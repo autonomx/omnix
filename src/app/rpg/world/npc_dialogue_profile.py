@@ -4,7 +4,9 @@ from copy import deepcopy
 from typing import Any, Dict, List
 
 from app.rpg.world.npc_biography_registry import get_npc_biography
+from app.rpg.world.npc_dialogue_recall import select_dialogue_recall, player_input_requests_recall
 from app.rpg.world.npc_history_state import recent_npc_history
+from app.rpg.world.npc_knowledge_state import known_facts_for_npc
 from app.rpg.world.npc_reputation_state import get_npc_reputation, response_style_from_reputation
 
 FORBIDDEN_NPC_DIALOGUE_CLAIMS = [
@@ -98,6 +100,15 @@ def build_npc_dialogue_profile(
     allowed_facts = _allowed_facts_from_topic(topic)
     history = recent_npc_history(simulation_state, npc_id=_safe_str(biography.get("npc_id")), limit=5)
     reputation = get_npc_reputation(simulation_state, npc_id=_safe_str(biography.get("npc_id")))
+    known_facts = known_facts_for_npc(simulation_state, npc_id=_safe_str(biography.get("npc_id")), limit=6)
+    player_input = _safe_str(runtime_state.get("player_input") or runtime_state.get("latest_player_input"))
+    dialogue_recall = select_dialogue_recall(
+        simulation_state,
+        npc_id=_safe_str(biography.get("npc_id")),
+        topic=topic,
+        tick=_safe_int(runtime_state.get("tick"), 0),
+        player_input=player_input,
+    ) if runtime_state.get("enable_dialogue_recall", True) else {"selected": False}
 
     profile = {
         "npc_id": _safe_str(biography.get("npc_id")),
@@ -123,6 +134,9 @@ def build_npc_dialogue_profile(
         "recent_history": deepcopy(history),
         "npc_reputation": deepcopy(reputation),
         "reputation_response_style": response_style_from_reputation(reputation, fallback="guarded"),
+        "known_facts": deepcopy(known_facts),
+        "dialogue_recall": deepcopy(dialogue_recall),
+        "recall_requested": player_input_requests_recall(player_input),
         "source": "deterministic_npc_dialogue_profile",
     }
     return profile
@@ -172,6 +186,22 @@ def deterministic_biography_line(
             "source": "deterministic_biography_dialogue",
         }
 
+    recall = _safe_dict(profile.get("dialogue_recall"))
+    recalls = _safe_list(recall.get("recalls"))
+    recall_prefix = ""
+    if recall.get("selected") and recalls:
+        first = _safe_dict(recalls[0])
+        recall_summary = _safe_str(first.get("summary"))
+        if recall_summary:
+            if "tavern" in _safe_str(profile.get("role")).lower():
+                recall_prefix = f"I remember you asking about this before: {recall_summary} "
+            elif "informant" in _safe_str(profile.get("role")).lower():
+                recall_prefix = f"I remember the thread you pulled earlier: {recall_summary} "
+            elif "guard" in _safe_str(profile.get("role")).lower():
+                recall_prefix = f"I remember the earlier report: {recall_summary} "
+            else:
+                recall_prefix = f"I remember this: {recall_summary} "
+
     if fact:
         if role.lower().startswith("tavern"):
             line = f"I keep a tavern, not a hero's ledger. But I can tell you this much: {fact}"
@@ -190,6 +220,8 @@ def deterministic_biography_line(
             line = "There is something there, but not enough to name it yet."
         else:
             line = "I do not know enough to say more."
+
+    line = (recall_prefix + line)[:280]
 
     return {
         "line": line,

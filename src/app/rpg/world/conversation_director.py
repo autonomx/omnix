@@ -8,6 +8,7 @@ from app.rpg.world.location_registry import current_location_id
 from app.rpg.world.npc_biography_registry import get_npc_biography
 from app.rpg.world.npc_goal_state import active_goals_for_npc
 from app.rpg.world.npc_presence_runtime import present_npcs_at_location, update_present_npcs_for_location
+from app.rpg.world.scene_continuity_state import scene_continuity_for_location
 
 
 DEFAULT_LOCATION_NPCS = {
@@ -218,6 +219,12 @@ def select_conversation_intent(
         }
         return {"selected": False, "reason": "not_enough_npcs_or_topics"}
 
+    continuity = scene_continuity_for_location(simulation_state, location_id=location_id)
+    recent_focus_ids = {
+        _safe_str(focus.get("topic_id"))
+        for focus in _safe_list(continuity.get("recent_focus"))
+    }
+
     candidates: List[Dict[str, Any]] = []
     for speaker_id in npcs:
         for listener_id in npcs:
@@ -234,6 +241,8 @@ def select_conversation_intent(
                     topic=topic,
                     simulation_state=simulation_state,
                 )
+                if topic_id in recent_focus_ids:
+                    score += 1
                 candidates.append(
                     {
                         "speaker_id": speaker_id,

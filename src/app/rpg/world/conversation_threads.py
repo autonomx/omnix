@@ -35,6 +35,11 @@ from app.rpg.world.npc_dialogue_profile import (
     build_npc_dialogue_profile,
     deterministic_biography_line,
 )
+from app.rpg.world.npc_dialogue_recall import (
+    find_recall_capable_npc,
+    player_input_requests_recall,
+)
+from app.rpg.world.npc_presence_runtime import present_npcs_at_location
 from app.rpg.world.npc_goal_state import (
     dominant_goal_for_npc,
     goal_topic_bias,
@@ -46,6 +51,11 @@ from app.rpg.world.npc_history_state import (
     add_npc_history_entry,
     prune_npc_history_state,
 )
+from app.rpg.world.npc_knowledge_state import (
+    add_npc_knowledge_from_topic,
+    prune_npc_knowledge_state,
+)
+from app.rpg.world.scene_continuity_state import update_scene_continuity_from_conversation
 from app.rpg.world.npc_reputation_state import (
     get_npc_reputation,
     response_style_from_reputation,
@@ -368,6 +378,83 @@ def _thread_on_cooldown(
     return bool(until and int(tick or 0) < until)
 
 
+def _apply_forced_player_invite_to_thread(
+    *,
+    state: Dict[str, Any],
+    thread: Dict[str, Any],
+    topic_payload: Dict[str, Any],
+    tick: int,
+    settings: Dict[str, Any],
+) -> Dict[str, Any]:
+    """Force a pending player response onto an active thread.
+
+    This is used only for explicit player-invited ticks. It does not mutate
+    inventory, currency, quests, journal, location, stock, rewards, or combat.
+    """
+    thread = _safe_dict(thread)
+    state = _safe_dict(state)
+    topic_payload = _safe_dict(topic_payload)
+
+    thread_id = _safe_str(thread.get("thread_id"))
+    topic_id = _safe_str(
+        topic_payload.get("topic_id")
+        or thread.get("topic_id")
+    )
+    topic_type = _safe_str(
+        topic_payload.get("topic_type")
+        or thread.get("topic_type")
+    )
+    prompt = _safe_str(
+        topic_payload.get("prompt")
+        or topic_payload.get("summary")
+        or topic_payload.get("title")
+        or thread.get("topic")
+        or "The NPC invites your response."
+    )
+
+    timeout_ticks = max(
+        1,
+        _safe_int(settings.get("pending_response_timeout_ticks"), 3),
+    )
+    created_tick = int(tick or 0)
+    expires_tick = created_tick + timeout_ticks
+
+    pending = {
+        "thread_id": thread_id,
+        "topic_id": topic_id,
+        "topic_type": topic_type,
+        "prompt": prompt[:280],
+        "created_tick": created_tick,
+        "expires_tick": expires_tick,
+        "source": "deterministic_forced_player_invite_runtime",
+    }
+
+    participation = _safe_dict(thread.get("player_participation"))
+    participation.update(
+        {
+            "included": True,
+            "mode": "player_invited",
+            "pending_response": True,
+            "prompt": pending["prompt"],
+            "topic_id": topic_id,
+            "topic_type": topic_type,
+            "created_tick": created_tick,
+            "expires_tick": expires_tick,
+        }
+    )
+
+    thread["participation_mode"] = "player_invited"
+    thread["player_participation"] = participation
+    thread["updated_tick"] = created_tick
+    state["pending_player_response"] = pending
+
+    return {
+        "pending_player_response": deepcopy(pending),
+        "player_participation": deepcopy(participation),
+        "source": "deterministic_forced_player_invite_runtime",
+    }
+
+
 def _set_thread_cooldown(
     state: Dict[str, Any],
     *,
@@ -459,15 +546,21 @@ def _biography_grounded_npc_response(
     listener_id: str,
     simulation_state: Dict[str, Any],
     runtime_state: Dict[str, Any] | None = None,
+    player_input: str = "",
     topic: Dict[str, Any] | None = None,
     pivot: Dict[str, Any] | None = None,
     response_style: str = "",
     response_intent: str = "answer",
 ) -> Dict[str, Any]:
+    profile_runtime_state = dict(_safe_dict(runtime_state))
+    profile_runtime_state["player_input"] = _safe_str(player_input)
+    profile_runtime_state["latest_player_input"] = _safe_str(player_input)
+    profile_runtime_state.setdefault("enable_dialogue_recall", True)
+
     profile = build_npc_dialogue_profile(
         npc_id=speaker_id,
         simulation_state=simulation_state,
-        runtime_state=runtime_state or {},
+        runtime_state=profile_runtime_state,
         topic=topic or {},
         listener_id=listener_id,
         response_intent=response_intent,
@@ -485,8 +578,200 @@ def _biography_grounded_npc_response(
         "biography_role": _safe_str(line_payload.get("biography_role")),
         "roleplay_source": _safe_str(line_payload.get("roleplay_source") or "deterministic_template"),
         "used_fact_ids": _safe_list(line_payload.get("used_fact_ids")),
+        "dialogue_recall": _safe_dict(profile.get("dialogue_recall")),
+        "recalled_history_ids": [
+            _safe_str(recall.get("source_history_id"))
+            for recall in _safe_list(_safe_dict(profile.get("dialogue_recall")).get("recalls"))
+            if _safe_str(recall.get("source_history_id"))
+        ],
+        "recalled_knowledge_ids": [
+            _safe_str(recall.get("source_knowledge_id"))
+            for recall in _safe_list(_safe_dict(profile.get("dialogue_recall")).get("recalls"))
+            if _safe_str(recall.get("source_knowledge_id"))
+        ],
         "response_style": _safe_str(line_payload.get("response_style") or response_style),
         "source": "deterministic_biography_grounded_npc_response",
+    }
+
+
+def _consume_recall_request_as_conversation_reply(
+    simulation_state: Dict[str, Any],
+    *,
+    player_input: str,
+    tick: int,
+    settings: Dict[str, Any],
+    runtime_state: Dict[str, Any] | None = None,
+) -> Dict[str, Any]:
+    """Handle direct player recall questions even when no pending invite exists.
+
+    This creates a presentation/conversation beat only. It does not mutate
+    quest/reward/journal/inventory/currency/location/combat state.
+    """
+    if not player_input_requests_recall(player_input):
+        return {
+            "triggered": False,
+            "reason": "not_recall_request",
+        }
+
+    location_id = current_location_id(simulation_state)
+    candidate_npcs = present_npcs_at_location(simulation_state, location_id=location_id)
+    if not candidate_npcs:
+        candidate_npcs = ["npc:Bran", "npc:Mira"]
+
+    # Prefer a current/recent topic when available, but recall selection can
+    # work without topic overlap because the player explicitly asked to recall.
+    conversation_state = _safe_dict(simulation_state.get("conversation_thread_state"))
+    topic_payload: Dict[str, Any] = {}
+    threads = _safe_list(conversation_state.get("threads"))
+    if threads:
+        latest_thread = _safe_dict(threads[-1])
+        topic_payload = _safe_dict(latest_thread.get("topic_payload"))
+
+    recall_choice = find_recall_capable_npc(
+        simulation_state,
+        candidate_npc_ids=candidate_npcs,
+        player_input=player_input,
+        topic=topic_payload,
+        tick=tick,
+    )
+    if not recall_choice.get("selected"):
+        return {
+            "triggered": False,
+            "reason": _safe_str(recall_choice.get("reason")) or "no_recall_available",
+            "recall_choice": recall_choice,
+        }
+
+    responder_id = _safe_str(recall_choice.get("npc_id"))
+    responder_bio = get_npc_biography(responder_id)
+    responder_name = _safe_str(responder_bio.get("name")) or responder_id.replace("npc:", "")
+
+    # Force the profile to see the recall request text.
+    profile_runtime_state = dict(_safe_dict(runtime_state))
+    profile_runtime_state["player_input"] = _safe_str(player_input)
+    profile_runtime_state["latest_player_input"] = _safe_str(player_input)
+    profile_runtime_state["tick"] = int(tick or 0)
+    profile_runtime_state["enable_dialogue_recall"] = True
+
+    biography_response = _biography_grounded_npc_response(
+        speaker_id=responder_id,
+        listener_id="player",
+        simulation_state=simulation_state,
+        runtime_state=profile_runtime_state,
+        player_input=player_input,
+        topic=topic_payload,
+        pivot={},
+        response_style="helpful",
+        response_intent="recall",
+    )
+
+    dialogue_recall = _safe_dict(biography_response.get("dialogue_recall"))
+    recalled_history_ids = _safe_list(biography_response.get("recalled_history_ids"))
+    recalled_knowledge_ids = _safe_list(biography_response.get("recalled_knowledge_ids"))
+    line = _safe_str(biography_response.get("line"))
+    if not line:
+        recalls = _safe_list(dialogue_recall.get("recalls"))
+        summary = _safe_str(_safe_dict(recalls[0]).get("summary")) if recalls else ""
+        line = f"I remember this: {summary}" if summary else "I remember you asking, but not enough to add more."
+
+    thread_id = f"conversation:{location_id}:{responder_id}:player:recall"
+    thread = _find_thread(conversation_state, thread_id)
+    if not thread:
+        thread = {
+            "thread_id": thread_id,
+            "participants": [
+                {"npc_id": responder_id, "name": responder_name},
+                {"npc_id": "player", "name": "Player"},
+            ],
+            "location_id": location_id,
+            "topic_id": _safe_str(topic_payload.get("topic_id")),
+            "topic_type": _safe_str(topic_payload.get("topic_type")),
+            "topic": _safe_str(topic_payload.get("title") or topic_payload.get("summary") or "Recall"),
+            "topic_payload": deepcopy(topic_payload),
+            "participation_mode": "player_joined",
+            "player_participation": {
+                "included": True,
+                "mode": "player_joined",
+                "pending_response": False,
+                "topic_id": _safe_str(topic_payload.get("topic_id")),
+            },
+            "beats": [],
+            "status": "active",
+            "created_tick": int(tick or 0),
+            "updated_tick": int(tick or 0),
+            "source": "deterministic_recall_request_runtime",
+        }
+        threads.append(thread)
+        conversation_state["threads"] = threads[-MAX_CONVERSATION_THREADS:]
+
+    player_response_beat = {
+        "beat_id": f"conversation:beat:{int(tick or 0)}:{thread_id}:player_recall_request",
+        "thread_id": thread_id,
+        "speaker_id": "player",
+        "speaker_name": "Player",
+        "listener_id": responder_id,
+        "listener_name": responder_name,
+        "line": _safe_str(player_input),
+        "topic_id": _safe_str(topic_payload.get("topic_id")),
+        "topic_type": _safe_str(topic_payload.get("topic_type")),
+        "topic": _safe_str(topic_payload.get("title") or topic_payload.get("summary") or "Recall"),
+        "tick": int(tick or 0),
+        "participation_mode": "player_joined",
+        "source": "deterministic_recall_request_runtime",
+    }
+
+    npc_response_beat = {
+        "beat_id": f"conversation:beat:{int(tick or 0)}:{thread_id}:npc_recall_response",
+        "thread_id": thread_id,
+        "speaker_id": responder_id,
+        "speaker_name": responder_name,
+        "listener_id": "player",
+        "listener_name": "Player",
+        "line": line,
+        "topic_id": _safe_str(topic_payload.get("topic_id")),
+        "topic_type": _safe_str(topic_payload.get("topic_type")),
+        "topic": _safe_str(topic_payload.get("title") or topic_payload.get("summary") or "Recall"),
+        "tick": int(tick or 0),
+        "participation_mode": "player_joined",
+        "response_style": _safe_str(biography_response.get("response_style") or "helpful"),
+        "biography_role": _safe_str(biography_response.get("biography_role")),
+        "roleplay_source": _safe_str(biography_response.get("roleplay_source") or "deterministic_template"),
+        "used_fact_ids": _safe_list(biography_response.get("used_fact_ids")),
+        "dialogue_profile": _safe_dict(biography_response.get("profile")),
+        "dialogue_recall": dialogue_recall,
+        "recalled_history_ids": recalled_history_ids,
+        "recalled_knowledge_ids": recalled_knowledge_ids,
+        "source": "deterministic_recall_request_runtime",
+    }
+
+    beats = _safe_list(thread.get("beats"))
+    beats.extend([player_response_beat, npc_response_beat])
+    thread["beats"] = beats[-MAX_BEATS_PER_THREAD:]
+    thread["updated_tick"] = int(tick or 0)
+    thread["participation_mode"] = "player_joined"
+    thread["player_participation"] = {
+        "included": True,
+        "mode": "player_joined",
+        "pending_response": False,
+        "topic_id": _safe_str(topic_payload.get("topic_id")),
+    }
+
+    conversation_state["pending_player_response"] = {}
+    simulation_state["conversation_thread_state"] = conversation_state
+
+    return {
+        "triggered": True,
+        "reason": "recall_request_consumed",
+        "participation_mode": "player_joined",
+        "thread": deepcopy(thread),
+        "beat": deepcopy(player_response_beat),
+        "npc_response_beat": deepcopy(npc_response_beat),
+        "player_participation": deepcopy(thread["player_participation"]),
+        "dialogue_profile": deepcopy(_safe_dict(npc_response_beat.get("dialogue_profile"))),
+        "dialogue_recall": deepcopy(dialogue_recall),
+        "recalled_history_ids": recalled_history_ids,
+        "recalled_knowledge_ids": recalled_knowledge_ids,
+        "conversation_thread_state": get_conversation_thread_state(simulation_state),
+        "source": "deterministic_recall_request_runtime",
     }
 
 
@@ -622,6 +907,8 @@ def maybe_advance_conversation_thread(
     location_id = current_location_id(simulation_state)
     location = get_location(location_id)
 
+    forced_invite_payload = {}
+
     # J2: expire stale rumor seeds before advancing the conversation.
     expire_stale_signals(simulation_state, current_tick=tick, settings=settings)
 
@@ -631,6 +918,21 @@ def maybe_advance_conversation_thread(
             "reason": "conversation_settings_disabled",
             "conversation_thread_state": get_conversation_thread_state(simulation_state),
         }
+
+    if (
+        settings.get("npc_dialogue_recall_enabled", True)
+        and not _safe_dict(state.get("pending_player_response"))
+        and player_input_requests_recall(player_input)
+    ):
+        recall_result = _consume_recall_request_as_conversation_reply(
+            simulation_state,
+            player_input=player_input,
+            tick=tick,
+            settings=settings,
+            runtime_state={"tick": int(tick or 0), "player_input": player_input},
+        )
+        if recall_result.get("triggered"):
+            return recall_result
 
     if not force and not autonomous and not is_ambient_wait_or_listen_intent(player_input):
         state["debug"] = {
@@ -724,8 +1026,23 @@ def maybe_advance_conversation_thread(
         tick=tick,
         force_player_mode=force_player_mode,
     )
+
+    if force_player_mode == "player_invited":
+        if not settings.get("allow_player_invited", False):
+            return {
+                "triggered": False,
+                "reason": "forced_player_invited_disabled_by_settings",
+                "participation_mode": "overheard",
+                "player_participation": {
+                    "included": False,
+                    "mode": "overheard",
+                    "pending_response": False,
+                },
+                "conversation_thread_state": get_conversation_thread_state(simulation_state),
+            }
+        participation_mode = "player_invited"
     thread_id = _thread_id_for(location_id=location_id, participants=participants)
-    if _thread_on_cooldown(state, thread_id=thread_id, tick=tick):
+    if _thread_on_cooldown(state, thread_id=thread_id, tick=tick) and force_player_mode != "player_invited":
         return {
             "triggered": False,
             "reason": "thread_on_cooldown",
@@ -738,6 +1055,9 @@ def maybe_advance_conversation_thread(
         thread = existing
         thread["last_participants"] = deepcopy(participants)
         participation_mode = _safe_str(thread.get("participation_mode") or participation_mode or "overheard")
+
+        if force_player_mode == "player_invited":
+            participation_mode = "player_invited"
     else:
         # Enforce max_active_threads: don't open a new thread when the cap is reached.
         active_ids = _safe_list(state.get("active_thread_ids"))
@@ -800,6 +1120,15 @@ def maybe_advance_conversation_thread(
         if len(threads) > MAX_CONVERSATION_THREADS:
             del threads[:-MAX_CONVERSATION_THREADS]
         state["threads"] = threads
+
+    if force_player_mode == "player_invited":
+        forced_invite_payload = _apply_forced_player_invite_to_thread(
+            state=state,
+            thread=thread,
+            topic_payload=topic_payload,
+            tick=tick,
+            settings=settings,
+        )
 
     beats = _safe_list(thread.get("beats"))
     beat_index = len(beats) + 1
@@ -866,6 +1195,19 @@ def maybe_advance_conversation_thread(
             settings=settings,
         )
 
+    # W1: record NPC knowledge from backed topic for speaker and listener.
+    if settings.get("npc_knowledge_enabled", True) and topic_is_backed_by_state(topic_payload):
+        for _npc_id in {_safe_str(beat.get("speaker_id")), _safe_str(beat.get("listener_id"))}:
+            if _npc_id.startswith("npc:"):
+                add_npc_knowledge_from_topic(
+                    simulation_state,
+                    npc_id=_npc_id,
+                    topic=topic_payload,
+                    tick=tick,
+                    confidence=2,
+                    ttl_ticks=int(settings.get("npc_knowledge_ttl_ticks") or 2000),
+                )
+
     active_ids = _safe_list(state.get("active_thread_ids"))
     if thread_id not in active_ids:
         active_ids.append(thread_id)
@@ -906,6 +1248,26 @@ def maybe_advance_conversation_thread(
         thread_events.append(world_event)
         thread["world_events"] = thread_events[-MAX_BEATS_PER_THREAD:]
 
+    # Y1: update scene continuity from this NPC-to-NPC beat.
+    if settings.get("scene_continuity_enabled", True):
+        update_scene_continuity_from_conversation(
+            simulation_state,
+            location_id=location_id,
+            topic_id=_safe_str(beat.get("topic_id")),
+            topic_type=_safe_str(beat.get("topic_type")),
+            speaker_id=_safe_str(beat.get("speaker_id")),
+            listener_id=_safe_str(beat.get("listener_id")),
+            tick=tick,
+        )
+
+    # W1: prune expired NPC knowledge.
+    if settings.get("npc_knowledge_enabled", True):
+        prune_npc_knowledge_state(
+            simulation_state,
+            current_tick=tick,
+            max_known_facts_per_npc=int(settings.get("npc_knowledge_max_facts_per_npc") or 24),
+        )
+
     state["debug"] = {
         "last_triggered": True,
         "reason": "wait_or_listen_turn",
@@ -919,8 +1281,9 @@ def maybe_advance_conversation_thread(
         "triggered": True,
         "reason": "wait_or_listen_turn",
         "autonomous": bool(autonomous),
-        "participation_mode": participation_mode,
+        "participation_mode": _safe_str(thread.get("participation_mode") or participation_mode),
         "player_participation": deepcopy(_safe_dict(thread.get("player_participation"))),
+        "pending_player_response": deepcopy(_safe_dict(state.get("pending_player_response"))),
         "topic": deepcopy(topic_payload),
         "thread": deepcopy(thread),
         "beat": deepcopy(beat),
@@ -934,7 +1297,10 @@ def maybe_advance_conversation_thread(
         ),
         "npc_history_state": deepcopy(_safe_dict(simulation_state.get("npc_history_state"))),
         "npc_reputation_state": deepcopy(_safe_dict(simulation_state.get("npc_reputation_state"))),
+        "npc_knowledge_state": deepcopy(_safe_dict(simulation_state.get("npc_knowledge_state"))),
+        "scene_continuity_state": deepcopy(_safe_dict(simulation_state.get("scene_continuity_state"))),
         "conversation_thread_state": get_conversation_thread_state(simulation_state),
+        "forced_player_invite": deepcopy(forced_invite_payload),
         "source": "deterministic_conversation_thread_runtime",
     }
     validation = validate_conversation_effects(result, settings=settings)
@@ -1114,6 +1480,7 @@ def handle_pending_player_conversation_response(
             listener_id="player",
             simulation_state=simulation_state,
             runtime_state={},
+            player_input=player_input,
             topic=active_topic,
             pivot=topic_pivot,
             response_style=response_style,
@@ -1142,6 +1509,9 @@ def handle_pending_player_conversation_response(
         npc_response_beat["roleplay_source"] = _safe_str(biography_response.get("roleplay_source") or "deterministic_template")
         npc_response_beat["used_fact_ids"] = _safe_list(biography_response.get("used_fact_ids"))
         npc_response_beat["dialogue_profile"] = _safe_dict(biography_response.get("profile"))
+        npc_response_beat["dialogue_recall"] = _safe_dict(biography_response.get("dialogue_recall"))
+        npc_response_beat["recalled_history_ids"] = _safe_list(biography_response.get("recalled_history_ids"))
+        npc_response_beat["recalled_knowledge_ids"] = _safe_list(biography_response.get("recalled_knowledge_ids"))
 
         # QRS: Override response style based on NPC reputation before appending beat.
         if settings.get("npc_reputation_enabled", True):
@@ -1209,6 +1579,36 @@ def handle_pending_player_conversation_response(
             thread_events.append(world_event)
         thread["world_events"] = thread_events[-MAX_BEATS_PER_THREAD:]
 
+    # Y1: update scene continuity after player response NPC beat.
+    if settings.get("scene_continuity_enabled", True) and npc_response_beat:
+        update_scene_continuity_from_conversation(
+            simulation_state,
+            location_id=_safe_str(thread.get("location_id")),
+            topic_id=_safe_str(active_topic.get("topic_id")),
+            topic_type=_safe_str(active_topic.get("topic_type")),
+            speaker_id=_safe_str(npc_response_beat.get("speaker_id")),
+            listener_id="player",
+            tick=tick,
+        )
+
+    # W1: knowledge from active_topic for responding NPC.
+    if settings.get("npc_knowledge_enabled", True) and npc_response_beat:
+        _resp_npc_id = _safe_str(npc_response_beat.get("speaker_id"))
+        if _resp_npc_id.startswith("npc:") and topic_is_backed_by_state(active_topic):
+            add_npc_knowledge_from_topic(
+                simulation_state,
+                npc_id=_resp_npc_id,
+                topic=active_topic,
+                tick=tick,
+                confidence=2,
+                ttl_ticks=int(settings.get("npc_knowledge_ttl_ticks") or 2000),
+            )
+        prune_npc_knowledge_state(
+            simulation_state,
+            current_tick=tick,
+            max_known_facts_per_npc=int(settings.get("npc_knowledge_max_facts_per_npc") or 24),
+        )
+
     social_state = record_player_joined_conversation(
         simulation_state,
         tick=tick,
@@ -1245,6 +1645,9 @@ def handle_pending_player_conversation_response(
         "dialogue_profile": deepcopy(_safe_dict(npc_response_beat.get("dialogue_profile"))),
         "roleplay_source": _safe_str(npc_response_beat.get("roleplay_source")),
         "used_fact_ids": _safe_list(npc_response_beat.get("used_fact_ids")),
+        "dialogue_recall": deepcopy(_safe_dict(npc_response_beat.get("dialogue_recall"))),
+        "recalled_history_ids": _safe_list(npc_response_beat.get("recalled_history_ids")),
+        "recalled_knowledge_ids": _safe_list(npc_response_beat.get("recalled_knowledge_ids")),
         "npc_response_style": response_style,
         "thread": deepcopy(thread),
         "beat": deepcopy(player_response),
@@ -1254,6 +1657,8 @@ def handle_pending_player_conversation_response(
         "npc_goal_state": deepcopy(_safe_dict(simulation_state.get("npc_goal_state"))),
         "npc_history_state": deepcopy(_safe_dict(simulation_state.get("npc_history_state"))),
         "npc_reputation_state": deepcopy(_safe_dict(simulation_state.get("npc_reputation_state"))),
+        "npc_knowledge_state": deepcopy(_safe_dict(simulation_state.get("npc_knowledge_state"))),
+        "scene_continuity_state": deepcopy(_safe_dict(simulation_state.get("scene_continuity_state"))),
         "conversation_thread_state": get_conversation_thread_state(simulation_state),
         "source": "deterministic_conversation_thread_runtime",
     }

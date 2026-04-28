@@ -10,6 +10,7 @@ from app.rpg.world.location_registry import current_location_id
 from app.rpg.world.npc_biography_registry import get_npc_biography
 from app.rpg.world.npc_goal_state import dominant_goal_for_npc, seed_default_npc_goals
 from app.rpg.world.npc_presence_runtime import present_npcs_at_location, update_present_npcs_for_location
+from app.rpg.world.scene_continuity_state import update_scene_continuity_from_activity
 from app.rpg.world.world_event_log import add_world_event
 
 MAX_SCHEDULED_ACTIVITIES = 8
@@ -262,6 +263,16 @@ def maybe_schedule_scene_activity(
         "last_activity_id": _safe_str(activity.get("activity_id")),
         "last_reason": "scheduled",
     }
+
+    # Y1: update scene continuity from activity.
+    if settings.get("scene_continuity_enabled", True):
+        update_scene_continuity_from_activity(
+            simulation_state,
+            location_id=location_id,
+            activity=activity,
+            tick=tick,
+        )
+
     return {
         "scheduled": True,
         "reason": "scheduled",

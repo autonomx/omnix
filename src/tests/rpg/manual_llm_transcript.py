@@ -1646,6 +1646,88 @@ SERVICE_SCENARIOS = {
         },
         "turns": ["__scene_activity_tick__"],
     },
+    # ── Bundle W-X-Y — Quest/NPC Knowledge, Dialogue Memory Recall, Scene Continuity ──
+    "npc_knowledge_records_backed_quest_discussion": {
+        "currency": {"gold": 0, "silver": 0, "copper": 0},
+        "conversation_settings": {
+            "enabled": True,
+            "autonomous_ticks_enabled": True,
+            "frequency": "always",
+            "conversation_chance_percent": 100,
+            "npc_knowledge_enabled": True,
+            "min_ticks_between_conversations": 0,
+            "thread_cooldown_ticks": 0,
+        },
+        "setup_quest_state": {
+            "quests": [
+                {
+                    "quest_id": "quest:old_mill_bandits",
+                    "title": "Trouble near the Old Mill",
+                    "summary": "There is talk of armed figures near the old mill road.",
+                    "status": "active",
+                    "location_id": "loc_tavern",
+                }
+            ]
+        },
+        "turns": ["__ambient_tick_quest__"],
+    },
+    "npc_dialogue_recalls_prior_player_reply": {
+        "currency": {"gold": 0, "silver": 0, "copper": 0},
+        "conversation_settings": {
+            "enabled": True,
+            "autonomous_ticks_enabled": True,
+            "frequency": "always",
+            "conversation_chance_percent": 100,
+            "allow_player_invited": True,
+            "player_inclusion_chance_percent": 100,
+            "npc_history_enabled": True,
+            "npc_knowledge_enabled": True,
+            "npc_dialogue_recall_enabled": True,
+            "min_ticks_between_conversations": 0,
+            "thread_cooldown_ticks": 0,
+        },
+        "setup_quest_state": {
+            "quests": [
+                {
+                    "quest_id": "quest:old_mill_bandits",
+                    "title": "Trouble near the Old Mill",
+                    "summary": "There is talk of armed figures near the old mill road.",
+                    "status": "active",
+                    "location_id": "loc_tavern",
+                }
+            ]
+        },
+        "turns": [
+            "__ambient_tick_quest__",
+            "I asked you about the old mill road.",
+            "__ambient_tick_player_invited__",
+            "Do you remember what I asked before?",
+        ],
+    },
+    "scene_continuity_tracks_recent_topic": {
+        "currency": {"gold": 0, "silver": 0, "copper": 0},
+        "conversation_settings": {
+            "enabled": True,
+            "autonomous_ticks_enabled": True,
+            "frequency": "always",
+            "conversation_chance_percent": 100,
+            "scene_continuity_enabled": True,
+            "min_ticks_between_conversations": 0,
+            "thread_cooldown_ticks": 0,
+        },
+        "setup_quest_state": {
+            "quests": [
+                {
+                    "quest_id": "quest:old_mill_bandits",
+                    "title": "Trouble near the Old Mill",
+                    "summary": "There is talk of armed figures near the old mill road.",
+                    "status": "active",
+                    "location_id": "loc_tavern",
+                }
+            ]
+        },
+        "turns": ["__ambient_tick_quest__", "__ambient_tick__"],
+    },
 }
 
 
@@ -1674,6 +1756,9 @@ CONVERSATION_EXPECTED_SCENARIOS = {
     "npc_schedule_populates_tavern_presence",
     "director_uses_presence_runtime",
     "scene_activity_uses_present_npc",
+    "npc_knowledge_records_backed_quest_discussion",
+    "npc_dialogue_recalls_prior_player_reply",
+    "scene_continuity_tracks_recent_topic",
 }
 
 
@@ -2720,11 +2805,33 @@ def _manual_regression_warnings(
         if not participation.get("pending_response"):
             warnings.append(f"{scenario_name}_expected_pending_response_on_turn_1")
 
-    if scenario_name in _player_invited_turn1_scenarios and turn_index == 3:
-        # npc_response_uses_social_state has a second invite at turn 3
-        participation = _safe_dict(_extract_conversation_result(result).get("player_participation"))
-        if scenario_name == "npc_response_uses_social_state" and _safe_str(participation.get("mode")) != "player_invited":
-            warnings.append("npc_response_uses_social_state_expected_second_player_invite")
+    if scenario_name == "npc_response_uses_social_state":
+        ambient_tick = _extract_ambient_tick_result(result)
+        conversation = _extract_conversation_result(result)
+        if turn_index == 3:
+            forced_failed = bool(ambient_tick.get("forced_player_invited_failed"))
+            forced_reason = _safe_str(ambient_tick.get("forced_player_invited_failure_reason"))
+            pending = bool(
+                _safe_dict(conversation.get("player_participation")).get("pending_response")
+                or _safe_dict(conversation.get("pending_player_response"))
+                or _safe_dict(ambient_tick.get("pending_player_response"))
+                or _safe_dict(
+                    _safe_dict(_extract_conversation_thread_state(result)).get("pending_player_response")
+                )
+            )
+            if forced_failed:
+                warnings.append(
+                    f"npc_response_uses_social_state_forced_invite_failed:{forced_reason or 'unknown'}"
+                )
+            elif not pending:
+                warnings.append("npc_response_uses_social_state_expected_second_player_invite")
+            if (
+                not forced_failed
+                and _safe_str(conversation.get("participation_mode")) != "player_invited"
+            ):
+                warnings.append(
+                    f"npc_response_uses_social_state_expected_player_invited_mode_got:{_safe_str(conversation.get('participation_mode')) or 'missing'}"
+                )
 
     if scenario_name == "npc_replies_after_player_join" and turn_index == 2:
         conv = _extract_conversation_result(result)
@@ -3139,6 +3246,64 @@ def _manual_regression_warnings(
             warnings.append("flat_turn_5_follow_directions_should_travel")
         if _extract_current_location_id(result) != "loc_market":
             warnings.append("flat_turn_5_expected_market")
+
+    # ── Bundle W-X-Y scenario-specific regression checks ────────────────────────
+
+    if scenario_name == "npc_knowledge_records_backed_quest_discussion" and turn_index == 1:
+        sim = _extract_simulation_state(result)
+        knowledge_state = _safe_dict(sim.get("npc_knowledge_state"))
+        if not _safe_dict(knowledge_state.get("by_npc")):
+            warnings.append("npc_knowledge_records_backed_quest_discussion_missing_knowledge")
+
+    if scenario_name == "npc_dialogue_recalls_prior_player_reply" and turn_index >= 4:
+        conversation = _extract_conversation_result(result)
+        profile = _safe_dict(conversation.get("dialogue_profile"))
+        response_beat = _safe_dict(conversation.get("npc_response_beat"))
+        recall = (
+            _safe_dict(conversation.get("dialogue_recall"))
+            or _safe_dict(response_beat.get("dialogue_recall"))
+            or _safe_dict(profile.get("dialogue_recall"))
+        )
+        recalled_history_ids = (
+            _safe_list(conversation.get("recalled_history_ids"))
+            or _safe_list(response_beat.get("recalled_history_ids"))
+        )
+        recalled_knowledge_ids = (
+            _safe_list(conversation.get("recalled_knowledge_ids"))
+            or _safe_list(response_beat.get("recalled_knowledge_ids"))
+        )
+        if not recall.get("selected"):
+            if _safe_str(conversation.get("reason")) != "recall_request_consumed":
+                warnings.append("npc_dialogue_recalls_prior_player_reply_missing_recall")
+        if not recalled_history_ids and not recalled_knowledge_ids:
+            if _safe_str(conversation.get("reason")) != "recall_request_consumed":
+                warnings.append("npc_dialogue_recalls_prior_player_reply_missing_recall_ids")
+
+        if _safe_str(conversation.get("reason")) == "recall_request_consumed":
+            if not recall.get("selected"):
+                warnings.append("npc_dialogue_recalls_prior_player_reply_recall_route_missing_selected_recall")
+            if not recalled_history_ids and not recalled_knowledge_ids:
+                warnings.append("npc_dialogue_recalls_prior_player_reply_recall_route_missing_ids")
+
+        turn_contract = _extract_turn_contract(result)
+        resolved = _safe_dict(turn_contract.get("resolved_result") or turn_contract.get("resolved_action"))
+        action_type = _safe_str(resolved.get("action_type") or resolved.get("semantic_action_type"))
+        if action_type and action_type not in {
+            "player_conversation_recall",
+            "player_conversation_reply",
+            "ambient_tick",
+        }:
+            warnings.append(
+                f"npc_dialogue_recalls_prior_player_reply_unexpected_action_type:{action_type}"
+            )
+
+    if scenario_name == "scene_continuity_tracks_recent_topic" and turn_index >= 1:
+        sim = _extract_simulation_state(result)
+        continuity = _safe_dict(sim.get("scene_continuity_state"))
+        by_location = _safe_dict(continuity.get("by_location"))
+        loc = _safe_dict(by_location.get("loc_tavern"))
+        if not _safe_list(loc.get("recent_focus")):
+            warnings.append("scene_continuity_tracks_recent_topic_missing_recent_focus")
 
     return warnings
 

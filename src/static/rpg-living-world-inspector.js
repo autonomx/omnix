@@ -111,6 +111,12 @@
     const npcHistoryByNpc = safeObj(npcHistoryStateRaw.by_npc);
     const npcReputationStateRaw = safeObj(result.npc_reputation_state || conversation.npc_reputation_state || safeObj(result.ambient_tick_result).npc_reputation_state);
     const npcReputationByNpc = safeObj(npcReputationStateRaw.by_npc);
+    const npcKnowledgeStateRaw = safeObj(result.npc_knowledge_state || conversation.npc_knowledge_state || safeObj(result.ambient_tick_result).npc_knowledge_state);
+    const npcKnowledgeByNpc = safeObj(npcKnowledgeStateRaw.by_npc);
+    const dialogueRecallStateRaw = safeObj(result.npc_dialogue_recall_state || conversation.npc_dialogue_recall_state || safeObj(result.ambient_tick_result).npc_dialogue_recall_state);
+    const dialogueRecallDebug = safeObj(dialogueRecallStateRaw.debug);
+    const sceneContinuityStateRaw = safeObj(result.scene_continuity_state || conversation.scene_continuity_state || safeObj(result.ambient_tick_result).scene_continuity_state);
+    const sceneContinuityByLocation = safeObj(sceneContinuityStateRaw.by_location);
     const conversationDirectorState = safeObj(result.conversation_director_state || safeObj(result.ambient_tick_result).conversation_director_state);
     const directorDebug = safeObj(conversationDirectorState.debug);
     const directorIntent = safeObj(directorDebug.selected_intent || conversation.director_intent);
@@ -285,6 +291,64 @@
               <div class="rpg-debug-row">
                 <strong>${escapeHtml(npcId)}</strong>
                 <code>fam=${escapeHtml(r.familiarity ?? 0)} trust=${escapeHtml(r.trust ?? 0)} annoy=${escapeHtml(r.annoyance ?? 0)} fear=${escapeHtml(r.fear ?? 0)} resp=${escapeHtml(r.respect ?? 0)}</code>
+              </div>
+            `;
+          }).join("")}
+        </div>
+      </details>
+      ` : ""}
+
+      ${Object.keys(npcKnowledgeByNpc).length ? `
+      <details>
+        <summary><strong>NPC Knowledge</strong></summary>
+        <div class="rpg-debug-section">
+          ${Object.entries(npcKnowledgeByNpc).map(([npcId, npcState]) => {
+            const facts = safeArr(safeObj(npcState).known_facts);
+            return `
+              <div class="rpg-debug-row">
+                <strong>${escapeHtml(npcId)}</strong>
+                <span>${facts.map((f) => escapeHtml(safeObj(f).summary || safeObj(f).knowledge_id || "")).join(" | ")}</span>
+                <code>${facts.length} facts</code>
+              </div>
+            `;
+          }).join("")}
+        </div>
+      </details>
+      ` : ""}
+
+      ${dialogueRecallDebug.selected ? `
+      <details>
+        <summary><strong>Dialogue Recall</strong></summary>
+        <div class="rpg-debug-section">
+          <div class="rpg-debug-row">
+            <strong>NPC</strong><span>${escapeHtml(dialogueRecallDebug.npc_id || "")}</span>
+          </div>
+          <div class="rpg-debug-row">
+            <strong>Topic</strong><span>${escapeHtml(dialogueRecallDebug.topic_id || "")}</span>
+          </div>
+          ${safeArr(dialogueRecallDebug.selected_recall).map((r) => `
+            <div class="rpg-debug-row">
+              <strong>${escapeHtml(safeObj(r).kind || "recall")}</strong>
+              <span>${escapeHtml(safeObj(r).summary || "")}</span>
+              <code>score=${escapeHtml(safeObj(r).score ?? 0)}</code>
+            </div>
+          `).join("")}
+        </div>
+      </details>
+      ` : ""}
+
+      ${Object.keys(sceneContinuityByLocation).length ? `
+      <details>
+        <summary><strong>Scene Continuity</strong></summary>
+        <div class="rpg-debug-section">
+          ${Object.entries(sceneContinuityByLocation).map(([locId, locState]) => {
+            const focus = safeArr(safeObj(locState).recent_focus);
+            const speakers = safeArr(safeObj(locState).recent_speakers);
+            return `
+              <div class="rpg-debug-row">
+                <strong>${escapeHtml(locId)}</strong>
+                <span>focus: ${focus.map((f) => escapeHtml(safeObj(f).topic_id || "")).join(", ") || "none"}</span>
+                <code>speakers: ${speakers.map((s) => escapeHtml(s)).join(", ") || "none"}</code>
               </div>
             `;
           }).join("")}

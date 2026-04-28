@@ -88,6 +88,13 @@ DEFAULT_CONVERSATION_SETTINGS: Dict[str, Any] = {
     "npc_schedule_enabled": True,
     "npc_presence_enabled": True,
     "scene_population_enabled": True,
+    # Bundle W-X-Y — Quest/NPC Knowledge, Dialogue Memory Recall, and Scene Continuity
+    "npc_knowledge_enabled": True,
+    "npc_knowledge_max_facts_per_npc": 24,
+    "npc_knowledge_ttl_ticks": 2000,
+    "npc_dialogue_recall_enabled": True,
+    "npc_dialogue_recall_cooldown_ticks": 4,
+    "scene_continuity_enabled": True,
 }
 
 
@@ -201,6 +208,13 @@ def normalize_conversation_settings(settings: Dict[str, Any]) -> Dict[str, Any]:
     merged["npc_schedule_enabled"] = _safe_bool(merged.get("npc_schedule_enabled"), True)
     merged["npc_presence_enabled"] = _safe_bool(merged.get("npc_presence_enabled"), True)
     merged["scene_population_enabled"] = _safe_bool(merged.get("scene_population_enabled"), True)
+    # Bundle W-X-Y
+    merged["npc_knowledge_enabled"] = _safe_bool(merged.get("npc_knowledge_enabled"), True)
+    merged["npc_knowledge_max_facts_per_npc"] = max(1, min(60, _safe_int(merged.get("npc_knowledge_max_facts_per_npc"), 24)))
+    merged["npc_knowledge_ttl_ticks"] = max(10, min(100000, _safe_int(merged.get("npc_knowledge_ttl_ticks"), 2000)))
+    merged["npc_dialogue_recall_enabled"] = _safe_bool(merged.get("npc_dialogue_recall_enabled"), True)
+    merged["npc_dialogue_recall_cooldown_ticks"] = max(1, min(100, _safe_int(merged.get("npc_dialogue_recall_cooldown_ticks"), 4)))
+    merged["scene_continuity_enabled"] = _safe_bool(merged.get("scene_continuity_enabled"), True)
     return merged
 
 

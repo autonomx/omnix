@@ -253,6 +253,7 @@ from app.rpg.session.turn_contract import (
     build_turn_contract,
 )
 from app.rpg.world.location_registry import ensure_location_state
+from app.rpg.world.npc_dialogue_recall import player_input_requests_recall
 from app.rpg.world.world_event_director import (
     apply_world_behavior_to_events,
     build_world_event_candidates,
@@ -6191,6 +6192,20 @@ def _apply_turn_authoritative(
     current_tick = int(runtime_state.get("tick", 0) or 0)
     ambient_tick_command = is_ambient_tick_command(player_input)
     ambient_tick_result = {}
+    recall_request_conversation_result = {}
+
+    if player_input_requests_recall(player_input):
+        recall_request_conversation_result = advance_conversation_threads_for_turn(
+            player_input=player_input,
+            simulation_state=simulation_state,
+            resolved_result={
+                "action_type": "player_conversation_recall",
+                "semantic_action_type": "player_conversation_recall",
+                "semantic_family": "conversation",
+            },
+            tick=current_tick,
+            runtime_state=runtime_state,
+        )
 
     turn_exec_key = f"turn:{current_tick}"
 
@@ -6689,7 +6704,10 @@ def _apply_turn_authoritative(
         authoritative["semantic_family"] = "ambient"
         authoritative["activity_label"] = "wait_and_listen"
 
-    conversation_result = _safe_dict(resolved_result.get("conversation_result"))
+    conversation_result = _safe_dict(
+        recall_request_conversation_result
+        or resolved_result.get("conversation_result")
+    )
     if not conversation_result and not ambient_tick_result:
         conversation_result = advance_conversation_threads_for_turn(
             player_input=player_input,

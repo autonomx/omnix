@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from copy import deepcopy
 from typing import Any, Dict
 
 from app.rpg.world.conversation_rumors import expire_conversation_world_signals
@@ -66,6 +67,10 @@ def _forced_player_mode(command: str) -> str:
     return ""
 
 
+def is_forced_player_invited_command(player_input: str) -> bool:
+    return _safe_str(player_input).strip().lower() == "__ambient_tick_player_invited__"
+
+
 def _forced_topic_type(command: str) -> str:
     command = _safe_str(command).strip().lower()
     if command == "__ambient_tick_quest__":
@@ -128,6 +133,7 @@ def advance_autonomous_ambient_tick(
     force = is_ambient_tick_command(command)
     force_mode = _forced_player_mode(command)
     force_topic = _forced_topic_type(command)
+    force_player_invited = force_mode == "player_invited"
 
     if is_scene_activity_tick_command(command):
         scene_activity_result = maybe_schedule_scene_activity(
@@ -204,6 +210,34 @@ def advance_autonomous_ambient_tick(
         forced_topic_type=force_topic,
     )
 
+    forced_invite_failed = False
+    forced_invite_failure_reason = ""
+    if force_player_invited:
+        participation = _safe_dict(conversation_result.get("player_participation"))
+        pending = (
+            _safe_dict(conversation_result.get("pending_player_response"))
+            or _safe_dict(
+                _safe_dict(conversation_result.get("conversation_thread_state")).get("pending_player_response")
+            )
+            or _safe_dict(
+                _safe_dict(simulation_state.get("conversation_thread_state")).get("pending_player_response")
+            )
+        )
+        if (
+            not conversation_result.get("triggered")
+            or _safe_str(conversation_result.get("participation_mode")) != "player_invited"
+            or not participation.get("pending_response")
+            or not pending
+        ):
+            forced_invite_failed = True
+            if conversation_result.get("triggered") and (not participation.get("pending_response") or not pending):
+                forced_invite_failure_reason = "forced_player_invited_missing_pending_response"
+            else:
+                forced_invite_failure_reason = (
+                    _safe_str(conversation_result.get("reason"))
+                    or "forced_player_invited_did_not_create_pending_response"
+                )
+
     conversation_state = _safe_dict(simulation_state.get("conversation_thread_state"))
     debug = _safe_dict(conversation_state.get("debug"))
     if conversation_result.get("triggered"):
@@ -223,8 +257,19 @@ def advance_autonomous_ambient_tick(
         "scene_activity_result": scene_activity_result,
         "signal_expiration": signal_expiration,
         "conversation_settings": settings,
+        "forced_player_invited": bool(force_player_invited),
+        "forced_player_invited_failed": bool(forced_invite_failed),
+        "forced_player_invited_failure_reason": forced_invite_failure_reason,
+        "pending_player_response": deepcopy(
+            _safe_dict(
+                _safe_dict(simulation_state.get("conversation_thread_state")).get("pending_player_response")
+            )
+        ),
         "npc_history_state": _safe_dict(simulation_state.get("npc_history_state")),
         "npc_reputation_state": _safe_dict(simulation_state.get("npc_reputation_state")),
+        "npc_knowledge_state": _safe_dict(simulation_state.get("npc_knowledge_state")),
+        "npc_dialogue_recall_state": _safe_dict(simulation_state.get("npc_dialogue_recall_state")),
+        "scene_continuity_state": _safe_dict(simulation_state.get("scene_continuity_state")),
         "conversation_director_state": _safe_dict(simulation_state.get("conversation_director_state")),
         "presence_result": presence_result,
         "scene_population_state": scene_population,
