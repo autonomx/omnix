@@ -1,8 +1,11 @@
 from __future__ import annotations
 
-from app.rpg.world.npc_presence_runtime import update_present_npcs_for_location, present_npcs_at_location
-from app.rpg.world.scene_population_runtime import build_scene_population_state
 from app.rpg.world.conversation_director import select_conversation_intent
+from app.rpg.world.npc_presence_runtime import (
+    present_npcs_at_location,
+    update_present_npcs_for_location,
+)
+from app.rpg.world.scene_population_runtime import build_scene_population_state
 
 
 def test_schedule_populates_tavern_presence():

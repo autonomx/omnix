@@ -6,7 +6,6 @@ from typing import Any, Dict, List
 from app.rpg.world.npc_history_state import recent_npc_history
 from app.rpg.world.npc_knowledge_state import known_facts_for_npc
 
-
 MAX_RECALLS_PER_RESPONSE = 2
 
 

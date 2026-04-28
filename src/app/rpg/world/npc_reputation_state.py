@@ -3,7 +3,6 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any, Dict
 
-
 REPUTATION_MIN = -5
 REPUTATION_MAX = 5
 

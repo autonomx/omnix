@@ -4,10 +4,16 @@ from copy import deepcopy
 from typing import Any, Dict, List
 
 from app.rpg.world.npc_biography_registry import get_npc_biography
-from app.rpg.world.npc_dialogue_recall import select_dialogue_recall, player_input_requests_recall
+from app.rpg.world.npc_dialogue_recall import (
+    player_input_requests_recall,
+    select_dialogue_recall,
+)
 from app.rpg.world.npc_history_state import recent_npc_history
 from app.rpg.world.npc_knowledge_state import known_facts_for_npc
-from app.rpg.world.npc_reputation_state import get_npc_reputation, response_style_from_reputation
+from app.rpg.world.npc_reputation_state import (
+    get_npc_reputation,
+    response_style_from_reputation,
+)
 
 FORBIDDEN_NPC_DIALOGUE_CLAIMS = [
     "Do not create or complete quests.",

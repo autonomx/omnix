@@ -39,7 +39,6 @@ from app.rpg.world.npc_dialogue_recall import (
     find_recall_capable_npc,
     player_input_requests_recall,
 )
-from app.rpg.world.npc_presence_runtime import present_npcs_at_location
 from app.rpg.world.npc_goal_state import (
     dominant_goal_for_npc,
     goal_topic_bias,
@@ -55,11 +54,14 @@ from app.rpg.world.npc_knowledge_state import (
     add_npc_knowledge_from_topic,
     prune_npc_knowledge_state,
 )
-from app.rpg.world.scene_continuity_state import update_scene_continuity_from_conversation
+from app.rpg.world.npc_presence_runtime import present_npcs_at_location
 from app.rpg.world.npc_reputation_state import (
     get_npc_reputation,
     response_style_from_reputation,
     update_npc_reputation,
+)
+from app.rpg.world.scene_continuity_state import (
+    update_scene_continuity_from_conversation,
 )
 from app.rpg.world.world_event_log import add_world_event
 

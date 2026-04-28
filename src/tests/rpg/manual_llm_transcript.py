@@ -4,6 +4,7 @@ import argparse
 import concurrent.futures
 import contextlib
 import difflib
+import html
 import json
 import os
 import shlex
@@ -25,6 +26,13 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 
 from app.rpg.session.runtime import apply_turn
 from app.rpg.world.conversation_threads import has_pending_player_conversation_response
+
+MANUAL_LOG_MAX_CHUNK_BYTES = 1_000_000
+MANUAL_LOG_CHUNK_SOFT_BYTES = 850_000
+MANUAL_LOG_CHUNK_DIR_NAME = "chunks"
+MANUAL_HTML_DIR_NAME = "html"
+MANUAL_HTML_SCENARIO_DIR_NAME = "scenarios"
+MANUAL_HTML_JSON_PREVIEW_CHARS = 160_000
 
 OUTPUT_DIR = Path(__file__).parent.parent.parent.parent / "resources" / "test-results"
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
@@ -312,17 +320,1324 @@ def _reset_output(channel: str | None = None) -> None:
         _OUTPUTS[channel] = []
 
 
-def _write_output(path: Path, channel: str = "main") -> None:
+def _html_escape(value: Any) -> str:
+    return html.escape("" if value is None else str(value), quote=True)
+
+
+def _json_pretty(value: Any, *, max_chars: int = MANUAL_HTML_JSON_PREVIEW_CHARS) -> str:
+    try:
+        text = json.dumps(value, indent=2, ensure_ascii=False, sort_keys=True)
+    except Exception:
+        text = str(value)
+    if len(text) > max_chars:
+        return text[:max_chars] + "\n\n... [truncated in HTML; see text chunks]"
+    return text
+
+
+def _status_for_warnings(warnings: List[str], error: str = "") -> str:
+    if error:
+        return "fail"
+    if warnings:
+        return "warn"
+    return "pass"
+
+
+def _badge(label: Any, status: str = "info") -> str:
+    status = _safe_str(status or "info").lower()
+    if status not in {"pass", "warn", "fail", "info", "muted"}:
+        status = "info"
+    return f'<span class="badge {status}">{_html_escape(label)}</span>'
+
+
+def _status_for_summary(summary: Dict[str, Any]) -> str:
+    if _safe_str(summary.get("error")):
+        return "fail"
+    if _safe_list(summary.get("regression_warnings")) or _safe_list(summary.get("scenario_warnings")):
+        return "warn"
+    return "pass"
+
+
+def _rel_link(from_dir: Path, target: Any) -> str:
+    try:
+        target_path = Path(str(target))
+        return str(target_path.relative_to(from_dir)).replace("\\", "/")
+    except Exception:
+        return str(target).replace("\\", "/")
+
+
+def _extract_display_text(value: Any) -> str:
+    if isinstance(value, str):
+        return value.strip()
+    if isinstance(value, dict):
+        for key in (
+            "text",
+            "content",
+            "narration",
+            "message",
+            "line",
+            "summary",
+            "display_text",
+        ):
+            text = _safe_str(value.get(key)).strip()
+            if text:
+                return text
+    return ""
+
+
+def _extract_player_text(turn: Dict[str, Any], result: Dict[str, Any]) -> str:
+    return (
+        _safe_str(turn.get("player")).strip()
+        or _safe_str(turn.get("input")).strip()
+        or _safe_str(turn.get("player_input")).strip()
+        or _safe_str(result.get("player_input")).strip()
+        or _safe_str(result.get("input")).strip()
+    )
+
+
+def _extract_ai_narration_text(result: Dict[str, Any]) -> str:
+    result = _safe_dict(result)
+    nested_result = _safe_dict(result.get("result"))
+    turn_contract = _safe_dict(result.get("turn_contract"))
+    resolved = _first_dict(
+        result.get("resolved_result"),
+        nested_result.get("resolved_result"),
+        turn_contract.get("resolved_result"),
+        turn_contract.get("resolved_action"),
+    )
+
+    candidates = [
+        result.get("narration"),
+        nested_result.get("narration"),
+        turn_contract.get("narration"),
+        resolved.get("narration"),
+        resolved.get("narrative"),
+        resolved.get("description"),
+        resolved.get("text"),
+    ]
+
+    for candidate in candidates:
+        text = _extract_display_text(candidate)
+        if text:
+            return text
+
+    # Structured narration contract variants.
+    for container in (result, nested_result, turn_contract, resolved):
+        container = _safe_dict(container)
+        narration_obj = _safe_dict(
+            container.get("narration_result")
+            or container.get("presentation")
+            or container.get("narration_contract")
+        )
+        text = _extract_display_text(narration_obj.get("narration") or narration_obj)
+        if text:
+            return text
+
+    return ""
+
+
+def _extract_npc_dialogue_lines(result: Dict[str, Any]) -> List[Dict[str, str]]:
+    result = _safe_dict(result)
+    nested_result = _safe_dict(result.get("result"))
+    turn_contract = _safe_dict(result.get("turn_contract"))
+    conversation = _first_dict(
+        result.get("conversation_result"),
+        nested_result.get("conversation_result"),
+        turn_contract.get("conversation_result"),
+        _safe_dict(turn_contract.get("resolved_result")).get("conversation_result"),
+    )
+
+    lines: List[Dict[str, str]] = []
+
+    # Prefer explicit NPC response beat.
+    npc_response = _safe_dict(conversation.get("npc_response_beat"))
+    if npc_response:
+        line = _safe_str(npc_response.get("line")).strip()
+        if line:
+            lines.append(
+                {
+                    "speaker": _safe_str(npc_response.get("speaker_name") or npc_response.get("speaker_id") or "NPC"),
+                    "speaker_id": _safe_str(npc_response.get("speaker_id")),
+                    "line": line,
+                    "kind": "npc_response",
+                }
+            )
+
+    # Include current beat if it is an NPC speaking.
+    beat = _safe_dict(conversation.get("beat"))
+    if beat:
+        speaker_id = _safe_str(beat.get("speaker_id"))
+        line = _safe_str(beat.get("line")).strip()
+        if line and speaker_id != "player":
+            item = {
+                "speaker": _safe_str(beat.get("speaker_name") or speaker_id or "NPC"),
+                "speaker_id": speaker_id,
+                "line": line,
+                "kind": "conversation_beat",
+            }
+            if item not in lines:
+                lines.append(item)
+
+    # Include the latest thread beats for context, bounded.
+    thread = _safe_dict(conversation.get("thread"))
+    for beat in _safe_list(thread.get("beats"))[-4:]:
+        beat = _safe_dict(beat)
+        speaker_id = _safe_str(beat.get("speaker_id"))
+        line = _safe_str(beat.get("line")).strip()
+        if not line or speaker_id == "player":
+            continue
+        item = {
+            "speaker": _safe_str(beat.get("speaker_name") or speaker_id or "NPC"),
+            "speaker_id": speaker_id,
+            "line": line,
+            "kind": "thread_beat",
+        }
+        if item not in lines:
+            lines.append(item)
+
+    return lines[:6]
+
+
+def _extract_action_summary(result: Dict[str, Any]) -> str:
+    result = _safe_dict(result)
+    nested_result = _safe_dict(result.get("result"))
+    turn_contract = _safe_dict(result.get("turn_contract"))
+    resolved = _first_dict(
+        result.get("resolved_result"),
+        nested_result.get("resolved_result"),
+        turn_contract.get("resolved_result"),
+        turn_contract.get("resolved_action"),
+    )
+    conversation = _first_dict(
+        result.get("conversation_result"),
+        nested_result.get("conversation_result"),
+        turn_contract.get("conversation_result"),
+        resolved.get("conversation_result"),
+    )
+    service_result = _first_dict(resolved.get("service_result"), result.get("service_result"))
+
+    action_type = (
+        _safe_str(resolved.get("action_type"))
+        or _safe_str(resolved.get("semantic_action_type"))
+        or _safe_str(result.get("action_type"))
+    )
+
+    bits = []
+    if action_type:
+        bits.append(f"action_type={action_type}")
+    if conversation:
+        reason = _safe_str(conversation.get("reason"))
+        mode = _safe_str(conversation.get("participation_mode"))
+        if reason:
+            bits.append(f"conversation={reason}")
+        if mode:
+            bits.append(f"mode={mode}")
+    if service_result:
+        kind = _safe_str(service_result.get("kind"))
+        status = _safe_str(service_result.get("status"))
+        if kind or status:
+            bits.append(f"service={kind or 'service'}:{status or 'unknown'}")
+
+    return " | ".join(bits)
+
+
+HTML_REPORT_CSS = r"""
+:root {
+  color-scheme: dark;
+  --bg: #0f1117;
+  --panel: #171a23;
+  --panel2: #202431;
+  --panel3: #11141c;
+  --text: #e7eaf0;
+  --muted: #a9b0bf;
+  --border: #343a4a;
+  --pass: #38a169;
+  --warn: #d69e2e;
+  --fail: #e53e3e;
+  --info: #4299e1;
+  --code: #0b0d12;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 14px/1.5 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+a { color: #8cc8ff; text-decoration: none; }
+a:hover { text-decoration: underline; }
+.page {
+  max-width: 1600px;
+  margin: 0 auto;
+  padding: 24px;
+}
+.header {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: flex-start;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 16px;
+  margin-bottom: 20px;
+}
+.card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 16px;
+  margin: 12px 0;
+}
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+}
+.badge {
+  display: inline-block;
+  border-radius: 999px;
+  padding: 2px 10px;
+  font-size: 12px;
+  font-weight: 700;
+  margin-right: 6px;
+  white-space: nowrap;
+}
+.badge.pass { background: rgba(56,161,105,.18); color: #8ff0b3; }
+.badge.warn { background: rgba(214,158,46,.18); color: #ffd37a; }
+.badge.fail { background: rgba(229,62,62,.18); color: #ff9a9a; }
+.badge.info { background: rgba(66,153,225,.18); color: #9dd2ff; }
+.badge.muted { background: rgba(169,176,191,.14); color: var(--muted); }
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin: 12px 0;
+}
+input[type="search"] {
+  background: var(--panel2);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 9px 12px;
+  min-width: 320px;
+}
+button {
+  background: var(--panel2);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 8px 10px;
+  cursor: pointer;
+}
+button:hover { background: #2b3142; }
+table {
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--panel);
+}
+th, td {
+  border-bottom: 1px solid var(--border);
+  padding: 8px 10px;
+  text-align: left;
+  vertical-align: top;
+}
+th {
+  background: var(--panel2);
+  color: var(--muted);
+  position: sticky;
+  top: 0;
+  z-index: 2;
+}
+tr.hidden { display: none; }
+pre {
+  background: var(--code);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px;
+  overflow-x: auto;
+  max-height: 720px;
+}
+code { color: #d8e2ff; }
+details {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  margin: 10px 0;
+}
+summary {
+  cursor: pointer;
+  padding: 10px 12px;
+  font-weight: 700;
+}
+details > div {
+  padding: 0 12px 12px;
+}
+.warning { border-left: 4px solid var(--warn); }
+.error { border-left: 4px solid var(--fail); }
+.turn { border-left: 4px solid var(--info); }
+.small {
+  color: var(--muted);
+  font-size: 12px;
+}
+.kv {
+  display: grid;
+  grid-template-columns: minmax(180px, 260px) 1fr;
+  gap: 8px;
+}
+.kv div:nth-child(odd) { color: var(--muted); }
+.panel-title {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+.json-wrap { position: relative; }
+.copy-btn {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  font-size: 12px;
+}
+.pill-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+hr {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 16px 0;
+}
+.chat-transcript {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.chat-turn {
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--panel3);
+  padding: 14px;
+}
+.chat-turn-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--muted);
+  font-size: 12px;
+  margin-bottom: 10px;
+}
+.chat-row {
+  display: grid;
+  grid-template-columns: 130px 1fr;
+  gap: 12px;
+  margin: 8px 0;
+}
+.chat-label {
+  color: var(--muted);
+  font-weight: 700;
+}
+.chat-bubble {
+  border-radius: 12px;
+  padding: 10px 12px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  white-space: pre-wrap;
+}
+.chat-bubble.player {
+  background: rgba(66,153,225,.12);
+  border-color: rgba(66,153,225,.35);
+}
+.chat-bubble.ai {
+  background: rgba(56,161,105,.10);
+  border-color: rgba(56,161,105,.30);
+}
+.chat-bubble.npc {
+  background: rgba(214,158,46,.10);
+  border-color: rgba(214,158,46,.30);
+}
+.chat-action {
+  color: var(--muted);
+  font-size: 12px;
+}
+th.sortable {
+  cursor: pointer;
+  user-select: none;
+}
+th.sortable:hover {
+  background: #2b3142;
+}
+.sort-indicator {
+  color: var(--muted);
+  font-size: 11px;
+  margin-left: 6px;
+}
+th.sort-asc,
+th.sort-desc {
+  color: var(--text);
+}
+"""
+
+
+HTML_REPORT_JS = r"""
+let sortState = { key: "", direction: "asc" };
+
+function sortScenarioTable(key, type = "text") {
+  const table = document.getElementById("scenarioTable");
+  if (!table) return;
+
+  const tbody = table.querySelector("tbody");
+  const rows = Array.from(tbody.querySelectorAll("[data-scenario-row]"));
+
+  const direction =
+    sortState.key === key && sortState.direction === "asc" ? "desc" : "asc";
+
+  sortState = { key, direction };
+
+  rows.sort((a, b) => {
+    let av = a.getAttribute(`data-${key}`) || "";
+    let bv = b.getAttribute(`data-${key}`) || "";
+
+    if (type === "number") {
+      av = Number(av || 0);
+      bv = Number(bv || 0);
+      return direction === "asc" ? av - bv : bv - av;
+    }
+
+    if (type === "status") {
+      const rank = { fail: 0, warn: 1, pass: 2 };
+      av = rank[av] ?? 99;
+      bv = rank[bv] ?? 99;
+      return direction === "asc" ? av - bv : bv - av;
+    }
+
+    av = String(av).toLowerCase();
+    bv = String(bv).toLowerCase();
+    return direction === "asc"
+      ? av.localeCompare(bv)
+      : bv.localeCompare(av);
+  });
+
+  rows.forEach(row => tbody.appendChild(row));
+
+  document.querySelectorAll("[data-sort-key]").forEach(th => {
+    th.classList.remove("sort-asc", "sort-desc");
+    const label = th.querySelector(".sort-indicator");
+    if (label) label.textContent = "";
+  });
+
+  const active = document.querySelector(`[data-sort-key="${key}"]`);
+  if (active) {
+    active.classList.add(direction === "asc" ? "sort-asc" : "sort-desc");
+    const label = active.querySelector(".sort-indicator");
+    if (label) label.textContent = direction === "asc" ? "▲" : "▼";
+  }
+
+  applySearch();
+}
+function setFilter(status) {
+  const q = (document.getElementById('scenarioSearch')?.value || '').toLowerCase();
+  document.querySelectorAll('[data-scenario-row]').forEach(row => {
+    const rowStatus = row.getAttribute('data-status');
+    const text = row.innerText.toLowerCase();
+    const statusMatch = status === 'all' || rowStatus === status;
+    const textMatch = !q || text.includes(q);
+    row.classList.toggle('hidden', !(statusMatch && textMatch));
+  });
+}
+function applySearch() {
+  const active = document.querySelector('[data-filter].active')?.getAttribute('data-filter') || 'all';
+  setFilter(active);
+}
+function activateFilter(btn, status) {
+  document.querySelectorAll('[data-filter]').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  setFilter(status);
+}
+function toggleAllDetails(open) {
+  document.querySelectorAll('details').forEach(d => d.open = open);
+}
+async function copyText(id) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  const text = el.innerText;
+  try {
+    await navigator.clipboard.writeText(text);
+  } catch (err) {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    document.body.removeChild(ta);
+  }
+}
+"""
+
+
+def _html_json_block(value: Any, *, block_id: str, title: str = "JSON", open_by_default: bool = False) -> str:
+    open_attr = " open" if open_by_default else ""
+    pretty = _html_escape(_json_pretty(value))
+    return f"""
+<details{open_attr}>
+  <summary>{_html_escape(title)}</summary>
+  <div class="json-wrap">
+    <button class="copy-btn" onclick="copyText('{_html_escape(block_id)}')">Copy</button>
+    <pre><code id="{_html_escape(block_id)}">{pretty}</code></pre>
+  </div>
+</details>
+"""
+
+
+def _kv_panel(title: str, fields: Dict[str, Any], *, status: str = "info") -> str:
+    rows = []
+    for key, value in fields.items():
+        if isinstance(value, (dict, list)):
+            rendered = f"<pre><code>{_html_escape(_json_pretty(value, max_chars=12_000))}</code></pre>"
+        else:
+            rendered = _html_escape(value)
+        rows.append(f"<div>{_html_escape(key)}</div><div>{rendered}</div>")
+    return f"""
+<div class="card">
+  <div class="panel-title"><h3>{_html_escape(title)}</h3>{_badge(title, status)}</div>
+  <div class="kv">{''.join(rows)}</div>
+</div>
+"""
+
+
+def _first_dict(*values: Any) -> Dict[str, Any]:
+    for value in values:
+        value = _safe_dict(value)
+        if value:
+            return value
+    return {}
+
+
+def _first_list(*values: Any) -> List[Any]:
+    for value in values:
+        value = _safe_list(value)
+        if value:
+            return value
+    return []
+
+
+def _render_special_panels(result: Dict[str, Any], *, prefix: str) -> str:
+    result = _safe_dict(result)
+    nested_result = _safe_dict(result.get("result"))
+    turn_contract = _safe_dict(result.get("turn_contract"))
+
+    conversation = _first_dict(
+        result.get("conversation_result"),
+        nested_result.get("conversation_result"),
+        turn_contract.get("conversation_result"),
+        _safe_dict(turn_contract.get("resolved_result")).get("conversation_result"),
+    )
+    resolved = _first_dict(
+        result.get("resolved_result"),
+        nested_result.get("resolved_result"),
+        turn_contract.get("resolved_result"),
+        turn_contract.get("resolved_action"),
+    )
+    simulation_state = _first_dict(
+        result.get("simulation_state"),
+        nested_result.get("simulation_state"),
+        turn_contract.get("simulation_state"),
+        result.get("session", {}).get("simulation_state") if isinstance(result.get("session"), dict) else {},
+    )
+
+    npc_response = _safe_dict(conversation.get("npc_response_beat"))
+    dialogue_profile = _first_dict(conversation.get("dialogue_profile"), npc_response.get("dialogue_profile"))
+    topic_pivot = _safe_dict(conversation.get("topic_pivot"))
+    director_intent = _first_dict(
+        conversation.get("director_intent"),
+        _safe_dict(simulation_state.get("conversation_director_state")).get("debug", {}).get("selected_intent"),
+    )
+    dialogue_recall = _first_dict(
+        conversation.get("dialogue_recall"),
+        npc_response.get("dialogue_recall"),
+        dialogue_profile.get("dialogue_recall"),
+    )
+
+    panels = []
+
+    if topic_pivot:
+        panels.append(_kv_panel("Topic Pivot", {
+            "requested": topic_pivot.get("requested"),
+            "accepted": topic_pivot.get("accepted"),
+            "requested_topic_hint": topic_pivot.get("requested_topic_hint"),
+            "selected_topic_type": topic_pivot.get("selected_topic_type") or topic_pivot.get("topic_type"),
+            "selected_topic_id": topic_pivot.get("selected_topic_id") or topic_pivot.get("topic_id"),
+            "pivot_rejected_reason": topic_pivot.get("pivot_rejected_reason"),
+        }, status="pass" if topic_pivot.get("accepted") else "info"))
+
+    if director_intent:
+        panels.append(_kv_panel("Director Intent", {
+            "selected": director_intent.get("selected"),
+            "speaker_id": director_intent.get("speaker_id"),
+            "listener_id": director_intent.get("listener_id"),
+            "topic_type": director_intent.get("topic_type"),
+            "topic_id": director_intent.get("topic_id"),
+            "reason": director_intent.get("reason"),
+            "priority": director_intent.get("priority"),
+        }, status="pass" if director_intent.get("selected") else "muted"))
+
+    if dialogue_recall:
+        panels.append(_kv_panel("Dialogue Recall", {
+            "selected": dialogue_recall.get("selected"),
+            "recall_requested": dialogue_recall.get("recall_requested"),
+            "reason": dialogue_recall.get("reason"),
+            "recalls": dialogue_recall.get("recalls"),
+            "recalled_history_ids": conversation.get("recalled_history_ids") or npc_response.get("recalled_history_ids"),
+            "recalled_knowledge_ids": conversation.get("recalled_knowledge_ids") or npc_response.get("recalled_knowledge_ids"),
+        }, status="pass" if dialogue_recall.get("selected") else "muted"))
+
+    for label, key in [
+        ("Scene Population", "scene_population_state"),
+        ("NPC Knowledge", "npc_knowledge_state"),
+        ("NPC Reputation", "npc_reputation_state"),
+        ("Present NPCs", "present_npc_state"),
+        ("Conversation Threads", "conversation_thread_state"),
+        ("Scene Continuity", "scene_continuity_state"),
+    ]:
+        value = _first_dict(
+            result.get(key),
+            nested_result.get(key),
+            conversation.get(key),
+            simulation_state.get(key),
+        )
+        if value:
+            panels.append(_html_json_block(value, block_id=f"{prefix}-{key}", title=label))
+
+    if dialogue_profile:
+        panels.append(_kv_panel("Dialogue Profile", {
+            "npc_id": dialogue_profile.get("npc_id"),
+            "name": dialogue_profile.get("name"),
+            "role": dialogue_profile.get("role"),
+            "response_intent": dialogue_profile.get("response_intent"),
+            "reputation_response_style": dialogue_profile.get("reputation_response_style"),
+            "used_fact_ids": dialogue_profile.get("used_fact_ids"),
+            "known_facts": dialogue_profile.get("known_facts"),
+        }, status="info"))
+
+    service_result = _first_dict(resolved.get("service_result"), result.get("service_result"))
+    if service_result:
+        panels.append(_kv_panel("Service Result", {
+            "matched": service_result.get("matched"),
+            "kind": service_result.get("kind"),
+            "status": service_result.get("status"),
+            "reason": service_result.get("reason"),
+        }, status="pass" if service_result.get("matched") else "muted"))
+
+    return "".join(panels)
+
+
+def _render_player_ai_conversation(turns: List[Dict[str, Any]]) -> str:
+    rendered_turns = []
+
+    for idx, turn in enumerate(turns, start=1):
+        result = _safe_dict(turn.get("result") or turn)
+        player_text = _extract_player_text(turn, result)
+        narration_text = _extract_ai_narration_text(result)
+        npc_lines = _extract_npc_dialogue_lines(result)
+        action_summary = _extract_action_summary(result)
+
+        npc_html = ""
+        for npc_line in npc_lines:
+            npc_html += f"""
+            <div class="chat-row">
+              <div class="chat-label">NPC {_html_escape(npc_line.get("speaker") or "")}</div>
+              <div class="chat-bubble npc">{_html_escape(npc_line.get("line") or "")}</div>
+            </div>
+            """
+
+        if not narration_text and not npc_lines:
+            narration_text = "[no AI/narration text found for this turn]"
+
+        rendered_turns.append(
+            f"""
+            <div class="chat-turn" id="conversation-turn-{idx}">
+              <div class="chat-turn-header">
+                <span>Turn {idx}</span>
+                <span>{_html_escape(action_summary)}</span>
+              </div>
+
+              <div class="chat-row">
+                <div class="chat-label">Player</div>
+                <div class="chat-bubble player">{_html_escape(player_text or "[no player text]")}</div>
+              </div>
+
+              <div class="chat-row">
+                <div class="chat-label">AI / Narration</div>
+                <div class="chat-bubble ai">{_html_escape(narration_text)}</div>
+              </div>
+
+              {npc_html}
+
+              <div class="chat-action">{_html_escape(action_summary)}</div>
+            </div>
+            """
+        )
+
+    return f"""
+    <div class="card">
+      <div class="panel-title">
+        <h2>Player ↔ AI Conversation</h2>
+        {_badge("READABLE TRANSCRIPT", "info")}
+      </div>
+      <p class="small">
+        Clean conversation view extracted from player input, narration, NPC response beats, and resolved turn metadata.
+      </p>
+      <div class="chat-transcript">
+        {''.join(rendered_turns)}
+      </div>
+    </div>
+    """
+
+
+def _write_scenario_html_v2(
+    *,
+    output_dir: Path,
+    scenario_name: str,
+    scenario_summary: Dict[str, Any],
+    turns: List[Dict[str, Any]],
+    log_artifact: Dict[str, Any] | None = None,
+) -> str:
+    html_root = output_dir / MANUAL_HTML_DIR_NAME
+    scenario_dir = html_root / MANUAL_HTML_SCENARIO_DIR_NAME
+    scenario_dir.mkdir(parents=True, exist_ok=True)
+
+    warnings = _safe_list(scenario_summary.get("regression_warnings")) + _safe_list(
+        scenario_summary.get("scenario_warnings")
+    )
+    status = _status_for_summary(scenario_summary)
+
+    warning_html = ""
+    if warnings:
+        warning_html = (
+            '<div class="card warning"><h2>Warnings</h2><ul>'
+            + "".join(f"<li>{_html_escape(w)}</li>" for w in warnings)
+            + "</ul></div>"
+        )
+
+    artifact_html = ""
+    if log_artifact:
+        file_links = []
+        for file_path in _safe_list(log_artifact.get("files"))[:300]:
+            file_path_obj = Path(str(file_path))
+            try:
+                rel = file_path_obj.relative_to(html_root)
+                href = str(rel).replace("\\", "/")
+            except Exception:
+                try:
+                    rel = file_path_obj.relative_to(output_dir)
+                    href = "../" + str(rel).replace("\\", "/")
+                except Exception:
+                    href = str(file_path).replace("\\", "/")
+            file_links.append(f'<li><a href="{_html_escape(href)}">{_html_escape(file_path_obj.name)}</a></li>')
+
+        artifact_html = f"""
+<div class="card">
+  <h2>Text/JSON Artifacts</h2>
+  <div class="kv">
+    <div>chunked</div><div>{_html_escape(log_artifact.get("chunked"))}</div>
+    <div>total_bytes</div><div>{_html_escape(log_artifact.get("total_bytes"))}</div>
+    <div>chunk_count</div><div>{_html_escape(log_artifact.get("chunk_count"))}</div>
+  </div>
+  <ul>{''.join(file_links)}</ul>
+</div>
+"""
+
+    turn_html = []
+    for idx, turn in enumerate(turns, start=1):
+        result = _safe_dict(turn.get("result") or turn)
+        player = (
+            turn.get("player")
+            or turn.get("input")
+            or result.get("player_input")
+            or result.get("input")
+            or ""
+        )
+
+        nested_result = _safe_dict(result.get("result"))
+        turn_contract = _safe_dict(result.get("turn_contract"))
+        conversation = _first_dict(
+            result.get("conversation_result"),
+            nested_result.get("conversation_result"),
+            turn_contract.get("conversation_result"),
+            _safe_dict(turn_contract.get("resolved_result")).get("conversation_result"),
+        )
+        resolved = _first_dict(
+            result.get("resolved_result"),
+            nested_result.get("resolved_result"),
+            turn_contract.get("resolved_result"),
+            turn_contract.get("resolved_action"),
+        )
+        npc_response = _safe_dict(conversation.get("npc_response_beat"))
+
+        action_type = (
+            resolved.get("action_type")
+            or resolved.get("semantic_action_type")
+            or result.get("action_type")
+            or ""
+        )
+
+        turn_status = "pass"
+        if _safe_str(result.get("error")):
+            turn_status = "fail"
+        elif _safe_list(result.get("regression_warnings")) or _safe_list(result.get("scenario_warnings")):
+            turn_status = "warn"
+
+        block_id = f"{scenario_name}-turn-{idx}-raw".replace(":", "-").replace(" ", "-")
+
+        turn_html.append(f"""
+<details class="turn" id="turn-{idx}" open>
+  <summary>
+    Turn {idx}: {_html_escape(str(player)[:180])}
+    {_badge(turn_status.upper(), turn_status)}
+  </summary>
+  <div>
+    <div class="grid">
+      <div class="card"><strong>Action Type</strong><br>{_html_escape(action_type)}</div>
+      <div class="card"><strong>Conversation Reason</strong><br>{_html_escape(conversation.get("reason") or "")}</div>
+      <div class="card"><strong>Participation</strong><br>{_html_escape(conversation.get("participation_mode") or "")}</div>
+      <div class="card"><strong>Roleplay Source</strong><br>{_html_escape(npc_response.get("roleplay_source") or conversation.get("roleplay_source") or "")}</div>
+    </div>
+
+    <div class="card">
+      <h3>Player</h3>
+      <p>{_html_escape(player)}</p>
+      <h3>NPC Response</h3>
+      <p>{_html_escape(npc_response.get("line") or "")}</p>
+    </div>
+
+    {_render_special_panels(result, prefix=f"{scenario_name}-turn-{idx}".replace(":", "-").replace(" ", "-"))}
+
+    {_html_json_block(result, block_id=block_id, title="Raw Turn JSON")}
+  </div>
+</details>
+""")
+
+    scenario_json_id = f"{scenario_name}-summary-json".replace(":", "-").replace(" ", "-")
+
+    # Populate conversation preview for index
+    first_turn = _safe_dict(turns[0]) if turns else {}
+    first_result = _safe_dict(first_turn.get("result") or first_turn)
+    scenario_summary["conversation_preview"] = (
+        _extract_player_text(first_turn, first_result)
+        or _extract_ai_narration_text(first_result)
+        or ""
+    )[:240]
+
+    html_text = f"""<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>{_html_escape(scenario_name)} — Manual RPG Scenario</title>
+  <style>{HTML_REPORT_CSS}</style>
+</head>
+<body>
+<script>{HTML_REPORT_JS}</script>
+<div class="page">
+  <div class="header">
+    <div>
+      <h1>{_html_escape(scenario_name)}</h1>
+      <p>{_badge(status.upper(), status)} <a href="../index.html">Back to index</a></p>
+    </div>
+    <div class="small">Manual RPG transcript report</div>
+  </div>
+
+  <div class="toolbar">
+    <button onclick="toggleAllDetails(true)">Expand all</button>
+    <button onclick="toggleAllDetails(false)">Collapse all</button>
+  </div>
+
+  <div class="grid">
+    <div class="card"><strong>Turns</strong><br>{_html_escape(len(turns))}</div>
+    <div class="card"><strong>Regression warnings</strong><br>{_html_escape(len(_safe_list(scenario_summary.get("regression_warnings"))))}</div>
+    <div class="card"><strong>Scenario warnings</strong><br>{_html_escape(len(_safe_list(scenario_summary.get("scenario_warnings"))))}</div>
+    <div class="card"><strong>Status</strong><br>{_badge(status.upper(), status)}</div>
+  </div>
+
+  {warning_html}
+  {artifact_html}
+
+  {_render_player_ai_conversation(turns)}
+
+  <div class="card">
+    <h2>Turn Navigation</h2>
+    <div class="pill-list">
+      {''.join(
+        f'<a class="badge info" href="#conversation-turn-{i}">Chat {i}</a>'
+        f'<a class="badge muted" href="#turn-{i}">Debug {i}</a>'
+        for i in range(1, len(turns) + 1)
+      )}
+    </div>
+  </div>
+
+  {''.join(turn_html)}
+
+  {_html_json_block(scenario_summary, block_id=scenario_json_id, title="Scenario Summary JSON")}
+</div>
+</body>
+</html>
+"""
+
+    path = scenario_dir / f"{scenario_name}.html"
+    path.write_text(html_text, encoding="utf-8")
+    return str(path)
+
+
+def _write_html_index_v2(
+    *,
+    output_dir: Path,
+    scenario_summaries: List[Dict[str, Any]],
+) -> str:
+    html_root = output_dir / MANUAL_HTML_DIR_NAME
+    html_root.mkdir(parents=True, exist_ok=True)
+
+    pass_count = warn_count = fail_count = 0
+    rows = []
+
+    for summary in scenario_summaries:
+        name = _safe_str(summary.get("scenario_name") or summary.get("name") or "unknown")
+        status = _status_for_summary(summary)
+        if status == "pass":
+            pass_count += 1
+        elif status == "warn":
+            warn_count += 1
+        else:
+            fail_count += 1
+
+        preview = _safe_str(summary.get("conversation_preview") or "")
+
+        turn_count = len(_safe_list(summary.get("turns")))
+        regression_count = len(_safe_list(summary.get("regression_warnings")))
+        scenario_warning_count = len(_safe_list(summary.get("scenario_warnings")))
+        error_text = _safe_str(summary.get("error"))[:240]
+        preview = _safe_str(summary.get("conversation_preview") or "")[:240]
+
+        rows.append(f"""
+<tr
+  data-scenario-row
+  data-status="{_html_escape(status)}"
+  data-name="{_html_escape(name)}"
+  data-turns="{turn_count}"
+  data-regression="{regression_count}"
+  data-scenario-warnings="{scenario_warning_count}"
+  data-error="{_html_escape(error_text)}"
+  data-preview="{_html_escape(preview)}"
+>
+  <td>{_badge(status.upper(), status)}</td>
+  <td><a href="scenarios/{_html_escape(name)}.html">{_html_escape(name)}</a></td>
+  <td>{_html_escape(turn_count)}</td>
+  <td>{_html_escape(regression_count)}</td>
+  <td>{_html_escape(scenario_warning_count)}</td>
+  <td>{_html_escape(preview)}</td>
+  <td>{_html_escape(error_text)}</td>
+</tr>
+""")
+
+    html_text = f"""<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Manual RPG Test Report</title>
+  <style>{HTML_REPORT_CSS}</style>
+</head>
+<body>
+<script>{HTML_REPORT_JS}</script>
+<div class="page">
+  <div class="header">
+    <div>
+      <h1>Manual RPG Test Report</h1>
+      <p class="small">Generated by manual_llm_transcript.py</p>
+    </div>
+  </div>
+
+  <div class="grid">
+    <div class="card"><strong>Total</strong><br>{len(scenario_summaries)}</div>
+    <div class="card"><strong>Pass</strong><br>{pass_count}</div>
+    <div class="card"><strong>Warn</strong><br>{warn_count}</div>
+    <div class="card"><strong>Fail</strong><br>{fail_count}</div>
+  </div>
+
+  <div class="toolbar">
+    <input id="scenarioSearch" type="search" placeholder="Search scenarios/warnings..." oninput="applySearch()" />
+    <button data-filter="all" class="active" onclick="activateFilter(this, 'all')">All</button>
+    <button data-filter="pass" onclick="activateFilter(this, 'pass')">Pass</button>
+    <button data-filter="warn" onclick="activateFilter(this, 'warn')">Warn</button>
+    <button data-filter="fail" onclick="activateFilter(this, 'fail')">Fail</button>
+  </div>
+
+  <div class="card">
+    <h2>Scenarios</h2>
+    <table id="scenarioTable">
+      <thead>
+        <tr>
+          <th class="sortable" data-sort-key="status" onclick="sortScenarioTable('status', 'status')">
+            Status <span class="sort-indicator"></span>
+          </th>
+          <th class="sortable" data-sort-key="name" onclick="sortScenarioTable('name', 'text')">
+            Scenario <span class="sort-indicator"></span>
+          </th>
+          <th class="sortable" data-sort-key="turns" onclick="sortScenarioTable('turns', 'number')">
+            Turns <span class="sort-indicator"></span>
+          </th>
+          <th class="sortable" data-sort-key="regression" onclick="sortScenarioTable('regression', 'number')">
+            Regression Warnings <span class="sort-indicator"></span>
+          </th>
+          <th class="sortable" data-sort-key="scenario-warnings" onclick="sortScenarioTable('scenario-warnings', 'number')">
+            Scenario Warnings <span class="sort-indicator"></span>
+          </th>
+          <th class="sortable" data-sort-key="preview" onclick="sortScenarioTable('preview', 'text')">
+            Preview <span class="sort-indicator"></span>
+          </th>
+          <th class="sortable" data-sort-key="error" onclick="sortScenarioTable('error', 'text')">
+            Error <span class="sort-indicator"></span>
+          </th>
+        </tr>
+      </thead>
+      <tbody>{''.join(rows)}</tbody>
+    </table>
+  </div>
+</div>
+<script>
+  sortScenarioTable('status', 'status');
+</script>
+</body>
+</html>
+"""
+
+    path = html_root / "index.html"
+    path.write_text(html_text, encoding="utf-8")
+    return str(path)
+
+
+def _write_scenario_html(
+    *,
+    output_dir: Path,
+    scenario_name: str,
+    scenario_summary: Dict[str, Any],
+    turns: List[Dict[str, Any]],
+    log_artifact: Dict[str, Any] | None = None,
+) -> str:
+    scenario_dir = output_dir / "scenarios"
+    scenario_dir.mkdir(parents=True, exist_ok=True)
+
+    warnings = list(scenario_summary.get("regression_warnings") or []) + list(
+        scenario_summary.get("scenario_warnings") or []
+    )
+    error = scenario_summary.get("error") or ""
+    status = _status_for_warnings(warnings, error)
+
+    turn_html = []
+    for idx, turn in enumerate(turns, start=1):
+        player = turn.get("player_input") or turn.get("player") or turn.get("input") or ""
+        conversation = turn.get("conversation_result") or {}
+        resolved = turn.get("resolved_result") or turn.get("resolved_action") or {}
+
+        reason = conversation.get("reason") or ""
+        action_type = turn.get("action_type") or turn.get("semantic_action_type") or resolved.get("action_type") or ""
+        npc_response = conversation.get("npc_response_beat") or {}
+
+        turn_html.append(
+            f"""
+            <details class="turn" id="turn-{idx}" open>
+              <summary>Turn {idx}: {_html_escape(player)[:160]}</summary>
+              <div class="kv">
+                <div>Action Type</div><div>{_html_escape(action_type)}</div>
+                <div>Conversation Reason</div><div>{_html_escape(reason)}</div>
+                <div>NPC Response</div><div>{_html_escape(npc_response.get("line") or "")}</div>
+                <div>Roleplay Source</div><div>{_html_escape(npc_response.get("roleplay_source") or conversation.get("roleplay_source") or "")}</div>
+                <div>Dialogue Recall</div><div>{_html_escape((npc_response.get("dialogue_recall") or conversation.get("dialogue_recall") or {}).get("selected"))}</div>
+              </div>
+              <details>
+                <summary>Raw turn JSON</summary>
+                <div><pre><code>{_html_escape(_json_pretty(turn))}</code></pre></div>
+              </details>
+            </details>
+            """
+        )
+
+    warning_html = ""
+    if warnings:
+        warning_items = "\n".join(f"<li>{_html_escape(w)}</li>" for w in warnings)
+        warning_html = f'<div class="card warning"><h2>Warnings</h2><ul>{warning_items}</ul></div>'
+
+    artifact_html = ""
+    if log_artifact:
+        files = log_artifact.get("files") or []
+        file_links = []
+        for file_path in files[:200]:
+            rel = Path(file_path)
+            try:
+                rel = rel.relative_to(output_dir)
+            except Exception:
+                pass
+            file_links.append(f'<li><a href="../{_html_escape(str(rel).replace(chr(92), "/"))}">{_html_escape(rel.name)}</a></li>')
+        artifact_html = f"""
+        <div class="card">
+          <h2>Text Log Artifacts</h2>
+          <p class="small">chunked: {_html_escape(log_artifact.get("chunked"))}, total_bytes: {_html_escape(log_artifact.get("total_bytes"))}</p>
+          <ul>{''.join(file_links)}</ul>
+        </div>
+        """
+
+    html_text = f"""<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>{_html_escape(scenario_name)} — Manual RPG Scenario</title>
+  <style>{HTML_REPORT_CSS}</style>
+</head>
+<body>
+  <div class="page">
+    <div class="header">
+      <div>
+        <h1>{_html_escape(scenario_name)}</h1>
+        <p>{_badge(status.upper(), status)} <a href="../index.html">Back to index</a></p>
+      </div>
+      <div class="small">Manual RPG transcript report</div>
+    </div>
+
+    <div class="grid">
+      <div class="card"><strong>Turns</strong><br>{_html_escape(len(turns))}</div>
+      <div class="card"><strong>Regression warnings</strong><br>{_html_escape(len(scenario_summary.get("regression_warnings") or []))}</div>
+      <div class="card"><strong>Scenario warnings</strong><br>{_html_escape(len(scenario_summary.get("scenario_warnings") or []))}</div>
+      <div class="card"><strong>Status</strong><br>{_badge(status.upper(), status)}</div>
+    </div>
+
+    {warning_html}
+    {artifact_html}
+
+    <div class="card">
+      <h2>Turns</h2>
+      {''.join(turn_html)}
+    </div>
+
+    <details>
+      <summary>Scenario Summary JSON</summary>
+      <div><pre><code>{_html_escape(_json_pretty(scenario_summary))}</code></pre></div>
+    </details>
+  </div>
+</body>
+</html>
+"""
+    path = scenario_dir / f"{scenario_name}.html"
+    path.write_text(html_text, encoding="utf-8")
+    return str(path)
+
+
+def _write_html_index(
+    *,
+    output_dir: Path,
+    scenario_summaries: List[Dict[str, Any]],
+) -> str:
+    rows = []
+    pass_count = warn_count = fail_count = 0
+
+    for summary in scenario_summaries:
+        name = summary.get("scenario") or summary.get("scenario_name") or summary.get("name") or "unknown"
+        warnings = list(summary.get("regression_warnings") or []) + list(summary.get("scenario_warnings") or [])
+        error = summary.get("error") or ""
+        status = _status_for_warnings(warnings, error)
+        if status == "pass":
+            pass_count += 1
+        elif status == "warn":
+            warn_count += 1
+        else:
+            fail_count += 1
+
+        rows.append(
+            f"""
+            <tr>
+              <td>{_badge(status.upper(), status)}</td>
+              <td><a href="scenarios/{_html_escape(name)}.html">{_html_escape(name)}</a></td>
+              <td>{_html_escape(len(summary.get("turns") or []))}</td>
+              <td>{_html_escape(len(summary.get("regression_warnings") or []))}</td>
+              <td>{_html_escape(len(summary.get("scenario_warnings") or []))}</td>
+              <td>{_html_escape(error)[:240]}</td>
+            </tr>
+            """
+        )
+
+    html_text = f"""<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Manual RPG Test Report</title>
+  <style>{HTML_REPORT_CSS}</style>
+</head>
+<body>
+  <div class="page">
+    <div class="header">
+      <div>
+        <h1>Manual RPG Test Report</h1>
+        <p class="small">Generated by manual_llm_transcript.py</p>
+      </div>
+    </div>
+
+    <div class="grid">
+      <div class="card"><strong>Total</strong><br>{len(scenario_summaries)}</div>
+      <div class="card"><strong>Pass</strong><br>{pass_count}</div>
+      <div class="card"><strong>Warn</strong><br>{warn_count}</div>
+      <div class="card"><strong>Fail</strong><br>{fail_count}</div>
+    </div>
+
+    <div class="card">
+      <h2>Scenarios</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Status</th>
+            <th>Scenario</th>
+            <th>Turns</th>
+            <th>Regression Warnings</th>
+            <th>Scenario Warnings</th>
+            <th>Error</th>
+          </tr>
+        </thead>
+        <tbody>
+          {''.join(rows)}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</body>
+</html>
+"""
+    path = output_dir / "index.html"
+    path.write_text(html_text, encoding="utf-8")
+    return str(path)
+
+
+def _write_output(path: Path, channel: str = "main", *, max_chunk_bytes: int = MANUAL_LOG_MAX_CHUNK_BYTES) -> dict[str, Any] | None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with _OUTPUT_LOCK:
         lines = list(_OUTPUTS.get(channel, []))
-    path.write_text("\n".join(lines), encoding="utf-8")
-    print(f"Wrote transcript to: {path.resolve()}", flush=True)
+    text = "\n".join(lines)
+
+    if channel.startswith("service_"):
+        # Use chunking for service scenario transcripts
+        scenario_name = channel.replace("service_", "", 1)
+        write_result = _write_text_chunked(
+            output_dir=path.parent,
+            base_name=f"manual_rpg_service_scenarios__{scenario_name}",
+            text=text,
+            max_chunk_bytes=max_chunk_bytes,
+        )
+        print(f"Wrote chunked transcript for {scenario_name}: {write_result.get('chunk_count', 1)} chunks, {write_result.get('total_bytes', 0)} bytes", flush=True)
+        return write_result
+    else:
+        path.write_text(text, encoding="utf-8")
+        print(f"Wrote transcript to: {path.resolve()}", flush=True)
+        return None
 
 
-def _write_all_outputs(mapping: Dict[str, Path]) -> None:
+def _write_all_outputs(mapping: Dict[str, Path], *, max_chunk_bytes: int = MANUAL_LOG_MAX_CHUNK_BYTES) -> Dict[str, dict[str, Any] | None]:
+    results = {}
     for channel, path in mapping.items():
-        _write_output(path, channel=channel)
+        results[channel] = _write_output(path, channel=channel, max_chunk_bytes=max_chunk_bytes)
+    return results
 
 
 def _write_current_transcript_outputs() -> None:
@@ -808,7 +2123,7 @@ def _is_diff_candidate(path: Path, roots: Sequence[str]) -> bool:
 
 
 def _git_untracked_files(roots: Sequence[str]) -> List[Path]:
-    status = _run_git(["status", "--porcelain", "--untracked-files=all", "--", *roots])
+    status = _run_git_command(["status", "--porcelain", "--untracked-files=all", "--", *roots])
     paths: List[Path] = []
     for line in status.splitlines():
         if not line.startswith("?? "):
@@ -860,6 +2175,23 @@ def write_code_diff_snapshot(
     path.write_text(diff, encoding="utf-8")
 
 
+def _should_include_in_results_zip(path: Path, *, output_dir: Path) -> bool:
+    try:
+        rel = path.relative_to(output_dir)
+    except Exception:
+        rel = path
+
+    rel_parts = set(rel.parts)
+
+    # Do not include generated HTML report files in the zip.
+    if MANUAL_HTML_DIR_NAME in rel_parts:
+        return False
+    if path.suffix.lower() in {".html", ".htm"}:
+        return False
+
+    return True
+
+
 def _is_result_zip_candidate(path: Path) -> bool:
     if not path.is_file():
         return False
@@ -889,7 +2221,7 @@ def write_results_zip(path: Path = RESULTS_ZIP_PATH) -> None:
     candidates = sorted(
         candidate
         for candidate in OUTPUT_DIR.iterdir()
-        if _is_result_zip_candidate(candidate)
+        if _is_result_zip_candidate(candidate) and _should_include_in_results_zip(candidate, output_dir=OUTPUT_DIR)
     )
 
     if path.exists():
@@ -903,6 +2235,24 @@ def write_results_zip(path: Path = RESULTS_ZIP_PATH) -> None:
         f"Wrote results zip to: {path.resolve()} ({len(candidates)} file(s))",
         flush=True,
     )
+
+
+def _assert_zip_excludes_html(zip_path: Path) -> None:
+    try:
+        import zipfile
+
+        with zipfile.ZipFile(zip_path, "r") as zf:
+            html_members = [
+                name for name in zf.namelist()
+                if name.lower().endswith((".html", ".htm")) or name.startswith(f"{MANUAL_HTML_DIR_NAME}/")
+            ]
+        if html_members:
+            raise RuntimeError(
+                "zip_contains_generated_html:" + ",".join(html_members[:20])
+            )
+    except Exception as exc:
+        if isinstance(exc, RuntimeError):
+            raise
 
 
 MANUAL_TEST_TURNS = [
@@ -1815,6 +3165,195 @@ def _looks_like_synthetic_social_debug(value: Any) -> bool:
     )
 
 
+def _utf8_len(value: str) -> int:
+    try:
+        return len((value or "").encode("utf-8"))
+    except Exception:
+        return len(str(value or ""))
+
+
+def _chunk_text_by_turn_boundaries(
+    text: str,
+    *,
+    soft_limit_bytes: int = MANUAL_LOG_CHUNK_SOFT_BYTES,
+    hard_limit_bytes: int = MANUAL_LOG_MAX_CHUNK_BYTES,
+) -> list[str]:
+    text = text or ""
+    if _utf8_len(text) <= hard_limit_bytes:
+        return [text]
+
+    # Prefer splitting on turn/scenario boundaries.
+    markers = [
+        "\n================================================================================\nTURN ",
+        "\n--------------------------------------------------------------------------------\nTURN ",
+        "\nTURN ",
+    ]
+
+    parts: list[str] = []
+    remaining = text
+
+    # Split by the best marker available.
+    selected_marker = ""
+    for marker in markers:
+        if marker in text:
+            selected_marker = marker
+            break
+
+    if selected_marker:
+        raw_sections = remaining.split(selected_marker)
+        sections: list[str] = []
+        for index, section in enumerate(raw_sections):
+            if index == 0:
+                if section:
+                    sections.append(section)
+            else:
+                sections.append(selected_marker + section)
+
+        current = ""
+        for section in sections:
+            if not current:
+                current = section
+                continue
+
+            if _utf8_len(current + section) <= soft_limit_bytes:
+                current += section
+            else:
+                parts.extend(_hard_split_text(current, hard_limit_bytes=hard_limit_bytes))
+                current = section
+
+        if current:
+            parts.extend(_hard_split_text(current, hard_limit_bytes=hard_limit_bytes))
+
+        return [part for part in parts if part]
+
+    return _hard_split_text(text, hard_limit_bytes=hard_limit_bytes)
+
+
+def _hard_split_text(
+    text: str,
+    *,
+    hard_limit_bytes: int = MANUAL_LOG_MAX_CHUNK_BYTES,
+) -> list[str]:
+    text = text or ""
+    if _utf8_len(text) <= hard_limit_bytes:
+        return [text]
+
+    chunks: list[str] = []
+    current: list[str] = []
+    current_bytes = 0
+
+    for line in text.splitlines(keepends=True):
+        line_bytes = _utf8_len(line)
+
+        if current and current_bytes + line_bytes > hard_limit_bytes:
+            chunks.append("".join(current))
+            current = []
+            current_bytes = 0
+
+        # If a single line is huge, split by characters conservatively.
+        if line_bytes > hard_limit_bytes:
+            if current:
+                chunks.append("".join(current))
+                current = []
+                current_bytes = 0
+
+            buffer = ""
+            for char in line:
+                if _utf8_len(buffer + char) > hard_limit_bytes:
+                    chunks.append(buffer)
+                    buffer = char
+                else:
+                    buffer += char
+            if buffer:
+                chunks.append(buffer)
+            continue
+
+        current.append(line)
+        current_bytes += line_bytes
+
+    if current:
+        chunks.append("".join(current))
+
+    return chunks
+
+
+def _write_text_chunked(
+    *,
+    output_dir: Path,
+    base_name: str,
+    text: str,
+    max_chunk_bytes: int = MANUAL_LOG_MAX_CHUNK_BYTES,
+) -> dict[str, Any]:
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    total_bytes = _utf8_len(text)
+    if total_bytes <= max_chunk_bytes:
+        path = output_dir / f"{base_name}.txt"
+        path.write_text(text or "", encoding="utf-8")
+        return {
+            "chunked": False,
+            "path": str(path),
+            "files": [str(path)],
+            "total_bytes": total_bytes,
+            "chunk_count": 1,
+        }
+
+    chunk_dir = output_dir / MANUAL_LOG_CHUNK_DIR_NAME / base_name
+    chunk_dir.mkdir(parents=True, exist_ok=True)
+
+    chunks = _chunk_text_by_turn_boundaries(
+        text,
+        soft_limit_bytes=min(MANUAL_LOG_CHUNK_SOFT_BYTES, max_chunk_bytes),
+        hard_limit_bytes=max_chunk_bytes,
+    )
+
+    files: list[str] = []
+    chunk_count = len(chunks)
+    width = max(3, len(str(chunk_count)))
+
+    for index, chunk in enumerate(chunks, start=1):
+        chunk_header = (
+            f"Manual RPG transcript chunk {index}/{chunk_count}\n"
+            f"base_name: {base_name}\n"
+            f"chunk_bytes: {_utf8_len(chunk)}\n"
+            f"total_bytes: {total_bytes}\n"
+            "\n"
+        )
+        path = chunk_dir / f"{base_name}.part-{index:0{width}d}-of-{chunk_count:0{width}d}.txt"
+        path.write_text(chunk_header + chunk, encoding="utf-8")
+        files.append(str(path))
+
+    manifest = {
+        "base_name": base_name,
+        "chunked": True,
+        "total_bytes": total_bytes,
+        "chunk_count": chunk_count,
+        "max_chunk_bytes": max_chunk_bytes,
+        "files": files,
+        "source": "manual_llm_transcript_chunk_writer",
+    }
+    manifest_path = chunk_dir / f"{base_name}.manifest.json"
+    manifest_path.write_text(json.dumps(manifest, indent=2, ensure_ascii=False), encoding="utf-8")
+
+    index_path = output_dir / f"{base_name}.chunked.txt"
+    index_lines = [
+        f"{base_name} was split into {chunk_count} chunks.",
+        f"total_bytes: {total_bytes}",
+        f"manifest: {manifest_path}",
+        "",
+        "Files:",
+        *files,
+        "",
+    ]
+    index_path.write_text("\n".join(index_lines), encoding="utf-8")
+
+    return {
+        **manifest,
+        "manifest_path": str(manifest_path),
+        "index_path": str(index_path),
+    }
+
+
 def _manual_present_npcs(simulation_state: Dict[str, Any]) -> List[str]:
     simulation_state = _safe_dict(simulation_state)
 
@@ -1964,9 +3503,7 @@ def _extract_simulation_state(result: Dict[str, Any]) -> Dict[str, Any]:
     return simulation_state
 
 
-def _extract_scene_activity_state(result: Dict[str, Any]) -> Dict[str, Any]:
-    simulation_state = _extract_simulation_state(result)
-    return _safe_dict(simulation_state.get("scene_activity_state"))
+
 
 
 def _extract_npc_response_style(result: Dict[str, Any]) -> str:
@@ -2534,8 +4071,6 @@ def _scenario_contamination_warnings(
     if turn_index == 1:
         active_services = _extract_active_services(result)
         transaction_history = _extract_transaction_history(result)
-        journal_state = _extract_journal_state(result)
-        world_event_state = _extract_world_event_state(result)
         if transaction_history:
             warnings.append("scenario_started_with_transaction_history")
         if active_services:
@@ -2643,16 +4178,7 @@ def _manual_regression_warnings(
         or _safe_dict(_extract_turn_contract(result).get("resolved_action")).get("action_type")
         or _safe_dict(_safe_dict(result).get("result")).get("action_type")
     )
-    semantic_action_type = _safe_str(
-        _safe_dict(_extract_turn_contract(result).get("resolved_result")).get("semantic_action_type")
-        or _safe_dict(_extract_turn_contract(result).get("resolved_action")).get("semantic_action_type")
-        or _safe_dict(_safe_dict(result).get("result")).get("semantic_action_type")
-    )
-    semantic_family = _safe_str(
-        _safe_dict(_extract_turn_contract(result).get("resolved_result")).get("semantic_family")
-        or _safe_dict(_extract_turn_contract(result).get("resolved_action")).get("semantic_family")
-        or _safe_dict(_safe_dict(result).get("result")).get("semantic_family")
-    )
+
     player_lower = _safe_str(player_input).lower()
 
     conversation = _extract_conversation_result(result)
@@ -3965,7 +5491,7 @@ def run_manual_transcript(
             _emit(f"session_id: {effective_session_id}", channel=legacy_channel)
             _emit("ERROR:", channel=legacy_channel)
             _emit(f"Could not create or load flat manual session: {effective_session_id}", channel=legacy_channel)
-        return
+        return []
 
     summary_channel = "flat_summary"
     legacy_channel = "flat_legacy"
@@ -4263,17 +5789,6 @@ def _run_one_service_scenario(
     }
 
 
-def _write_scenario_html(scenario_name: str, summary: Dict[str, Any]) -> None:
-    html_turns = summary.get("html_turns", [])
-    if not html_turns:
-        return
-    with open(CONVERSATION_PATH, "a", encoding="utf-8") as f:
-        f.write(f"    <h3>Scenario: {scenario_name}</h3>\n")
-        for turn_html in html_turns:
-            f.write(turn_html)
-        f.write("\n")
-
-
 def run_service_scenarios(
     selected: str = "all",
     *,
@@ -4288,6 +5803,8 @@ def run_service_scenarios(
     console_llm_raw: bool = True,
     console_llm_max_chars: int = 1200,
     fail_on_regression_warnings: bool = False,
+    max_log_chunk_bytes: int = MANUAL_LOG_MAX_CHUNK_BYTES,
+    no_html_report: bool = False,
 ) -> None:
     if reset_output:
         _reset_output()
@@ -4400,8 +5917,6 @@ def run_service_scenarios(
                     output_map[f"service_{scenario_name}"] = (
                         OUTPUT_DIR / f"manual_rpg_service_scenarios__{scenario_name}.txt"
                     )
-                # Write HTML for this scenario
-                _write_scenario_html(scenario_name, summary)
     else:
         for item in scenario_items:
             scenario_name = item[0]
@@ -4437,19 +5952,80 @@ def run_service_scenarios(
                 output_map[f"service_{scenario_name}"] = (
                     OUTPUT_DIR / f"manual_rpg_service_scenarios__{scenario_name}.txt"
                 )
-            # Write HTML for this scenario
-            _write_scenario_html(scenario_name, summary)
 
     _emit_summary_block("Service Scenario Summary", scenario_summaries, summary_channel)
 
     if split_files:
         output_map[summary_channel] = OUTPUT_DIR / "manual_rpg_service_scenarios__summary.txt"
-        _write_all_outputs(output_map)
+        write_results = _write_all_outputs(output_map, max_chunk_bytes=max_log_chunk_bytes)
+        # Update scenario summaries with log artifacts
+        for summary in scenario_summaries:
+            scenario_name = summary.get("scenario")
+            channel = f"service_{scenario_name}"
+            write_result = write_results.get(channel)
+            if write_result:
+                summary["log_artifact"] = write_result
+            # Write HTML for this scenario
+            if not no_html_report:
+                scenario_html_path = _write_scenario_html_v2(
+                    output_dir=OUTPUT_DIR,
+                    scenario_name=scenario_name,
+                    scenario_summary=summary,
+                    turns=summary.get("turns") or [],
+                    log_artifact=write_result,
+                )
+                summary["html_report"] = scenario_html_path
     else:
         suffix = selected if selected != "all" else "all"
         _write_output(
             OUTPUT_DIR / f"manual_rpg_service_scenarios_{suffix}.txt",
             channel=legacy_channel,
+        )
+        # For legacy mode, still write HTML
+        if not no_html_report:
+            for summary in scenario_summaries:
+                scenario_name = summary.get("scenario")
+                # Write HTML for this scenario
+                scenario_html_path = _write_scenario_html_v2(
+                    output_dir=OUTPUT_DIR,
+                    scenario_name=scenario_name,
+                    scenario_summary=summary,
+                    turns=summary.get("turns") or [],
+                    log_artifact=None,
+                )
+                summary["html_report"] = scenario_html_path
+
+    # Write HTML index
+    _write_html_index(
+        output_dir=OUTPUT_DIR,
+        scenario_summaries=scenario_summaries,
+    )
+
+    # Write final manifest for all chunked scenarios
+    chunk_manifest = {
+        "chunking": {
+            "enabled": True,
+            "max_chunk_bytes": max_log_chunk_bytes,
+        },
+        "scenarios": [
+            {
+                "scenario_name": item.get("scenario"),
+                "log_artifact": item.get("log_artifact"),
+            }
+            for item in scenario_summaries
+            if item.get("log_artifact")
+        ],
+        "source": "manual_llm_transcript_chunk_manifest",
+    }
+    (OUTPUT_DIR / "manual_log_chunks_manifest.json").write_text(
+        json.dumps(chunk_manifest, indent=2, ensure_ascii=False),
+        encoding="utf-8",
+    )
+
+    if not no_html_report:
+        _write_html_index_v2(
+            output_dir=OUTPUT_DIR,
+            scenario_summaries=scenario_summaries,
         )
 
 
@@ -4498,6 +6074,8 @@ def run_requested_transcripts(args: argparse.Namespace) -> None:
             console_llm_raw=args.console_llm_raw,
             console_llm_max_chars=args.console_llm_max_chars,
             fail_on_regression_warnings=args.fail_on_regression_warnings,
+            max_log_chunk_bytes=max(100_000, int(args.max_log_chunk_bytes or MANUAL_LOG_MAX_CHUNK_BYTES)),
+            no_html_report=args.no_html_report,
         )
         with open(CONVERSATION_PATH, "a", encoding="utf-8") as f:
             f.write("    <h2>Flat Manual Transcript</h2>\n")
@@ -4542,6 +6120,8 @@ def run_requested_transcripts(args: argparse.Namespace) -> None:
             console_llm_raw=args.console_llm_raw,
             console_llm_max_chars=args.console_llm_max_chars,
             fail_on_regression_warnings=args.fail_on_regression_warnings,
+            max_log_chunk_bytes=max(100_000, int(args.max_log_chunk_bytes or MANUAL_LOG_MAX_CHUNK_BYTES)),
+            no_html_report=args.no_html_report,
         )
         # Write HTML footer
         html_footer = "</body>\n</html>"
@@ -4600,6 +6180,12 @@ def main() -> None:
             "Only turns within each scenario remain sequential. "
             "Default: 4, or env OMNIX_MANUAL_SCENARIO_WORKERS if set."
         ),
+    )
+    parser.add_argument(
+        "--max-log-chunk-bytes",
+        type=int,
+        default=MANUAL_LOG_MAX_CHUNK_BYTES,
+        help="Maximum UTF-8 bytes per manual transcript chunk file. Default: 1000000.",
     )
     parser.add_argument(
         "--no-parallel-scenarios",
@@ -4708,6 +6294,11 @@ def main() -> None:
         default=[],
         help="Path root to include in code-diff.txt. Defaults to src. Can be passed multiple times.",
     )
+    parser.add_argument(
+        "--no-html-report",
+        action="store_true",
+        help="Do not generate local HTML report files.",
+    )
 
     args = parser.parse_args()
 
@@ -4747,6 +6338,7 @@ def main() -> None:
                 write_code_diff_snapshot(roots=code_diff_roots)
             if not args.no_results_zip:
                 write_results_zip()
+                _assert_zip_excludes_html(RESULTS_ZIP_PATH)
             with _REGRESSION_WARNING_LOCK:
                 warning_rows = list(_REGRESSION_WARNING_ROWS)
                 regression_warnings = list(_REGRESSION_WARNINGS)

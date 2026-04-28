@@ -3,7 +3,6 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any, Dict, List
 
-
 MAX_HISTORY_ENTRIES_PER_NPC = 20
 DEFAULT_HISTORY_TTL_TICKS = 1000
 

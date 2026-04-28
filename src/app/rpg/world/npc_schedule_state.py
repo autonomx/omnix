@@ -5,7 +5,6 @@ from typing import Any, Dict, List
 
 from app.rpg.world.npc_biography_registry import get_npc_biography
 
-
 DEFAULT_NPC_SCHEDULES: Dict[str, List[Dict[str, Any]]] = {
     "npc:Bran": [
         {

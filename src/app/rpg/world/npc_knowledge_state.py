@@ -3,7 +3,6 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any, Dict, List
 
-
 MAX_KNOWN_FACTS_PER_NPC = 24
 DEFAULT_KNOWLEDGE_TTL_TICKS = 2000
 

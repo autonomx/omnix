@@ -5,7 +5,6 @@ from typing import Any, Dict, List
 
 from app.rpg.world.location_registry import current_location_id
 
-
 MAX_RECENT_FOCUS = 8
 MAX_RECENT_SPEAKERS = 8
 MAX_RECENT_ACTIVITIES = 8

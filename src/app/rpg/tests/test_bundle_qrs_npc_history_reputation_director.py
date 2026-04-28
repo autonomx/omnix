@@ -1,15 +1,22 @@
 """Bundle QRS: NPC History, Reputation, and Conversation Director tests."""
 from __future__ import annotations
 
-import pytest
 from typing import Any, Dict
 
+import pytest
+
+from app.rpg.world.conversation_director import (
+    ensure_conversation_director_state,
+    present_npcs_for_location,
+    select_conversation_intent,
+)
+from app.rpg.world.conversation_settings import normalize_conversation_settings
 from app.rpg.world.npc_history_state import (
+    MAX_HISTORY_ENTRIES_PER_NPC,
     add_npc_history_entry,
     ensure_npc_history_state,
     prune_npc_history_state,
     recent_npc_history,
-    MAX_HISTORY_ENTRIES_PER_NPC,
 )
 from app.rpg.world.npc_reputation_state import (
     ensure_npc_reputation_state,
@@ -17,13 +24,6 @@ from app.rpg.world.npc_reputation_state import (
     response_style_from_reputation,
     update_npc_reputation,
 )
-from app.rpg.world.conversation_director import (
-    ensure_conversation_director_state,
-    present_npcs_for_location,
-    select_conversation_intent,
-)
-from app.rpg.world.conversation_settings import normalize_conversation_settings
-
 
 # ── Helpers ────────────────────────────────────────────────────────────────
 

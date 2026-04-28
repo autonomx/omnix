@@ -9,7 +9,10 @@ from app.rpg.world.conversation_topics import select_conversation_topic
 from app.rpg.world.location_registry import current_location_id
 from app.rpg.world.npc_biography_registry import get_npc_biography
 from app.rpg.world.npc_goal_state import dominant_goal_for_npc, seed_default_npc_goals
-from app.rpg.world.npc_presence_runtime import present_npcs_at_location, update_present_npcs_for_location
+from app.rpg.world.npc_presence_runtime import (
+    present_npcs_at_location,
+    update_present_npcs_for_location,
+)
 from app.rpg.world.scene_continuity_state import update_scene_continuity_from_activity
 from app.rpg.world.world_event_log import add_world_event
 
