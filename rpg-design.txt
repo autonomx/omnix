@@ -1,185 +1,44 @@
-rs_referrals_signals.pyNext bundle:
-
-Bundle AI-AJ-AK — Evolved NPC Companions, Party Eligibility, and Arc Continuity v1
-
-Include required fix first:
-
-AF-AG-AH.3 — Evolution Profile Projection Fix
-
-Apply after AF-AG-AH.2.
-
-Required fix: AF-AG-AH.3 — Evolution Profile Projection Fix
-Goal
-
-npc_evolution_state is now correctly updated, but the later dialogue_profile does not always expose:
-
-personality_modifiers
-active_motivations
-identity_arc
-current_role
-base_role
-party_join_eligibility
-
-This breaks:
-
-npc_evolution_trust_profile_expected_loyal_modifier
-
-The fix: make build_npc_dialogue_profile(...) project the merged/evolved NPC identity into the final profile every time.
-
-PATCH 1 — src/app/rpg/world/npc_dialogue_profile.py
-
-Find build_npc_dialogue_profile(...).
-
-Make sure the imports exist:
-
-from copy import deepcopy
-
-from app.rpg.world.npc_evolution_state import (
-    get_npc_evolution,
-    merged_npc_identity,
-)
-
-Find where biography/profile is loaded. It likely looks like:
-
-biography = get_npc_biography(npc_id)
-
-Patch it to preserve the base profile and merge evolution:
-
-base_profile = get_npc_biography(npc_id)
-evolution = get_npc_evolution(simulation_state, npc_id=npc_id)
-biography = merged_npc_identity(
-    base_profile=base_profile,
-    evolution=evolution,
-)
-
-If the function already does something similar, ensure the final profile dict uses the merged biography, not the unmerged base_profile.
-
-Add these fields to the returned profile dict:
-
-"profile_source": _safe_str(biography.get("source")),
-"biography_source": _safe_str(base_profile.get("source")),
-"base_role": _safe_str(biography.get("base_role")),
-"starting_role": _safe_str(biography.get("starting_role")),
-"current_role": _safe_str(biography.get("current_role") or biography.get("role")),
-"identity_arc": _safe_str(biography.get("identity_arc")),
-"personality_modifiers": deepcopy(_safe_list(biography.get("personality_modifiers"))),
-"active_motivations": deepcopy(_safe_list(biography.get("active_motivations"))),
-"party_join_eligibility": deepcopy(_safe_dict(biography.get("party_join_eligibility"))),
-"npc_evolution": deepcopy(evolution),
-
-Also ensure role prefers the evolved role:
-
-"role": _safe_str(
-    biography.get("current_role")
-    or biography.get("role")
-    or biography.get("starting_role")
-),
-
-If there is a line like this later:
-
-"profile_source": "deterministic_npc_dialogue_profile",
-
-do not let it overwrite the merged source. Use:
-
-"source": _safe_str(biography.get("source")) or "deterministic_npc_dialogue_profile",
-PATCH 2 — src/app/rpg/world/npc_evolution_state.py
-
-In merged_npc_identity(...), make sure personality_modifiers and active_motivations are projected at top level.
-
-Replace the return construction with this safer shape:
-
-def merged_npc_identity(
-    *,
-    base_profile: Dict[str, Any],
-    evolution: Dict[str, Any],
-) -> Dict[str, Any]:
-    base = _safe_dict(base_profile)
-    evo = _safe_dict(evolution)
-
-    base_role = _safe_str(
-        base.get("base_role")
-        or base.get("role")
-        or base.get("starting_role")
-    )
-    current_role = _safe_str(evo.get("current_role")) or _safe_str(
-        base.get("current_role_hint") or base_role
-    )
-
-    modifiers = deepcopy(_safe_list(evo.get("personality_modifiers")))
-    motivations = deepcopy(_safe_list(evo.get("active_motivations")))
-    base_personality = deepcopy(_safe_dict(base.get("personality")))
-
-    merged = {
-        **deepcopy(base),
-        "base_role": base_role,
-        "starting_role": _safe_str(base.get("starting_role") or base_role),
-        "current_role": current_role,
-        "role": current_role or base_role,
-        "identity_arc": _safe_str(evo.get("identity_arc")),
-        "personality_modifiers": modifiers,
-        "active_motivations": motivations,
-        "party_join_eligibility": deepcopy(_safe_dict(evo.get("party_join_eligibility"))),
-        "npc_evolution": deepcopy(evo),
-        "personality": {
-            **base_personality,
-            "evolution_modifiers": modifiers,
-        },
-        "source": "merged_file_profile_and_evolution_state",
-    }
-
-    return merged
-
-This guarantees the dialogue profile can read the evolved fields directly.
-
-PATCH 3 — Manual validator should check profile source paths robustly
-
-File:
-
-src/tests/rpg/manual_llm_transcript.py
-
-Find the block:
-
-if scenario_name == "npc_evolution_reputation_threshold_trust":
-
-Keep the turn 1 state-level check.
-
-For the turn 3 profile check, use all possible fields:
-
-if turn_index >= 3:
-    conversation = _extract_conversation_result(result)
-    profile = _safe_dict(conversation.get("dialogue_profile"))
-    profile_modifiers = (
-        _safe_list(profile.get("personality_modifiers"))
-        or _safe_list(_safe_dict(profile.get("npc_evolution")).get("personality_modifiers"))
-        or _safe_list(
-            _safe_dict(profile.get("personality")).get("evolution_modifiers")
-        )
-    )
-    if not any("loyal" in _safe_str(mod).lower() for mod in profile_modifiers):
-        warnings.append("npc_evolution_trust_profile_expected_loyal_modifier")
-
-This keeps the validation strict enough while matching the intended projection options.
-
-Bundle AI — Party Eligibility Signals v1
-Goal
-
-NPC evolution can make an NPC eligible to join the player’s party, but it does not automatically join them.
-
-Example:
-
-Bran loses tavern → revenge motivation → party_join_eligibility.eligible = true
-
-The actual join requires an explicit player conversation/action later.
-
-NEW FILE — src/app/rpg/world/npc_party_eligibility.py
+Strict apply-this-patch spec
+1. Create new file
+src/app/rpg/world/companion_acceptance.py
 from __future__ import annotations
 
 from copy import deepcopy
 from typing import Any, Dict, List
 
-from app.rpg.world.npc_biography_registry import get_npc_biography
-from app.rpg.world.npc_evolution_state import get_npc_evolution
-from app.rpg.world.npc_reputation_state import get_npc_reputation
+from app.rpg.party.party_state import add_companion, ensure_party_state
+from app.rpg.world.npc_party_eligibility import evaluate_npc_party_join_eligibility
+
+
+ACCEPTANCE_MARKERS = {
+    "yes",
+    "yeah",
+    "agreed",
+    "i accept",
+    "join us",
+    "join me",
+    "come with me",
+    "you can come",
+    "welcome",
+    "let's go",
+    "lets go",
+    "travel with me",
+    "fight with me",
+}
+
+REJECTION_MARKERS = {
+    "no",
+    "not now",
+    "stay here",
+    "wait here",
+    "i refuse",
+    "don't come",
+    "do not come",
+    "go back",
+}
+
+MAX_PENDING_OFFERS = 8
+MAX_ACCEPTANCE_HISTORY = 24
 
 
 def _safe_str(value: Any) -> str:
@@ -194,243 +53,239 @@ def _safe_list(value: Any) -> List[Any]:
     return value if isinstance(value, list) else []
 
 
-def _safe_int(value: Any, default: int = 0) -> int:
-    try:
-        return int(value)
-    except Exception:
-        return default
+def _text_has_any(text: str, markers: set[str]) -> bool:
+    normalized = _safe_str(text).strip().lower()
+    return any(marker in normalized for marker in markers)
 
 
-def evaluate_npc_party_join_eligibility(
+def player_input_accepts_companion_offer(player_input: Any) -> bool:
+    return _text_has_any(_safe_str(player_input), ACCEPTANCE_MARKERS)
+
+
+def player_input_rejects_companion_offer(player_input: Any) -> bool:
+    return _text_has_any(_safe_str(player_input), REJECTION_MARKERS)
+
+
+def ensure_companion_acceptance_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
+    state = _safe_dict(simulation_state.get("companion_acceptance_state"))
+
+    if not isinstance(state.get("pending_offers"), dict):
+        state["pending_offers"] = {}
+
+    if not isinstance(state.get("history"), list):
+        state["history"] = []
+
+    if not isinstance(state.get("debug"), dict):
+        state["debug"] = {}
+
+    simulation_state["companion_acceptance_state"] = state
+    return state
+
+
+def record_companion_join_offer(
     simulation_state: Dict[str, Any],
     *,
     npc_id: str,
+    join_intent: Dict[str, Any],
+    tick: int,
 ) -> Dict[str, Any]:
     npc_id = _safe_str(npc_id)
-    if not npc_id.startswith("npc:"):
+    intent = _safe_dict(join_intent)
+
+    if not intent.get("offered"):
         return {
-            "eligible": False,
-            "reason": "invalid_npc_id",
-            "source": "deterministic_npc_party_eligibility",
+            "recorded": False,
+            "reason": "join_intent_not_offered",
+            "source": "deterministic_companion_acceptance",
         }
 
-    bio = get_npc_biography(npc_id)
-    evo = get_npc_evolution(simulation_state, npc_id=npc_id)
-    rep = get_npc_reputation(simulation_state, npc_id=npc_id)
+    state = ensure_companion_acceptance_state(simulation_state)
+    pending = _safe_dict(state.get("pending_offers"))
 
-    party = _safe_dict(evo.get("party_join_eligibility"))
-    required_trust = _safe_int(party.get("requires_player_trust"), 0)
-    trust = _safe_int(rep.get("trust"), 0)
+    offer_id = f"companion_offer:{npc_id}:{int(tick or 0)}"
+    eligibility = _safe_dict(intent.get("party_join_eligibility_result"))
 
-    if not party.get("eligible"):
-        return {
-            "eligible": False,
-            "npc_id": npc_id,
-            "name": _safe_str(bio.get("name")) or npc_id.replace("npc:", ""),
-            "reason": "no_party_join_arc",
-            "source": "deterministic_npc_party_eligibility",
-        }
+    pending[npc_id] = {
+        "offer_id": offer_id,
+        "npc_id": npc_id,
+        "created_tick": int(tick or 0),
+        "status": "pending_player_acceptance",
+        "reason": _safe_str(intent.get("reason") or "eligible_to_join"),
+        "party_join_eligibility_result": deepcopy(eligibility),
+        "source": "deterministic_companion_acceptance",
+    }
 
-    if trust < required_trust:
-        return {
-            "eligible": False,
-            "npc_id": npc_id,
-            "name": _safe_str(bio.get("name")) or npc_id.replace("npc:", ""),
-            "reason": "insufficient_trust",
-            "required_trust": required_trust,
-            "current_trust": trust,
-            "party_join_eligibility": deepcopy(party),
-            "source": "deterministic_npc_party_eligibility",
-        }
+    # Bound pending offers deterministically by oldest created_tick, then npc_id.
+    ordered = sorted(
+        pending.items(),
+        key=lambda item: (
+            int(_safe_dict(item[1]).get("created_tick") or 0),
+            _safe_str(item[0]),
+        ),
+    )
+    pending = dict(ordered[-MAX_PENDING_OFFERS:])
+
+    state["pending_offers"] = pending
+    state["debug"] = {
+        "last_offer_id": offer_id,
+        "last_npc_id": npc_id,
+        "last_tick": int(tick or 0),
+        "source": "deterministic_companion_acceptance",
+    }
 
     return {
-        "eligible": True,
+        "recorded": True,
+        "offer_id": offer_id,
         "npc_id": npc_id,
-        "name": _safe_str(bio.get("name")) or npc_id.replace("npc:", ""),
-        "reason": _safe_str(party.get("reason") or "party_join_arc_available"),
-        "current_role": _safe_str(evo.get("current_role") or bio.get("role")),
-        "identity_arc": _safe_str(evo.get("identity_arc")),
-        "active_motivations": deepcopy(_safe_list(evo.get("active_motivations"))),
-        "party_join_eligibility": deepcopy(party),
-        "source": "deterministic_npc_party_eligibility",
+        "requires_player_acceptance": True,
+        "source": "deterministic_companion_acceptance",
     }
 
 
-def party_eligible_npcs(
-    simulation_state: Dict[str, Any],
-    *,
-    npc_ids: List[str],
-) -> List[Dict[str, Any]]:
-    out = []
-    for npc_id in npc_ids[:16]:
-        result = evaluate_npc_party_join_eligibility(
-            simulation_state,
-            npc_id=_safe_str(npc_id),
-        )
-        if result.get("eligible"):
-            out.append(result)
-    return out
-Wire into conversation_threads.py
-
-Add import:
-
-from app.rpg.world.npc_party_eligibility import evaluate_npc_party_join_eligibility
-
-After npc_evolution_result is computed or near the NPC response result assembly:
-
-party_join_eligibility_result = {}
-if settings.get("npc_party_eligibility_enabled", True):
-    party_join_eligibility_result = evaluate_npc_party_join_eligibility(
-        simulation_state,
-        npc_id=responder_id,
-    )
-
-Add to npc_response_beat:
-
-"party_join_eligibility_result": deepcopy(party_join_eligibility_result),
-
-Add to top-level conversation_result:
-
-"party_join_eligibility_result": deepcopy(party_join_eligibility_result),
-Bundle AJ — Companion Offer / Join Intent v1
-Goal
-
-When eligible, an NPC may offer to join, but this produces only a join intent, not a direct party mutation.
-
-The actual party membership runtime can come next.
-
-Output:
-
-{
-  "companion_join_intent": {
-    "offered": true,
-    "npc_id": "npc:Bran",
-    "reason": "lost_home_and_has_revenge_motivation",
-    "requires_player_acceptance": true
-  }
-}
-NEW FILE — src/app/rpg/world/companion_join_intent.py
-from __future__ import annotations
-
-from copy import deepcopy
-from typing import Any, Dict
-
-from app.rpg.world.npc_party_eligibility import evaluate_npc_party_join_eligibility
-
-
-JOIN_REQUEST_MARKERS = {
-    "join me",
-    "come with me",
-    "travel with me",
-    "fight with me",
-    "help me",
-    "come along",
-    "adventure with me",
-}
-
-
-def _safe_str(value: Any) -> str:
-    return "" if value is None else str(value)
-
-
-def _safe_dict(value: Any) -> Dict[str, Any]:
-    return value if isinstance(value, dict) else {}
-
-
-def player_input_requests_join(player_input: Any) -> bool:
-    text = _safe_str(player_input).lower()
-    return any(marker in text for marker in JOIN_REQUEST_MARKERS)
-
-
-def maybe_create_companion_join_intent(
+def resolve_companion_acceptance(
     simulation_state: Dict[str, Any],
     *,
     npc_id: str,
     player_input: str,
+    tick: int,
 ) -> Dict[str, Any]:
-    requested = player_input_requests_join(player_input)
-    eligibility = evaluate_npc_party_join_eligibility(
-        simulation_state,
-        npc_id=npc_id,
+    npc_id = _safe_str(npc_id)
+    state = ensure_companion_acceptance_state(simulation_state)
+    pending = _safe_dict(state.get("pending_offers"))
+    offer = _safe_dict(pending.get(npc_id))
+
+    if not offer:
+        return {
+            "resolved": False,
+            "accepted": False,
+            "rejected": False,
+            "reason": "no_pending_companion_offer",
+            "source": "deterministic_companion_acceptance",
+        }
+
+    accepts = player_input_accepts_companion_offer(player_input)
+    rejects = player_input_rejects_companion_offer(player_input)
+
+    if not accepts and not rejects:
+        return {
+            "resolved": False,
+            "accepted": False,
+            "rejected": False,
+            "reason": "player_response_did_not_resolve_offer",
+            "offer": deepcopy(offer),
+            "source": "deterministic_companion_acceptance",
+        }
+
+    history = _safe_list(state.get("history"))
+
+    if rejects and not accepts:
+        pending.pop(npc_id, None)
+        entry = {
+            "offer_id": _safe_str(offer.get("offer_id")),
+            "npc_id": npc_id,
+            "status": "rejected",
+            "resolved_tick": int(tick or 0),
+            "source": "deterministic_companion_acceptance",
+        }
+        history.append(entry)
+        state["pending_offers"] = pending
+        state["history"] = history[-MAX_ACCEPTANCE_HISTORY:]
+        state["debug"] = deepcopy(entry)
+
+        return {
+            "resolved": True,
+            "accepted": False,
+            "rejected": True,
+            "npc_id": npc_id,
+            "reason": "player_rejected_companion_offer",
+            "offer": deepcopy(offer),
+            "source": "deterministic_companion_acceptance",
+        }
+
+    eligibility = evaluate_npc_party_join_eligibility(simulation_state, npc_id=npc_id)
+    if not eligibility.get("eligible"):
+        pending.pop(npc_id, None)
+        entry = {
+            "offer_id": _safe_str(offer.get("offer_id")),
+            "npc_id": npc_id,
+            "status": "invalidated",
+            "resolved_tick": int(tick or 0),
+            "reason": _safe_str(eligibility.get("reason") or "npc_no_longer_eligible"),
+            "source": "deterministic_companion_acceptance",
+        }
+        history.append(entry)
+        state["pending_offers"] = pending
+        state["history"] = history[-MAX_ACCEPTANCE_HISTORY:]
+        state["debug"] = deepcopy(entry)
+
+        return {
+            "resolved": True,
+            "accepted": False,
+            "rejected": False,
+            "npc_id": npc_id,
+            "reason": "npc_no_longer_eligible",
+            "party_join_eligibility_result": deepcopy(eligibility),
+            "source": "deterministic_companion_acceptance",
+        }
+
+    player_state = _safe_dict(simulation_state.get("player_state"))
+    player_state = ensure_party_state(player_state)
+    before_count = len(_safe_list(_safe_dict(player_state.get("party_state")).get("companions")))
+
+    player_state = add_companion(
+        player_state,
+        npc_id,
+        _safe_str(eligibility.get("name") or npc_id.replace("npc:", "")),
+        role="companion",
+        source="accepted_companion_offer",
+        joined_tick=int(tick or 0),
+        identity_arc=_safe_str(eligibility.get("identity_arc")),
+        current_role=_safe_str(eligibility.get("current_role")),
+        active_motivations=deepcopy(_safe_list(eligibility.get("active_motivations"))),
     )
 
-    if not requested:
-        return {
-            "offered": False,
-            "requested": False,
-            "reason": "player_did_not_request_join",
-            "party_join_eligibility_result": deepcopy(eligibility),
-            "source": "deterministic_companion_join_intent",
-        }
+    after_count = len(_safe_list(_safe_dict(player_state.get("party_state")).get("companions")))
+    simulation_state["player_state"] = player_state
 
-    if not eligibility.get("eligible"):
-        return {
-            "offered": False,
-            "requested": True,
-            "npc_id": npc_id,
-            "reason": _safe_str(eligibility.get("reason") or "npc_not_eligible"),
-            "party_join_eligibility_result": deepcopy(eligibility),
-            "source": "deterministic_companion_join_intent",
-        }
+    pending.pop(npc_id, None)
+
+    accepted = after_count > before_count or any(
+        _safe_dict(comp).get("npc_id") == npc_id
+        for comp in _safe_list(_safe_dict(player_state.get("party_state")).get("companions"))
+    )
+
+    entry = {
+        "offer_id": _safe_str(offer.get("offer_id")),
+        "npc_id": npc_id,
+        "status": "accepted" if accepted else "not_added",
+        "resolved_tick": int(tick or 0),
+        "party_size_before": before_count,
+        "party_size_after": after_count,
+        "source": "deterministic_companion_acceptance",
+    }
+    history.append(entry)
+
+    state["pending_offers"] = pending
+    state["history"] = history[-MAX_ACCEPTANCE_HISTORY:]
+    state["debug"] = deepcopy(entry)
 
     return {
-        "offered": True,
-        "requested": True,
+        "resolved": True,
+        "accepted": bool(accepted),
+        "rejected": False,
         "npc_id": npc_id,
-        "reason": _safe_str(eligibility.get("reason") or "eligible_to_join"),
-        "requires_player_acceptance": True,
+        "reason": "player_accepted_companion_offer" if accepted else "party_state_not_changed",
+        "offer": deepcopy(offer),
         "party_join_eligibility_result": deepcopy(eligibility),
-        "source": "deterministic_companion_join_intent",
+        "party_state": deepcopy(player_state.get("party_state")),
+        "source": "deterministic_companion_acceptance",
     }
-Wire into conversation_threads.py
-
-Add import:
-
-from app.rpg.world.companion_join_intent import maybe_create_companion_join_intent
-
-After party_join_eligibility_result:
-
-companion_join_intent = {}
-if settings.get("companion_join_intent_enabled", True):
-    companion_join_intent = maybe_create_companion_join_intent(
-        simulation_state,
-        npc_id=responder_id,
-        player_input=player_input,
-    )
-
-Add to npc_response_beat and result:
-
-"companion_join_intent": deepcopy(companion_join_intent),
-
-Do not add the NPC to a party list in this bundle.
-
-Bundle AK — NPC Arc Continuity v1
-Goal
-
-Track the current visible arc for evolved NPCs so the world can reference it across scenes.
-
-State:
-
-{
-  "npc_arc_continuity_state": {
-    "by_npc": {
-      "npc:Bran": {
-        "arc_id": "arc:npc:Bran:revenge_after_losing_tavern",
-        "identity_arc": "revenge_after_losing_tavern",
-        "current_role": "Displaced tavern keeper",
-        "active_motivation_summary": "Find the bandits who destroyed his tavern.",
-        "last_updated_tick": 842
-      }
-    }
-  }
-}
-NEW FILE — src/app/rpg/world/npc_arc_continuity.py
+2. Create new file
+src/app/rpg/world/companion_dialogue.py
 from __future__ import annotations
 
 from copy import deepcopy
-from typing import Any, Dict
-
-from app.rpg.world.npc_evolution_state import get_npc_evolution
+from typing import Any, Dict, List
 
 
 def _safe_str(value: Any) -> str:
@@ -441,310 +296,308 @@ def _safe_dict(value: Any) -> Dict[str, Any]:
     return value if isinstance(value, dict) else {}
 
 
-def _safe_list(value: Any):
+def _safe_list(value: Any) -> List[Any]:
     return value if isinstance(value, list) else []
 
 
-def ensure_npc_arc_continuity_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
-    state = _safe_dict(simulation_state.get("npc_arc_continuity_state"))
-    if not isinstance(state.get("by_npc"), dict):
-        state["by_npc"] = {}
-    if not isinstance(state.get("debug"), dict):
-        state["debug"] = {}
-    simulation_state["npc_arc_continuity_state"] = state
-    return state
-
-
-def update_npc_arc_continuity(
-    simulation_state: Dict[str, Any],
+def build_companion_join_dialogue(
     *,
     npc_id: str,
-    tick: int,
+    npc_name: str,
+    acceptance_result: Dict[str, Any],
 ) -> Dict[str, Any]:
-    npc_id = _safe_str(npc_id)
-    evo = get_npc_evolution(simulation_state, npc_id=npc_id)
-
-    identity_arc = _safe_str(evo.get("identity_arc"))
-    current_role = _safe_str(evo.get("current_role"))
-    motivations = _safe_list(evo.get("active_motivations"))
-
-    if not identity_arc and not current_role and not motivations:
+    result = _safe_dict(acceptance_result)
+    if not result.get("accepted"):
         return {
-            "updated": False,
-            "reason": "no_evolution_arc",
-            "source": "deterministic_npc_arc_continuity",
+            "created": False,
+            "reason": "companion_not_accepted",
+            "source": "deterministic_companion_dialogue",
         }
 
-    first_motivation = _safe_dict(motivations[0]) if motivations else {}
-    state = ensure_npc_arc_continuity_state(simulation_state)
-    by_npc = _safe_dict(state.get("by_npc"))
+    eligibility = _safe_dict(result.get("party_join_eligibility_result"))
+    identity_arc = _safe_str(eligibility.get("identity_arc"))
+    motivations = _safe_list(eligibility.get("active_motivations"))
 
-    entry = {
-        "arc_id": f"arc:{npc_id}:{identity_arc or current_role or 'evolved'}",
-        "npc_id": npc_id,
-        "identity_arc": identity_arc,
-        "current_role": current_role,
-        "active_motivation_summary": _safe_str(first_motivation.get("summary")),
-        "last_updated_tick": int(tick or 0),
-        "source": "deterministic_npc_arc_continuity",
-    }
+    motivation_text = ""
+    if motivations:
+        motivation_text = _safe_str(_safe_dict(motivations[0]).get("summary"))
 
-    by_npc[npc_id] = entry
-    state["by_npc"] = by_npc
-    state["debug"] = {
-        "last_updated_tick": int(tick or 0),
-        "last_npc_id": npc_id,
-        "source": "deterministic_npc_arc_continuity",
+    name = _safe_str(npc_name) or _safe_str(eligibility.get("name")) or _safe_str(npc_id).replace("npc:", "")
+
+    if identity_arc == "revenge_after_losing_tavern":
+        line = (
+            f"{name} nods, jaw tight. "
+            "\"Then I walk with you until the bandits answer for what they did.\""
+        )
+    elif motivation_text:
+        line = f"{name} nods. \"Then I am with you. {motivation_text}\""
+    else:
+        line = f"{name} nods. \"Then I am with you.\""
+
+    beat = {
+        "kind": "companion_join_dialogue",
+        "speaker_id": _safe_str(npc_id),
+        "speaker_name": name,
+        "line": line,
+        "acceptance_result": deepcopy(result),
+        "source": "deterministic_companion_dialogue",
     }
 
     return {
-        "updated": True,
-        "arc": deepcopy(entry),
-        "source": "deterministic_npc_arc_continuity",
+        "created": True,
+        "beat": beat,
+        "line": line,
+        "source": "deterministic_companion_dialogue",
     }
-Wire into conversation_threads.py
 
-Add import:
 
-from app.rpg.world.npc_arc_continuity import update_npc_arc_continuity
+def build_companion_presence_summary(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
+    player_state = _safe_dict(simulation_state.get("player_state"))
+    party_state = _safe_dict(player_state.get("party_state"))
+    companions = _safe_list(party_state.get("companions"))
 
-After npc_evolution_result and/or before final result:
+    active = []
+    for comp in companions[:6]:
+        comp = _safe_dict(comp)
+        if _safe_str(comp.get("status") or "active") == "active":
+            active.append({
+                "npc_id": _safe_str(comp.get("npc_id")),
+                "name": _safe_str(comp.get("name")),
+                "role": _safe_str(comp.get("role")),
+                "identity_arc": _safe_str(comp.get("identity_arc")),
+                "current_role": _safe_str(comp.get("current_role")),
+            })
 
-npc_arc_continuity_result = {}
-if settings.get("npc_arc_continuity_enabled", True):
-    npc_arc_continuity_result = update_npc_arc_continuity(
-        simulation_state,
-        npc_id=responder_id,
-        tick=tick,
-    )
+    return {
+        "active_companions": active,
+        "count": len(active),
+        "source": "deterministic_companion_dialogue",
+    }
+3. Patch existing file
+src/app/rpg/party/party_state.py
 
-Add to result:
+Patch _normalize_companion so companion arc metadata survives normalization.
 
-"npc_arc_continuity_result": deepcopy(npc_arc_continuity_result),
-"npc_arc_continuity_state": deepcopy(
-    _safe_dict(simulation_state.get("npc_arc_continuity_state"))
-),
-Settings patch
+Find this return block:
 
-File:
+    return {
+        "npc_id": _safe_str(companion.get("npc_id")),
+        "name": _safe_str(companion.get("name") or companion.get("npc_id") or "Companion"),
+        "hp": int(hp),
+        "max_hp": max_hp,
+        "loyalty": loyalty,
+        "morale": morale,
+        "role": role,
+        "status": status,
+        "equipment": clean_equipment,
+    }
 
+Replace with:
+
+    return {
+        "npc_id": _safe_str(companion.get("npc_id")),
+        "name": _safe_str(companion.get("name") or companion.get("npc_id") or "Companion"),
+        "hp": int(hp),
+        "max_hp": max_hp,
+        "loyalty": loyalty,
+        "morale": morale,
+        "role": role,
+        "status": status,
+        "equipment": clean_equipment,
+        "source": _safe_str(companion.get("source")),
+        "joined_tick": _safe_int(companion.get("joined_tick"), 0),
+        "identity_arc": _safe_str(companion.get("identity_arc")),
+        "current_role": _safe_str(companion.get("current_role")),
+        "active_motivations": _safe_list(companion.get("active_motivations"))[:4],
+    }
+
+Then replace the existing add_companion function signature:
+
+def add_companion(player_state: Dict[str, Any], npc_id: str, name: str) -> Dict[str, Any]:
+
+with:
+
+def add_companion(
+    player_state: Dict[str, Any],
+    npc_id: str,
+    name: str,
+    *,
+    role: str = "ally",
+    source: str = "",
+    joined_tick: int = 0,
+    identity_arc: str = "",
+    current_role: str = "",
+    active_motivations: Optional[List[Dict[str, Any]]] = None,
+) -> Dict[str, Any]:
+
+Then inside that function, replace the appended companion dict:
+
+    companions.append(_normalize_companion({
+        "npc_id": npc_id,
+        "name": name,
+        "hp": 100,
+        "max_hp": 100,
+        "loyalty": 0.5,
+        "morale": 0.5,
+        "role": "ally",
+        "status": "active",
+        "equipment": {},
+    }))
+
+with:
+
+    companions.append(_normalize_companion({
+        "npc_id": npc_id,
+        "name": name,
+        "hp": 100,
+        "max_hp": 100,
+        "loyalty": 0.5,
+        "morale": 0.5,
+        "role": role or "ally",
+        "status": "active",
+        "equipment": {},
+        "source": source,
+        "joined_tick": int(joined_tick or 0),
+        "identity_arc": identity_arc,
+        "current_role": current_role,
+        "active_motivations": _safe_list(active_motivations)[:4],
+    }))
+
+This keeps old callers working because all new parameters are keyword-only with defaults.
+
+4. Patch existing file
 src/app/rpg/world/conversation_settings.py
 
-Add defaults:
+In DEFAULT_CONVERSATION_SETTINGS, near the AI/AJ/AK settings, add:
 
-"npc_party_eligibility_enabled": True,
-"companion_join_intent_enabled": True,
-"npc_arc_continuity_enabled": True,
+    "companion_acceptance_enabled": True,
+    "companion_dialogue_enabled": True,
 
-Normalize:
+Then in normalize_conversation_settings, near the existing boolean normalization for companion_join_intent_enabled and npc_arc_continuity_enabled, add:
 
-merged["npc_party_eligibility_enabled"] = _safe_bool(
-    merged.get("npc_party_eligibility_enabled"),
-    True,
-)
-merged["companion_join_intent_enabled"] = _safe_bool(
-    merged.get("companion_join_intent_enabled"),
-    True,
-)
-merged["npc_arc_continuity_enabled"] = _safe_bool(
-    merged.get("npc_arc_continuity_enabled"),
-    True,
-)
-Manual scenarios
-
-File:
-
-src/tests/rpg/manual_llm_transcript.py
-
-Add scenarios:
-
-"npc_party_eligibility_after_bran_loses_tavern": {
-    "currency": {"gold": 0, "silver": 0, "copper": 0},
-    "conversation_settings": {
-        "enabled": True,
-        "autonomous_ticks_enabled": True,
-        "frequency": "always",
-        "conversation_chance_percent": 100,
-        "allow_player_invited": True,
-        "player_inclusion_chance_percent": 100,
-        "npc_file_profiles_enabled": True,
-        "npc_evolution_enabled": True,
-        "npc_party_eligibility_enabled": True,
-        "min_ticks_between_conversations": 0,
-        "thread_cooldown_ticks": 0
-    },
-    "setup_world_event": {
-        "event_id": "event:test:bandit_attack_rusty_flagon_party",
-        "kind": "location_destroyed",
-        "location_id": "loc_tavern",
-        "summary": "Bandits attacked and burned the Rusty Flagon.",
-        "affected_npcs": ["npc:Bran"]
-    },
-    "setup_npc_reputation_state": {
-        "by_npc": {
-            "npc:Bran": {
-                "npc_id": "npc:Bran",
-                "familiarity": 3,
-                "trust": 2,
-                "annoyance": 0,
-                "fear": 0,
-                "respect": 2,
-                "last_updated_tick": 1,
-                "source": "deterministic_npc_reputation_runtime"
-            }
-        }
-    },
-    "turns": [
-        "__apply_world_event_evolution__",
-        "__ambient_tick_player_invited__",
-        "Bran, what will you do now?"
-    ]
-},
-"companion_join_intent_requires_player_request": {
-    "currency": {"gold": 0, "silver": 0, "copper": 0},
-    "conversation_settings": {
-        "enabled": True,
-        "autonomous_ticks_enabled": True,
-        "frequency": "always",
-        "conversation_chance_percent": 100,
-        "allow_player_invited": True,
-        "player_inclusion_chance_percent": 100,
-        "npc_file_profiles_enabled": True,
-        "npc_evolution_enabled": True,
-        "npc_party_eligibility_enabled": True,
-        "companion_join_intent_enabled": True,
-        "min_ticks_between_conversations": 0,
-        "thread_cooldown_ticks": 0
-    },
-    "setup_world_event": {
-        "event_id": "event:test:bandit_attack_rusty_flagon_join",
-        "kind": "location_destroyed",
-        "location_id": "loc_tavern",
-        "summary": "Bandits attacked and burned the Rusty Flagon.",
-        "affected_npcs": ["npc:Bran"]
-    },
-    "setup_npc_reputation_state": {
-        "by_npc": {
-            "npc:Bran": {
-                "npc_id": "npc:Bran",
-                "familiarity": 3,
-                "trust": 2,
-                "annoyance": 0,
-                "fear": 0,
-                "respect": 2,
-                "last_updated_tick": 1,
-                "source": "deterministic_npc_reputation_runtime"
-            }
-        }
-    },
-    "turns": [
-        "__apply_world_event_evolution__",
-        "__ambient_tick_player_invited__",
-        "Bran, come with me and help me find the bandits."
-    ]
-},
-"npc_arc_continuity_tracks_bran_revenge_arc": {
-    "currency": {"gold": 0, "silver": 0, "copper": 0},
-    "conversation_settings": {
-        "enabled": True,
-        "autonomous_ticks_enabled": True,
-        "frequency": "always",
-        "conversation_chance_percent": 100,
-        "allow_player_invited": True,
-        "player_inclusion_chance_percent": 100,
-        "npc_file_profiles_enabled": True,
-        "npc_evolution_enabled": True,
-        "npc_arc_continuity_enabled": True,
-        "min_ticks_between_conversations": 0,
-        "thread_cooldown_ticks": 0
-    },
-    "setup_world_event": {
-        "event_id": "event:test:bandit_attack_rusty_flagon_arc",
-        "kind": "location_destroyed",
-        "location_id": "loc_tavern",
-        "summary": "Bandits attacked and burned the Rusty Flagon.",
-        "affected_npcs": ["npc:Bran"]
-    },
-    "turns": [
-        "__apply_world_event_evolution__",
-        "__ambient_tick_player_invited__",
-        "Bran, what happens next?"
-    ]
-}
-
-Add all three to CONVERSATION_EXPECTED_SCENARIOS.
-
-Manual warnings
-
-Add warning checks:
-
-if scenario_name == "npc_party_eligibility_after_bran_loses_tavern" and turn_index >= 3:
-    conversation = _extract_conversation_result(result)
-    eligibility = _safe_dict(conversation.get("party_join_eligibility_result"))
-    if eligibility.get("eligible") is not True:
-        warnings.append(
-            f"npc_party_eligibility_expected_true_got:{_safe_str(eligibility.get('reason')) or 'missing'}"
-        )
-
-if scenario_name == "companion_join_intent_requires_player_request" and turn_index >= 3:
-    conversation = _extract_conversation_result(result)
-    intent = _safe_dict(conversation.get("companion_join_intent"))
-    if intent.get("offered") is not True:
-        warnings.append(
-            f"companion_join_intent_expected_offered_got:{_safe_str(intent.get('reason')) or 'missing'}"
-        )
-    if intent.get("requires_player_acceptance") is not True:
-        warnings.append("companion_join_intent_expected_requires_player_acceptance")
-
-if scenario_name == "npc_arc_continuity_tracks_bran_revenge_arc" and turn_index >= 3:
-    conversation = _extract_conversation_result(result)
-    arc_result = _safe_dict(conversation.get("npc_arc_continuity_result"))
-    arc_state = _safe_dict(conversation.get("npc_arc_continuity_state"))
-    if arc_result.get("updated") is not True:
-        warnings.append(
-            f"npc_arc_continuity_expected_updated_got:{_safe_str(arc_result.get('reason')) or 'missing'}"
-        )
-    by_npc = _safe_dict(arc_state.get("by_npc"))
-    bran = _safe_dict(by_npc.get("npc:Bran"))
-    if _safe_str(bran.get("identity_arc")) != "revenge_after_losing_tavern":
-        warnings.append("npc_arc_continuity_expected_bran_revenge_arc")
-HTML report panels
-
-In _render_special_panels(...), add:
-
-for label, key in [
-    ("NPC Arc Continuity", "npc_arc_continuity_state"),
-]:
-    value = _first_dict(
-        result.get(key),
-        nested_result.get(key),
-        conversation.get(key),
-        simulation_state.get(key),
+    merged["companion_acceptance_enabled"] = _safe_bool(
+        merged.get("companion_acceptance_enabled"),
+        True,
     )
-    if value:
-        panels.append(_html_json_block(value, block_id=f"{prefix}-{key}", title=label))
-
-for label, key in [
-    ("Party Join Eligibility", "party_join_eligibility_result"),
-    ("Companion Join Intent", "companion_join_intent"),
-    ("NPC Arc Continuity Result", "npc_arc_continuity_result"),
-]:
-    value = _first_dict(
-        conversation.get(key),
-        npc_response.get(key),
+    merged["companion_dialogue_enabled"] = _safe_bool(
+        merged.get("companion_dialogue_enabled"),
+        True,
     )
-    if value:
-        panels.append(_html_json_block(value, block_id=f"{prefix}-{key}", title=label))
-Tests
+5. Patch existing file
+src/app/rpg/world/conversation_threads.py
 
-Create:
+Add imports near the existing companion imports:
 
-src/app/rpg/tests/test_bundle_ai_aj_ak_companions_arc_continuity.py
+from app.rpg.world.companion_acceptance import (
+    record_companion_join_offer,
+    resolve_companion_acceptance,
+)
+from app.rpg.world.companion_dialogue import (
+    build_companion_join_dialogue,
+    build_companion_presence_summary,
+)
+
+Then find this existing block:
+
+        # AJ: Companion join intent from player request.
+        companion_join_intent: Dict[str, Any] = {}
+        if settings.get("companion_join_intent_enabled", True):
+            companion_join_intent = maybe_create_companion_join_intent(
+                simulation_state,
+                npc_id=responder_id,
+                player_input=player_input,
+            )
+        npc_response_beat["companion_join_intent"] = deepcopy(companion_join_intent)
+
+Replace it with:
+
+        # AJ: Companion join intent from player request.
+        companion_join_intent: Dict[str, Any] = {}
+        if settings.get("companion_join_intent_enabled", True):
+            companion_join_intent = maybe_create_companion_join_intent(
+                simulation_state,
+                npc_id=responder_id,
+                player_input=player_input,
+            )
+        npc_response_beat["companion_join_intent"] = deepcopy(companion_join_intent)
+
+        # AL-AM: Explicit player acceptance/rejection of a pending companion offer.
+        companion_acceptance_result: Dict[str, Any] = {}
+        companion_offer_record_result: Dict[str, Any] = {}
+        if settings.get("companion_acceptance_enabled", True):
+            companion_acceptance_result = resolve_companion_acceptance(
+                simulation_state,
+                npc_id=responder_id,
+                player_input=player_input,
+                tick=tick,
+            )
+
+            if (
+                not companion_acceptance_result.get("accepted")
+                and not companion_acceptance_result.get("rejected")
+                and companion_join_intent.get("offered")
+            ):
+                companion_offer_record_result = record_companion_join_offer(
+                    simulation_state,
+                    npc_id=responder_id,
+                    join_intent=companion_join_intent,
+                    tick=tick,
+                )
+
+        npc_response_beat["companion_acceptance_result"] = deepcopy(companion_acceptance_result)
+        npc_response_beat["companion_offer_record_result"] = deepcopy(companion_offer_record_result)
+        npc_response_beat["companion_acceptance_state"] = deepcopy(
+            _safe_dict(simulation_state.get("companion_acceptance_state"))
+        )
+        npc_response_beat["party_state"] = deepcopy(
+            _safe_dict(_safe_dict(simulation_state.get("player_state")).get("party_state"))
+        )
+
+        # AN: Deterministic companion dialogue after accepted join.
+        companion_dialogue_result: Dict[str, Any] = {}
+        if settings.get("companion_dialogue_enabled", True):
+            companion_dialogue_result = build_companion_join_dialogue(
+                npc_id=responder_id,
+                npc_name=responder_name,
+                acceptance_result=companion_acceptance_result,
+            )
+            if companion_dialogue_result.get("created"):
+                dialogue_beat = deepcopy(_safe_dict(companion_dialogue_result.get("beat")))
+                if dialogue_beat:
+                    all_beats = _safe_list(thread.get("beats"))
+                    all_beats.append(dialogue_beat)
+                    thread["beats"] = all_beats[-MAX_BEATS_PER_THREAD:]
+                    npc_response_beat["line"] = _safe_str(
+                        companion_dialogue_result.get("line") or npc_response_beat.get("line")
+                    )
+
+        npc_response_beat["companion_dialogue_result"] = deepcopy(companion_dialogue_result)
+        npc_response_beat["companion_presence_summary"] = deepcopy(
+            build_companion_presence_summary(simulation_state)
+        )
+
+Then near the returned/debug payload around the existing AI/AJ/AK fields, where you already have:
+
+        "companion_join_intent": deepcopy(_safe_dict(npc_response_beat.get("companion_join_intent"))),
+        "npc_arc_continuity_result": deepcopy(_safe_dict(npc_response_beat.get("npc_arc_continuity_result"))),
+
+add these immediately after companion_join_intent:
+
+        "companion_acceptance_result": deepcopy(_safe_dict(npc_response_beat.get("companion_acceptance_result"))),
+        "companion_offer_record_result": deepcopy(_safe_dict(npc_response_beat.get("companion_offer_record_result"))),
+        "companion_dialogue_result": deepcopy(_safe_dict(npc_response_beat.get("companion_dialogue_result"))),
+        "companion_presence_summary": deepcopy(_safe_dict(npc_response_beat.get("companion_presence_summary"))),
+        "party_state": deepcopy(_safe_dict(npc_response_beat.get("party_state"))),
+6. Add tests
+Create src/app/rpg/tests/test_bundle_al_am_an_companion_acceptance_party_dialogue.py
 from app.rpg.world.npc_evolution_triggers import evolve_npcs_from_world_event
 from app.rpg.world.npc_reputation_state import update_npc_reputation
-from app.rpg.world.npc_party_eligibility import evaluate_npc_party_join_eligibility
 from app.rpg.world.companion_join_intent import maybe_create_companion_join_intent
-from app.rpg.world.npc_arc_continuity import update_npc_arc_continuity
+from app.rpg.world.companion_acceptance import (
+    record_companion_join_offer,
+    resolve_companion_acceptance,
+)
+from app.rpg.world.companion_dialogue import build_companion_join_dialogue
 
 
 def _bran_lost_tavern_state():
@@ -772,81 +625,444 @@ def _bran_lost_tavern_state():
     return state
 
 
-def test_bran_party_eligible_after_losing_tavern_with_trust():
-    state = _bran_lost_tavern_state()
-    result = evaluate_npc_party_join_eligibility(state, npc_id="npc:Bran")
-
-    assert result["eligible"] is True
-    assert result["npc_id"] == "npc:Bran"
-    assert result["identity_arc"] == "revenge_after_losing_tavern"
-
-
-def test_companion_join_intent_requires_request():
+def test_companion_offer_is_pending_until_player_accepts():
     state = _bran_lost_tavern_state()
 
-    no_request = maybe_create_companion_join_intent(
-        state,
-        npc_id="npc:Bran",
-        player_input="What will you do now?",
-    )
-    assert no_request["offered"] is False
-    assert no_request["requested"] is False
-
-    requested = maybe_create_companion_join_intent(
+    intent = maybe_create_companion_join_intent(
         state,
         npc_id="npc:Bran",
         player_input="Come with me and help me find the bandits.",
     )
-    assert requested["offered"] is True
-    assert requested["requires_player_acceptance"] is True
+    assert intent["offered"] is True
+    assert intent["requires_player_acceptance"] is True
 
-
-def test_arc_continuity_tracks_revenge_arc():
-    state = _bran_lost_tavern_state()
-    result = update_npc_arc_continuity(
+    offer = record_companion_join_offer(
         state,
         npc_id="npc:Bran",
+        join_intent=intent,
+        tick=12,
+    )
+    assert offer["recorded"] is True
+
+    party_before = state.get("player_state", {}).get("party_state", {}).get("companions", [])
+    assert party_before == []
+
+    unresolved = resolve_companion_acceptance(
+        state,
+        npc_id="npc:Bran",
+        player_input="What do you need before we go?",
+        tick=13,
+    )
+    assert unresolved["resolved"] is False
+    assert unresolved["reason"] == "player_response_did_not_resolve_offer"
+
+
+def test_player_acceptance_adds_bran_to_party_with_arc_metadata():
+    state = _bran_lost_tavern_state()
+
+    intent = maybe_create_companion_join_intent(
+        state,
+        npc_id="npc:Bran",
+        player_input="Come with me and help me find the bandits.",
+    )
+    record_companion_join_offer(
+        state,
+        npc_id="npc:Bran",
+        join_intent=intent,
         tick=12,
     )
 
-    assert result["updated"] is True
-    arc = state["npc_arc_continuity_state"]["by_npc"]["npc:Bran"]
-    assert arc["identity_arc"] == "revenge_after_losing_tavern"
-    assert "bandits" in arc["active_motivation_summary"].lower()
-
-Also update AF-AG-AH test or add a focused test:
-
-def test_dialogue_profile_projects_evolution_modifiers():
-    from app.rpg.world.npc_dialogue_profile import build_npc_dialogue_profile
-    from app.rpg.world.npc_evolution_state import apply_npc_evolution_event
-
-    state = {}
-    apply_npc_evolution_event(
+    accepted = resolve_companion_acceptance(
         state,
         npc_id="npc:Bran",
-        event_id="event:test:loyal",
-        kind="trust_threshold",
-        personality_modifier={
-            "trait": "loyal_to_player",
-            "strength": 1,
-            "reason": "The player earned trust.",
-        },
-        tick=5,
+        player_input="Yes. Let's go.",
+        tick=13,
     )
 
-    profile = build_npc_dialogue_profile(
+    assert accepted["resolved"] is True
+    assert accepted["accepted"] is True
+
+    companions = state["player_state"]["party_state"]["companions"]
+    assert len(companions) == 1
+    assert companions[0]["npc_id"] == "npc:Bran"
+    assert companions[0]["role"] == "companion"
+    assert companions[0]["identity_arc"] == "revenge_after_losing_tavern"
+    assert companions[0]["current_role"] == "Displaced tavern keeper"
+
+
+def test_player_rejection_does_not_add_companion():
+    state = _bran_lost_tavern_state()
+
+    intent = maybe_create_companion_join_intent(
+        state,
         npc_id="npc:Bran",
-        simulation_state=state,
-        runtime_state={"tick": 6},
-        topic={},
-        listener_id="player",
-        response_intent="answer",
+        player_input="Come with me and help me find the bandits.",
+    )
+    record_companion_join_offer(
+        state,
+        npc_id="npc:Bran",
+        join_intent=intent,
+        tick=12,
     )
 
-    assert any("loyal" in str(mod).lower() for mod in profile["personality_modifiers"])
-Validation
+    rejected = resolve_companion_acceptance(
+        state,
+        npc_id="npc:Bran",
+        player_input="No, stay here for now.",
+        tick=13,
+    )
 
-Run:
+    assert rejected["resolved"] is True
+    assert rejected["rejected"] is True
+    assert state.get("player_state", {}).get("party_state", {}).get("companions", []) == []
 
-PYTHONPATH=src pytest -q src/app/rpg/tests/test_bundle_af_ag_ah_npc_profiles_evolution.py
-PYTHONPATH=src pytest -q src/app/rpg/tests/test_bundle_ai_aj_ak_companions_arc_continuity.py
+
+def test_companion_join_dialogue_uses_revenge_arc():
+    state = _bran_lost_tavern_state()
+
+    intent = maybe_create_companion_join_intent(
+        state,
+        npc_id="npc:Bran",
+        player_input="Come with me and help me find the bandits.",
+    )
+    record_companion_join_offer(
+        state,
+        npc_id="npc:Bran",
+        join_intent=intent,
+        tick=12,
+    )
+    accepted = resolve_companion_acceptance(
+        state,
+        npc_id="npc:Bran",
+        player_input="Yes. Let's go.",
+        tick=13,
+    )
+
+    dialogue = build_companion_join_dialogue(
+        npc_id="npc:Bran",
+        npc_name="Bran",
+        acceptance_result=accepted,
+    )
+
+    assert dialogue["created"] is True
+    assert "bandits" in dialogue["line"].lower()
+    assert dialogue["beat"]["kind"] == "companion_join_dialogue"
+7. Run
+cd F:\LLM\omnix
+pytest src/app/rpg/tests/test_bundle_al_am_an_companion_acceptance_party_dialogue.py -q
+pytest src/app/rpg/tests/test_bundle_ai_aj_ak_companions_arc_continuity.py -q
+pytest src/app/rpg/tests/test_bundle_af_ag_ah_npc_profiles_evolution.py -q
+
+Expected:
+
+test_bundle_al_am_an_companion_acceptance_party_dialogue.py: 4 passed
+test_bundle_ai_aj_ak_companions_arc_continuity.py: still passing
+test_bundle_af_ag_ah_npc_profiles_evolution.py: still passing
+What this bundle should prove
+
+After this patch, the flow should be:
+
+Bran loses tavern.
+Bran gains revenge arc.
+Player asks Bran to come along.
+Runtime records companion_join_intent.offered == true.
+Runtime records a pending companion offer.
+Player explicitly accepts.
+Simulation mutates player_state.party_state.companions.
+Bran appears as:
+{
+  "npc_id": "npc:Bran",
+  "name": "Bran",
+  "role": "companion",
+  "identity_arc": "revenge_after_losing_tavern",
+  "current_role": "Displaced tavern keeper"
+}
+Deterministic companion dialogue appears on acceptance, grounded in the revenge arc.
+
+This is the right next step because it turns “Bran wants to join” into “Bran actually joins the party,” without allowing the LLM to mutate party state.
+8. Patch manual transcript scenario coverage
+File
+
+src/tests/rpg/manual_llm_transcript.py
+
+8.1 Add HTML/debug panels for new AL-AM-AN fields
+
+Find this block inside _render_special_panels:
+
+    for label, key in [
+        ("Party Join Eligibility", "party_join_eligibility_result"),
+        ("Companion Join Intent", "companion_join_intent"),
+        ("NPC Arc Continuity Result", "npc_arc_continuity_result"),
+    ]:
+
+Replace it with:
+
+    for label, key in [
+        ("Party Join Eligibility", "party_join_eligibility_result"),
+        ("Companion Join Intent", "companion_join_intent"),
+        ("Companion Offer Record Result", "companion_offer_record_result"),
+        ("Companion Acceptance Result", "companion_acceptance_result"),
+        ("Companion Dialogue Result", "companion_dialogue_result"),
+        ("Companion Presence Summary", "companion_presence_summary"),
+        ("Party State", "party_state"),
+        ("NPC Arc Continuity Result", "npc_arc_continuity_result"),
+    ]:
+
+This makes the HTML scenario page clearly show the offer, pending state, acceptance, party mutation, and companion dialogue.
+
+8.2 Add manual scenario
+
+Find the existing scenario:
+
+    "companion_join_intent_requires_player_request": {
+
+After that scenario block ends, and before:
+
+    "npc_arc_continuity_tracks_bran_revenge_arc": {
+
+insert this new scenario:
+
+    "companion_acceptance_adds_bran_to_party": {
+        "currency": {"gold": 0, "silver": 0, "copper": 0},
+        "conversation_settings": {
+            "enabled": True,
+            "autonomous_ticks_enabled": True,
+            "frequency": "always",
+            "conversation_chance_percent": 100,
+            "allow_player_invited": True,
+            "player_inclusion_chance_percent": 100,
+            "npc_file_profiles_enabled": True,
+            "npc_evolution_enabled": True,
+            "npc_party_eligibility_enabled": True,
+            "companion_join_intent_enabled": True,
+            "companion_acceptance_enabled": True,
+            "companion_dialogue_enabled": True,
+            "npc_arc_continuity_enabled": True,
+            "min_ticks_between_conversations": 0,
+            "thread_cooldown_ticks": 0,
+        },
+        "setup_world_event": {
+            "event_id": "event:test:bandit_attack_rusty_flagon_acceptance",
+            "kind": "location_destroyed",
+            "location_id": "loc_tavern",
+            "summary": "Bandits attacked and burned the Rusty Flagon.",
+            "affected_npcs": ["npc:Bran"],
+        },
+        "setup_npc_reputation_state": {
+            "by_npc": {
+                "npc:Bran": {
+                    "npc_id": "npc:Bran",
+                    "familiarity": 3,
+                    "trust": 2,
+                    "annoyance": 0,
+                    "fear": 0,
+                    "respect": 2,
+                    "last_updated_tick": 1,
+                    "source": "deterministic_npc_reputation_runtime",
+                }
+            }
+        },
+        "turns": [
+            "__apply_world_event_evolution__",
+            "__ambient_tick_player_invited__",
+            "Bran, come with me and help me find the bandits.",
+            "Yes. Let's go.",
+        ],
+    },
+
+Expected scenario flow:
+
+Turn 1: Bran loses tavern and gains revenge arc.
+Turn 2: Conversation setup / invited response context.
+Turn 3: Player asks Bran to come along.
+Turn 3 result should record companion_join_intent.offered == true.
+Turn 3 result should record a pending companion offer.
+Turn 4: Player explicitly accepts.
+Turn 4 result should mutate player_state.party_state.companions.
+8.3 Add scenario to expected conversation scenarios
+
+Find:
+
+CONVERSATION_EXPECTED_SCENARIOS = {
+
+Inside the set, near the existing companion scenarios, add:
+
+    "companion_acceptance_adds_bran_to_party",
+
+For example:
+
+    "npc_party_eligibility_after_bran_loses_tavern",
+    "companion_join_intent_requires_player_request",
+    "companion_acceptance_adds_bran_to_party",
+    "npc_arc_continuity_tracks_bran_revenge_arc",
+8.4 Add it to the AF-AK/AL-AM-AN manual command safety group
+
+Find this block:
+
+    if scenario_name in {
+        "npc_evolution_bran_loses_tavern",
+        "npc_evolution_reputation_threshold_trust",
+        "npc_party_eligibility_after_bran_loses_tavern",
+        "companion_join_intent_requires_player_request",
+        "npc_arc_continuity_tracks_bran_revenge_arc",
+    }:
+
+Replace it with:
+
+    if scenario_name in {
+        "npc_evolution_bran_loses_tavern",
+        "npc_evolution_reputation_threshold_trust",
+        "npc_party_eligibility_after_bran_loses_tavern",
+        "companion_join_intent_requires_player_request",
+        "companion_acceptance_adds_bran_to_party",
+        "npc_arc_continuity_tracks_bran_revenge_arc",
+    }:
+8.5 Add regression checks for the manual scenario
+
+Find this existing block:
+
+    if scenario_name == "companion_join_intent_requires_player_request" and turn_index >= 3:
+        sim = _extract_simulation_state(result)
+        if not _safe_dict(_safe_dict(sim.get("npc_evolution_state")).get("by_npc")).get("npc:Bran"):
+            warnings.append(f"{scenario_name}_missing_bran_evolution_state_on_followup_turn")
+        conversation = _extract_conversation_result(result)
+        intent = _safe_dict(conversation.get("companion_join_intent"))
+        if intent.get("offered") is not True:
+            warnings.append(
+                f"companion_join_intent_expected_offered_got:{_safe_str(intent.get('reason')) or 'missing'}"
+            )
+        if intent.get("requires_player_acceptance") is not True:
+            warnings.append("companion_join_intent_expected_requires_player_acceptance")
+
+Immediately after it, insert:
+
+    if scenario_name == "companion_acceptance_adds_bran_to_party":
+        sim = _extract_simulation_state(result)
+        evo_by_npc = _safe_dict(_safe_dict(sim.get("npc_evolution_state")).get("by_npc"))
+        bran_evo = _safe_dict(evo_by_npc.get("npc:Bran"))
+
+        if turn_index >= 3 and not bran_evo:
+            warnings.append("companion_acceptance_missing_bran_evolution_state")
+
+        if turn_index == 3:
+            conversation = _extract_conversation_result(result)
+
+            intent = _safe_dict(conversation.get("companion_join_intent"))
+            if intent.get("offered") is not True:
+                warnings.append(
+                    f"companion_acceptance_expected_join_intent_offered_got:{_safe_str(intent.get('reason')) or 'missing'}"
+                )
+            if intent.get("requires_player_acceptance") is not True:
+                warnings.append("companion_acceptance_expected_requires_player_acceptance")
+
+            offer_record = _safe_dict(conversation.get("companion_offer_record_result"))
+            if offer_record.get("recorded") is not True:
+                warnings.append(
+                    f"companion_acceptance_expected_pending_offer_recorded_got:{_safe_str(offer_record.get('reason')) or 'missing'}"
+                )
+
+            acceptance_state = _safe_dict(
+                conversation.get("companion_acceptance_state")
+                or sim.get("companion_acceptance_state")
+            )
+            pending = _safe_dict(acceptance_state.get("pending_offers"))
+            if not _safe_dict(pending.get("npc:Bran")):
+                warnings.append("companion_acceptance_expected_pending_offer_for_bran")
+
+            party_state = _safe_dict(
+                conversation.get("party_state")
+                or _safe_dict(_safe_dict(sim.get("player_state")).get("party_state"))
+            )
+            companions = _safe_list(party_state.get("companions"))
+            if any(_safe_str(_safe_dict(comp).get("npc_id")) == "npc:Bran" for comp in companions):
+                warnings.append("companion_acceptance_bran_joined_before_player_acceptance")
+
+        if turn_index == 4:
+            conversation = _extract_conversation_result(result)
+
+            acceptance = _safe_dict(conversation.get("companion_acceptance_result"))
+            if acceptance.get("accepted") is not True:
+                warnings.append(
+                    f"companion_acceptance_expected_accepted_true_got:{_safe_str(acceptance.get('reason')) or 'missing'}"
+                )
+
+            party_state = _safe_dict(
+                conversation.get("party_state")
+                or acceptance.get("party_state")
+                or _safe_dict(_safe_dict(sim.get("player_state")).get("party_state"))
+            )
+            companions = _safe_list(party_state.get("companions"))
+            bran_companion = {}
+            for companion in companions:
+                companion = _safe_dict(companion)
+                if _safe_str(companion.get("npc_id")) == "npc:Bran":
+                    bran_companion = companion
+                    break
+
+            if not bran_companion:
+                warnings.append("companion_acceptance_expected_bran_in_party")
+            else:
+                if _safe_str(bran_companion.get("name")) != "Bran":
+                    warnings.append(
+                        f"companion_acceptance_expected_bran_name_got:{_safe_str(bran_companion.get('name')) or 'missing'}"
+                    )
+                if _safe_str(bran_companion.get("role")) != "companion":
+                    warnings.append(
+                        f"companion_acceptance_expected_role_companion_got:{_safe_str(bran_companion.get('role')) or 'missing'}"
+                    )
+                if _safe_str(bran_companion.get("identity_arc")) != "revenge_after_losing_tavern":
+                    warnings.append(
+                        f"companion_acceptance_expected_revenge_arc_got:{_safe_str(bran_companion.get('identity_arc')) or 'missing'}"
+                    )
+                if _safe_str(bran_companion.get("current_role")) != "Displaced tavern keeper":
+                    warnings.append(
+                        f"companion_acceptance_expected_displaced_role_got:{_safe_str(bran_companion.get('current_role')) or 'missing'}"
+                    )
+
+            acceptance_state = _safe_dict(
+                conversation.get("companion_acceptance_state")
+                or sim.get("companion_acceptance_state")
+            )
+            pending = _safe_dict(acceptance_state.get("pending_offers"))
+            if _safe_dict(pending.get("npc:Bran")):
+                warnings.append("companion_acceptance_pending_offer_not_cleared_after_acceptance")
+
+            dialogue = _safe_dict(conversation.get("companion_dialogue_result"))
+            if dialogue and dialogue.get("created") is not True:
+                warnings.append("companion_acceptance_dialogue_result_present_but_not_created")
+8.6 Run the new manual scenario
+cd F:\LLM\omnix
+python src/tests/rpg/manual_llm_transcript.py --service-scenarios companion_acceptance_adds_bran_to_party --fail-on-regression-warnings
+
+Expected clean result:
+
+scenario: companion_acceptance_adds_bran_to_party
+regression_warnings: 0
+scenario_warnings: 0
+
+The important JSON chunks should show:
+
+"companion_join_intent": {
+  "offered": true,
+  "requires_player_acceptance": true
+}
+"companion_offer_record_result": {
+  "recorded": true,
+  "npc_id": "npc:Bran"
+}
+"companion_acceptance_result": {
+  "resolved": true,
+  "accepted": true,
+  "npc_id": "npc:Bran"
+}
+"party_state": {
+  "companions": [
+    {
+      "npc_id": "npc:Bran",
+      "name": "Bran",
+      "role": "companion",
+      "identity_arc": "revenge_after_losing_tavern",
+      "current_role": "Displaced tavern keeper"
+    }
+  ]
+}

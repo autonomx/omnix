@@ -1141,11 +1141,20 @@ def _render_special_panels(result: Dict[str, Any], *, prefix: str) -> str:
     for label, key in [
         ("Party Join Eligibility", "party_join_eligibility_result"),
         ("Companion Join Intent", "companion_join_intent"),
+        ("Companion Offer Record Result", "companion_offer_record_result"),
+        ("Companion Acceptance Result", "companion_acceptance_result"),
+        ("Companion Acceptance Debug", "companion_acceptance_debug"),
+        ("Companion Dialogue Result", "companion_dialogue_result"),
+        ("Companion Presence Summary", "companion_presence_summary"),
+        ("Party State", "party_state"),
         ("NPC Arc Continuity Result", "npc_arc_continuity_result"),
     ]:
         value = _first_dict(
+            result.get(key),
+            nested_result.get(key),
             conversation.get(key),
             npc_response.get(key),
+            simulation_state.get(key),
         )
         if value:
             panels.append(_html_json_block(value, block_id=f"{prefix}-{key}", title=label))
@@ -3636,6 +3645,53 @@ SERVICE_SCENARIOS = {
             "Bran, come with me and help me find the bandits.",
         ],
     },
+    "companion_acceptance_adds_bran_to_party": {
+        "currency": {"gold": 0, "silver": 0, "copper": 0},
+        "conversation_settings": {
+            "enabled": True,
+            "autonomous_ticks_enabled": True,
+            "frequency": "always",
+            "conversation_chance_percent": 100,
+            "allow_player_invited": True,
+            "player_inclusion_chance_percent": 100,
+            "npc_file_profiles_enabled": True,
+            "npc_evolution_enabled": True,
+            "npc_party_eligibility_enabled": True,
+            "companion_join_intent_enabled": True,
+            "companion_acceptance_enabled": True,
+            "companion_dialogue_enabled": True,
+            "npc_arc_continuity_enabled": True,
+            "min_ticks_between_conversations": 0,
+            "thread_cooldown_ticks": 0,
+        },
+        "setup_world_event": {
+            "event_id": "event:test:bandit_attack_rusty_flagon_acceptance",
+            "kind": "location_destroyed",
+            "location_id": "loc_tavern",
+            "summary": "Bandits attacked and burned the Rusty Flagon.",
+            "affected_npcs": ["npc:Bran"],
+        },
+        "setup_npc_reputation_state": {
+            "by_npc": {
+                "npc:Bran": {
+                    "npc_id": "npc:Bran",
+                    "familiarity": 3,
+                    "trust": 2,
+                    "annoyance": 0,
+                    "fear": 0,
+                    "respect": 2,
+                    "last_updated_tick": 1,
+                    "source": "deterministic_npc_reputation_runtime",
+                }
+            }
+        },
+        "turns": [
+            "__apply_world_event_evolution__",
+            "__ambient_tick_player_invited__",
+            "Bran, come with me and help me find the bandits.",
+            "Yes. Let's go.",
+        ],
+    },
     "npc_arc_continuity_tracks_bran_revenge_arc": {
         "currency": {"gold": 0, "silver": 0, "copper": 0},
         "conversation_settings": {
@@ -3708,6 +3764,7 @@ CONVERSATION_EXPECTED_SCENARIOS = {
     "npc_evolution_reputation_threshold_trust",
     "npc_party_eligibility_after_bran_loses_tavern",
     "companion_join_intent_requires_player_request",
+    "companion_acceptance_adds_bran_to_party",
     "npc_arc_continuity_tracks_bran_revenge_arc",
 }
 
@@ -3742,6 +3799,53 @@ def _safe_int(value: Any, default: int = 0) -> int:
         return int(value)
     except Exception:
         return default
+
+
+def _find_companion_by_npc_id(simulation_state: Dict[str, Any], npc_id: str) -> Dict[str, Any]:
+    party_state = _safe_dict(
+        _safe_dict(simulation_state.get("player_state")).get("party_state")
+    )
+    companions = _safe_list(party_state.get("companions"))
+    for companion in companions:
+        companion = _safe_dict(companion)
+        if _safe_str(companion.get("npc_id")) == npc_id:
+            return companion
+    return {}
+
+
+def _validate_companion_acceptance_final_state(
+    scenario_name: str,
+    result: Dict[str, Any],
+) -> List[str]:
+    if scenario_name != "companion_acceptance_adds_bran_to_party":
+        return []
+
+    sim = _extract_simulation_state(result)
+    bran = _find_companion_by_npc_id(sim, "npc:Bran")
+    warnings: List[str] = []
+
+    if not bran:
+        warnings.append("companion_acceptance_expected_bran_in_final_party_state")
+        return warnings
+
+    if _safe_str(bran.get("name")) != "Bran":
+        warnings.append(
+            f"companion_acceptance_expected_bran_name_got:{_safe_str(bran.get('name')) or 'missing'}"
+        )
+    if _safe_str(bran.get("role")) != "companion":
+        warnings.append(
+            f"companion_acceptance_expected_role_companion_got:{_safe_str(bran.get('role')) or 'missing'}"
+        )
+    if _safe_str(bran.get("identity_arc")) != "revenge_after_losing_tavern":
+        warnings.append(
+            f"companion_acceptance_expected_revenge_arc_got:{_safe_str(bran.get('identity_arc')) or 'missing'}"
+        )
+    if _safe_str(bran.get("current_role")) != "Displaced tavern keeper":
+        warnings.append(
+            f"companion_acceptance_expected_displaced_role_got:{_safe_str(bran.get('current_role')) or 'missing'}"
+        )
+
+    return warnings
 
 
 def _safe_str(value: Any) -> str:
@@ -4489,17 +4593,36 @@ def _extract_travel_result(result: Dict[str, Any]) -> Dict[str, Any]:
     return _safe_dict(resolved.get("travel_result"))
 
 def _extract_conversation_result(result: Dict[str, Any]) -> Dict[str, Any]:
-    result_sub = _safe_dict(_safe_dict(result).get("result"))
-    direct = _safe_dict(result_sub.get("conversation_result"))
-    if direct:
-        return direct
-    narration_debug = _safe_dict(result_sub.get("narration_debug"))
-    direct = _safe_dict(narration_debug.get("conversation_result"))
-    if direct:
-        return direct
+    result = _safe_dict(result)
+    result_sub = _safe_dict(result.get("result"))
+    nested_result = _safe_dict(result_sub.get("result"))
     turn_contract = _extract_turn_contract(result)
-    resolved = _safe_dict(turn_contract.get("resolved_result") or turn_contract.get("resolved_action"))
-    return _safe_dict(resolved.get("conversation_result"))
+    resolved = _safe_dict(
+        turn_contract.get("resolved_result")
+        or turn_contract.get("resolved_action")
+    )
+    narration_debug = _safe_dict(
+        result.get("narration_debug")
+        or result_sub.get("narration_debug")
+        or nested_result.get("narration_debug")
+        or resolved.get("narration_debug")
+    )
+
+    candidates = [
+        result.get("conversation_result"),
+        result_sub.get("conversation_result"),
+        nested_result.get("conversation_result"),
+        turn_contract.get("conversation_result"),
+        resolved.get("conversation_result"),
+        narration_debug.get("conversation_result"),
+    ]
+
+    for candidate in candidates:
+        candidate = _safe_dict(candidate)
+        if candidate:
+            return candidate
+
+    return {}
 
 
 def _extract_ambient_tick_result(result: Dict[str, Any]) -> Dict[str, Any]:
@@ -5391,7 +5514,11 @@ def _manual_regression_warnings(
             _safe_str(_safe_dict(npc).get("id"))
             for npc in _safe_list(current_location.get("present_npcs"))
         }
-        if len(participants) < 2:
+        if (
+            len(participants) < 2
+            and _safe_str(conversation.get("participation_mode")) != "companion_acceptance"
+            and _safe_str(conversation.get("reason")) != "pending_companion_offer_resolved"
+        ):
             warnings.append("conversation_triggered_with_less_than_two_participants")
         if present_ids and not participant_ids.issubset(present_ids):
             warnings.append("conversation_participant_not_present")
@@ -5668,6 +5795,7 @@ def _manual_regression_warnings(
         "npc_evolution_reputation_threshold_trust",
         "npc_party_eligibility_after_bran_loses_tavern",
         "companion_join_intent_requires_player_request",
+        "companion_acceptance_adds_bran_to_party",
         "npc_arc_continuity_tracks_bran_revenge_arc",
     }:
         result_dict = _safe_dict(result)
@@ -5699,6 +5827,131 @@ def _manual_regression_warnings(
             )
         if intent.get("requires_player_acceptance") is not True:
             warnings.append("companion_join_intent_expected_requires_player_acceptance")
+
+    if scenario_name == "companion_acceptance_adds_bran_to_party":
+        sim = _extract_simulation_state(result)
+        evo_by_npc = _safe_dict(_safe_dict(sim.get("npc_evolution_state")).get("by_npc"))
+        bran_evo = _safe_dict(evo_by_npc.get("npc:Bran"))
+
+        if turn_index >= 3 and not bran_evo:
+            warnings.append("companion_acceptance_missing_bran_evolution_state")
+
+        if turn_index == 3:
+            conversation = _extract_conversation_result(result)
+
+            intent = _safe_dict(conversation.get("companion_join_intent"))
+            if intent.get("offered") is not True:
+                warnings.append(
+                    f"companion_acceptance_expected_join_intent_offered_got:{_safe_str(intent.get('reason')) or 'missing'}"
+                )
+            if intent.get("requires_player_acceptance") is not True:
+                warnings.append("companion_acceptance_expected_requires_player_acceptance")
+
+            offer_record = _safe_dict(conversation.get("companion_offer_record_result"))
+            if offer_record.get("recorded") is not True:
+                warnings.append(
+                    f"companion_acceptance_expected_pending_offer_recorded_got:{_safe_str(offer_record.get('reason')) or 'missing'}"
+                )
+
+            acceptance_state = _safe_dict(
+                conversation.get("companion_acceptance_state")
+                or sim.get("companion_acceptance_state")
+            )
+            pending = _safe_dict(acceptance_state.get("pending_offers"))
+            if not _safe_dict(pending.get("npc:Bran")):
+                warnings.append("companion_acceptance_expected_pending_offer_for_bran")
+
+            party_state = _safe_dict(
+                conversation.get("party_state")
+                or _safe_dict(_safe_dict(sim.get("player_state")).get("party_state"))
+            )
+            companions = _safe_list(party_state.get("companions"))
+            if any(_safe_str(_safe_dict(comp).get("npc_id")) == "npc:Bran" for comp in companions):
+                warnings.append("companion_acceptance_bran_joined_before_player_acceptance")
+
+        if turn_index == 4:
+            conversation = _extract_conversation_result(result)
+
+            acceptance = _safe_dict(conversation.get("companion_acceptance_result"))
+            if acceptance.get("accepted") is not True:
+                warnings.append(
+                    f"companion_acceptance_expected_accepted_true_got:{_safe_str(acceptance.get('reason')) or 'missing'}"
+                )
+
+            # Strongest source of truth: final simulation state.
+            # The conversation payload is useful for debug, but stale/partial
+            # conversation data must not hide a failed party mutation.
+            final_party_state = _safe_dict(
+                _safe_dict(sim.get("player_state")).get("party_state")
+            )
+            companions = _safe_list(final_party_state.get("companions"))
+            bran_companion = {}
+            for companion in companions:
+                companion = _safe_dict(companion)
+                if _safe_str(companion.get("npc_id")) == "npc:Bran":
+                    bran_companion = companion
+                    break
+
+            if not bran_companion:
+                warnings.append("companion_acceptance_expected_bran_in_final_party_state")
+            else:
+                if _safe_str(bran_companion.get("name")) != "Bran":
+                    warnings.append(
+                        f"companion_acceptance_expected_bran_name_got:{_safe_str(bran_companion.get('name')) or 'missing'}"
+                    )
+                if _safe_str(bran_companion.get("role")) != "companion":
+                    warnings.append(
+                        f"companion_acceptance_expected_role_companion_got:{_safe_str(bran_companion.get('role')) or 'missing'}"
+                    )
+                if _safe_str(bran_companion.get("identity_arc")) != "revenge_after_losing_tavern":
+                    warnings.append(
+                        f"companion_acceptance_expected_revenge_arc_got:{_safe_str(bran_companion.get('identity_arc')) or 'missing'}"
+                    )
+                if _safe_str(bran_companion.get("current_role")) != "Displaced tavern keeper":
+                    warnings.append(
+                        f"companion_acceptance_expected_displaced_role_got:{_safe_str(bran_companion.get('current_role')) or 'missing'}"
+                    )
+
+            acceptance_state = _safe_dict(
+                conversation.get("companion_acceptance_state")
+                or sim.get("companion_acceptance_state")
+            )
+            pending = _safe_dict(acceptance_state.get("pending_offers"))
+            if _safe_dict(pending.get("npc:Bran")):
+                warnings.append("companion_acceptance_pending_offer_not_cleared_after_acceptance")
+
+            dialogue = _safe_dict(conversation.get("companion_dialogue_result"))
+            if dialogue and dialogue.get("created") is not True:
+                warnings.append("companion_acceptance_dialogue_result_present_but_not_created")
+
+            if conversation.get("reason") != "pending_companion_offer_resolved":
+                warnings.append(
+                    f"companion_acceptance_expected_pending_offer_resolved_reason_got:{_safe_str(conversation.get('reason')) or 'missing'}"
+                )
+
+            companion_debug = _safe_dict(
+                conversation.get("companion_acceptance_debug")
+                or result.get("companion_acceptance_debug")
+                or _safe_dict(result.get("result")).get("companion_acceptance_debug")
+            )
+            if companion_debug:
+                acceptance_succeeded = (
+                    acceptance.get("accepted") is True
+                    and conversation.get("reason") == "pending_companion_offer_resolved"
+                )
+
+                # If acceptance succeeded, pending offers should already be cleared.
+                # Only require visible pending state when the resolver failed.
+                if (
+                    not acceptance_succeeded
+                    and companion_debug.get("has_any_pending_offer") is not True
+                ):
+                    warnings.append("companion_acceptance_debug_expected_pending_offer_visible")
+
+                if companion_debug.get("accepts") is not True:
+                    warnings.append("companion_acceptance_debug_expected_accept_marker_true")
+            else:
+                warnings.append("companion_acceptance_debug_missing_on_turn_4")
 
     if scenario_name == "npc_arc_continuity_tracks_bran_revenge_arc" and turn_index >= 3:
         sim = _extract_simulation_state(result)
@@ -6555,6 +6808,7 @@ def _run_one_service_scenario(
     last_result: Dict[str, Any] = {}
     scenario_results: List[Dict[str, Any]] = []
     html_turns: List[str] = []
+    scenario_warnings: List[str] = []
     current_currency = currency
     current_location_id = ""
 
@@ -6802,12 +7056,29 @@ def _run_one_service_scenario(
                 current_currency = next_currency
         last_result = result
 
+    if scenario_name == "companion_acceptance_adds_bran_to_party":
+        final_result = last_result or {}
+        final_warnings = _validate_companion_acceptance_final_state(
+            scenario_name,
+            final_result,
+        )
+        if final_warnings:
+            scenario_warnings.extend(final_warnings)
+            if fail_on_regression_warnings:
+                for warning in final_warnings:
+                    _add_regression_warning(
+                        scenario=scenario_name,
+                        turn=len(turns),
+                        warning=f"scenario_warning:{warning}",
+                    )
+
     return {
         "scenario": scenario_name,
         "session_id": session_id,
         "seeded_currency": currency,
         "turns": scenario_results,
         "html_turns": html_turns,
+        "scenario_warnings": scenario_warnings,
         "_channel": scenario_channel,
     }
 
@@ -7102,6 +7373,29 @@ def run_requested_transcripts(args: argparse.Namespace) -> None:
         with open(CONVERSATION_PATH, "a", encoding="utf-8") as f:
             f.write("    <h2>Flat Manual Transcript</h2>\n")
 
+    elif args.service_scenarios:
+        with open(CONVERSATION_PATH, "a", encoding="utf-8") as f:
+            f.write("    <h2>Service Scenarios</h2>\n")
+        run_service_scenarios(
+            args.scenario,
+            split_files=not args.single_file,
+            run_id=run_id,
+            stable_session_ids=args.stable_session_ids,
+            reset_session_state=not args.no_reset_session_state,
+            parallel_scenarios=not args.no_parallel_scenarios,
+            scenario_workers=args.scenario_workers,
+            reset_output=False,
+            console_llm=not args.no_console_llm,
+            console_llm_raw=args.console_llm_raw,
+            console_llm_max_chars=args.console_llm_max_chars,
+            fail_on_regression_warnings=args.fail_on_regression_warnings,
+            max_log_chunk_bytes=max(100_000, int(args.max_log_chunk_bytes or MANUAL_LOG_MAX_CHUNK_BYTES)),
+            no_html_report=args.no_html_report,
+        )
+        with open(CONVERSATION_PATH, "a", encoding="utf-8") as f:
+            f.write("</body>\n</html>")
+        return
+
     flat_html_turns = run_manual_transcript(
         turns,
         session_id=args.session_id,
@@ -7125,31 +7419,6 @@ def run_requested_transcripts(args: argparse.Namespace) -> None:
     with open(CONVERSATION_PATH, "a", encoding="utf-8") as f:
         f.write(html_footer)
     return
-
-    if args.service_scenarios:
-        with open(CONVERSATION_PATH, "a", encoding="utf-8") as f:
-            f.write("    <h2>Service Scenarios</h2>\n")
-        run_service_scenarios(
-            args.scenario,
-            split_files=not args.single_file,
-            run_id=run_id,
-            stable_session_ids=args.stable_session_ids,
-            reset_session_state=not args.no_reset_session_state,
-            parallel_scenarios=not args.no_parallel_scenarios,
-            scenario_workers=args.scenario_workers,
-            reset_output=False,
-            console_llm=not args.no_console_llm,
-            console_llm_raw=args.console_llm_raw,
-            console_llm_max_chars=args.console_llm_max_chars,
-            fail_on_regression_warnings=args.fail_on_regression_warnings,
-            max_log_chunk_bytes=max(100_000, int(args.max_log_chunk_bytes or MANUAL_LOG_MAX_CHUNK_BYTES)),
-            no_html_report=args.no_html_report,
-        )
-        # Write HTML footer
-        html_footer = "</body>\n</html>"
-        with open(CONVERSATION_PATH, "a", encoding="utf-8") as f:
-            f.write(html_footer)
-        return
 
     flat_html_turns = run_manual_transcript(
         turns,

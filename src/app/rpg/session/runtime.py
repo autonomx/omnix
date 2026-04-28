@@ -260,6 +260,153 @@ from app.rpg.world.world_event_director import (
     convert_events_to_ambient_updates,
     filter_world_events,
 )
+from app.rpg.world.companion_acceptance import (
+    get_pending_companion_offer_debug,
+    hydrate_companion_acceptance_from_pending_offers,
+    resolve_pending_companion_offer_response,
+)
+from app.rpg.world.companion_dialogue import (
+    build_companion_join_dialogue,
+    build_companion_presence_summary,
+)
+
+
+def _player_party_state_from_simulation(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
+    return copy.deepcopy(
+        _safe_dict(
+            _safe_dict(simulation_state.get("player_state")).get("party_state")
+        )
+    )
+
+
+def _try_resolve_pending_companion_offer_at_turn_start(
+    simulation_state: Dict[str, Any],
+    *,
+    player_input: str,
+    tick: int,
+) -> Dict[str, Any]:
+    """Resolve pending companion offer before ordinary action handling.
+
+    This is intentionally above the conversation-thread runtime. A pending
+    companion offer is a deterministic yes/no state machine, not an ambient
+    conversation trigger. This catches ordinary player input like:
+
+        Yes. Let's go.
+
+    before semantic action handling can classify it as travel/observe.
+    """
+    simulation_state = _safe_dict(simulation_state)
+
+    companion_debug = get_pending_companion_offer_debug(
+        simulation_state,
+        player_input=player_input,
+    )
+
+    if not companion_debug.get("has_any_pending_offer"):
+        return {
+            "resolved": False,
+            "reason": "no_pending_companion_offer",
+            "companion_acceptance_debug": companion_debug,
+            "source": "deterministic_session_runtime",
+        }
+
+    if not companion_debug.get("accepts") and not companion_debug.get("rejects"):
+        return {
+            "resolved": False,
+            "reason": "player_input_did_not_accept_or_reject_pending_companion_offer",
+            "companion_acceptance_debug": companion_debug,
+            "source": "deterministic_session_runtime",
+        }
+
+    thread_pending = _safe_dict(
+        _safe_dict(simulation_state.get("conversation_thread_state")).get(
+            "pending_companion_offers"
+        )
+    )
+    if thread_pending:
+        hydrate_companion_acceptance_from_pending_offers(
+            simulation_state,
+            thread_pending,
+        )
+
+    acceptance_result = resolve_pending_companion_offer_response(
+        simulation_state,
+        player_input=player_input,
+        tick=tick,
+    )
+
+    if not acceptance_result.get("resolved"):
+        return {
+            "resolved": False,
+            "reason": _safe_str(acceptance_result.get("reason")) or "pending_companion_offer_not_resolved",
+            "companion_acceptance_result": copy.deepcopy(acceptance_result),
+            "companion_acceptance_debug": get_pending_companion_offer_debug(
+                simulation_state,
+                player_input=player_input,
+            ),
+            "source": "deterministic_session_runtime",
+        }
+
+    npc_id = _safe_str(acceptance_result.get("npc_id"))
+    eligibility = _safe_dict(acceptance_result.get("party_join_eligibility_result"))
+    npc_name = (
+        _safe_str(eligibility.get("name"))
+        or npc_id.replace("npc:", "")
+        or "Companion"
+    )
+
+    companion_dialogue_result: Dict[str, Any] = {}
+    if acceptance_result.get("accepted"):
+        companion_dialogue_result = build_companion_join_dialogue(
+            npc_id=npc_id,
+            npc_name=npc_name,
+            acceptance_result=acceptance_result,
+        )
+
+    npc_response_beat = {}
+    if companion_dialogue_result.get("created"):
+        npc_response_beat = copy.deepcopy(
+            _safe_dict(companion_dialogue_result.get("beat"))
+        )
+
+    conversation_result = {
+        "triggered": True,
+        "reason": "pending_companion_offer_resolved",
+        "source_reason": "session_runtime_turn_start",
+        "autonomous": False,
+        "participation_mode": "companion_acceptance",
+        "companion_acceptance_result": copy.deepcopy(acceptance_result),
+        "companion_dialogue_result": copy.deepcopy(companion_dialogue_result),
+        "companion_presence_summary": copy.deepcopy(
+            build_companion_presence_summary(simulation_state)
+        ),
+        "companion_acceptance_state": copy.deepcopy(
+            _safe_dict(simulation_state.get("companion_acceptance_state"))
+        ),
+        "companion_acceptance_debug": get_pending_companion_offer_debug(
+            simulation_state,
+            player_input=player_input,
+        ),
+        "party_state": _player_party_state_from_simulation(simulation_state),
+        "npc_response_beat": npc_response_beat,
+        "conversation_thread_state": copy.deepcopy(
+            _safe_dict(simulation_state.get("conversation_thread_state"))
+        ),
+        "source": "deterministic_session_runtime",
+    }
+
+    return {
+        "resolved": True,
+        "accepted": bool(acceptance_result.get("accepted")),
+        "rejected": bool(acceptance_result.get("rejected")),
+        "reason": "pending_companion_offer_resolved",
+        "conversation_result": conversation_result,
+        "companion_acceptance_result": copy.deepcopy(acceptance_result),
+        "companion_dialogue_result": copy.deepcopy(companion_dialogue_result),
+        "party_state": _player_party_state_from_simulation(simulation_state),
+        "source": "deterministic_session_runtime",
+    }
+
 
 _advance_simulation_for_idle = advance_simulation_for_idle
 _build_idle_player_context = build_idle_player_context
@@ -7619,6 +7766,77 @@ def apply_turn(
     *,
     performance_override: Dict[str, Any] | None = None,
 ) -> Dict[str, Any]:
+    session = load_runtime_session(session_id)
+    if session is None:
+        return {"ok": False, "error": "session_not_found"}
+
+    simulation_state = copy.deepcopy(_safe_dict(session.get("simulation_state")))
+    tick = int(_safe_dict(session.get("runtime_state")).get("tick", 0) or 0)
+    companion_acceptance_precheck = _try_resolve_pending_companion_offer_at_turn_start(
+        simulation_state,
+        player_input=player_input,
+        tick=tick,
+    )
+    if companion_acceptance_precheck.get("resolved"):
+        conversation_result = _safe_dict(
+            companion_acceptance_precheck.get("conversation_result")
+        )
+
+        resolved_result = {
+            "ok": True,
+            "action_type": "companion_acceptance",
+            "semantic_action_type": "companion_acceptance",
+            "semantic_family": "social",
+            "summary": "The pending companion offer is resolved.",
+            "conversation_result": copy.deepcopy(conversation_result),
+            "companion_acceptance_result": copy.deepcopy(
+                companion_acceptance_precheck.get("companion_acceptance_result")
+            ),
+            "companion_dialogue_result": copy.deepcopy(
+                companion_acceptance_precheck.get("companion_dialogue_result")
+            ),
+            "party_state": copy.deepcopy(
+                companion_acceptance_precheck.get("party_state")
+            ),
+            "source": "deterministic_session_runtime",
+        }
+
+        turn_contract = {
+            "ok": True,
+            "action_type": "companion_acceptance",
+            "semantic_action_type": "companion_acceptance",
+            "semantic_family": "social",
+            "resolved_result": copy.deepcopy(resolved_result),
+            "conversation_result": copy.deepcopy(conversation_result),
+            "simulation_state": simulation_state,
+            "source": "deterministic_session_runtime",
+        }
+
+        result = {
+            "ok": True,
+            "result": {
+                "ok": True,
+                "resolved_result": copy.deepcopy(resolved_result),
+                "conversation_result": copy.deepcopy(conversation_result),
+                "simulation_state": simulation_state,
+            },
+            "turn_contract": turn_contract,
+            "conversation_result": copy.deepcopy(conversation_result),
+            "simulation_state": simulation_state,
+            "session": session,
+        }
+
+        # Preserve normal session state persistence behavior.
+        if isinstance(session, dict):
+            session["simulation_state"] = simulation_state
+            setup_payload = _safe_dict(session.get("setup_payload"))
+            metadata = _safe_dict(setup_payload.get("metadata"))
+            metadata["simulation_state"] = simulation_state
+            setup_payload["metadata"] = metadata
+            session["setup_payload"] = setup_payload
+
+        return result
+
     authoritative_result = _apply_turn_authoritative(
         session_id,
         player_input,

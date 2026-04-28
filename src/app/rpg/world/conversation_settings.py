@@ -113,6 +113,8 @@ DEFAULT_CONVERSATION_SETTINGS: Dict[str, Any] = {
     "npc_party_eligibility_enabled": True,
     "companion_join_intent_enabled": True,
     "npc_arc_continuity_enabled": True,
+    "companion_acceptance_enabled": True,
+    "companion_dialogue_enabled": True,
 }
 
 
@@ -291,6 +293,14 @@ def normalize_conversation_settings(settings: Dict[str, Any]) -> Dict[str, Any]:
     )
     merged["npc_arc_continuity_enabled"] = _safe_bool(
         merged.get("npc_arc_continuity_enabled"),
+        True,
+    )
+    merged["companion_acceptance_enabled"] = _safe_bool(
+        merged.get("companion_acceptance_enabled"),
+        True,
+    )
+    merged["companion_dialogue_enabled"] = _safe_bool(
+        merged.get("companion_dialogue_enabled"),
         True,
     )
     return merged

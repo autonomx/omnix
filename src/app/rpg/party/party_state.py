@@ -74,6 +74,11 @@ def _normalize_companion(companion: Dict[str, Any]) -> Dict[str, Any]:
         "role": role,
         "status": status,
         "equipment": clean_equipment,
+        "source": _safe_str(companion.get("source")),
+        "joined_tick": _safe_int(companion.get("joined_tick"), 0),
+        "identity_arc": _safe_str(companion.get("identity_arc")),
+        "current_role": _safe_str(companion.get("current_role")),
+        "active_motivations": _safe_list(companion.get("active_motivations"))[:4],
     }
 
 
@@ -109,7 +114,18 @@ def ensure_party_state(player_state: Dict[str, Any]) -> Dict[str, Any]:  # noqa:
     return player_state
 
 
-def add_companion(player_state: Dict[str, Any], npc_id: str, name: str) -> Dict[str, Any]:
+def add_companion(
+    player_state: Dict[str, Any],
+    npc_id: str,
+    name: str,
+    *,
+    role: str = "ally",
+    source: str = "",
+    joined_tick: int = 0,
+    identity_arc: str = "",
+    current_role: str = "",
+    active_motivations: Optional[List[Dict[str, Any]]] = None,
+) -> Dict[str, Any]:
     """Add a companion to the party if there is room and not already present."""
     player_state = ensure_party_state(player_state)
     party = player_state["party_state"]
@@ -131,9 +147,14 @@ def add_companion(player_state: Dict[str, Any], npc_id: str, name: str) -> Dict[
         "max_hp": 100,
         "loyalty": 0.5,
         "morale": 0.5,
-        "role": "ally",
+        "role": role or "ally",
         "status": "active",
         "equipment": {},
+        "source": source,
+        "joined_tick": int(joined_tick or 0),
+        "identity_arc": identity_arc,
+        "current_role": current_role,
+        "active_motivations": _safe_list(active_motivations)[:4],
     }))
     companions = sorted(companions, key=lambda c: str(c.get("npc_id")))
 

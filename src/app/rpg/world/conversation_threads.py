@@ -4,6 +4,18 @@ from copy import deepcopy
 from typing import Any, Dict, List
 
 from app.rpg.session.ambient_intent import is_ambient_wait_or_listen_intent
+from app.rpg.world.companion_acceptance import (
+    get_pending_companion_offer_debug,
+    hydrate_companion_acceptance_from_pending_offers,
+    record_companion_join_offer,
+    resolve_pending_companion_offer_response,
+)
+from app.rpg.world.companion_dialogue import (
+    build_companion_join_dialogue,
+    build_companion_presence_summary,
+)
+from app.rpg.world.companion_join_intent import maybe_create_companion_join_intent
+from app.rpg.world.consequence_signals import emit_consequence_signals
 from app.rpg.world.conversation_director import select_conversation_intent
 from app.rpg.world.conversation_effects import (
     build_conversation_world_signal,
@@ -30,6 +42,7 @@ from app.rpg.world.location_registry import (
     get_location,
     present_npcs_for_current_location,
 )
+from app.rpg.world.npc_arc_continuity import update_npc_arc_continuity
 from app.rpg.world.npc_biography_registry import get_npc_biography
 from app.rpg.world.npc_dialogue_profile import (
     build_npc_dialogue_profile,
@@ -39,6 +52,7 @@ from app.rpg.world.npc_dialogue_recall import (
     find_recall_capable_npc,
     player_input_requests_recall,
 )
+from app.rpg.world.npc_evolution_triggers import evolve_npc_from_reputation_thresholds
 from app.rpg.world.npc_goal_state import (
     dominant_goal_for_npc,
     goal_topic_bias,
@@ -54,19 +68,17 @@ from app.rpg.world.npc_knowledge_state import (
     add_npc_knowledge_from_topic,
     prune_npc_knowledge_state,
 )
+from app.rpg.world.npc_party_eligibility import evaluate_npc_party_join_eligibility
 from app.rpg.world.npc_presence_runtime import present_npcs_at_location
+from app.rpg.world.npc_referrals import suggest_npc_referral
 from app.rpg.world.npc_reputation_state import (
     get_npc_reputation,
     response_style_from_reputation,
     update_npc_reputation,
 )
-from app.rpg.world.player_reputation_consequences import apply_player_reputation_consequence
-from app.rpg.world.consequence_signals import emit_consequence_signals
-from app.rpg.world.npc_evolution_triggers import evolve_npc_from_reputation_thresholds
-from app.rpg.world.npc_referrals import suggest_npc_referral
-from app.rpg.world.npc_party_eligibility import evaluate_npc_party_join_eligibility
-from app.rpg.world.companion_join_intent import maybe_create_companion_join_intent
-from app.rpg.world.npc_arc_continuity import update_npc_arc_continuity
+from app.rpg.world.player_reputation_consequences import (
+    apply_player_reputation_consequence,
+)
 from app.rpg.world.quest_conversation_access import (
     evaluate_quest_conversation_access,
     filter_allowed_topic_facts_for_access,
@@ -103,6 +115,105 @@ def _safe_int(value: Any, default: int = 0) -> int:
         return int(value)
     except Exception:
         return default
+
+
+def _player_party_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
+    return deepcopy(
+        _safe_dict(
+            _safe_dict(simulation_state.get("player_state")).get("party_state")
+        )
+    )
+
+
+def _companion_acceptance_runtime_result(
+    simulation_state: Dict[str, Any],
+    state: Dict[str, Any],
+    settings: Dict[str, Any],
+    *,
+    player_input: str,
+    tick: int,
+    source_reason: str,
+) -> Dict[str, Any]:
+    companion_acceptance_result = resolve_pending_companion_offer_response(
+        simulation_state,
+        player_input=player_input,
+        tick=tick,
+    )
+
+    if not companion_acceptance_result.get("resolved"):
+        return {
+            "triggered": False,
+            "reason": _safe_str(companion_acceptance_result.get("reason")) or "companion_offer_not_resolved",
+            "companion_acceptance_result": deepcopy(companion_acceptance_result),
+            "companion_acceptance_debug": get_pending_companion_offer_debug(
+                simulation_state,
+                player_input=player_input,
+            ),
+            "source": "deterministic_conversation_thread_runtime",
+        }
+
+    npc_id = _safe_str(companion_acceptance_result.get("npc_id"))
+    eligibility = _safe_dict(
+        companion_acceptance_result.get("party_join_eligibility_result")
+    )
+    npc_name = (
+        _safe_str(eligibility.get("name"))
+        or npc_id.replace("npc:", "")
+        or "Companion"
+    )
+
+    companion_dialogue_result: Dict[str, Any] = {}
+    if (
+        settings.get("companion_dialogue_enabled", True)
+        and companion_acceptance_result.get("accepted")
+    ):
+        companion_dialogue_result = build_companion_join_dialogue(
+            npc_id=npc_id,
+            npc_name=npc_name,
+            acceptance_result=companion_acceptance_result,
+        )
+
+    npc_response_beat = {}
+    if companion_dialogue_result.get("created"):
+        npc_response_beat = deepcopy(
+            _safe_dict(companion_dialogue_result.get("beat"))
+        )
+
+    state["debug"] = {
+        "last_triggered": True,
+        "reason": "pending_companion_offer_resolved",
+        "source_reason": source_reason,
+        "participation_mode": "companion_acceptance",
+        "npc_id": npc_id,
+        "accepted": bool(companion_acceptance_result.get("accepted")),
+        "rejected": bool(companion_acceptance_result.get("rejected")),
+        "tick": int(tick or 0),
+        "source": "deterministic_conversation_thread_runtime",
+    }
+
+    return {
+        "triggered": True,
+        "reason": "pending_companion_offer_resolved",
+        "source_reason": source_reason,
+        "autonomous": False,
+        "participation_mode": "companion_acceptance",
+        "companion_acceptance_result": deepcopy(companion_acceptance_result),
+        "companion_dialogue_result": deepcopy(companion_dialogue_result),
+        "companion_presence_summary": deepcopy(
+            build_companion_presence_summary(simulation_state)
+        ),
+        "companion_acceptance_state": deepcopy(
+            _safe_dict(simulation_state.get("companion_acceptance_state"))
+        ),
+        "companion_acceptance_debug": get_pending_companion_offer_debug(
+            simulation_state,
+            player_input=player_input,
+        ),
+        "party_state": _player_party_state(simulation_state),
+        "npc_response_beat": npc_response_beat,
+        "conversation_thread_state": get_conversation_thread_state(simulation_state),
+        "source": "deterministic_conversation_thread_runtime",
+    }
 
 
 def ensure_conversation_thread_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
@@ -922,6 +1033,22 @@ def maybe_advance_conversation_thread(
     simulation_state = _safe_dict(simulation_state)
     state = ensure_conversation_thread_state(simulation_state)
     settings = normalize_conversation_settings(settings or {})
+
+    # AL-AM-AN.3:
+    # This must happen at the absolute top, before recall, ambient, wait/listen,
+    # NPC-count, topic, cooldown, or pending-player-response gates.
+    if settings.get("companion_acceptance_enabled", True):
+        companion_acceptance_attempt = _companion_acceptance_runtime_result(
+            simulation_state,
+            state,
+            settings,
+            player_input=player_input,
+            tick=tick,
+            source_reason="top_of_maybe_advance_conversation_thread",
+        )
+        if companion_acceptance_attempt.get("triggered"):
+            return companion_acceptance_attempt
+
     location_id = current_location_id(simulation_state)
     location = get_location(location_id)
 
@@ -936,6 +1063,77 @@ def maybe_advance_conversation_thread(
             "reason": "conversation_settings_disabled",
             "conversation_thread_state": get_conversation_thread_state(simulation_state),
         }
+
+    # AL-AM-AN.2:
+    # A pending companion offer is not an ambient conversation trigger.
+    # It is a deterministic simulation state waiting for the player's explicit
+    # yes/no response. Therefore it must be resolved before the normal
+    # wait/listen/ambient gate returns "not_wait_or_listen_turn".
+    if settings.get("companion_acceptance_enabled", True):
+        companion_acceptance_result = resolve_pending_companion_offer_response(
+            simulation_state,
+            player_input=player_input,
+            tick=tick,
+        )
+
+        if companion_acceptance_result.get("resolved"):
+            npc_id = _safe_str(companion_acceptance_result.get("npc_id"))
+            eligibility = _safe_dict(
+                companion_acceptance_result.get("party_join_eligibility_result")
+            )
+            npc_name = (
+                _safe_str(eligibility.get("name"))
+                or npc_id.replace("npc:", "")
+                or "Companion"
+            )
+
+            companion_dialogue_result: Dict[str, Any] = {}
+            if (
+                settings.get("companion_dialogue_enabled", True)
+                and companion_acceptance_result.get("accepted")
+            ):
+                companion_dialogue_result = build_companion_join_dialogue(
+                    npc_id=npc_id,
+                    npc_name=npc_name,
+                    acceptance_result=companion_acceptance_result,
+                )
+
+            if companion_dialogue_result.get("created"):
+                npc_response_beat = deepcopy(
+                    _safe_dict(companion_dialogue_result.get("beat"))
+                )
+            else:
+                npc_response_beat = {}
+
+            state["debug"] = {
+                "last_triggered": True,
+                "reason": "pending_companion_offer_resolved",
+                "participation_mode": "companion_acceptance",
+                "npc_id": npc_id,
+                "accepted": bool(companion_acceptance_result.get("accepted")),
+                "rejected": bool(companion_acceptance_result.get("rejected")),
+                "tick": int(tick or 0),
+                "source": "deterministic_conversation_thread_runtime",
+            }
+
+            return {
+                "triggered": True,
+                "reason": "pending_companion_offer_resolved",
+                "autonomous": False,
+                "participation_mode": "companion_acceptance",
+                "companion_acceptance_result": deepcopy(companion_acceptance_result),
+                "companion_dialogue_result": deepcopy(companion_dialogue_result),
+                "companion_presence_summary": deepcopy(
+                    build_companion_presence_summary(simulation_state)
+                ),
+                "companion_acceptance_state": deepcopy(
+                    _safe_dict(simulation_state.get("companion_acceptance_state"))
+                ),
+                "party_state": _player_party_state(simulation_state),
+                "npc_response_beat": npc_response_beat,
+                "conversation_thread_state": get_conversation_thread_state(simulation_state),
+                "source": "deterministic_conversation_thread_runtime",
+            }
 
     if (
         settings.get("npc_dialogue_recall_enabled", True)
@@ -953,14 +1151,52 @@ def maybe_advance_conversation_thread(
             return recall_result
 
     if not force and not autonomous and not is_ambient_wait_or_listen_intent(player_input):
+        companion_debug = get_pending_companion_offer_debug(
+            simulation_state,
+            player_input=player_input,
+        )
+        fallback_attempt: Dict[str, Any] = {}
+
+        if (
+            settings.get("companion_acceptance_enabled", True)
+            and companion_debug.get("has_any_pending_offer")
+            and (companion_debug.get("accepts") or companion_debug.get("rejects"))
+        ):
+            thread_pending = _safe_dict(
+                _safe_dict(simulation_state.get("conversation_thread_state")).get(
+                    "pending_companion_offers"
+                )
+            )
+            if thread_pending:
+                hydrate_companion_acceptance_from_pending_offers(
+                    simulation_state,
+                    thread_pending,
+                )
+
+            fallback_attempt = _companion_acceptance_runtime_result(
+                simulation_state,
+                state,
+                settings,
+                player_input=player_input,
+                tick=tick,
+                source_reason="fallback_before_not_wait_listen_or_ambient_tick",
+            )
+            if fallback_attempt.get("triggered"):
+                return fallback_attempt
+
         state["debug"] = {
             "last_triggered": False,
-            "reason": "not_wait_or_listen_turn",
+            "reason": "not_wait_listen_or_ambient_tick",
             "location_id": location_id,
         }
         return {
             "triggered": False,
-            "reason": "not_wait_or_listen_turn",
+            "reason": "not_wait_listen_or_ambient_tick",
+            "companion_acceptance_debug": companion_debug,
+            "companion_acceptance_result": deepcopy(
+                _safe_dict(fallback_attempt.get("companion_acceptance_result"))
+            ),
+            "source": "deterministic_conversation_thread_runtime",
             "conversation_thread_state": get_conversation_thread_state(simulation_state),
         }
 
@@ -1641,6 +1877,44 @@ def handle_pending_player_conversation_response(
             )
         npc_response_beat["companion_join_intent"] = deepcopy(companion_join_intent)
 
+        companion_offer_record_result: Dict[str, Any] = {}
+        if (
+            settings.get("companion_acceptance_enabled", True)
+            and companion_join_intent.get("offered")
+        ):
+            companion_offer_record_result = record_companion_join_offer(
+                simulation_state,
+                npc_id=responder_id,
+                join_intent=companion_join_intent,
+                tick=tick,
+            )
+
+        npc_response_beat["companion_offer_record_result"] = deepcopy(
+            companion_offer_record_result
+        )
+        npc_response_beat["companion_acceptance_state"] = deepcopy(
+            _safe_dict(simulation_state.get("companion_acceptance_state"))
+        )
+        npc_response_beat["party_state"] = _player_party_state(simulation_state)
+
+        # AL-AM-AN.4:
+        # This response turn may create an offer, but it must never accept it.
+        # Acceptance is handled only at the top of maybe_advance_conversation_thread
+        # on a later player yes/no response.
+        companion_acceptance_result: Dict[str, Any] = {
+            "resolved": False,
+            "accepted": False,
+            "rejected": False,
+            "reason": "awaiting_later_player_acceptance",
+            "source": "deterministic_companion_acceptance",
+        }
+
+        npc_response_beat["companion_acceptance_result"] = deepcopy(companion_acceptance_result)
+        npc_response_beat["companion_dialogue_result"] = {}
+        npc_response_beat["companion_presence_summary"] = deepcopy(
+            build_companion_presence_summary(simulation_state)
+        )
+
         # AK: Arc continuity tracking.
         npc_arc_continuity_result: Dict[str, Any] = {}
         if settings.get("npc_arc_continuity_enabled", True):
@@ -1812,6 +2086,11 @@ def handle_pending_player_conversation_response(
         "npc_evolution_result": deepcopy(_safe_dict(npc_response_beat.get("npc_evolution_result"))),
         "party_join_eligibility_result": deepcopy(_safe_dict(npc_response_beat.get("party_join_eligibility_result"))),
         "companion_join_intent": deepcopy(_safe_dict(npc_response_beat.get("companion_join_intent"))),
+        "companion_acceptance_result": deepcopy(_safe_dict(npc_response_beat.get("companion_acceptance_result"))),
+        "companion_offer_record_result": deepcopy(_safe_dict(npc_response_beat.get("companion_offer_record_result"))),
+        "companion_dialogue_result": deepcopy(_safe_dict(npc_response_beat.get("companion_dialogue_result"))),
+        "companion_presence_summary": deepcopy(_safe_dict(npc_response_beat.get("companion_presence_summary"))),
+        "party_state": deepcopy(_safe_dict(npc_response_beat.get("party_state"))),
         "npc_arc_continuity_result": deepcopy(_safe_dict(npc_response_beat.get("npc_arc_continuity_result"))),
         "npc_arc_continuity_state": deepcopy(
             _safe_dict(simulation_state.get("npc_arc_continuity_state"))
