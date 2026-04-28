@@ -1,146 +1,174 @@
 Below is the next bundle spec:
 
-Bundle W-X-Y — Quest/NPC Knowledge, Dialogue Memory Recall, and Scene Continuity v1
+Bundle Z-AA-AB — Quest-Aware NPC Agency + Player Reputation Consequences v1
 
-Apply after T-U-V.1, which passed.
+Apply after W-X-Y.3 and the manual HTML/logging improvements.
 
-Bundle W — Quest/NPC Knowledge Model v1
+Bundle Z — Quest-Aware NPC Agency v1
 
 Goal:
 
-NPCs should know different things based on deterministic state, biography, location, quest involvement, prior history, rumors, and recent conversations.
+NPCs should respond to quest-related topics according to their role, biography, knowledge, goals, and reputation toward the player.
 
-Add a bounded knowledge model:
+This means Bran, Mira, Guard Captain, and Merchant should not all treat the same quest topic identically.
 
-src/app/rpg/world/npc_knowledge_state.py
+Examples:
 
-Knowledge entries are not new facts by themselves. They are references to already-backed facts:
+Bran:
+  talks about tavern rumors, road trouble, debts, and local safety.
+
+Mira:
+  notices patterns, contradictions, and who avoids talking.
+
+Guard Captain:
+  asks for evidence, reports, witnesses, and public order.
+
+Merchant:
+  frames quest dangers as road/trade risk.
+
+Hard rule:
+
+NPC quest-aware agency can affect:
+- whether NPC answers
+- how much they share
+- whether they deflect
+- whether they emit bounded world_signals
+- whether they suggest who might know more
+- reputation/social state
+
+NPC quest-aware agency cannot directly:
+- create quests
+- complete quests
+- grant rewards
+- create journal entries
+- add inventory
+- change currency
+- change shop stock
+- teleport/move player
+- start combat
+Bundle AA — Player Reputation Consequences v1
+
+Goal:
+
+Player behavior should affect NPC reputation state in bounded deterministic ways.
+
+Use existing:
+
+npc_reputation_state
+conversation_social_state
+npc_history_state
+
+Add stronger deterministic reputation events for:
+
+- polite/helpful reply
+- repeated questioning
+- asking unbacked topics
+- hostile/socially disruptive action
+- backed quest cooperation
+- ignoring invitation / letting pending response expire
+
+State remains bounded:
 
 {
-  "npc_knowledge_state": {
+  "npc_reputation_state": {
     "by_npc": {
       "npc:Bran": {
-        "known_facts": [
-          {
-            "knowledge_id": "know:npc:Bran:topic:quest:quest:old_mill_bandits",
-            "source_topic_id": "topic:quest:quest:old_mill_bandits",
-            "source_kind": "quest",
-            "summary": "There is talk of armed figures near the old mill road.",
-            "confidence": 2,
-            "tick": 527,
-            "expires_tick": 2527
-          }
-        ]
+        "familiarity": 3,
+        "trust": 1,
+        "annoyance": 0,
+        "fear": 0,
+        "respect": 1,
+        "last_updated_tick": 527,
+        "last_reason": "player_backed_quest_cooperation"
       }
-    },
-    "debug": {}
+    }
   }
 }
 
-Rules:
+Reputation affects:
 
-- knowledge entries must cite source_topic_id/source_event_id/source_memory_id/source_history_id
-- no uncited knowledge
-- max known facts per NPC
-- expired knowledge pruned
-- knowledge can influence dialogue and topic selection
-- knowledge cannot create quests, rewards, inventory, journal, currency, stock, location changes, or combat
-Bundle X — Dialogue Memory Recall v1
+- response_style
+- willingness to answer backed quest questions
+- willingness to invite player into conversation
+- whether NPC says “ask someone else”
+- whether NPC emits soft world_signals like social_tension or trust_signal
+
+Still does not directly affect:
+
+- quest unlocks
+- rewards
+- prices
+- inventory
+- journal
+
+Those can come later through explicit deterministic systems.
+
+Bundle AB — Quest Conversation Access Gates v1
 
 Goal:
 
-NPCs can recall recent player conversations and prior topics in dialogue, but only from bounded NPC history/reputation/knowledge state.
+NPCs can gate quest-related conversation detail based on:
+- whether topic is backed
+- NPC biography/role
+- NPC knowledge
+- player reputation/trust/respect
+- topic sensitivity
 
-Add recall selection:
-
-src/app/rpg/world/npc_dialogue_recall.py
-
-Recall output:
+Access gate result:
 
 {
-  "selected": true,
-  "recall": {
-    "kind": "prior_player_reply",
-    "summary": "The player asked Bran about the old mill road.",
-    "source_history_id": "hist:npc:Bran:527:player_conversation_reply",
-    "tick": 527
+  "quest_conversation_access": {
+    "requested": true,
+    "topic_id": "topic:quest:quest:old_mill_bandits",
+    "npc_id": "npc:Bran",
+    "access": "partial",
+    "reason": "known_topic_but_guarded_reputation",
+    "allowed_detail_level": 1,
+    "blocked_detail_level": 2,
+    "safe_deflection": "I know enough to be cautious, not enough to send you chasing shadows."
   }
 }
 
-Rules:
+Access levels:
 
-- recall only uses npc_history_state / npc_knowledge_state
-- recall is bounded to max 1–2 snippets per response
-- recall has cooldown so NPCs do not repeat it every turn
-- recall can shape line text
-- recall cannot create authoritative facts
-Bundle Y — Scene Continuity v1
+none       — NPC refuses/does not know
+partial    — NPC gives safe summary only
+normal     — NPC gives normal backed facts
+trusted    — NPC gives richer backed context
 
-Goal:
+Hard constraints:
 
-Scene population, activity, conversation threads, and recent beats should feel continuous across ambient ticks.
-
-Add:
-
-src/app/rpg/world/scene_continuity_state.py
-
-State shape:
-
-{
-  "scene_continuity_state": {
-    "by_location": {
-      "loc_tavern": {
-        "recent_focus": [
-          {
-            "focus_id": "focus:loc_tavern:topic:quest:old_mill_bandits",
-            "topic_id": "topic:quest:old_mill_bandits",
-            "kind": "quest_discussion",
-            "last_tick": 527,
-            "weight": 3
-          }
-        ],
-        "recent_speakers": ["npc:Bran", "npc:Mira"],
-        "recent_activities": []
-      }
-    },
-    "debug": {}
-  }
-}
-
-Rules:
-
-- scene continuity helps pick follow-up topics/speakers
-- caps recent_focus/recent_speakers/recent_activities
-- expires old focus entries
-- avoids repeating the same line/topic too often
-- no direct mutation outside continuity state
+Access gates only choose how to present backed facts.
+They do not create new facts.
 Files to add/change
-NEW  src/app/rpg/world/npc_knowledge_state.py
-NEW  src/app/rpg/world/npc_dialogue_recall.py
-NEW  src/app/rpg/world/scene_continuity_state.py
+NEW  src/app/rpg/world/quest_conversation_access.py
+NEW  src/app/rpg/world/player_reputation_consequences.py
 
 MOD  src/app/rpg/world/conversation_settings.py
-MOD  src/app/rpg/world/npc_dialogue_profile.py
 MOD  src/app/rpg/world/conversation_threads.py
-MOD  src/app/rpg/world/conversation_director.py
-MOD  src/app/rpg/session/ambient_tick_runtime.py
+MOD  src/app/rpg/world/npc_dialogue_profile.py
+MOD  src/app/rpg/world/npc_reputation_state.py
+MOD  src/app/rpg/world/npc_knowledge_state.py
 MOD  src/static/rpg-living-world-inspector.js
 MOD  src/tests/rpg/manual_llm_transcript.py
 
-NEW  src/app/rpg/tests/test_bundle_wxy_knowledge_recall_continuity.py
-W1 PATCH — NPC knowledge state
+NEW  src/app/rpg/tests/test_bundle_zaaab_quest_aware_reputation.py
+Z1 PATCH — Quest conversation access gates
 
 Create:
 
-src/app/rpg/world/npc_knowledge_state.py
+src/app/rpg/world/quest_conversation_access.py
 from __future__ import annotations
 
 from copy import deepcopy
 from typing import Any, Dict, List
 
+from app.rpg.world.npc_biography_registry import get_npc_biography
+from app.rpg.world.npc_knowledge_state import known_facts_for_npc
+from app.rpg.world.npc_reputation_state import get_npc_reputation
 
-MAX_KNOWN_FACTS_PER_NPC = 24
-DEFAULT_KNOWLEDGE_TTL_TICKS = 2000
+
+ACCESS_LEVELS = {"none", "partial", "normal", "trusted"}
 
 
 def _safe_str(value: Any) -> str:
@@ -162,313 +190,170 @@ def _safe_int(value: Any, default: int = 0) -> int:
         return default
 
 
-def ensure_npc_knowledge_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
-    state = _safe_dict(simulation_state.get("npc_knowledge_state"))
-    if not isinstance(state.get("by_npc"), dict):
-        state["by_npc"] = {}
-    if not isinstance(state.get("debug"), dict):
-        state["debug"] = {}
-    simulation_state["npc_knowledge_state"] = state
-    return state
+def _topic_is_backed(topic: Dict[str, Any]) -> bool:
+    topic = _safe_dict(topic)
+    topic_id = _safe_str(topic.get("topic_id"))
+    topic_type = _safe_str(topic.get("topic_type"))
+    source_id = _safe_str(topic.get("source_id"))
+    summary = _safe_str(topic.get("summary") or topic.get("title"))
+    return bool(topic_id and topic_type and summary and (source_id or topic_id.startswith("topic:")))
 
 
-def prune_npc_knowledge_state(
-    simulation_state: Dict[str, Any],
-    *,
-    current_tick: int,
-    max_known_facts_per_npc: int = MAX_KNOWN_FACTS_PER_NPC,
-) -> Dict[str, Any]:
-    state = ensure_npc_knowledge_state(simulation_state)
-    by_npc = _safe_dict(state.get("by_npc"))
-    expired_ids: List[str] = []
-
-    for npc_id, npc_state in list(by_npc.items()):
-        npc_state = _safe_dict(npc_state)
-        kept = []
-        for fact in _safe_list(npc_state.get("known_facts")):
-            fact = _safe_dict(fact)
-            knowledge_id = _safe_str(fact.get("knowledge_id"))
-            expires_tick = _safe_int(fact.get("expires_tick"), 0)
-            if expires_tick and int(current_tick or 0) >= expires_tick:
-                if knowledge_id:
-                    expired_ids.append(knowledge_id)
-                continue
-            kept.append(fact)
-
-        kept.sort(
-            key=lambda item: (
-                _safe_int(_safe_dict(item).get("confidence"), 0),
-                _safe_int(_safe_dict(item).get("tick"), 0),
-                _safe_str(_safe_dict(item).get("knowledge_id")),
-            ),
-            reverse=True,
-        )
-        npc_state["known_facts"] = kept[: max(1, int(max_known_facts_per_npc or MAX_KNOWN_FACTS_PER_NPC))]
-        by_npc[npc_id] = npc_state
-
-    state["by_npc"] = by_npc
-    state["debug"] = {
-        **_safe_dict(state.get("debug")),
-        "last_prune_tick": int(current_tick or 0),
-        "expired_knowledge_ids": expired_ids,
-        "source": "deterministic_npc_knowledge_runtime",
-    }
-    return {
-        "expired_knowledge_ids": expired_ids,
-        "source": "deterministic_npc_knowledge_runtime",
-    }
+def _npc_knows_topic(simulation_state: Dict[str, Any], *, npc_id: str, topic_id: str) -> bool:
+    for fact in known_facts_for_npc(simulation_state, npc_id=npc_id, limit=12):
+        if _safe_str(fact.get("source_topic_id")) == topic_id:
+            return True
+    return False
 
 
-def add_npc_knowledge_from_topic(
+def evaluate_quest_conversation_access(
     simulation_state: Dict[str, Any],
     *,
     npc_id: str,
     topic: Dict[str, Any],
-    tick: int,
-    confidence: int = 2,
-    ttl_ticks: int = DEFAULT_KNOWLEDGE_TTL_TICKS,
+    player_input: str = "",
 ) -> Dict[str, Any]:
+    """Decide how much backed quest detail an NPC may discuss.
+
+    This is a presentation/access gate only. It does not create quests, rewards,
+    journal entries, inventory, currency, stock, location changes, or combat.
+    """
     npc_id = _safe_str(npc_id)
     topic = _safe_dict(topic)
     topic_id = _safe_str(topic.get("topic_id"))
-    source_id = _safe_str(topic.get("source_id") or topic_id)
-    source_kind = _safe_str(topic.get("source_kind") or topic.get("topic_type"))
-    summary = _safe_str(topic.get("summary") or topic.get("title")).strip()
+    topic_type = _safe_str(topic.get("topic_type"))
+    bio = get_npc_biography(npc_id)
+    role = _safe_str(bio.get("role")).lower()
+    reputation = get_npc_reputation(simulation_state, npc_id=npc_id)
 
-    if not npc_id.startswith("npc:"):
-        return {"created": False, "reason": "invalid_npc_id"}
-    if not topic_id or not summary:
-        return {"created": False, "reason": "knowledge_requires_backed_topic"}
+    requested = topic_type == "quest" or "quest" in topic_id or "trouble" in _safe_str(player_input).lower()
 
-    state = ensure_npc_knowledge_state(simulation_state)
-    by_npc = _safe_dict(state.get("by_npc"))
-    npc_state = _safe_dict(by_npc.get(npc_id))
-    facts = _safe_list(npc_state.get("known_facts"))
-
-    current_tick = int(tick or 0)
-    knowledge_id = f"know:{npc_id}:{topic_id}"
-
-    entry = {
-        "knowledge_id": knowledge_id,
-        "npc_id": npc_id,
-        "source_topic_id": topic_id,
-        "source_id": source_id,
-        "source_kind": source_kind,
-        "summary": summary[:280],
-        "confidence": max(1, min(5, _safe_int(confidence, 2))),
-        "tick": current_tick,
-        "expires_tick": current_tick + max(1, int(ttl_ticks or DEFAULT_KNOWLEDGE_TTL_TICKS)),
-        "source": "deterministic_npc_knowledge_runtime",
-    }
-
-    facts = [
-        _safe_dict(fact)
-        for fact in facts
-        if _safe_str(_safe_dict(fact).get("knowledge_id")) != knowledge_id
-    ]
-    facts.append(entry)
-    facts.sort(
-        key=lambda item: (
-            _safe_int(_safe_dict(item).get("confidence"), 0),
-            _safe_int(_safe_dict(item).get("tick"), 0),
-        ),
-        reverse=True,
-    )
-
-    npc_state["known_facts"] = facts[:MAX_KNOWN_FACTS_PER_NPC]
-    by_npc[npc_id] = npc_state
-    state["by_npc"] = by_npc
-    simulation_state["npc_knowledge_state"] = state
-
-    return {
-        "created": True,
-        "entry": deepcopy(entry),
-        "source": "deterministic_npc_knowledge_runtime",
-    }
-
-
-def known_facts_for_npc(
-    simulation_state: Dict[str, Any],
-    *,
-    npc_id: str,
-    limit: int = 6,
-) -> List[Dict[str, Any]]:
-    state = ensure_npc_knowledge_state(simulation_state)
-    npc_state = _safe_dict(_safe_dict(state.get("by_npc")).get(_safe_str(npc_id)))
-    facts = sorted(
-        [_safe_dict(fact) for fact in _safe_list(npc_state.get("known_facts"))],
-        key=lambda item: (
-            _safe_int(item.get("confidence"), 0),
-            _safe_int(item.get("tick"), 0),
-        ),
-        reverse=True,
-    )
-    return deepcopy(facts[: max(0, int(limit or 0))])
-X1 PATCH — Dialogue recall selector
-
-Create:
-
-src/app/rpg/world/npc_dialogue_recall.py
-from __future__ import annotations
-
-from copy import deepcopy
-from typing import Any, Dict, List
-
-from app.rpg.world.npc_history_state import recent_npc_history
-from app.rpg.world.npc_knowledge_state import known_facts_for_npc
-
-
-MAX_RECALLS_PER_RESPONSE = 2
-
-
-def _safe_str(value: Any) -> str:
-    return "" if value is None else str(value)
-
-
-def _safe_dict(value: Any) -> Dict[str, Any]:
-    return value if isinstance(value, dict) else {}
-
-
-def _safe_list(value: Any) -> List[Any]:
-    return value if isinstance(value, list) else []
-
-
-def _safe_int(value: Any, default: int = 0) -> int:
-    try:
-        return int(value)
-    except Exception:
-        return default
-
-
-def ensure_dialogue_recall_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
-    state = _safe_dict(simulation_state.get("npc_dialogue_recall_state"))
-    if not isinstance(state.get("cooldowns"), dict):
-        state["cooldowns"] = {}
-    if not isinstance(state.get("debug"), dict):
-        state["debug"] = {}
-    simulation_state["npc_dialogue_recall_state"] = state
-    return state
-
-
-def _token_overlap_score(a: str, b: str) -> int:
-    a_tokens = {token for token in _safe_str(a).lower().replace("_", " ").split() if len(token) > 3}
-    b_tokens = {token for token in _safe_str(b).lower().replace("_", " ").split() if len(token) > 3}
-    return len(a_tokens & b_tokens)
-
-
-def select_dialogue_recall(
-    simulation_state: Dict[str, Any],
-    *,
-    npc_id: str,
-    topic: Dict[str, Any],
-    tick: int,
-    cooldown_ticks: int = 4,
-    limit: int = MAX_RECALLS_PER_RESPONSE,
-) -> Dict[str, Any]:
-    state = ensure_dialogue_recall_state(simulation_state)
-    cooldowns = _safe_dict(state.get("cooldowns"))
-    npc_id = _safe_str(npc_id)
-    topic = _safe_dict(topic)
-    topic_text = " ".join(
-        _safe_str(topic.get(key))
-        for key in ("topic_id", "topic_type", "title", "summary")
-    )
-
-    cooldown_key = f"{npc_id}:{_safe_str(topic.get('topic_id'))}"
-    cooldown_until = _safe_int(cooldowns.get(cooldown_key), 0)
-    if cooldown_until and int(tick or 0) < cooldown_until:
+    if not requested:
         return {
-            "selected": False,
-            "reason": "recall_on_cooldown",
-            "source": "deterministic_npc_dialogue_recall",
+            "requested": False,
+            "access": "normal",
+            "reason": "not_quest_conversation",
+            "source": "deterministic_quest_conversation_access",
         }
 
-    candidates: List[Dict[str, Any]] = []
-
-    for history in recent_npc_history(simulation_state, npc_id=npc_id, limit=8):
-        summary = _safe_str(history.get("summary"))
-        score = _token_overlap_score(topic_text, summary) + _safe_int(history.get("importance"), 0)
-        if score <= 0:
-            continue
-        candidates.append(
-            {
-                "kind": "history",
-                "summary": summary,
-                "source_history_id": _safe_str(history.get("history_id")),
-                "topic_id": _safe_str(history.get("topic_id")),
-                "tick": _safe_int(history.get("tick"), 0),
-                "score": score,
-            }
-        )
-
-    for fact in known_facts_for_npc(simulation_state, npc_id=npc_id, limit=8):
-        summary = _safe_str(fact.get("summary"))
-        score = _token_overlap_score(topic_text, summary) + _safe_int(fact.get("confidence"), 0)
-        if score <= 0:
-            continue
-        candidates.append(
-            {
-                "kind": "knowledge",
-                "summary": summary,
-                "source_knowledge_id": _safe_str(fact.get("knowledge_id")),
-                "topic_id": _safe_str(fact.get("source_topic_id")),
-                "tick": _safe_int(fact.get("tick"), 0),
-                "score": score,
-            }
-        )
-
-    if not candidates:
-        state["debug"] = {
-            "selected": False,
-            "reason": "no_relevant_recall",
+    if not _topic_is_backed(topic):
+        return {
+            "requested": True,
+            "topic_id": topic_id,
             "npc_id": npc_id,
-            "topic_id": _safe_str(topic.get("topic_id")),
-            "tick": int(tick or 0),
-            "source": "deterministic_npc_dialogue_recall",
+            "access": "none",
+            "reason": "unbacked_topic",
+            "allowed_detail_level": 0,
+            "blocked_detail_level": 3,
+            "safe_deflection": "I have no reliable word of that.",
+            "source": "deterministic_quest_conversation_access",
         }
-        return {"selected": False, "reason": "no_relevant_recall"}
 
-    candidates.sort(
-        key=lambda item: (
-            _safe_int(item.get("score"), 0),
-            _safe_int(item.get("tick"), 0),
-        ),
-        reverse=True,
-    )
-    selected = candidates[: max(1, int(limit or MAX_RECALLS_PER_RESPONSE))]
-    cooldowns[cooldown_key] = int(tick or 0) + max(1, int(cooldown_ticks or 4))
-    state["cooldowns"] = cooldowns
-    state["debug"] = {
-        "selected": True,
-        "npc_id": npc_id,
-        "topic_id": _safe_str(topic.get("topic_id")),
-        "selected_recall": selected,
-        "tick": int(tick or 0),
-        "source": "deterministic_npc_dialogue_recall",
+    trust = _safe_int(reputation.get("trust"), 0)
+    respect = _safe_int(reputation.get("respect"), 0)
+    annoyance = _safe_int(reputation.get("annoyance"), 0)
+    fear = _safe_int(reputation.get("fear"), 0)
+    knows_topic = _npc_knows_topic(simulation_state, npc_id=npc_id, topic_id=topic_id)
+
+    score = 1
+
+    if knows_topic:
+        score += 1
+    if trust >= 2:
+        score += 1
+    if respect >= 2:
+        score += 1
+    if annoyance >= 3:
+        score -= 1
+    if fear >= 3:
+        score -= 1
+
+    if "guard" in role and topic_type == "quest":
+        score += 1
+    if "informant" in role and topic_type == "quest":
+        score += 1
+    if "tavern" in role and any(word in _safe_str(topic.get("summary")).lower() for word in ("road", "traveler", "tavern", "local")):
+        score += 1
+    if "merchant" in role and any(word in _safe_str(topic.get("summary")).lower() for word in ("road", "trade", "market", "goods")):
+        score += 1
+
+    if score <= 0:
+        access = "none"
+        reason = "known_topic_but_npc_unwilling"
+        allowed = 0
+    elif score == 1:
+        access = "partial"
+        reason = "backed_topic_low_trust_or_low_knowledge"
+        allowed = 1
+    elif score <= 3:
+        access = "normal"
+        reason = "backed_topic_normal_access"
+        allowed = 2
+    else:
+        access = "trusted"
+        reason = "backed_topic_trusted_access"
+        allowed = 3
+
+    deflection_by_access = {
+        "none": "I know enough to be cautious, not enough to say more.",
+        "partial": "I will keep this to what is reliable.",
+        "normal": "",
+        "trusted": "",
     }
 
     return {
-        "selected": True,
-        "recalls": deepcopy(selected),
-        "source": "deterministic_npc_dialogue_recall",
+        "requested": True,
+        "topic_id": topic_id,
+        "topic_type": topic_type,
+        "npc_id": npc_id,
+        "access": access,
+        "reason": reason,
+        "allowed_detail_level": allowed,
+        "blocked_detail_level": max(0, 3 - allowed),
+        "safe_deflection": deflection_by_access.get(access, ""),
+        "npc_reputation": deepcopy(reputation),
+        "npc_role": _safe_str(bio.get("role")),
+        "npc_knows_topic": knows_topic,
+        "source": "deterministic_quest_conversation_access",
     }
-Y1 PATCH — Scene continuity state
+
+
+def filter_allowed_topic_facts_for_access(
+    topic: Dict[str, Any],
+    *,
+    access: Dict[str, Any],
+) -> List[str]:
+    topic = _safe_dict(topic)
+    access = _safe_dict(access)
+    allowed_level = _safe_int(access.get("allowed_detail_level"), 1)
+    facts = [_safe_str(fact) for fact in _safe_list(topic.get("allowed_facts")) if _safe_str(fact)]
+
+    summary = _safe_str(topic.get("summary"))
+    title = _safe_str(topic.get("title"))
+
+    if not facts and summary:
+        facts = [summary]
+    if not facts and title:
+        facts = [title]
+
+    if allowed_level <= 0:
+        return []
+    if allowed_level == 1:
+        return facts[:1]
+    if allowed_level == 2:
+        return facts[:3]
+    return facts[:6]
+AA1 PATCH — Player reputation consequences
 
 Create:
 
-src/app/rpg/world/scene_continuity_state.py
+src/app/rpg/world/player_reputation_consequences.py
 from __future__ import annotations
 
 from copy import deepcopy
-from typing import Any, Dict, List
+from typing import Any, Dict
 
-from app.rpg.world.location_registry import current_location_id
-
-
-MAX_RECENT_FOCUS = 8
-MAX_RECENT_SPEAKERS = 8
-MAX_RECENT_ACTIVITIES = 8
-DEFAULT_FOCUS_TTL_TICKS = 50
+from app.rpg.world.npc_reputation_state import update_npc_reputation
 
 
 def _safe_str(value: Any) -> str:
@@ -479,141 +364,104 @@ def _safe_dict(value: Any) -> Dict[str, Any]:
     return value if isinstance(value, dict) else {}
 
 
-def _safe_list(value: Any) -> List[Any]:
-    return value if isinstance(value, list) else []
-
-
-def _safe_int(value: Any, default: int = 0) -> int:
-    try:
-        return int(value)
-    except Exception:
-        return default
-
-
-def ensure_scene_continuity_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
-    state = _safe_dict(simulation_state.get("scene_continuity_state"))
-    if not isinstance(state.get("by_location"), dict):
-        state["by_location"] = {}
-    if not isinstance(state.get("debug"), dict):
-        state["debug"] = {}
-    simulation_state["scene_continuity_state"] = state
-    return state
-
-
-def update_scene_continuity_from_conversation(
-    simulation_state: Dict[str, Any],
+def classify_player_conversation_reputation_event(
     *,
-    location_id: str = "",
-    topic_id: str = "",
-    topic_type: str = "",
-    speaker_id: str = "",
-    listener_id: str = "",
-    tick: int,
+    player_input: str,
+    topic_pivot: Dict[str, Any],
+    conversation_result: Dict[str, Any],
 ) -> Dict[str, Any]:
-    location_id = _safe_str(location_id or current_location_id(simulation_state))
-    state = ensure_scene_continuity_state(simulation_state)
-    by_location = _safe_dict(state.get("by_location"))
-    entry = _safe_dict(by_location.get(location_id))
+    text = _safe_str(player_input).strip().lower()
+    pivot = _safe_dict(topic_pivot)
+    conversation = _safe_dict(conversation_result)
 
-    recent_focus = []
-    for focus in _safe_list(entry.get("recent_focus")):
-        focus = _safe_dict(focus)
-        expires_tick = _safe_int(focus.get("expires_tick"), 0)
-        if expires_tick and int(tick or 0) >= expires_tick:
-            continue
-        if _safe_str(focus.get("topic_id")) == _safe_str(topic_id):
-            continue
-        recent_focus.append(focus)
+    if any(word in text for word in ("thank", "thanks", "appreciate", "helpful")):
+        return {
+            "kind": "polite_cooperation",
+            "familiarity_delta": 1,
+            "trust_delta": 1,
+            "respect_delta": 1,
+            "reason": "player_polite_or_cooperative",
+        }
 
-    if topic_id:
-        recent_focus.insert(
-            0,
-            {
-                "focus_id": f"focus:{location_id}:{topic_id}",
-                "topic_id": _safe_str(topic_id),
-                "topic_type": _safe_str(topic_type),
-                "kind": f"{_safe_str(topic_type) or 'topic'}_discussion",
-                "last_tick": int(tick or 0),
-                "weight": 3,
-                "expires_tick": int(tick or 0) + DEFAULT_FOCUS_TTL_TICKS,
-                "source": "deterministic_scene_continuity_runtime",
-            },
-        )
+    if any(word in text for word in ("liar", "shut up", "idiot", "threaten")):
+        return {
+            "kind": "hostile_social_reply",
+            "familiarity_delta": 1,
+            "trust_delta": -1,
+            "annoyance_delta": 2,
+            "fear_delta": 1,
+            "reason": "player_hostile_social_reply",
+        }
 
-    speakers = [
-        value
-        for value in [_safe_str(speaker_id), _safe_str(listener_id)]
-        if value.startswith("npc:")
-    ]
-    recent_speakers = []
-    for speaker in speakers + _safe_list(entry.get("recent_speakers")):
-        speaker = _safe_str(speaker)
-        if speaker and speaker not in recent_speakers:
-            recent_speakers.append(speaker)
+    if pivot.get("requested") and pivot.get("accepted"):
+        return {
+            "kind": "backed_topic_cooperation",
+            "familiarity_delta": 1,
+            "trust_delta": 1,
+            "respect_delta": 1,
+            "reason": "player_asked_backed_topic",
+        }
 
-    entry["recent_focus"] = recent_focus[:MAX_RECENT_FOCUS]
-    entry["recent_speakers"] = recent_speakers[:MAX_RECENT_SPEAKERS]
-    by_location[location_id] = entry
-    state["by_location"] = by_location
-    state["debug"] = {
-        "last_updated_tick": int(tick or 0),
-        "location_id": location_id,
-        "source": "deterministic_scene_continuity_runtime",
-    }
+    if pivot.get("requested") and not pivot.get("accepted"):
+        return {
+            "kind": "unbacked_topic_pressure",
+            "familiarity_delta": 1,
+            "trust_delta": 0,
+            "annoyance_delta": 1,
+            "reason": "player_pressed_unbacked_topic",
+        }
+
+    if _safe_str(conversation.get("reason")) == "pending_player_response_expired":
+        return {
+            "kind": "ignored_invitation",
+            "familiarity_delta": 0,
+            "trust_delta": -1,
+            "annoyance_delta": 1,
+            "reason": "player_ignored_invitation",
+        }
 
     return {
-        "updated": True,
-        "location_id": location_id,
-        "scene_continuity": deepcopy(entry),
-        "source": "deterministic_scene_continuity_runtime",
+        "kind": "ordinary_conversation_reply",
+        "familiarity_delta": 1,
+        "trust_delta": 0,
+        "respect_delta": 0,
+        "reason": "ordinary_conversation_reply",
     }
 
 
-def update_scene_continuity_from_activity(
+def apply_player_reputation_consequence(
     simulation_state: Dict[str, Any],
     *,
-    location_id: str = "",
-    activity: Dict[str, Any],
+    npc_id: str,
+    player_input: str,
+    topic_pivot: Dict[str, Any],
+    conversation_result: Dict[str, Any],
     tick: int,
 ) -> Dict[str, Any]:
-    location_id = _safe_str(location_id or current_location_id(simulation_state))
-    state = ensure_scene_continuity_state(simulation_state)
-    by_location = _safe_dict(state.get("by_location"))
-    entry = _safe_dict(by_location.get(location_id))
-
-    recent_activities = _safe_list(entry.get("recent_activities"))
-    activity = _safe_dict(activity)
-    recent_activities.insert(
-        0,
-        {
-            "activity_id": _safe_str(activity.get("activity_id") or activity.get("kind")),
-            "kind": _safe_str(activity.get("kind")),
-            "npc_id": _safe_str(activity.get("npc_id")),
-            "summary": _safe_str(activity.get("text") or activity.get("summary")),
-            "tick": int(tick or 0),
-            "source": "deterministic_scene_continuity_runtime",
-        },
+    event = classify_player_conversation_reputation_event(
+        player_input=player_input,
+        topic_pivot=topic_pivot,
+        conversation_result=conversation_result,
     )
-    entry["recent_activities"] = recent_activities[:MAX_RECENT_ACTIVITIES]
-    by_location[location_id] = entry
-    state["by_location"] = by_location
+
+    result = update_npc_reputation(
+        simulation_state,
+        npc_id=npc_id,
+        tick=tick,
+        familiarity_delta=int(event.get("familiarity_delta") or 0),
+        trust_delta=int(event.get("trust_delta") or 0),
+        annoyance_delta=int(event.get("annoyance_delta") or 0),
+        fear_delta=int(event.get("fear_delta") or 0),
+        respect_delta=int(event.get("respect_delta") or 0),
+        reason=_safe_str(event.get("reason")),
+    )
 
     return {
-        "updated": True,
-        "location_id": location_id,
-        "scene_continuity": deepcopy(entry),
-        "source": "deterministic_scene_continuity_runtime",
+        "applied": bool(result.get("updated")),
+        "event": deepcopy(event),
+        "reputation_update": deepcopy(result),
+        "source": "deterministic_player_reputation_consequence_runtime",
     }
-
-
-def scene_continuity_for_location(
-    simulation_state: Dict[str, Any],
-    *,
-    location_id: str = "",
-) -> Dict[str, Any]:
-    location_id = _safe_str(location_id or current_location_id(simulation_state))
-    state = ensure_scene_continuity_state(simulation_state)
-    return deepcopy(_safe_dict(_safe_dict(state.get("by_location")).get(location_id)))
 Settings patch
 
 File:
@@ -622,206 +470,152 @@ src/app/rpg/world/conversation_settings.py
 
 Add defaults:
 
-"npc_knowledge_enabled": True,
-"npc_knowledge_max_facts_per_npc": 24,
-"npc_knowledge_ttl_ticks": 2000,
-"npc_dialogue_recall_enabled": True,
-"npc_dialogue_recall_cooldown_ticks": 4,
-"scene_continuity_enabled": True,
+"quest_conversation_access_enabled": True,
+"player_reputation_consequences_enabled": True,
+"quest_access_min_detail_level": 0,
 
 Normalize:
 
-merged["npc_knowledge_enabled"] = _safe_bool(merged.get("npc_knowledge_enabled"), True)
-merged["npc_knowledge_max_facts_per_npc"] = max(1, min(60, _safe_int(merged.get("npc_knowledge_max_facts_per_npc"), 24)))
-merged["npc_knowledge_ttl_ticks"] = max(10, min(100000, _safe_int(merged.get("npc_knowledge_ttl_ticks"), 2000)))
-merged["npc_dialogue_recall_enabled"] = _safe_bool(merged.get("npc_dialogue_recall_enabled"), True)
-merged["npc_dialogue_recall_cooldown_ticks"] = max(1, min(100, _safe_int(merged.get("npc_dialogue_recall_cooldown_ticks"), 4)))
-merged["scene_continuity_enabled"] = _safe_bool(merged.get("scene_continuity_enabled"), True)
-Dialogue profile integration
-
-File:
-
-src/app/rpg/world/npc_dialogue_profile.py
-
-Import:
-
-from app.rpg.world.npc_knowledge_state import known_facts_for_npc
-from app.rpg.world.npc_dialogue_recall import select_dialogue_recall
-
-Inside build_npc_dialogue_profile(...), add:
-
-known_facts = known_facts_for_npc(simulation_state, npc_id=_safe_str(biography.get("npc_id")), limit=6)
-dialogue_recall = select_dialogue_recall(
-    simulation_state,
-    npc_id=_safe_str(biography.get("npc_id")),
-    topic=topic,
-    tick=_safe_int(runtime_state.get("tick"), 0),
-) if runtime_state.get("enable_dialogue_recall", True) else {"selected": False}
-
-Add to profile:
-
-"known_facts": deepcopy(known_facts),
-"dialogue_recall": deepcopy(dialogue_recall),
-
-In deterministic_biography_line(...), when a recall is selected, add a short recall clause without inventing facts:
-
-recall = _safe_dict(profile.get("dialogue_recall"))
-recalls = _safe_list(recall.get("recalls"))
-recall_prefix = ""
-if recall.get("selected") and recalls:
-    first = _safe_dict(recalls[0])
-    recall_summary = _safe_str(first.get("summary"))
-    if recall_summary:
-        recall_prefix = f"I remember this much: {recall_summary} "
-
-Then prefix generated fact lines:
-
-line = recall_prefix + line
-
-Keep total line length bounded to around 280 chars:
-
-line = line[:280]
+merged["quest_conversation_access_enabled"] = _safe_bool(
+    merged.get("quest_conversation_access_enabled"),
+    True,
+)
+merged["player_reputation_consequences_enabled"] = _safe_bool(
+    merged.get("player_reputation_consequences_enabled"),
+    True,
+)
+merged["quest_access_min_detail_level"] = max(
+    0,
+    min(3, _safe_int(merged.get("quest_access_min_detail_level"), 0)),
+)
 Conversation thread integration
 
 File:
 
 src/app/rpg/world/conversation_threads.py
 
-Imports:
+Add imports:
 
-from app.rpg.world.npc_knowledge_state import add_npc_knowledge_from_topic, prune_npc_knowledge_state
-from app.rpg.world.scene_continuity_state import update_scene_continuity_from_conversation
+from app.rpg.world.quest_conversation_access import (
+    evaluate_quest_conversation_access,
+    filter_allowed_topic_facts_for_access,
+)
+from app.rpg.world.player_reputation_consequences import apply_player_reputation_consequence
+Patch NPC response after topic pivot / selected topic resolution
 
-When a conversation beat is created from a backed topic, add knowledge for speaker/listener:
+Find where selected_topic / topic_payload is known before _biography_grounded_npc_response(...).
 
-if settings.get("npc_knowledge_enabled", True):
-    for npc_id in {beat.get("speaker_id"), beat.get("listener_id")}:
-        npc_id = _safe_str(npc_id)
-        if npc_id.startswith("npc:"):
-            add_npc_knowledge_from_topic(
-                simulation_state,
-                npc_id=npc_id,
-                topic=topic_payload,
-                tick=tick,
-                confidence=2,
-                ttl_ticks=int(settings.get("npc_knowledge_ttl_ticks") or 2000),
-            )
+Add:
 
-On player response consumed / NPC response beat, call scene continuity:
+quest_access = {}
+effective_topic_payload = selected_topic or topic_payload or {}
 
-if settings.get("scene_continuity_enabled", True):
-    update_scene_continuity_from_conversation(
+if settings.get("quest_conversation_access_enabled", True):
+    quest_access = evaluate_quest_conversation_access(
         simulation_state,
-        location_id=location_id,
-        topic_id=topic_id,
-        topic_type=topic_type,
-        speaker_id=_safe_str(npc_response_beat.get("speaker_id")),
-        listener_id=_safe_str(npc_response_beat.get("listener_id")),
+        npc_id=responder_id,
+        topic=effective_topic_payload,
+        player_input=player_input,
+    )
+
+    if quest_access.get("requested"):
+        allowed_facts = filter_allowed_topic_facts_for_access(
+            effective_topic_payload,
+            access=quest_access,
+        )
+        effective_topic_payload = {
+            **effective_topic_payload,
+            "allowed_facts": allowed_facts,
+            "quest_conversation_access": quest_access,
+        }
+
+Then change the biography call from:
+
+topic=selected_topic or topic_payload or {},
+
+to:
+
+topic=effective_topic_payload,
+Add access fields to npc_response_beat
+"quest_conversation_access": deepcopy(quest_access),
+Add access fields to top-level result
+"quest_conversation_access": deepcopy(quest_access),
+Reputation consequence integration
+
+In the pending-player-response consumed path, after topic_pivot exists and after responder is known:
+
+reputation_consequence = {}
+if settings.get("player_reputation_consequences_enabled", True):
+    reputation_consequence = apply_player_reputation_consequence(
+        simulation_state,
+        npc_id=responder_id,
+        player_input=player_input,
+        topic_pivot=topic_pivot or {},
+        conversation_result={"reason": "pending_player_response_consumed"},
         tick=tick,
     )
 
-Also after normal NPC-to-NPC beat:
+Add to npc_response_beat:
 
-if settings.get("scene_continuity_enabled", True):
-    update_scene_continuity_from_conversation(
-        simulation_state,
-        location_id=location_id,
-        topic_id=_safe_str(beat.get("topic_id")),
-        topic_type=_safe_str(beat.get("topic_type")),
-        speaker_id=_safe_str(beat.get("speaker_id")),
-        listener_id=_safe_str(beat.get("listener_id")),
-        tick=tick,
-    )
+"player_reputation_consequence": deepcopy(reputation_consequence),
 
-Before return, prune:
+Add to result:
 
-if settings.get("npc_knowledge_enabled", True):
-    prune_npc_knowledge_state(
-        simulation_state,
-        current_tick=tick,
-        max_known_facts_per_npc=int(settings.get("npc_knowledge_max_facts_per_npc") or 24),
-    )
-
-Add result fields:
-
-"npc_knowledge_state": deepcopy(_safe_dict(simulation_state.get("npc_knowledge_state"))),
-"scene_continuity_state": deepcopy(_safe_dict(simulation_state.get("scene_continuity_state"))),
-Conversation director integration
+"player_reputation_consequence": deepcopy(reputation_consequence),
+"npc_reputation_state": deepcopy(_safe_dict(simulation_state.get("npc_reputation_state"))),
+Dialogue profile integration
 
 File:
 
-src/app/rpg/world/conversation_director.py
+src/app/rpg/world/npc_dialogue_profile.py
 
-Import:
+In build_npc_dialogue_profile(...), include quest access if present on topic:
 
-from app.rpg.world.scene_continuity_state import scene_continuity_for_location
+quest_access = _safe_dict(topic.get("quest_conversation_access"))
 
-In select_conversation_intent(...), before sorting candidates, adjust score:
+Add to profile:
 
-continuity = scene_continuity_for_location(simulation_state, location_id=location_id)
-recent_focus_ids = {
-    _safe_str(focus.get("topic_id"))
-    for focus in _safe_list(continuity.get("recent_focus"))
-}
+"quest_conversation_access": deepcopy(quest_access),
 
-When scoring topic:
+In deterministic_biography_line(...), before normal backed fact line generation:
 
-if _safe_str(topic.get("topic_id")) in recent_focus_ids:
-    score += 1
+quest_access = _safe_dict(profile.get("quest_conversation_access"))
+if quest_access.get("requested") and _safe_str(quest_access.get("access")) == "none":
+    line = _safe_str(quest_access.get("safe_deflection")) or "I cannot say more about that."
+    return {
+        "line": line[:280],
+        "roleplay_source": "deterministic_template",
+        "biography_role": role,
+        "biography_traits": traits[:5],
+        "used_fact_ids": [],
+        "response_style": style,
+        "quest_conversation_access": quest_access,
+        "source": "deterministic_biography_dialogue",
+    }
 
-This makes current scenes slightly more continuous without forcing repetition.
+if quest_access.get("requested") and _safe_str(quest_access.get("access")) == "partial":
+    prefix = _safe_str(quest_access.get("safe_deflection"))
+    if prefix and fact:
+        fact = f"{prefix} {fact}"
 
-Scene activity continuity integration
+Also add quest_conversation_access to every return payload from deterministic_biography_line(...).
 
-File:
-
-src/app/rpg/world/scene_activity_scheduler.py
-
-Import:
-
-from app.rpg.world.scene_continuity_state import update_scene_continuity_from_activity
-
-After an activity is scheduled:
-
-if settings.get("scene_continuity_enabled", True):
-    update_scene_continuity_from_activity(
-        simulation_state,
-        location_id=location_id,
-        activity=activity,
-        tick=tick,
-    )
-Ambient tick result pass-through
-
-File:
-
-src/app/rpg/session/ambient_tick_runtime.py
-
-Add to return payloads:
-
-"npc_knowledge_state": _safe_dict(simulation_state.get("npc_knowledge_state")),
-"npc_dialogue_recall_state": _safe_dict(simulation_state.get("npc_dialogue_recall_state")),
-"scene_continuity_state": _safe_dict(simulation_state.get("scene_continuity_state")),
 Inspector visibility
 
 File:
 
 src/static/rpg-living-world-inspector.js
 
-Add sections:
+Add a panel:
 
-NPC Knowledge
-Dialogue Recall
-Scene Continuity
+Quest Conversation Access
 
-Display:
+Show:
 
-npc_knowledge_state.by_npc
-npc_dialogue_recall_state.debug
-scene_continuity_state.by_location
-conversation_result.npc_knowledge_state
-conversation_result.scene_continuity_state
-dialogue_profile.dialogue_recall
-dialogue_profile.known_facts
+conversation_result.quest_conversation_access
+npc_response_beat.quest_conversation_access
+conversation_result.player_reputation_consequence
+npc_reputation_state.by_npc
 Manual scenarios
 
 File:
@@ -830,31 +624,7 @@ src/tests/rpg/manual_llm_transcript.py
 
 Add scenarios:
 
-"npc_knowledge_records_backed_quest_discussion": {
-    "currency": {"gold": 0, "silver": 0, "copper": 0},
-    "conversation_settings": {
-        "enabled": True,
-        "autonomous_ticks_enabled": True,
-        "frequency": "always",
-        "conversation_chance_percent": 100,
-        "npc_knowledge_enabled": True,
-        "min_ticks_between_conversations": 0,
-        "thread_cooldown_ticks": 0,
-    },
-    "setup_quest_state": {
-        "quests": [
-            {
-                "quest_id": "quest:old_mill_bandits",
-                "title": "Trouble near the Old Mill",
-                "summary": "There is talk of armed figures near the old mill road.",
-                "status": "active",
-                "location_id": "loc_tavern",
-            }
-        ]
-    },
-    "turns": ["__ambient_tick_quest__"],
-},
-"npc_dialogue_recalls_prior_player_reply": {
+"quest_access_backed_topic_partial_or_normal": {
     "currency": {"gold": 0, "silver": 0, "copper": 0},
     "conversation_settings": {
         "enabled": True,
@@ -863,9 +633,8 @@ Add scenarios:
         "conversation_chance_percent": 100,
         "allow_player_invited": True,
         "player_inclusion_chance_percent": 100,
-        "npc_history_enabled": True,
-        "npc_knowledge_enabled": True,
-        "npc_dialogue_recall_enabled": True,
+        "quest_conversation_access_enabled": True,
+        "player_reputation_consequences_enabled": True,
         "min_ticks_between_conversations": 0,
         "thread_cooldown_ticks": 0,
     },
@@ -881,156 +650,237 @@ Add scenarios:
         ]
     },
     "turns": [
-        "__ambient_tick_quest__",
-        "I asked you about the old mill road.",
         "__ambient_tick_player_invited__",
-        "Do you remember what I asked before?",
+        "What can you tell me about the trouble at the old mill road?",
     ],
 },
-"scene_continuity_tracks_recent_topic": {
+"quest_access_unbacked_topic_denied": {
     "currency": {"gold": 0, "silver": 0, "copper": 0},
     "conversation_settings": {
         "enabled": True,
         "autonomous_ticks_enabled": True,
         "frequency": "always",
         "conversation_chance_percent": 100,
-        "scene_continuity_enabled": True,
+        "allow_player_invited": True,
+        "player_inclusion_chance_percent": 100,
+        "quest_conversation_access_enabled": True,
+        "player_reputation_consequences_enabled": True,
         "min_ticks_between_conversations": 0,
         "thread_cooldown_ticks": 0,
     },
-    "setup_quest_state": {
-        "quests": [
-            {
-                "quest_id": "quest:old_mill_bandits",
-                "title": "Trouble near the Old Mill",
-                "summary": "There is talk of armed figures near the old mill road.",
-                "status": "active",
-                "location_id": "loc_tavern",
-            }
-        ]
+    "turns": [
+        "__ambient_tick_player_invited__",
+        "Tell me about the hidden royal assassination quest.",
+    ],
+},
+"player_reputation_polite_reply_improves_trust": {
+    "currency": {"gold": 0, "silver": 0, "copper": 0},
+    "conversation_settings": {
+        "enabled": True,
+        "autonomous_ticks_enabled": True,
+        "frequency": "always",
+        "conversation_chance_percent": 100,
+        "allow_player_invited": True,
+        "player_inclusion_chance_percent": 100,
+        "player_reputation_consequences_enabled": True,
+        "min_ticks_between_conversations": 0,
+        "thread_cooldown_ticks": 0,
     },
-    "turns": ["__ambient_tick_quest__", "__ambient_tick__"],
+    "turns": [
+        "__ambient_tick_player_invited__",
+        "Thank you, that was helpful.",
+    ],
+},
+"player_reputation_unbacked_pressure_adds_annoyance": {
+    "currency": {"gold": 0, "silver": 0, "copper": 0},
+    "conversation_settings": {
+        "enabled": True,
+        "autonomous_ticks_enabled": True,
+        "frequency": "always",
+        "conversation_chance_percent": 100,
+        "allow_player_invited": True,
+        "player_inclusion_chance_percent": 100,
+        "player_reputation_consequences_enabled": True,
+        "min_ticks_between_conversations": 0,
+        "thread_cooldown_ticks": 0,
+    },
+    "turns": [
+        "__ambient_tick_player_invited__",
+        "Tell me about the secret treasure vault you are hiding.",
+    ],
 },
 
-Add expected conversation scenarios:
+Add to CONVERSATION_EXPECTED_SCENARIOS:
 
-"npc_knowledge_records_backed_quest_discussion",
-"npc_dialogue_recalls_prior_player_reply",
-"scene_continuity_tracks_recent_topic",
+"quest_access_backed_topic_partial_or_normal",
+"quest_access_unbacked_topic_denied",
+"player_reputation_polite_reply_improves_trust",
+"player_reputation_unbacked_pressure_adds_annoyance",
 
-Warnings:
+Add warnings:
 
-if scenario_name == "npc_knowledge_records_backed_quest_discussion" and turn_index == 1:
-    sim = _extract_simulation_state(result)
-    knowledge_state = _safe_dict(sim.get("npc_knowledge_state"))
-    if not _safe_dict(knowledge_state.get("by_npc")):
-        warnings.append("npc_knowledge_records_backed_quest_discussion_missing_knowledge")
-
-if scenario_name == "npc_dialogue_recalls_prior_player_reply" and turn_index >= 4:
+if scenario_name == "quest_access_backed_topic_partial_or_normal" and turn_index == 2:
     conversation = _extract_conversation_result(result)
-    profile = _safe_dict(conversation.get("dialogue_profile"))
-    recall = _safe_dict(profile.get("dialogue_recall"))
-    if not recall.get("selected"):
-        warnings.append("npc_dialogue_recalls_prior_player_reply_missing_recall")
+    access = _safe_dict(conversation.get("quest_conversation_access"))
+    if not access.get("requested"):
+        warnings.append("quest_access_backed_topic_expected_requested")
+    if _safe_str(access.get("access")) not in {"partial", "normal", "trusted"}:
+        warnings.append(f"quest_access_backed_topic_unexpected_access:{_safe_str(access.get('access')) or 'missing'}")
 
-if scenario_name == "scene_continuity_tracks_recent_topic" and turn_index >= 1:
-    sim = _extract_simulation_state(result)
-    continuity = _safe_dict(sim.get("scene_continuity_state"))
-    by_location = _safe_dict(continuity.get("by_location"))
-    loc = _safe_dict(by_location.get("loc_tavern"))
-    if not _safe_list(loc.get("recent_focus")):
-        warnings.append("scene_continuity_tracks_recent_topic_missing_recent_focus")
+if scenario_name == "quest_access_unbacked_topic_denied" and turn_index == 2:
+    conversation = _extract_conversation_result(result)
+    pivot = _safe_dict(conversation.get("topic_pivot"))
+    access = _safe_dict(conversation.get("quest_conversation_access"))
+    if pivot.get("accepted"):
+        warnings.append("quest_access_unbacked_topic_pivot_unexpectedly_accepted")
+    if _safe_str(access.get("access")) not in {"none", ""}:
+        warnings.append(f"quest_access_unbacked_topic_expected_none_access_got:{_safe_str(access.get('access'))}")
+
+if scenario_name == "player_reputation_polite_reply_improves_trust" and turn_index == 2:
+    conversation = _extract_conversation_result(result)
+    consequence = _safe_dict(conversation.get("player_reputation_consequence"))
+    event = _safe_dict(consequence.get("event"))
+    if _safe_str(event.get("kind")) != "polite_cooperation":
+        warnings.append(f"player_reputation_polite_expected_polite_cooperation_got:{_safe_str(event.get('kind'))}")
+    rep = _safe_dict(_extract_simulation_state(result).get("npc_reputation_state"))
+    if not _safe_dict(rep.get("by_npc")):
+        warnings.append("player_reputation_polite_missing_reputation_state")
+
+if scenario_name == "player_reputation_unbacked_pressure_adds_annoyance" and turn_index == 2:
+    conversation = _extract_conversation_result(result)
+    consequence = _safe_dict(conversation.get("player_reputation_consequence"))
+    event = _safe_dict(consequence.get("event"))
+    if _safe_str(event.get("kind")) != "unbacked_topic_pressure":
+        warnings.append(f"player_reputation_unbacked_expected_unbacked_pressure_got:{_safe_str(event.get('kind'))}")
 Tests
 
 Create:
 
-src/app/rpg/tests/test_bundle_wxy_knowledge_recall_continuity.py
+src/app/rpg/tests/test_bundle_z_aa_ab_quest_aware_reputation.py
+from app.rpg.world.quest_conversation_access import (
+    evaluate_quest_conversation_access,
+    filter_allowed_topic_facts_for_access,
+)
+from app.rpg.world.player_reputation_consequences import (
+    classify_player_conversation_reputation_event,
+    apply_player_reputation_consequence,
+)
+from app.rpg.world.npc_reputation_state import get_npc_reputation
 
-Minimum tests:
 
-from app.rpg.world.npc_knowledge_state import add_npc_knowledge_from_topic, known_facts_for_npc, prune_npc_knowledge_state
-from app.rpg.world.npc_dialogue_recall import select_dialogue_recall
-from app.rpg.world.scene_continuity_state import update_scene_continuity_from_conversation, scene_continuity_for_location
-
-
-def test_npc_knowledge_requires_backed_topic():
+def test_unbacked_quest_access_is_denied():
     state = {}
-    result = add_npc_knowledge_from_topic(
+    access = evaluate_quest_conversation_access(
         state,
         npc_id="npc:Bran",
         topic={},
-        tick=10,
+        player_input="Tell me about the hidden assassination quest.",
     )
-    assert result["created"] is False
+
+    assert access["requested"] is True
+    assert access["access"] == "none"
+    assert access["reason"] == "unbacked_topic"
 
 
-def test_npc_knowledge_records_backed_topic_and_prunes_expired():
+def test_backed_quest_access_allows_bounded_facts():
     state = {}
-    result = add_npc_knowledge_from_topic(
+    topic = {
+        "topic_id": "topic:quest:quest:old_mill_bandits",
+        "topic_type": "quest",
+        "source_id": "quest:old_mill_bandits",
+        "source_kind": "quest",
+        "title": "Trouble near the Old Mill",
+        "summary": "There is talk of armed figures near the old mill road.",
+        "allowed_facts": [
+            "There is talk of armed figures near the old mill road.",
+            "Travelers avoid the old mill road at night.",
+            "Locals are worried about armed figures.",
+        ],
+    }
+
+    access = evaluate_quest_conversation_access(
         state,
         npc_id="npc:Bran",
-        topic={
-            "topic_id": "topic:quest:old_mill",
-            "topic_type": "quest",
-            "summary": "There is talk of armed figures near the old mill road.",
-            "source_id": "quest:old_mill",
-            "source_kind": "quest",
-        },
-        tick=10,
-        ttl_ticks=2,
+        topic=topic,
+        player_input="What can you tell me about the old mill road?",
     )
-    assert result["created"] is True
-    assert known_facts_for_npc(state, npc_id="npc:Bran")
-    prune_npc_knowledge_state(state, current_tick=12)
-    assert not known_facts_for_npc(state, npc_id="npc:Bran")
+    facts = filter_allowed_topic_facts_for_access(topic, access=access)
+
+    assert access["requested"] is True
+    assert access["access"] in {"partial", "normal", "trusted"}
+    assert facts
+    assert len(facts) <= 6
 
 
-def test_dialogue_recall_selects_relevant_knowledge():
+def test_polite_reply_reputation_event():
+    event = classify_player_conversation_reputation_event(
+        player_input="Thank you, that was helpful.",
+        topic_pivot={},
+        conversation_result={},
+    )
+
+    assert event["kind"] == "polite_cooperation"
+    assert event["trust_delta"] > 0
+
+
+def test_unbacked_topic_pressure_reputation_event():
+    event = classify_player_conversation_reputation_event(
+        player_input="Tell me about the secret vault.",
+        topic_pivot={"requested": True, "accepted": False},
+        conversation_result={},
+    )
+
+    assert event["kind"] == "unbacked_topic_pressure"
+    assert event["annoyance_delta"] > 0
+
+
+def test_apply_reputation_consequence_updates_state():
     state = {}
-    add_npc_knowledge_from_topic(
+    result = apply_player_reputation_consequence(
         state,
         npc_id="npc:Bran",
-        topic={
-            "topic_id": "topic:quest:old_mill",
-            "topic_type": "quest",
-            "title": "Old Mill road",
-            "summary": "There is talk of armed figures near the old mill road.",
-            "source_id": "quest:old_mill",
-            "source_kind": "quest",
-        },
-        tick=10,
+        player_input="Thank you.",
+        topic_pivot={},
+        conversation_result={},
+        tick=12,
     )
-    recall = select_dialogue_recall(
-        state,
-        npc_id="npc:Bran",
-        topic={
-            "topic_id": "topic:quest:old_mill",
-            "title": "Old Mill road",
-            "summary": "What about the old mill road?",
-        },
-        tick=11,
-    )
-    assert recall["selected"] is True
-    assert recall["recalls"]
 
+    assert result["applied"] is True
+    rep = get_npc_reputation(state, npc_id="npc:Bran")
+    assert rep["trust"] >= 1
+    assert rep["familiarity"] >= 1
+HTML report panel
 
-def test_scene_continuity_tracks_recent_topic():
-    state = {}
-    update_scene_continuity_from_conversation(
-        state,
-        location_id="loc_tavern",
-        topic_id="topic:quest:old_mill",
-        topic_type="quest",
-        speaker_id="npc:Bran",
-        listener_id="npc:Mira",
-        tick=10,
-    )
-    continuity = scene_continuity_for_location(state, location_id="loc_tavern")
-    assert continuity["recent_focus"][0]["topic_id"] == "topic:quest:old_mill"
-    assert "npc:Bran" in continuity["recent_speakers"]
+Since you just improved HTML, add quest_conversation_access and player_reputation_consequence to _render_special_panels(...).
+
+In manual_llm_transcript.py, add to special panels:
+
+quest_access = _first_dict(
+    conversation.get("quest_conversation_access"),
+    npc_response.get("quest_conversation_access"),
+)
+if quest_access:
+    panels.append(_kv_panel("Quest Conversation Access", {
+        "requested": quest_access.get("requested"),
+        "access": quest_access.get("access"),
+        "reason": quest_access.get("reason"),
+        "allowed_detail_level": quest_access.get("allowed_detail_level"),
+        "blocked_detail_level": quest_access.get("blocked_detail_level"),
+        "npc_knows_topic": quest_access.get("npc_knows_topic"),
+    }, status="pass" if quest_access.get("access") in {"partial", "normal", "trusted"} else "warn"))
+
+rep_consequence = _first_dict(
+    conversation.get("player_reputation_consequence"),
+    npc_response.get("player_reputation_consequence"),
+)
+if rep_consequence:
+    panels.append(_html_json_block(
+        rep_consequence,
+        block_id=f"{prefix}-player-reputation-consequence",
+        title="Player Reputation Consequence",
+    ))
 Validation
 
 Run:
 
-PYTHONPATH=src pytest -q src/app/rpg/tests/test_bundle_wxy_knowledge_recall_continuity.py
-PYTHONPATH=src pytest -q src/app/rpg/tests/test_bundle_tuv_npc_schedule_presence_population.py
+PYTHONPATH=src pytest -q src/app/rpg/tests/test_bundle_z_aa_ab_quest_aware_reputation.py

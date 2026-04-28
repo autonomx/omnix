@@ -1027,6 +1027,31 @@ def _render_special_panels(result: Dict[str, Any], *, prefix: str) -> str:
             "reason": service_result.get("reason"),
         }, status="pass" if service_result.get("matched") else "muted"))
 
+    quest_access = _first_dict(
+        conversation.get("quest_conversation_access"),
+        npc_response.get("quest_conversation_access"),
+    )
+    if quest_access:
+        panels.append(_kv_panel("Quest Conversation Access", {
+            "requested": quest_access.get("requested"),
+            "access": quest_access.get("access"),
+            "reason": quest_access.get("reason"),
+            "allowed_detail_level": quest_access.get("allowed_detail_level"),
+            "blocked_detail_level": quest_access.get("blocked_detail_level"),
+            "npc_knows_topic": quest_access.get("npc_knows_topic"),
+        }, status="pass" if quest_access.get("access") in {"partial", "normal", "trusted"} else "warn"))
+
+    rep_consequence = _first_dict(
+        conversation.get("player_reputation_consequence"),
+        npc_response.get("player_reputation_consequence"),
+    )
+    if rep_consequence:
+        panels.append(_html_json_block(
+            rep_consequence,
+            block_id=f"{prefix}-player-reputation-consequence",
+            title="Player Reputation Consequence",
+        ))
+
     return "".join(panels)
 
 
@@ -1122,17 +1147,11 @@ def _write_scenario_html_v2(
     if log_artifact:
         file_links = []
         for file_path in _safe_list(log_artifact.get("files"))[:300]:
-            file_path_obj = Path(str(file_path))
-            try:
-                rel = file_path_obj.relative_to(html_root)
-                href = str(rel).replace("\\", "/")
-            except Exception:
-                try:
-                    rel = file_path_obj.relative_to(output_dir)
-                    href = "../" + str(rel).replace("\\", "/")
-                except Exception:
-                    href = str(file_path).replace("\\", "/")
-            file_links.append(f'<li><a href="{_html_escape(href)}">{_html_escape(file_path_obj.name)}</a></li>')
+            rel = str(file_path).replace("\\", "/")
+            href = "../../" + rel
+            file_links.append(
+                f'<li><a href="{_html_escape(href)}">{_html_escape(Path(rel).name)}</a></li>'
+            )
 
         artifact_html = f"""
 <div class="card">
@@ -1298,7 +1317,12 @@ def _write_html_index_v2(
     rows = []
 
     for summary in scenario_summaries:
-        name = _safe_str(summary.get("scenario_name") or summary.get("name") or "unknown")
+        name = _safe_str(
+            summary.get("scenario")
+            or summary.get("scenario_name")
+            or summary.get("name")
+            or "unknown"
+        )
         status = _status_for_summary(summary)
         if status == "pass":
             pass_count += 1
@@ -1616,21 +1640,20 @@ def _write_output(path: Path, channel: str = "main", *, max_chunk_bytes: int = M
         lines = list(_OUTPUTS.get(channel, []))
     text = "\n".join(lines)
 
-    if channel.startswith("service_"):
-        # Use chunking for service scenario transcripts
-        scenario_name = channel.replace("service_", "", 1)
-        write_result = _write_text_chunked(
-            output_dir=path.parent,
-            base_name=f"manual_rpg_service_scenarios__{scenario_name}",
-            text=text,
-            max_chunk_bytes=max_chunk_bytes,
-        )
-        print(f"Wrote chunked transcript for {scenario_name}: {write_result.get('chunk_count', 1)} chunks, {write_result.get('total_bytes', 0)} bytes", flush=True)
-        return write_result
-    else:
-        path.write_text(text, encoding="utf-8")
-        print(f"Wrote transcript to: {path.resolve()}", flush=True)
-        return None
+    base_name = path.stem
+    write_result = _write_text_chunked(
+        output_dir=path.parent,
+        base_name=base_name,
+        text=text,
+        max_chunk_bytes=max_chunk_bytes,
+    )
+    print(
+        f"Wrote transcript for {channel}: "
+        f"{write_result.get('chunk_count', 1)} file(s), "
+        f"{write_result.get('total_bytes', 0)} bytes",
+        flush=True,
+    )
+    return write_result
 
 
 def _write_all_outputs(mapping: Dict[str, Path], *, max_chunk_bytes: int = MANUAL_LOG_MAX_CHUNK_BYTES) -> Dict[str, dict[str, Any] | None]:
@@ -1640,7 +1663,7 @@ def _write_all_outputs(mapping: Dict[str, Path], *, max_chunk_bytes: int = MANUA
     return results
 
 
-def _write_current_transcript_outputs() -> None:
+def _write_current_transcript_outputs(*, max_chunk_bytes: int = MANUAL_LOG_MAX_CHUNK_BYTES) -> None:
     """Write all known transcript channels from the current run.
 
     This is intentionally called at the end of the top-level run. It prevents
@@ -1677,7 +1700,7 @@ def _write_current_transcript_outputs() -> None:
         scenario_name = channel.replace("service_", "", 1)
         output_map[channel] = OUTPUT_DIR / f"manual_rpg_service_scenarios__{scenario_name}.txt"
 
-    _write_all_outputs(output_map)
+    _write_all_outputs(output_map, max_chunk_bytes=max_chunk_bytes)
 
 
 def _new_manual_run_id() -> str:
@@ -2199,6 +2222,21 @@ def _is_result_zip_candidate(path: Path) -> bool:
         return False
     if path.suffix.lower() == ".zip":
         return False
+    if MANUAL_HTML_DIR_NAME in path.parts:
+        return False
+    if path.suffix.lower() in {".html", ".htm"}:
+        return False
+
+    # Include chunked transcript artifacts recursively.
+    if MANUAL_LOG_CHUNK_DIR_NAME in path.parts:
+        return True
+
+    # Include manifest/index JSON files written by the manual transcript runner.
+    if path.name in {
+        "manual_log_chunks_manifest.json",
+    }:
+        return True
+
     if path.name in {
         "code-diff.txt",
         "token-usage.txt",
@@ -2220,7 +2258,7 @@ def write_results_zip(path: Path = RESULTS_ZIP_PATH) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     candidates = sorted(
         candidate
-        for candidate in OUTPUT_DIR.iterdir()
+        for candidate in OUTPUT_DIR.rglob("*")
         if _is_result_zip_candidate(candidate) and _should_include_in_results_zip(candidate, output_dir=OUTPUT_DIR)
     )
 
@@ -2229,12 +2267,14 @@ def write_results_zip(path: Path = RESULTS_ZIP_PATH) -> None:
 
     with zipfile.ZipFile(path, mode="w", compression=zipfile.ZIP_DEFLATED) as archive:
         for candidate in candidates:
-            archive.write(candidate, arcname=candidate.name)
+            archive.write(candidate, arcname=str(candidate.relative_to(OUTPUT_DIR)).replace("\\", "/"))
 
     print(
         f"Wrote results zip to: {path.resolve()} ({len(candidates)} file(s))",
         flush=True,
     )
+    _assert_zip_excludes_html(path)
+    _assert_zip_includes_referenced_chunks(path)
 
 
 def _assert_zip_excludes_html(zip_path: Path) -> None:
@@ -2253,6 +2293,33 @@ def _assert_zip_excludes_html(zip_path: Path) -> None:
     except Exception as exc:
         if isinstance(exc, RuntimeError):
             raise
+
+
+def _assert_zip_includes_referenced_chunks(zip_path: Path) -> None:
+    """Fail if .chunked.txt files are included without their chunk parts."""
+    with zipfile.ZipFile(zip_path, "r") as zf:
+        names = set(zf.namelist())
+        chunk_indexes = [name for name in names if name.endswith(".chunked.txt")]
+        chunk_parts = [
+            name for name in names
+            if f"{MANUAL_LOG_CHUNK_DIR_NAME}/" in name
+            and ".part-" in name
+            and name.endswith(".txt")
+        ]
+        manifests = [
+            name for name in names
+            if f"{MANUAL_LOG_CHUNK_DIR_NAME}/" in name
+            and name.endswith(".manifest.json")
+        ]
+
+    if chunk_indexes and not chunk_parts:
+        raise RuntimeError(
+            "zip_missing_chunk_parts: .chunked.txt files exist but chunks/**/*.part-*.txt were not included"
+        )
+    if chunk_indexes and not manifests:
+        raise RuntimeError(
+            "zip_missing_chunk_manifests: .chunked.txt files exist but chunks/**/*.manifest.json were not included"
+        )
 
 
 MANUAL_TEST_TURNS = [
@@ -3078,6 +3145,91 @@ SERVICE_SCENARIOS = {
         },
         "turns": ["__ambient_tick_quest__", "__ambient_tick__"],
     },
+    "quest_access_backed_topic_partial_or_normal": {
+        "currency": {"gold": 0, "silver": 0, "copper": 0},
+        "conversation_settings": {
+            "enabled": True,
+            "autonomous_ticks_enabled": True,
+            "frequency": "always",
+            "conversation_chance_percent": 100,
+            "allow_player_invited": True,
+            "player_inclusion_chance_percent": 100,
+            "quest_conversation_access_enabled": True,
+            "player_reputation_consequences_enabled": True,
+            "min_ticks_between_conversations": 0,
+            "thread_cooldown_ticks": 0,
+        },
+        "setup_quest_state": {
+            "quests": [
+                {
+                    "quest_id": "quest:old_mill_bandits",
+                    "title": "Trouble near the Old Mill",
+                    "summary": "There is talk of armed figures near the old mill road.",
+                    "status": "active",
+                    "location_id": "loc_tavern",
+                }
+            ]
+        },
+        "turns": [
+            "__ambient_tick_player_invited__",
+            "What can you tell me about the trouble at the old mill road?",
+        ],
+    },
+    "quest_access_unbacked_topic_denied": {
+        "currency": {"gold": 0, "silver": 0, "copper": 0},
+        "conversation_settings": {
+            "enabled": True,
+            "autonomous_ticks_enabled": True,
+            "frequency": "always",
+            "conversation_chance_percent": 100,
+            "allow_player_invited": True,
+            "player_inclusion_chance_percent": 100,
+            "quest_conversation_access_enabled": True,
+            "player_reputation_consequences_enabled": True,
+            "min_ticks_between_conversations": 0,
+            "thread_cooldown_ticks": 0,
+        },
+        "turns": [
+            "__ambient_tick_player_invited__",
+            "Tell me about the hidden royal assassination quest.",
+        ],
+    },
+    "player_reputation_polite_reply_improves_trust": {
+        "currency": {"gold": 0, "silver": 0, "copper": 0},
+        "conversation_settings": {
+            "enabled": True,
+            "autonomous_ticks_enabled": True,
+            "frequency": "always",
+            "conversation_chance_percent": 100,
+            "allow_player_invited": True,
+            "player_inclusion_chance_percent": 100,
+            "player_reputation_consequences_enabled": True,
+            "min_ticks_between_conversations": 0,
+            "thread_cooldown_ticks": 0,
+        },
+        "turns": [
+            "__ambient_tick_player_invited__",
+            "Thank you, that was helpful.",
+        ],
+    },
+    "player_reputation_unbacked_pressure_adds_annoyance": {
+        "currency": {"gold": 0, "silver": 0, "copper": 0},
+        "conversation_settings": {
+            "enabled": True,
+            "autonomous_ticks_enabled": True,
+            "frequency": "always",
+            "conversation_chance_percent": 100,
+            "allow_player_invited": True,
+            "player_inclusion_chance_percent": 100,
+            "player_reputation_consequences_enabled": True,
+            "min_ticks_between_conversations": 0,
+            "thread_cooldown_ticks": 0,
+        },
+        "turns": [
+            "__ambient_tick_player_invited__",
+            "Tell me about the secret treasure vault you are hiding.",
+        ],
+    },
 }
 
 
@@ -3109,6 +3261,10 @@ CONVERSATION_EXPECTED_SCENARIOS = {
     "npc_knowledge_records_backed_quest_discussion",
     "npc_dialogue_recalls_prior_player_reply",
     "scene_continuity_tracks_recent_topic",
+    "quest_access_backed_topic_partial_or_normal",
+    "quest_access_unbacked_topic_denied",
+    "player_reputation_polite_reply_improves_trust",
+    "player_reputation_unbacked_pressure_adds_annoyance",
 }
 
 
@@ -3308,6 +3464,7 @@ def _write_text_chunked(
     )
 
     files: list[str] = []
+    rel_files: list[str] = []
     chunk_count = len(chunks)
     width = max(3, len(str(chunk_count)))
 
@@ -3322,6 +3479,7 @@ def _write_text_chunked(
         path = chunk_dir / f"{base_name}.part-{index:0{width}d}-of-{chunk_count:0{width}d}.txt"
         path.write_text(chunk_header + chunk, encoding="utf-8")
         files.append(str(path))
+        rel_files.append(str(path.relative_to(output_dir)).replace("\\", "/"))
 
     manifest = {
         "base_name": base_name,
@@ -3329,28 +3487,33 @@ def _write_text_chunked(
         "total_bytes": total_bytes,
         "chunk_count": chunk_count,
         "max_chunk_bytes": max_chunk_bytes,
-        "files": files,
+        "files": rel_files,
+        "absolute_files": files,
         "source": "manual_llm_transcript_chunk_writer",
     }
     manifest_path = chunk_dir / f"{base_name}.manifest.json"
     manifest_path.write_text(json.dumps(manifest, indent=2, ensure_ascii=False), encoding="utf-8")
 
+    manifest_relpath = str(manifest_path.relative_to(output_dir)).replace("\\", "/")
     index_path = output_dir / f"{base_name}.chunked.txt"
     index_lines = [
         f"{base_name} was split into {chunk_count} chunks.",
         f"total_bytes: {total_bytes}",
-        f"manifest: {manifest_path}",
+        f"manifest: {manifest_relpath}",
         "",
         "Files:",
-        *files,
+        *rel_files,
         "",
     ]
     index_path.write_text("\n".join(index_lines), encoding="utf-8")
 
     return {
         **manifest,
+        "files": rel_files,
         "manifest_path": str(manifest_path),
+        "manifest_relpath": str(manifest_path.relative_to(output_dir)).replace("\\", "/"),
         "index_path": str(index_path),
+        "index_relpath": str(index_path.relative_to(output_dir)).replace("\\", "/"),
     }
 
 
@@ -4831,6 +4994,42 @@ def _manual_regression_warnings(
         if not _safe_list(loc.get("recent_focus")):
             warnings.append("scene_continuity_tracks_recent_topic_missing_recent_focus")
 
+    # ── Bundle Z-AA-AB scenario-specific regression checks ─────────────────────
+
+    if scenario_name == "quest_access_backed_topic_partial_or_normal" and turn_index == 2:
+        conversation = _extract_conversation_result(result)
+        access = _safe_dict(conversation.get("quest_conversation_access"))
+        if not access.get("requested"):
+            warnings.append("quest_access_backed_topic_expected_requested")
+        if _safe_str(access.get("access")) not in {"partial", "normal", "trusted"}:
+            warnings.append(f"quest_access_backed_topic_unexpected_access:{_safe_str(access.get('access')) or 'missing'}")
+
+    if scenario_name == "quest_access_unbacked_topic_denied" and turn_index == 2:
+        conversation = _extract_conversation_result(result)
+        pivot = _safe_dict(conversation.get("topic_pivot"))
+        access = _safe_dict(conversation.get("quest_conversation_access"))
+        if pivot.get("accepted"):
+            warnings.append("quest_access_unbacked_topic_pivot_unexpectedly_accepted")
+        if _safe_str(access.get("access")) not in {"none", ""}:
+            warnings.append(f"quest_access_unbacked_topic_expected_none_access_got:{_safe_str(access.get('access'))}")
+
+    if scenario_name == "player_reputation_polite_reply_improves_trust" and turn_index == 2:
+        conversation = _extract_conversation_result(result)
+        consequence = _safe_dict(conversation.get("player_reputation_consequence"))
+        event = _safe_dict(consequence.get("event"))
+        if _safe_str(event.get("kind")) != "polite_cooperation":
+            warnings.append(f"player_reputation_polite_expected_polite_cooperation_got:{_safe_str(event.get('kind'))}")
+        rep = _safe_dict(_extract_simulation_state(result).get("npc_reputation_state"))
+        if not _safe_dict(rep.get("by_npc")):
+            warnings.append("player_reputation_polite_missing_reputation_state")
+
+    if scenario_name == "player_reputation_unbacked_pressure_adds_annoyance" and turn_index == 2:
+        conversation = _extract_conversation_result(result)
+        consequence = _safe_dict(conversation.get("player_reputation_consequence"))
+        event = _safe_dict(consequence.get("event"))
+        if _safe_str(event.get("kind")) != "unbacked_topic_pressure":
+            warnings.append(f"player_reputation_unbacked_expected_unbacked_pressure_got:{_safe_str(event.get('kind'))}")
+
     return warnings
 
 
@@ -5995,17 +6194,16 @@ def run_service_scenarios(
                 )
                 summary["html_report"] = scenario_html_path
 
-    # Write HTML index
-    _write_html_index(
-        output_dir=OUTPUT_DIR,
-        scenario_summaries=scenario_summaries,
-    )
-
     # Write final manifest for all chunked scenarios
     chunk_manifest = {
         "chunking": {
             "enabled": True,
             "max_chunk_bytes": max_log_chunk_bytes,
+        },
+        "html_report": {
+            "enabled": not no_html_report,
+            "excluded_from_zip": True,
+            "local_dir": str((OUTPUT_DIR / MANUAL_HTML_DIR_NAME).resolve()),
         },
         "scenarios": [
             {
@@ -6331,7 +6529,12 @@ def main() -> None:
         raise
     finally:
         try:
-            _write_current_transcript_outputs()
+            _write_current_transcript_outputs(
+                max_chunk_bytes=max(
+                    100_000,
+                    int(args.max_log_chunk_bytes or MANUAL_LOG_MAX_CHUNK_BYTES),
+                )
+            )
             if not args.no_token_usage:
                 write_token_usage_report()
             if not args.no_code_diff:

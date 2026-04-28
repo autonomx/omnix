@@ -143,6 +143,7 @@ def build_npc_dialogue_profile(
         "known_facts": deepcopy(known_facts),
         "dialogue_recall": deepcopy(dialogue_recall),
         "recall_requested": player_input_requests_recall(player_input),
+        "quest_conversation_access": deepcopy(_safe_dict(topic.get("quest_conversation_access"))),
         "source": "deterministic_npc_dialogue_profile",
     }
     return profile
@@ -171,6 +172,25 @@ def deterministic_biography_line(
     pivot_reason = _safe_str(pivot.get("pivot_rejected_reason") or pivot.get("reason"))
     hint = _safe_str(pivot.get("requested_topic_hint"))
 
+    quest_access = _safe_dict(profile.get("quest_conversation_access"))
+    if quest_access.get("requested") and _safe_str(quest_access.get("access")) == "none":
+        line = _safe_str(quest_access.get("safe_deflection")) or "I cannot say more about that."
+        return {
+            "line": line[:280],
+            "roleplay_source": "deterministic_template",
+            "biography_role": role,
+            "biography_traits": traits[:5],
+            "used_fact_ids": [],
+            "response_style": style,
+            "quest_conversation_access": quest_access,
+            "source": "deterministic_biography_dialogue",
+        }
+
+    if quest_access.get("requested") and _safe_str(quest_access.get("access")) == "partial":
+        prefix = _safe_str(quest_access.get("safe_deflection"))
+        if prefix and fact:
+            fact = f"{prefix} {fact}"
+
     if pivot_requested and not pivot_accepted:
         if "plainspoken" in traits or role.lower().startswith("tavern"):
             line = "I have no reliable word of that. I will not dress guesses up as fact."
@@ -189,6 +209,7 @@ def deterministic_biography_line(
             "response_style": style,
             "unbacked_hint": hint,
             "pivot_rejected_reason": pivot_reason or "no_backed_topic_found",
+            "quest_conversation_access": quest_access,
             "source": "deterministic_biography_dialogue",
         }
 
@@ -236,5 +257,6 @@ def deterministic_biography_line(
         "biography_traits": traits[:5],
         "used_fact_ids": _safe_list(profile.get("used_fact_ids"))[:8],
         "response_style": style,
+        "quest_conversation_access": quest_access,
         "source": "deterministic_biography_dialogue",
     }

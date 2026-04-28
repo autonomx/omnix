@@ -111,6 +111,16 @@
     const npcHistoryByNpc = safeObj(npcHistoryStateRaw.by_npc);
     const npcReputationStateRaw = safeObj(result.npc_reputation_state || conversation.npc_reputation_state || safeObj(result.ambient_tick_result).npc_reputation_state);
     const npcReputationByNpc = safeObj(npcReputationStateRaw.by_npc);
+    const questConversationAccess = safeObj(
+      result.quest_conversation_access ||
+      conversation.quest_conversation_access ||
+      safeObj(conversation.npc_response_beat).quest_conversation_access
+    );
+    const playerReputationConsequence = safeObj(
+      result.player_reputation_consequence ||
+      conversation.player_reputation_consequence ||
+      safeObj(conversation.npc_response_beat).player_reputation_consequence
+    );
     const npcKnowledgeStateRaw = safeObj(result.npc_knowledge_state || conversation.npc_knowledge_state || safeObj(result.ambient_tick_result).npc_knowledge_state);
     const npcKnowledgeByNpc = safeObj(npcKnowledgeStateRaw.by_npc);
     const dialogueRecallStateRaw = safeObj(result.npc_dialogue_recall_state || conversation.npc_dialogue_recall_state || safeObj(result.ambient_tick_result).npc_dialogue_recall_state);
@@ -373,6 +383,51 @@
           <div class="rpg-debug-row">
             <strong>Reason</strong><span>${escapeHtml(directorIntent.reason || "")}</span>
           </div>
+        </div>
+      </details>
+      ` : ""}
+
+      ${questConversationAccess.requested ? `
+      <details>
+        <summary><strong>Quest Conversation Access</strong></summary>
+        <div class="rpg-debug-section">
+          <div class="rpg-debug-row">
+            <strong>Access</strong><span>${escapeHtml(questConversationAccess.access || "")}</span>
+            <code>detail=${escapeHtml(questConversationAccess.allowed_detail_level ?? "")}</code>
+          </div>
+          <div class="rpg-debug-row">
+            <strong>Reason</strong><span>${escapeHtml(questConversationAccess.reason || "")}</span>
+          </div>
+          <div class="rpg-debug-row">
+            <strong>NPC</strong><span>${escapeHtml(questConversationAccess.npc_id || "")}</span>
+            <code>role=${escapeHtml(questConversationAccess.npc_role || "")} knows=${escapeHtml(questConversationAccess.npc_knows_topic ?? "")}</code>
+          </div>
+          ${questConversationAccess.safe_deflection ? `<div class="rpg-debug-row">
+            <strong>Deflection</strong><span>${escapeHtml(questConversationAccess.safe_deflection)}</span>
+          </div>` : ""}
+        </div>
+      </details>
+      ` : ""}
+
+      ${playerReputationConsequence.applied ? `
+      <details>
+        <summary><strong>Player Reputation Consequence</strong></summary>
+        <div class="rpg-debug-section">
+          ${(() => {
+            const event = safeObj(playerReputationConsequence.event);
+            return `
+              <div class="rpg-debug-row">
+                <strong>Kind</strong><span>${escapeHtml(event.kind || "")}</span>
+              </div>
+              <div class="rpg-debug-row">
+                <strong>Reason</strong><span>${escapeHtml(event.reason || "")}</span>
+              </div>
+              <div class="rpg-debug-row">
+                <strong>Deltas</strong>
+                <code>fam=${escapeHtml(event.familiarity_delta ?? 0)} trust=${escapeHtml(event.trust_delta ?? 0)} annoy=${escapeHtml(event.annoyance_delta ?? 0)} fear=${escapeHtml(event.fear_delta ?? 0)} resp=${escapeHtml(event.respect_delta ?? 0)}</code>
+              </div>
+            `;
+          })()}
         </div>
       </details>
       ` : ""}

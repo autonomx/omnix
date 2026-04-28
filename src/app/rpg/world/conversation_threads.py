@@ -60,6 +60,11 @@ from app.rpg.world.npc_reputation_state import (
     response_style_from_reputation,
     update_npc_reputation,
 )
+from app.rpg.world.player_reputation_consequences import apply_player_reputation_consequence
+from app.rpg.world.quest_conversation_access import (
+    evaluate_quest_conversation_access,
+    filter_allowed_topic_facts_for_access,
+)
 from app.rpg.world.scene_continuity_state import (
     update_scene_continuity_from_conversation,
 )
@@ -1441,6 +1446,8 @@ def handle_pending_player_conversation_response(
     # ── Bundle H1 + I1: NPC response beat ───────────────────────────────────
     npc_response_beat: Dict[str, Any] = {}
     response_style = ""
+    quest_access: Dict[str, Any] = {}
+    reputation_consequence: Dict[str, Any] = {}
     if settings.get("allow_npc_response_beats", True) and participants:
         npc = _safe_dict(participants[0])
         npc_id = _safe_str(npc.get("id"))
@@ -1477,13 +1484,35 @@ def handle_pending_player_conversation_response(
                     details={"response_style": response_style},
                 )
         npc_beat_index = len(_safe_list(thread.get("beats"))) + 1
+
+        # Z-AA-AB: Evaluate quest conversation access gate before biography response.
+        quest_access: Dict[str, Any] = {}
+        effective_topic = active_topic
+        if settings.get("quest_conversation_access_enabled", True):
+            quest_access = evaluate_quest_conversation_access(
+                simulation_state,
+                npc_id=_safe_str(npc.get("id")),
+                topic=active_topic,
+                player_input=player_input,
+            )
+            if quest_access.get("requested"):
+                allowed_facts = filter_allowed_topic_facts_for_access(
+                    active_topic,
+                    access=quest_access,
+                )
+                effective_topic = {
+                    **active_topic,
+                    "allowed_facts": allowed_facts,
+                    "quest_conversation_access": quest_access,
+                }
+
         biography_response = _biography_grounded_npc_response(
             speaker_id=_safe_str(npc.get("id")),
             listener_id="player",
             simulation_state=simulation_state,
             runtime_state={},
             player_input=player_input,
-            topic=active_topic,
+            topic=effective_topic,
             pivot=topic_pivot,
             response_style=response_style,
             response_intent="answer" if _safe_dict(topic_pivot).get("accepted") else "deflect",
@@ -1491,7 +1520,7 @@ def handle_pending_player_conversation_response(
         npc_response_beat = _make_npc_response_beat(
             npc=npc,
             thread=thread,
-            topic=active_topic,
+            topic=effective_topic,
             topic_pivot=topic_pivot,
             response_style=response_style,
             tick=tick,
@@ -1514,6 +1543,7 @@ def handle_pending_player_conversation_response(
         npc_response_beat["dialogue_recall"] = _safe_dict(biography_response.get("dialogue_recall"))
         npc_response_beat["recalled_history_ids"] = _safe_list(biography_response.get("recalled_history_ids"))
         npc_response_beat["recalled_knowledge_ids"] = _safe_list(biography_response.get("recalled_knowledge_ids"))
+        npc_response_beat["quest_conversation_access"] = deepcopy(quest_access)
 
         # QRS: Override response style based on NPC reputation before appending beat.
         if settings.get("npc_reputation_enabled", True):
@@ -1552,6 +1582,19 @@ def handle_pending_player_conversation_response(
                 annoyance_delta=1 if topic_pivot.get("requested") and not topic_pivot.get("accepted") else 0,
                 reason="player_joined_conversation",
             )
+
+        # Z-AA-AB: Apply richer player reputation consequences.
+        reputation_consequence: Dict[str, Any] = {}
+        if settings.get("player_reputation_consequences_enabled", True):
+            reputation_consequence = apply_player_reputation_consequence(
+                simulation_state,
+                npc_id=responder_id,
+                player_input=player_input,
+                topic_pivot=topic_pivot or {},
+                conversation_result={"reason": "pending_player_response_consumed"},
+                tick=tick,
+            )
+        npc_response_beat["player_reputation_consequence"] = deepcopy(reputation_consequence)
 
     state["pending_player_response"] = {}
 
@@ -1661,6 +1704,8 @@ def handle_pending_player_conversation_response(
         "npc_reputation_state": deepcopy(_safe_dict(simulation_state.get("npc_reputation_state"))),
         "npc_knowledge_state": deepcopy(_safe_dict(simulation_state.get("npc_knowledge_state"))),
         "scene_continuity_state": deepcopy(_safe_dict(simulation_state.get("scene_continuity_state"))),
+        "quest_conversation_access": deepcopy(quest_access),
+        "player_reputation_consequence": deepcopy(reputation_consequence),
         "conversation_thread_state": get_conversation_thread_state(simulation_state),
         "source": "deterministic_conversation_thread_runtime",
     }

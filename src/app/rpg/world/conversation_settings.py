@@ -95,6 +95,10 @@ DEFAULT_CONVERSATION_SETTINGS: Dict[str, Any] = {
     "npc_dialogue_recall_enabled": True,
     "npc_dialogue_recall_cooldown_ticks": 4,
     "scene_continuity_enabled": True,
+    # Bundle Z-AA-AB — Quest-Aware NPC Agency + Player Reputation Consequences
+    "quest_conversation_access_enabled": True,
+    "player_reputation_consequences_enabled": True,
+    "quest_access_min_detail_level": 0,
 }
 
 
@@ -215,6 +219,19 @@ def normalize_conversation_settings(settings: Dict[str, Any]) -> Dict[str, Any]:
     merged["npc_dialogue_recall_enabled"] = _safe_bool(merged.get("npc_dialogue_recall_enabled"), True)
     merged["npc_dialogue_recall_cooldown_ticks"] = max(1, min(100, _safe_int(merged.get("npc_dialogue_recall_cooldown_ticks"), 4)))
     merged["scene_continuity_enabled"] = _safe_bool(merged.get("scene_continuity_enabled"), True)
+    # Bundle Z-AA-AB
+    merged["quest_conversation_access_enabled"] = _safe_bool(
+        merged.get("quest_conversation_access_enabled"),
+        True,
+    )
+    merged["player_reputation_consequences_enabled"] = _safe_bool(
+        merged.get("player_reputation_consequences_enabled"),
+        True,
+    )
+    merged["quest_access_min_detail_level"] = max(
+        0,
+        min(3, _safe_int(merged.get("quest_access_min_detail_level"), 0)),
+    )
     return merged
 
 
