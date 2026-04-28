@@ -1,174 +1,185 @@
-Below is the next bundle spec:
+rs_referrals_signals.pyNext bundle:
 
-Bundle Z-AA-AB — Quest-Aware NPC Agency + Player Reputation Consequences v1
+Bundle AI-AJ-AK — Evolved NPC Companions, Party Eligibility, and Arc Continuity v1
 
-Apply after W-X-Y.3 and the manual HTML/logging improvements.
+Include required fix first:
 
-Bundle Z — Quest-Aware NPC Agency v1
+AF-AG-AH.3 — Evolution Profile Projection Fix
 
-Goal:
+Apply after AF-AG-AH.2.
 
-NPCs should respond to quest-related topics according to their role, biography, knowledge, goals, and reputation toward the player.
+Required fix: AF-AG-AH.3 — Evolution Profile Projection Fix
+Goal
 
-This means Bran, Mira, Guard Captain, and Merchant should not all treat the same quest topic identically.
+npc_evolution_state is now correctly updated, but the later dialogue_profile does not always expose:
 
-Examples:
+personality_modifiers
+active_motivations
+identity_arc
+current_role
+base_role
+party_join_eligibility
 
-Bran:
-  talks about tavern rumors, road trouble, debts, and local safety.
+This breaks:
 
-Mira:
-  notices patterns, contradictions, and who avoids talking.
+npc_evolution_trust_profile_expected_loyal_modifier
 
-Guard Captain:
-  asks for evidence, reports, witnesses, and public order.
+The fix: make build_npc_dialogue_profile(...) project the merged/evolved NPC identity into the final profile every time.
 
-Merchant:
-  frames quest dangers as road/trade risk.
+PATCH 1 — src/app/rpg/world/npc_dialogue_profile.py
 
-Hard rule:
+Find build_npc_dialogue_profile(...).
 
-NPC quest-aware agency can affect:
-- whether NPC answers
-- how much they share
-- whether they deflect
-- whether they emit bounded world_signals
-- whether they suggest who might know more
-- reputation/social state
+Make sure the imports exist:
 
-NPC quest-aware agency cannot directly:
-- create quests
-- complete quests
-- grant rewards
-- create journal entries
-- add inventory
-- change currency
-- change shop stock
-- teleport/move player
-- start combat
-Bundle AA — Player Reputation Consequences v1
+from copy import deepcopy
 
-Goal:
+from app.rpg.world.npc_evolution_state import (
+    get_npc_evolution,
+    merged_npc_identity,
+)
 
-Player behavior should affect NPC reputation state in bounded deterministic ways.
+Find where biography/profile is loaded. It likely looks like:
 
-Use existing:
+biography = get_npc_biography(npc_id)
 
-npc_reputation_state
-conversation_social_state
-npc_history_state
+Patch it to preserve the base profile and merge evolution:
 
-Add stronger deterministic reputation events for:
+base_profile = get_npc_biography(npc_id)
+evolution = get_npc_evolution(simulation_state, npc_id=npc_id)
+biography = merged_npc_identity(
+    base_profile=base_profile,
+    evolution=evolution,
+)
 
-- polite/helpful reply
-- repeated questioning
-- asking unbacked topics
-- hostile/socially disruptive action
-- backed quest cooperation
-- ignoring invitation / letting pending response expire
+If the function already does something similar, ensure the final profile dict uses the merged biography, not the unmerged base_profile.
 
-State remains bounded:
+Add these fields to the returned profile dict:
 
-{
-  "npc_reputation_state": {
-    "by_npc": {
-      "npc:Bran": {
-        "familiarity": 3,
-        "trust": 1,
-        "annoyance": 0,
-        "fear": 0,
-        "respect": 1,
-        "last_updated_tick": 527,
-        "last_reason": "player_backed_quest_cooperation"
-      }
+"profile_source": _safe_str(biography.get("source")),
+"biography_source": _safe_str(base_profile.get("source")),
+"base_role": _safe_str(biography.get("base_role")),
+"starting_role": _safe_str(biography.get("starting_role")),
+"current_role": _safe_str(biography.get("current_role") or biography.get("role")),
+"identity_arc": _safe_str(biography.get("identity_arc")),
+"personality_modifiers": deepcopy(_safe_list(biography.get("personality_modifiers"))),
+"active_motivations": deepcopy(_safe_list(biography.get("active_motivations"))),
+"party_join_eligibility": deepcopy(_safe_dict(biography.get("party_join_eligibility"))),
+"npc_evolution": deepcopy(evolution),
+
+Also ensure role prefers the evolved role:
+
+"role": _safe_str(
+    biography.get("current_role")
+    or biography.get("role")
+    or biography.get("starting_role")
+),
+
+If there is a line like this later:
+
+"profile_source": "deterministic_npc_dialogue_profile",
+
+do not let it overwrite the merged source. Use:
+
+"source": _safe_str(biography.get("source")) or "deterministic_npc_dialogue_profile",
+PATCH 2 — src/app/rpg/world/npc_evolution_state.py
+
+In merged_npc_identity(...), make sure personality_modifiers and active_motivations are projected at top level.
+
+Replace the return construction with this safer shape:
+
+def merged_npc_identity(
+    *,
+    base_profile: Dict[str, Any],
+    evolution: Dict[str, Any],
+) -> Dict[str, Any]:
+    base = _safe_dict(base_profile)
+    evo = _safe_dict(evolution)
+
+    base_role = _safe_str(
+        base.get("base_role")
+        or base.get("role")
+        or base.get("starting_role")
+    )
+    current_role = _safe_str(evo.get("current_role")) or _safe_str(
+        base.get("current_role_hint") or base_role
+    )
+
+    modifiers = deepcopy(_safe_list(evo.get("personality_modifiers")))
+    motivations = deepcopy(_safe_list(evo.get("active_motivations")))
+    base_personality = deepcopy(_safe_dict(base.get("personality")))
+
+    merged = {
+        **deepcopy(base),
+        "base_role": base_role,
+        "starting_role": _safe_str(base.get("starting_role") or base_role),
+        "current_role": current_role,
+        "role": current_role or base_role,
+        "identity_arc": _safe_str(evo.get("identity_arc")),
+        "personality_modifiers": modifiers,
+        "active_motivations": motivations,
+        "party_join_eligibility": deepcopy(_safe_dict(evo.get("party_join_eligibility"))),
+        "npc_evolution": deepcopy(evo),
+        "personality": {
+            **base_personality,
+            "evolution_modifiers": modifiers,
+        },
+        "source": "merged_file_profile_and_evolution_state",
     }
-  }
-}
 
-Reputation affects:
+    return merged
 
-- response_style
-- willingness to answer backed quest questions
-- willingness to invite player into conversation
-- whether NPC says “ask someone else”
-- whether NPC emits soft world_signals like social_tension or trust_signal
+This guarantees the dialogue profile can read the evolved fields directly.
 
-Still does not directly affect:
+PATCH 3 — Manual validator should check profile source paths robustly
 
-- quest unlocks
-- rewards
-- prices
-- inventory
-- journal
+File:
 
-Those can come later through explicit deterministic systems.
+src/tests/rpg/manual_llm_transcript.py
 
-Bundle AB — Quest Conversation Access Gates v1
+Find the block:
 
-Goal:
+if scenario_name == "npc_evolution_reputation_threshold_trust":
 
-NPCs can gate quest-related conversation detail based on:
-- whether topic is backed
-- NPC biography/role
-- NPC knowledge
-- player reputation/trust/respect
-- topic sensitivity
+Keep the turn 1 state-level check.
 
-Access gate result:
+For the turn 3 profile check, use all possible fields:
 
-{
-  "quest_conversation_access": {
-    "requested": true,
-    "topic_id": "topic:quest:quest:old_mill_bandits",
-    "npc_id": "npc:Bran",
-    "access": "partial",
-    "reason": "known_topic_but_guarded_reputation",
-    "allowed_detail_level": 1,
-    "blocked_detail_level": 2,
-    "safe_deflection": "I know enough to be cautious, not enough to send you chasing shadows."
-  }
-}
+if turn_index >= 3:
+    conversation = _extract_conversation_result(result)
+    profile = _safe_dict(conversation.get("dialogue_profile"))
+    profile_modifiers = (
+        _safe_list(profile.get("personality_modifiers"))
+        or _safe_list(_safe_dict(profile.get("npc_evolution")).get("personality_modifiers"))
+        or _safe_list(
+            _safe_dict(profile.get("personality")).get("evolution_modifiers")
+        )
+    )
+    if not any("loyal" in _safe_str(mod).lower() for mod in profile_modifiers):
+        warnings.append("npc_evolution_trust_profile_expected_loyal_modifier")
 
-Access levels:
+This keeps the validation strict enough while matching the intended projection options.
 
-none       — NPC refuses/does not know
-partial    — NPC gives safe summary only
-normal     — NPC gives normal backed facts
-trusted    — NPC gives richer backed context
+Bundle AI — Party Eligibility Signals v1
+Goal
 
-Hard constraints:
+NPC evolution can make an NPC eligible to join the player’s party, but it does not automatically join them.
 
-Access gates only choose how to present backed facts.
-They do not create new facts.
-Files to add/change
-NEW  src/app/rpg/world/quest_conversation_access.py
-NEW  src/app/rpg/world/player_reputation_consequences.py
+Example:
 
-MOD  src/app/rpg/world/conversation_settings.py
-MOD  src/app/rpg/world/conversation_threads.py
-MOD  src/app/rpg/world/npc_dialogue_profile.py
-MOD  src/app/rpg/world/npc_reputation_state.py
-MOD  src/app/rpg/world/npc_knowledge_state.py
-MOD  src/static/rpg-living-world-inspector.js
-MOD  src/tests/rpg/manual_llm_transcript.py
+Bran loses tavern → revenge motivation → party_join_eligibility.eligible = true
 
-NEW  src/app/rpg/tests/test_bundle_zaaab_quest_aware_reputation.py
-Z1 PATCH — Quest conversation access gates
+The actual join requires an explicit player conversation/action later.
 
-Create:
-
-src/app/rpg/world/quest_conversation_access.py
+NEW FILE — src/app/rpg/world/npc_party_eligibility.py
 from __future__ import annotations
 
 from copy import deepcopy
 from typing import Any, Dict, List
 
 from app.rpg.world.npc_biography_registry import get_npc_biography
-from app.rpg.world.npc_knowledge_state import known_facts_for_npc
+from app.rpg.world.npc_evolution_state import get_npc_evolution
 from app.rpg.world.npc_reputation_state import get_npc_reputation
-
-
-ACCESS_LEVELS = {"none", "partial", "normal", "trusted"}
 
 
 def _safe_str(value: Any) -> str:
@@ -190,170 +201,132 @@ def _safe_int(value: Any, default: int = 0) -> int:
         return default
 
 
-def _topic_is_backed(topic: Dict[str, Any]) -> bool:
-    topic = _safe_dict(topic)
-    topic_id = _safe_str(topic.get("topic_id"))
-    topic_type = _safe_str(topic.get("topic_type"))
-    source_id = _safe_str(topic.get("source_id"))
-    summary = _safe_str(topic.get("summary") or topic.get("title"))
-    return bool(topic_id and topic_type and summary and (source_id or topic_id.startswith("topic:")))
-
-
-def _npc_knows_topic(simulation_state: Dict[str, Any], *, npc_id: str, topic_id: str) -> bool:
-    for fact in known_facts_for_npc(simulation_state, npc_id=npc_id, limit=12):
-        if _safe_str(fact.get("source_topic_id")) == topic_id:
-            return True
-    return False
-
-
-def evaluate_quest_conversation_access(
+def evaluate_npc_party_join_eligibility(
     simulation_state: Dict[str, Any],
     *,
     npc_id: str,
-    topic: Dict[str, Any],
-    player_input: str = "",
 ) -> Dict[str, Any]:
-    """Decide how much backed quest detail an NPC may discuss.
-
-    This is a presentation/access gate only. It does not create quests, rewards,
-    journal entries, inventory, currency, stock, location changes, or combat.
-    """
     npc_id = _safe_str(npc_id)
-    topic = _safe_dict(topic)
-    topic_id = _safe_str(topic.get("topic_id"))
-    topic_type = _safe_str(topic.get("topic_type"))
+    if not npc_id.startswith("npc:"):
+        return {
+            "eligible": False,
+            "reason": "invalid_npc_id",
+            "source": "deterministic_npc_party_eligibility",
+        }
+
     bio = get_npc_biography(npc_id)
-    role = _safe_str(bio.get("role")).lower()
-    reputation = get_npc_reputation(simulation_state, npc_id=npc_id)
+    evo = get_npc_evolution(simulation_state, npc_id=npc_id)
+    rep = get_npc_reputation(simulation_state, npc_id=npc_id)
 
-    requested = topic_type == "quest" or "quest" in topic_id or "trouble" in _safe_str(player_input).lower()
+    party = _safe_dict(evo.get("party_join_eligibility"))
+    required_trust = _safe_int(party.get("requires_player_trust"), 0)
+    trust = _safe_int(rep.get("trust"), 0)
 
-    if not requested:
+    if not party.get("eligible"):
         return {
-            "requested": False,
-            "access": "normal",
-            "reason": "not_quest_conversation",
-            "source": "deterministic_quest_conversation_access",
-        }
-
-    if not _topic_is_backed(topic):
-        return {
-            "requested": True,
-            "topic_id": topic_id,
+            "eligible": False,
             "npc_id": npc_id,
-            "access": "none",
-            "reason": "unbacked_topic",
-            "allowed_detail_level": 0,
-            "blocked_detail_level": 3,
-            "safe_deflection": "I have no reliable word of that.",
-            "source": "deterministic_quest_conversation_access",
+            "name": _safe_str(bio.get("name")) or npc_id.replace("npc:", ""),
+            "reason": "no_party_join_arc",
+            "source": "deterministic_npc_party_eligibility",
         }
 
-    trust = _safe_int(reputation.get("trust"), 0)
-    respect = _safe_int(reputation.get("respect"), 0)
-    annoyance = _safe_int(reputation.get("annoyance"), 0)
-    fear = _safe_int(reputation.get("fear"), 0)
-    knows_topic = _npc_knows_topic(simulation_state, npc_id=npc_id, topic_id=topic_id)
-
-    score = 1
-
-    if knows_topic:
-        score += 1
-    if trust >= 2:
-        score += 1
-    if respect >= 2:
-        score += 1
-    if annoyance >= 3:
-        score -= 1
-    if fear >= 3:
-        score -= 1
-
-    if "guard" in role and topic_type == "quest":
-        score += 1
-    if "informant" in role and topic_type == "quest":
-        score += 1
-    if "tavern" in role and any(word in _safe_str(topic.get("summary")).lower() for word in ("road", "traveler", "tavern", "local")):
-        score += 1
-    if "merchant" in role and any(word in _safe_str(topic.get("summary")).lower() for word in ("road", "trade", "market", "goods")):
-        score += 1
-
-    if score <= 0:
-        access = "none"
-        reason = "known_topic_but_npc_unwilling"
-        allowed = 0
-    elif score == 1:
-        access = "partial"
-        reason = "backed_topic_low_trust_or_low_knowledge"
-        allowed = 1
-    elif score <= 3:
-        access = "normal"
-        reason = "backed_topic_normal_access"
-        allowed = 2
-    else:
-        access = "trusted"
-        reason = "backed_topic_trusted_access"
-        allowed = 3
-
-    deflection_by_access = {
-        "none": "I know enough to be cautious, not enough to say more.",
-        "partial": "I will keep this to what is reliable.",
-        "normal": "",
-        "trusted": "",
-    }
+    if trust < required_trust:
+        return {
+            "eligible": False,
+            "npc_id": npc_id,
+            "name": _safe_str(bio.get("name")) or npc_id.replace("npc:", ""),
+            "reason": "insufficient_trust",
+            "required_trust": required_trust,
+            "current_trust": trust,
+            "party_join_eligibility": deepcopy(party),
+            "source": "deterministic_npc_party_eligibility",
+        }
 
     return {
-        "requested": True,
-        "topic_id": topic_id,
-        "topic_type": topic_type,
+        "eligible": True,
         "npc_id": npc_id,
-        "access": access,
-        "reason": reason,
-        "allowed_detail_level": allowed,
-        "blocked_detail_level": max(0, 3 - allowed),
-        "safe_deflection": deflection_by_access.get(access, ""),
-        "npc_reputation": deepcopy(reputation),
-        "npc_role": _safe_str(bio.get("role")),
-        "npc_knows_topic": knows_topic,
-        "source": "deterministic_quest_conversation_access",
+        "name": _safe_str(bio.get("name")) or npc_id.replace("npc:", ""),
+        "reason": _safe_str(party.get("reason") or "party_join_arc_available"),
+        "current_role": _safe_str(evo.get("current_role") or bio.get("role")),
+        "identity_arc": _safe_str(evo.get("identity_arc")),
+        "active_motivations": deepcopy(_safe_list(evo.get("active_motivations"))),
+        "party_join_eligibility": deepcopy(party),
+        "source": "deterministic_npc_party_eligibility",
     }
 
 
-def filter_allowed_topic_facts_for_access(
-    topic: Dict[str, Any],
+def party_eligible_npcs(
+    simulation_state: Dict[str, Any],
     *,
-    access: Dict[str, Any],
-) -> List[str]:
-    topic = _safe_dict(topic)
-    access = _safe_dict(access)
-    allowed_level = _safe_int(access.get("allowed_detail_level"), 1)
-    facts = [_safe_str(fact) for fact in _safe_list(topic.get("allowed_facts")) if _safe_str(fact)]
+    npc_ids: List[str],
+) -> List[Dict[str, Any]]:
+    out = []
+    for npc_id in npc_ids[:16]:
+        result = evaluate_npc_party_join_eligibility(
+            simulation_state,
+            npc_id=_safe_str(npc_id),
+        )
+        if result.get("eligible"):
+            out.append(result)
+    return out
+Wire into conversation_threads.py
 
-    summary = _safe_str(topic.get("summary"))
-    title = _safe_str(topic.get("title"))
+Add import:
 
-    if not facts and summary:
-        facts = [summary]
-    if not facts and title:
-        facts = [title]
+from app.rpg.world.npc_party_eligibility import evaluate_npc_party_join_eligibility
 
-    if allowed_level <= 0:
-        return []
-    if allowed_level == 1:
-        return facts[:1]
-    if allowed_level == 2:
-        return facts[:3]
-    return facts[:6]
-AA1 PATCH — Player reputation consequences
+After npc_evolution_result is computed or near the NPC response result assembly:
 
-Create:
+party_join_eligibility_result = {}
+if settings.get("npc_party_eligibility_enabled", True):
+    party_join_eligibility_result = evaluate_npc_party_join_eligibility(
+        simulation_state,
+        npc_id=responder_id,
+    )
 
-src/app/rpg/world/player_reputation_consequences.py
+Add to npc_response_beat:
+
+"party_join_eligibility_result": deepcopy(party_join_eligibility_result),
+
+Add to top-level conversation_result:
+
+"party_join_eligibility_result": deepcopy(party_join_eligibility_result),
+Bundle AJ — Companion Offer / Join Intent v1
+Goal
+
+When eligible, an NPC may offer to join, but this produces only a join intent, not a direct party mutation.
+
+The actual party membership runtime can come next.
+
+Output:
+
+{
+  "companion_join_intent": {
+    "offered": true,
+    "npc_id": "npc:Bran",
+    "reason": "lost_home_and_has_revenge_motivation",
+    "requires_player_acceptance": true
+  }
+}
+NEW FILE — src/app/rpg/world/companion_join_intent.py
 from __future__ import annotations
 
 from copy import deepcopy
 from typing import Any, Dict
 
-from app.rpg.world.npc_reputation_state import update_npc_reputation
+from app.rpg.world.npc_party_eligibility import evaluate_npc_party_join_eligibility
+
+
+JOIN_REQUEST_MARKERS = {
+    "join me",
+    "come with me",
+    "travel with me",
+    "fight with me",
+    "help me",
+    "come along",
+    "adventure with me",
+}
 
 
 def _safe_str(value: Any) -> str:
@@ -364,104 +337,193 @@ def _safe_dict(value: Any) -> Dict[str, Any]:
     return value if isinstance(value, dict) else {}
 
 
-def classify_player_conversation_reputation_event(
-    *,
-    player_input: str,
-    topic_pivot: Dict[str, Any],
-    conversation_result: Dict[str, Any],
-) -> Dict[str, Any]:
-    text = _safe_str(player_input).strip().lower()
-    pivot = _safe_dict(topic_pivot)
-    conversation = _safe_dict(conversation_result)
-
-    if any(word in text for word in ("thank", "thanks", "appreciate", "helpful")):
-        return {
-            "kind": "polite_cooperation",
-            "familiarity_delta": 1,
-            "trust_delta": 1,
-            "respect_delta": 1,
-            "reason": "player_polite_or_cooperative",
-        }
-
-    if any(word in text for word in ("liar", "shut up", "idiot", "threaten")):
-        return {
-            "kind": "hostile_social_reply",
-            "familiarity_delta": 1,
-            "trust_delta": -1,
-            "annoyance_delta": 2,
-            "fear_delta": 1,
-            "reason": "player_hostile_social_reply",
-        }
-
-    if pivot.get("requested") and pivot.get("accepted"):
-        return {
-            "kind": "backed_topic_cooperation",
-            "familiarity_delta": 1,
-            "trust_delta": 1,
-            "respect_delta": 1,
-            "reason": "player_asked_backed_topic",
-        }
-
-    if pivot.get("requested") and not pivot.get("accepted"):
-        return {
-            "kind": "unbacked_topic_pressure",
-            "familiarity_delta": 1,
-            "trust_delta": 0,
-            "annoyance_delta": 1,
-            "reason": "player_pressed_unbacked_topic",
-        }
-
-    if _safe_str(conversation.get("reason")) == "pending_player_response_expired":
-        return {
-            "kind": "ignored_invitation",
-            "familiarity_delta": 0,
-            "trust_delta": -1,
-            "annoyance_delta": 1,
-            "reason": "player_ignored_invitation",
-        }
-
-    return {
-        "kind": "ordinary_conversation_reply",
-        "familiarity_delta": 1,
-        "trust_delta": 0,
-        "respect_delta": 0,
-        "reason": "ordinary_conversation_reply",
-    }
+def player_input_requests_join(player_input: Any) -> bool:
+    text = _safe_str(player_input).lower()
+    return any(marker in text for marker in JOIN_REQUEST_MARKERS)
 
 
-def apply_player_reputation_consequence(
+def maybe_create_companion_join_intent(
     simulation_state: Dict[str, Any],
     *,
     npc_id: str,
     player_input: str,
-    topic_pivot: Dict[str, Any],
-    conversation_result: Dict[str, Any],
-    tick: int,
 ) -> Dict[str, Any]:
-    event = classify_player_conversation_reputation_event(
-        player_input=player_input,
-        topic_pivot=topic_pivot,
-        conversation_result=conversation_result,
-    )
-
-    result = update_npc_reputation(
+    requested = player_input_requests_join(player_input)
+    eligibility = evaluate_npc_party_join_eligibility(
         simulation_state,
         npc_id=npc_id,
-        tick=tick,
-        familiarity_delta=int(event.get("familiarity_delta") or 0),
-        trust_delta=int(event.get("trust_delta") or 0),
-        annoyance_delta=int(event.get("annoyance_delta") or 0),
-        fear_delta=int(event.get("fear_delta") or 0),
-        respect_delta=int(event.get("respect_delta") or 0),
-        reason=_safe_str(event.get("reason")),
     )
 
+    if not requested:
+        return {
+            "offered": False,
+            "requested": False,
+            "reason": "player_did_not_request_join",
+            "party_join_eligibility_result": deepcopy(eligibility),
+            "source": "deterministic_companion_join_intent",
+        }
+
+    if not eligibility.get("eligible"):
+        return {
+            "offered": False,
+            "requested": True,
+            "npc_id": npc_id,
+            "reason": _safe_str(eligibility.get("reason") or "npc_not_eligible"),
+            "party_join_eligibility_result": deepcopy(eligibility),
+            "source": "deterministic_companion_join_intent",
+        }
+
     return {
-        "applied": bool(result.get("updated")),
-        "event": deepcopy(event),
-        "reputation_update": deepcopy(result),
-        "source": "deterministic_player_reputation_consequence_runtime",
+        "offered": True,
+        "requested": True,
+        "npc_id": npc_id,
+        "reason": _safe_str(eligibility.get("reason") or "eligible_to_join"),
+        "requires_player_acceptance": True,
+        "party_join_eligibility_result": deepcopy(eligibility),
+        "source": "deterministic_companion_join_intent",
     }
+Wire into conversation_threads.py
+
+Add import:
+
+from app.rpg.world.companion_join_intent import maybe_create_companion_join_intent
+
+After party_join_eligibility_result:
+
+companion_join_intent = {}
+if settings.get("companion_join_intent_enabled", True):
+    companion_join_intent = maybe_create_companion_join_intent(
+        simulation_state,
+        npc_id=responder_id,
+        player_input=player_input,
+    )
+
+Add to npc_response_beat and result:
+
+"companion_join_intent": deepcopy(companion_join_intent),
+
+Do not add the NPC to a party list in this bundle.
+
+Bundle AK — NPC Arc Continuity v1
+Goal
+
+Track the current visible arc for evolved NPCs so the world can reference it across scenes.
+
+State:
+
+{
+  "npc_arc_continuity_state": {
+    "by_npc": {
+      "npc:Bran": {
+        "arc_id": "arc:npc:Bran:revenge_after_losing_tavern",
+        "identity_arc": "revenge_after_losing_tavern",
+        "current_role": "Displaced tavern keeper",
+        "active_motivation_summary": "Find the bandits who destroyed his tavern.",
+        "last_updated_tick": 842
+      }
+    }
+  }
+}
+NEW FILE — src/app/rpg/world/npc_arc_continuity.py
+from __future__ import annotations
+
+from copy import deepcopy
+from typing import Any, Dict
+
+from app.rpg.world.npc_evolution_state import get_npc_evolution
+
+
+def _safe_str(value: Any) -> str:
+    return "" if value is None else str(value)
+
+
+def _safe_dict(value: Any) -> Dict[str, Any]:
+    return value if isinstance(value, dict) else {}
+
+
+def _safe_list(value: Any):
+    return value if isinstance(value, list) else []
+
+
+def ensure_npc_arc_continuity_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
+    state = _safe_dict(simulation_state.get("npc_arc_continuity_state"))
+    if not isinstance(state.get("by_npc"), dict):
+        state["by_npc"] = {}
+    if not isinstance(state.get("debug"), dict):
+        state["debug"] = {}
+    simulation_state["npc_arc_continuity_state"] = state
+    return state
+
+
+def update_npc_arc_continuity(
+    simulation_state: Dict[str, Any],
+    *,
+    npc_id: str,
+    tick: int,
+) -> Dict[str, Any]:
+    npc_id = _safe_str(npc_id)
+    evo = get_npc_evolution(simulation_state, npc_id=npc_id)
+
+    identity_arc = _safe_str(evo.get("identity_arc"))
+    current_role = _safe_str(evo.get("current_role"))
+    motivations = _safe_list(evo.get("active_motivations"))
+
+    if not identity_arc and not current_role and not motivations:
+        return {
+            "updated": False,
+            "reason": "no_evolution_arc",
+            "source": "deterministic_npc_arc_continuity",
+        }
+
+    first_motivation = _safe_dict(motivations[0]) if motivations else {}
+    state = ensure_npc_arc_continuity_state(simulation_state)
+    by_npc = _safe_dict(state.get("by_npc"))
+
+    entry = {
+        "arc_id": f"arc:{npc_id}:{identity_arc or current_role or 'evolved'}",
+        "npc_id": npc_id,
+        "identity_arc": identity_arc,
+        "current_role": current_role,
+        "active_motivation_summary": _safe_str(first_motivation.get("summary")),
+        "last_updated_tick": int(tick or 0),
+        "source": "deterministic_npc_arc_continuity",
+    }
+
+    by_npc[npc_id] = entry
+    state["by_npc"] = by_npc
+    state["debug"] = {
+        "last_updated_tick": int(tick or 0),
+        "last_npc_id": npc_id,
+        "source": "deterministic_npc_arc_continuity",
+    }
+
+    return {
+        "updated": True,
+        "arc": deepcopy(entry),
+        "source": "deterministic_npc_arc_continuity",
+    }
+Wire into conversation_threads.py
+
+Add import:
+
+from app.rpg.world.npc_arc_continuity import update_npc_arc_continuity
+
+After npc_evolution_result and/or before final result:
+
+npc_arc_continuity_result = {}
+if settings.get("npc_arc_continuity_enabled", True):
+    npc_arc_continuity_result = update_npc_arc_continuity(
+        simulation_state,
+        npc_id=responder_id,
+        tick=tick,
+    )
+
+Add to result:
+
+"npc_arc_continuity_result": deepcopy(npc_arc_continuity_result),
+"npc_arc_continuity_state": deepcopy(
+    _safe_dict(simulation_state.get("npc_arc_continuity_state"))
+),
 Settings patch
 
 File:
@@ -470,152 +532,24 @@ src/app/rpg/world/conversation_settings.py
 
 Add defaults:
 
-"quest_conversation_access_enabled": True,
-"player_reputation_consequences_enabled": True,
-"quest_access_min_detail_level": 0,
+"npc_party_eligibility_enabled": True,
+"companion_join_intent_enabled": True,
+"npc_arc_continuity_enabled": True,
 
 Normalize:
 
-merged["quest_conversation_access_enabled"] = _safe_bool(
-    merged.get("quest_conversation_access_enabled"),
+merged["npc_party_eligibility_enabled"] = _safe_bool(
+    merged.get("npc_party_eligibility_enabled"),
     True,
 )
-merged["player_reputation_consequences_enabled"] = _safe_bool(
-    merged.get("player_reputation_consequences_enabled"),
+merged["companion_join_intent_enabled"] = _safe_bool(
+    merged.get("companion_join_intent_enabled"),
     True,
 )
-merged["quest_access_min_detail_level"] = max(
-    0,
-    min(3, _safe_int(merged.get("quest_access_min_detail_level"), 0)),
+merged["npc_arc_continuity_enabled"] = _safe_bool(
+    merged.get("npc_arc_continuity_enabled"),
+    True,
 )
-Conversation thread integration
-
-File:
-
-src/app/rpg/world/conversation_threads.py
-
-Add imports:
-
-from app.rpg.world.quest_conversation_access import (
-    evaluate_quest_conversation_access,
-    filter_allowed_topic_facts_for_access,
-)
-from app.rpg.world.player_reputation_consequences import apply_player_reputation_consequence
-Patch NPC response after topic pivot / selected topic resolution
-
-Find where selected_topic / topic_payload is known before _biography_grounded_npc_response(...).
-
-Add:
-
-quest_access = {}
-effective_topic_payload = selected_topic or topic_payload or {}
-
-if settings.get("quest_conversation_access_enabled", True):
-    quest_access = evaluate_quest_conversation_access(
-        simulation_state,
-        npc_id=responder_id,
-        topic=effective_topic_payload,
-        player_input=player_input,
-    )
-
-    if quest_access.get("requested"):
-        allowed_facts = filter_allowed_topic_facts_for_access(
-            effective_topic_payload,
-            access=quest_access,
-        )
-        effective_topic_payload = {
-            **effective_topic_payload,
-            "allowed_facts": allowed_facts,
-            "quest_conversation_access": quest_access,
-        }
-
-Then change the biography call from:
-
-topic=selected_topic or topic_payload or {},
-
-to:
-
-topic=effective_topic_payload,
-Add access fields to npc_response_beat
-"quest_conversation_access": deepcopy(quest_access),
-Add access fields to top-level result
-"quest_conversation_access": deepcopy(quest_access),
-Reputation consequence integration
-
-In the pending-player-response consumed path, after topic_pivot exists and after responder is known:
-
-reputation_consequence = {}
-if settings.get("player_reputation_consequences_enabled", True):
-    reputation_consequence = apply_player_reputation_consequence(
-        simulation_state,
-        npc_id=responder_id,
-        player_input=player_input,
-        topic_pivot=topic_pivot or {},
-        conversation_result={"reason": "pending_player_response_consumed"},
-        tick=tick,
-    )
-
-Add to npc_response_beat:
-
-"player_reputation_consequence": deepcopy(reputation_consequence),
-
-Add to result:
-
-"player_reputation_consequence": deepcopy(reputation_consequence),
-"npc_reputation_state": deepcopy(_safe_dict(simulation_state.get("npc_reputation_state"))),
-Dialogue profile integration
-
-File:
-
-src/app/rpg/world/npc_dialogue_profile.py
-
-In build_npc_dialogue_profile(...), include quest access if present on topic:
-
-quest_access = _safe_dict(topic.get("quest_conversation_access"))
-
-Add to profile:
-
-"quest_conversation_access": deepcopy(quest_access),
-
-In deterministic_biography_line(...), before normal backed fact line generation:
-
-quest_access = _safe_dict(profile.get("quest_conversation_access"))
-if quest_access.get("requested") and _safe_str(quest_access.get("access")) == "none":
-    line = _safe_str(quest_access.get("safe_deflection")) or "I cannot say more about that."
-    return {
-        "line": line[:280],
-        "roleplay_source": "deterministic_template",
-        "biography_role": role,
-        "biography_traits": traits[:5],
-        "used_fact_ids": [],
-        "response_style": style,
-        "quest_conversation_access": quest_access,
-        "source": "deterministic_biography_dialogue",
-    }
-
-if quest_access.get("requested") and _safe_str(quest_access.get("access")) == "partial":
-    prefix = _safe_str(quest_access.get("safe_deflection"))
-    if prefix and fact:
-        fact = f"{prefix} {fact}"
-
-Also add quest_conversation_access to every return payload from deterministic_biography_line(...).
-
-Inspector visibility
-
-File:
-
-src/static/rpg-living-world-inspector.js
-
-Add a panel:
-
-Quest Conversation Access
-
-Show:
-
-conversation_result.quest_conversation_access
-npc_response_beat.quest_conversation_access
-conversation_result.player_reputation_consequence
-npc_reputation_state.by_npc
 Manual scenarios
 
 File:
@@ -624,7 +558,7 @@ src/tests/rpg/manual_llm_transcript.py
 
 Add scenarios:
 
-"quest_access_backed_topic_partial_or_normal": {
+"npc_party_eligibility_after_bran_loses_tavern": {
     "currency": {"gold": 0, "silver": 0, "copper": 0},
     "conversation_settings": {
         "enabled": True,
@@ -633,28 +567,40 @@ Add scenarios:
         "conversation_chance_percent": 100,
         "allow_player_invited": True,
         "player_inclusion_chance_percent": 100,
-        "quest_conversation_access_enabled": True,
-        "player_reputation_consequences_enabled": True,
+        "npc_file_profiles_enabled": True,
+        "npc_evolution_enabled": True,
+        "npc_party_eligibility_enabled": True,
         "min_ticks_between_conversations": 0,
-        "thread_cooldown_ticks": 0,
+        "thread_cooldown_ticks": 0
     },
-    "setup_quest_state": {
-        "quests": [
-            {
-                "quest_id": "quest:old_mill_bandits",
-                "title": "Trouble near the Old Mill",
-                "summary": "There is talk of armed figures near the old mill road.",
-                "status": "active",
-                "location_id": "loc_tavern",
+    "setup_world_event": {
+        "event_id": "event:test:bandit_attack_rusty_flagon_party",
+        "kind": "location_destroyed",
+        "location_id": "loc_tavern",
+        "summary": "Bandits attacked and burned the Rusty Flagon.",
+        "affected_npcs": ["npc:Bran"]
+    },
+    "setup_npc_reputation_state": {
+        "by_npc": {
+            "npc:Bran": {
+                "npc_id": "npc:Bran",
+                "familiarity": 3,
+                "trust": 2,
+                "annoyance": 0,
+                "fear": 0,
+                "respect": 2,
+                "last_updated_tick": 1,
+                "source": "deterministic_npc_reputation_runtime"
             }
-        ]
+        }
     },
     "turns": [
+        "__apply_world_event_evolution__",
         "__ambient_tick_player_invited__",
-        "What can you tell me about the trouble at the old mill road?",
-    ],
+        "Bran, what will you do now?"
+    ]
 },
-"quest_access_unbacked_topic_denied": {
+"companion_join_intent_requires_player_request": {
     "currency": {"gold": 0, "silver": 0, "copper": 0},
     "conversation_settings": {
         "enabled": True,
@@ -663,17 +609,41 @@ Add scenarios:
         "conversation_chance_percent": 100,
         "allow_player_invited": True,
         "player_inclusion_chance_percent": 100,
-        "quest_conversation_access_enabled": True,
-        "player_reputation_consequences_enabled": True,
+        "npc_file_profiles_enabled": True,
+        "npc_evolution_enabled": True,
+        "npc_party_eligibility_enabled": True,
+        "companion_join_intent_enabled": True,
         "min_ticks_between_conversations": 0,
-        "thread_cooldown_ticks": 0,
+        "thread_cooldown_ticks": 0
+    },
+    "setup_world_event": {
+        "event_id": "event:test:bandit_attack_rusty_flagon_join",
+        "kind": "location_destroyed",
+        "location_id": "loc_tavern",
+        "summary": "Bandits attacked and burned the Rusty Flagon.",
+        "affected_npcs": ["npc:Bran"]
+    },
+    "setup_npc_reputation_state": {
+        "by_npc": {
+            "npc:Bran": {
+                "npc_id": "npc:Bran",
+                "familiarity": 3,
+                "trust": 2,
+                "annoyance": 0,
+                "fear": 0,
+                "respect": 2,
+                "last_updated_tick": 1,
+                "source": "deterministic_npc_reputation_runtime"
+            }
+        }
     },
     "turns": [
+        "__apply_world_event_evolution__",
         "__ambient_tick_player_invited__",
-        "Tell me about the hidden royal assassination quest.",
-    ],
+        "Bran, come with me and help me find the bandits."
+    ]
 },
-"player_reputation_polite_reply_improves_trust": {
+"npc_arc_continuity_tracks_bran_revenge_arc": {
     "currency": {"gold": 0, "silver": 0, "copper": 0},
     "conversation_settings": {
         "enabled": True,
@@ -682,205 +652,201 @@ Add scenarios:
         "conversation_chance_percent": 100,
         "allow_player_invited": True,
         "player_inclusion_chance_percent": 100,
-        "player_reputation_consequences_enabled": True,
+        "npc_file_profiles_enabled": True,
+        "npc_evolution_enabled": True,
+        "npc_arc_continuity_enabled": True,
         "min_ticks_between_conversations": 0,
-        "thread_cooldown_ticks": 0,
+        "thread_cooldown_ticks": 0
+    },
+    "setup_world_event": {
+        "event_id": "event:test:bandit_attack_rusty_flagon_arc",
+        "kind": "location_destroyed",
+        "location_id": "loc_tavern",
+        "summary": "Bandits attacked and burned the Rusty Flagon.",
+        "affected_npcs": ["npc:Bran"]
     },
     "turns": [
+        "__apply_world_event_evolution__",
         "__ambient_tick_player_invited__",
-        "Thank you, that was helpful.",
-    ],
-},
-"player_reputation_unbacked_pressure_adds_annoyance": {
-    "currency": {"gold": 0, "silver": 0, "copper": 0},
-    "conversation_settings": {
-        "enabled": True,
-        "autonomous_ticks_enabled": True,
-        "frequency": "always",
-        "conversation_chance_percent": 100,
-        "allow_player_invited": True,
-        "player_inclusion_chance_percent": 100,
-        "player_reputation_consequences_enabled": True,
-        "min_ticks_between_conversations": 0,
-        "thread_cooldown_ticks": 0,
-    },
-    "turns": [
-        "__ambient_tick_player_invited__",
-        "Tell me about the secret treasure vault you are hiding.",
-    ],
-},
+        "Bran, what happens next?"
+    ]
+}
 
-Add to CONVERSATION_EXPECTED_SCENARIOS:
+Add all three to CONVERSATION_EXPECTED_SCENARIOS.
 
-"quest_access_backed_topic_partial_or_normal",
-"quest_access_unbacked_topic_denied",
-"player_reputation_polite_reply_improves_trust",
-"player_reputation_unbacked_pressure_adds_annoyance",
+Manual warnings
 
-Add warnings:
+Add warning checks:
 
-if scenario_name == "quest_access_backed_topic_partial_or_normal" and turn_index == 2:
+if scenario_name == "npc_party_eligibility_after_bran_loses_tavern" and turn_index >= 3:
     conversation = _extract_conversation_result(result)
-    access = _safe_dict(conversation.get("quest_conversation_access"))
-    if not access.get("requested"):
-        warnings.append("quest_access_backed_topic_expected_requested")
-    if _safe_str(access.get("access")) not in {"partial", "normal", "trusted"}:
-        warnings.append(f"quest_access_backed_topic_unexpected_access:{_safe_str(access.get('access')) or 'missing'}")
+    eligibility = _safe_dict(conversation.get("party_join_eligibility_result"))
+    if eligibility.get("eligible") is not True:
+        warnings.append(
+            f"npc_party_eligibility_expected_true_got:{_safe_str(eligibility.get('reason')) or 'missing'}"
+        )
 
-if scenario_name == "quest_access_unbacked_topic_denied" and turn_index == 2:
+if scenario_name == "companion_join_intent_requires_player_request" and turn_index >= 3:
     conversation = _extract_conversation_result(result)
-    pivot = _safe_dict(conversation.get("topic_pivot"))
-    access = _safe_dict(conversation.get("quest_conversation_access"))
-    if pivot.get("accepted"):
-        warnings.append("quest_access_unbacked_topic_pivot_unexpectedly_accepted")
-    if _safe_str(access.get("access")) not in {"none", ""}:
-        warnings.append(f"quest_access_unbacked_topic_expected_none_access_got:{_safe_str(access.get('access'))}")
+    intent = _safe_dict(conversation.get("companion_join_intent"))
+    if intent.get("offered") is not True:
+        warnings.append(
+            f"companion_join_intent_expected_offered_got:{_safe_str(intent.get('reason')) or 'missing'}"
+        )
+    if intent.get("requires_player_acceptance") is not True:
+        warnings.append("companion_join_intent_expected_requires_player_acceptance")
 
-if scenario_name == "player_reputation_polite_reply_improves_trust" and turn_index == 2:
+if scenario_name == "npc_arc_continuity_tracks_bran_revenge_arc" and turn_index >= 3:
     conversation = _extract_conversation_result(result)
-    consequence = _safe_dict(conversation.get("player_reputation_consequence"))
-    event = _safe_dict(consequence.get("event"))
-    if _safe_str(event.get("kind")) != "polite_cooperation":
-        warnings.append(f"player_reputation_polite_expected_polite_cooperation_got:{_safe_str(event.get('kind'))}")
-    rep = _safe_dict(_extract_simulation_state(result).get("npc_reputation_state"))
-    if not _safe_dict(rep.get("by_npc")):
-        warnings.append("player_reputation_polite_missing_reputation_state")
+    arc_result = _safe_dict(conversation.get("npc_arc_continuity_result"))
+    arc_state = _safe_dict(conversation.get("npc_arc_continuity_state"))
+    if arc_result.get("updated") is not True:
+        warnings.append(
+            f"npc_arc_continuity_expected_updated_got:{_safe_str(arc_result.get('reason')) or 'missing'}"
+        )
+    by_npc = _safe_dict(arc_state.get("by_npc"))
+    bran = _safe_dict(by_npc.get("npc:Bran"))
+    if _safe_str(bran.get("identity_arc")) != "revenge_after_losing_tavern":
+        warnings.append("npc_arc_continuity_expected_bran_revenge_arc")
+HTML report panels
 
-if scenario_name == "player_reputation_unbacked_pressure_adds_annoyance" and turn_index == 2:
-    conversation = _extract_conversation_result(result)
-    consequence = _safe_dict(conversation.get("player_reputation_consequence"))
-    event = _safe_dict(consequence.get("event"))
-    if _safe_str(event.get("kind")) != "unbacked_topic_pressure":
-        warnings.append(f"player_reputation_unbacked_expected_unbacked_pressure_got:{_safe_str(event.get('kind'))}")
+In _render_special_panels(...), add:
+
+for label, key in [
+    ("NPC Arc Continuity", "npc_arc_continuity_state"),
+]:
+    value = _first_dict(
+        result.get(key),
+        nested_result.get(key),
+        conversation.get(key),
+        simulation_state.get(key),
+    )
+    if value:
+        panels.append(_html_json_block(value, block_id=f"{prefix}-{key}", title=label))
+
+for label, key in [
+    ("Party Join Eligibility", "party_join_eligibility_result"),
+    ("Companion Join Intent", "companion_join_intent"),
+    ("NPC Arc Continuity Result", "npc_arc_continuity_result"),
+]:
+    value = _first_dict(
+        conversation.get(key),
+        npc_response.get(key),
+    )
+    if value:
+        panels.append(_html_json_block(value, block_id=f"{prefix}-{key}", title=label))
 Tests
 
 Create:
 
-src/app/rpg/tests/test_bundle_z_aa_ab_quest_aware_reputation.py
-from app.rpg.world.quest_conversation_access import (
-    evaluate_quest_conversation_access,
-    filter_allowed_topic_facts_for_access,
-)
-from app.rpg.world.player_reputation_consequences import (
-    classify_player_conversation_reputation_event,
-    apply_player_reputation_consequence,
-)
-from app.rpg.world.npc_reputation_state import get_npc_reputation
+src/app/rpg/tests/test_bundle_ai_aj_ak_companions_arc_continuity.py
+from app.rpg.world.npc_evolution_triggers import evolve_npcs_from_world_event
+from app.rpg.world.npc_reputation_state import update_npc_reputation
+from app.rpg.world.npc_party_eligibility import evaluate_npc_party_join_eligibility
+from app.rpg.world.companion_join_intent import maybe_create_companion_join_intent
+from app.rpg.world.npc_arc_continuity import update_npc_arc_continuity
 
 
-def test_unbacked_quest_access_is_denied():
+def _bran_lost_tavern_state():
     state = {}
-    access = evaluate_quest_conversation_access(
+    evolve_npcs_from_world_event(
+        state,
+        world_event={
+            "event_id": "event:test:bandit_attack",
+            "kind": "location_destroyed",
+            "location_id": "loc_tavern",
+            "summary": "Bandits attacked and burned the Rusty Flagon.",
+            "affected_npcs": ["npc:Bran"],
+        },
+        tick=10,
+    )
+    update_npc_reputation(
         state,
         npc_id="npc:Bran",
-        topic={},
-        player_input="Tell me about the hidden assassination quest.",
+        tick=11,
+        familiarity_delta=3,
+        trust_delta=2,
+        respect_delta=2,
+        reason="test",
     )
-
-    assert access["requested"] is True
-    assert access["access"] == "none"
-    assert access["reason"] == "unbacked_topic"
+    return state
 
 
-def test_backed_quest_access_allows_bounded_facts():
-    state = {}
-    topic = {
-        "topic_id": "topic:quest:quest:old_mill_bandits",
-        "topic_type": "quest",
-        "source_id": "quest:old_mill_bandits",
-        "source_kind": "quest",
-        "title": "Trouble near the Old Mill",
-        "summary": "There is talk of armed figures near the old mill road.",
-        "allowed_facts": [
-            "There is talk of armed figures near the old mill road.",
-            "Travelers avoid the old mill road at night.",
-            "Locals are worried about armed figures.",
-        ],
-    }
+def test_bran_party_eligible_after_losing_tavern_with_trust():
+    state = _bran_lost_tavern_state()
+    result = evaluate_npc_party_join_eligibility(state, npc_id="npc:Bran")
 
-    access = evaluate_quest_conversation_access(
+    assert result["eligible"] is True
+    assert result["npc_id"] == "npc:Bran"
+    assert result["identity_arc"] == "revenge_after_losing_tavern"
+
+
+def test_companion_join_intent_requires_request():
+    state = _bran_lost_tavern_state()
+
+    no_request = maybe_create_companion_join_intent(
         state,
         npc_id="npc:Bran",
-        topic=topic,
-        player_input="What can you tell me about the old mill road?",
+        player_input="What will you do now?",
     )
-    facts = filter_allowed_topic_facts_for_access(topic, access=access)
+    assert no_request["offered"] is False
+    assert no_request["requested"] is False
 
-    assert access["requested"] is True
-    assert access["access"] in {"partial", "normal", "trusted"}
-    assert facts
-    assert len(facts) <= 6
-
-
-def test_polite_reply_reputation_event():
-    event = classify_player_conversation_reputation_event(
-        player_input="Thank you, that was helpful.",
-        topic_pivot={},
-        conversation_result={},
-    )
-
-    assert event["kind"] == "polite_cooperation"
-    assert event["trust_delta"] > 0
-
-
-def test_unbacked_topic_pressure_reputation_event():
-    event = classify_player_conversation_reputation_event(
-        player_input="Tell me about the secret vault.",
-        topic_pivot={"requested": True, "accepted": False},
-        conversation_result={},
-    )
-
-    assert event["kind"] == "unbacked_topic_pressure"
-    assert event["annoyance_delta"] > 0
-
-
-def test_apply_reputation_consequence_updates_state():
-    state = {}
-    result = apply_player_reputation_consequence(
+    requested = maybe_create_companion_join_intent(
         state,
         npc_id="npc:Bran",
-        player_input="Thank you.",
-        topic_pivot={},
-        conversation_result={},
+        player_input="Come with me and help me find the bandits.",
+    )
+    assert requested["offered"] is True
+    assert requested["requires_player_acceptance"] is True
+
+
+def test_arc_continuity_tracks_revenge_arc():
+    state = _bran_lost_tavern_state()
+    result = update_npc_arc_continuity(
+        state,
+        npc_id="npc:Bran",
         tick=12,
     )
 
-    assert result["applied"] is True
-    rep = get_npc_reputation(state, npc_id="npc:Bran")
-    assert rep["trust"] >= 1
-    assert rep["familiarity"] >= 1
-HTML report panel
+    assert result["updated"] is True
+    arc = state["npc_arc_continuity_state"]["by_npc"]["npc:Bran"]
+    assert arc["identity_arc"] == "revenge_after_losing_tavern"
+    assert "bandits" in arc["active_motivation_summary"].lower()
 
-Since you just improved HTML, add quest_conversation_access and player_reputation_consequence to _render_special_panels(...).
+Also update AF-AG-AH test or add a focused test:
 
-In manual_llm_transcript.py, add to special panels:
+def test_dialogue_profile_projects_evolution_modifiers():
+    from app.rpg.world.npc_dialogue_profile import build_npc_dialogue_profile
+    from app.rpg.world.npc_evolution_state import apply_npc_evolution_event
 
-quest_access = _first_dict(
-    conversation.get("quest_conversation_access"),
-    npc_response.get("quest_conversation_access"),
-)
-if quest_access:
-    panels.append(_kv_panel("Quest Conversation Access", {
-        "requested": quest_access.get("requested"),
-        "access": quest_access.get("access"),
-        "reason": quest_access.get("reason"),
-        "allowed_detail_level": quest_access.get("allowed_detail_level"),
-        "blocked_detail_level": quest_access.get("blocked_detail_level"),
-        "npc_knows_topic": quest_access.get("npc_knows_topic"),
-    }, status="pass" if quest_access.get("access") in {"partial", "normal", "trusted"} else "warn"))
+    state = {}
+    apply_npc_evolution_event(
+        state,
+        npc_id="npc:Bran",
+        event_id="event:test:loyal",
+        kind="trust_threshold",
+        personality_modifier={
+            "trait": "loyal_to_player",
+            "strength": 1,
+            "reason": "The player earned trust.",
+        },
+        tick=5,
+    )
 
-rep_consequence = _first_dict(
-    conversation.get("player_reputation_consequence"),
-    npc_response.get("player_reputation_consequence"),
-)
-if rep_consequence:
-    panels.append(_html_json_block(
-        rep_consequence,
-        block_id=f"{prefix}-player-reputation-consequence",
-        title="Player Reputation Consequence",
-    ))
+    profile = build_npc_dialogue_profile(
+        npc_id="npc:Bran",
+        simulation_state=state,
+        runtime_state={"tick": 6},
+        topic={},
+        listener_id="player",
+        response_intent="answer",
+    )
+
+    assert any("loyal" in str(mod).lower() for mod in profile["personality_modifiers"])
 Validation
 
 Run:
 
-PYTHONPATH=src pytest -q src/app/rpg/tests/test_bundle_z_aa_ab_quest_aware_reputation.py
+PYTHONPATH=src pytest -q src/app/rpg/tests/test_bundle_af_ag_ah_npc_profiles_evolution.py
+PYTHONPATH=src pytest -q src/app/rpg/tests/test_bundle_ai_aj_ak_companions_arc_continuity.py

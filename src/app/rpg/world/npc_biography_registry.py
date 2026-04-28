@@ -3,6 +3,11 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any, Dict, List
 
+try:
+    from app.rpg.world.npc_profile_loader import get_file_npc_profile
+except Exception:
+    get_file_npc_profile = None  # type: ignore[assignment]
+
 
 def _safe_str(value: Any) -> str:
     return "" if value is None else str(value)
@@ -322,6 +327,15 @@ def canonical_npc_id(value: Any) -> str:
 
 def get_npc_biography(npc_id_or_name: Any) -> Dict[str, Any]:
     npc_id = canonical_npc_id(npc_id_or_name)
+
+    if get_file_npc_profile is not None:
+        try:
+            profile = get_file_npc_profile(npc_id)
+            if profile:
+                return profile
+        except Exception:
+            pass
+
     bio = NPC_BIOGRAPHIES.get(npc_id)
     if bio:
         return deepcopy(bio)

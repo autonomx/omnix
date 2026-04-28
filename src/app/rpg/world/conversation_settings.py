@@ -99,6 +99,20 @@ DEFAULT_CONVERSATION_SETTINGS: Dict[str, Any] = {
     "quest_conversation_access_enabled": True,
     "player_reputation_consequences_enabled": True,
     "quest_access_min_detail_level": 0,
+    # Bundle AC-AD-AE — Quest Rumor Propagation, NPC Referrals, Consequence Signals
+    "quest_rumor_propagation_enabled": True,
+    "quest_rumor_ttl_ticks": 120,
+    "npc_referrals_enabled": True,
+    "consequence_signals_enabled": True,
+    # Bundle AF-AG-AH — File-Based NPC Profiles + NPC Evolution Arcs
+    "npc_file_profiles_enabled": True,
+    "npc_evolution_enabled": True,
+    "npc_evolution_from_reputation_enabled": True,
+    "npc_evolution_from_world_events_enabled": True,
+    # Bundle AI-AJ-AK — Companions, Arc Continuity
+    "npc_party_eligibility_enabled": True,
+    "companion_join_intent_enabled": True,
+    "npc_arc_continuity_enabled": True,
 }
 
 
@@ -231,6 +245,53 @@ def normalize_conversation_settings(settings: Dict[str, Any]) -> Dict[str, Any]:
     merged["quest_access_min_detail_level"] = max(
         0,
         min(3, _safe_int(merged.get("quest_access_min_detail_level"), 0)),
+    )
+    # Bundle AC-AD-AE
+    merged["quest_rumor_propagation_enabled"] = _safe_bool(
+        merged.get("quest_rumor_propagation_enabled"),
+        True,
+    )
+    merged["quest_rumor_ttl_ticks"] = max(
+        4,
+        min(10000, _safe_int(merged.get("quest_rumor_ttl_ticks"), 120)),
+    )
+    merged["npc_referrals_enabled"] = _safe_bool(
+        merged.get("npc_referrals_enabled"),
+        True,
+    )
+    merged["consequence_signals_enabled"] = _safe_bool(
+        merged.get("consequence_signals_enabled"),
+        True,
+    )
+    # Bundle AF-AG-AH
+    merged["npc_file_profiles_enabled"] = _safe_bool(
+        merged.get("npc_file_profiles_enabled"),
+        True,
+    )
+    merged["npc_evolution_enabled"] = _safe_bool(
+        merged.get("npc_evolution_enabled"),
+        True,
+    )
+    merged["npc_evolution_from_reputation_enabled"] = _safe_bool(
+        merged.get("npc_evolution_from_reputation_enabled"),
+        True,
+    )
+    merged["npc_evolution_from_world_events_enabled"] = _safe_bool(
+        merged.get("npc_evolution_from_world_events_enabled"),
+        True,
+    )
+    # Bundle AI-AJ-AK
+    merged["npc_party_eligibility_enabled"] = _safe_bool(
+        merged.get("npc_party_eligibility_enabled"),
+        True,
+    )
+    merged["companion_join_intent_enabled"] = _safe_bool(
+        merged.get("companion_join_intent_enabled"),
+        True,
+    )
+    merged["npc_arc_continuity_enabled"] = _safe_bool(
+        merged.get("npc_arc_continuity_enabled"),
+        True,
     )
     return merged
 

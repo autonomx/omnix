@@ -163,6 +163,46 @@ def evaluate_quest_conversation_access(
     }
 
 
+def requested_topic_access_from_pivot(topic_pivot: Dict[str, Any]) -> Dict[str, Any]:
+    pivot = _safe_dict(topic_pivot)
+    if not pivot.get("requested"):
+        return {
+            "requested": False,
+            "source": "deterministic_requested_topic_access",
+        }
+
+    if pivot.get("accepted"):
+        return {
+            "requested": True,
+            "accepted": True,
+            "access": "backed",
+            "reason": "requested_topic_backed",
+            "requested_topic_hint": _safe_str(pivot.get("requested_topic_hint")),
+            "selected_topic_id": _safe_str(
+                pivot.get("selected_topic_id")
+                or pivot.get("topic_id")
+                or _safe_dict(pivot.get("selected_topic")).get("topic_id")
+            ),
+            "source": "deterministic_requested_topic_access",
+        }
+
+    reason = (
+        _safe_str(pivot.get("pivot_rejected_reason"))
+        or _safe_str(pivot.get("reason"))
+        or "no_backed_topic_found"
+    )
+
+    return {
+        "requested": True,
+        "accepted": False,
+        "access": "none",
+        "reason": reason,
+        "requested_topic_hint": _safe_str(pivot.get("requested_topic_hint")),
+        "safe_deflection": "I have no reliable word of that.",
+        "source": "deterministic_requested_topic_access",
+    }
+
+
 def filter_allowed_topic_facts_for_access(
     topic: Dict[str, Any],
     *,

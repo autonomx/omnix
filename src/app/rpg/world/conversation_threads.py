@@ -61,9 +61,20 @@ from app.rpg.world.npc_reputation_state import (
     update_npc_reputation,
 )
 from app.rpg.world.player_reputation_consequences import apply_player_reputation_consequence
+from app.rpg.world.consequence_signals import emit_consequence_signals
+from app.rpg.world.npc_evolution_triggers import evolve_npc_from_reputation_thresholds
+from app.rpg.world.npc_referrals import suggest_npc_referral
+from app.rpg.world.npc_party_eligibility import evaluate_npc_party_join_eligibility
+from app.rpg.world.companion_join_intent import maybe_create_companion_join_intent
+from app.rpg.world.npc_arc_continuity import update_npc_arc_continuity
 from app.rpg.world.quest_conversation_access import (
     evaluate_quest_conversation_access,
     filter_allowed_topic_facts_for_access,
+    requested_topic_access_from_pivot,
+)
+from app.rpg.world.quest_rumor_propagation import (
+    maybe_seed_quest_rumor_from_conversation,
+    prune_quest_rumors,
 )
 from app.rpg.world.scene_continuity_state import (
     update_scene_continuity_from_conversation,
@@ -1485,6 +1496,9 @@ def handle_pending_player_conversation_response(
                 )
         npc_beat_index = len(_safe_list(thread.get("beats"))) + 1
 
+        # Z-AA-AB.1: Compute requested_topic_access from pivot.
+        requested_topic_access = requested_topic_access_from_pivot(topic_pivot or {})
+
         # Z-AA-AB: Evaluate quest conversation access gate before biography response.
         quest_access: Dict[str, Any] = {}
         effective_topic = active_topic
@@ -1595,6 +1609,65 @@ def handle_pending_player_conversation_response(
                 tick=tick,
             )
         npc_response_beat["player_reputation_consequence"] = deepcopy(reputation_consequence)
+        npc_response_beat["requested_topic_access"] = deepcopy(requested_topic_access)
+
+        # AF-AG-AH: NPC evolution from reputation thresholds.
+        npc_evolution_result: Dict[str, Any] = {}
+        if settings.get("npc_evolution_enabled", True):
+            npc_evolution_result = evolve_npc_from_reputation_thresholds(
+                simulation_state,
+                npc_id=responder_id,
+                tick=tick,
+            )
+        npc_response_beat["npc_evolution_result"] = deepcopy(npc_evolution_result)
+        npc_response_beat["npc_evolution_state"] = deepcopy(_safe_dict(simulation_state.get("npc_evolution_state")))
+
+        # AI: Party eligibility check after evolution.
+        party_join_eligibility_result: Dict[str, Any] = {}
+        if settings.get("npc_party_eligibility_enabled", True):
+            party_join_eligibility_result = evaluate_npc_party_join_eligibility(
+                simulation_state,
+                npc_id=responder_id,
+            )
+        npc_response_beat["party_join_eligibility_result"] = deepcopy(party_join_eligibility_result)
+
+        # AJ: Companion join intent from player request.
+        companion_join_intent: Dict[str, Any] = {}
+        if settings.get("companion_join_intent_enabled", True):
+            companion_join_intent = maybe_create_companion_join_intent(
+                simulation_state,
+                npc_id=responder_id,
+                player_input=player_input,
+            )
+        npc_response_beat["companion_join_intent"] = deepcopy(companion_join_intent)
+
+        # AK: Arc continuity tracking.
+        npc_arc_continuity_result: Dict[str, Any] = {}
+        if settings.get("npc_arc_continuity_enabled", True):
+            npc_arc_continuity_result = update_npc_arc_continuity(
+                simulation_state,
+                npc_id=responder_id,
+                tick=tick,
+            )
+        npc_response_beat["npc_arc_continuity_result"] = deepcopy(npc_arc_continuity_result)
+
+        # AD: NPC referral suggestion.
+        npc_referral: Dict[str, Any] = {}
+        if settings.get("npc_referrals_enabled", True):
+            npc_referral = suggest_npc_referral(
+                simulation_state,
+                speaker_id=responder_id,
+                topic=effective_topic,
+                access=quest_access,
+                requested_topic_access=requested_topic_access,
+                player_input=player_input,
+            )
+            if npc_referral.get("suggested") and quest_access.get("access") in {"none", "partial"}:
+                npc_response_beat["line"] = f"{npc_response_beat.get('line', '')} {npc_referral.get('line_hint')}".strip()
+        npc_response_beat["npc_referral"] = deepcopy(npc_referral)
+    else:
+        requested_topic_access = requested_topic_access_from_pivot(topic_pivot or {})
+        npc_referral = {}
 
     state["pending_player_response"] = {}
 
@@ -1677,6 +1750,38 @@ def handle_pending_player_conversation_response(
         "response_style_source": "deterministic_conversation_social_state",
     }
 
+    # Build conversation_result snapshot for AC/AE wiring.
+    _partial_conversation_result: Dict[str, Any] = {
+        "topic_pivot": topic_pivot,
+        "quest_conversation_access": deepcopy(quest_access),
+        "requested_topic_access": deepcopy(requested_topic_access),
+        "player_reputation_consequence": deepcopy(reputation_consequence),
+        "npc_referral": deepcopy(npc_referral),
+        "npc_response_beat": deepcopy(npc_response_beat),
+        "thread": deepcopy(thread),
+    }
+
+    # AC: Quest rumor propagation.
+    quest_rumor_result: Dict[str, Any] = {}
+    if settings.get("quest_rumor_propagation_enabled", True):
+        quest_rumor_result = maybe_seed_quest_rumor_from_conversation(
+            simulation_state,
+            conversation_result=_partial_conversation_result,
+            tick=tick,
+            ttl_ticks=int(settings.get("quest_rumor_ttl_ticks") or 120),
+        )
+        prune_quest_rumors(simulation_state, current_tick=tick)
+
+    # AE: Consequence signals.
+    _partial_conversation_result["quest_rumor_result"] = deepcopy(quest_rumor_result)
+    consequence_signal_result: Dict[str, Any] = {}
+    if settings.get("consequence_signals_enabled", True):
+        consequence_signal_result = emit_consequence_signals(
+            simulation_state,
+            conversation_result=_partial_conversation_result,
+            tick=tick,
+        )
+
     result = {
         "triggered": True,
         "reason": "pending_player_response_consumed",
@@ -1703,9 +1808,23 @@ def handle_pending_player_conversation_response(
         "npc_history_state": deepcopy(_safe_dict(simulation_state.get("npc_history_state"))),
         "npc_reputation_state": deepcopy(_safe_dict(simulation_state.get("npc_reputation_state"))),
         "npc_knowledge_state": deepcopy(_safe_dict(simulation_state.get("npc_knowledge_state"))),
+        "npc_evolution_state": deepcopy(_safe_dict(simulation_state.get("npc_evolution_state"))),
+        "npc_evolution_result": deepcopy(_safe_dict(npc_response_beat.get("npc_evolution_result"))),
+        "party_join_eligibility_result": deepcopy(_safe_dict(npc_response_beat.get("party_join_eligibility_result"))),
+        "companion_join_intent": deepcopy(_safe_dict(npc_response_beat.get("companion_join_intent"))),
+        "npc_arc_continuity_result": deepcopy(_safe_dict(npc_response_beat.get("npc_arc_continuity_result"))),
+        "npc_arc_continuity_state": deepcopy(
+            _safe_dict(simulation_state.get("npc_arc_continuity_state"))
+        ),
         "scene_continuity_state": deepcopy(_safe_dict(simulation_state.get("scene_continuity_state"))),
         "quest_conversation_access": deepcopy(quest_access),
         "player_reputation_consequence": deepcopy(reputation_consequence),
+        "requested_topic_access": deepcopy(requested_topic_access),
+        "npc_referral": deepcopy(npc_referral),
+        "quest_rumor_result": deepcopy(quest_rumor_result),
+        "quest_rumor_state": deepcopy(_safe_dict(simulation_state.get("quest_rumor_state"))),
+        "consequence_signal_result": deepcopy(consequence_signal_result),
+        "consequence_signal_state": deepcopy(_safe_dict(simulation_state.get("consequence_signal_state"))),
         "conversation_thread_state": get_conversation_thread_state(simulation_state),
         "source": "deterministic_conversation_thread_runtime",
     }

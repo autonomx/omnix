@@ -8,6 +8,7 @@ from app.rpg.world.npc_dialogue_recall import (
     player_input_requests_recall,
     select_dialogue_recall,
 )
+from app.rpg.world.npc_evolution_state import get_npc_evolution, merged_npc_identity
 from app.rpg.world.npc_history_state import recent_npc_history
 from app.rpg.world.npc_knowledge_state import known_facts_for_npc
 from app.rpg.world.npc_reputation_state import (
@@ -101,6 +102,9 @@ def build_npc_dialogue_profile(
     topic = _safe_dict(topic)
 
     biography = get_npc_biography(npc_id)
+    evolution = get_npc_evolution(simulation_state, npc_id=_safe_str(biography.get("npc_id")))
+    base_biography = biography
+    biography = merged_npc_identity(base_profile=biography, evolution=evolution)
     social = _npc_social_entry(simulation_state, _safe_str(biography.get("npc_id")))
     active_goal = _npc_goal_entry(simulation_state, _safe_str(biography.get("npc_id")))
     allowed_facts = _allowed_facts_from_topic(topic)
@@ -119,7 +123,19 @@ def build_npc_dialogue_profile(
     profile = {
         "npc_id": _safe_str(biography.get("npc_id")),
         "name": _safe_str(biography.get("name")),
-        "role": _safe_str(biography.get("role")),
+        "role": _safe_str(
+            biography.get("current_role")
+            or biography.get("role")
+            or biography.get("starting_role")
+        ),
+        "base_role": _safe_str(biography.get("base_role")),
+        "starting_role": _safe_str(biography.get("starting_role")),
+        "current_role": _safe_str(biography.get("current_role") or biography.get("role")),
+        "identity_arc": _safe_str(biography.get("identity_arc")),
+        "personality_modifiers": deepcopy(_safe_list(biography.get("personality_modifiers"))),
+        "active_motivations": deepcopy(_safe_list(biography.get("active_motivations"))),
+        "party_join_eligibility": deepcopy(_safe_dict(biography.get("party_join_eligibility"))),
+        "npc_evolution": deepcopy(evolution),
         "short_bio": _safe_str(biography.get("short_bio")),
         "personality_traits": _safe_list(biography.get("personality_traits"))[:8],
         "speaking_style": deepcopy(_safe_dict(biography.get("speaking_style"))),
@@ -144,7 +160,9 @@ def build_npc_dialogue_profile(
         "dialogue_recall": deepcopy(dialogue_recall),
         "recall_requested": player_input_requests_recall(player_input),
         "quest_conversation_access": deepcopy(_safe_dict(topic.get("quest_conversation_access"))),
-        "source": "deterministic_npc_dialogue_profile",
+        "profile_source": _safe_str(biography.get("source")),
+        "biography_source": _safe_str(base_biography.get("source")),
+        "source": _safe_str(biography.get("source")) or "deterministic_npc_dialogue_profile",
     }
     return profile
 
@@ -159,7 +177,7 @@ def deterministic_biography_line(
     profile = _safe_dict(profile)
     topic = _safe_dict(topic)
     pivot = _safe_dict(pivot)
-    role = _safe_str(profile.get("role")) or "local"
+    role = _safe_str(profile.get("current_role") or profile.get("role")) or "local"
     npc_id = _safe_str(profile.get("npc_id"))
     name = _safe_str(profile.get("name")) or npc_id.replace("npc:", "")
     style = _safe_str(response_style or profile.get("reputation_response_style") or profile.get("response_intent") or "guarded")
@@ -247,6 +265,22 @@ def deterministic_biography_line(
             line = "There is something there, but not enough to name it yet."
         else:
             line = "I do not know enough to say more."
+
+    identity_arc = _safe_str(profile.get("identity_arc"))
+    motivations = _safe_list(profile.get("active_motivations"))
+    modifiers = _safe_list(profile.get("personality_modifiers"))
+
+    evolution_prefix = ""
+    if identity_arc:
+        evolution_prefix = f"As a {profile.get('current_role')}, "
+    elif motivations:
+        first_motivation = _safe_dict(motivations[0])
+        summary = _safe_str(first_motivation.get("summary"))
+        if summary:
+            evolution_prefix = f"With {summary.lower()}, "
+
+    if evolution_prefix and line:
+        line = evolution_prefix + line[0].lower() + line[1:]
 
     line = (recall_prefix + line)[:280]
 
