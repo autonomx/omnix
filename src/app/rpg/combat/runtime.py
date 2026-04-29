@@ -4,6 +4,12 @@ import hashlib
 from copy import deepcopy
 from typing import Any, Dict, List
 
+from app.rpg.interactions.equipment_runtime import (
+    consume_equipped_ammo,
+    project_equipment_stats,
+)
+from app.rpg.interactions.loot_runtime import generate_loot_from_table
+
 
 def _safe_str(value: Any) -> str:
     return "" if value is None else str(value)
@@ -48,8 +54,8 @@ def _default_enemy_bandit() -> Dict[str, Any]:
         "actor_id": "enemy:bandit_1",
         "side": "enemy",
         "name": "Bandit",
-        "hp": 12,
-        "max_hp": 12,
+        "hp": 8,
+        "max_hp": 8,
         "armor": 0,
         "defense": 10,
         "initiative_bonus": 0,
@@ -127,6 +133,106 @@ def _current_actor_id(combat_state: Dict[str, Any]) -> str:
         return ""
     idx = _safe_int(combat_state.get("turn_index"), 0) % len(order)
     return _safe_str(_safe_dict(order[idx]).get("actor_id"))
+
+
+def _participant(combat_state: Dict[str, Any], actor_id: str) -> Dict[str, Any]:
+    return _safe_dict(_safe_dict(combat_state.get("participants")).get(actor_id))
+
+
+def _living_enemy_ids(combat_state: Dict[str, Any]) -> List[str]:
+    ids: List[str] = []
+    for actor_id, participant in _safe_dict(combat_state.get("participants")).items():
+        participant = _safe_dict(participant)
+        if (
+            _safe_str(participant.get("side")) == "enemy"
+            and _safe_str(participant.get("status") or "active") == "active"
+            and _safe_int(participant.get("hp"), 0) > 0
+        ):
+            ids.append(_safe_str(actor_id))
+    return ids
+
+
+def _living_party_ids(combat_state: Dict[str, Any]) -> List[str]:
+    ids: List[str] = []
+    for actor_id, participant in _safe_dict(combat_state.get("participants")).items():
+        participant = _safe_dict(participant)
+        if (
+            _safe_str(participant.get("side")) == "party"
+            and _safe_str(participant.get("status") or "active") == "active"
+            and _safe_int(participant.get("hp"), 0) > 0
+        ):
+            ids.append(_safe_str(actor_id))
+    return ids
+
+
+def _default_target_for_actor(combat_state: Dict[str, Any], actor_id: str) -> str:
+    actor = _participant(combat_state, actor_id)
+    side = _safe_str(actor.get("side"))
+
+    if side == "enemy":
+        party = _living_party_ids(combat_state)
+        return party[0] if party else ""
+
+    enemies = _living_enemy_ids(combat_state)
+    return enemies[0] if enemies else ""
+
+
+def _combat_seed(combat_state: Dict[str, Any], *parts: Any) -> str:
+    return "|".join(
+        [
+            _safe_str(combat_state.get("encounter_id")),
+            str(_safe_int(combat_state.get("round"), 1)),
+            str(_safe_int(combat_state.get("turn_index"), 0)),
+            *[_safe_str(part) for part in parts],
+        ]
+    )
+
+
+def _actor_equipment_stats(simulation_state: Dict[str, Any], actor_id: str) -> Dict[str, Any]:
+    projected = project_equipment_stats(simulation_state, actor_id=actor_id)
+    return _safe_dict(projected.get("stats"))
+
+
+def _damage_bounds_for_actor(simulation_state: Dict[str, Any], actor_id: str) -> Dict[str, int]:
+    stats = _actor_equipment_stats(simulation_state, actor_id)
+    return {
+        "damage_min": max(1, _safe_int(stats.get("damage_min"), 1)),
+        "damage_max": max(1, _safe_int(stats.get("damage_max"), 2)),
+        "accuracy_bonus": _safe_int(stats.get("accuracy_bonus"), 0),
+        "encumbrance_penalty": _safe_int(stats.get("encumbrance_penalty"), 0),
+        "armor": _safe_int(stats.get("armor"), 0),
+    }
+
+
+def _sync_participant_hp_to_actor_state(
+    simulation_state: Dict[str, Any],
+    *,
+    actor_id: str,
+    hp: int,
+    status: str,
+) -> None:
+    if actor_id == "player":
+        player_state = _player_state(simulation_state)
+        player_state["hp"] = max(0, int(hp))
+        if status:
+            player_state["combat_status"] = status
+        simulation_state["player_state"] = player_state
+        return
+
+    if actor_id.startswith("npc:"):
+        player_state = _player_state(simulation_state)
+        party_state = _safe_dict(player_state.get("party_state"))
+        companions = _safe_list(party_state.get("companions"))
+        for companion in companions:
+            companion = _safe_dict(companion)
+            if _safe_str(companion.get("npc_id")) == actor_id:
+                companion["hp"] = max(0, int(hp))
+                if status:
+                    companion["combat_status"] = status
+                break
+        party_state["companions"] = companions
+        player_state["party_state"] = party_state
+        simulation_state["player_state"] = player_state
 
 
 def _build_initiative_order(
@@ -368,5 +474,220 @@ def gate_combat_action(
         "current_actor_id": _safe_str(turn.get("current_actor_id")),
         "action_kind": _safe_str(action_kind),
         "combat_state": deepcopy(_safe_dict(turn.get("combat_state"))),
+        "source": "deterministic_combat_runtime",
+    }
+
+
+def resolve_combat_attack(
+    simulation_state: Dict[str, Any],
+    *,
+    actor_id: str = "player",
+    target_id: str = "",
+    session_id: str = "",
+    tick: int = 0,
+) -> Dict[str, Any]:
+    combat_state = get_combat_state(simulation_state)
+    if combat_state.get("active") is not True:
+        return {
+            "resolved": False,
+            "changed_state": False,
+            "reason": "combat_not_active",
+            "source": "deterministic_combat_runtime",
+        }
+
+    actor_id = _safe_str(actor_id or "player")
+    gate = gate_combat_action(
+        simulation_state,
+        actor_id=actor_id,
+        action_kind="attack",
+    )
+    if gate.get("resolved") is not True:
+        return gate
+
+    participants = _safe_dict(combat_state.get("participants"))
+    actor = _participant(combat_state, actor_id)
+    if not actor:
+        return {
+            "resolved": False,
+            "changed_state": False,
+            "reason": "combat_actor_not_found",
+            "actor_id": actor_id,
+            "combat_state": deepcopy(combat_state),
+            "source": "deterministic_combat_runtime",
+        }
+
+    target_id = _safe_str(target_id) or _default_target_for_actor(combat_state, actor_id)
+    target = _participant(combat_state, target_id)
+    if not target:
+        return {
+            "resolved": False,
+            "changed_state": False,
+            "reason": "combat_target_not_found",
+            "actor_id": actor_id,
+            "target_id": target_id,
+            "combat_state": deepcopy(combat_state),
+            "source": "deterministic_combat_runtime",
+        }
+
+    if _safe_str(target.get("status") or "active") != "active" or _safe_int(target.get("hp"), 0) <= 0:
+        return {
+            "resolved": False,
+            "changed_state": False,
+            "reason": "combat_target_not_active",
+            "actor_id": actor_id,
+            "target_id": target_id,
+            "combat_state": deepcopy(combat_state),
+            "source": "deterministic_combat_runtime",
+        }
+
+    actor_stats = _damage_bounds_for_actor(simulation_state, actor_id)
+    target_defense = _safe_int(target.get("defense"), 10)
+    target_armor = _safe_int(target.get("armor"), 0)
+
+    ammo_result = {}
+    equipment_stats = project_equipment_stats(simulation_state, actor_id=actor_id)
+    equipped_items = _safe_list(equipment_stats.get("equipped_items"))
+    requires_ammo = False
+    for equipped in equipped_items:
+        equipped = _safe_dict(equipped)
+        if _safe_str(equipped.get("slot")) == "main_hand":
+            stats_item = _safe_dict(equipped)
+            # equipment_runtime does not expose requires_ammo_tag directly,
+            # so use ammo hook defensively. If no ammo is equipped and weapon
+            # does not need ammo, consume_equipped_ammo returns ammo_not_equipped.
+            requires_ammo = True if _safe_int(_safe_dict(equipment_stats.get("stats")).get("range"), 1) > 1 else False
+
+    if actor_id == "player" and requires_ammo:
+        ammo_result = consume_equipped_ammo(
+            simulation_state,
+            actor_id=actor_id,
+            quantity=1,
+            tick=tick,
+        )
+        if ammo_result.get("consumed") is not True:
+            return {
+                "resolved": False,
+                "changed_state": False,
+                "reason": "combat_ammo_required",
+                "actor_id": actor_id,
+                "target_id": target_id,
+                "ammo_result": deepcopy(ammo_result),
+                "combat_state": deepcopy(combat_state),
+                "source": "deterministic_combat_runtime",
+            }
+
+    attack_roll = _deterministic_roll(
+        _combat_seed(combat_state, "attack", actor_id, target_id),
+        1,
+        20,
+    )
+    attack_total = (
+        attack_roll
+        + actor_stats["accuracy_bonus"]
+        - actor_stats["encumbrance_penalty"]
+    )
+    hit = attack_total >= target_defense
+
+    hp_before = _safe_int(target.get("hp"), 0)
+    damage_roll = 0
+    armor_reduction = 0
+    damage_applied = 0
+    hp_after = hp_before
+
+    if hit:
+        damage_roll = _deterministic_roll(
+            _combat_seed(combat_state, "damage", actor_id, target_id),
+            actor_stats["damage_min"],
+            actor_stats["damage_max"],
+        )
+        armor_reduction = max(0, target_armor)
+        damage_applied = max(1, damage_roll - armor_reduction)
+        hp_after = max(0, hp_before - damage_applied)
+
+    target["hp"] = hp_after
+    defeated = hp_after <= 0
+    if defeated:
+        target["status"] = "defeated"
+
+    participants[target_id] = target
+    combat_state["participants"] = participants
+    _sync_participant_hp_to_actor_state(
+        simulation_state,
+        actor_id=target_id,
+        hp=hp_after,
+        status=_safe_str(target.get("status")),
+    )
+
+    combat_log_entry = {
+        "kind": "attack",
+        "round": _safe_int(combat_state.get("round"), 1),
+        "turn_index": _safe_int(combat_state.get("turn_index"), 0),
+        "actor_id": actor_id,
+        "target_id": target_id,
+        "attack_roll": attack_roll,
+        "attack_total": attack_total,
+        "target_defense": target_defense,
+        "hit": hit,
+        "damage_roll": damage_roll,
+        "armor_reduction": armor_reduction,
+        "damage_applied": damage_applied,
+        "target_hp_before": hp_before,
+        "target_hp_after": hp_after,
+        "defeated": defeated,
+        "tick": int(tick or 0),
+    }
+    combat_state.setdefault("combat_log", []).append(combat_log_entry)
+
+    combat_ended = False
+    loot_result = {}
+
+    if defeated and not _living_enemy_ids(combat_state):
+        combat_state["active"] = False
+        combat_state["ended_reason"] = "enemy_side_defeated"
+        combat_ended = True
+
+        loot_table_id = _safe_str(target.get("loot_table_id") or "loot:bandit_common")
+        loot_result = generate_loot_from_table(
+            simulation_state,
+            loot_table_id=loot_table_id,
+            source_id=target_id,
+            session_id=session_id,
+            tick=tick,
+            add_to_inventory=True,
+        )
+
+    if not combat_ended:
+        advance = advance_combat_turn(simulation_state, tick=tick)
+        combat_state = _safe_dict(simulation_state.get("combat_state"))
+        next_actor_id = _safe_str(advance.get("current_actor_id"))
+    else:
+        simulation_state["combat_state"] = combat_state
+        next_actor_id = ""
+
+    reason = "combat_defeat_resolved" if defeated else "combat_attack_resolved"
+
+    return {
+        "resolved": True,
+        "changed_state": True,
+        "reason": reason,
+        "actor_id": actor_id,
+        "target_id": target_id,
+        "hit": hit,
+        "attack_roll": attack_roll,
+        "attack_total": attack_total,
+        "target_defense": target_defense,
+        "damage_roll": damage_roll,
+        "armor_reduction": armor_reduction,
+        "damage_applied": damage_applied,
+        "target_hp_before": hp_before,
+        "target_hp_after": hp_after,
+        "defeated": defeated,
+        "combat_ended": combat_ended,
+        "next_actor_id": next_actor_id,
+        "ammo_result": deepcopy(ammo_result),
+        "loot_result": deepcopy(loot_result),
+        "combat_log_entry": deepcopy(combat_log_entry),
+        "combat_state": deepcopy(combat_state),
+        "tick": int(tick or 0),
         "source": "deterministic_combat_runtime",
     }

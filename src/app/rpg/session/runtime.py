@@ -8461,6 +8461,8 @@ def apply_turn(
         general_interaction_result.get("combat_state")
         or simulation_state.get("combat_state")
     )
+    combat_loot_result = _safe_dict(combat_result.get("loot_result"))
+    combat_ammo_result = _safe_dict(combat_result.get("ammo_result"))
 
     authoritative_result = _apply_turn_authoritative(
         session_id,
@@ -8563,6 +8565,8 @@ def apply_turn(
         final_result["companion_auto_equip_result"] = copy.deepcopy(companion_auto_equip_result)
         final_result["combat_result"] = copy.deepcopy(combat_result)
         final_result["combat_state"] = copy.deepcopy(combat_state)
+        final_result["combat_loot_result"] = copy.deepcopy(combat_loot_result)
+        final_result["combat_ammo_result"] = copy.deepcopy(combat_ammo_result)
         final_result["visible_interaction_reason"] = _interaction_visible_result_reason(general_interaction_result)
 
         _nested = _safe_dict(final_result.get("result"))
@@ -8598,6 +8602,8 @@ def apply_turn(
         _nested["companion_auto_equip_result"] = copy.deepcopy(companion_auto_equip_result)
         _nested["combat_result"] = copy.deepcopy(combat_result)
         _nested["combat_state"] = copy.deepcopy(combat_state)
+        _nested["combat_loot_result"] = copy.deepcopy(combat_loot_result)
+        _nested["combat_ammo_result"] = copy.deepcopy(combat_ammo_result)
         final_result["result"] = _nested
 
         _tc = _safe_dict(final_result.get("turn_contract"))
@@ -8689,6 +8695,7 @@ def apply_turn(
         or loot_result.get("changed_state") is True
         or companion_auto_equip_result.get("changed_state") is True
         or combat_result.get("changed_state") is True
+        or combat_loot_result.get("changed_state") is True
     ):
         session = _sync_session_simulation_state_for_early_return(
             session,

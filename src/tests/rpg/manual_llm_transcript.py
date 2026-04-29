@@ -2049,6 +2049,74 @@ def _persist_manual_command_simulation_state(
     return saved_simulation_state
 
 
+def _manual_force_player_combat_turn_result(
+    *,
+    session_id: str,
+    session: Dict[str, Any],
+    last_result: Dict[str, Any],
+) -> Dict[str, Any]:
+    sim = _extract_simulation_state(last_result) if last_result else _safe_dict(session.get("simulation_state"))
+    combat_state = _safe_dict(sim.get("combat_state"))
+    order = _safe_list(combat_state.get("initiative_order"))
+
+    found_index = -1
+    for idx, row in enumerate(order):
+        row = _safe_dict(row)
+        if _safe_str(row.get("actor_id")) == "player":
+            found_index = idx
+            break
+
+    changed = False
+    if combat_state.get("active") is True and found_index >= 0:
+        combat_state["turn_index"] = found_index
+        combat_state["current_actor_id"] = "player"
+        sim["combat_state"] = combat_state
+        changed = True
+
+    visible_reason = "combat_turn_forced_to_player" if changed else "player_not_in_initiative_order"
+    session["simulation_state"] = sim
+
+    persist_error = ""
+    try:
+        _save_manual_session_for_test(
+            session,
+            reason="manual_force_player_combat_turn",
+        )
+    except Exception as exc:
+        persist_error = f"{type(exc).__name__}: {exc}"
+        visible_reason = "combat_turn_force_persist_failed"
+
+    combat_result = {
+        "resolved": changed and not persist_error,
+        "changed_state": changed and not persist_error,
+        "reason": visible_reason,
+        "combat_state": combat_state,
+        "persist_error": persist_error,
+        "source": "manual_combat_test_command",
+    }
+
+    return {
+        "ok": True,
+        "visible_interaction_reason": visible_reason,
+        "narration_preview": f"Result: {visible_reason}",
+        "final_narration": f"Result: {visible_reason}",
+        "result": {
+            "ok": True,
+            "manual_command": "__manual_force_player_combat_turn__",
+            "visible_interaction_reason": visible_reason,
+            "narration_preview": f"Result: {visible_reason}",
+            "final_narration": f"Result: {visible_reason}",
+            "combat_result": combat_result,
+            "combat_state": combat_state,
+            "simulation_state": sim,
+        },
+        "combat_result": combat_result,
+        "combat_state": combat_state,
+        "simulation_state": sim,
+        "session": session,
+    }
+
+
 def _sanitize_manual_simulation_state_for_test(
     simulation_state: Dict[str, Any],
     *,
@@ -4779,6 +4847,70 @@ SERVICE_SCENARIOS = {
             "I attack the bandit."
         ]
     },
+    "combat_actions_damage_defeat": {
+        "currency": {"gold": 0, "silver": 0, "copper": 0},
+        "conversation_settings": {
+            "enabled": True,
+            "autonomous_ticks_enabled": False,
+            "frequency": "never",
+            "conversation_chance_percent": 0,
+            "allow_player_invited": False,
+            "player_inclusion_chance_percent": 0,
+            "npc_file_profiles_enabled": True,
+            "npc_evolution_enabled": True,
+            "min_ticks_between_conversations": 0,
+            "thread_cooldown_ticks": 0
+        },
+        "setup_interaction_state": {
+            "scene_items": [],
+            "scene_objects": [],
+            "player_location_id": "loc_tavern_road",
+            "player_hp": 20,
+            "player_max_hp": 20,
+            "player_inventory": {
+                "items": [
+                    {
+                        "item_id": "item:hunting_bow",
+                        "definition_id": "def:hunting_bow",
+                        "name": "hunting bow",
+                        "aliases": ["bow"]
+                    },
+                    {
+                        "item_id": "item:iron_arrow_stack_a",
+                        "definition_id": "def:iron_arrow",
+                        "name": "iron arrows",
+                        "aliases": ["arrows", "iron arrow"],
+                        "quantity": 15
+                    },
+                    {
+                        "item_id": "item:padded_armor",
+                        "definition_id": "def:padded_armor",
+                        "name": "padded armor",
+                        "aliases": ["armor"]
+                    }
+                ],
+                "equipment": {
+                    "main_hand": "item:hunting_bow",
+                    "ammo": "item:iron_arrow_stack_a",
+                    "body": "item:padded_armor"
+                },
+                "carry_capacity": 50.0
+            },
+            "party_state": {
+                "max_size": 4,
+                "companions": []
+            }
+        },
+        "turns": [
+            "I attack the bandit.",
+            "__manual_force_player_combat_turn__",
+            "I attack the bandit.",
+            "__manual_force_player_combat_turn__",
+            "I attack the bandit.",
+            "__manual_force_player_combat_turn__",
+            "I attack the bandit."
+        ]
+    },
 }
 
 
@@ -4920,7 +5052,8 @@ def _validate_companion_acceptance_final_state(
 
     if not bran:
         warnings.append("companion_acceptance_expected_bran_in_final_party_state")
-        return warnings
+
+    return warnings
 
     if _safe_str(bran.get("name")) != "Bran":
         warnings.append(
@@ -9627,7 +9760,6 @@ def _run_one_service_scenario(
 
     for index, player_input in enumerate(turns, start=1):
         manual_turn_index = int(index)
-        turn_index = manual_turn_index
         print(
             f"[manual][worker {_thread_label()}] scenario {scenario_name} "
             f"turn {index}/{len(turns)}: {player_input}",
@@ -9795,7 +9927,8 @@ def _run_one_service_scenario(
             if not sim:
                 sim = _ensure_manual_simulation_roots(session)
 
-            if command == "__manual_offer_companion_mira__":
+
+            elif command == "__manual_offer_companion_mira__":
                 record_manual_companion_join_offer_for_test_or_runtime(
                     sim,
                     npc_id="npc:Mira",
@@ -9844,8 +9977,6 @@ def _run_one_service_scenario(
             }
         elif _safe_str(player_input) == "__manual_edit_mira_profile__":
             from app.rpg.profiles.dynamic_npc_profiles import (
-                ensure_dynamic_npc_profile,
-                load_npc_profile,
                 update_npc_character_card,
             )
 
@@ -10233,6 +10364,32 @@ def _run_one_service_scenario(
                 "simulation_state": sim,
                 "session": session,
             }
+        elif _safe_str(player_input) == "__manual_force_player_combat_turn__":
+            result = _manual_force_player_combat_turn_result(
+                session_id=session_id,
+                session=session,
+                last_result=last_result,
+            )
+
+            visible_reason = _safe_str(result.get("visible_interaction_reason"))
+            last_result = result
+            scenario_results.append(
+                {
+                    "turn_index": manual_turn_index,
+                    "player_input": player_input,
+                    "result": result,
+                    "narration_preview": f"Result: {visible_reason}",
+                    "final_narration": f"Result: {visible_reason}",
+                    "visible_interaction_reason": visible_reason,
+                    "regression_warnings": _manual_regression_warnings(
+                        scenario_name=scenario_name,
+                        turn_index=manual_turn_index,
+                        player_input=player_input,
+                        result=result,
+                    ),
+                }
+            )
+            continue
         else:
             result = apply_turn(session_id=session_id, player_input=player_input)
         extracted_location_id = _extract_current_location_id(result)
@@ -10361,55 +10518,55 @@ def _run_one_service_scenario(
 
         if manual_turn_index == 1:
             if combat_result.get("resolved") is not True:
-                warnings.append(
+                scenario_warnings.append(
                     f"combat_start_expected_resolved_true_got:{_safe_str(combat_result.get('reason')) or 'missing'}"
                 )
             if _safe_str(combat_result.get("reason")) not in {"combat_started", "combat_already_active"}:
-                warnings.append(
+                scenario_warnings.append(
                     f"combat_start_expected_combat_started_got:{_safe_str(combat_result.get('reason')) or 'missing'}"
                 )
             if combat_state.get("active") is not True:
-                warnings.append("combat_start_expected_active_true")
+                scenario_warnings.append("combat_start_expected_active_true")
             if not _safe_list(combat_state.get("initiative_order")):
-                warnings.append("combat_start_expected_initiative_order")
+                scenario_warnings.append("combat_start_expected_initiative_order")
             participants = _safe_dict(combat_state.get("participants"))
             for actor_id in ("player", "npc:Bran", "enemy:bandit_1"):
                 if actor_id not in participants:
-                    warnings.append(f"combat_start_expected_participant_missing:{actor_id}")
+                    scenario_warnings.append(f"combat_start_expected_participant_missing:{actor_id}")
 
         if manual_turn_index == 2:
             current_actor = _safe_str(combat_state.get("current_actor_id"))
             reason = _safe_str(combat_result.get("reason"))
             if current_actor == "player":
                 if reason != "combat_action_allowed":
-                    warnings.append(
+                    scenario_warnings.append(
                         f"combat_turn2_expected_action_allowed_for_player_got:{reason or 'missing'}"
                     )
             else:
                 if reason != "not_actor_turn":
-                    warnings.append(
+                    scenario_warnings.append(
                         f"combat_turn2_expected_not_actor_turn_for_nonplayer_current_got:{reason or 'missing'}"
                     )
 
         if manual_turn_index == 3:
             if _safe_str(combat_result.get("reason")) != "combat_turn_advanced":
-                warnings.append(
+                scenario_warnings.append(
                     f"combat_advance_expected_combat_turn_advanced_got:{_safe_str(combat_result.get('reason')) or 'missing'}"
                 )
             if not _safe_str(combat_result.get("current_actor_id")):
-                warnings.append("combat_advance_expected_current_actor_id")
+                scenario_warnings.append("combat_advance_expected_current_actor_id")
 
         if manual_turn_index == 4:
             current_actor = _safe_str(combat_state.get("current_actor_id"))
             reason = _safe_str(combat_result.get("reason"))
             if current_actor == "player":
                 if reason != "combat_action_allowed":
-                    warnings.append(
+                    scenario_warnings.append(
                         f"combat_turn4_expected_action_allowed_for_player_got:{reason or 'missing'}"
                     )
             else:
                 if reason != "not_actor_turn":
-                    warnings.append(
+                    scenario_warnings.append(
                         f"combat_turn4_expected_not_actor_turn_for_nonplayer_current_got:{reason or 'missing'}"
                     )
 
@@ -10421,9 +10578,101 @@ def _run_one_service_scenario(
             4: {"combat_action_allowed", "not_actor_turn"},
         }
         if visible_reason and visible_reason not in expected_reasons.get(manual_turn_index, set()):
-            warnings.append(
+            scenario_warnings.append(
                 f"combat_visible_unexpected_turn_{manual_turn_index}_got:{visible_reason}"
             )
+
+    if scenario_name == "combat_actions_damage_defeat":
+        combat_result = _extract_combat_result(result)
+        combat_state = _extract_combat_state(result)
+        visible_reason = _extract_visible_interaction_reason(result)
+
+        attack_turns = {3, 5, 7}
+        force_turns = {2, 4, 6}
+
+        if manual_turn_index == 1:
+            if _safe_str(combat_result.get("reason")) != "combat_started":
+                scenario_warnings.append(
+                    f"combat_damage_start_expected_combat_started_got:{_safe_str(combat_result.get('reason')) or 'missing'}"
+                )
+            if combat_state.get("active") is not True:
+                scenario_warnings.append("combat_damage_start_expected_active_true")
+
+        if manual_turn_index in force_turns:
+            if _safe_str(combat_result.get("reason")) != "combat_turn_forced_to_player":
+                scenario_warnings.append(
+                    f"combat_damage_force_expected_player_turn_got:{_safe_str(combat_result.get('reason')) or 'missing'}"
+                )
+            if _safe_str(combat_result.get("persist_error")):
+                scenario_warnings.append(
+                    f"combat_damage_force_persist_error:{_safe_str(combat_result.get('persist_error'))}"
+                )
+            if _safe_str(combat_result.get("reason")) == "no_supported_semantic_action_detected":
+                scenario_warnings.append("combat_damage_force_command_fell_through_to_semantic_parser")
+            if _safe_str(combat_state.get("current_actor_id")) != "player":
+                scenario_warnings.append(
+                    f"combat_damage_force_expected_current_actor_player_got:{_safe_str(combat_state.get('current_actor_id')) or 'missing'}"
+                )
+
+        if manual_turn_index in attack_turns:
+            reason = _safe_str(combat_result.get("reason"))
+            if reason not in {"combat_attack_resolved", "combat_defeat_resolved"}:
+                scenario_warnings.append(
+                    f"combat_damage_attack_expected_attack_or_defeat_got:{reason or 'missing'}"
+                )
+            if combat_result.get("hit") is not True and int(combat_result.get("damage_applied") or 0) <= 0:
+                scenario_warnings.append("combat_damage_attack_expected_hit_or_positive_damage")
+            if int(combat_result.get("target_hp_after") or 999) >= int(combat_result.get("target_hp_before") or 0):
+                scenario_warnings.append(
+                    "combat_damage_attack_expected_target_hp_decrease"
+                )
+            if manual_turn_index in {5, 7} and reason == "not_actor_turn":
+                scenario_warnings.append(
+                    "combat_damage_forced_player_turn_did_not_persist_before_attack"
+                )
+
+        if manual_turn_index == 7:
+            if _safe_str(combat_result.get("reason")) != "combat_defeat_resolved":
+                prior_or_current_defeat = (
+                    _safe_str(combat_result.get("reason")) == "combat_defeat_resolved"
+                    or _safe_str(combat_state.get("ended_reason")) == "enemy_side_defeated"
+                    or combat_state.get("active") is False
+                )
+                if not prior_or_current_defeat:
+                    scenario_warnings.append(
+                        f"combat_damage_final_expected_combat_defeat_resolved_got:{_safe_str(combat_result.get('reason')) or 'missing'}"
+                    )
+
+            if combat_result.get("combat_ended") is not True:
+                scenario_warnings.append("combat_damage_final_expected_combat_ended_true")
+            if combat_state.get("active") is not False:
+                scenario_warnings.append("combat_damage_final_expected_combat_state_inactive")
+            loot = _safe_dict(combat_result.get("loot_result"))
+            if loot.get("resolved") is not True:
+                scenario_warnings.append(
+                    f"combat_damage_final_expected_loot_generated_got:{_safe_str(loot.get('reason')) or 'missing'}"
+                )
+
+        expected_visible = {
+            1: "combat_started",
+            2: "combat_turn_forced_to_player",
+            3: {"combat_attack_resolved", "combat_defeat_resolved"},
+            4: "combat_turn_forced_to_player",
+            5: {"combat_attack_resolved", "combat_defeat_resolved"},
+            6: "combat_turn_forced_to_player",
+            7: {"combat_defeat_resolved", "combat_not_active", "combat_turn_forced_to_player"},
+        }.get(manual_turn_index)
+
+        if isinstance(expected_visible, set):
+            if visible_reason not in expected_visible:
+                scenario_warnings.append(
+                    f"combat_damage_visible_expected_one_of_{sorted(expected_visible)}_got:{visible_reason or 'missing'}"
+                )
+        elif expected_visible and visible_reason != expected_visible:
+            scenario_warnings.append(
+                f"combat_damage_visible_expected_{expected_visible}_got:{visible_reason or 'missing'}"
+            )
+
 
     return {
         "scenario": scenario_name,

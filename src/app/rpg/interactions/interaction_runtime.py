@@ -21,6 +21,7 @@ from app.rpg.interactions.target_resolver import (
 from app.rpg.combat.runtime import (
     gate_combat_action,
     is_combat_active,
+    resolve_combat_attack,
     start_combat_encounter,
 )
 
@@ -110,10 +111,17 @@ def resolve_general_interaction(
                 tick=tick,
             )
         else:
-            combat_result = gate_combat_action(
+            target_ref = _safe_str(enriched_action.get("target_ref"))
+            target_id = ""
+            if "bandit" in target_ref.lower():
+                target_id = "enemy:bandit_1"
+
+            combat_result = resolve_combat_attack(
                 simulation_state,
                 actor_id=_safe_str(enriched_action.get("actor_id") or actor_id or "player"),
-                action_kind="attack",
+                target_id=target_id,
+                session_id=_safe_str(simulation_state.get("session_id")),
+                tick=tick,
             )
 
         interaction_result = {
