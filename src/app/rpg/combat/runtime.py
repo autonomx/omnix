@@ -485,6 +485,7 @@ def resolve_combat_attack(
     target_id: str = "",
     session_id: str = "",
     tick: int = 0,
+    combat_modifiers: Dict[str, Any] | None = None,
 ) -> Dict[str, Any]:
     combat_state = get_combat_state(simulation_state)
     if combat_state.get("active") is not True:
@@ -496,6 +497,9 @@ def resolve_combat_attack(
         }
 
     actor_id = _safe_str(actor_id or "player")
+    combat_modifiers = _safe_dict(combat_modifiers)
+    morale_accuracy_bonus = _safe_int(combat_modifiers.get("accuracy_bonus"), 0)
+    morale_damage_bonus = _safe_int(combat_modifiers.get("damage_bonus"), 0)
     gate = gate_combat_action(
         simulation_state,
         actor_id=actor_id,
@@ -551,20 +555,22 @@ def resolve_combat_attack(
     for equipped in equipped_items:
         equipped = _safe_dict(equipped)
         if _safe_str(equipped.get("slot")) == "main_hand":
-            stats_item = _safe_dict(equipped)
             # equipment_runtime does not expose requires_ammo_tag directly,
             # so use ammo hook defensively. If no ammo is equipped and weapon
             # does not need ammo, consume_equipped_ammo returns ammo_not_equipped.
             requires_ammo = True if _safe_int(_safe_dict(equipment_stats.get("stats")).get("range"), 1) > 1 else False
 
-    if actor_id == "player" and requires_ammo:
+    if requires_ammo:
         ammo_result = consume_equipped_ammo(
             simulation_state,
             actor_id=actor_id,
             quantity=1,
             tick=tick,
         )
-        if ammo_result.get("consumed") is not True:
+        # Companions may not have ammo in this phase. Let melee/no-ammo
+        # companions still resolve with their projected weapon stats unless
+        # the player is explicitly using an ammo weapon.
+        if ammo_result.get("consumed") is not True and actor_id == "player":
             return {
                 "resolved": False,
                 "changed_state": False,
@@ -584,6 +590,7 @@ def resolve_combat_attack(
     attack_total = (
         attack_roll
         + actor_stats["accuracy_bonus"]
+        + morale_accuracy_bonus
         - actor_stats["encumbrance_penalty"]
     )
     hit = attack_total >= target_defense
@@ -601,7 +608,7 @@ def resolve_combat_attack(
             actor_stats["damage_max"],
         )
         armor_reduction = max(0, target_armor)
-        damage_applied = max(1, damage_roll - armor_reduction)
+        damage_applied = max(1, damage_roll + morale_damage_bonus - armor_reduction)
         hp_after = max(0, hp_before - damage_applied)
 
     target["hp"] = hp_after
@@ -626,9 +633,12 @@ def resolve_combat_attack(
         "target_id": target_id,
         "attack_roll": attack_roll,
         "attack_total": attack_total,
+        "equipment_accuracy_bonus": actor_stats["accuracy_bonus"],
+        "morale_accuracy_bonus": morale_accuracy_bonus,
         "target_defense": target_defense,
         "hit": hit,
         "damage_roll": damage_roll,
+        "morale_damage_bonus": morale_damage_bonus,
         "armor_reduction": armor_reduction,
         "damage_applied": damage_applied,
         "target_hp_before": hp_before,
@@ -675,8 +685,11 @@ def resolve_combat_attack(
         "hit": hit,
         "attack_roll": attack_roll,
         "attack_total": attack_total,
+        "equipment_accuracy_bonus": actor_stats["accuracy_bonus"],
+        "morale_accuracy_bonus": morale_accuracy_bonus,
         "target_defense": target_defense,
         "damage_roll": damage_roll,
+        "morale_damage_bonus": morale_damage_bonus,
         "armor_reduction": armor_reduction,
         "damage_applied": damage_applied,
         "target_hp_before": hp_before,

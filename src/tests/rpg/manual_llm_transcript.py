@@ -29,6 +29,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 from app.rpg.session.runtime import apply_turn
 from app.rpg.world.conversation_threads import has_pending_player_conversation_response
 from app.rpg.combat.runtime import advance_combat_turn
+from app.rpg.combat.companion_runtime import resolve_current_companion_combat_turn
 from app.runtime_paths import resources_data_root
 
 MANUAL_LOG_MAX_CHUNK_BYTES = 1_000_000
@@ -1006,6 +1007,7 @@ def _render_special_panels(result: Dict[str, Any], *, prefix: str) -> str:
         ("Scene Continuity", "scene_continuity_state"),
         ("Combat Result", "combat_result"),
         ("Combat State", "combat_state"),
+        ("Companion Combat Result", "companion_combat_result"),
     ]:
         value = _first_dict(
             result.get(key),
@@ -4906,7 +4908,87 @@ SERVICE_SCENARIOS = {
             "__manual_force_player_combat_turn__",
             "I attack the bandit.",
             "__manual_force_player_combat_turn__",
+            "I attack the bandit."
+        ]
+    },
+    "companion_combat_participation": {
+        "currency": {"gold": 0, "silver": 0, "copper": 0},
+        "conversation_settings": {
+            "enabled": True,
+            "autonomous_ticks_enabled": False,
+            "frequency": "never",
+            "conversation_chance_percent": 0,
+            "allow_player_invited": False,
+            "player_inclusion_chance_percent": 0,
+            "npc_file_profiles_enabled": True,
+            "npc_evolution_enabled": True,
+            "min_ticks_between_conversations": 0,
+            "thread_cooldown_ticks": 0
+        },
+        "setup_interaction_state": {
+            "scene_items": [],
+            "scene_objects": [],
+            "player_location_id": "loc_tavern_road",
+            "player_hp": 20,
+            "player_max_hp": 20,
+            "player_inventory": {
+                "items": [
+                    {
+                        "item_id": "item:hunting_bow",
+                        "definition_id": "def:hunting_bow",
+                        "name": "hunting bow",
+                        "aliases": ["bow"]
+                    },
+                    {
+                        "item_id": "item:iron_arrow_stack_a",
+                        "definition_id": "def:iron_arrow",
+                        "name": "iron arrows",
+                        "aliases": ["arrows", "iron arrow"],
+                        "quantity": 15
+                    }
+                ],
+                "equipment": {
+                    "main_hand": "item:hunting_bow",
+                    "ammo": "item:iron_arrow_stack_a"
+                },
+                "carry_capacity": 50.0
+            },
+            "party_state": {
+                "max_size": 4,
+                "companions": [
+                    {
+                        "npc_id": "npc:Bran",
+                        "name": "Bran",
+                        "role": "companion",
+                        "status": "active",
+                        "follow_mode": "following_player",
+                        "location_id": "loc_tavern_road",
+                        "current_role": "Displaced tavern keeper",
+                        "identity_arc": "revenge_after_losing_tavern",
+                        "active_motivations": ["revenge", "protect the party"],
+                        "loyalty": 35,
+                        "inventory": {
+                            "items": [
+                                {
+                                    "item_id": "item:bran_rusty_dagger",
+                                    "definition_id": "def:rusty_dagger",
+                                    "name": "rusty dagger",
+                                    "aliases": ["dagger"]
+                                }
+                            ],
+                            "equipment": {
+                                "main_hand": "item:bran_rusty_dagger"
+                            },
+                            "carry_capacity": 50.0
+                        }
+                    }
+                ]
+            }
+        },
+        "turns": [
             "I attack the bandit.",
+            "__manual_resolve_current_combat_actor__",
+            "__manual_resolve_current_combat_actor__",
             "__manual_force_player_combat_turn__",
             "I attack the bandit."
         ]
@@ -6235,6 +6317,17 @@ def _extract_combat_state(result: Dict[str, Any]) -> Dict[str, Any]:
         result.get("combat_state"),
         nested.get("combat_state"),
         sim.get("combat_state"),
+    )
+
+
+def _extract_companion_combat_result(result: Dict[str, Any]) -> Dict[str, Any]:
+    result = _safe_dict(result)
+    nested = _safe_dict(result.get("result"))
+    interaction = _extract_interaction_result(result)
+    return _first_dict(
+        interaction.get("companion_combat_result"),
+        result.get("companion_combat_result"),
+        nested.get("companion_combat_result"),
     )
 
 
@@ -10390,6 +10483,79 @@ def _run_one_service_scenario(
                 }
             )
             continue
+        elif _safe_str(player_input) == "__manual_resolve_current_combat_actor__":
+            sim = _extract_simulation_state(last_result) if last_result else _safe_dict(session.get("simulation_state"))
+
+            companion_combat_result = resolve_current_companion_combat_turn(
+                sim,
+                session_id=session_id,
+                tick=manual_turn_index,
+            )
+
+            visible_reason = _safe_str(companion_combat_result.get("reason") or "combat_actor_not_resolved")
+            session["simulation_state"] = sim
+
+            persist_error = ""
+            try:
+                _save_manual_session_for_test(
+                    session,
+                    reason="manual_resolve_current_combat_actor",
+                )
+            except TypeError:
+                _save_manual_session_for_test(
+                    session_id=session_id,
+                    session=session,
+                    reason="manual_resolve_current_combat_actor",
+                )
+            except Exception as exc:
+                persist_error = f"{type(exc).__name__}: {exc}"
+                visible_reason = "combat_actor_resolve_persist_failed"
+
+            if persist_error:
+                companion_combat_result["persist_error"] = persist_error
+                companion_combat_result["reason"] = visible_reason
+
+            result = {
+                "ok": True,
+                "visible_interaction_reason": visible_reason,
+                "narration_preview": f"Result: {visible_reason}",
+                "final_narration": f"Result: {visible_reason}",
+                "result": {
+                    "ok": True,
+                    "manual_command": player_input,
+                    "visible_interaction_reason": visible_reason,
+                    "narration_preview": f"Result: {visible_reason}",
+                    "final_narration": f"Result: {visible_reason}",
+                    "companion_combat_result": companion_combat_result,
+                    "combat_result": companion_combat_result,
+                    "combat_state": _safe_dict(sim.get("combat_state")),
+                    "simulation_state": sim,
+                },
+                "companion_combat_result": companion_combat_result,
+                "combat_result": companion_combat_result,
+                "combat_state": _safe_dict(sim.get("combat_state")),
+                "simulation_state": sim,
+                "session": session,
+            }
+
+            last_result = result
+            scenario_results.append(
+                {
+                    "turn_index": manual_turn_index,
+                    "player_input": player_input,
+                    "result": result,
+                    "narration_preview": f"Result: {visible_reason}",
+                    "final_narration": f"Result: {visible_reason}",
+                    "visible_interaction_reason": visible_reason,
+                    "regression_warnings": _manual_regression_warnings(
+                        scenario_name=scenario_name,
+                        turn_index=manual_turn_index,
+                        player_input=player_input,
+                        result=result,
+                    ),
+                }
+            )
+            continue
         else:
             result = apply_turn(session_id=session_id, player_input=player_input)
         extracted_location_id = _extract_current_location_id(result)
@@ -10587,8 +10753,8 @@ def _run_one_service_scenario(
         combat_state = _extract_combat_state(result)
         visible_reason = _extract_visible_interaction_reason(result)
 
-        attack_turns = {3, 5, 7}
-        force_turns = {2, 4, 6}
+        attack_turns = {3, 5}
+        force_turns = {2, 4}
 
         if manual_turn_index == 1:
             if _safe_str(combat_result.get("reason")) != "combat_started":
@@ -10631,7 +10797,7 @@ def _run_one_service_scenario(
                     "combat_damage_forced_player_turn_did_not_persist_before_attack"
                 )
 
-        if manual_turn_index == 7:
+        if manual_turn_index == 5:
             if _safe_str(combat_result.get("reason")) != "combat_defeat_resolved":
                 prior_or_current_defeat = (
                     _safe_str(combat_result.get("reason")) == "combat_defeat_resolved"
@@ -10658,9 +10824,7 @@ def _run_one_service_scenario(
             2: "combat_turn_forced_to_player",
             3: {"combat_attack_resolved", "combat_defeat_resolved"},
             4: "combat_turn_forced_to_player",
-            5: {"combat_attack_resolved", "combat_defeat_resolved"},
-            6: "combat_turn_forced_to_player",
-            7: {"combat_defeat_resolved", "combat_not_active", "combat_turn_forced_to_player"},
+            5: "combat_defeat_resolved",
         }.get(manual_turn_index)
 
         if isinstance(expected_visible, set):
@@ -10671,6 +10835,98 @@ def _run_one_service_scenario(
         elif expected_visible and visible_reason != expected_visible:
             scenario_warnings.append(
                 f"combat_damage_visible_expected_{expected_visible}_got:{visible_reason or 'missing'}"
+            )
+
+    if scenario_name == "companion_combat_participation":
+        combat_result = _extract_combat_result(result)
+        companion_combat = _extract_companion_combat_result(result)
+        combat_state = _extract_combat_state(result)
+        visible_reason = _extract_visible_interaction_reason(result)
+
+        if manual_turn_index == 1:
+            if _safe_str(combat_result.get("reason")) != "combat_started":
+                scenario_warnings.append(
+                    f"companion_combat_start_expected_combat_started_got:{_safe_str(combat_result.get('reason')) or 'missing'}"
+                )
+            participants = _safe_dict(combat_state.get("participants"))
+            if "npc:Bran" not in participants:
+                scenario_warnings.append("companion_combat_expected_bran_participant")
+
+        if manual_turn_index in {2, 3}:
+            reason = _safe_str(companion_combat.get("reason") or combat_result.get("reason"))
+            allowed = {
+                "companion_combat_attack_resolved",
+                "companion_combat_defeat_resolved",
+                "enemy_turn_skipped_for_v1",
+                "current_actor_not_companion",
+                "combat_not_active",
+            }
+            if reason not in allowed:
+                scenario_warnings.append(
+                    f"companion_combat_actor_resolve_unexpected_reason:{reason or 'missing'}"
+                )
+
+            if reason in {"companion_combat_attack_resolved", "companion_combat_defeat_resolved"}:
+                if _safe_str(companion_combat.get("actor_id")) != "npc:Bran":
+                    scenario_warnings.append(
+                        f"companion_combat_expected_actor_bran_got:{_safe_str(companion_combat.get('actor_id')) or 'missing'}"
+                    )
+                morale = _safe_dict(companion_combat.get("morale"))
+                if _safe_str(morale.get("morale_state")) != "motivated":
+                    scenario_warnings.append(
+                        f"companion_combat_expected_bran_motivated_got:{_safe_str(morale.get('morale_state')) or 'missing'}"
+                    )
+                attack = _safe_dict(companion_combat.get("attack_result"))
+                expected_accuracy_bonus = int(morale.get("accuracy_bonus") or 0)
+                expected_damage_bonus = int(morale.get("damage_bonus") or 0)
+
+                if int(attack.get("morale_accuracy_bonus") or 0) != expected_accuracy_bonus:
+                    scenario_warnings.append(
+                        "companion_combat_expected_morale_accuracy_bonus_applied_got:"
+                        + _safe_str(attack.get("morale_accuracy_bonus"))
+                    )
+
+                if int(attack.get("morale_damage_bonus") or 0) != expected_damage_bonus:
+                    scenario_warnings.append(
+                        "companion_combat_expected_morale_damage_bonus_applied_got:"
+                        + _safe_str(attack.get("morale_damage_bonus"))
+                    )
+
+                if expected_accuracy_bonus:
+                    attack_roll = int(attack.get("attack_roll") or 0)
+                    equipment_accuracy = int(attack.get("equipment_accuracy_bonus") or 0)
+                    encumbrance_penalty = 0
+                    expected_total = attack_roll + equipment_accuracy + expected_accuracy_bonus - encumbrance_penalty
+                    if int(attack.get("attack_total") or 0) != expected_total:
+                        scenario_warnings.append(
+                            f"companion_combat_expected_attack_total_{expected_total}_got:{int(attack.get('attack_total') or 0)}"
+                        )
+
+                if expected_damage_bonus and attack.get("hit") is True:
+                    damage_roll = int(attack.get("damage_roll") or 0)
+                    armor_reduction = int(attack.get("armor_reduction") or 0)
+                    expected_damage = max(1, damage_roll + expected_damage_bonus - armor_reduction)
+                    if int(attack.get("damage_applied") or 0) != expected_damage:
+                        scenario_warnings.append(
+                            f"companion_combat_expected_damage_applied_{expected_damage}_got:{int(attack.get('damage_applied') or 0)}"
+                        )
+
+        if manual_turn_index == 4:
+            if _safe_str(combat_result.get("reason")) != "combat_turn_forced_to_player":
+                scenario_warnings.append(
+                    f"companion_combat_force_expected_player_turn_got:{_safe_str(combat_result.get('reason')) or 'missing'}"
+                )
+
+        if manual_turn_index == 5:
+            reason = _safe_str(combat_result.get("reason"))
+            if reason not in {"combat_attack_resolved", "combat_defeat_resolved", "combat_not_active"}:
+                scenario_warnings.append(
+                    f"companion_combat_player_attack_expected_attack_or_defeat_got:{reason or 'missing'}"
+                )
+
+        if visible_reason in {"no_supported_semantic_action_detected", ""}:
+            scenario_warnings.append(
+                f"companion_combat_visible_reason_invalid:{visible_reason or 'missing'}"
             )
 
 
