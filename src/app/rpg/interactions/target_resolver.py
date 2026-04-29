@@ -278,6 +278,42 @@ def resolve_target_ref(
     best = [item for item in candidates if item[0] == best_score]
 
     if len(best) > 1:
+        # Multiple systems can expose the same NPC/item through different
+        # projections, for example present_npc_state and party_state. If the
+        # best candidates point to the same stable entity, this is not a real
+        # ambiguity.
+        unique_best = {}
+        for item in best:
+            entity = _safe_dict(item[3])
+            key = (_entity_type(entity), _entity_id(entity))
+            if not key[0] or not key[1]:
+                continue
+            if key not in unique_best:
+                unique_best[key] = item
+
+        if len(unique_best) == 1:
+            item = next(iter(unique_best.values()))
+            entity = _safe_dict(item[3])
+            return {
+                "resolved": True,
+                "reason": "duplicate_entity_candidate_resolved",
+                "target_ref": target_ref,
+                "target_id": _entity_id(entity),
+                "target_type": _entity_type(entity),
+                "score": item[0],
+                "entity": deepcopy(entity),
+                "duplicate_candidates": [
+                    {
+                        "entity_id": candidate[1],
+                        "entity_type": candidate[2],
+                        "score": candidate[0],
+                        "name": _safe_str(_safe_dict(candidate[3]).get("name")),
+                    }
+                    for candidate in best[:8]
+                ],
+                "source": "deterministic_target_resolver",
+            }
+
         best_entities = [_safe_dict(item[3]) for item in best]
         best_types = {_entity_type(entity) for entity in best_entities}
         best_defs = {

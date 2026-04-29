@@ -474,18 +474,22 @@ def resolve_semantic_action_v2(
             "source": "deterministic_semantic_action_resolver_v2",
         }
 
-    if re.search(r"\b(attack|strike|hit|stab|shoot)\b", text):
+    if re.search(r"\b(attack|strike|shoot|stab|slash|hit)\b", text):
         target = _first_match(
             [
-                r"\b(?:attack|strike|hit|stab|shoot)\s+([^,.!?]+)",
+                r"\b(?:attack|strike|shoot|stab|slash|hit)\s+([^,.!?]+)",
+                r"\bshoot\s+at\s+([^,.!?]+)",
             ],
             text,
         )
+
+        target = re.sub(r"^\s*(the|a|an)\s+", "", _safe_str(target), flags=re.I).strip()
+
         return {
             "resolved": True,
             "kind": "attack",
             "actor_id": actor_id,
-            "target_ref": target,
+            "target_ref": _clean_target_ref(target),
             "confidence": "high" if target else "low",
             "raw_input": raw,
             "source": "deterministic_semantic_action_resolver_v2",

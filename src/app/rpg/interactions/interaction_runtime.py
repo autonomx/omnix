@@ -18,6 +18,11 @@ from app.rpg.interactions.target_resolver import (
     expected_target_types_for_action,
     resolve_target_ref,
 )
+from app.rpg.combat.runtime import (
+    gate_combat_action,
+    is_combat_active,
+    start_combat_encounter,
+)
 
 
 def _safe_str(value: Any) -> str:
@@ -92,6 +97,41 @@ def resolve_general_interaction(
             "handled": False,
             "semantic_action_v2": deepcopy(action),
             "interaction_result": _build_unresolved_result(action, _safe_str(action.get("reason"))),
+            "source": "deterministic_general_interaction_runtime",
+        }
+
+    if kind == "attack":
+        enriched_action = deepcopy(action)
+
+        if not is_combat_active(simulation_state):
+            combat_result = start_combat_encounter(
+                simulation_state,
+                encounter_id="enc:bandit_ambush",
+                tick=tick,
+            )
+        else:
+            combat_result = gate_combat_action(
+                simulation_state,
+                actor_id=_safe_str(enriched_action.get("actor_id") or actor_id or "player"),
+                action_kind="attack",
+            )
+
+        interaction_result = {
+            "resolved": bool(combat_result.get("resolved")),
+            "changed_state": bool(combat_result.get("changed_state")),
+            "reason": _safe_str(combat_result.get("reason")),
+            "semantic_action_v2": deepcopy(enriched_action),
+            "combat_result": deepcopy(combat_result),
+            "combat_state": deepcopy(combat_result.get("combat_state") or simulation_state.get("combat_state") or {}),
+            "source": "deterministic_general_interaction_runtime",
+        }
+
+        return {
+            "handled": bool(interaction_result.get("resolved")),
+            "semantic_action_v2": deepcopy(enriched_action),
+            "interaction_result": deepcopy(interaction_result),
+            "combat_result": deepcopy(combat_result),
+            "combat_state": deepcopy(interaction_result.get("combat_state")),
             "source": "deterministic_general_interaction_runtime",
         }
 

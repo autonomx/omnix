@@ -28,6 +28,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 
 from app.rpg.session.runtime import apply_turn
 from app.rpg.world.conversation_threads import has_pending_player_conversation_response
+from app.rpg.combat.runtime import advance_combat_turn
 from app.runtime_paths import resources_data_root
 
 MANUAL_LOG_MAX_CHUNK_BYTES = 1_000_000
@@ -1003,6 +1004,8 @@ def _render_special_panels(result: Dict[str, Any], *, prefix: str) -> str:
         ("Present NPCs", "present_npc_state"),
         ("Conversation Threads", "conversation_thread_state"),
         ("Scene Continuity", "scene_continuity_state"),
+        ("Combat Result", "combat_result"),
+        ("Combat State", "combat_state"),
     ]:
         value = _first_dict(
             result.get(key),
@@ -4688,6 +4691,94 @@ SERVICE_SCENARIOS = {
             "I give the stolen ring to Captain Aldric."
         ]
     },
+    "combat_state_initiative_turn_gating": {
+        "currency": {"gold": 0, "silver": 0, "copper": 0},
+        "conversation_settings": {
+            "enabled": True,
+            "autonomous_ticks_enabled": False,
+            "frequency": "never",
+            "conversation_chance_percent": 0,
+            "allow_player_invited": False,
+            "player_inclusion_chance_percent": 0,
+            "npc_file_profiles_enabled": True,
+            "npc_evolution_enabled": True,
+            "min_ticks_between_conversations": 0,
+            "thread_cooldown_ticks": 0
+        },
+        "setup_interaction_state": {
+            "scene_items": [],
+            "scene_objects": [],
+            "player_location_id": "loc_tavern_road",
+            "player_hp": 20,
+            "player_max_hp": 20,
+            "player_inventory": {
+                "items": [
+                    {
+                        "item_id": "item:hunting_bow",
+                        "definition_id": "def:hunting_bow",
+                        "name": "hunting bow",
+                        "aliases": ["bow"]
+                    },
+                    {
+                        "item_id": "item:iron_arrow_stack_a",
+                        "definition_id": "def:iron_arrow",
+                        "name": "iron arrows",
+                        "aliases": ["arrows", "iron arrow"],
+                        "quantity": 15
+                    },
+                    {
+                        "item_id": "item:padded_armor",
+                        "definition_id": "def:padded_armor",
+                        "name": "padded armor",
+                        "aliases": ["armor"]
+                    }
+                ],
+                "equipment": {
+                    "main_hand": "item:hunting_bow",
+                    "ammo": "item:iron_arrow_stack_a",
+                    "body": "item:padded_armor"
+                },
+                "carry_capacity": 50.0
+            },
+            "party_state": {
+                "max_size": 4,
+                "companions": [
+                    {
+                        "npc_id": "npc:Bran",
+                        "name": "Bran",
+                        "role": "companion",
+                        "status": "active",
+                        "follow_mode": "following_player",
+                        "location_id": "loc_tavern_road",
+                        "current_role": "Displaced tavern keeper",
+                        "identity_arc": "revenge_after_losing_tavern",
+                        "active_motivations": ["revenge"],
+                        "loyalty": 35,
+                        "inventory": {
+                            "items": [
+                                {
+                                    "item_id": "item:bran_rusty_dagger",
+                                    "definition_id": "def:rusty_dagger",
+                                    "name": "rusty dagger",
+                                    "aliases": ["dagger"]
+                                }
+                            ],
+                            "equipment": {
+                                "main_hand": "item:bran_rusty_dagger"
+                            },
+                            "carry_capacity": 50.0
+                        }
+                    }
+                ]
+            }
+        },
+        "turns": [
+            "I attack the bandit.",
+            "I attack the bandit.",
+            "__manual_advance_combat_turn__",
+            "I attack the bandit."
+        ]
+    },
 }
 
 
@@ -4749,6 +4840,18 @@ CONVERSATION_EXPECTED_SCENARIOS = {
 SCENE_ACTIVITY_ONLY_SCENARIOS = {
     "scene_activity_schedules_idle_action",
     "scene_activity_respects_cooldown",
+}
+
+
+NON_CONVERSATION_ALLOWED_SCENARIOS = {
+    "companion_inventory_auto_equip",
+    "inventory_item_interaction_runtime",
+    "inventory_item_model_stacking_weight_encumbrance",
+    "inventory_containers_durability_repair",
+    "inventory_consumables_ammo_equipment_stats",
+    "inventory_crafting_recipes_materials",
+    "inventory_loot_merchant_economy",
+    "combat_state_initiative_turn_gating",
 }
 
 
@@ -5616,6 +5719,41 @@ def _extract_conversation_result(result: Dict[str, Any]) -> Dict[str, Any]:
     return {}
 
 
+def _has_real_conversation_activity(result: Dict[str, Any]) -> bool:
+    result = _safe_dict(result)
+    nested = _safe_dict(result.get("result"))
+    turn_contract = _safe_dict(result.get("turn_contract"))
+    resolved_result = _safe_dict(turn_contract.get("resolved_result"))
+
+    conversation = _first_dict(
+        result.get("conversation_result"),
+        nested.get("conversation_result"),
+        turn_contract.get("conversation_result"),
+        resolved_result.get("conversation_result"),
+    )
+
+    if not conversation:
+        return False
+
+    real_markers = [
+        conversation.get("npc_response_beat"),
+        conversation.get("beat"),
+        conversation.get("thread"),
+        conversation.get("topic_pivot"),
+        conversation.get("player_invited_conversation_result"),
+        conversation.get("autonomous_conversation_result"),
+    ]
+
+    for marker in real_markers:
+        marker = _safe_dict(marker)
+        if marker:
+            return True
+
+    # A reason-only scaffold or companion context projection is not a real
+    # conversation trigger.
+    return False
+
+
 def _extract_ambient_tick_result(result: Dict[str, Any]) -> Dict[str, Any]:
     result_sub = _safe_dict(_safe_dict(result).get("result"))
     direct = _safe_dict(result_sub.get("ambient_tick_result"))
@@ -5945,6 +6083,28 @@ def _extract_interaction_result(result: Dict[str, Any]) -> Dict[str, Any]:
     return {}
 
 
+def _extract_combat_result(result: Dict[str, Any]) -> Dict[str, Any]:
+    result = _safe_dict(result)
+    nested = _safe_dict(result.get("result"))
+    interaction = _extract_interaction_result(result)
+    return _first_dict(
+        interaction.get("combat_result"),
+        result.get("combat_result"),
+        nested.get("combat_result"),
+    )
+
+
+def _extract_combat_state(result: Dict[str, Any]) -> Dict[str, Any]:
+    result = _safe_dict(result)
+    nested = _safe_dict(result.get("result"))
+    sim = _extract_simulation_state(result)
+    return _first_dict(
+        result.get("combat_state"),
+        nested.get("combat_state"),
+        sim.get("combat_state"),
+    )
+
+
 def _extract_semantic_action_v2(result: Dict[str, Any]) -> Dict[str, Any]:
     result = _safe_dict(result)
     result_sub = _safe_dict(result.get("result"))
@@ -6160,9 +6320,9 @@ def _manual_regression_warnings(
     conversation_triggered = bool(conversation.get("triggered"))
 
     if (
-        conversation.get("triggered")
-        and scenario_name not in CONVERSATION_EXPECTED_SCENARIOS
-        and scenario_name not in SCENE_ACTIVITY_ONLY_SCENARIOS
+        scenario_name not in CONVERSATION_EXPECTED_SCENARIOS
+        and scenario_name not in NON_CONVERSATION_ALLOWED_SCENARIOS
+        and _has_real_conversation_activity(result)
     ):
         warnings.append("conversation_triggered_in_non_conversation_scenario")
 
@@ -9467,6 +9627,7 @@ def _run_one_service_scenario(
 
     for index, player_input in enumerate(turns, start=1):
         manual_turn_index = int(index)
+        turn_index = manual_turn_index
         print(
             f"[manual][worker {_thread_label()}] scenario {scenario_name} "
             f"turn {index}/{len(turns)}: {player_input}",
@@ -10037,6 +10198,41 @@ def _run_one_service_scenario(
                 "simulation_state": sim,
                 "session": session,
             }
+        elif _safe_str(player_input) == "__manual_advance_combat_turn__":
+            command = _safe_str(player_input)
+            sim = _extract_simulation_state(last_result) if last_result else _safe_dict(session.get("simulation_state"))
+            if not sim:
+                sim = _ensure_manual_simulation_roots(session)
+
+            combat_result = advance_combat_turn(
+                sim,
+                tick=manual_turn_index,
+            )
+
+            visible_reason = _safe_str(combat_result.get("reason") or "combat_turn_not_advanced")
+            session["simulation_state"] = sim
+            _sync_manual_simulation_state(session, sim)
+            _save_manual_session_for_test(session, reason="manual advance combat turn carry-forward")
+            result = {
+                "ok": True,
+                "visible_interaction_reason": visible_reason,
+                "narration_preview": f"Result: {visible_reason}",
+                "final_narration": f"Result: {visible_reason}",
+                "result": {
+                    "ok": True,
+                    "manual_command": command,
+                    "visible_interaction_reason": visible_reason,
+                    "narration_preview": f"Result: {visible_reason}",
+                    "final_narration": f"Result: {visible_reason}",
+                    "combat_result": combat_result,
+                    "combat_state": _safe_dict(sim.get("combat_state")),
+                    "simulation_state": sim,
+                },
+                "combat_result": combat_result,
+                "combat_state": _safe_dict(sim.get("combat_state")),
+                "simulation_state": sim,
+                "session": session,
+            }
         else:
             result = apply_turn(session_id=session_id, player_input=player_input)
         extracted_location_id = _extract_current_location_id(result)
@@ -10158,6 +10354,76 @@ def _run_one_service_scenario(
                 scenario_warnings.append(
                     f"visible_interaction_html_expected_missing:{expected}"
                 )
+
+    if scenario_name == "combat_state_initiative_turn_gating":
+        combat_result = _extract_combat_result(result)
+        combat_state = _extract_combat_state(result)
+
+        if manual_turn_index == 1:
+            if combat_result.get("resolved") is not True:
+                warnings.append(
+                    f"combat_start_expected_resolved_true_got:{_safe_str(combat_result.get('reason')) or 'missing'}"
+                )
+            if _safe_str(combat_result.get("reason")) not in {"combat_started", "combat_already_active"}:
+                warnings.append(
+                    f"combat_start_expected_combat_started_got:{_safe_str(combat_result.get('reason')) or 'missing'}"
+                )
+            if combat_state.get("active") is not True:
+                warnings.append("combat_start_expected_active_true")
+            if not _safe_list(combat_state.get("initiative_order")):
+                warnings.append("combat_start_expected_initiative_order")
+            participants = _safe_dict(combat_state.get("participants"))
+            for actor_id in ("player", "npc:Bran", "enemy:bandit_1"):
+                if actor_id not in participants:
+                    warnings.append(f"combat_start_expected_participant_missing:{actor_id}")
+
+        if manual_turn_index == 2:
+            current_actor = _safe_str(combat_state.get("current_actor_id"))
+            reason = _safe_str(combat_result.get("reason"))
+            if current_actor == "player":
+                if reason != "combat_action_allowed":
+                    warnings.append(
+                        f"combat_turn2_expected_action_allowed_for_player_got:{reason or 'missing'}"
+                    )
+            else:
+                if reason != "not_actor_turn":
+                    warnings.append(
+                        f"combat_turn2_expected_not_actor_turn_for_nonplayer_current_got:{reason or 'missing'}"
+                    )
+
+        if manual_turn_index == 3:
+            if _safe_str(combat_result.get("reason")) != "combat_turn_advanced":
+                warnings.append(
+                    f"combat_advance_expected_combat_turn_advanced_got:{_safe_str(combat_result.get('reason')) or 'missing'}"
+                )
+            if not _safe_str(combat_result.get("current_actor_id")):
+                warnings.append("combat_advance_expected_current_actor_id")
+
+        if manual_turn_index == 4:
+            current_actor = _safe_str(combat_state.get("current_actor_id"))
+            reason = _safe_str(combat_result.get("reason"))
+            if current_actor == "player":
+                if reason != "combat_action_allowed":
+                    warnings.append(
+                        f"combat_turn4_expected_action_allowed_for_player_got:{reason or 'missing'}"
+                    )
+            else:
+                if reason != "not_actor_turn":
+                    warnings.append(
+                        f"combat_turn4_expected_not_actor_turn_for_nonplayer_current_got:{reason or 'missing'}"
+                    )
+
+        visible_reason = _extract_visible_interaction_reason(result)
+        expected_reasons = {
+            1: {"combat_started", "combat_already_active"},
+            2: {"combat_action_allowed", "not_actor_turn"},
+            3: {"combat_turn_advanced"},
+            4: {"combat_action_allowed", "not_actor_turn"},
+        }
+        if visible_reason and visible_reason not in expected_reasons.get(manual_turn_index, set()):
+            warnings.append(
+                f"combat_visible_unexpected_turn_{manual_turn_index}_got:{visible_reason}"
+            )
 
     return {
         "scenario": scenario_name,
