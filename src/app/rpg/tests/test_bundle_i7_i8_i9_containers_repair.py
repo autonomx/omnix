@@ -3,8 +3,8 @@ from app.rpg.interactions.item_model import normalize_item_instance
 from app.rpg.session.runtime import (
     _apply_visible_interaction_reason_to_resolved_result,
     _interaction_visible_result_reason,
-    _replace_stale_visible_result_text,
     _patch_visible_interaction_reason_into_payload_text,
+    _replace_stale_visible_result_text,
 )
 
 

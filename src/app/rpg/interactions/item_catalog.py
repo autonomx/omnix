@@ -273,6 +273,28 @@ ITEM_DEFINITIONS: Dict[str, Dict[str, Any]] = {
             "max_durability": 1.0,
         },
     },
+    "def:copper_coin": {
+        "definition_id": "def:copper_coin",
+        "name": "copper coin",
+        "kind": "currency_item",
+        "stackable": True,
+        "max_stack": 999,
+        "unit_weight": 0.01,
+        "rarity": "common",
+        "value": {"gold": 0, "silver": 0, "copper": 1},
+        "tags": ["currency", "coin"],
+    },
+    "def:bandit_token": {
+        "definition_id": "def:bandit_token",
+        "name": "bandit token",
+        "kind": "trinket",
+        "stackable": True,
+        "max_stack": 20,
+        "unit_weight": 0.05,
+        "rarity": "common",
+        "value": {"gold": 0, "silver": 1, "copper": 0},
+        "tags": ["trinket", "bandit"],
+    },
 }
 
 
@@ -312,10 +334,18 @@ NAME_TO_DEFINITION_ID = {
     "stick": "def:wooden_stick",
     "sticks": "def:wooden_stick",
     "oil flask": "def:oil_flask",
+    "oil flasks": "def:oil_flask",
     "oil": "def:oil_flask",
     "flask of oil": "def:oil_flask",
     "torch": "def:torch",
     "torches": "def:torch",
+    "copper coin": "def:copper_coin",
+    "copper coins": "def:copper_coin",
+    "coin": "def:copper_coin",
+    "coins": "def:copper_coin",
+    "bandit token": "def:bandit_token",
+    "bandit tokens": "def:bandit_token",
+    "token": "def:bandit_token",
 }
 
 

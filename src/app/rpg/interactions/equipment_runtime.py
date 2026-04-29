@@ -9,7 +9,6 @@ from app.rpg.interactions.item_model import (
     remove_quantity_from_items_list,
 )
 
-
 DEFAULT_STATS = {
     "damage_min": 0,
     "damage_max": 1,

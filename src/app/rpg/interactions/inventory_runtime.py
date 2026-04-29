@@ -3,13 +3,13 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any, Dict, List
 
+from app.rpg.interactions.equipment_runtime import project_equipment_stats
 from app.rpg.interactions.item_model import (
     add_item_to_items_list,
     normalize_item_instance,
     recalculate_inventory_derived_fields,
     split_stack,
 )
-from app.rpg.interactions.equipment_runtime import project_equipment_stats
 
 DEFAULT_EQUIPMENT_SLOTS = {
     "weapon": "main_hand",

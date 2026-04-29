@@ -3,11 +3,12 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any, Dict
 
-from app.rpg.interactions.container_runtime import apply_container_interaction
 from app.rpg.interactions.consumable_runtime import apply_consumable_interaction
+from app.rpg.interactions.container_runtime import apply_container_interaction
 from app.rpg.interactions.crafting_runtime import apply_crafting_interaction
 from app.rpg.interactions.equipment_runtime import project_equipment_stats
 from app.rpg.interactions.inventory_runtime import apply_inventory_interaction
+from app.rpg.interactions.merchant_runtime import apply_merchant_interaction
 from app.rpg.interactions.repair_runtime import apply_repair_interaction
 from app.rpg.interactions.semantic_actions import (
     resolve_semantic_action_v2,
@@ -114,6 +115,29 @@ def resolve_general_interaction(
             "semantic_action_v2": deepcopy(enriched_action),
             "interaction_result": deepcopy(interaction_result),
             "crafting_result": deepcopy(crafting_result),
+            "source": "deterministic_general_interaction_runtime",
+        }
+
+    if kind in {"buy", "sell"}:
+        enriched_action = deepcopy(action)
+        merchant_result = apply_merchant_interaction(
+            simulation_state,
+            semantic_action_v2=enriched_action,
+            tick=tick,
+        )
+        interaction_result = {
+            "resolved": bool(merchant_result.get("resolved")),
+            "changed_state": bool(merchant_result.get("changed_state")),
+            "reason": _safe_str(merchant_result.get("reason")),
+            "semantic_action_v2": deepcopy(enriched_action),
+            "merchant_result": deepcopy(merchant_result),
+            "source": "deterministic_general_interaction_runtime",
+        }
+        return {
+            "handled": bool(interaction_result.get("resolved")),
+            "semantic_action_v2": deepcopy(enriched_action),
+            "interaction_result": deepcopy(interaction_result),
+            "merchant_result": deepcopy(merchant_result),
             "source": "deterministic_general_interaction_runtime",
         }
 

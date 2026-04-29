@@ -1,150 +1,119 @@
-Bundle I13-I14-I15 — Crafting, Recipes, and Material Consumption v1
+Bundle I19-I20-I21 — Companion Inventory AI + Auto-Equip v1
 
 Goal:
 
-I13 — Add deterministic recipe definitions.
-I14 — Resolve craft actions from player text.
-I15 — Consume required materials/tools and create output items.
-Cleanup — manual command turns like __manual_consume_equipped_ammo__ show visible AI/result text.
+I19 — Companion inventory/equipment model parity.
+I20 — Companion auto-equip better gear after receiving items.
+I21 — Personality/loyalty-aware item acceptance/refusal.
 
-This should not add merchants/loot tables yet.
+This builds on:
+
+I1-I18 inventory/item model
+companion party_state
+NPC profiles/personality/loyalty
+
+It should not add full companion combat yet. This only prepares companion equipment/inventory behavior for combat.
 
 Expected behavior
+Give Bran a better weapon
 
 Input:
 
-I craft a torch.
+I give the hunting bow to Bran.
 
-Given inventory:
-
-{
-  "items": [
-    {"definition_id": "def:wooden_stick", "quantity": 1},
-    {"definition_id": "def:cloth_scrap", "quantity": 1},
-    {"definition_id": "def:oil_flask", "quantity": 1}
-  ]
-}
-
-Expected result:
+Expected:
 
 {
-  "crafting_result": {
+  "inventory_result": {
     "resolved": true,
     "changed_state": true,
-    "reason": "recipe_crafted",
-    "recipe_id": "recipe:torch",
-    "materials_consumed": [
-      {"definition_id": "def:wooden_stick", "quantity": 1},
-      {"definition_id": "def:cloth_scrap", "quantity": 1},
-      {"definition_id": "def:oil_flask", "quantity": 1}
-    ],
-    "items_created": [
-      {"definition_id": "def:torch", "quantity": 1}
-    ]
+    "reason": "item_given_to_npc",
+    "recipient_id": "npc:Bran"
+  },
+  "companion_item_acceptance_result": {
+    "accepted": true,
+    "reason": "item_useful_to_companion_arc"
+  },
+  "companion_auto_equip_result": {
+    "equipped": true,
+    "npc_id": "npc:Bran",
+    "item_id": "item:hunting_bow",
+    "slot": "main_hand",
+    "reason": "better_equipment"
   }
 }
-Patch 1 — Extend item catalog with crafting materials/output
-File
-src/app/rpg/interactions/item_catalog.py
 
-Add definitions:
+Bran’s companion inventory should now have:
 
-    "def:wooden_stick": {
-        "definition_id": "def:wooden_stick",
-        "name": "wooden stick",
-        "kind": "material",
-        "stackable": True,
-        "max_stack": 20,
-        "unit_weight": 0.4,
-        "rarity": "common",
-        "value": {"gold": 0, "silver": 0, "copper": 1},
-        "tags": ["material", "wood", "stick"],
+{
+  "inventory": {
+    "items": [
+      {
+        "item_id": "item:hunting_bow",
+        "definition_id": "def:hunting_bow"
+      }
+    ],
+    "equipment": {
+      "main_hand": "item:hunting_bow"
     },
-    "def:oil_flask": {
-        "definition_id": "def:oil_flask",
-        "name": "oil flask",
-        "kind": "material",
-        "stackable": True,
-        "max_stack": 10,
-        "unit_weight": 0.5,
-        "rarity": "common",
-        "value": {"gold": 0, "silver": 2, "copper": 0},
-        "tags": ["material", "oil", "flammable"],
-    },
-    "def:torch": {
-        "definition_id": "def:torch",
-        "name": "torch",
-        "kind": "tool",
-        "stackable": True,
-        "max_stack": 10,
-        "unit_weight": 0.7,
-        "rarity": "common",
-        "value": {"gold": 0, "silver": 1, "copper": 0},
-        "tags": ["tool", "light", "fire_source"],
-        "consumable": {
-            "effect": {
-                "kind": "light_source",
-                "duration_turns": 20,
-                "target": "self"
-            },
-            "consumed_quantity": 1
-        },
-    },
+    "equipment_stats": {
+      "stats": {
+        "damage_max": 6,
+        "accuracy_bonus": 1
+      }
+    }
+  }
+}
+Companion refuses item due personality/morality
 
-Add aliases:
+Input:
 
-    "wooden stick": "def:wooden_stick",
-    "stick": "def:wooden_stick",
-    "sticks": "def:wooden_stick",
-    "oil flask": "def:oil_flask",
-    "oil": "def:oil_flask",
-    "flask of oil": "def:oil_flask",
-    "torch": "def:torch",
-    "torches": "def:torch",
-Patch 2 — Add recipe catalog
+I give the stolen ring to Captain Aldric.
+
+Expected:
+
+{
+  "inventory_result": {
+    "resolved": false,
+    "changed_state": false,
+    "reason": "companion_refused_item"
+  },
+  "companion_item_acceptance_result": {
+    "accepted": false,
+    "reason": "morality_refuses_stolen_goods"
+  }
+}
+Companion accepts thief-aligned item
+
+Input:
+
+I give the stolen ring to Mira.
+
+If Mira has thief/rogue/opportunist profile traits:
+
+{
+  "companion_item_acceptance_result": {
+    "accepted": true,
+    "reason": "personality_accepts_illicit_valuable"
+  }
+}
+Patch 1 — Add companion item policy runtime
 New file
-src/app/rpg/interactions/recipe_catalog.py
+src/app/rpg/interactions/companion_item_policy.py
 from __future__ import annotations
 
 from copy import deepcopy
 from typing import Any, Dict, List
 
-
-RECIPES: Dict[str, Dict[str, Any]] = {
-    "recipe:torch": {
-        "recipe_id": "recipe:torch",
-        "name": "torch",
-        "aliases": ["torch", "a torch", "torches"],
-        "requires": [
-            {"definition_id": "def:wooden_stick", "quantity": 1},
-            {"definition_id": "def:cloth_scrap", "quantity": 1},
-            {"definition_id": "def:oil_flask", "quantity": 1},
-        ],
-        "produces": [
-            {"definition_id": "def:torch", "quantity": 1},
-        ],
-        "required_tool_tags": [],
-        "source": "deterministic_recipe_catalog",
-    },
-    "recipe:arrow_bundle": {
-        "recipe_id": "recipe:arrow_bundle",
-        "name": "iron arrows",
-        "aliases": ["iron arrows", "arrows", "arrow bundle"],
-        "requires": [
-            {"definition_id": "def:wooden_stick", "quantity": 2},
-            {"definition_id": "def:cloth_scrap", "quantity": 1},
-        ],
-        "produces": [
-            {"definition_id": "def:iron_arrow", "quantity": 5},
-        ],
-        "required_tool_tags": [],
-        "source": "deterministic_recipe_catalog",
-    },
-}
+from app.rpg.interactions.item_model import normalize_item_instance
 
 
 def _safe_str(value: Any) -> str:
     return "" if value is None else str(value)
+
+
+def _safe_dict(value: Any) -> Dict[str, Any]:
+    return value if isinstance(value, dict) else {}
 
 
 def _safe_list(value: Any) -> List[Any]:
@@ -155,46 +124,197 @@ def _norm(value: Any) -> str:
     return _safe_str(value).strip().lower()
 
 
-def get_recipe(recipe_id: str) -> Dict[str, Any]:
-    return deepcopy(RECIPES.get(_safe_str(recipe_id), {}))
+def _tags(item: Dict[str, Any]) -> set[str]:
+    item = normalize_item_instance(_safe_dict(item))
+    return {_norm(tag) for tag in _safe_list(item.get("tags")) if _norm(tag)}
 
 
-def find_recipe_by_name(name: str) -> Dict[str, Any]:
-    target = _norm(name)
-    if not target:
-        return {}
+def _profile_terms(companion: Dict[str, Any]) -> set[str]:
+    companion = _safe_dict(companion)
 
-    for recipe in RECIPES.values():
-        names = [_safe_str(recipe.get("name"))]
-        names.extend(_safe_list(recipe.get("aliases")))
-        if target in {_norm(item) for item in names}:
-            return deepcopy(recipe)
+    fields = [
+        companion.get("role"),
+        companion.get("current_role"),
+        companion.get("identity_arc"),
+        companion.get("personality"),
+        companion.get("morality"),
+        companion.get("profession"),
+        companion.get("background"),
+    ]
 
-    # Conservative fuzzy fallback.
-    for recipe in RECIPES.values():
-        names = [_safe_str(recipe.get("name"))]
-        names.extend(_safe_list(recipe.get("aliases")))
-        for item in names:
-            normalized = _norm(item)
-            if target and (target in normalized or normalized in target):
-                return deepcopy(recipe)
+    profile = _safe_dict(companion.get("profile"))
+    biography = _safe_dict(companion.get("biography"))
+    card = _safe_dict(companion.get("character_card"))
 
-    return {}
-Patch 3 — Add crafting runtime
+    fields.extend([
+        profile.get("role"),
+        profile.get("current_role"),
+        profile.get("identity_arc"),
+        profile.get("personality"),
+        profile.get("morality"),
+        profile.get("profession"),
+        profile.get("background"),
+        biography.get("summary"),
+        biography.get("personality"),
+        biography.get("morality"),
+        card.get("personality"),
+        card.get("morality"),
+        card.get("background"),
+    ])
+
+    terms: set[str] = set()
+    for value in fields:
+        text = _norm(value)
+        if not text:
+            continue
+        for token in text.replace(",", " ").replace("/", " ").replace("-", " ").split():
+            if token:
+                terms.add(token)
+        terms.add(text)
+
+    motivations = _safe_list(companion.get("active_motivations"))
+    motivations.extend(_safe_list(profile.get("active_motivations")))
+    for motivation in motivations:
+        text = _norm(motivation)
+        if text:
+            terms.add(text)
+            for token in text.split():
+                terms.add(token)
+
+    traits = _safe_list(companion.get("traits"))
+    traits.extend(_safe_list(profile.get("traits")))
+    traits.extend(_safe_list(card.get("traits")))
+    for trait in traits:
+        text = _norm(trait)
+        if text:
+            terms.add(text)
+
+    return terms
+
+
+def _loyalty_score(companion: Dict[str, Any]) -> int:
+    companion = _safe_dict(companion)
+    for key in ("loyalty", "loyalty_score", "trust", "relationship_score"):
+        raw = companion.get(key)
+        try:
+            return int(raw)
+        except Exception:
+            pass
+
+    relationship = _safe_dict(companion.get("relationship"))
+    for key in ("loyalty", "trust", "score"):
+        try:
+            return int(relationship.get(key))
+        except Exception:
+            pass
+
+    return 0
+
+
+def evaluate_companion_item_acceptance(
+    *,
+    companion: Dict[str, Any],
+    item: Dict[str, Any],
+) -> Dict[str, Any]:
+    companion = _safe_dict(companion)
+    item = normalize_item_instance(_safe_dict(item))
+
+    item_tags = _tags(item)
+    profile_terms = _profile_terms(companion)
+    loyalty = _loyalty_score(companion)
+
+    npc_id = _safe_str(companion.get("npc_id"))
+    item_id = _safe_str(item.get("item_id"))
+
+    lawful_terms = {"guard", "captain", "watch", "lawful", "honorable", "honourable", "justice"}
+    thief_terms = {"thief", "rogue", "criminal", "opportunist", "smuggler", "bandit"}
+    revenge_terms = {"revenge", "vengeance", "bandit", "revenge_after_losing_tavern"}
+
+    illicit_tags = {"stolen", "contraband", "illicit"}
+    weapon_tags = {"weapon", "blade", "bow", "ranged", "dagger"}
+    armor_tags = {"armor", "armor_light", "shield"}
+    valuable_tags = {"valuable", "jewelry", "ring", "trinket"}
+
+    if item_tags & illicit_tags and profile_terms & lawful_terms and loyalty < 80:
+        return {
+            "accepted": False,
+            "reason": "morality_refuses_stolen_goods",
+            "npc_id": npc_id,
+            "item_id": item_id,
+            "item_tags": sorted(item_tags),
+            "profile_terms": sorted(profile_terms),
+            "loyalty": loyalty,
+            "source": "deterministic_companion_item_policy",
+        }
+
+    if item_tags & illicit_tags and (profile_terms & thief_terms or item_tags & valuable_tags):
+        return {
+            "accepted": True,
+            "reason": "personality_accepts_illicit_valuable",
+            "npc_id": npc_id,
+            "item_id": item_id,
+            "item_tags": sorted(item_tags),
+            "profile_terms": sorted(profile_terms),
+            "loyalty": loyalty,
+            "source": "deterministic_companion_item_policy",
+        }
+
+    if item_tags & weapon_tags and (profile_terms & revenge_terms or "companion" in profile_terms):
+        return {
+            "accepted": True,
+            "reason": "item_useful_to_companion_arc",
+            "npc_id": npc_id,
+            "item_id": item_id,
+            "item_tags": sorted(item_tags),
+            "profile_terms": sorted(profile_terms),
+            "loyalty": loyalty,
+            "source": "deterministic_companion_item_policy",
+        }
+
+    if item_tags & armor_tags:
+        return {
+            "accepted": True,
+            "reason": "defensive_item_accepted",
+            "npc_id": npc_id,
+            "item_id": item_id,
+            "item_tags": sorted(item_tags),
+            "profile_terms": sorted(profile_terms),
+            "loyalty": loyalty,
+            "source": "deterministic_companion_item_policy",
+        }
+
+    if loyalty < -25:
+        return {
+            "accepted": False,
+            "reason": "low_loyalty_refuses_nonessential_item",
+            "npc_id": npc_id,
+            "item_id": item_id,
+            "item_tags": sorted(item_tags),
+            "profile_terms": sorted(profile_terms),
+            "loyalty": loyalty,
+            "source": "deterministic_companion_item_policy",
+        }
+
+    return {
+        "accepted": True,
+        "reason": "neutral_item_accepted",
+        "npc_id": npc_id,
+        "item_id": item_id,
+        "item_tags": sorted(item_tags),
+        "profile_terms": sorted(profile_terms),
+        "loyalty": loyalty,
+        "source": "deterministic_companion_item_policy",
+    }
+Patch 2 — Add companion auto-equip runtime
 New file
-src/app/rpg/interactions/crafting_runtime.py
+src/app/rpg/interactions/companion_auto_equip.py
 from __future__ import annotations
 
 from copy import deepcopy
 from typing import Any, Dict, List
 
-from app.rpg.interactions.item_model import (
-    add_item_to_items_list,
-    normalize_item_instance,
-    recalculate_inventory_derived_fields,
-    remove_quantity_from_items_list,
-)
-from app.rpg.interactions.recipe_catalog import find_recipe_by_name, get_recipe
+from app.rpg.interactions.equipment_runtime import project_equipment_stats
+from app.rpg.interactions.item_model import normalize_item_instance, recalculate_inventory_derived_fields
 
 
 def _safe_str(value: Any) -> str:
@@ -216,318 +336,394 @@ def _safe_int(value: Any, default: int = 0) -> int:
         return default
 
 
-def _inventory(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
-    player_state = _safe_dict(simulation_state.get("player_state"))
-    inv = _safe_dict(player_state.get("inventory"))
-    if not isinstance(inv.get("items"), list):
-        inv["items"] = []
-    if not isinstance(inv.get("equipment"), dict):
-        inv["equipment"] = {}
-    player_state["inventory"] = inv
-    simulation_state["player_state"] = player_state
-    return inv
+def _find_companion(simulation_state: Dict[str, Any], npc_id: str) -> Dict[str, Any]:
+    party_state = _safe_dict(_safe_dict(simulation_state.get("player_state")).get("party_state"))
+    for companion in _safe_list(party_state.get("companions")):
+        companion = _safe_dict(companion)
+        if _safe_str(companion.get("npc_id")) == npc_id:
+            return companion
+    return {}
 
 
-def _quantity_by_definition(items: List[Dict[str, Any]]) -> Dict[str, int]:
-    quantities: Dict[str, int] = {}
+def _ensure_inventory(companion: Dict[str, Any]) -> Dict[str, Any]:
+    inventory = _safe_dict(companion.get("inventory"))
+    if not isinstance(inventory.get("items"), list):
+        inventory["items"] = []
+    if not isinstance(inventory.get("equipment"), dict):
+        inventory["equipment"] = {}
+    inventory = recalculate_inventory_derived_fields(inventory)
+    companion["inventory"] = inventory
+    return inventory
+
+
+def _find_item(items: List[Any], item_id: str) -> Dict[str, Any]:
     for item in _safe_list(items):
-        normalized = normalize_item_instance(_safe_dict(item))
-        definition_id = _safe_str(normalized.get("definition_id"))
-        if not definition_id:
-            continue
-        quantities[definition_id] = quantities.get(definition_id, 0) + _safe_int(normalized.get("quantity"), 1)
-    return quantities
+        item = normalize_item_instance(_safe_dict(item))
+        if _safe_str(item.get("item_id")) == item_id:
+            return item
+    return {}
 
 
-def _result(
-    *,
-    resolved: bool,
-    changed_state: bool,
-    reason: str,
-    action: Dict[str, Any],
-    extra: Dict[str, Any] | None = None,
-) -> Dict[str, Any]:
-    payload = {
-        "resolved": resolved,
-        "changed_state": changed_state,
-        "reason": reason,
-        "semantic_action_v2": deepcopy(_safe_dict(action)),
-        "source": "deterministic_crafting_runtime",
-    }
-    payload.update(_safe_dict(extra or {}))
-    return payload
+def _slot_for_item(item: Dict[str, Any]) -> str:
+    item = normalize_item_instance(item)
+    equipment = _safe_dict(item.get("equipment"))
+    if _safe_str(equipment.get("slot")):
+        return _safe_str(equipment.get("slot"))
+    if _safe_str(item.get("slot")):
+        return _safe_str(item.get("slot"))
+
+    kind = _safe_str(item.get("kind")).lower()
+    if kind == "weapon":
+        return "main_hand"
+    if kind == "armor":
+        return "body"
+    if kind == "shield":
+        return "off_hand"
+    return ""
 
 
-def apply_crafting_interaction(
+def _score_item_for_slot(item: Dict[str, Any], slot: str) -> int:
+    item = normalize_item_instance(item)
+    equipment = _safe_dict(item.get("equipment"))
+    stats = _safe_dict(equipment.get("stats"))
+
+    if slot == "main_hand":
+        return (
+            _safe_int(stats.get("damage_max"), 0) * 10
+            + _safe_int(stats.get("damage_min"), 0) * 5
+            + _safe_int(stats.get("accuracy_bonus"), 0) * 3
+            + _safe_int(stats.get("range"), 0)
+        )
+
+    if slot in {"body", "head", "cloak", "off_hand"}:
+        return (
+            _safe_int(stats.get("armor"), 0) * 10
+            + _safe_int(stats.get("stealth_bonus"), 0) * 2
+            - _safe_int(stats.get("stealth_penalty"), 0) * 2
+        )
+
+    if slot == "ammo":
+        return _safe_int(item.get("quantity"), 1)
+
+    return 0
+
+
+def apply_companion_auto_equip(
     simulation_state: Dict[str, Any],
     *,
-    semantic_action_v2: Dict[str, Any],
+    npc_id: str,
+    item_id: str,
     tick: int = 0,
 ) -> Dict[str, Any]:
-    action = _safe_dict(semantic_action_v2)
-    if _safe_str(action.get("kind")) != "craft":
-        return _result(
-            resolved=False,
-            changed_state=False,
-            reason="not_crafting_action",
-            action=action,
-        )
+    companion = _find_companion(simulation_state, npc_id)
+    if not companion:
+        return {
+            "equipped": False,
+            "changed_state": False,
+            "reason": "companion_not_found",
+            "npc_id": npc_id,
+            "item_id": item_id,
+            "source": "deterministic_companion_auto_equip",
+        }
 
-    recipe_ref = _safe_str(action.get("target_ref") or action.get("recipe_ref"))
-    recipe_id = _safe_str(action.get("recipe_id"))
+    inventory = _ensure_inventory(companion)
+    items = [normalize_item_instance(_safe_dict(item)) for item in _safe_list(inventory.get("items"))]
+    item = _find_item(items, item_id)
+    if not item:
+        return {
+            "equipped": False,
+            "changed_state": False,
+            "reason": "item_not_in_companion_inventory",
+            "npc_id": npc_id,
+            "item_id": item_id,
+            "source": "deterministic_companion_auto_equip",
+        }
 
-    recipe = get_recipe(recipe_id) if recipe_id else find_recipe_by_name(recipe_ref)
-    if not recipe:
-        return _result(
-            resolved=False,
-            changed_state=False,
-            reason="recipe_not_found",
-            action=action,
-            extra={"recipe_ref": recipe_ref},
-        )
+    slot = _slot_for_item(item)
+    if not slot:
+        return {
+            "equipped": False,
+            "changed_state": False,
+            "reason": "item_not_equippable",
+            "npc_id": npc_id,
+            "item_id": item_id,
+            "source": "deterministic_companion_auto_equip",
+        }
 
-    inv = _inventory(simulation_state)
-    items = [normalize_item_instance(_safe_dict(item)) for item in _safe_list(inv.get("items"))]
-    quantities = _quantity_by_definition(items)
+    equipment = _safe_dict(inventory.get("equipment"))
+    current_item_id = _safe_str(equipment.get(slot))
 
-    missing = []
-    for requirement in _safe_list(recipe.get("requires")):
-        definition_id = _safe_str(_safe_dict(requirement).get("definition_id"))
-        required_qty = max(1, _safe_int(_safe_dict(requirement).get("quantity"), 1))
-        available_qty = quantities.get(definition_id, 0)
-        if available_qty < required_qty:
-            missing.append({
-                "definition_id": definition_id,
-                "required_quantity": required_qty,
-                "available_quantity": available_qty,
-            })
+    incoming_score = _score_item_for_slot(item, slot)
+    current_score = -1
 
-    if missing:
-        return _result(
-            resolved=False,
-            changed_state=False,
-            reason="missing_crafting_materials",
-            action=action,
-            extra={
-                "recipe_id": _safe_str(recipe.get("recipe_id")),
-                "missing_materials": missing,
-            },
-        )
+    if current_item_id:
+        current_item = _find_item(items, current_item_id)
+        current_score = _score_item_for_slot(current_item, slot) if current_item else -1
 
-    consumed = []
-    updated_items = items
+    if current_item_id and incoming_score <= current_score:
+        stats = project_equipment_stats(simulation_state, actor_id=npc_id)
+        inventory["equipment_stats"] = stats
+        companion["inventory"] = inventory
+        return {
+            "equipped": False,
+            "changed_state": False,
+            "reason": "not_better_than_current_equipment",
+            "npc_id": npc_id,
+            "item_id": item_id,
+            "slot": slot,
+            "incoming_score": incoming_score,
+            "current_item_id": current_item_id,
+            "current_score": current_score,
+            "equipment_stats": deepcopy(stats),
+            "source": "deterministic_companion_auto_equip",
+        }
 
-    for requirement in _safe_list(recipe.get("requires")):
-        definition_id = _safe_str(_safe_dict(requirement).get("definition_id"))
-        required_qty = max(1, _safe_int(_safe_dict(requirement).get("quantity"), 1))
-        remove_result = remove_quantity_from_items_list(
-            updated_items,
-            definition_id=definition_id,
-            quantity=required_qty,
-        )
-        if not remove_result.get("removed_all"):
-            return _result(
+    equipment[slot] = item_id
+    inventory["equipment"] = equipment
+    inventory = recalculate_inventory_derived_fields(inventory)
+    companion["inventory"] = inventory
+
+    stats = project_equipment_stats(simulation_state, actor_id=npc_id)
+    inventory["equipment_stats"] = stats
+    companion["inventory"] = inventory
+
+    return {
+        "equipped": True,
+        "changed_state": True,
+        "reason": "better_equipment" if current_item_id else "empty_slot_equipped",
+        "npc_id": npc_id,
+        "item_id": item_id,
+        "slot": slot,
+        "incoming_score": incoming_score,
+        "previous_item_id": current_item_id,
+        "previous_score": current_score,
+        "equipment_stats": deepcopy(stats),
+        "tick": int(tick or 0),
+        "source": "deterministic_companion_auto_equip",
+    }
+Patch 3 — Add stolen ring item definition
+File
+src/app/rpg/interactions/item_catalog.py
+
+Add definition:
+
+    "def:stolen_ring": {
+        "definition_id": "def:stolen_ring",
+        "name": "stolen ring",
+        "kind": "trinket",
+        "stackable": False,
+        "max_stack": 1,
+        "unit_weight": 0.05,
+        "rarity": "uncommon",
+        "value": {"gold": 1, "silver": 0, "copper": 0},
+        "tags": ["valuable", "jewelry", "ring", "stolen", "illicit"],
+    },
+
+Add aliases:
+
+    "stolen ring": "def:stolen_ring",
+    "ring": "def:stolen_ring",
+Patch 4 — Gate give action through companion acceptance and auto-equip
+File
+src/app/rpg/interactions/inventory_runtime.py
+
+Add imports:
+
+from app.rpg.interactions.companion_auto_equip import apply_companion_auto_equip
+from app.rpg.interactions.companion_item_policy import evaluate_companion_item_acceptance
+
+In the give branch, find this approximate block:
+
+recipient_inventory = _companion_inventory(simulation_state, recipient_id)
+if not recipient_inventory:
+    return _inventory_result(...)
+
+item = _clone_item_for_inventory(_safe_dict(inventory_items.pop(index)))
+recipient_items = _safe_list(recipient_inventory.get("items"))
+recipient_add = add_item_to_items_list(recipient_items, item)
+...
+return _inventory_result(...)
+
+Replace the branch body from after the item_not_in_inventory check through the return with this:
+
+        item = _clone_item_for_inventory(_safe_dict(inventory_items[index]))
+
+        companion = {}
+        party_state = _safe_dict(player_state.get("party_state"))
+        for candidate in _safe_list(party_state.get("companions")):
+            candidate = _safe_dict(candidate)
+            if _safe_str(candidate.get("npc_id")) == recipient_id:
+                companion = candidate
+                break
+
+        if not companion:
+            return _inventory_result(
                 resolved=False,
                 changed_state=False,
-                reason="failed_to_consume_crafting_materials",
+                reason="recipient_companion_not_found",
                 action=action,
+                item=item,
+                extra={"recipient_id": recipient_id},
+            )
+
+        acceptance = evaluate_companion_item_acceptance(
+            companion=companion,
+            item=item,
+        )
+        if acceptance.get("accepted") is not True:
+            return _inventory_result(
+                resolved=False,
+                changed_state=False,
+                reason="companion_refused_item",
+                action=action,
+                item=item,
                 extra={
-                    "recipe_id": _safe_str(recipe.get("recipe_id")),
-                    "definition_id": definition_id,
+                    "recipient_id": recipient_id,
+                    "companion_item_acceptance_result": deepcopy(acceptance),
                 },
             )
 
-        updated_items = _safe_list(remove_result.get("items"))
-        consumed.append({
-            "definition_id": definition_id,
-            "quantity": required_qty,
-        })
+        # Remove from player only after acceptance.
+        item = _clone_item_for_inventory(_safe_dict(inventory_items.pop(index)))
 
-    created = []
-    add_result = {"items": updated_items}
+        recipient_inventory = _companion_inventory(simulation_state, recipient_id)
+        if not recipient_inventory:
+            return _inventory_result(
+                resolved=False,
+                changed_state=False,
+                reason="recipient_inventory_not_available",
+                action=action,
+                item=item,
+                extra={
+                    "recipient_id": recipient_id,
+                    "companion_item_acceptance_result": deepcopy(acceptance),
+                },
+            )
 
-    for output in _safe_list(recipe.get("produces")):
-        definition_id = _safe_str(_safe_dict(output).get("definition_id"))
-        quantity = max(1, _safe_int(_safe_dict(output).get("quantity"), 1))
-        item = normalize_item_instance({
-            "definition_id": definition_id,
-            "quantity": quantity,
-            "source": "deterministic_crafting_runtime",
-        })
-        add_result = add_item_to_items_list(_safe_list(add_result.get("items")), item)
-        created.append({
-            "definition_id": definition_id,
-            "quantity": quantity,
-            "item": deepcopy(item),
-        })
+        recipient_items = _safe_list(recipient_inventory.get("items"))
+        recipient_add = add_item_to_items_list(recipient_items, item)
+        recipient_inventory["items"] = recipient_add["items"]
+        recipient_inventory = recalculate_inventory_derived_fields(recipient_inventory)
+        companion["inventory"] = recipient_inventory
 
-    inv["items"] = _safe_list(add_result.get("items"))
-    inv = recalculate_inventory_derived_fields(inv)
-    simulation_state["player_state"]["inventory"] = inv
+        inventory["items"] = inventory_items
+        inventory = recalculate_inventory_derived_fields(inventory)
+        player_state["inventory"] = inventory
+        simulation_state["player_state"] = player_state
 
-    return _result(
-        resolved=True,
-        changed_state=True,
-        reason="recipe_crafted",
-        action=action,
-        extra={
-            "recipe_id": _safe_str(recipe.get("recipe_id")),
-            "recipe_name": _safe_str(recipe.get("name")),
-            "materials_consumed": consumed,
-            "items_created": created,
-            "stacked": bool(add_result.get("stacked")),
-            "stack_events": deepcopy(_safe_list(add_result.get("stack_events"))),
-            "carry_weight": inv.get("carry_weight"),
-            "encumbrance_state": inv.get("encumbrance_state"),
-            "tick": int(tick or 0),
-        },
-    )
-Patch 4 — Extend semantic action resolver for craft
-File
-src/app/rpg/interactions/semantic_actions.py
-
-Add to SUPPORTED_ACTION_KINDS:
-
-"craft",
-
-Add before generic use block:
-
-    if re.search(r"\b(craft|make|assemble|create)\b", text):
-        target = _first_match(
-            [
-                r"\b(?:craft|make|assemble|create)\s+([^,.!?]+)",
-            ],
-            text,
+        auto_equip = apply_companion_auto_equip(
+            simulation_state,
+            npc_id=recipient_id,
+            item_id=_item_id(item),
+            tick=tick,
         )
-        quantity, clean_target = _parse_leading_quantity(target)
-        return {
-            "resolved": True,
-            "kind": "craft",
-            "actor_id": actor_id,
-            "target_ref": clean_target,
-            "recipe_ref": clean_target,
-            "quantity": quantity,
-            "confidence": "high" if clean_target else "low",
-            "raw_input": raw,
-            "source": "deterministic_semantic_action_resolver_v2",
-        }
-Patch 5 — Wire crafting into interaction runtime
+
+        return _inventory_result(
+            resolved=True,
+            changed_state=True,
+            reason="item_given_to_npc",
+            action=action,
+            item=item,
+            extra={
+                "item_id": _item_id(item),
+                "quantity": int(item.get("quantity") or 1),
+                "recipient_id": recipient_id,
+                "recipient_carry_weight": recipient_inventory.get("carry_weight"),
+                "recipient_encumbrance_state": recipient_inventory.get("encumbrance_state"),
+                "carry_weight": inventory.get("carry_weight"),
+                "encumbrance_state": inventory.get("encumbrance_state"),
+                "companion_item_acceptance_result": deepcopy(acceptance),
+                "companion_auto_equip_result": deepcopy(auto_equip),
+                "tick": int(tick or 0),
+            },
+        )
+
+Important behavior:
+
+Refusal must not remove item from player inventory.
+Acceptance removes item from player inventory and gives it to companion.
+Auto-equip happens after item is in companion inventory.
+Patch 5 — Expose companion item/equip results in general interaction result
 File
 src/app/rpg/interactions/interaction_runtime.py
 
-Add import:
+In the inventory branch, after:
 
-from app.rpg.interactions.crafting_runtime import apply_crafting_interaction
-
-In expected_target_types flow, crafting does not need a normal target resolution. So after semantic action is resolved and kind is known, before target resolution fails on missing target, add a direct craft branch.
-
-Recommended placement: after kind = semantic_action_kind(action) and before resolving target_ref.
-
-    if kind == "craft":
-        enriched_action = deepcopy(action)
-        crafting_result = apply_crafting_interaction(
-            simulation_state,
-            semantic_action_v2=enriched_action,
-            tick=tick,
-        )
-        interaction_result = {
-            "resolved": bool(crafting_result.get("resolved")),
-            "changed_state": bool(crafting_result.get("changed_state")),
-            "reason": _safe_str(crafting_result.get("reason")),
-            "semantic_action_v2": deepcopy(enriched_action),
-            "crafting_result": deepcopy(crafting_result),
-            "source": "deterministic_general_interaction_runtime",
-        }
-        return {
-            "handled": bool(interaction_result.get("resolved")),
-            "semantic_action_v2": deepcopy(enriched_action),
-            "interaction_result": deepcopy(interaction_result),
-            "crafting_result": deepcopy(crafting_result),
-            "source": "deterministic_general_interaction_runtime",
-        }
-Patch 6 — Runtime payload exposure and persistence
-File
-src/app/rpg/session/runtime.py
-
-Update _interaction_visible_result_reason(...) keys:
-
-for key in ("inventory_result", "container_result", "repair_result", "consumable_result", "crafting_result"):
-
-After current result extraction:
-
-consumable_result = _safe_dict(general_interaction_result.get("consumable_result"))
-equipment_stats = _safe_dict(general_interaction_result.get("equipment_stats"))
+inventory_result = apply_inventory_interaction(...)
 
 add:
 
-crafting_result = _safe_dict(general_interaction_result.get("crafting_result"))
+companion_item_acceptance_result = _safe_dict(
+    inventory_result.get("companion_item_acceptance_result")
+)
+companion_auto_equip_result = _safe_dict(
+    inventory_result.get("companion_auto_equip_result")
+)
 
-Where payloads include inventory/repair/etc., add:
+Then include in interaction_result:
 
-"crafting_result": deepcopy(crafting_result),
+"companion_item_acceptance_result": deepcopy(companion_item_acceptance_result),
+"companion_auto_equip_result": deepcopy(companion_auto_equip_result),
+
+And in the returned dict:
+
+"companion_item_acceptance_result": deepcopy(companion_item_acceptance_result),
+"companion_auto_equip_result": deepcopy(companion_auto_equip_result),
+
+So the inventory branch return contains:
+
+return {
+    "handled": bool(interaction_result.get("resolved")),
+    "semantic_action_v2": deepcopy(enriched_action),
+    "interaction_result": deepcopy(interaction_result),
+    "inventory_result": deepcopy(inventory_result),
+    "companion_item_acceptance_result": deepcopy(companion_item_acceptance_result),
+    "companion_auto_equip_result": deepcopy(companion_auto_equip_result),
+    "source": "deterministic_general_interaction_runtime",
+}
+Patch 6 — Expose/persist companion item results in session runtime
+File
+src/app/rpg/session/runtime.py
+
+After the existing extraction:
+
+inventory_result = _safe_dict(general_interaction_result.get("inventory_result"))
+
+add:
+
+companion_item_acceptance_result = _safe_dict(
+    general_interaction_result.get("companion_item_acceptance_result")
+)
+companion_auto_equip_result = _safe_dict(
+    general_interaction_result.get("companion_auto_equip_result")
+)
+
+Where payloads include inventory_result, also add:
+
+"companion_item_acceptance_result": deepcopy(companion_item_acceptance_result),
+"companion_auto_equip_result": deepcopy(companion_auto_equip_result),
 
 Update persistence condition:
 
-if (
-    inventory_result.get("changed_state") is True
-    or container_result.get("changed_state") is True
-    or repair_result.get("changed_state") is True
-    or consumable_result.get("changed_state") is True
-    or crafting_result.get("changed_state") is True
-):
-Patch 7 — Fix manual command HTML text from I10-I12
+or companion_auto_equip_result.get("changed_state") is True
+or inventory_result.get("changed_state") is True
+
+The existing inventory changed-state condition should already persist accepted gives. This extra condition protects auto-equip-only cases.
+
+Update _interaction_visible_result_reason(...) keys only if you want direct display from nested results. Usually the visible reason should stay item_given_to_npc or companion_refused_item, so no change is required. But adding these is harmless:
+
+"companion_item_acceptance_result",
+"companion_auto_equip_result",
+Patch 7 — HTML panels
 File
 src/tests/rpg/manual_llm_transcript.py
 
-In the manual command block for:
+In _render_special_panels(...), add:
 
-if command == "__manual_consume_equipped_ammo__":
+("Companion Item Acceptance Result", "companion_item_acceptance_result"),
+("Companion Auto Equip Result", "companion_auto_equip_result"),
 
-Add a visible reason into the result payload.
-
-Find:
-
-ammo_result = consume_equipped_ammo(...)
-equipment_stats = project_equipment_stats(...)
-
-After it, add:
-
-visible_reason = "ammo_consumed" if ammo_result.get("consumed") is True else _safe_str(ammo_result.get("reason") or "ammo_not_consumed")
-
-Then include this in both top-level and nested result dicts:
-
-"visible_interaction_reason": visible_reason,
-"narration_preview": f"Result: {visible_reason}",
-"final_narration": f"Result: {visible_reason}",
-
-Example:
-
-result = {
-    "ok": True,
-    "visible_interaction_reason": visible_reason,
-    "narration_preview": f"Result: {visible_reason}",
-    "final_narration": f"Result: {visible_reason}",
-    "result": {
-        "ok": True,
-        "manual_command": command,
-        "visible_interaction_reason": visible_reason,
-        "narration_preview": f"Result: {visible_reason}",
-        "final_narration": f"Result: {visible_reason}",
-        "ammo_result": ammo_result,
-        "equipment_stats": equipment_stats,
-        "simulation_state": sim,
-    },
-    "ammo_result": ammo_result,
-    "equipment_stats": equipment_stats,
-    "simulation_state": sim,
-    "session": session,
-}
-
-This fixes the previously noted:
-
-<p class="ai">AI: </p>
-
-for the ammo manual hook.
+near the existing companion/inventory panels.
 
 Patch 8 — Manual scenario
 File
@@ -535,7 +731,7 @@ src/tests/rpg/manual_llm_transcript.py
 
 Add scenario:
 
-"inventory_crafting_recipes_materials": {
+"companion_inventory_auto_equip": {
     "currency": {"gold": 0, "silver": 0, "copper": 0},
     "conversation_settings": {
         "enabled": True,
@@ -556,62 +752,105 @@ Add scenario:
         "player_inventory": {
             "items": [
                 {
-                    "item_id": "item:wooden_sticks",
-                    "definition_id": "def:wooden_stick",
-                    "name": "wooden sticks",
-                    "aliases": ["stick", "sticks"],
-                    "quantity": 3
+                    "item_id": "item:hunting_bow",
+                    "definition_id": "def:hunting_bow",
+                    "name": "hunting bow",
+                    "aliases": ["bow"]
                 },
                 {
-                    "item_id": "item:cloth_scraps",
-                    "definition_id": "def:cloth_scrap",
-                    "name": "cloth scraps",
-                    "aliases": ["cloth scrap", "scraps"],
-                    "quantity": 3
+                    "item_id": "item:padded_armor",
+                    "definition_id": "def:padded_armor",
+                    "name": "padded armor",
+                    "aliases": ["armor"]
                 },
                 {
-                    "item_id": "item:oil_flasks",
-                    "definition_id": "def:oil_flask",
-                    "name": "oil flasks",
-                    "aliases": ["oil", "flask of oil"],
-                    "quantity": 2
+                    "item_id": "item:stolen_ring",
+                    "definition_id": "def:stolen_ring",
+                    "name": "stolen ring",
+                    "aliases": ["ring"]
                 }
             ],
             "equipment": {},
             "carry_capacity": 50.0
+        },
+        "party_state": {
+            "max_size": 4,
+            "companions": [
+                {
+                    "npc_id": "npc:Bran",
+                    "name": "Bran",
+                    "role": "companion",
+                    "status": "active",
+                    "follow_mode": "following_player",
+                    "location_id": "loc_tavern_road",
+                    "current_role": "Displaced tavern keeper",
+                    "identity_arc": "revenge_after_losing_tavern",
+                    "active_motivations": ["revenge", "protect the party"],
+                    "loyalty": 35,
+                    "inventory": {
+                        "items": [],
+                        "equipment": {},
+                        "carry_capacity": 50.0
+                    }
+                },
+                {
+                    "npc_id": "npc:Captain_Aldric",
+                    "name": "Captain Aldric",
+                    "role": "companion",
+                    "status": "active",
+                    "follow_mode": "following_player",
+                    "location_id": "loc_tavern_road",
+                    "current_role": "Guard captain",
+                    "personality": "lawful honorable protective",
+                    "morality": "lawful guard justice",
+                    "loyalty": 20,
+                    "inventory": {
+                        "items": [],
+                        "equipment": {},
+                        "carry_capacity": 50.0
+                    }
+                }
+            ]
         }
     },
     "turns": [
-        "I craft a torch.",
-        "I craft iron arrows.",
-        "I craft a torch."
+        "I give the hunting bow to Bran.",
+        "I give the padded armor to Bran.",
+        "I give the stolen ring to Captain Aldric."
     ]
 },
 
 Add scenario choice:
 
-"inventory_crafting_recipes_materials",
-
-Expected state:
-
-Turn 1: consumes 1 stick, 1 cloth, 1 oil; creates 1 torch.
-Turn 2: consumes 2 sticks, 1 cloth; creates 5 iron arrows.
-Turn 3: fails missing materials because sticks are 0.
-Patch 9 — HTML panels
+"companion_inventory_auto_equip",
+Patch 9 — Manual validation
 File
 src/tests/rpg/manual_llm_transcript.py
 
-Add panel:
+Add helpers:
 
-("Crafting Result", "crafting_result"),
-Patch 10 — Manual validation
-File
-src/tests/rpg/manual_llm_transcript.py
+def _companion_by_id(simulation_state: Dict[str, Any], npc_id: str) -> Dict[str, Any]:
+    party_state = _safe_dict(_safe_dict(simulation_state.get("player_state")).get("party_state"))
+    for companion in _safe_list(party_state.get("companions")):
+        companion = _safe_dict(companion)
+        if _safe_str(companion.get("npc_id")) == npc_id:
+            return companion
+    return {}
 
-Add helper if missing:
 
-def _player_inventory_item_by_definition(simulation_state: Dict[str, Any], definition_id: str) -> Dict[str, Any]:
-    for item in _player_inventory_items(simulation_state):
+def _companion_equipment(simulation_state: Dict[str, Any], npc_id: str) -> Dict[str, Any]:
+    companion = _companion_by_id(simulation_state, npc_id)
+    return _safe_dict(_safe_dict(companion.get("inventory")).get("equipment"))
+
+
+def _companion_inventory_item_by_definition(
+    simulation_state: Dict[str, Any],
+    npc_id: str,
+    definition_id: str,
+) -> Dict[str, Any]:
+    companion = _companion_by_id(simulation_state, npc_id)
+    items = _safe_list(_safe_dict(companion.get("inventory")).get("items"))
+    for item in items:
         item = _safe_dict(item)
         if _safe_str(item.get("definition_id")) == definition_id:
             return item
@@ -619,65 +858,101 @@ def _player_inventory_item_by_definition(simulation_state: Dict[str, Any], defin
 
 Add validation block:
 
-    if scenario_name == "inventory_crafting_recipes_materials":
+    if scenario_name == "companion_inventory_auto_equip":
         sim = _extract_simulation_state(result)
         interaction = _extract_interaction_result(result)
-        crafting = _safe_dict(
-            interaction.get("crafting_result")
-            or result.get("crafting_result")
-            or _safe_dict(result.get("result")).get("crafting_result")
+        inventory = _safe_dict(
+            interaction.get("inventory_result")
+            or result.get("inventory_result")
+            or _safe_dict(result.get("result")).get("inventory_result")
+        )
+        acceptance = _safe_dict(
+            interaction.get("companion_item_acceptance_result")
+            or result.get("companion_item_acceptance_result")
+            or _safe_dict(result.get("result")).get("companion_item_acceptance_result")
+            or inventory.get("companion_item_acceptance_result")
+        )
+        auto_equip = _safe_dict(
+            interaction.get("companion_auto_equip_result")
+            or result.get("companion_auto_equip_result")
+            or _safe_dict(result.get("result")).get("companion_auto_equip_result")
+            or inventory.get("companion_auto_equip_result")
         )
 
         if turn_index == 1:
-            if crafting.get("resolved") is not True:
+            if inventory.get("resolved") is not True:
                 warnings.append(
-                    f"crafting_torch_expected_resolved_true_got:{_safe_str(crafting.get('reason')) or 'missing'}"
+                    f"companion_inventory_bow_expected_resolved_true_got:{_safe_str(inventory.get('reason')) or 'missing'}"
                 )
-            if _safe_str(crafting.get("reason")) != "recipe_crafted":
+            if _safe_str(inventory.get("reason")) != "item_given_to_npc":
                 warnings.append(
-                    f"crafting_torch_expected_recipe_crafted_got:{_safe_str(crafting.get('reason')) or 'missing'}"
+                    f"companion_inventory_bow_expected_item_given_to_npc_got:{_safe_str(inventory.get('reason')) or 'missing'}"
                 )
-            torch = _player_inventory_item_by_definition(sim, "def:torch")
-            if int(torch.get("quantity") or 0) != 1:
+            if acceptance.get("accepted") is not True:
                 warnings.append(
-                    f"crafting_torch_expected_torch_quantity_1_got:{int(torch.get('quantity') or 0)}"
+                    f"companion_inventory_bow_expected_accepted_true_got:{_safe_str(acceptance.get('reason')) or 'missing'}"
+                )
+            if auto_equip.get("equipped") is not True:
+                warnings.append(
+                    f"companion_inventory_bow_expected_auto_equipped_true_got:{_safe_str(auto_equip.get('reason')) or 'missing'}"
+                )
+            equipment = _companion_equipment(sim, "npc:Bran")
+            if _safe_str(equipment.get("main_hand")) != "item:hunting_bow":
+                warnings.append(
+                    f"companion_inventory_bow_expected_bran_main_hand_bow_got:{_safe_str(equipment.get('main_hand')) or 'missing'}"
                 )
 
         if turn_index == 2:
-            if crafting.get("resolved") is not True:
+            if _safe_str(inventory.get("reason")) != "item_given_to_npc":
                 warnings.append(
-                    f"crafting_arrows_expected_resolved_true_got:{_safe_str(crafting.get('reason')) or 'missing'}"
+                    f"companion_inventory_armor_expected_item_given_to_npc_got:{_safe_str(inventory.get('reason')) or 'missing'}"
                 )
-            arrows = _player_inventory_item_by_definition(sim, "def:iron_arrow")
-            if int(arrows.get("quantity") or 0) != 5:
+            if acceptance.get("accepted") is not True:
                 warnings.append(
-                    f"crafting_arrows_expected_arrow_quantity_5_got:{int(arrows.get('quantity') or 0)}"
+                    f"companion_inventory_armor_expected_accepted_true_got:{_safe_str(acceptance.get('reason')) or 'missing'}"
+                )
+            equipment = _companion_equipment(sim, "npc:Bran")
+            if _safe_str(equipment.get("body")) != "item:padded_armor":
+                warnings.append(
+                    f"companion_inventory_armor_expected_bran_body_armor_got:{_safe_str(equipment.get('body')) or 'missing'}"
                 )
 
         if turn_index == 3:
-            if crafting.get("resolved") is not False:
-                warnings.append("crafting_missing_materials_expected_resolved_false")
-            if _safe_str(crafting.get("reason")) != "missing_crafting_materials":
+            if inventory.get("resolved") is not False:
+                warnings.append("companion_inventory_stolen_ring_expected_resolved_false")
+            if _safe_str(inventory.get("reason")) != "companion_refused_item":
                 warnings.append(
-                    f"crafting_missing_materials_expected_missing_crafting_materials_got:{_safe_str(crafting.get('reason')) or 'missing'}"
+                    f"companion_inventory_stolen_ring_expected_refused_got:{_safe_str(inventory.get('reason')) or 'missing'}"
+                )
+            if acceptance.get("accepted") is not False:
+                warnings.append(
+                    f"companion_inventory_stolen_ring_expected_accepted_false_got:{acceptance.get('accepted')}"
+                )
+            if _safe_str(acceptance.get("reason")) != "morality_refuses_stolen_goods":
+                warnings.append(
+                    f"companion_inventory_stolen_ring_expected_morality_refusal_got:{_safe_str(acceptance.get('reason')) or 'missing'}"
                 )
 
-Also add visible reason expectations:
+            player_ring = _player_inventory_item_by_definition(sim, "def:stolen_ring")
+            if not player_ring:
+                warnings.append("companion_inventory_stolen_ring_expected_ring_remains_with_player")
+
+Expected visible reason:
 
         expected_visible_by_turn = {
-            1: "recipe_crafted",
-            2: "recipe_crafted",
-            3: "missing_crafting_materials",
+            1: "item_given_to_npc",
+            2: "item_given_to_npc",
+            3: "companion_refused_item",
         }
         expected_visible = expected_visible_by_turn.get(turn_index)
         visible_reason = _extract_visible_interaction_reason(result)
         if expected_visible and visible_reason != expected_visible:
             warnings.append(
-                f"crafting_visible_expected_{expected_visible}_got:{visible_reason or 'missing'}"
+                f"companion_inventory_visible_expected_{expected_visible}_got:{visible_reason or 'missing'}"
             )
-Patch 11 — Unit tests
+Patch 10 — Unit tests
 New file
-src/app/rpg/tests/test_bundle_i13_i14_i15_crafting.py
+src/app/rpg/tests/test_bundle_i19_i20_i21_companion_inventory.py
 from app.rpg.interactions.interaction_runtime import resolve_general_interaction
 
 
@@ -689,29 +964,61 @@ def _state():
             "inventory": {
                 "items": [
                     {
-                        "item_id": "item:wooden_sticks",
-                        "definition_id": "def:wooden_stick",
-                        "name": "wooden sticks",
-                        "aliases": ["stick", "sticks"],
-                        "quantity": 3,
+                        "item_id": "item:hunting_bow",
+                        "definition_id": "def:hunting_bow",
+                        "name": "hunting bow",
+                        "aliases": ["bow"],
                     },
                     {
-                        "item_id": "item:cloth_scraps",
-                        "definition_id": "def:cloth_scrap",
-                        "name": "cloth scraps",
-                        "aliases": ["cloth scrap", "scraps"],
-                        "quantity": 3,
+                        "item_id": "item:padded_armor",
+                        "definition_id": "def:padded_armor",
+                        "name": "padded armor",
+                        "aliases": ["armor"],
                     },
                     {
-                        "item_id": "item:oil_flasks",
-                        "definition_id": "def:oil_flask",
-                        "name": "oil flasks",
-                        "aliases": ["oil", "flask of oil"],
-                        "quantity": 2,
+                        "item_id": "item:stolen_ring",
+                        "definition_id": "def:stolen_ring",
+                        "name": "stolen ring",
+                        "aliases": ["ring"],
                     },
                 ],
                 "equipment": {},
                 "carry_capacity": 50.0,
+            },
+            "party_state": {
+                "max_size": 4,
+                "companions": [
+                    {
+                        "npc_id": "npc:Bran",
+                        "name": "Bran",
+                        "role": "companion",
+                        "status": "active",
+                        "current_role": "Displaced tavern keeper",
+                        "identity_arc": "revenge_after_losing_tavern",
+                        "active_motivations": ["revenge"],
+                        "loyalty": 35,
+                        "inventory": {
+                            "items": [],
+                            "equipment": {},
+                            "carry_capacity": 50.0,
+                        },
+                    },
+                    {
+                        "npc_id": "npc:Captain_Aldric",
+                        "name": "Captain Aldric",
+                        "role": "companion",
+                        "status": "active",
+                        "current_role": "Guard captain",
+                        "personality": "lawful honorable protective",
+                        "morality": "lawful guard justice",
+                        "loyalty": 20,
+                        "inventory": {
+                            "items": [],
+                            "equipment": {},
+                            "carry_capacity": 50.0,
+                        },
+                    },
+                ],
             },
         },
         "scene_items": [],
@@ -719,85 +1026,94 @@ def _state():
     }
 
 
-def _item_by_def(state, definition_id):
+def _companion(state, npc_id):
+    for companion in state["player_state"]["party_state"]["companions"]:
+        if companion["npc_id"] == npc_id:
+            return companion
+    return {}
+
+
+def _player_item_by_def(state, definition_id):
     for item in state["player_state"]["inventory"]["items"]:
         if item.get("definition_id") == definition_id:
             return item
     return {}
 
 
-def test_craft_torch_consumes_materials_and_creates_output():
+def _companion_item_by_def(state, npc_id, definition_id):
+    companion = _companion(state, npc_id)
+    for item in companion.get("inventory", {}).get("items", []):
+        if item.get("definition_id") == definition_id:
+            return item
+    return {}
+
+
+def test_give_weapon_to_bran_auto_equips_main_hand():
     state = _state()
 
     result = resolve_general_interaction(
         state,
-        player_input="I craft a torch.",
+        player_input="I give the hunting bow to Bran.",
         tick=1,
     )
 
-    crafting = result["crafting_result"]
-    assert crafting["resolved"] is True
-    assert crafting["changed_state"] is True
-    assert crafting["reason"] == "recipe_crafted"
-    assert crafting["recipe_id"] == "recipe:torch"
+    inventory = result["inventory_result"]
+    acceptance = result["companion_item_acceptance_result"]
+    auto_equip = result["companion_auto_equip_result"]
 
-    assert _item_by_def(state, "def:torch")["quantity"] == 1
-    assert _item_by_def(state, "def:wooden_stick")["quantity"] == 2
-    assert _item_by_def(state, "def:cloth_scrap")["quantity"] == 2
-    assert _item_by_def(state, "def:oil_flask")["quantity"] == 1
+    assert inventory["resolved"] is True
+    assert inventory["reason"] == "item_given_to_npc"
+    assert acceptance["accepted"] is True
+    assert auto_equip["equipped"] is True
+    assert auto_equip["slot"] == "main_hand"
 
-
-def test_craft_arrows_stacks_output():
-    state = _state()
-
-    result = resolve_general_interaction(
-        state,
-        player_input="I craft iron arrows.",
-        tick=1,
-    )
-
-    crafting = result["crafting_result"]
-    assert crafting["resolved"] is True
-    assert crafting["reason"] == "recipe_crafted"
-    assert crafting["recipe_id"] == "recipe:arrow_bundle"
-
-    arrows = _item_by_def(state, "def:iron_arrow")
-    assert arrows["quantity"] == 5
+    bran = _companion(state, "npc:Bran")
+    assert bran["inventory"]["equipment"]["main_hand"] == "item:hunting_bow"
+    assert _companion_item_by_def(state, "npc:Bran", "def:hunting_bow")
+    assert not _player_item_by_def(state, "def:hunting_bow")
 
 
-def test_crafting_missing_materials_fails_without_mutation():
+def test_give_armor_to_bran_auto_equips_body():
     state = _state()
 
     resolve_general_interaction(
         state,
-        player_input="I craft a torch.",
+        player_input="I give the padded armor to Bran.",
         tick=1,
     )
-    resolve_general_interaction(
-        state,
-        player_input="I craft iron arrows.",
-        tick=2,
-    )
+
+    bran = _companion(state, "npc:Bran")
+    assert bran["inventory"]["equipment"]["body"] == "item:padded_armor"
+    assert _companion_item_by_def(state, "npc:Bran", "def:padded_armor")
+
+
+def test_lawful_guard_refuses_stolen_ring_and_player_keeps_it():
+    state = _state()
+
     result = resolve_general_interaction(
         state,
-        player_input="I craft a torch.",
-        tick=3,
+        player_input="I give the stolen ring to Captain Aldric.",
+        tick=1,
     )
 
-    crafting = result["crafting_result"]
-    assert crafting["resolved"] is False
-    assert crafting["changed_state"] is False
-    assert crafting["reason"] == "missing_crafting_materials"
+    inventory = result["inventory_result"]
+    acceptance = result["companion_item_acceptance_result"]
 
-    assert _item_by_def(state, "def:torch")["quantity"] == 1
-    assert not _item_by_def(state, "def:wooden_stick")
+    assert inventory["resolved"] is False
+    assert inventory["changed_state"] is False
+    assert inventory["reason"] == "companion_refused_item"
+    assert acceptance["accepted"] is False
+    assert acceptance["reason"] == "morality_refuses_stolen_goods"
+
+    assert _player_item_by_def(state, "def:stolen_ring")
+    assert not _companion_item_by_def(state, "npc:Captain_Aldric", "def:stolen_ring")
 
 Run:
 
-pytest src/app/rpg/tests/test_bundle_i13_i14_i15_crafting.py -q
+pytest src/app/rpg/tests/test_bundle_i19_i20_i21_companion_inventory.py -q
 
 Expected:
 
 3 passed
 Run validation
-pytest src/app/rpg/tests/test_bundle_i13_i14_i15_crafting.py -q
+pytest src/app/rpg/tests/test_bundle_i19_i20_i21_companion_inventory.py -q

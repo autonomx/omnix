@@ -3,7 +3,6 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any, Dict, List
 
-
 RECIPES: Dict[str, Dict[str, Any]] = {
     "recipe:torch": {
         "recipe_id": "recipe:torch",

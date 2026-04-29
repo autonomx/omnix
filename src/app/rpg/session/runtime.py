@@ -33,7 +33,7 @@ def _interaction_visible_result_reason(general_interaction_result: Dict[str, Any
     general_interaction_result = _safe_dict(general_interaction_result)
     interaction = _safe_dict(general_interaction_result.get("interaction_result"))
 
-    for key in ("inventory_result", "container_result", "repair_result", "consumable_result", "crafting_result"):
+    for key in ("inventory_result", "container_result", "repair_result", "consumable_result", "crafting_result", "merchant_result", "loot_result"):
         nested = _safe_dict(
             interaction.get(key)
             or general_interaction_result.get(key)
@@ -8446,6 +8446,8 @@ def apply_turn(
     consumable_result = _safe_dict(general_interaction_result.get("consumable_result"))
     equipment_stats = _safe_dict(general_interaction_result.get("equipment_stats"))
     crafting_result = _safe_dict(general_interaction_result.get("crafting_result"))
+    merchant_result = _safe_dict(general_interaction_result.get("merchant_result"))
+    loot_result = _safe_dict(general_interaction_result.get("loot_result"))
 
     authoritative_result = _apply_turn_authoritative(
         session_id,
@@ -8542,6 +8544,8 @@ def apply_turn(
         final_result["consumable_result"] = copy.deepcopy(consumable_result)
         final_result["equipment_stats"] = copy.deepcopy(equipment_stats)
         final_result["crafting_result"] = copy.deepcopy(crafting_result)
+        final_result["merchant_result"] = copy.deepcopy(merchant_result)
+        final_result["loot_result"] = copy.deepcopy(loot_result)
         final_result["visible_interaction_reason"] = _interaction_visible_result_reason(general_interaction_result)
 
         _nested = _safe_dict(final_result.get("result"))
@@ -8571,6 +8575,8 @@ def apply_turn(
         _nested["consumable_result"] = copy.deepcopy(consumable_result)
         _nested["equipment_stats"] = copy.deepcopy(equipment_stats)
         _nested["crafting_result"] = copy.deepcopy(crafting_result)
+        _nested["merchant_result"] = copy.deepcopy(merchant_result)
+        _nested["loot_result"] = copy.deepcopy(loot_result)
         final_result["result"] = _nested
 
         _tc = _safe_dict(final_result.get("turn_contract"))
@@ -8601,6 +8607,8 @@ def apply_turn(
         _rr["consumable_result"] = copy.deepcopy(consumable_result)
         _rr["equipment_stats"] = copy.deepcopy(equipment_stats)
         _rr["crafting_result"] = copy.deepcopy(crafting_result)
+        _rr["merchant_result"] = copy.deepcopy(merchant_result)
+        _rr["loot_result"] = copy.deepcopy(loot_result)
 
         _rr = _apply_visible_interaction_reason_to_resolved_result(
             _rr,
@@ -8654,6 +8662,8 @@ def apply_turn(
         or repair_result.get("changed_state") is True
         or consumable_result.get("changed_state") is True
         or crafting_result.get("changed_state") is True
+        or merchant_result.get("changed_state") is True
+        or loot_result.get("changed_state") is True
     ):
         session = _sync_session_simulation_state_for_early_return(
             session,

@@ -7,6 +7,7 @@ import difflib
 import html
 import json
 import os
+import re
 import shlex
 import shutil
 import signal
@@ -15,7 +16,6 @@ import sys
 import threading
 import time
 import urllib.request
-import re
 import uuid
 import zipfile
 from copy import deepcopy
@@ -1182,6 +1182,8 @@ def _render_special_panels(result: Dict[str, Any], *, prefix: str) -> str:
         ("Repair Result", "repair_result"),
         ("Consumable Result", "consumable_result"),
         ("Crafting Result", "crafting_result"),
+        ("Loot Result", "loot_result"),
+        ("Merchant Result", "merchant_result"),
         ("Ammo Result", "ammo_result"),
         ("Equipment Stats", "equipment_stats"),
     ]:
@@ -4530,6 +4532,72 @@ SERVICE_SCENARIOS = {
             "I craft a torch."
         ]
     },
+    "inventory_loot_merchant_economy": {
+        "currency": {"gold": 1, "silver": 0, "copper": 0},
+        "conversation_settings": {
+            "enabled": True,
+            "autonomous_ticks_enabled": False,
+            "frequency": "never",
+            "conversation_chance_percent": 0,
+            "allow_player_invited": False,
+            "player_inclusion_chance_percent": 0,
+            "npc_file_profiles_enabled": True,
+            "npc_evolution_enabled": True,
+            "min_ticks_between_conversations": 0,
+            "thread_cooldown_ticks": 0
+        },
+        "setup_interaction_state": {
+            "scene_items": [],
+            "scene_objects": [],
+            "player_location_id": "loc_tavern_market",
+            "player_inventory": {
+                "items": [
+                    {
+                        "item_id": "item:rusty_dagger",
+                        "definition_id": "def:rusty_dagger",
+                        "name": "rusty dagger",
+                        "aliases": ["dagger"]
+                    }
+                ],
+                "equipment": {},
+                "carry_capacity": 50.0
+            },
+            "merchant_state": {
+                "merchants": {
+                    "npc:Elara": {
+                        "merchant_id": "npc:Elara",
+                        "name": "Elara",
+                        "buy_price_multiplier": 1.0,
+                        "sell_price_multiplier": 0.5,
+                        "inventory": {
+                            "items": [
+                                {
+                                    "item_id": "merchant:elara:minor_healing_potion",
+                                    "definition_id": "def:minor_healing_potion",
+                                    "name": "minor healing potion",
+                                    "quantity": 5
+                                },
+                                {
+                                    "item_id": "merchant:elara:oil_flask",
+                                    "definition_id": "def:oil_flask",
+                                    "name": "oil flask",
+                                    "quantity": 3
+                                }
+                            ],
+                            "equipment": {},
+                            "carry_capacity": 9999.0
+                        }
+                    }
+                }
+            }
+        },
+        "turns": [
+            "__manual_generate_bandit_loot__",
+            "I buy a minor healing potion from Elara.",
+            "I sell the rusty dagger to Elara.",
+            "I buy 2 oil flasks from Elara."
+        ]
+    },
 }
 
 
@@ -5849,6 +5917,30 @@ def _player_inventory_item_by_definition(simulation_state: Dict[str, Any], defin
     return _inventory_item_by_definition(simulation_state, definition_id)
 
 
+def _player_currency(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
+    return _safe_dict(_safe_dict(simulation_state.get("player_state")).get("currency"))
+
+
+def _merchant_state(simulation_state: Dict[str, Any], merchant_id: str) -> Dict[str, Any]:
+    return _safe_dict(
+        _safe_dict(
+            _safe_dict(simulation_state.get("merchant_state")).get("merchants")
+        ).get(merchant_id)
+    )
+
+
+def _merchant_items(simulation_state: Dict[str, Any], merchant_id: str) -> List[Dict[str, Any]]:
+    return _safe_list(_safe_dict(_merchant_state(simulation_state, merchant_id).get("inventory")).get("items"))
+
+
+def _merchant_item_by_definition(simulation_state: Dict[str, Any], merchant_id: str, definition_id: str) -> Dict[str, Any]:
+    for item in _merchant_items(simulation_state, merchant_id):
+        item = _safe_dict(item)
+        if _safe_str(item.get("definition_id")) == definition_id:
+            return item
+    return {}
+
+
 def _player_inventory_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
     return _safe_dict(_safe_dict(simulation_state.get("player_state")).get("inventory"))
 
@@ -6700,6 +6792,129 @@ def _manual_regression_warnings(
         if expected_visible and visible_reason != expected_visible:
             warnings.append(
                 f"crafting_visible_expected_{expected_visible}_got:{visible_reason or 'missing'}"
+            )
+
+    if scenario_name == "inventory_loot_merchant_economy":
+        sim = _extract_simulation_state(result)
+        interaction = _extract_interaction_result(result)
+        loot = _safe_dict(
+            result.get("loot_result")
+            or _safe_dict(result.get("result")).get("loot_result")
+        )
+        merchant = _safe_dict(
+            interaction.get("merchant_result")
+            or result.get("merchant_result")
+            or _safe_dict(result.get("result")).get("merchant_result")
+        )
+
+        if turn_index == 1:
+            if loot.get("resolved") is not True:
+                warnings.append(
+                    f"loot_expected_resolved_true_got:{_safe_str(loot.get('reason')) or 'missing'}"
+                )
+            if _safe_str(loot.get("reason")) != "loot_generated":
+                warnings.append(
+                    f"loot_expected_loot_generated_got:{_safe_str(loot.get('reason')) or 'missing'}"
+                )
+            if not _safe_list(loot.get("items_created")):
+                warnings.append("loot_expected_items_created")
+            seeded_currency = _player_currency(sim)
+            if not seeded_currency:
+                warnings.append("loot_merchant_expected_player_state_currency_seeded")
+
+        if turn_index == 2:
+            if merchant.get("resolved") is not True:
+                warnings.append(
+                    f"merchant_buy_expected_resolved_true_got:{_safe_str(merchant.get('reason')) or 'missing'}"
+                )
+            if _safe_str(merchant.get("reason")) != "item_bought_from_merchant":
+                warnings.append(
+                    f"merchant_buy_expected_item_bought_from_merchant_got:{_safe_str(merchant.get('reason')) or 'missing'}"
+                )
+            potion = _player_inventory_item_by_definition(sim, "def:minor_healing_potion")
+            if int(potion.get("quantity") or 0) < 1:
+                warnings.append("merchant_buy_expected_player_has_potion")
+            currency = _player_currency(sim)
+            if int(currency.get("gold") or 0) != 0 or int(currency.get("silver") or 0) != 90:
+                warnings.append(
+                    "merchant_buy_expected_currency_after_potion_0g_90s_0c_got:"
+                    + _compact_json(currency)
+                )
+
+        if turn_index == 3:
+            if _safe_str(merchant.get("reason")) != "item_sold_to_merchant":
+                warnings.append(
+                    f"merchant_sell_expected_item_sold_to_merchant_got:{_safe_str(merchant.get('reason')) or 'missing'}"
+                )
+            player_items = _safe_list(
+                _safe_dict(
+                    _safe_dict(sim.get("player_state")).get("inventory")
+                ).get("items")
+            )
+
+            # The scenario starts with item:rusty_dagger, but Turn 1 loot can
+            # deterministically add another rusty dagger, usually with a suffix
+            # such as item:rusty_dagger:2. The sell validation must verify that
+            # the original sold item is gone, not that no dagger definition
+            # remains anywhere in inventory.
+            original_dagger_still_present = False
+            remaining_loot_daggers = 0
+
+            for item in player_items:
+                item = _safe_dict(item)
+                item_id = _safe_str(item.get("item_id"))
+                definition_id = _safe_str(item.get("definition_id"))
+
+                if item_id == "item:rusty_dagger":
+                    original_dagger_still_present = True
+
+                if definition_id == "def:rusty_dagger" and item_id != "item:rusty_dagger":
+                    remaining_loot_daggers += int(item.get("quantity") or 1)
+
+            if original_dagger_still_present:
+                warnings.append("merchant_sell_expected_original_dagger_item_id_removed_from_player_inventory")
+            merchant_dagger = _merchant_item_by_definition(sim, "npc:Elara", "def:rusty_dagger")
+            if not merchant_dagger:
+                warnings.append("merchant_sell_expected_elara_has_dagger")
+            elif int(merchant_dagger.get("quantity") or 0) < 1:
+                warnings.append(
+                    f"merchant_sell_expected_elara_dagger_quantity_at_least_1_got:{int(merchant_dagger.get('quantity') or 0)}"
+                )
+            currency = _player_currency(sim)
+            if int(currency.get("gold") or 0) != 0 or int(currency.get("silver") or 0) != 94:
+                warnings.append(
+                    "merchant_sell_expected_currency_after_dagger_0g_94s_0c_got:"
+                    + _compact_json(currency)
+                )
+
+        if turn_index == 4:
+            if _safe_str(merchant.get("reason")) != "item_bought_from_merchant":
+                warnings.append(
+                    f"merchant_buy_oil_expected_item_bought_from_merchant_got:{_safe_str(merchant.get('reason')) or 'missing'}"
+                )
+            oil = _player_inventory_item_by_definition(sim, "def:oil_flask")
+            if int(oil.get("quantity") or 0) != 2:
+                warnings.append(
+                    f"merchant_buy_oil_expected_player_oil_quantity_2_got:{int(oil.get('quantity') or 0)}"
+                )
+            currency = _player_currency(sim)
+            if int(currency.get("gold") or 0) != 0 or int(currency.get("silver") or 0) != 90:
+                warnings.append(
+                    "merchant_buy_oil_expected_currency_after_0g_90s_0c_got:"
+                    + _compact_json(currency)
+                )
+
+        expected_visible_by_turn = {
+            1: "loot_generated",
+            2: "item_bought_from_merchant",
+            3: "item_sold_to_merchant",
+            4: "item_bought_from_merchant",
+        }
+        expected_visible = expected_visible_by_turn.get(turn_index)
+        visible_reason = _extract_visible_interaction_reason(result)
+        if expected_visible and visible_reason != expected_visible:
+            warnings.append(
+                f"loot_merchant_visible_expected_{expected_visible}_got:{visible_reason or 'missing'}"
             )
 
     conversation = _extract_conversation_result(result)
@@ -8186,6 +8401,15 @@ def _apply_manual_scenario_setup(session_id: str, scenario: Dict[str, Any]) -> b
             simulation_state["location_id"] = location_id
         simulation_state["scene_objects"] = _safe_list(setup_interaction_state.get("scene_objects"))
         simulation_state["scene_items"] = _safe_list(setup_interaction_state.get("scene_items"))
+
+        scenario_currency = _safe_dict(scenario.get("currency"))
+        if scenario_currency:
+            player_state["currency"] = {
+                "gold": int(scenario_currency.get("gold") or 0),
+                "silver": int(scenario_currency.get("silver") or 0),
+                "copper": int(scenario_currency.get("copper") or 0),
+            }
+
         if isinstance(setup_interaction_state.get("player_inventory"), dict):
             player_state["inventory"] = _safe_dict(setup_interaction_state.get("player_inventory"))
         if isinstance(setup_interaction_state.get("party_state"), dict):
@@ -8194,6 +8418,8 @@ def _apply_manual_scenario_setup(session_id: str, scenario: Dict[str, Any]) -> b
             player_state["hp"] = int(setup_interaction_state.get("player_hp") or 0)
         if "player_max_hp" in setup_interaction_state:
             player_state["max_hp"] = int(setup_interaction_state.get("player_max_hp") or 1)
+        if isinstance(setup_interaction_state.get("merchant_state"), dict):
+            simulation_state["merchant_state"] = _safe_dict(setup_interaction_state.get("merchant_state"))
         simulation_state["player_state"] = player_state
 
         setup_payload = _safe_dict(session.get("setup_payload"))
@@ -8252,6 +8478,11 @@ def _write_session_currency(session_id: str, currency: Dict[str, Any]) -> bool:
         player_state["inventory_state"] = inventory_state
 
     inventory_state["currency"] = {
+        "gold": int(currency.get("gold") or 0),
+        "silver": int(currency.get("silver") or 0),
+        "copper": int(currency.get("copper") or 0),
+    }
+    player_state["currency"] = {
         "gold": int(currency.get("gold") or 0),
         "silver": int(currency.get("silver") or 0),
         "copper": int(currency.get("copper") or 0),
@@ -9518,7 +9749,10 @@ def _run_one_service_scenario(
                 "session": session,
             }
         elif _safe_str(player_input) == "__manual_consume_equipped_ammo__":
-            from app.rpg.interactions.equipment_runtime import consume_equipped_ammo, project_equipment_stats
+            from app.rpg.interactions.equipment_runtime import (
+                consume_equipped_ammo,
+                project_equipment_stats,
+            )
 
             command = _safe_str(player_input)
             sim = _extract_simulation_state(last_result) if last_result else _safe_dict(session.get("simulation_state"))
@@ -9553,6 +9787,44 @@ def _run_one_service_scenario(
                 },
                 "ammo_result": ammo_result,
                 "equipment_stats": equipment_stats,
+                "simulation_state": sim,
+                "session": session,
+            }
+        elif _safe_str(player_input) == "__manual_generate_bandit_loot__":
+            from app.rpg.interactions.loot_runtime import generate_loot_from_table
+
+            command = _safe_str(player_input)
+            sim = _extract_simulation_state(last_result) if last_result else _safe_dict(session.get("simulation_state"))
+            if not sim:
+                sim = _ensure_manual_simulation_roots(session)
+
+            loot_result = generate_loot_from_table(
+                sim,
+                loot_table_id="loot:bandit_common",
+                source_id="enc:bandit_common_manual",
+                session_id=_safe_str(session.get("session_id")),
+                tick=manual_turn_index,
+                add_to_inventory=True,
+            )
+            visible_reason = _safe_str(loot_result.get("reason") or "loot_not_generated")
+            session["simulation_state"] = sim
+            _sync_manual_simulation_state(session, sim)
+            _save_manual_session_for_test(session, reason="manual generate bandit loot carry-forward")
+            result = {
+                "ok": True,
+                "visible_interaction_reason": visible_reason,
+                "narration_preview": f"Result: {visible_reason}",
+                "final_narration": f"Result: {visible_reason}",
+                "result": {
+                    "ok": True,
+                    "manual_command": command,
+                    "visible_interaction_reason": visible_reason,
+                    "narration_preview": f"Result: {visible_reason}",
+                    "final_narration": f"Result: {visible_reason}",
+                    "loot_result": loot_result,
+                    "simulation_state": sim,
+                },
+                "loot_result": loot_result,
                 "simulation_state": sim,
                 "session": session,
             }

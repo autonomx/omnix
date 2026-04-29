@@ -20,6 +20,8 @@ SUPPORTED_ACTION_KINDS = {
     "talk",
     "consume",
     "craft",
+    "buy",
+    "sell",
     "unknown",
 }
 
@@ -305,6 +307,78 @@ def resolve_semantic_action_v2(
             "recipe_ref": clean_target,
             "quantity": quantity,
             "confidence": "high" if clean_target else "low",
+            "raw_input": raw,
+            "source": "deterministic_semantic_action_resolver_v2",
+        }
+
+    if re.search(r"\b(buy|purchase)\b", text):
+        item_ref = ""
+        merchant_ref = ""
+
+        match = re.search(r"\b(?:buy|purchase)\s+([^,.!?]+?)\s+from\s+([^,.!?]+)", text, re.I)
+        if match:
+            raw_item = _clean_target_ref(match.group(1))
+            quantity, item_ref = _parse_leading_quantity(raw_item)
+            merchant_ref = _clean_target_ref(match.group(2))
+        else:
+            item_ref = _first_match(
+                [
+                    r"\b(?:buy|purchase)\s+([^,.!?]+)",
+                ],
+                text,
+            )
+            quantity, item_ref = _parse_leading_quantity(item_ref)
+
+        merchant_id = ""
+        if merchant_ref.lower() == "elara":
+            merchant_id = "npc:Elara"
+
+        return {
+            "resolved": True,
+            "kind": "buy",
+            "actor_id": actor_id,
+            "target_ref": item_ref,
+            "item_ref": item_ref,
+            "secondary_target_ref": merchant_ref,
+            "merchant_id": merchant_id,
+            "quantity": quantity,
+            "confidence": "high" if item_ref else "low",
+            "raw_input": raw,
+            "source": "deterministic_semantic_action_resolver_v2",
+        }
+
+    if re.search(r"\b(sell)\b", text):
+        item_ref = ""
+        merchant_ref = ""
+
+        match = re.search(r"\bsell\s+([^,.!?]+?)\s+to\s+([^,.!?]+)", text, re.I)
+        if match:
+            raw_item = _clean_target_ref(match.group(1))
+            quantity, item_ref = _parse_leading_quantity(raw_item)
+            merchant_ref = _clean_target_ref(match.group(2))
+        else:
+            item_ref = _first_match(
+                [
+                    r"\bsell\s+([^,.!?]+)",
+                ],
+                text,
+            )
+            quantity, item_ref = _parse_leading_quantity(item_ref)
+
+        merchant_id = ""
+        if merchant_ref.lower() == "elara":
+            merchant_id = "npc:Elara"
+
+        return {
+            "resolved": True,
+            "kind": "sell",
+            "actor_id": actor_id,
+            "target_ref": item_ref,
+            "item_ref": item_ref,
+            "secondary_target_ref": merchant_ref,
+            "merchant_id": merchant_id,
+            "quantity": quantity,
+            "confidence": "high" if item_ref else "low",
             "raw_input": raw,
             "source": "deterministic_semantic_action_resolver_v2",
         }
