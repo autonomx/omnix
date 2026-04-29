@@ -1,535 +1,266 @@
-Bundle I7-I8-I9 — Containers, Durability, and Repair Materials v1
+Bundle I10-I11-I12 — Consumables, Ammo, and Equipment Stats v1
 
 Goal:
 
-I7 — Container items can hold other items with bounded capacity.
-I8 — Durable items expose condition/durability and can be repaired.
-I9 — Repair actions consume materials or use tools deterministically.
-G/I cleanup — visible result summary should use inventory/repair results instead of stale item_not_found.
+I10 — Consumable items can apply bounded deterministic effects and decrement quantity.
+I11 — Ammo items can be selected/equipped and consumed by a deterministic ammo runtime hook.
+I12 — Equipped items project combat-ready equipment stats.
 
-This should not add crafting recipes, consumables, ammo consumption, merchants, or loot tables yet.
+This bundle should not implement full combat yet. It only prepares inventory state for combat.
 
 Expected behavior
-Container
+Consumable
 
 Input:
 
-I put the iron arrows into the leather satchel.
+I drink the minor healing potion.
 
 Expected:
 
 {
-  "container_result": {
+  "consumable_result": {
     "resolved": true,
     "changed_state": true,
-    "reason": "item_added_to_container",
-    "item_id": "item:iron_arrow_stack_a",
-    "container_id": "item:leather_satchel"
+    "reason": "consumable_used",
+    "item_id": "item:minor_healing_potion",
+    "effect": {
+      "kind": "heal",
+      "amount": 5
+    },
+    "quantity_before": 2,
+    "quantity_after": 1
   }
 }
 
-Player inventory keeps the satchel, and the arrows move into:
+Player health changes deterministically:
 
 {
-  "item_id": "item:leather_satchel",
-  "container": {
-    "capacity_weight": 15.0,
-    "items": [
-      {
-        "definition_id": "def:iron_arrow",
-        "quantity": 15
-      }
-    ]
+  "player_state": {
+    "hp": 15,
+    "max_hp": 20
   }
 }
-Durability
 
-Durable items already have condition like:
+after using a potion at hp=10.
 
-{
-  "condition": {
-    "durability": 0.55,
-    "max_durability": 1.0
-  }
-}
-Repair with tool
+Ammo selection
 
 Input:
 
-I repair the rusty dagger with the whetstone.
+I equip the iron arrows as ammo.
 
 Expected:
 
 {
-  "repair_result": {
+  "inventory_result": {
     "resolved": true,
     "changed_state": true,
-    "reason": "item_repaired_with_tool",
-    "target_item_id": "item:rusty_dagger",
-    "tool_item_id": "item:whetstone",
-    "condition_before": 0.55,
-    "condition_after": 0.75
+    "reason": "ammo_equipped",
+    "slot": "ammo",
+    "item_id": "item:iron_arrow_stack_a"
   }
 }
-Repair with material
 
-Input:
-
-I repair the torn cloak with 2 cloth scraps.
-
-Expected:
+Equipment becomes:
 
 {
-  "repair_result": {
-    "resolved": true,
-    "changed_state": true,
-    "reason": "item_repaired_with_material",
-    "target_item_id": "item:torn_cloak",
-    "materials_consumed": [
-      {
-        "definition_id": "def:cloth_scrap",
-        "quantity": 2
-      }
-    ],
-    "condition_before": 0.35,
-    "condition_after": 0.65
+  "equipment": {
+    "ammo": "item:iron_arrow_stack_a"
+  }
+}
+Ammo consumption hook
+
+A runtime function should support later combat:
+
+consume_equipped_ammo(simulation_state, actor_id="player", quantity=1)
+
+Expected result:
+
+{
+  "consumed": true,
+  "ammo_item_id": "item:iron_arrow_stack_a",
+  "quantity_before": 15,
+  "quantity_after": 14
+}
+Equipment stats
+
+Equipped items project stats:
+
+{
+  "equipment_stats": {
+    "damage_min": 1,
+    "damage_max": 4,
+    "armor": 1,
+    "accuracy_bonus": 1,
+    "encumbrance_penalty": 0
   }
 }
 Patch 1 — Extend item catalog
 File
 src/app/rpg/interactions/item_catalog.py
 
-Add definitions to ITEM_DEFINITIONS:
+Add these definitions to ITEM_DEFINITIONS:
 
-    "def:leather_satchel": {
-        "definition_id": "def:leather_satchel",
-        "name": "leather satchel",
-        "kind": "container",
-        "stackable": False,
-        "max_stack": 1,
-        "unit_weight": 1.0,
-        "rarity": "common",
-        "value": {"gold": 0, "silver": 6, "copper": 0},
-        "tags": ["container", "bag", "satchel"],
-        "container": {
-            "capacity_weight": 15.0,
-            "items": [],
-        },
-    },
-    "def:whetstone": {
-        "definition_id": "def:whetstone",
-        "name": "whetstone",
-        "kind": "tool",
-        "stackable": False,
-        "max_stack": 1,
-        "unit_weight": 0.5,
-        "rarity": "common",
-        "value": {"gold": 0, "silver": 1, "copper": 0},
-        "tags": ["tool", "repair_tool", "sharpening"],
-        "repair": {
-            "tool": True,
-            "target_tags": ["blade", "weapon"],
-            "durability_restore": 0.20,
-            "consumed": False,
-        },
-    },
-    "def:cloth_scrap": {
-        "definition_id": "def:cloth_scrap",
-        "name": "cloth scrap",
-        "kind": "material",
+    "def:minor_healing_potion": {
+        "definition_id": "def:minor_healing_potion",
+        "name": "minor healing potion",
+        "kind": "consumable",
         "stackable": True,
-        "max_stack": 99,
-        "unit_weight": 0.05,
+        "max_stack": 10,
+        "unit_weight": 0.3,
         "rarity": "common",
-        "value": {"gold": 0, "silver": 0, "copper": 1},
-        "tags": ["material", "cloth", "repair_material"],
-        "repair": {
-            "material": True,
-            "target_tags": ["cloth", "armor_light"],
-            "durability_restore_per_unit": 0.15,
-            "default_quantity": 2,
-            "consumed": True,
+        "value": {"gold": 0, "silver": 10, "copper": 0},
+        "tags": ["consumable", "potion", "healing"],
+        "consumable": {
+            "effect": {
+                "kind": "heal",
+                "amount": 5,
+                "target": "self"
+            },
+            "consumed_quantity": 1
         },
     },
-    "def:torn_cloak": {
-        "definition_id": "def:torn_cloak",
-        "name": "torn cloak",
-        "kind": "armor",
+    "def:hunting_bow": {
+        "definition_id": "def:hunting_bow",
+        "name": "hunting bow",
+        "kind": "weapon",
         "stackable": False,
         "max_stack": 1,
-        "unit_weight": 1.0,
+        "unit_weight": 2.0,
         "rarity": "common",
-        "value": {"gold": 0, "silver": 3, "copper": 0},
-        "tags": ["cloth", "armor_light", "cloak"],
+        "value": {"gold": 1, "silver": 5, "copper": 0},
+        "tags": ["weapon", "bow", "ranged"],
         "equipment": {
-            "slot": "cloak",
+            "slot": "main_hand",
+            "requires_ammo_tag": "arrow",
             "stats": {
-                "armor": 0,
-                "stealth_bonus": 0,
+                "damage_min": 1,
+                "damage_max": 6,
+                "accuracy_bonus": 1,
+                "range": 4
             },
         },
         "condition": {
-            "durability": 0.35,
+            "durability": 0.9,
+            "max_durability": 1.0,
+        },
+    },
+    "def:padded_armor": {
+        "definition_id": "def:padded_armor",
+        "name": "padded armor",
+        "kind": "armor",
+        "stackable": False,
+        "max_stack": 1,
+        "unit_weight": 6.0,
+        "rarity": "common",
+        "value": {"gold": 1, "silver": 2, "copper": 0},
+        "tags": ["armor", "armor_light", "body"],
+        "equipment": {
+            "slot": "body",
+            "stats": {
+                "armor": 1,
+                "stealth_penalty": 0
+            },
+        },
+        "condition": {
+            "durability": 0.85,
             "max_durability": 1.0,
         },
     },
 
 Add aliases to NAME_TO_DEFINITION_ID:
 
-    "leather satchel": "def:leather_satchel",
-    "satchel": "def:leather_satchel",
-    "bag": "def:leather_satchel",
-    "whetstone": "def:whetstone",
-    "cloth scrap": "def:cloth_scrap",
-    "cloth scraps": "def:cloth_scrap",
-    "scrap": "def:cloth_scrap",
-    "scraps": "def:cloth_scrap",
-    "torn cloak": "def:torn_cloak",
-    "cloak": "def:torn_cloak",
-Patch 2 — Extend item model for containers and recursive weight
+    "minor healing potion": "def:minor_healing_potion",
+    "healing potion": "def:minor_healing_potion",
+    "potion": "def:minor_healing_potion",
+    "hunting bow": "def:hunting_bow",
+    "bow": "def:hunting_bow",
+    "padded armor": "def:padded_armor",
+    "armor": "def:padded_armor",
+
+def:iron_arrow already exists from I4-I6 and should include:
+
+"tags": ["ammo", "arrow", "piercing"]
+Patch 2 — Extend semantic resolver for consumables/ammo
 File
-src/app/rpg/interactions/item_model.py
-2.1 Preserve container metadata during normalization
+src/app/rpg/interactions/semantic_actions.py
+2.1 Add consume action kind
 
-In normalize_item_instance(...), after condition handling, add:
+In SUPPORTED_ACTION_KINDS, add:
 
-    container = _safe_dict(item.get("container") or definition.get("container"))
-    if container:
-        capacity = _safe_float(container.get("capacity_weight"), 0.0)
-        contained_items = [
-            normalize_item_instance(_safe_dict(contained))
-            for contained in _safe_list(container.get("items"))
-        ]
-        normalized["container"] = {
-            "capacity_weight": capacity,
-            "items": contained_items,
-        }
-2.2 Add contained-weight helper
+"consume",
+2.2 Add drink/eat/use consumable parser before generic use
 
-Add near calculate_inventory_weight(...):
+Before the generic use block, add:
 
-def calculate_item_total_weight(item: Dict[str, Any]) -> float:
-    normalized = normalize_item_instance(item)
-    own_weight = _safe_float(normalized.get("total_weight"), 0.0)
-
-    container = _safe_dict(normalized.get("container"))
-    contained = _safe_list(container.get("items"))
-    contained_weight = 0.0
-    for child in contained:
-        contained_weight += calculate_item_total_weight(_safe_dict(child))
-
-    return round(own_weight + contained_weight, 4)
-
-
-def calculate_container_contents_weight(item: Dict[str, Any]) -> float:
-    normalized = normalize_item_instance(item)
-    container = _safe_dict(normalized.get("container"))
-    total = 0.0
-    for child in _safe_list(container.get("items")):
-        total += calculate_item_total_weight(_safe_dict(child))
-    return round(total, 4)
-2.3 Replace inventory weight calculation
-
-Find:
-
-def calculate_inventory_weight(items: List[Any]) -> float:
-    total = 0.0
-    for item in _safe_list(items):
-        normalized = normalize_item_instance(_safe_dict(item))
-        total += _safe_float(normalized.get("total_weight"), 0.0)
-    return round(total, 4)
-
-Replace with:
-
-def calculate_inventory_weight(items: List[Any]) -> float:
-    total = 0.0
-    for item in _safe_list(items):
-        total += calculate_item_total_weight(_safe_dict(item))
-    return round(total, 4)
-
-This makes carried containers include their contents.
-
-Patch 3 — Add stack removal helpers
-File
-src/app/rpg/interactions/item_model.py
-
-Add:
-
-def remove_quantity_from_items_list(
-    items: List[Any],
-    *,
-    item_id: str = "",
-    definition_id: str = "",
-    quantity: int = 1,
-) -> Dict[str, Any]:
-    normalized_items = [normalize_item_instance(_safe_dict(item)) for item in _safe_list(items)]
-    quantity = max(1, _safe_int(quantity, 1))
-    removed = []
-    remaining_to_remove = quantity
-
-    for index, item in list(enumerate(normalized_items)):
-        if remaining_to_remove <= 0:
-            break
-
-        matches_id = item_id and _safe_str(item.get("item_id")) == _safe_str(item_id)
-        matches_def = definition_id and _safe_str(item.get("definition_id")) == _safe_str(definition_id)
-        if not matches_id and not matches_def:
-            continue
-
-        available = _safe_int(item.get("quantity"), 1)
-        take = min(available, remaining_to_remove)
-
-        removed_item = deepcopy(item)
-        removed_item["quantity"] = take
-        removed_item["total_weight"] = round(_safe_float(removed_item.get("unit_weight"), 0.0) * take, 4)
-        removed.append(removed_item)
-
-        remaining_qty = available - take
-        if remaining_qty <= 0:
-            normalized_items.pop(index)
-        else:
-            normalized_items[index]["quantity"] = remaining_qty
-            normalized_items[index]["total_weight"] = round(
-                _safe_float(normalized_items[index].get("unit_weight"), 0.0) * remaining_qty,
-                4,
-            )
-
-        remaining_to_remove -= take
-
-    return {
-        "removed_all": remaining_to_remove == 0,
-        "removed_items": removed,
-        "items": normalized_items,
-        "quantity_removed": quantity - remaining_to_remove,
-        "quantity_missing": remaining_to_remove,
-        "source": "deterministic_item_model",
-    }
-Patch 4 — Add container runtime
-New file
-src/app/rpg/interactions/container_runtime.py
-from __future__ import annotations
-
-from copy import deepcopy
-from typing import Any, Dict
-
-from app.rpg.interactions.item_model import (
-    add_item_to_items_list,
-    calculate_container_contents_weight,
-    calculate_item_total_weight,
-    normalize_item_instance,
-    recalculate_inventory_derived_fields,
-    remove_quantity_from_items_list,
-)
-
-
-def _safe_str(value: Any) -> str:
-    return "" if value is None else str(value)
-
-
-def _safe_dict(value: Any) -> Dict[str, Any]:
-    return value if isinstance(value, dict) else {}
-
-
-def _safe_list(value: Any):
-    return value if isinstance(value, list) else []
-
-
-def _safe_int(value: Any, default: int = 0) -> int:
-    try:
-        return int(value)
-    except Exception:
-        return default
-
-
-def _safe_float(value: Any, default: float = 0.0) -> float:
-    try:
-        return float(value)
-    except Exception:
-        return default
-
-
-def _player_inventory(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
-    player_state = _safe_dict(simulation_state.get("player_state"))
-    inventory = _safe_dict(player_state.get("inventory"))
-    if not isinstance(inventory.get("items"), list):
-        inventory["items"] = []
-    if not isinstance(inventory.get("equipment"), dict):
-        inventory["equipment"] = {}
-    player_state["inventory"] = inventory
-    simulation_state["player_state"] = player_state
-    return inventory
-
-
-def _find_item_index(items, item_id: str) -> int:
-    for idx, item in enumerate(_safe_list(items)):
-        item = _safe_dict(item)
-        if _safe_str(item.get("item_id")) == item_id:
-            return idx
-    return -1
-
-
-def _result(
-    *,
-    resolved: bool,
-    changed_state: bool,
-    reason: str,
-    action: Dict[str, Any],
-    extra: Dict[str, Any] | None = None,
-) -> Dict[str, Any]:
-    payload = {
-        "resolved": resolved,
-        "changed_state": changed_state,
-        "reason": reason,
-        "semantic_action_v2": deepcopy(_safe_dict(action)),
-        "source": "deterministic_container_runtime",
-    }
-    payload.update(_safe_dict(extra or {}))
-    return payload
-
-
-def apply_container_interaction(
-    simulation_state: Dict[str, Any],
-    *,
-    semantic_action_v2: Dict[str, Any],
-    tick: int = 0,
-) -> Dict[str, Any]:
-    action = _safe_dict(semantic_action_v2)
-    kind = _safe_str(action.get("kind"))
-    if kind != "put":
-        return _result(
-            resolved=False,
-            changed_state=False,
-            reason="not_container_action",
-            action=action,
+    if re.search(r"\b(drink|eat|consume|quaff)\b", text):
+        target = _first_match(
+            [
+                r"\b(?:drink|eat|consume|quaff)\s+([^,.!?]+)",
+            ],
+            text,
         )
-
-    item_id = _safe_str(action.get("target_id"))
-    container_id = _safe_str(action.get("secondary_target_id"))
-    quantity = max(1, _safe_int(action.get("quantity"), 1))
-
-    if not item_id or not container_id:
-        return _result(
-            resolved=False,
-            changed_state=False,
-            reason="missing_item_or_container",
-            action=action,
-        )
-
-    inventory = _player_inventory(simulation_state)
-    items = [normalize_item_instance(_safe_dict(item)) for item in _safe_list(inventory.get("items"))]
-
-    container_index = _find_item_index(items, container_id)
-    if container_index < 0:
-        return _result(
-            resolved=False,
-            changed_state=False,
-            reason="container_not_in_inventory",
-            action=action,
-            extra={"item_id": item_id, "container_id": container_id},
-        )
-
-    container_item = normalize_item_instance(items[container_index])
-    container = _safe_dict(container_item.get("container"))
-    if not container:
-        return _result(
-            resolved=False,
-            changed_state=False,
-            reason="target_is_not_container",
-            action=action,
-            extra={"container_id": container_id},
-        )
-
-    if item_id == container_id:
-        return _result(
-            resolved=False,
-            changed_state=False,
-            reason="cannot_put_container_inside_itself",
-            action=action,
-            extra={"container_id": container_id},
-        )
-
-    remove_result = remove_quantity_from_items_list(
-        items,
-        item_id=item_id,
-        quantity=quantity,
-    )
-    if not remove_result.get("removed_all"):
-        return _result(
-            resolved=False,
-            changed_state=False,
-            reason="item_not_available_for_container",
-            action=action,
-            extra={
-                "item_id": item_id,
-                "container_id": container_id,
-                "quantity_missing": remove_result.get("quantity_missing"),
-            },
-        )
-
-    removed_items = _safe_list(remove_result.get("removed_items"))
-    moving_item = normalize_item_instance(_safe_dict(removed_items[0]))
-
-    current_contents_weight = calculate_container_contents_weight(container_item)
-    moving_weight = calculate_item_total_weight(moving_item)
-    capacity = _safe_float(container.get("capacity_weight"), 0.0)
-
-    if capacity > 0 and current_contents_weight + moving_weight > capacity:
-        return _result(
-            resolved=False,
-            changed_state=False,
-            reason="container_capacity_exceeded",
-            action=action,
-            extra={
-                "item_id": item_id,
-                "container_id": container_id,
-                "contents_weight": current_contents_weight,
-                "moving_weight": moving_weight,
-                "capacity_weight": capacity,
-            },
-        )
-
-    updated_items = _safe_list(remove_result.get("items"))
-    container_index = _find_item_index(updated_items, container_id)
-    if container_index < 0:
-        return _result(
-            resolved=False,
-            changed_state=False,
-            reason="container_missing_after_item_remove",
-            action=action,
-        )
-
-    container_item = normalize_item_instance(updated_items[container_index])
-    container = _safe_dict(container_item.get("container"))
-    contents = _safe_list(container.get("items"))
-    add_result = add_item_to_items_list(contents, moving_item)
-    container["items"] = add_result["items"]
-    container_item["container"] = container
-    updated_items[container_index] = container_item
-
-    inventory["items"] = updated_items
-    inventory = recalculate_inventory_derived_fields(inventory)
-    simulation_state["player_state"]["inventory"] = inventory
-
-    return _result(
-        resolved=True,
-        changed_state=True,
-        reason="item_added_to_container",
-        action=action,
-        extra={
-            "item_id": item_id,
-            "container_id": container_id,
+        quantity, clean_target = _parse_leading_quantity(target)
+        return {
+            "resolved": True,
+            "kind": "consume",
+            "actor_id": actor_id,
+            "target_ref": clean_target,
             "quantity": quantity,
-            "stacked": bool(add_result.get("stacked")),
-            "contents_weight": calculate_container_contents_weight(container_item),
-            "capacity_weight": capacity,
-            "carry_weight": inventory.get("carry_weight"),
-            "encumbrance_state": inventory.get("encumbrance_state"),
-            "tick": int(tick or 0),
-        },
-    )
-Patch 5 — Add repair runtime
+            "confidence": "high" if clean_target else "low",
+            "raw_input": raw,
+            "source": "deterministic_semantic_action_resolver_v2",
+        }
+2.3 Improve equip parsing for ammo
+
+In the existing equip block, after target is parsed, add detection:
+
+        equipment_slot = ""
+        if re.search(r"\bas ammo\b|\bammo slot\b|\bequip .* arrows", text):
+            equipment_slot = "ammo"
+
+Then include in the return dict:
+
+"equipment_slot": equipment_slot,
+
+Final equip return should include:
+
+        return {
+            "resolved": True,
+            "kind": "equip",
+            "actor_id": actor_id,
+            "target_ref": target,
+            "equipment_slot": equipment_slot,
+            "confidence": "high" if target else "low",
+            "raw_input": raw,
+            "source": "deterministic_semantic_action_resolver_v2",
+        }
+
+For input:
+
+I equip the iron arrows as ammo.
+
+target_ref should be:
+
+iron arrows as ammo
+
+If that happens, clean it by adding:
+
+        target = re.sub(r"\s+as\s+ammo$", "", target, flags=re.I).strip()
+
+before returning.
+
+Patch 3 — Update target resolver action types
+File
+src/app/rpg/interactions/target_resolver.py
+
+In expected_target_types_for_action(...), update:
+
+if action_kind in {"take", "drop", "equip", "unequip", "put", "repair", "consume"}:
+    return ["item"]
+Patch 4 — Add consumable runtime
 New file
-src/app/rpg/interactions/repair_runtime.py
+src/app/rpg/interactions/consumable_runtime.py
 from __future__ import annotations
 
 from copy import deepcopy
@@ -557,13 +288,6 @@ def _safe_list(value: Any):
 def _safe_int(value: Any, default: int = 0) -> int:
     try:
         return int(value)
-    except Exception:
-        return default
-
-
-def _safe_float(value: Any, default: float = 0.0) -> float:
-    try:
-        return float(value)
     except Exception:
         return default
 
@@ -580,23 +304,12 @@ def _inventory(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
     return inv
 
 
-def _find_index(items, item_id: str) -> int:
-    for idx, item in enumerate(_safe_list(items)):
-        if _safe_str(_safe_dict(item).get("item_id")) == item_id:
-            return idx
-    return -1
-
-
-def _tags(item: Dict[str, Any]) -> set[str]:
-    return {_safe_str(tag) for tag in _safe_list(item.get("tags")) if _safe_str(tag)}
-
-
-def _condition(item: Dict[str, Any]) -> Dict[str, float]:
-    cond = _safe_dict(item.get("condition"))
-    return {
-        "durability": max(0.0, min(1.0, _safe_float(cond.get("durability"), 1.0))),
-        "max_durability": max(0.0, _safe_float(cond.get("max_durability"), 1.0)),
-    }
+def _find_item(items, item_id: str) -> Dict[str, Any]:
+    for item in _safe_list(items):
+        item = normalize_item_instance(_safe_dict(item))
+        if _safe_str(item.get("item_id")) == item_id:
+            return item
+    return {}
 
 
 def _result(
@@ -612,426 +325,635 @@ def _result(
         "changed_state": changed_state,
         "reason": reason,
         "semantic_action_v2": deepcopy(_safe_dict(action)),
-        "source": "deterministic_repair_runtime",
+        "source": "deterministic_consumable_runtime",
     }
     payload.update(_safe_dict(extra or {}))
     return payload
 
 
-def _repair_config(item: Dict[str, Any]) -> Dict[str, Any]:
-    return _safe_dict(item.get("repair"))
-
-
-def apply_repair_interaction(
+def apply_consumable_interaction(
     simulation_state: Dict[str, Any],
     *,
     semantic_action_v2: Dict[str, Any],
     tick: int = 0,
 ) -> Dict[str, Any]:
     action = _safe_dict(semantic_action_v2)
-    if _safe_str(action.get("kind")) != "repair":
+    if _safe_str(action.get("kind")) != "consume":
         return _result(
             resolved=False,
             changed_state=False,
-            reason="not_repair_action",
+            reason="not_consumable_action",
             action=action,
         )
 
-    target_id = _safe_str(action.get("target_id"))
-    tool_or_material_id = _safe_str(action.get("secondary_target_id"))
+    item_id = _safe_str(action.get("target_id"))
+    if not item_id:
+        return _result(
+            resolved=False,
+            changed_state=False,
+            reason="missing_consumable_item",
+            action=action,
+        )
 
     inv = _inventory(simulation_state)
     items = [normalize_item_instance(_safe_dict(item)) for item in _safe_list(inv.get("items"))]
-
-    target_index = _find_index(items, target_id)
-    if target_index < 0:
+    item = _find_item(items, item_id)
+    if not item:
         return _result(
             resolved=False,
             changed_state=False,
-            reason="repair_target_not_in_inventory",
+            reason="consumable_not_in_inventory",
             action=action,
-            extra={"target_item_id": target_id},
+            extra={"item_id": item_id},
         )
 
-    target = normalize_item_instance(items[target_index])
-    cond = _condition(target)
-    before = cond["durability"]
-
-    if before >= cond["max_durability"]:
+    consumable = _safe_dict(item.get("consumable"))
+    if not consumable:
         return _result(
             resolved=False,
             changed_state=False,
-            reason="item_already_fully_repaired",
+            reason="item_is_not_consumable",
             action=action,
-            extra={"target_item_id": target_id, "condition_before": before},
+            extra={"item_id": item_id},
         )
 
-    if not tool_or_material_id:
+    consumed_quantity = max(1, _safe_int(consumable.get("consumed_quantity"), 1))
+    quantity_before = max(1, _safe_int(item.get("quantity"), 1))
+    if quantity_before < consumed_quantity:
         return _result(
             resolved=False,
             changed_state=False,
-            reason="missing_repair_tool_or_material",
-            action=action,
-            extra={"target_item_id": target_id},
-        )
-
-    tool_index = _find_index(items, tool_or_material_id)
-    if tool_index < 0:
-        return _result(
-            resolved=False,
-            changed_state=False,
-            reason="repair_tool_or_material_not_in_inventory",
-            action=action,
-            extra={"target_item_id": target_id, "tool_or_material_id": tool_or_material_id},
-        )
-
-    repair_item = normalize_item_instance(items[tool_index])
-    repair_cfg = _repair_config(repair_item)
-    target_tags = _tags(target)
-    allowed_tags = {_safe_str(tag) for tag in _safe_list(repair_cfg.get("target_tags")) if _safe_str(tag)}
-
-    if allowed_tags and not (allowed_tags & target_tags):
-        return _result(
-            resolved=False,
-            changed_state=False,
-            reason="repair_material_not_applicable",
+            reason="insufficient_consumable_quantity",
             action=action,
             extra={
-                "target_item_id": target_id,
-                "tool_or_material_id": tool_or_material_id,
-                "target_tags": sorted(target_tags),
-                "allowed_tags": sorted(allowed_tags),
+                "item_id": item_id,
+                "required_quantity": consumed_quantity,
+                "available_quantity": quantity_before,
             },
         )
 
-    materials_consumed = []
+    effect = _safe_dict(consumable.get("effect"))
+    effect_kind = _safe_str(effect.get("kind"))
 
-    if repair_cfg.get("tool") is True:
-        restore = _safe_float(repair_cfg.get("durability_restore"), 0.0)
-        reason = "item_repaired_with_tool"
-    elif repair_cfg.get("material") is True:
-        requested_qty = max(1, _safe_int(action.get("secondary_quantity"), repair_cfg.get("default_quantity") or 1))
-        available_qty = _safe_int(repair_item.get("quantity"), 1)
-        if available_qty < requested_qty:
-            return _result(
-                resolved=False,
-                changed_state=False,
-                reason="insufficient_repair_material_quantity",
-                action=action,
-                extra={
-                    "target_item_id": target_id,
-                    "material_item_id": tool_or_material_id,
-                    "required_quantity": requested_qty,
-                    "available_quantity": available_qty,
-                },
-            )
+    player_state = _safe_dict(simulation_state.get("player_state"))
+    effect_result = {
+        "applied": False,
+        "reason": "unsupported_consumable_effect",
+        "effect": deepcopy(effect),
+    }
 
-        restore = _safe_float(repair_cfg.get("durability_restore_per_unit"), 0.0) * requested_qty
-        reason = "item_repaired_with_material"
+    if effect_kind == "heal":
+        amount = max(0, _safe_int(effect.get("amount"), 0))
+        hp_before = _safe_int(player_state.get("hp"), _safe_int(player_state.get("max_hp"), 20))
+        max_hp = max(1, _safe_int(player_state.get("max_hp"), 20))
+        hp_after = min(max_hp, hp_before + amount)
+        player_state["hp"] = hp_after
+        player_state["max_hp"] = max_hp
+        simulation_state["player_state"] = player_state
+        effect_result = {
+            "applied": True,
+            "kind": "heal",
+            "amount": amount,
+            "hp_before": hp_before,
+            "hp_after": hp_after,
+            "max_hp": max_hp,
+        }
 
-        remove_result = remove_quantity_from_items_list(
-            items,
-            item_id=tool_or_material_id,
-            quantity=requested_qty,
-        )
-        if not remove_result.get("removed_all"):
-            return _result(
-                resolved=False,
-                changed_state=False,
-                reason="failed_to_consume_repair_material",
-                action=action,
-            )
-        items = _safe_list(remove_result.get("items"))
-        target_index = _find_index(items, target_id)
-        materials_consumed.append({
-            "item_id": tool_or_material_id,
-            "definition_id": _safe_str(repair_item.get("definition_id")),
-            "quantity": requested_qty,
-        })
-    else:
+    remove_result = remove_quantity_from_items_list(
+        items,
+        item_id=item_id,
+        quantity=consumed_quantity,
+    )
+    if not remove_result.get("removed_all"):
         return _result(
             resolved=False,
             changed_state=False,
-            reason="item_is_not_repair_tool_or_material",
+            reason="failed_to_consume_item_quantity",
             action=action,
-            extra={"tool_or_material_id": tool_or_material_id},
+            extra={"item_id": item_id},
         )
 
-    target = normalize_item_instance(items[target_index])
-    cond = _condition(target)
-    before = cond["durability"]
-    after = min(cond["max_durability"], before + restore)
-    target["condition"] = {
-        "durability": round(after, 4),
-        "max_durability": cond["max_durability"],
-    }
-    items[target_index] = target
-
-    inv["items"] = items
+    inv["items"] = _safe_list(remove_result.get("items"))
     inv = recalculate_inventory_derived_fields(inv)
     simulation_state["player_state"]["inventory"] = inv
 
     return _result(
         resolved=True,
         changed_state=True,
-        reason=reason,
+        reason="consumable_used",
         action=action,
         extra={
-            "target_item_id": target_id,
-            "tool_or_material_id": tool_or_material_id,
-            "condition_before": round(before, 4),
-            "condition_after": round(after, 4),
-            "durability_restored": round(after - before, 4),
-            "materials_consumed": materials_consumed,
+            "item_id": item_id,
+            "definition_id": _safe_str(item.get("definition_id")),
+            "effect": deepcopy(effect),
+            "effect_result": effect_result,
+            "quantity_before": quantity_before,
+            "quantity_after": quantity_before - consumed_quantity,
+            "quantity_consumed": consumed_quantity,
             "carry_weight": inv.get("carry_weight"),
             "encumbrance_state": inv.get("encumbrance_state"),
             "tick": int(tick or 0),
         },
     )
-Patch 6 — Extend semantic action resolver for put X into Y
-File
-src/app/rpg/interactions/semantic_actions.py
-6.1 Add put to supported kinds
+Patch 5 — Add equipment stats and ammo runtime
+New file
+src/app/rpg/interactions/equipment_runtime.py
+from __future__ import annotations
 
-Find SUPPORTED_ACTION_KINDS, add:
+from copy import deepcopy
+from typing import Any, Dict
 
-    "put",
-6.2 Add a put parser before use
+from app.rpg.interactions.item_model import (
+    normalize_item_instance,
+    recalculate_inventory_derived_fields,
+    remove_quantity_from_items_list,
+)
 
-Add before the if re.search(r"\b(use)\b", text): block:
 
-    if re.search(r"\b(put|place|stow)\b", text):
-        item_ref = ""
-        container_ref = ""
-        quantity = 1
+DEFAULT_STATS = {
+    "damage_min": 0,
+    "damage_max": 1,
+    "armor": 0,
+    "accuracy_bonus": 0,
+    "range": 1,
+    "stealth_bonus": 0,
+    "stealth_penalty": 0,
+    "encumbrance_penalty": 0,
+}
 
-        match = re.search(r"\b(?:put|place|stow)\s+([^,.!?]+?)\s+(?:into|in|inside)\s+([^,.!?]+)", text, re.I)
-        if match:
-            raw_item = _clean_target_ref(match.group(1))
-            quantity, item_ref = _parse_leading_quantity(raw_item)
-            container_ref = _clean_target_ref(match.group(2))
 
+def _safe_str(value: Any) -> str:
+    return "" if value is None else str(value)
+
+
+def _safe_dict(value: Any) -> Dict[str, Any]:
+    return value if isinstance(value, dict) else {}
+
+
+def _safe_list(value: Any):
+    return value if isinstance(value, list) else []
+
+
+def _safe_int(value: Any, default: int = 0) -> int:
+    try:
+        return int(value)
+    except Exception:
+        return default
+
+
+def _inventory_for_actor(simulation_state: Dict[str, Any], actor_id: str) -> Dict[str, Any]:
+    if actor_id in {"", "player"}:
+        player_state = _safe_dict(simulation_state.get("player_state"))
+        inv = _safe_dict(player_state.get("inventory"))
+        if not isinstance(inv.get("items"), list):
+            inv["items"] = []
+        if not isinstance(inv.get("equipment"), dict):
+            inv["equipment"] = {}
+        player_state["inventory"] = inv
+        simulation_state["player_state"] = player_state
+        return inv
+
+    party_state = _safe_dict(_safe_dict(simulation_state.get("player_state")).get("party_state"))
+    for companion in _safe_list(party_state.get("companions")):
+        companion = _safe_dict(companion)
+        if _safe_str(companion.get("npc_id")) == actor_id:
+            inv = _safe_dict(companion.get("inventory"))
+            if not isinstance(inv.get("items"), list):
+                inv["items"] = []
+            if not isinstance(inv.get("equipment"), dict):
+                inv["equipment"] = {}
+            companion["inventory"] = inv
+            return inv
+
+    return {}
+
+
+def _find_item(items, item_id: str) -> Dict[str, Any]:
+    for item in _safe_list(items):
+        item = normalize_item_instance(_safe_dict(item))
+        if _safe_str(item.get("item_id")) == item_id:
+            return item
+    return {}
+
+
+def _item_tags(item: Dict[str, Any]) -> set[str]:
+    return {_safe_str(tag) for tag in _safe_list(item.get("tags")) if _safe_str(tag)}
+
+
+def project_equipment_stats(
+    simulation_state: Dict[str, Any],
+    *,
+    actor_id: str = "player",
+) -> Dict[str, Any]:
+    inv = _inventory_for_actor(simulation_state, actor_id)
+    items = [normalize_item_instance(_safe_dict(item)) for item in _safe_list(inv.get("items"))]
+    equipment = _safe_dict(inv.get("equipment"))
+
+    stats = deepcopy(DEFAULT_STATS)
+    equipped_items = []
+
+    for slot, item_id in equipment.items():
+        item = _find_item(items, _safe_str(item_id))
+        if not item:
+            continue
+
+        item_equipment = _safe_dict(item.get("equipment"))
+        item_stats = _safe_dict(item_equipment.get("stats"))
+        for key, value in item_stats.items():
+            stats[key] = _safe_int(stats.get(key), 0) + _safe_int(value, 0)
+
+        equipped_items.append({
+            "slot": _safe_str(slot),
+            "item_id": _safe_str(item_id),
+            "definition_id": _safe_str(item.get("definition_id")),
+            "name": _safe_str(item.get("name")),
+            "stats": deepcopy(item_stats),
+        })
+
+    encumbrance = _safe_str(inv.get("encumbrance_state"))
+    penalty = 0
+    if encumbrance == "burdened":
+        penalty = 1
+    elif encumbrance == "overloaded":
+        penalty = 3
+    elif encumbrance == "immobile":
+        penalty = 99
+
+    stats["encumbrance_penalty"] = penalty
+
+    result = {
+        "projected": True,
+        "actor_id": actor_id,
+        "stats": stats,
+        "equipped_items": equipped_items,
+        "source": "deterministic_equipment_runtime",
+    }
+
+    inv["equipment_stats"] = result
+    return result
+
+
+def ammo_compatible_with_equipped_weapon(
+    simulation_state: Dict[str, Any],
+    *,
+    actor_id: str = "player",
+) -> Dict[str, Any]:
+    inv = _inventory_for_actor(simulation_state, actor_id)
+    items = [normalize_item_instance(_safe_dict(item)) for item in _safe_list(inv.get("items"))]
+    equipment = _safe_dict(inv.get("equipment"))
+
+    weapon_id = _safe_str(equipment.get("main_hand"))
+    ammo_id = _safe_str(equipment.get("ammo"))
+
+    weapon = _find_item(items, weapon_id)
+    ammo = _find_item(items, ammo_id)
+
+    if not weapon_id or not weapon:
         return {
-            "resolved": True,
-            "kind": "put",
+            "compatible": True,
+            "reason": "no_weapon_equipped",
+            "source": "deterministic_equipment_runtime",
+        }
+
+    required_tag = _safe_str(_safe_dict(weapon.get("equipment")).get("requires_ammo_tag"))
+    if not required_tag:
+        return {
+            "compatible": True,
+            "reason": "weapon_does_not_require_ammo",
+            "source": "deterministic_equipment_runtime",
+        }
+
+    if not ammo_id or not ammo:
+        return {
+            "compatible": False,
+            "reason": "required_ammo_not_equipped",
+            "required_ammo_tag": required_tag,
+            "source": "deterministic_equipment_runtime",
+        }
+
+    compatible = required_tag in _item_tags(ammo)
+    return {
+        "compatible": compatible,
+        "reason": "ammo_compatible" if compatible else "ammo_tag_mismatch",
+        "weapon_item_id": weapon_id,
+        "ammo_item_id": ammo_id,
+        "required_ammo_tag": required_tag,
+        "ammo_tags": sorted(_item_tags(ammo)),
+        "source": "deterministic_equipment_runtime",
+    }
+
+
+def consume_equipped_ammo(
+    simulation_state: Dict[str, Any],
+    *,
+    actor_id: str = "player",
+    quantity: int = 1,
+    tick: int = 0,
+) -> Dict[str, Any]:
+    inv = _inventory_for_actor(simulation_state, actor_id)
+    if not inv:
+        return {
+            "consumed": False,
+            "reason": "inventory_not_available",
             "actor_id": actor_id,
-            "target_ref": item_ref,
-            "secondary_target_ref": container_ref,
-            "quantity": quantity,
-            "confidence": "high" if item_ref and container_ref else "low",
-            "raw_input": raw,
-            "source": "deterministic_semantic_action_resolver_v2",
+            "source": "deterministic_equipment_runtime",
         }
-Patch 7 — Quantity-aware repair material parsing
-File
-src/app/rpg/interactions/semantic_actions.py
 
-In the repaired repair block, after splitting target_part, tool_part, parse quantity for tool/material:
-
-Find:
-
-            target_ref = _clean_target_ref(target_part)
-            tool_ref = _clean_target_ref(tool_part)
-
-Replace with:
-
-            target_ref = _clean_target_ref(target_part)
-            secondary_quantity, tool_ref = _parse_leading_quantity(tool_part)
-
-Before the block, initialize:
-
-    secondary_quantity = 1
-
-Then add to the returned dict:
-
-        "secondary_quantity": secondary_quantity,
-
-Final repair return should include:
-
-        "target_ref": target_ref,
-        "secondary_target_ref": tool_ref,
-        "tool_ref": tool_ref,
-        "secondary_quantity": secondary_quantity,
-Patch 8 — Target type/source routing
-File
-src/app/rpg/interactions/target_resolver.py
-
-Update expected_target_types_for_action:
-
-    if action_kind in {"take", "drop", "equip", "unequip", "put", "repair"}:
-        return ["item"]
-
-Keep open/close/inspect/use as they are.
-
-Patch 9 — Wire container and repair runtimes
-File
-src/app/rpg/interactions/interaction_runtime.py
-9.1 Add imports
-from app.rpg.interactions.container_runtime import apply_container_interaction
-from app.rpg.interactions.repair_runtime import apply_repair_interaction
-9.2 Update allowed source helper
-
-Find _allowed_sources_for_action(...) and update:
-
-def _allowed_sources_for_action(kind: str) -> list[str]:
-    if kind == "take":
-        return ["scene_items", "location_items", "world_items"]
-    if kind in {"drop", "equip", "unequip", "give", "put", "repair"}:
-        return ["player_inventory"]
-    return []
-9.3 Route secondary target for put/repair through player inventory
-
-Find secondary resolution logic:
-
-secondary_expected = ["npc"] if kind == "give" else []
-secondary_result = resolve_target_ref(...)
-
-Replace with:
-
-        secondary_expected = ["npc"] if kind == "give" else []
-        secondary_allowed_sources = []
-        if kind in {"put", "repair"}:
-            secondary_expected = ["item"]
-            secondary_allowed_sources = ["player_inventory"]
-
-        secondary_result = resolve_target_ref(
-            simulation_state,
-            target_ref=secondary_ref,
-            expected_types=secondary_expected,
-            allowed_sources=secondary_allowed_sources,
-        )
-9.4 Add container/repair result routing
-
-After inventory routing branch and before generic placeholder result, add:
-
-    container_result = {}
-    if kind == "put":
-        container_result = apply_container_interaction(
-            simulation_state,
-            semantic_action_v2=enriched_action,
-            tick=tick,
-        )
-        interaction_result = {
-            "resolved": bool(container_result.get("resolved")),
-            "changed_state": bool(container_result.get("changed_state")),
-            "reason": _safe_str(container_result.get("reason")),
-            "semantic_action_v2": deepcopy(enriched_action),
-            "target_resolution": deepcopy(target_result),
-            "secondary_target_resolution": deepcopy(secondary_result),
-            "container_result": deepcopy(container_result),
-            "source": "deterministic_general_interaction_runtime",
-        }
+    compatibility = ammo_compatible_with_equipped_weapon(simulation_state, actor_id=actor_id)
+    if compatibility.get("compatible") is not True:
         return {
-            "handled": bool(interaction_result.get("resolved")),
-            "semantic_action_v2": deepcopy(enriched_action),
-            "interaction_result": deepcopy(interaction_result),
-            "container_result": deepcopy(container_result),
-            "source": "deterministic_general_interaction_runtime",
+            "consumed": False,
+            "reason": _safe_str(compatibility.get("reason")),
+            "compatibility": compatibility,
+            "actor_id": actor_id,
+            "source": "deterministic_equipment_runtime",
         }
 
-    repair_result = {}
-    if kind == "repair":
-        repair_result = apply_repair_interaction(
-            simulation_state,
-            semantic_action_v2=enriched_action,
-            tick=tick,
-        )
-        interaction_result = {
-            "resolved": bool(repair_result.get("resolved")),
-            "changed_state": bool(repair_result.get("changed_state")),
-            "reason": _safe_str(repair_result.get("reason")),
-            "semantic_action_v2": deepcopy(enriched_action),
-            "target_resolution": deepcopy(target_result),
-            "secondary_target_resolution": deepcopy(secondary_result),
-            "repair_result": deepcopy(repair_result),
-            "source": "deterministic_general_interaction_runtime",
-        }
+    equipment = _safe_dict(inv.get("equipment"))
+    ammo_id = _safe_str(equipment.get("ammo"))
+    if not ammo_id:
         return {
-            "handled": bool(interaction_result.get("resolved")),
-            "semantic_action_v2": deepcopy(enriched_action),
-            "interaction_result": deepcopy(interaction_result),
-            "repair_result": deepcopy(repair_result),
-            "source": "deterministic_general_interaction_runtime",
+            "consumed": False,
+            "reason": "ammo_not_equipped",
+            "actor_id": actor_id,
+            "source": "deterministic_equipment_runtime",
         }
-Patch 10 — Persist container/repair mutations in session runtime
+
+    items = [normalize_item_instance(_safe_dict(item)) for item in _safe_list(inv.get("items"))]
+    ammo = _find_item(items, ammo_id)
+    if not ammo:
+        return {
+            "consumed": False,
+            "reason": "equipped_ammo_not_found",
+            "actor_id": actor_id,
+            "ammo_item_id": ammo_id,
+            "source": "deterministic_equipment_runtime",
+        }
+
+    quantity = max(1, _safe_int(quantity, 1))
+    before = max(0, _safe_int(ammo.get("quantity"), 0))
+    if before < quantity:
+        return {
+            "consumed": False,
+            "reason": "insufficient_ammo",
+            "actor_id": actor_id,
+            "ammo_item_id": ammo_id,
+            "quantity_before": before,
+            "quantity_required": quantity,
+            "source": "deterministic_equipment_runtime",
+        }
+
+    remove_result = remove_quantity_from_items_list(
+        items,
+        item_id=ammo_id,
+        quantity=quantity,
+    )
+    if not remove_result.get("removed_all"):
+        return {
+            "consumed": False,
+            "reason": "failed_to_consume_ammo",
+            "actor_id": actor_id,
+            "ammo_item_id": ammo_id,
+            "source": "deterministic_equipment_runtime",
+        }
+
+    inv["items"] = _safe_list(remove_result.get("items"))
+    inv = recalculate_inventory_derived_fields(inv)
+
+    after = before - quantity
+    if after <= 0:
+        equipment.pop("ammo", None)
+    inv["equipment"] = equipment
+
+    if actor_id in {"", "player"}:
+        simulation_state["player_state"]["inventory"] = inv
+
+    return {
+        "consumed": True,
+        "actor_id": actor_id,
+        "ammo_item_id": ammo_id,
+        "quantity_before": before,
+        "quantity_after": after,
+        "quantity_consumed": quantity,
+        "equipment": deepcopy(equipment),
+        "carry_weight": inv.get("carry_weight"),
+        "encumbrance_state": inv.get("encumbrance_state"),
+        "tick": int(tick or 0),
+        "source": "deterministic_equipment_runtime",
+    }
+Patch 6 — Update inventory equip behavior for ammo slot
 File
-src/app/rpg/session/runtime.py
+src/app/rpg/interactions/inventory_runtime.py
 
-After existing:
+Add import:
 
-inventory_result = _safe_dict(general_interaction_result.get("inventory_result"))
+from app.rpg.interactions.equipment_runtime import project_equipment_stats
+
+In the equip branch, after:
+
+item = _safe_dict(inventory_items[index])
+slot = _slot_for_item(item)
 
 add:
 
+requested_slot = _safe_str(action.get("equipment_slot"))
+if requested_slot:
+    slot = requested_slot
+
+if slot == "ammo":
+    tags = {_safe_str(tag) for tag in _safe_list(item.get("tags"))}
+    if "ammo" not in tags:
+        return _inventory_result(
+            resolved=False,
+            changed_state=False,
+            reason="item_is_not_ammo",
+            action=action,
+            item=item,
+        )
+
+Change equipped reason in return:
+
+reason = "ammo_equipped" if slot == "ammo" else "item_equipped"
+
+Use that in _inventory_result(...).
+
+After saving equipment and recalculating inventory, add:
+
+equipment_stats = project_equipment_stats(simulation_state, actor_id="player")
+
+In return extra, add:
+
+"equipment_stats": deepcopy(equipment_stats),
+
+So final equip return becomes conceptually:
+
+return _inventory_result(
+    resolved=True,
+    changed_state=True,
+    reason=reason,
+    action=action,
+    item=item,
+    extra={
+        "item_id": target_id,
+        "slot": slot,
+        "equipment_stats": deepcopy(equipment_stats),
+        "carry_weight": inventory.get("carry_weight"),
+        "encumbrance_state": inventory.get("encumbrance_state"),
+        "tick": int(tick or 0),
+    },
+)
+
+In the unequip branch, after recalc, also project stats:
+
+equipment_stats = project_equipment_stats(simulation_state, actor_id="player")
+
+and include in return.
+
+Patch 7 — Wire consume runtime into interaction runtime
+File
+src/app/rpg/interactions/interaction_runtime.py
+
+Add imports:
+
+from app.rpg.interactions.consumable_runtime import apply_consumable_interaction
+from app.rpg.interactions.equipment_runtime import project_equipment_stats
+
+Update _allowed_sources_for_action(...):
+
+if kind in {"drop", "equip", "unequip", "give", "put", "repair", "consume"}:
+    return ["player_inventory"]
+
+After inventory/container/repair routing and before generic placeholder, add consumable routing. Put it before generic placeholder:
+
+    consumable_result = {}
+    if kind == "consume":
+        consumable_result = apply_consumable_interaction(
+            simulation_state,
+            semantic_action_v2=enriched_action,
+            tick=tick,
+        )
+        equipment_stats = project_equipment_stats(simulation_state, actor_id="player")
+        interaction_result = {
+            "resolved": bool(consumable_result.get("resolved")),
+            "changed_state": bool(consumable_result.get("changed_state")),
+            "reason": _safe_str(consumable_result.get("reason")),
+            "semantic_action_v2": deepcopy(enriched_action),
+            "target_resolution": deepcopy(target_result),
+            "secondary_target_resolution": deepcopy(secondary_result),
+            "consumable_result": deepcopy(consumable_result),
+            "equipment_stats": deepcopy(equipment_stats),
+            "source": "deterministic_general_interaction_runtime",
+        }
+        return {
+            "handled": bool(interaction_result.get("resolved")),
+            "semantic_action_v2": deepcopy(enriched_action),
+            "interaction_result": deepcopy(interaction_result),
+            "consumable_result": deepcopy(consumable_result),
+            "equipment_stats": deepcopy(equipment_stats),
+            "source": "deterministic_general_interaction_runtime",
+        }
+
+Also after inventory equip/unequip actions, add equipment stats to the returned general result if not already present in inventory_result:
+
+equipment_stats = {}
+if kind in {"equip", "unequip"}:
+    equipment_stats = project_equipment_stats(simulation_state, actor_id="player")
+
+and include:
+
+"equipment_stats": deepcopy(equipment_stats),
+Patch 8 — Extend visible reason helper for consumables
+File
+src/app/rpg/session/runtime.py
+
+Find _interaction_visible_result_reason(...).
+
+Update keys from:
+
+for key in ("inventory_result", "container_result", "repair_result"):
+
+to:
+
+for key in ("inventory_result", "container_result", "repair_result", "consumable_result"):
+
+Update _patch_visible_interaction_reason_into_payload_text(...) if it has key lists only for previous results. Add:
+
+"consumable_result"
+
+if applicable.
+
+Patch 9 — Persist and expose consumable/equipment results
+File
+src/app/rpg/session/runtime.py
+
+After:
+
+inventory_result = _safe_dict(general_interaction_result.get("inventory_result"))
 container_result = _safe_dict(general_interaction_result.get("container_result"))
 repair_result = _safe_dict(general_interaction_result.get("repair_result"))
 
-Where payloads include inventory_result, also add:
+add:
 
-"container_result": deepcopy(container_result),
-"repair_result": deepcopy(repair_result),
+consumable_result = _safe_dict(general_interaction_result.get("consumable_result"))
+equipment_stats = _safe_dict(general_interaction_result.get("equipment_stats"))
 
-Before normal final return, update persistence condition:
+Where payloads include the others, add:
+
+"consumable_result": deepcopy(consumable_result),
+"equipment_stats": deepcopy(equipment_stats),
+
+Update persistence condition:
 
 if (
     inventory_result.get("changed_state") is True
     or container_result.get("changed_state") is True
     or repair_result.get("changed_state") is True
+    or consumable_result.get("changed_state") is True
 ):
-    session = _sync_session_simulation_state_for_early_return(
-        session,
-        simulation_state,
-        reason="general_item_interaction",
-    )
-    result["session"] = session
-Patch 11 — Cleanup visible fallback result summary
+Patch 10 — Manual command for ammo hook
 File
-src/app/rpg/session/runtime.py
+src/tests/rpg/manual_llm_transcript.py
 
-Search for the code producing visible/fallback result strings like:
+Add import:
 
-Result: item_not_found
+from app.rpg.interactions.equipment_runtime import consume_equipped_ammo, project_equipment_stats
 
-or variables named like:
+Add manual command:
 
-result_summary
-action_result
-fallback_result
-narration_result
+if command == "__manual_consume_equipped_ammo__":
+    sim = _extract_simulation_state(last_result) if last_result else _safe_dict(session.get("simulation_state"))
+    ammo_result = consume_equipped_ammo(
+        sim,
+        actor_id="player",
+        quantity=1,
+        tick=tick,
+    )
+    equipment_stats = project_equipment_stats(sim, actor_id="player")
+    session["simulation_state"] = sim
+    result = {
+        "ok": True,
+        "result": {
+            "ok": True,
+            "manual_command": command,
+            "ammo_result": ammo_result,
+            "equipment_stats": equipment_stats,
+            "simulation_state": sim,
+        },
+        "ammo_result": ammo_result,
+        "equipment_stats": equipment_stats,
+        "simulation_state": sim,
+        "session": session,
+    }
 
-Add a helper near other helpers:
+Use your existing manual-command result-recording pattern and do not fall through into normal apply_turn.
 
-def _interaction_visible_result_reason(general_interaction_result: Dict[str, Any]) -> str:
-    interaction = _safe_dict(general_interaction_result.get("interaction_result"))
-    for key in ("inventory_result", "container_result", "repair_result"):
-        nested = _safe_dict(interaction.get(key) or general_interaction_result.get(key))
-        if nested:
-            return _safe_str(nested.get("reason"))
-
-    if interaction:
-        return _safe_str(interaction.get("reason"))
-
-    return ""
-
-Then wherever the fallback says item_not_found, prefer:
-
-visible_reason = _interaction_visible_result_reason(general_interaction_result)
-if visible_reason:
-    # use visible_reason for result/action text instead of stale item_not_found
-
-If the exact result-string code is hard to find, add this to the final resolved_result and manual report can verify it:
-
-"visible_interaction_reason": _interaction_visible_result_reason(general_interaction_result),
-
-This makes the cleanup testable even before full narration integration.
-
-Patch 12 — Manual scenario
+Patch 11 — Manual scenario
 File
 src/tests/rpg/manual_llm_transcript.py
 
 Add scenario:
 
-"inventory_containers_durability_repair": {
+"inventory_consumables_ammo_equipment_stats": {
     "currency": {"gold": 0, "silver": 0, "copper": 0},
     "conversation_settings": {
         "enabled": True,
@@ -1049,8 +971,23 @@ Add scenario:
         "scene_items": [],
         "scene_objects": [],
         "player_location_id": "loc_tavern_road",
+        "player_hp": 10,
+        "player_max_hp": 20,
         "player_inventory": {
             "items": [
+                {
+                    "item_id": "item:minor_healing_potions",
+                    "definition_id": "def:minor_healing_potion",
+                    "name": "minor healing potion",
+                    "aliases": ["healing potion", "potion"],
+                    "quantity": 2
+                },
+                {
+                    "item_id": "item:hunting_bow",
+                    "definition_id": "def:hunting_bow",
+                    "name": "hunting bow",
+                    "aliases": ["bow"]
+                },
                 {
                     "item_id": "item:iron_arrow_stack_a",
                     "definition_id": "def:iron_arrow",
@@ -1059,34 +996,10 @@ Add scenario:
                     "quantity": 15
                 },
                 {
-                    "item_id": "item:leather_satchel",
-                    "definition_id": "def:leather_satchel",
-                    "name": "leather satchel",
-                    "aliases": ["satchel", "bag"]
-                },
-                {
-                    "item_id": "item:rusty_dagger",
-                    "definition_id": "def:rusty_dagger",
-                    "name": "rusty dagger",
-                    "aliases": ["dagger"]
-                },
-                {
-                    "item_id": "item:whetstone",
-                    "definition_id": "def:whetstone",
-                    "name": "whetstone"
-                },
-                {
-                    "item_id": "item:torn_cloak",
-                    "definition_id": "def:torn_cloak",
-                    "name": "torn cloak",
-                    "aliases": ["cloak"]
-                },
-                {
-                    "item_id": "item:cloth_scraps",
-                    "definition_id": "def:cloth_scrap",
-                    "name": "cloth scraps",
-                    "aliases": ["cloth scrap", "scraps"],
-                    "quantity": 4
+                    "item_id": "item:padded_armor",
+                    "definition_id": "def:padded_armor",
+                    "name": "padded armor",
+                    "aliases": ["armor"]
                 }
             ],
             "equipment": {},
@@ -1094,131 +1007,164 @@ Add scenario:
         }
     },
     "turns": [
-        "I put 15 iron arrows into the leather satchel.",
-        "I repair the rusty dagger with the whetstone.",
-        "I repair the torn cloak with 2 cloth scraps."
+        "I drink the minor healing potion.",
+        "I equip the hunting bow.",
+        "I equip the iron arrows as ammo.",
+        "I equip the padded armor.",
+        "__manual_consume_equipped_ammo__"
     ]
 },
 
 Add scenario choice:
 
-"inventory_containers_durability_repair",
-Patch 13 — Manual HTML panels
+"inventory_consumables_ammo_equipment_stats",
+Patch 12 — Extend setup interaction helper for HP
+File
+src/tests/rpg/manual_llm_transcript.py
+
+In _apply_setup_interaction_state(...), after player_state is created, add:
+
+if "player_hp" in setup:
+    player_state["hp"] = int(setup.get("player_hp") or 0)
+
+if "player_max_hp" in setup:
+    player_state["max_hp"] = int(setup.get("player_max_hp") or 1)
+Patch 13 — HTML panels
 File
 src/tests/rpg/manual_llm_transcript.py
 
 Add panels:
 
-("Container Result", "container_result"),
-("Repair Result", "repair_result"),
+("Consumable Result", "consumable_result"),
+("Ammo Result", "ammo_result"),
+("Equipment Stats", "equipment_stats"),
 
-Keep existing:
+Keep existing inventory/interaction panels.
 
-("Inventory Result", "inventory_result"),
-("Interaction Result", "interaction_result"),
-("General Interaction Result", "general_interaction_result"),
 Patch 14 — Manual validation
 File
 src/tests/rpg/manual_llm_transcript.py
 
 Add helpers:
 
-def _inventory_item_by_id(simulation_state: Dict[str, Any], item_id: str) -> Dict[str, Any]:
+def _player_hp(simulation_state: Dict[str, Any]) -> int:
+    return int(_safe_dict(simulation_state.get("player_state")).get("hp") or 0)
+
+
+def _player_max_hp(simulation_state: Dict[str, Any]) -> int:
+    return int(_safe_dict(simulation_state.get("player_state")).get("max_hp") or 0)
+
+
+def _player_inventory_item_by_id(simulation_state: Dict[str, Any], item_id: str) -> Dict[str, Any]:
     for item in _player_inventory_items(simulation_state):
         item = _safe_dict(item)
         if _safe_str(item.get("item_id")) == item_id:
             return item
     return {}
 
-
-def _container_contents(item: Dict[str, Any]) -> List[Dict[str, Any]]:
-    return _safe_list(_safe_dict(_safe_dict(item).get("container")).get("items"))
-
-
-def _item_condition_value(item: Dict[str, Any]) -> float:
-    return float(_safe_dict(_safe_dict(item).get("condition")).get("durability") or 0.0)
-
 Add to _manual_regression_warnings(...):
 
-    if scenario_name == "inventory_containers_durability_repair":
+    if scenario_name == "inventory_consumables_ammo_equipment_stats":
         sim = _extract_simulation_state(result)
         interaction = _extract_interaction_result(result)
-        container_result = _safe_dict(
-            interaction.get("container_result")
-            or result.get("container_result")
-            or _safe_dict(result.get("result")).get("container_result")
+
+        consumable = _safe_dict(
+            interaction.get("consumable_result")
+            or result.get("consumable_result")
+            or _safe_dict(result.get("result")).get("consumable_result")
         )
-        repair_result = _safe_dict(
-            interaction.get("repair_result")
-            or result.get("repair_result")
-            or _safe_dict(result.get("result")).get("repair_result")
+        inventory = _safe_dict(
+            interaction.get("inventory_result")
+            or result.get("inventory_result")
+            or _safe_dict(result.get("result")).get("inventory_result")
+        )
+        ammo_result = _safe_dict(
+            result.get("ammo_result")
+            or _safe_dict(result.get("result")).get("ammo_result")
+        )
+        equipment_stats = _safe_dict(
+            interaction.get("equipment_stats")
+            or result.get("equipment_stats")
+            or _safe_dict(result.get("result")).get("equipment_stats")
         )
 
         if turn_index == 1:
-            if container_result.get("resolved") is not True:
+            if consumable.get("resolved") is not True:
                 warnings.append(
-                    f"container_expected_resolved_true_got:{_safe_str(container_result.get('reason')) or 'missing'}"
+                    f"consumable_expected_resolved_true_got:{_safe_str(consumable.get('reason')) or 'missing'}"
                 )
-            if _safe_str(container_result.get("reason")) != "item_added_to_container":
+            if _safe_str(consumable.get("reason")) != "consumable_used":
                 warnings.append(
-                    f"container_expected_item_added_to_container_got:{_safe_str(container_result.get('reason')) or 'missing'}"
+                    f"consumable_expected_consumable_used_got:{_safe_str(consumable.get('reason')) or 'missing'}"
                 )
-
-            satchel = _inventory_item_by_id(sim, "item:leather_satchel")
-            contents = _container_contents(satchel)
-            arrow = {}
-            for item in contents:
-                item = _safe_dict(item)
-                if _safe_str(item.get("definition_id")) == "def:iron_arrow":
-                    arrow = item
-                    break
-            if int(arrow.get("quantity") or 0) != 15:
+            if _player_hp(sim) != 15:
+                warnings.append(f"consumable_expected_player_hp_15_got:{_player_hp(sim)}")
+            potion = _player_inventory_item_by_id(sim, "item:minor_healing_potions")
+            if int(potion.get("quantity") or 0) != 1:
                 warnings.append(
-                    f"container_expected_15_arrows_inside_satchel_got:{int(arrow.get('quantity') or 0)}"
+                    f"consumable_expected_potion_quantity_1_got:{int(potion.get('quantity') or 0)}"
                 )
-            if _inventory_item_by_id(sim, "item:iron_arrow_stack_a"):
-                warnings.append("container_expected_arrows_removed_from_top_level_inventory")
 
         if turn_index == 2:
-            if repair_result.get("resolved") is not True:
+            if _safe_str(inventory.get("reason")) != "item_equipped":
                 warnings.append(
-                    f"repair_tool_expected_resolved_true_got:{_safe_str(repair_result.get('reason')) or 'missing'}"
+                    f"equipment_expected_bow_item_equipped_got:{_safe_str(inventory.get('reason')) or 'missing'}"
                 )
-            if _safe_str(repair_result.get("reason")) != "item_repaired_with_tool":
+            equipment = _player_equipment(sim)
+            if _safe_str(equipment.get("main_hand")) != "item:hunting_bow":
                 warnings.append(
-                    f"repair_tool_expected_item_repaired_with_tool_got:{_safe_str(repair_result.get('reason')) or 'missing'}"
-                )
-
-            dagger = _inventory_item_by_id(sim, "item:rusty_dagger")
-            if _item_condition_value(dagger) <= 0.55:
-                warnings.append(
-                    f"repair_tool_expected_dagger_condition_above_055_got:{_item_condition_value(dagger)}"
+                    f"equipment_expected_main_hand_bow_got:{_safe_str(equipment.get('main_hand')) or 'missing'}"
                 )
 
         if turn_index == 3:
-            if repair_result.get("resolved") is not True:
+            if _safe_str(inventory.get("reason")) != "ammo_equipped":
                 warnings.append(
-                    f"repair_material_expected_resolved_true_got:{_safe_str(repair_result.get('reason')) or 'missing'}"
+                    f"ammo_expected_ammo_equipped_got:{_safe_str(inventory.get('reason')) or 'missing'}"
                 )
-            if _safe_str(repair_result.get("reason")) != "item_repaired_with_material":
+            equipment = _player_equipment(sim)
+            if _safe_str(equipment.get("ammo")) != "item:iron_arrow_stack_a":
                 warnings.append(
-                    f"repair_material_expected_item_repaired_with_material_got:{_safe_str(repair_result.get('reason')) or 'missing'}"
-                )
-
-            cloak = _inventory_item_by_id(sim, "item:torn_cloak")
-            if _item_condition_value(cloak) <= 0.35:
-                warnings.append(
-                    f"repair_material_expected_cloak_condition_above_035_got:{_item_condition_value(cloak)}"
+                    f"ammo_expected_equipment_ammo_arrows_got:{_safe_str(equipment.get('ammo')) or 'missing'}"
                 )
 
-            scraps = _inventory_item_by_id(sim, "item:cloth_scraps")
-            if int(scraps.get("quantity") or 0) != 2:
+        if turn_index == 4:
+            if _safe_str(inventory.get("reason")) != "item_equipped":
                 warnings.append(
-                    f"repair_material_expected_2_cloth_scraps_remaining_got:{int(scraps.get('quantity') or 0)}"
+                    f"equipment_expected_armor_item_equipped_got:{_safe_str(inventory.get('reason')) or 'missing'}"
+                )
+            equipment = _player_equipment(sim)
+            if _safe_str(equipment.get("body")) != "item:padded_armor":
+                warnings.append(
+                    f"equipment_expected_body_padded_armor_got:{_safe_str(equipment.get('body')) or 'missing'}"
+                )
+            stats = _safe_dict(equipment_stats.get("stats"))
+            if int(stats.get("armor") or 0) < 1:
+                warnings.append("equipment_stats_expected_armor_at_least_1")
+            if int(stats.get("damage_max") or 0) < 6:
+                warnings.append("equipment_stats_expected_bow_damage_max_at_least_6")
+
+        if turn_index == 5:
+            if ammo_result.get("consumed") is not True:
+                warnings.append(
+                    f"ammo_consume_expected_consumed_true_got:{_safe_str(ammo_result.get('reason')) or 'missing'}"
+                )
+            if int(ammo_result.get("quantity_after") or -1) != 14:
+                warnings.append(
+                    f"ammo_consume_expected_quantity_after_14_got:{int(ammo_result.get('quantity_after') or -1)}"
+                )
+            arrows = _player_inventory_item_by_id(sim, "item:iron_arrow_stack_a")
+            if int(arrows.get("quantity") or 0) != 14:
+                warnings.append(
+                    f"ammo_consume_expected_inventory_arrows_14_got:{int(arrows.get('quantity') or 0)}"
                 )
 Patch 15 — Unit tests
 New file
-src/app/rpg/tests/test_bundle_i7_i8_i9_containers_repair.py
+src/app/rpg/tests/test_bundle_i10_i11_i12_consumables_ammo_equipment.py
+from app.rpg.interactions.equipment_runtime import (
+    ammo_compatible_with_equipped_weapon,
+    consume_equipped_ammo,
+    project_equipment_stats,
+)
 from app.rpg.interactions.interaction_runtime import resolve_general_interaction
 
 
@@ -1227,8 +1173,23 @@ def _state():
         "location_id": "loc_tavern_road",
         "player_state": {
             "location_id": "loc_tavern_road",
+            "hp": 10,
+            "max_hp": 20,
             "inventory": {
                 "items": [
+                    {
+                        "item_id": "item:minor_healing_potions",
+                        "definition_id": "def:minor_healing_potion",
+                        "name": "minor healing potion",
+                        "aliases": ["healing potion", "potion"],
+                        "quantity": 2,
+                    },
+                    {
+                        "item_id": "item:hunting_bow",
+                        "definition_id": "def:hunting_bow",
+                        "name": "hunting bow",
+                        "aliases": ["bow"],
+                    },
                     {
                         "item_id": "item:iron_arrow_stack_a",
                         "definition_id": "def:iron_arrow",
@@ -1237,34 +1198,10 @@ def _state():
                         "quantity": 15,
                     },
                     {
-                        "item_id": "item:leather_satchel",
-                        "definition_id": "def:leather_satchel",
-                        "name": "leather satchel",
-                        "aliases": ["satchel", "bag"],
-                    },
-                    {
-                        "item_id": "item:rusty_dagger",
-                        "definition_id": "def:rusty_dagger",
-                        "name": "rusty dagger",
-                        "aliases": ["dagger"],
-                    },
-                    {
-                        "item_id": "item:whetstone",
-                        "definition_id": "def:whetstone",
-                        "name": "whetstone",
-                    },
-                    {
-                        "item_id": "item:torn_cloak",
-                        "definition_id": "def:torn_cloak",
-                        "name": "torn cloak",
-                        "aliases": ["cloak"],
-                    },
-                    {
-                        "item_id": "item:cloth_scraps",
-                        "definition_id": "def:cloth_scrap",
-                        "name": "cloth scraps",
-                        "aliases": ["cloth scrap", "scraps"],
-                        "quantity": 4,
+                        "item_id": "item:padded_armor",
+                        "definition_id": "def:padded_armor",
+                        "name": "padded armor",
+                        "aliases": ["armor"],
                     },
                 ],
                 "equipment": {},
@@ -1276,107 +1213,123 @@ def _state():
     }
 
 
-def _items(state):
-    return state["player_state"]["inventory"]["items"]
+def _inventory(state):
+    return state["player_state"]["inventory"]
 
 
 def _item(state, item_id):
-    for item in _items(state):
+    for item in _inventory(state)["items"]:
         if item.get("item_id") == item_id:
             return item
     return {}
 
 
-def test_put_items_into_container():
+def test_consume_healing_potion_heals_and_decrements_quantity():
     state = _state()
 
     result = resolve_general_interaction(
         state,
-        player_input="I put 15 iron arrows into the leather satchel.",
+        player_input="I drink the minor healing potion.",
         tick=1,
     )
 
-    container = result["container_result"]
-    assert container["resolved"] is True
-    assert container["changed_state"] is True
-    assert container["reason"] == "item_added_to_container"
+    consumable = result["consumable_result"]
+    assert consumable["resolved"] is True
+    assert consumable["reason"] == "consumable_used"
+    assert consumable["effect_result"]["hp_before"] == 10
+    assert consumable["effect_result"]["hp_after"] == 15
 
-    assert not _item(state, "item:iron_arrow_stack_a")
-
-    satchel = _item(state, "item:leather_satchel")
-    contents = satchel["container"]["items"]
-    assert contents[0]["definition_id"] == "def:iron_arrow"
-    assert contents[0]["quantity"] == 15
+    assert state["player_state"]["hp"] == 15
+    assert _item(state, "item:minor_healing_potions")["quantity"] == 1
 
 
-def test_repair_weapon_with_tool():
+def test_equip_bow_arrows_and_armor_projects_stats():
     state = _state()
 
-    result = resolve_general_interaction(
+    bow = resolve_general_interaction(
         state,
-        player_input="I repair the rusty dagger with the whetstone.",
+        player_input="I equip the hunting bow.",
         tick=1,
     )
+    assert bow["inventory_result"]["reason"] == "item_equipped"
 
-    repair = result["repair_result"]
-    assert repair["resolved"] is True
-    assert repair["reason"] == "item_repaired_with_tool"
-    assert repair["condition_before"] == 0.55
-    assert repair["condition_after"] == 0.75
+    arrows = resolve_general_interaction(
+        state,
+        player_input="I equip the iron arrows as ammo.",
+        tick=2,
+    )
+    assert arrows["inventory_result"]["reason"] == "ammo_equipped"
 
-    dagger = _item(state, "item:rusty_dagger")
-    assert dagger["condition"]["durability"] == 0.75
+    armor = resolve_general_interaction(
+        state,
+        player_input="I equip the padded armor.",
+        tick=3,
+    )
+    assert armor["inventory_result"]["reason"] == "item_equipped"
+
+    equipment = _inventory(state)["equipment"]
+    assert equipment["main_hand"] == "item:hunting_bow"
+    assert equipment["ammo"] == "item:iron_arrow_stack_a"
+    assert equipment["body"] == "item:padded_armor"
+
+    stats = project_equipment_stats(state)["stats"]
+    assert stats["damage_max"] >= 6
+    assert stats["armor"] >= 1
+    assert stats["accuracy_bonus"] >= 1
 
 
-def test_repair_cloak_with_material_consumes_scraps():
+def test_ammo_compatibility_and_consumption():
     state = _state()
 
-    result = resolve_general_interaction(
+    resolve_general_interaction(
         state,
-        player_input="I repair the torn cloak with 2 cloth scraps.",
+        player_input="I equip the hunting bow.",
         tick=1,
     )
+    resolve_general_interaction(
+        state,
+        player_input="I equip the iron arrows as ammo.",
+        tick=2,
+    )
 
-    repair = result["repair_result"]
-    assert repair["resolved"] is True
-    assert repair["reason"] == "item_repaired_with_material"
-    assert repair["condition_before"] == 0.35
-    assert repair["condition_after"] == 0.65
-    assert repair["materials_consumed"][0]["quantity"] == 2
+    compat = ammo_compatible_with_equipped_weapon(state)
+    assert compat["compatible"] is True
+    assert compat["reason"] == "ammo_compatible"
 
-    cloak = _item(state, "item:torn_cloak")
-    scraps = _item(state, "item:cloth_scraps")
+    consumed = consume_equipped_ammo(state, quantity=1, tick=3)
+    assert consumed["consumed"] is True
+    assert consumed["quantity_before"] == 15
+    assert consumed["quantity_after"] == 14
 
-    assert cloak["condition"]["durability"] == 0.65
-    assert scraps["quantity"] == 2
+    assert _item(state, "item:iron_arrow_stack_a")["quantity"] == 14
 
 
-def test_wrong_repair_material_fails():
+def test_consuming_last_ammo_clears_ammo_slot():
     state = _state()
+    _item(state, "item:iron_arrow_stack_a")["quantity"] = 1
 
-    result = resolve_general_interaction(
+    resolve_general_interaction(
         state,
-        player_input="I repair the rusty dagger with 2 cloth scraps.",
+        player_input="I equip the hunting bow.",
         tick=1,
     )
+    resolve_general_interaction(
+        state,
+        player_input="I equip the iron arrows as ammo.",
+        tick=2,
+    )
 
-    repair = result["repair_result"]
-    assert repair["resolved"] is False
-    assert repair["changed_state"] is False
-    assert repair["reason"] == "repair_material_not_applicable"
-
-    dagger = _item(state, "item:rusty_dagger")
-    scraps = _item(state, "item:cloth_scraps")
-
-    assert dagger["condition"]["durability"] == 0.55
-    assert scraps["quantity"] == 4
+    consumed = consume_equipped_ammo(state, quantity=1, tick=3)
+    assert consumed["consumed"] is True
+    assert consumed["quantity_after"] == 0
+    assert "ammo" not in _inventory(state)["equipment"]
 
 Run:
 
-pytest src/app/rpg/tests/test_bundle_i7_i8_i9_containers_repair.py -q
+pytest src/app/rpg/tests/test_bundle_i10_i11_i12_consumables_ammo_equipment.py -q
 
 Expected:
 
 4 passed
 Run manual scenario
-pytest src/app/rpg/tests/test_bundle_i7_i8_i9_containers_repair.py -q
+pytest src/app/rpg/tests/test_bundle_i10_i11_i12_consumables_ammo_equipment.py -q

@@ -33,7 +33,7 @@ def _interaction_visible_result_reason(general_interaction_result: Dict[str, Any
     general_interaction_result = _safe_dict(general_interaction_result)
     interaction = _safe_dict(general_interaction_result.get("interaction_result"))
 
-    for key in ("inventory_result", "container_result", "repair_result"):
+    for key in ("inventory_result", "container_result", "repair_result", "consumable_result"):
         nested = _safe_dict(
             interaction.get(key)
             or general_interaction_result.get(key)
@@ -8443,6 +8443,8 @@ def apply_turn(
 
     container_result = _safe_dict(general_interaction_result.get("container_result"))
     repair_result = _safe_dict(general_interaction_result.get("repair_result"))
+    consumable_result = _safe_dict(general_interaction_result.get("consumable_result"))
+    equipment_stats = _safe_dict(general_interaction_result.get("equipment_stats"))
 
     authoritative_result = _apply_turn_authoritative(
         session_id,
@@ -8536,6 +8538,8 @@ def apply_turn(
         final_result["inventory_result"] = copy.deepcopy(inventory_result)
         final_result["container_result"] = copy.deepcopy(container_result)
         final_result["repair_result"] = copy.deepcopy(repair_result)
+        final_result["consumable_result"] = copy.deepcopy(consumable_result)
+        final_result["equipment_stats"] = copy.deepcopy(equipment_stats)
         final_result["visible_interaction_reason"] = _interaction_visible_result_reason(general_interaction_result)
 
         _nested = _safe_dict(final_result.get("result"))
@@ -8562,6 +8566,8 @@ def apply_turn(
         _nested["inventory_result"] = copy.deepcopy(inventory_result)
         _nested["container_result"] = copy.deepcopy(container_result)
         _nested["repair_result"] = copy.deepcopy(repair_result)
+        _nested["consumable_result"] = copy.deepcopy(consumable_result)
+        _nested["equipment_stats"] = copy.deepcopy(equipment_stats)
         final_result["result"] = _nested
 
         _tc = _safe_dict(final_result.get("turn_contract"))
@@ -8589,6 +8595,8 @@ def apply_turn(
         _rr["inventory_result"] = copy.deepcopy(inventory_result)
         _rr["container_result"] = copy.deepcopy(container_result)
         _rr["repair_result"] = copy.deepcopy(repair_result)
+        _rr["consumable_result"] = copy.deepcopy(consumable_result)
+        _rr["equipment_stats"] = copy.deepcopy(equipment_stats)
 
         _rr = _apply_visible_interaction_reason_to_resolved_result(
             _rr,
@@ -8640,6 +8648,7 @@ def apply_turn(
         inventory_result.get("changed_state") is True
         or container_result.get("changed_state") is True
         or repair_result.get("changed_state") is True
+        or consumable_result.get("changed_state") is True
     ):
         session = _sync_session_simulation_state_for_early_return(
             session,

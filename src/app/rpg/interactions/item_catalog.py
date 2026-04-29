@@ -166,6 +166,72 @@ ITEM_DEFINITIONS: Dict[str, Dict[str, Any]] = {
             "max_durability": 1.0,
         },
     },
+    "def:minor_healing_potion": {
+        "definition_id": "def:minor_healing_potion",
+        "name": "minor healing potion",
+        "kind": "consumable",
+        "stackable": True,
+        "max_stack": 10,
+        "unit_weight": 0.3,
+        "rarity": "common",
+        "value": {"gold": 0, "silver": 10, "copper": 0},
+        "tags": ["consumable", "potion", "healing"],
+        "consumable": {
+            "effect": {
+                "kind": "heal",
+                "amount": 5,
+                "target": "self"
+            },
+            "consumed_quantity": 1
+        },
+    },
+    "def:hunting_bow": {
+        "definition_id": "def:hunting_bow",
+        "name": "hunting bow",
+        "kind": "weapon",
+        "stackable": False,
+        "max_stack": 1,
+        "unit_weight": 2.0,
+        "rarity": "common",
+        "value": {"gold": 1, "silver": 5, "copper": 0},
+        "tags": ["weapon", "bow", "ranged"],
+        "equipment": {
+            "slot": "main_hand",
+            "requires_ammo_tag": "arrow",
+            "stats": {
+                "damage_min": 1,
+                "damage_max": 6,
+                "accuracy_bonus": 1,
+                "range": 4
+            },
+        },
+        "condition": {
+            "durability": 0.9,
+            "max_durability": 1.0,
+        },
+    },
+    "def:padded_armor": {
+        "definition_id": "def:padded_armor",
+        "name": "padded armor",
+        "kind": "armor",
+        "stackable": False,
+        "max_stack": 1,
+        "unit_weight": 6.0,
+        "rarity": "common",
+        "value": {"gold": 1, "silver": 2, "copper": 0},
+        "tags": ["armor", "armor_light", "body"],
+        "equipment": {
+            "slot": "body",
+            "stats": {
+                "armor": 1,
+                "stealth_penalty": 0
+            },
+        },
+        "condition": {
+            "durability": 0.85,
+            "max_durability": 1.0,
+        },
+    },
 }
 
 
@@ -194,6 +260,13 @@ NAME_TO_DEFINITION_ID = {
     "scraps": "def:cloth_scrap",
     "torn cloak": "def:torn_cloak",
     "cloak": "def:torn_cloak",
+    "minor healing potion": "def:minor_healing_potion",
+    "healing potion": "def:minor_healing_potion",
+    "potion": "def:minor_healing_potion",
+    "hunting bow": "def:hunting_bow",
+    "bow": "def:hunting_bow",
+    "padded armor": "def:padded_armor",
+    "armor": "def:padded_armor",
 }
 
 

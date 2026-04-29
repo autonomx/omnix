@@ -344,7 +344,7 @@ def expected_target_types_for_action(action_kind: str) -> List[str]:
         return ["npc"]
     if action_kind == "give":
         return ["item"]
-    if action_kind in {"take", "drop", "equip", "unequip", "put", "repair"}:
+    if action_kind in {"take", "drop", "equip", "unequip", "put", "repair", "consume"}:
         return ["item"]
     if action_kind in {"open", "close", "inspect", "repair", "use"}:
         return ["object", "item", "npc"]

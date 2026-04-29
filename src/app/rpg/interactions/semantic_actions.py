@@ -18,6 +18,7 @@ SUPPORTED_ACTION_KINDS = {
     "unequip",
     "attack",
     "talk",
+    "consume",
     "unknown",
 }
 
@@ -268,6 +269,25 @@ def resolve_semantic_action_v2(
             "source": "deterministic_semantic_action_resolver_v2",
         }
 
+    if re.search(r"\b(drink|eat|consume|quaff)\b", text):
+        target = _first_match(
+            [
+                r"\b(?:drink|eat|consume|quaff)\s+([^,.!?]+)",
+            ],
+            text,
+        )
+        quantity, clean_target = _parse_leading_quantity(target)
+        return {
+            "resolved": True,
+            "kind": "consume",
+            "actor_id": actor_id,
+            "target_ref": clean_target,
+            "quantity": quantity,
+            "confidence": "high" if clean_target else "low",
+            "raw_input": raw,
+            "source": "deterministic_semantic_action_resolver_v2",
+        }
+
     if re.search(r"\b(use)\b", text):
         item_ref = ""
         target_ref = ""
@@ -327,11 +347,16 @@ def resolve_semantic_action_v2(
             ],
             text,
         )
+        equipment_slot = ""
+        if re.search(r"\bas ammo\b|\bammo slot\b|\bequip .* arrows", text):
+            equipment_slot = "ammo"
+        target = re.sub(r"\s+as\s+ammo$", "", target, flags=re.I).strip()
         return {
             "resolved": True,
             "kind": "equip",
             "actor_id": actor_id,
             "target_ref": target,
+            "equipment_slot": equipment_slot,
             "confidence": "high" if target else "low",
             "raw_input": raw,
             "source": "deterministic_semantic_action_resolver_v2",

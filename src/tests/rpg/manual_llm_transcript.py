@@ -1180,6 +1180,9 @@ def _render_special_panels(result: Dict[str, Any], *, prefix: str) -> str:
         ("Inventory Result", "inventory_result"),
         ("Container Result", "container_result"),
         ("Repair Result", "repair_result"),
+        ("Consumable Result", "consumable_result"),
+        ("Ammo Result", "ammo_result"),
+        ("Equipment Stats", "equipment_stats"),
     ]:
         value = _first_dict(
             result.get(key),
@@ -4400,6 +4403,67 @@ SERVICE_SCENARIOS = {
             "I repair the torn cloak with 2 cloth scraps."
         ]
     },
+    "inventory_consumables_ammo_equipment_stats": {
+        "currency": {"gold": 0, "silver": 0, "copper": 0},
+        "conversation_settings": {
+            "enabled": True,
+            "autonomous_ticks_enabled": False,
+            "frequency": "never",
+            "conversation_chance_percent": 0,
+            "allow_player_invited": False,
+            "player_inclusion_chance_percent": 0,
+            "npc_file_profiles_enabled": True,
+            "npc_evolution_enabled": True,
+            "min_ticks_between_conversations": 0,
+            "thread_cooldown_ticks": 0
+        },
+        "setup_interaction_state": {
+            "scene_items": [],
+            "scene_objects": [],
+            "player_location_id": "loc_tavern_road",
+            "player_hp": 10,
+            "player_max_hp": 20,
+            "player_inventory": {
+                "items": [
+                    {
+                        "item_id": "item:minor_healing_potions",
+                        "definition_id": "def:minor_healing_potion",
+                        "name": "minor healing potion",
+                        "aliases": ["healing potion", "potion"],
+                        "quantity": 2
+                    },
+                    {
+                        "item_id": "item:hunting_bow",
+                        "definition_id": "def:hunting_bow",
+                        "name": "hunting bow",
+                        "aliases": ["bow"]
+                    },
+                    {
+                        "item_id": "item:iron_arrow_stack_a",
+                        "definition_id": "def:iron_arrow",
+                        "name": "iron arrows",
+                        "aliases": ["arrows", "iron arrow"],
+                        "quantity": 15
+                    },
+                    {
+                        "item_id": "item:padded_armor",
+                        "definition_id": "def:padded_armor",
+                        "name": "padded armor",
+                        "aliases": ["armor"]
+                    }
+                ],
+                "equipment": {},
+                "carry_capacity": 50.0
+            }
+        },
+        "turns": [
+            "I drink the minor healing potion.",
+            "I equip the hunting bow.",
+            "I equip the iron arrows as ammo.",
+            "I equip the padded armor.",
+            "__manual_consume_equipped_ammo__"
+        ]
+    },
 }
 
 
@@ -5691,6 +5755,22 @@ def _player_inventory_items(simulation_state: Dict[str, Any]) -> List[Dict[str, 
     )
 
 
+def _player_hp(simulation_state: Dict[str, Any]) -> int:
+    return int(_safe_dict(simulation_state.get("player_state")).get("hp") or 0)
+
+
+def _player_max_hp(simulation_state: Dict[str, Any]) -> int:
+    return int(_safe_dict(simulation_state.get("player_state")).get("max_hp") or 0)
+
+
+def _player_inventory_item_by_id(simulation_state: Dict[str, Any], item_id: str) -> Dict[str, Any]:
+    for item in _player_inventory_items(simulation_state):
+        item = _safe_dict(item)
+        if _safe_str(item.get("item_id")) == item_id:
+            return item
+    return {}
+
+
 def _inventory_item_by_definition(simulation_state: Dict[str, Any], definition_id: str) -> Dict[str, Any]:
     for item in _player_inventory_items(simulation_state):
         item = _safe_dict(item)
@@ -6402,6 +6482,100 @@ def _manual_regression_warnings(
             bran_items = _item_ids(_companion_inventory_items(sim, "npc:Bran"))
             if "item:small_knife" not in bran_items:
                 warnings.append("inventory_expected_small_knife_in_bran_inventory_after_give")
+
+    if scenario_name == "inventory_consumables_ammo_equipment_stats":
+        sim = _extract_simulation_state(result)
+        interaction = _safe_dict(_extract_interaction_result(result))
+
+        consumable = _safe_dict(
+            interaction.get("consumable_result")
+            or result.get("consumable_result")
+            or _safe_dict(result.get("result")).get("consumable_result")
+        )
+        inventory = _safe_dict(
+            interaction.get("inventory_result")
+            or result.get("inventory_result")
+            or _safe_dict(result.get("result")).get("inventory_result")
+        )
+        ammo_result = _safe_dict(
+            result.get("ammo_result")
+            or _safe_dict(result.get("result")).get("ammo_result")
+        )
+        equipment_stats = _safe_dict(
+            interaction.get("equipment_stats")
+            or result.get("equipment_stats")
+            or _safe_dict(result.get("result")).get("equipment_stats")
+        )
+
+        if turn_index == 1:
+            if consumable.get("resolved") is not True:
+                warnings.append(
+                    f"consumable_expected_resolved_true_got:{_safe_str(consumable.get('reason')) or 'missing'}"
+                )
+            if _safe_str(consumable.get("reason")) != "consumable_used":
+                warnings.append(
+                    f"consumable_expected_consumable_used_got:{_safe_str(consumable.get('reason')) or 'missing'}"
+                )
+            if _player_hp(sim) != 15:
+                warnings.append(f"consumable_expected_player_hp_15_got:{_player_hp(sim)}")
+            potion = _player_inventory_item_by_id(sim, "item:minor_healing_potions")
+            if int(potion.get("quantity") or 0) != 1:
+                warnings.append(
+                    f"consumable_expected_potion_quantity_1_got:{int(potion.get('quantity') or 0)}"
+                )
+
+        if turn_index == 2:
+            if _safe_str(inventory.get("reason")) != "item_equipped":
+                warnings.append(
+                    f"equipment_expected_bow_item_equipped_got:{_safe_str(inventory.get('reason')) or 'missing'}"
+                )
+            equipment = _player_equipment(sim)
+            if _safe_str(equipment.get("main_hand")) != "item:hunting_bow":
+                warnings.append(
+                    f"equipment_expected_main_hand_bow_got:{_safe_str(equipment.get('main_hand')) or 'missing'}"
+                )
+
+        if turn_index == 3:
+            if _safe_str(inventory.get("reason")) != "ammo_equipped":
+                warnings.append(
+                    f"ammo_expected_ammo_equipped_got:{_safe_str(inventory.get('reason')) or 'missing'}"
+                )
+            equipment = _player_equipment(sim)
+            if _safe_str(equipment.get("ammo")) != "item:iron_arrow_stack_a":
+                warnings.append(
+                    f"ammo_expected_equipment_ammo_arrows_got:{_safe_str(equipment.get('ammo')) or 'missing'}"
+                )
+
+        if turn_index == 4:
+            if _safe_str(inventory.get("reason")) != "item_equipped":
+                warnings.append(
+                    f"equipment_expected_armor_item_equipped_got:{_safe_str(inventory.get('reason')) or 'missing'}"
+                )
+            equipment = _player_equipment(sim)
+            if _safe_str(equipment.get("body")) != "item:padded_armor":
+                warnings.append(
+                    f"equipment_expected_body_padded_armor_got:{_safe_str(equipment.get('body')) or 'missing'}"
+                )
+            stats = _safe_dict(equipment_stats.get("stats"))
+            if int(stats.get("armor") or 0) < 1:
+                warnings.append("equipment_stats_expected_armor_at_least_1")
+            if int(stats.get("damage_max") or 0) < 6:
+                warnings.append("equipment_stats_expected_bow_damage_max_at_least_6")
+
+        if turn_index == 5:
+            if ammo_result.get("consumed") is not True:
+                warnings.append(
+                    f"ammo_consume_expected_consumed_true_got:{_safe_str(ammo_result.get('reason')) or 'missing'}"
+                )
+            if int(ammo_result.get("quantity_after") or -1) != 14:
+                warnings.append(
+                    f"ammo_consume_expected_quantity_after_14_got:{int(ammo_result.get('quantity_after') or -1)}"
+                )
+            arrows = _player_inventory_item_by_id(sim, "item:iron_arrow_stack_a")
+            if int(arrows.get("quantity") or 0) != 14:
+                warnings.append(
+                    f"ammo_consume_expected_inventory_arrows_14_got:{int(arrows.get('quantity') or 0)}"
+                )
 
     conversation = _extract_conversation_result(result)
     simulation_state = _extract_simulation_state(result)
@@ -7891,6 +8065,10 @@ def _apply_manual_scenario_setup(session_id: str, scenario: Dict[str, Any]) -> b
             player_state["inventory"] = _safe_dict(setup_interaction_state.get("player_inventory"))
         if isinstance(setup_interaction_state.get("party_state"), dict):
             player_state["party_state"] = _safe_dict(setup_interaction_state.get("party_state"))
+        if "player_hp" in setup_interaction_state:
+            player_state["hp"] = int(setup_interaction_state.get("player_hp") or 0)
+        if "player_max_hp" in setup_interaction_state:
+            player_state["max_hp"] = int(setup_interaction_state.get("player_max_hp") or 1)
         simulation_state["player_state"] = player_state
 
         setup_payload = _safe_dict(session.get("setup_payload"))
@@ -9211,6 +9389,38 @@ def _run_one_service_scenario(
                 },
                 "profile_generation_result": gen_result,
                 "character_card_result": get_character_card("npc:Mira"),
+                "simulation_state": sim,
+                "session": session,
+            }
+        elif _safe_str(player_input) == "__manual_consume_equipped_ammo__":
+            from app.rpg.interactions.equipment_runtime import consume_equipped_ammo, project_equipment_stats
+
+            command = _safe_str(player_input)
+            sim = _extract_simulation_state(last_result) if last_result else _safe_dict(session.get("simulation_state"))
+            if not sim:
+                sim = _ensure_manual_simulation_roots(session)
+
+            ammo_result = consume_equipped_ammo(
+                sim,
+                actor_id="player",
+                quantity=1,
+                tick=manual_turn_index,
+            )
+            equipment_stats = project_equipment_stats(sim, actor_id="player")
+            session["simulation_state"] = sim
+            _sync_manual_simulation_state(session, sim)
+            _save_manual_session_for_test(session, reason="manual consume ammo carry-forward")
+            result = {
+                "ok": True,
+                "result": {
+                    "ok": True,
+                    "manual_command": command,
+                    "ammo_result": ammo_result,
+                    "equipment_stats": equipment_stats,
+                    "simulation_state": sim,
+                },
+                "ammo_result": ammo_result,
+                "equipment_stats": equipment_stats,
                 "simulation_state": sim,
                 "session": session,
             }

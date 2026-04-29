@@ -9,6 +9,7 @@ from app.rpg.interactions.item_model import (
     recalculate_inventory_derived_fields,
     split_stack,
 )
+from app.rpg.interactions.equipment_runtime import project_equipment_stats
 
 DEFAULT_EQUIPMENT_SLOTS = {
     "weapon": "main_hand",
@@ -370,7 +371,24 @@ def apply_inventory_interaction(
             )
 
         item = _safe_dict(inventory_items[index])
-        slot = _slot_for_item(item)
+        normalized_item = normalize_item_instance(item)
+        slot = _slot_for_item(normalized_item)
+
+        requested_slot = _safe_str(action.get("equipment_slot"))
+        if requested_slot:
+            slot = requested_slot
+
+        if slot == "ammo":
+            tags = {_safe_str(tag) for tag in _safe_list(normalized_item.get("tags"))}
+            if "ammo" not in tags:
+                return _inventory_result(
+                    resolved=False,
+                    changed_state=False,
+                    reason="item_is_not_ammo",
+                    action=action,
+                    item=normalized_item,
+                )
+
         equipment = _safe_dict(inventory.get("equipment"))
         equipment[slot] = target_id
         inventory["equipment"] = equipment
@@ -378,15 +396,19 @@ def apply_inventory_interaction(
         player_state["inventory"] = inventory
         simulation_state["player_state"] = player_state
 
+        equipment_stats = project_equipment_stats(simulation_state, actor_id="player")
+        reason = "ammo_equipped" if slot == "ammo" else "item_equipped"
+
         return _inventory_result(
             resolved=True,
             changed_state=True,
-            reason="item_equipped",
+            reason=reason,
             action=action,
             item=item,
             extra={
                 "item_id": target_id,
                 "slot": slot,
+                "equipment_stats": deepcopy(equipment_stats),
                 "carry_weight": inventory.get("carry_weight"),
                 "encumbrance_state": inventory.get("encumbrance_state"),
                 "tick": int(tick or 0),
@@ -416,6 +438,8 @@ def apply_inventory_interaction(
         player_state["inventory"] = inventory
         simulation_state["player_state"] = player_state
 
+        equipment_stats = project_equipment_stats(simulation_state, actor_id="player")
+
         return _inventory_result(
             resolved=True,
             changed_state=True,
@@ -424,6 +448,7 @@ def apply_inventory_interaction(
             extra={
                 "item_id": target_id,
                 "slot": removed_slot,
+                "equipment_stats": deepcopy(equipment_stats),
                 "carry_weight": inventory.get("carry_weight"),
                 "encumbrance_state": inventory.get("encumbrance_state"),
                 "tick": int(tick or 0),
