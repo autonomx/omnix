@@ -1,12 +1,12 @@
 """Tests for Bundles AC, AD, AE — Quest Rumor Propagation, NPC Referrals, Consequence Signals."""
 from __future__ import annotations
 
+from app.rpg.world.consequence_signals import emit_consequence_signals
+from app.rpg.world.npc_referrals import suggest_npc_referral
 from app.rpg.world.quest_rumor_propagation import (
     maybe_seed_quest_rumor_from_conversation,
     quest_rumors_for_location,
 )
-from app.rpg.world.npc_referrals import suggest_npc_referral
-from app.rpg.world.consequence_signals import emit_consequence_signals
 
 
 def test_backed_quest_conversation_seeds_rumor():
@@ -142,7 +142,9 @@ def test_rumor_not_seeded_when_topic_not_quest():
 
 
 def test_requested_topic_access_from_pivot_not_requested():
-    from app.rpg.world.quest_conversation_access import requested_topic_access_from_pivot
+    from app.rpg.world.quest_conversation_access import (
+        requested_topic_access_from_pivot,
+    )
 
     result = requested_topic_access_from_pivot({})
     assert result["requested"] is False
@@ -150,7 +152,9 @@ def test_requested_topic_access_from_pivot_not_requested():
 
 
 def test_requested_topic_access_from_pivot_accepted():
-    from app.rpg.world.quest_conversation_access import requested_topic_access_from_pivot
+    from app.rpg.world.quest_conversation_access import (
+        requested_topic_access_from_pivot,
+    )
 
     result = requested_topic_access_from_pivot({
         "requested": True,
@@ -165,7 +169,9 @@ def test_requested_topic_access_from_pivot_accepted():
 
 
 def test_requested_topic_access_from_pivot_rejected():
-    from app.rpg.world.quest_conversation_access import requested_topic_access_from_pivot
+    from app.rpg.world.quest_conversation_access import (
+        requested_topic_access_from_pivot,
+    )
 
     result = requested_topic_access_from_pivot({
         "requested": True,
@@ -211,8 +217,8 @@ def test_consequence_signals_do_not_emit_quest_interest_for_unbacked_fallback():
 
 
 def test_referral_not_suggested_for_generic_polite_reply():
-    from app.rpg.world.npc_referrals import suggest_npc_referral
     from app.rpg.world.location_registry import set_current_location
+    from app.rpg.world.npc_referrals import suggest_npc_referral
 
     state = {
         "present_npc_state": {
@@ -239,8 +245,8 @@ def test_referral_not_suggested_for_generic_polite_reply():
 
 
 def test_referral_still_suggested_when_player_asks_who_to_ask():
-    from app.rpg.world.npc_referrals import suggest_npc_referral
     from app.rpg.world.location_registry import set_current_location
+    from app.rpg.world.npc_referrals import suggest_npc_referral
 
     state = {
         "present_npc_state": {

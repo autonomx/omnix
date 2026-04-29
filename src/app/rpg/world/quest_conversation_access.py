@@ -7,7 +7,6 @@ from app.rpg.world.npc_biography_registry import get_npc_biography
 from app.rpg.world.npc_knowledge_state import known_facts_for_npc
 from app.rpg.world.npc_reputation_state import get_npc_reputation
 
-
 ACCESS_LEVELS = {"none", "partial", "normal", "trusted"}
 
 

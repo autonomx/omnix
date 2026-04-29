@@ -16,7 +16,6 @@ from app.rpg.profiles.llm_profile_drafter import (
     validate_profile_draft,
 )
 
-
 DRAFT_VERSION = 1
 MAX_DRAFT_WARNINGS = 12
 

@@ -121,6 +121,7 @@ from app.rpg.economy.transactions import (
     build_transaction_metadata,
     enrich_action_with_registry_price,
 )
+from app.rpg.interactions.interaction_runtime import resolve_general_interaction
 from app.rpg.items.inventory_state import (
     add_inventory_items,
     equip_inventory_item,
@@ -145,6 +146,27 @@ from app.rpg.memory.dialogue_context import (
 from app.rpg.memory.memory_state import ensure_memory_state
 from app.rpg.memory.social_effects import apply_general_social_effects
 from app.rpg.memory.world_memory_state import ensure_world_memory_state
+from app.rpg.party.companion_commands import maybe_apply_companion_command
+from app.rpg.party.companion_memory import (
+    companion_loyalty_projection,
+    companion_memory_summary,
+    maybe_apply_companion_relationship_drift_from_player_input,
+    record_companion_join_memory,
+)
+from app.rpg.party.companion_presence import (
+    build_party_aware_turn_context,
+    companion_presence_summary,
+    project_active_companions_into_presence,
+    sync_active_companions_to_player_location,
+)
+from app.rpg.party.companion_quests import (
+    companion_quest_summary,
+    maybe_progress_companion_quest_from_player_input,
+    seed_companion_quest_from_arc,
+    seed_companion_quests_for_active_companions,
+)
+from app.rpg.party.companion_turns import maybe_build_direct_companion_turn_response
+from app.rpg.party.party_composition import project_party_composition_effects
 from app.rpg.player import ensure_player_party, ensure_player_state
 from app.rpg.player.player_progression_state import (
     award_player_xp,
@@ -166,6 +188,9 @@ from app.rpg.presentation.memory_inspector import build_memory_ui_summary
 from app.rpg.presentation.personality_state import ensure_personality_state
 from app.rpg.presentation.speaker_cards import build_nearby_npc_cards
 from app.rpg.presentation.visual_state import ensure_visual_state
+from app.rpg.profiles.character_cards import list_character_cards_for_simulation_state
+from app.rpg.profiles.dynamic_npc_profiles import load_npc_profile
+from app.rpg.profiles.profile_drafts import profile_draft_summary
 from app.rpg.session.ambient_builder import (
     _MAX_IDLE_TICKS_PER_REQUEST,
     _MAX_RESUME_CATCHUP_TICKS,
@@ -252,14 +277,6 @@ from app.rpg.session.turn_contract import (
     apply_state_delta,
     build_turn_contract,
 )
-from app.rpg.world.location_registry import ensure_location_state
-from app.rpg.world.npc_dialogue_recall import player_input_requests_recall
-from app.rpg.world.world_event_director import (
-    apply_world_behavior_to_events,
-    build_world_event_candidates,
-    convert_events_to_ambient_updates,
-    filter_world_events,
-)
 from app.rpg.world.companion_acceptance import (
     get_pending_companion_offer_debug,
     hydrate_companion_acceptance_from_pending_offers,
@@ -269,31 +286,14 @@ from app.rpg.world.companion_dialogue import (
     build_companion_join_dialogue,
     build_companion_presence_summary,
 )
-from app.rpg.party.companion_presence import (
-    build_party_aware_turn_context,
-    companion_presence_summary,
-    project_active_companions_into_presence,
-    sync_active_companions_to_player_location,
+from app.rpg.world.location_registry import ensure_location_state
+from app.rpg.world.npc_dialogue_recall import player_input_requests_recall
+from app.rpg.world.world_event_director import (
+    apply_world_behavior_to_events,
+    build_world_event_candidates,
+    convert_events_to_ambient_updates,
+    filter_world_events,
 )
-from app.rpg.party.companion_turns import maybe_build_direct_companion_turn_response
-from app.rpg.party.companion_commands import maybe_apply_companion_command
-from app.rpg.party.companion_memory import (
-    companion_memory_summary,
-    companion_loyalty_projection,
-    maybe_apply_companion_relationship_drift_from_player_input,
-    record_companion_join_memory,
-)
-from app.rpg.party.companion_quests import (
-    companion_quest_summary,
-    maybe_progress_companion_quest_from_player_input,
-    seed_companion_quest_from_arc,
-    seed_companion_quests_for_active_companions,
-)
-from app.rpg.party.party_composition import project_party_composition_effects
-from app.rpg.profiles.character_cards import list_character_cards_for_simulation_state
-from app.rpg.profiles.dynamic_npc_profiles import load_npc_profile
-from app.rpg.profiles.profile_drafts import profile_draft_summary
-from app.rpg.interactions.interaction_runtime import resolve_general_interaction
 
 
 def _active_companion_profiles_summary(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
@@ -8279,7 +8279,10 @@ def apply_turn(
         simulation_state,
         player_input=player_input,
         actor_id="player",
+        tick=tick,
     )
+
+    inventory_result = _safe_dict(general_interaction_result.get("inventory_result"))
 
     authoritative_result = _apply_turn_authoritative(
         session_id,
@@ -8370,6 +8373,7 @@ def apply_turn(
             _safe_dict(general_interaction_result.get("interaction_result"))
         )
         final_result["general_interaction_result"] = copy.deepcopy(general_interaction_result)
+        final_result["inventory_result"] = copy.deepcopy(inventory_result)
 
         _nested = _safe_dict(final_result.get("result"))
         _nested["party_aware_turn_context"] = copy.deepcopy(_party_aware_ctx)
@@ -8392,6 +8396,7 @@ def apply_turn(
             _safe_dict(general_interaction_result.get("interaction_result"))
         )
         _nested["general_interaction_result"] = copy.deepcopy(general_interaction_result)
+        _nested["inventory_result"] = copy.deepcopy(inventory_result)
         final_result["result"] = _nested
 
         _tc = _safe_dict(final_result.get("turn_contract"))
@@ -8416,6 +8421,7 @@ def apply_turn(
             _safe_dict(general_interaction_result.get("interaction_result"))
         )
         _rr["general_interaction_result"] = copy.deepcopy(general_interaction_result)
+        _rr["inventory_result"] = copy.deepcopy(inventory_result)
         _tc["resolved_result"] = _rr
         final_result["turn_contract"] = _tc
 
@@ -8456,6 +8462,14 @@ def apply_turn(
         companion_relationship_drift_result=_companion_drift,
         companion_quest_progress_result=_companion_quest_progress,
     )
+
+    if inventory_result.get("changed_state") is True:
+        session = _sync_session_simulation_state_for_early_return(
+            session,
+            simulation_state,
+            reason="inventory_interaction",
+        )
+
     final_result["session"] = session
 
     return final_result

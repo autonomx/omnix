@@ -10,7 +10,6 @@ from app.rpg.party.companion_presence import (
     project_active_companions_into_presence,
 )
 
-
 VALID_COMMANDS = {
     "follow",
     "stay",

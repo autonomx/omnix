@@ -3,7 +3,6 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any, Dict, List
 
-
 MAX_PERSONALITY_MODIFIERS = 12
 MAX_ACTIVE_MOTIVATIONS = 12
 MAX_EVOLUTION_EVENTS = 24

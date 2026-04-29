@@ -3,7 +3,6 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any, Dict, List
 
-
 MAX_CONSEQUENCE_SIGNALS = 32
 ALLOWED_CONSEQUENCE_SIGNAL_KINDS = {
     "trust_signal",

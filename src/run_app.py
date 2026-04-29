@@ -77,7 +77,6 @@ for logger_name in ['app.rpg', 'rpg']:
     rpg_logger.propagate = True
 
 import app.shared as shared
-from app.runtime_paths import generated_images_root, resources_models_root
 from app.image.api import router as image_router
 from app.image.chat_hooks import maybe_enqueue_chat_image
 from app.image.story_hooks import maybe_enqueue_story_scene_image
@@ -86,6 +85,7 @@ from app.rpg.api.rpg_adventure_routes import rpg_adventure_bp
 from app.rpg.api.rpg_game_routes import rpg_game_bp
 from app.rpg.api.rpg_presentation_routes import rpg_presentation_bp
 from app.rpg.api.rpg_session_routes import rpg_session_bp
+from app.runtime_paths import generated_images_root, resources_models_root
 from app.runtime_services import get_runtime_status_bundle
 from app.tts_http_client import (
     decode_float32_audio_base64,

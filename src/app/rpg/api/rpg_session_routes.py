@@ -21,6 +21,16 @@ from app.rpg.ai.semantic_state_change_capture import (
     capture_semantic_state_change_proposals_for_session,
 )
 from app.rpg.economy.action_generator import build_menu_action
+from app.rpg.profiles.character_cards import (
+    approve_character_card_draft,
+    draft_character_card,
+    generate_character_card_portrait_prompt,
+    generate_character_card_profile,
+    get_character_card,
+    list_character_cards_for_simulation_state,
+    reject_character_card_draft,
+    update_character_card,
+)
 from app.rpg.session.ambient_builder import (
     get_pending_ambient_updates,
 )
@@ -47,16 +57,6 @@ from app.rpg.session.runtime import (
 )
 from app.rpg.social.conversation_presentation import build_conversation_payload
 from app.rpg.social.player_interventions import apply_player_intervention
-from app.rpg.profiles.character_cards import (
-    approve_character_card_draft,
-    draft_character_card,
-    generate_character_card_portrait_prompt,
-    generate_character_card_profile,
-    get_character_card,
-    list_character_cards_for_simulation_state,
-    reject_character_card_draft,
-    update_character_card,
-)
 from app.rpg.world.npc_biography_registry import list_npc_biographies
 
 rpg_session_bp = APIRouter()

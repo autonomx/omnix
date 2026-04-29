@@ -3,11 +3,10 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any, Dict, List
 
-from app.rpg.party.party_state import add_companion, ensure_party_state
 from app.rpg.party.companion_presence import current_player_location_id
-from app.rpg.world.npc_party_eligibility import evaluate_npc_party_join_eligibility
+from app.rpg.party.party_state import add_companion, ensure_party_state
 from app.rpg.profiles.dynamic_npc_profiles import ensure_dynamic_npc_profile
-
+from app.rpg.world.npc_party_eligibility import evaluate_npc_party_join_eligibility
 
 ACCEPTANCE_MARKERS = {
     "yes",

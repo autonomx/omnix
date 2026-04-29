@@ -1,13 +1,18 @@
-from app.rpg.world.npc_profile_loader import get_file_npc_profile, clear_npc_profile_cache
 from app.rpg.world.npc_biography_registry import get_npc_biography
 from app.rpg.world.npc_evolution_state import (
     apply_npc_evolution_event,
     get_npc_evolution,
     merged_npc_identity,
 )
-from app.rpg.world.npc_evolution_triggers import evolve_npcs_from_world_event
+from app.rpg.world.npc_evolution_triggers import (
+    evolve_npc_from_reputation_thresholds,
+    evolve_npcs_from_world_event,
+)
+from app.rpg.world.npc_profile_loader import (
+    clear_npc_profile_cache,
+    get_file_npc_profile,
+)
 from app.rpg.world.npc_reputation_state import update_npc_reputation
-from app.rpg.world.npc_evolution_triggers import evolve_npc_from_reputation_thresholds
 
 
 def test_file_npc_profile_bran_loads():

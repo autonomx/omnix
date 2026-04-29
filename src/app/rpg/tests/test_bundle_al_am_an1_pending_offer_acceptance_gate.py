@@ -2,9 +2,9 @@ from app.rpg.world.companion_acceptance import (
     record_companion_join_offer,
     resolve_pending_companion_offer_response,
 )
+from app.rpg.world.companion_join_intent import maybe_create_companion_join_intent
 from app.rpg.world.npc_evolution_triggers import evolve_npcs_from_world_event
 from app.rpg.world.npc_reputation_state import update_npc_reputation
-from app.rpg.world.companion_join_intent import maybe_create_companion_join_intent
 
 
 def _bran_lost_tavern_state():

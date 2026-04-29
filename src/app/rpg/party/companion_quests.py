@@ -5,7 +5,6 @@ from typing import Any, Dict, List
 
 from app.rpg.party.companion_presence import active_party_companions
 
-
 MAX_COMPANION_QUEST_EVENTS = 32
 
 

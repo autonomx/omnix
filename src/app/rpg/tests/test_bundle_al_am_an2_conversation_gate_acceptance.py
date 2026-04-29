@@ -1,6 +1,6 @@
-from app.rpg.world.conversation_threads import maybe_advance_conversation_thread
 from app.rpg.world.companion_acceptance import record_companion_join_offer
 from app.rpg.world.companion_join_intent import maybe_create_companion_join_intent
+from app.rpg.world.conversation_threads import maybe_advance_conversation_thread
 from app.rpg.world.npc_evolution_triggers import evolve_npcs_from_world_event
 from app.rpg.world.npc_reputation_state import update_npc_reputation
 

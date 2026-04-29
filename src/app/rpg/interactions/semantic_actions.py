@@ -4,7 +4,6 @@ import re
 from copy import deepcopy
 from typing import Any, Dict, List
 
-
 SUPPORTED_ACTION_KINDS = {
     "inspect",
     "open",
@@ -43,6 +42,32 @@ def _clean_target_ref(value: str) -> str:
     value = re.sub(r"^(the|a|an|my|his|her|their|this|that)\s+", "", value, flags=re.I)
     value = value.strip(" .,!?:;\"'")
     return value
+
+
+def _parse_leading_quantity(target_ref: str) -> tuple[int, str]:
+    value = _safe_str(target_ref).strip()
+
+    match = re.match(r"^(\d+)\s+(.+)$", value)
+    if match:
+        return max(1, int(match.group(1))), _clean_target_ref(match.group(2))
+
+    word_numbers = {
+        "one": 1,
+        "two": 2,
+        "three": 3,
+        "four": 4,
+        "five": 5,
+        "six": 6,
+        "seven": 7,
+        "eight": 8,
+        "nine": 9,
+        "ten": 10,
+    }
+    parts = value.split(maxsplit=1)
+    if len(parts) == 2 and parts[0].lower() in word_numbers:
+        return word_numbers[parts[0].lower()], _clean_target_ref(parts[1])
+
+    return 1, _clean_target_ref(value)
 
 
 def _extract_after_markers(text: str, markers: List[str]) -> str:
@@ -160,11 +185,13 @@ def resolve_semantic_action_v2(
             ],
             text,
         )
+        quantity, clean_target = _parse_leading_quantity(target)
         return {
             "resolved": True,
             "kind": "take",
             "actor_id": actor_id,
-            "target_ref": target,
+            "target_ref": clean_target,
+            "quantity": quantity,
             "confidence": "high" if target else "low",
             "raw_input": raw,
             "source": "deterministic_semantic_action_resolver_v2",

@@ -3,7 +3,6 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any, Dict, List
 
-
 MAX_PARTY_COMPOSITION_EFFECTS = 12
 
 

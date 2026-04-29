@@ -4,7 +4,9 @@ from app.rpg.profiles.character_cards import (
     get_character_card,
     list_character_cards_for_simulation_state,
 )
-from app.rpg.world.companion_acceptance import record_manual_companion_join_offer_for_test_or_runtime
+from app.rpg.world.companion_acceptance import (
+    record_manual_companion_join_offer_for_test_or_runtime,
+)
 
 
 def _make_state_with_mira():

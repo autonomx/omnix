@@ -49,12 +49,18 @@ def _score_candidate(target_ref: str, entity: Dict[str, Any]) -> int:
     if not names:
         return 0
 
+    singular_target = target[:-1] if target.endswith("s") else target
+
     score = 0
     for name in names:
         if target == name:
             score = max(score, 100)
         elif target in name or name in target:
             score = max(score, 75)
+        elif singular_target and singular_target == name:
+            score = max(score, 95)
+        elif singular_target and (singular_target in name or name in singular_target):
+            score = max(score, 70)
         else:
             target_tokens = set(target.split())
             name_tokens = set(name.split())
@@ -84,6 +90,14 @@ def _entity_type(entity: Dict[str, Any]) -> str:
     if _safe_str(entity.get("object_id")):
         return "object"
     return "entity"
+
+
+def _definition_id(entity: Dict[str, Any]) -> str:
+    raw = _safe_dict(entity.get("raw"))
+    return _safe_str(
+        entity.get("definition_id")
+        or raw.get("definition_id")
+    )
 
 
 def collect_interaction_entities(simulation_state: Dict[str, Any]) -> List[Dict[str, Any]]:
@@ -221,9 +235,11 @@ def resolve_target_ref(
     *,
     target_ref: str,
     expected_types: List[str] | None = None,
+    allowed_sources: List[str] | None = None,
 ) -> Dict[str, Any]:
     target_ref = _safe_str(target_ref)
     expected = set(expected_types or [])
+    allowed = set(allowed_sources or [])
 
     if not target_ref:
         return {
@@ -238,6 +254,10 @@ def resolve_target_ref(
         entity = _safe_dict(entity)
         entity_type = _entity_type(entity)
         if expected and entity_type not in expected:
+            continue
+
+        entity_source = _safe_str(entity.get("source"))
+        if allowed and entity_source not in allowed:
             continue
 
         score = _score_candidate(target_ref, entity)
@@ -258,6 +278,39 @@ def resolve_target_ref(
     best = [item for item in candidates if item[0] == best_score]
 
     if len(best) > 1:
+        best_entities = [_safe_dict(item[3]) for item in best]
+        best_types = {_entity_type(entity) for entity in best_entities}
+        best_defs = {
+            _definition_id(entity)
+            for entity in best_entities
+            if _definition_id(entity)
+        }
+
+        if best_types == {"item"} and len(best_defs) == 1:
+            # Equivalent stackable item candidates. Resolve to the first stable
+            # candidate so inventory runtime can take from that stack.
+            entity = _safe_dict(best[0][3])
+            return {
+                "resolved": True,
+                "reason": "equivalent_item_stack_resolved",
+                "target_ref": target_ref,
+                "target_id": _entity_id(entity),
+                "target_type": _entity_type(entity),
+                "score": best[0][0],
+                "entity": deepcopy(entity),
+                "equivalent_stack_candidates": [
+                    {
+                        "entity_id": item[1],
+                        "entity_type": item[2],
+                        "score": item[0],
+                        "name": _safe_str(_safe_dict(item[3]).get("name")),
+                        "definition_id": _definition_id(_safe_dict(item[3])),
+                    }
+                    for item in best[:8]
+                ],
+                "source": "deterministic_target_resolver",
+            }
+
         return {
             "resolved": False,
             "reason": "ambiguous_target",

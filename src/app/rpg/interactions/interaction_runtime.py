@@ -3,6 +3,7 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any, Dict
 
+from app.rpg.interactions.inventory_runtime import apply_inventory_interaction
 from app.rpg.interactions.semantic_actions import (
     resolve_semantic_action_v2,
     semantic_action_kind,
@@ -59,11 +60,20 @@ def _interaction_reason_for_kind(kind: str) -> str:
     return "unsupported_interaction_kind"
 
 
+def _allowed_sources_for_action(kind: str) -> list[str]:
+    if kind == "take":
+        return ["scene_items", "location_items", "world_items"]
+    if kind in {"drop", "equip", "unequip", "give"}:
+        return ["player_inventory"]
+    return []
+
+
 def resolve_general_interaction(
     simulation_state: Dict[str, Any],
     *,
     player_input: str,
     actor_id: str = "player",
+    tick: int = 0,
 ) -> Dict[str, Any]:
     action = resolve_semantic_action_v2(
         player_input=player_input,
@@ -85,6 +95,7 @@ def resolve_general_interaction(
         simulation_state,
         target_ref=target_ref,
         expected_types=expected_types,
+        allowed_sources=_allowed_sources_for_action(kind),
     ) if target_ref else {
         "resolved": False,
         "reason": "missing_target_ref",
@@ -124,7 +135,14 @@ def resolve_general_interaction(
             "target_resolution": deepcopy(target_result),
             "source": "deterministic_general_interaction_runtime",
         }
-    elif kind == "give" and secondary_ref and not secondary_result.get("resolved"):
+        return {
+            "handled": False,
+            "semantic_action_v2": deepcopy(enriched_action),
+            "interaction_result": deepcopy(interaction_result),
+            "source": "deterministic_general_interaction_runtime",
+        }
+
+    if kind == "give" and secondary_ref and not secondary_result.get("resolved"):
         interaction_result = {
             "resolved": False,
             "changed_state": False,
@@ -134,16 +152,50 @@ def resolve_general_interaction(
             "secondary_target_resolution": deepcopy(secondary_result),
             "source": "deterministic_general_interaction_runtime",
         }
-    else:
+        return {
+            "handled": False,
+            "semantic_action_v2": deepcopy(enriched_action),
+            "interaction_result": deepcopy(interaction_result),
+            "source": "deterministic_general_interaction_runtime",
+        }
+
+    inventory_result: Dict[str, Any] = {}
+    if kind in {"take", "drop", "give", "equip", "unequip"}:
+        inventory_result = apply_inventory_interaction(
+            simulation_state,
+            semantic_action_v2=enriched_action,
+            tick=tick,
+        )
+
+    if inventory_result:
         interaction_result = {
-            "resolved": True,
-            "changed_state": False,
-            "reason": _interaction_reason_for_kind(kind),
+            "resolved": bool(inventory_result.get("resolved")),
+            "changed_state": bool(inventory_result.get("changed_state")),
+            "reason": _safe_str(inventory_result.get("reason")),
             "semantic_action_v2": deepcopy(enriched_action),
             "target_resolution": deepcopy(target_result),
             "secondary_target_resolution": deepcopy(secondary_result),
+            "inventory_result": deepcopy(inventory_result),
             "source": "deterministic_general_interaction_runtime",
         }
+
+        return {
+            "handled": bool(interaction_result.get("resolved")),
+            "semantic_action_v2": deepcopy(enriched_action),
+            "interaction_result": deepcopy(interaction_result),
+            "inventory_result": deepcopy(inventory_result),
+            "source": "deterministic_general_interaction_runtime",
+        }
+
+    interaction_result = {
+        "resolved": True,
+        "changed_state": False,
+        "reason": _interaction_reason_for_kind(kind),
+        "semantic_action_v2": deepcopy(enriched_action),
+        "target_resolution": deepcopy(target_result),
+        "secondary_target_resolution": deepcopy(secondary_result),
+        "source": "deterministic_general_interaction_runtime",
+    }
 
     return {
         "handled": bool(interaction_result.get("resolved")),

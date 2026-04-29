@@ -1,12 +1,12 @@
+from app.rpg.world.npc_reputation_state import get_npc_reputation
+from app.rpg.world.player_reputation_consequences import (
+    apply_player_reputation_consequence,
+    classify_player_conversation_reputation_event,
+)
 from app.rpg.world.quest_conversation_access import (
     evaluate_quest_conversation_access,
     filter_allowed_topic_facts_for_access,
 )
-from app.rpg.world.player_reputation_consequences import (
-    classify_player_conversation_reputation_event,
-    apply_player_reputation_consequence,
-)
-from app.rpg.world.npc_reputation_state import get_npc_reputation
 
 
 def test_unbacked_quest_access_is_denied():

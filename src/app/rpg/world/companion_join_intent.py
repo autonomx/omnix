@@ -5,7 +5,6 @@ from typing import Any, Dict
 
 from app.rpg.world.npc_party_eligibility import evaluate_npc_party_join_eligibility
 
-
 JOIN_REQUEST_MARKERS = {
     "join me",
     "come with me",

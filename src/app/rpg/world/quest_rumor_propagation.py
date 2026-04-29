@@ -3,7 +3,6 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any, Dict, List
 
-
 MAX_QUEST_RUMORS = 24
 DEFAULT_QUEST_RUMOR_TTL_TICKS = 120
 

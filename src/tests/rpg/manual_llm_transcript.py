@@ -25,9 +25,9 @@ from typing import Any, Dict, List, Sequence
 # Add src to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 
-from app.runtime_paths import resources_data_root
 from app.rpg.session.runtime import apply_turn
 from app.rpg.world.conversation_threads import has_pending_player_conversation_response
+from app.runtime_paths import resources_data_root
 
 MANUAL_LOG_MAX_CHUNK_BYTES = 1_000_000
 MANUAL_LOG_CHUNK_SOFT_BYTES = 850_000
@@ -1174,6 +1174,7 @@ def _render_special_panels(result: Dict[str, Any], *, prefix: str) -> str:
         ("Semantic Action v2", "semantic_action_v2"),
         ("Interaction Result", "interaction_result"),
         ("General Interaction Result", "general_interaction_result"),
+        ("Inventory Result", "inventory_result"),
     ]:
         value = _first_dict(
             result.get(key),
@@ -4181,6 +4182,136 @@ SERVICE_SCENARIOS = {
             "I repair the broken cart with the rope.",
         ],
     },
+    "inventory_item_interaction_runtime": {
+        "currency": {"gold": 0, "silver": 0, "copper": 0},
+        "conversation_settings": {
+            "enabled": True,
+            "autonomous_ticks_enabled": False,
+            "frequency": "never",
+            "conversation_chance_percent": 0,
+            "allow_player_invited": False,
+            "player_inclusion_chance_percent": 0,
+            "npc_file_profiles_enabled": True,
+            "npc_evolution_enabled": True,
+            "min_ticks_between_conversations": 0,
+            "thread_cooldown_ticks": 0
+        },
+        "setup_interaction_state": {
+            "scene_items": [
+                {
+                    "item_id": "item:rusty_key",
+                    "name": "rusty key",
+                    "aliases": ["key"],
+                    "location_id": "loc_tavern_road",
+                    "kind": "key"
+                },
+                {
+                    "item_id": "item:rusty_dagger",
+                    "name": "rusty dagger",
+                    "aliases": ["dagger"],
+                    "location_id": "loc_tavern_road",
+                    "kind": "weapon",
+                    "slot": "main_hand"
+                }
+            ],
+            "scene_objects": [],
+            "player_location_id": "loc_tavern_road",
+            "player_inventory": {
+                "items": [
+                    {
+                        "item_id": "item:small_knife",
+                        "name": "small knife",
+                        "aliases": ["knife"],
+                        "kind": "weapon",
+                        "slot": "main_hand"
+                    }
+                ],
+                "equipment": {}
+            },
+            "party_state": {
+                "max_size": 3,
+                "companions": [
+                    {
+                        "npc_id": "npc:Bran",
+                        "name": "Bran",
+                        "role": "companion",
+                        "status": "active",
+                        "follow_mode": "following_player",
+                        "location_id": "loc_tavern_road"
+                    }
+                ]
+            }
+        },
+        "turns": [
+            "I pick up the rusty key.",
+            "I drop the rusty key.",
+            "I pick up the rusty dagger.",
+            "I equip the rusty dagger.",
+            "I give the small knife to Bran."
+        ],
+    },
+    "inventory_item_model_stacking_weight_encumbrance": {
+        "currency": {"gold": 0, "silver": 0, "copper": 0},
+        "conversation_settings": {
+            "enabled": True,
+            "autonomous_ticks_enabled": False,
+            "frequency": "never",
+            "conversation_chance_percent": 0,
+            "allow_player_invited": False,
+            "player_inclusion_chance_percent": 0,
+            "npc_file_profiles_enabled": True,
+            "npc_evolution_enabled": True,
+            "min_ticks_between_conversations": 0,
+            "thread_cooldown_ticks": 0
+        },
+        "setup_interaction_state": {
+            "scene_items": [
+                {
+                    "item_id": "item:iron_arrow_stack_a",
+                    "definition_id": "def:iron_arrow",
+                    "name": "iron arrows",
+                    "aliases": ["arrows", "iron arrow"],
+                    "quantity": 5,
+                    "location_id": "loc_tavern_road"
+                },
+                {
+                    "item_id": "item:iron_arrow_stack_b",
+                    "definition_id": "def:iron_arrow",
+                    "name": "iron arrows",
+                    "aliases": ["arrows", "iron arrow"],
+                    "quantity": 10,
+                    "location_id": "loc_tavern_road"
+                },
+                {
+                    "item_id": "item:rusty_dagger",
+                    "definition_id": "def:rusty_dagger",
+                    "name": "rusty dagger",
+                    "aliases": ["dagger"],
+                    "location_id": "loc_tavern_road"
+                },
+                {
+                    "item_id": "item:heavy_anvil",
+                    "definition_id": "def:heavy_anvil",
+                    "name": "heavy anvil",
+                    "aliases": ["anvil"],
+                    "location_id": "loc_tavern_road"
+                }
+            ],
+            "scene_objects": [],
+            "player_location_id": "loc_tavern_road",
+            "player_inventory": {
+                "items": [],
+                "equipment": {},
+                "carry_capacity": 50.0
+            }
+        },
+        "turns": [
+            "I pick up 5 iron arrows.",
+            "I pick up 10 iron arrows.",
+            "I pick up the rusty dagger.",
+            "I pick up the heavy anvil."
+        ]
+    },
 }
 
 
@@ -5463,6 +5594,59 @@ def _extract_semantic_action_v2(result: Dict[str, Any]) -> Dict[str, Any]:
     return {}
 
 
+def _player_inventory_items(simulation_state: Dict[str, Any]) -> List[Dict[str, Any]]:
+    return _safe_list(
+        _safe_dict(
+            _safe_dict(simulation_state.get("player_state")).get("inventory")
+        ).get("items")
+    )
+
+
+def _inventory_item_by_definition(simulation_state: Dict[str, Any], definition_id: str) -> Dict[str, Any]:
+    for item in _player_inventory_items(simulation_state):
+        item = _safe_dict(item)
+        if _safe_str(item.get("definition_id")) == definition_id:
+            return item
+    return {}
+
+
+def _player_inventory_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
+    return _safe_dict(_safe_dict(simulation_state.get("player_state")).get("inventory"))
+
+
+def _player_equipment(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
+    return _safe_dict(
+        _safe_dict(
+            _safe_dict(simulation_state.get("player_state")).get("inventory")
+        ).get("equipment")
+    )
+
+
+def _scene_item_ids(simulation_state: Dict[str, Any]) -> List[str]:
+    return [
+        _safe_str(_safe_dict(item).get("item_id"))
+        for item in _safe_list(simulation_state.get("scene_items"))
+        if _safe_str(_safe_dict(item).get("item_id"))
+    ]
+
+
+def _companion_inventory_items(simulation_state: Dict[str, Any], npc_id: str) -> List[Dict[str, Any]]:
+    party_state = _safe_dict(_safe_dict(simulation_state.get("player_state")).get("party_state"))
+    for companion in _safe_list(party_state.get("companions")):
+        companion = _safe_dict(companion)
+        if _safe_str(companion.get("npc_id")) == npc_id:
+            return _safe_list(_safe_dict(companion.get("inventory")).get("items"))
+    return []
+
+
+def _item_ids(items: List[Dict[str, Any]]) -> List[str]:
+    return [
+        _safe_str(_safe_dict(item).get("item_id"))
+        for item in _safe_list(items)
+        if _safe_str(_safe_dict(item).get("item_id"))
+    ]
+
+
 def _manual_regression_warnings(
     *,
     scenario_name: str = "",
@@ -6017,12 +6201,102 @@ def _manual_regression_warnings(
 
     provider_name = _safe_str(service_result.get("provider_name"))
     service_kind = _safe_str(service_result.get("service_kind"))
-    if provider_name == "Elara" and service_kind in {"shop_goods", "repair"}:
-        if current_location_id and current_location_id != "loc_market":
-            warnings.append("elara_service_resolved_outside_market")
-    if provider_name == "Bran" and service_kind in {"lodging", "meal", "paid_information"}:
-        if current_location_id and current_location_id != "loc_tavern":
-            warnings.append("bran_service_resolved_outside_tavern")
+    _service_scenario_names = {
+        "lodging_success",
+        "shop_success",
+        "paid_info",
+        "blocked_purchase",
+    }
+    _service_action_types = {
+        "service_purchase",
+        "purchase_service",
+        "lodging",
+        "shop_purchase",
+        "paid_info",
+    }
+    _is_service_scenario = scenario_name in _service_scenario_names
+    _is_service_action = action_type in _service_action_types
+    if _is_service_scenario or _is_service_action:
+        if provider_name == "Elara" and service_kind in {"shop_goods", "repair"}:
+            if current_location_id and current_location_id != "loc_market":
+                warnings.append("elara_service_resolved_outside_market")
+        if provider_name == "Bran" and service_kind in {"lodging", "meal", "paid_information"}:
+            if current_location_id and current_location_id != "loc_tavern":
+                warnings.append("bran_service_resolved_outside_tavern")
+
+    if scenario_name == "inventory_item_interaction_runtime":
+        sim = _extract_simulation_state(result)
+        interaction = _safe_dict(_extract_interaction_result(result))
+        inventory = _safe_dict(
+            interaction.get("inventory_result")
+            or result.get("inventory_result")
+            or _safe_dict(result.get("result")).get("inventory_result")
+        )
+
+        player_item_ids = _item_ids(_player_inventory_items(sim))
+        scene_ids = _scene_item_ids(sim)
+
+        expected_by_turn = {
+            1: ("item_added_to_inventory", "item:rusty_key"),
+            2: ("item_dropped_to_location", "item:rusty_key"),
+            3: ("item_added_to_inventory", "item:rusty_dagger"),
+            4: ("item_equipped", "item:rusty_dagger"),
+            5: ("item_given_to_npc", "item:small_knife"),
+        }
+
+        expected = expected_by_turn.get(turn_index)
+        if expected:
+            expected_reason, expected_item_id = expected
+
+            if inventory.get("resolved") is not True:
+                warnings.append(
+                    f"inventory_expected_resolved_true_got:{_safe_str(inventory.get('reason')) or 'missing'}"
+                )
+
+            if inventory.get("changed_state") is not True:
+                warnings.append(
+                    f"inventory_expected_changed_state_true_got:{_safe_str(inventory.get('reason')) or 'missing'}"
+                )
+
+            if _safe_str(inventory.get("reason")) != expected_reason:
+                warnings.append(
+                    f"inventory_expected_reason_{expected_reason}_got:{_safe_str(inventory.get('reason')) or 'missing'}"
+                )
+
+            if _safe_str(inventory.get("item_id")) != expected_item_id:
+                warnings.append(
+                    f"inventory_expected_item_{expected_item_id}_got:{_safe_str(inventory.get('item_id')) or 'missing'}"
+                )
+
+        if turn_index == 1:
+            if "item:rusty_key" not in player_item_ids:
+                warnings.append("inventory_expected_rusty_key_in_player_inventory_after_take")
+            if "item:rusty_key" in scene_ids:
+                warnings.append("inventory_expected_rusty_key_removed_from_scene_after_take")
+
+        if turn_index == 2:
+            if "item:rusty_key" in player_item_ids:
+                warnings.append("inventory_expected_rusty_key_removed_from_inventory_after_drop")
+            if "item:rusty_key" not in scene_ids:
+                warnings.append("inventory_expected_rusty_key_back_in_scene_after_drop")
+
+        if turn_index == 3:
+            if "item:rusty_dagger" not in player_item_ids:
+                warnings.append("inventory_expected_rusty_dagger_in_inventory_after_take")
+
+        if turn_index == 4:
+            equipment = _player_equipment(sim)
+            if _safe_str(equipment.get("main_hand")) != "item:rusty_dagger":
+                warnings.append(
+                    f"inventory_expected_dagger_equipped_main_hand_got:{_safe_str(equipment.get('main_hand')) or 'missing'}"
+                )
+
+        if turn_index == 5:
+            if "item:small_knife" in player_item_ids:
+                warnings.append("inventory_expected_small_knife_removed_from_player_after_give")
+            bran_items = _item_ids(_companion_inventory_items(sim, "npc:Bran"))
+            if "item:small_knife" not in bran_items:
+                warnings.append("inventory_expected_small_knife_in_bran_inventory_after_give")
 
     conversation = _extract_conversation_result(result)
     simulation_state = _extract_simulation_state(result)
@@ -7193,6 +7467,70 @@ def _manual_regression_warnings(
                     f"general_interaction_expected_reason_{expected_reason}_got:{_safe_str(interaction.get('reason')) or 'missing'}"
                 )
 
+    if scenario_name == "inventory_item_model_stacking_weight_encumbrance":
+        sim = _extract_simulation_state(result)
+        inventory_state = _player_inventory_state(sim)
+        inventory = _safe_dict(
+            _extract_interaction_result(result).get("inventory_result")
+            or result.get("inventory_result")
+            or _safe_dict(result.get("result")).get("inventory_result")
+        )
+
+        if turn_index in {1, 2, 3, 4}:
+            if inventory.get("resolved") is not True:
+                warnings.append(
+                    f"item_model_expected_inventory_resolved_true_got:{_safe_str(inventory.get('reason')) or 'missing'}"
+                )
+            if inventory.get("changed_state") is not True:
+                warnings.append(
+                    f"item_model_expected_changed_state_true_got:{_safe_str(inventory.get('reason')) or 'missing'}"
+                )
+
+        if turn_index == 1:
+            arrows = _inventory_item_by_definition(sim, "def:iron_arrow")
+            if int(arrows.get("quantity") or 0) != 5:
+                warnings.append(
+                    f"item_model_expected_arrow_quantity_5_got:{int(arrows.get('quantity') or 0)}"
+                )
+            if float(inventory_state.get("carry_weight") or 0.0) <= 0:
+                warnings.append("item_model_expected_positive_carry_weight_after_arrows")
+
+        if turn_index == 2:
+            arrows = _inventory_item_by_definition(sim, "def:iron_arrow")
+            if int(arrows.get("quantity") or 0) != 15:
+                warnings.append(
+                    f"item_model_expected_arrow_quantity_15_got:{int(arrows.get('quantity') or 0)}"
+                )
+            if inventory.get("stacked") is not True:
+                warnings.append("item_model_expected_second_arrow_pickup_stacked_true")
+
+        if turn_index == 3:
+            dagger = _inventory_item_by_definition(sim, "def:rusty_dagger")
+            if not dagger:
+                warnings.append("item_model_expected_rusty_dagger_in_inventory")
+            if _safe_str(dagger.get("rarity")) != "common":
+                warnings.append(
+                    f"item_model_expected_dagger_rarity_common_got:{_safe_str(dagger.get('rarity')) or 'missing'}"
+                )
+            equipment = _safe_dict(dagger.get("equipment"))
+            stats = _safe_dict(equipment.get("stats"))
+            if int(stats.get("damage_max") or 0) < 1:
+                warnings.append("item_model_expected_dagger_equipment_stats")
+
+        if turn_index == 4:
+            anvil = _inventory_item_by_definition(sim, "def:heavy_anvil")
+            if not anvil:
+                warnings.append("item_model_expected_heavy_anvil_in_inventory")
+            enc = _safe_str(inventory_state.get("encumbrance_state"))
+            if enc not in {"overloaded", "immobile"}:
+                warnings.append(
+                    f"item_model_expected_overloaded_or_immobile_after_anvil_got:{enc or 'missing'}"
+                )
+            if float(inventory_state.get("carry_weight") or 0.0) <= float(inventory_state.get("carry_capacity") or 50.0):
+                warnings.append(
+                    f"item_model_expected_carry_weight_above_capacity_got:{inventory_state.get('carry_weight')}"
+                )
+
     return warnings
 
 
@@ -7331,6 +7669,10 @@ def _apply_manual_scenario_setup(session_id: str, scenario: Dict[str, Any]) -> b
             simulation_state["location_id"] = location_id
         simulation_state["scene_objects"] = _safe_list(setup_interaction_state.get("scene_objects"))
         simulation_state["scene_items"] = _safe_list(setup_interaction_state.get("scene_items"))
+        if isinstance(setup_interaction_state.get("player_inventory"), dict):
+            player_state["inventory"] = _safe_dict(setup_interaction_state.get("player_inventory"))
+        if isinstance(setup_interaction_state.get("party_state"), dict):
+            player_state["party_state"] = _safe_dict(setup_interaction_state.get("party_state"))
         simulation_state["player_state"] = player_state
 
         setup_payload = _safe_dict(session.get("setup_payload"))
@@ -8246,7 +8588,9 @@ def _run_one_service_scenario(
                 _sync_manual_simulation_state(session, command_sim)
                 _save_manual_session_for_test(session, reason="manual command carry-forward")
         elif _safe_str(player_input) in {"__manual_offer_companion_mira__", "__manual_offer_companion_alric__"}:
-            from app.rpg.world.companion_acceptance import record_manual_companion_join_offer_for_test_or_runtime
+            from app.rpg.world.companion_acceptance import (
+                record_manual_companion_join_offer_for_test_or_runtime,
+            )
 
             command = _safe_str(player_input)
             sim = _extract_simulation_state(last_result) if last_result else _safe_dict(session.get("simulation_state"))
@@ -8498,7 +8842,9 @@ def _run_one_service_scenario(
                 "session": session,
             }
         elif _safe_str(player_input) == "__manual_offer_companion_mira_no_auto_profile__":
-            from app.rpg.world.companion_acceptance import record_manual_companion_join_offer_for_test_or_runtime
+            from app.rpg.world.companion_acceptance import (
+                record_manual_companion_join_offer_for_test_or_runtime,
+            )
 
             command = _safe_str(player_input)
             sim = _extract_simulation_state(last_result) if last_result else _safe_dict(session.get("simulation_state"))

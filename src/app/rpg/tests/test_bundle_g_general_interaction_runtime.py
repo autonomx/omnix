@@ -103,11 +103,13 @@ def test_general_interaction_take_item_requires_inventory_runtime():
     assert result["handled"] is True
     action = result["semantic_action_v2"]
     interaction = result["interaction_result"]
+    inventory = result["inventory_result"]
 
     assert action["kind"] == "take"
     assert action["target_id"] == "item:rusty_key"
-    assert interaction["reason"] == "take_requires_inventory_runtime"
-    assert interaction["changed_state"] is False
+    assert inventory["reason"] == "item_added_to_inventory"
+    assert inventory["resolved"] is True
+    assert inventory["changed_state"] is True
 
 
 def test_general_interaction_use_item_on_target():
