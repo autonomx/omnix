@@ -15,6 +15,7 @@ import hashlib
 import json
 import logging
 import os
+import re
 import time as _time
 from datetime import datetime, timezone
 from typing import Any, Callable, Dict, List, Optional, Tuple
@@ -26,6 +27,125 @@ def _has_pending_conversation_response(simulation_state: Dict[str, Any]) -> bool
     thread_state = _safe_dict(simulation_state.get("conversation_thread_state"))
     pending = _safe_dict(thread_state.get("pending_player_response"))
     return bool(pending.get("thread_id") and pending.get("topic_id"))
+
+
+def _interaction_visible_result_reason(general_interaction_result: Dict[str, Any]) -> str:
+    general_interaction_result = _safe_dict(general_interaction_result)
+    interaction = _safe_dict(general_interaction_result.get("interaction_result"))
+
+    for key in ("inventory_result", "container_result", "repair_result"):
+        nested = _safe_dict(
+            interaction.get(key)
+            or general_interaction_result.get(key)
+        )
+        if nested and _safe_str(nested.get("reason")):
+            return _safe_str(nested.get("reason"))
+
+    if interaction and _safe_str(interaction.get("reason")):
+        return _safe_str(interaction.get("reason"))
+
+    return ""
+
+
+def _replace_stale_visible_result_text(text: Any, *, visible_reason: str) -> str:
+    text = _safe_str(text)
+    visible_reason = _safe_str(visible_reason)
+    if not visible_reason:
+        return text
+    if not text.strip():
+        return f"Result: {visible_reason}"
+
+    # Replace stale fallback result lines while preserving the rest of the
+    # generated narration text. This catches:
+    #   Result: unknown_item
+    #   Result: item_not_found
+    #   Result: unknown
+    text = re.sub(
+        r"(?im)^(\s*Result:\s*)(unknown_item|item_not_found|unknown)\s*$",
+        rf"\1{visible_reason}",
+        text,
+    )
+
+    # Some payloads embed the stale result mid-line.
+    text = re.sub(
+        r"(?i)Result:\s*(unknown_item|item_not_found|unknown)",
+        f"Result: {visible_reason}",
+        text,
+    )
+
+    return text
+
+
+def _patch_visible_interaction_reason_into_payload_text(
+    payload: Dict[str, Any],
+    *,
+    visible_reason: str,
+) -> Dict[str, Any]:
+    payload = _safe_dict(payload)
+    visible_reason = _safe_str(visible_reason)
+    if not payload or not visible_reason:
+        return payload
+
+    text_keys = (
+        "narration",
+        "final_narration",
+        "narration_preview",
+        "raw_payload_narration",
+        "action",
+        "result",
+        "summary",
+        "result_summary",
+        "action_result",
+        "outcome",
+    )
+
+    for key in text_keys:
+        if key in payload:
+            payload[key] = _replace_stale_visible_result_text(
+                payload.get(key),
+                visible_reason=visible_reason,
+            )
+
+    return payload
+
+
+def _apply_visible_interaction_reason_to_resolved_result(
+    resolved_result: Dict[str, Any],
+    *,
+    general_interaction_result: Dict[str, Any],
+) -> Dict[str, Any]:
+    resolved_result = _safe_dict(resolved_result)
+    visible_reason = _interaction_visible_result_reason(general_interaction_result)
+    if not visible_reason:
+        return resolved_result
+
+    resolved_result["visible_interaction_reason"] = visible_reason
+
+    stale_values = {
+        "",
+        "item_not_found",
+        "unknown_item",
+        "unknown",
+        "Action: You act.",
+        "You act.",
+    }
+
+    current_result = _safe_str(resolved_result.get("result"))
+    current_action = _safe_str(resolved_result.get("action"))
+
+    if current_result in stale_values:
+        resolved_result["result"] = visible_reason
+
+    if current_action in stale_values or current_action.startswith("Result: item_not_found") or current_action.startswith("Result: unknown_item"):
+        resolved_result["action"] = f"Result: {visible_reason}"
+
+    # Some report/narration paths read summary/text instead of result/action.
+    for key in ("summary", "result_summary", "action_result", "outcome"):
+        current = _safe_str(resolved_result.get(key))
+        if current in stale_values or current.startswith("Result: item_not_found") or current.startswith("Result: unknown_item"):
+            resolved_result[key] = visible_reason
+
+    return resolved_result
 
 
 from app.rpg.action_resolver import resolve_player_action
@@ -7057,6 +7177,43 @@ def _apply_turn_authoritative(
             resolved_for_contract["semantic_action"] = semantic_action_record
             turn_contract["resolved_result"] = resolved_for_contract
             turn_contract["resolved_action"] = resolved_for_contract
+
+            resolved_from_contract = _safe_dict(
+                turn_contract.get("resolved_result")
+                or turn_contract.get("resolved_action")
+            )
+            if resolved_from_contract:
+                resolved_from_contract = _apply_visible_interaction_reason_to_resolved_result(
+                    resolved_from_contract,
+                    general_interaction_result=general_interaction_result,
+                )
+                if "resolved_result" in turn_contract:
+                    turn_contract["resolved_result"] = resolved_from_contract
+                else:
+                    turn_contract["resolved_action"] = resolved_from_contract
+
+            turn_contract["visible_interaction_reason"] = _interaction_visible_result_reason(
+                general_interaction_result
+            )
+            if turn_contract["visible_interaction_reason"]:
+                turn_contract = _patch_visible_interaction_reason_into_payload_text(
+                    turn_contract,
+                    visible_reason=turn_contract["visible_interaction_reason"],
+                )
+
+                contract_resolved = _safe_dict(
+                    turn_contract.get("resolved_result")
+                    or turn_contract.get("resolved_action")
+                )
+                if contract_resolved:
+                    contract_resolved = _patch_visible_interaction_reason_into_payload_text(
+                        contract_resolved,
+                        visible_reason=turn_contract["visible_interaction_reason"],
+                    )
+                    if "resolved_result" in turn_contract:
+                        turn_contract["resolved_result"] = contract_resolved
+                    else:
+                        turn_contract["resolved_action"] = contract_resolved
         contract_resolved = merge_service_result_into_contract_resolved(
             resolved_result,
             _safe_dict(turn_contract.get("resolved_action") or resolved_result),
@@ -8284,6 +8441,9 @@ def apply_turn(
 
     inventory_result = _safe_dict(general_interaction_result.get("inventory_result"))
 
+    container_result = _safe_dict(general_interaction_result.get("container_result"))
+    repair_result = _safe_dict(general_interaction_result.get("repair_result"))
+
     authoritative_result = _apply_turn_authoritative(
         session_id,
         player_input,
@@ -8374,6 +8534,9 @@ def apply_turn(
         )
         final_result["general_interaction_result"] = copy.deepcopy(general_interaction_result)
         final_result["inventory_result"] = copy.deepcopy(inventory_result)
+        final_result["container_result"] = copy.deepcopy(container_result)
+        final_result["repair_result"] = copy.deepcopy(repair_result)
+        final_result["visible_interaction_reason"] = _interaction_visible_result_reason(general_interaction_result)
 
         _nested = _safe_dict(final_result.get("result"))
         _nested["party_aware_turn_context"] = copy.deepcopy(_party_aware_ctx)
@@ -8397,6 +8560,8 @@ def apply_turn(
         )
         _nested["general_interaction_result"] = copy.deepcopy(general_interaction_result)
         _nested["inventory_result"] = copy.deepcopy(inventory_result)
+        _nested["container_result"] = copy.deepcopy(container_result)
+        _nested["repair_result"] = copy.deepcopy(repair_result)
         final_result["result"] = _nested
 
         _tc = _safe_dict(final_result.get("turn_contract"))
@@ -8422,6 +8587,14 @@ def apply_turn(
         )
         _rr["general_interaction_result"] = copy.deepcopy(general_interaction_result)
         _rr["inventory_result"] = copy.deepcopy(inventory_result)
+        _rr["container_result"] = copy.deepcopy(container_result)
+        _rr["repair_result"] = copy.deepcopy(repair_result)
+
+        _rr = _apply_visible_interaction_reason_to_resolved_result(
+            _rr,
+            general_interaction_result=general_interaction_result,
+        )
+
         _tc["resolved_result"] = _rr
         final_result["turn_contract"] = _tc
 
@@ -8463,14 +8636,56 @@ def apply_turn(
         companion_quest_progress_result=_companion_quest_progress,
     )
 
-    if inventory_result.get("changed_state") is True:
+    if (
+        inventory_result.get("changed_state") is True
+        or container_result.get("changed_state") is True
+        or repair_result.get("changed_state") is True
+    ):
         session = _sync_session_simulation_state_for_early_return(
             session,
             simulation_state,
-            reason="inventory_interaction",
+            reason="general_item_interaction",
         )
 
     final_result["session"] = session
+
+    visible_interaction_reason = _interaction_visible_result_reason(general_interaction_result)
+    if visible_interaction_reason:
+        final_result["visible_interaction_reason"] = visible_interaction_reason
+        result = _patch_visible_interaction_reason_into_payload_text(
+            final_result,
+            visible_reason=visible_interaction_reason,
+        )
+
+        nested = _safe_dict(result.get("result"))
+        if nested:
+            nested["visible_interaction_reason"] = visible_interaction_reason
+            nested = _patch_visible_interaction_reason_into_payload_text(
+                nested,
+                visible_reason=visible_interaction_reason,
+            )
+
+            nested_resolved = _safe_dict(
+                nested.get("resolved_result")
+                or nested.get("resolved_action")
+            )
+            if nested_resolved:
+                nested_resolved = _apply_visible_interaction_reason_to_resolved_result(
+                    nested_resolved,
+                    general_interaction_result=general_interaction_result,
+                )
+                nested_resolved = _patch_visible_interaction_reason_into_payload_text(
+                    nested_resolved,
+                    visible_reason=visible_interaction_reason,
+                )
+                if "resolved_result" in nested:
+                    nested["resolved_result"] = nested_resolved
+                else:
+                    nested["resolved_action"] = nested_resolved
+
+            result["result"] = nested
+
+        final_result = result
 
     return final_result
 

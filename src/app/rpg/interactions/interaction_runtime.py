@@ -3,7 +3,9 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any, Dict
 
+from app.rpg.interactions.container_runtime import apply_container_interaction
 from app.rpg.interactions.inventory_runtime import apply_inventory_interaction
+from app.rpg.interactions.repair_runtime import apply_repair_interaction
 from app.rpg.interactions.semantic_actions import (
     resolve_semantic_action_v2,
     semantic_action_kind,
@@ -63,7 +65,7 @@ def _interaction_reason_for_kind(kind: str) -> str:
 def _allowed_sources_for_action(kind: str) -> list[str]:
     if kind == "take":
         return ["scene_items", "location_items", "world_items"]
-    if kind in {"drop", "equip", "unequip", "give"}:
+    if kind in {"drop", "equip", "unequip", "give", "put", "repair"}:
         return ["player_inventory"]
     return []
 
@@ -116,10 +118,16 @@ def resolve_general_interaction(
     )
     if secondary_ref:
         secondary_expected = ["npc"] if kind == "give" else []
+        secondary_allowed_sources = []
+        if kind in {"put", "repair"}:
+            secondary_expected = ["item"]
+            secondary_allowed_sources = ["player_inventory"]
+
         secondary_result = resolve_target_ref(
             simulation_state,
             target_ref=secondary_ref,
             expected_types=secondary_expected,
+            allowed_sources=secondary_allowed_sources,
         )
         enriched_action["secondary_target_resolution"] = deepcopy(secondary_result)
         if secondary_result.get("resolved"):
@@ -184,6 +192,56 @@ def resolve_general_interaction(
             "semantic_action_v2": deepcopy(enriched_action),
             "interaction_result": deepcopy(interaction_result),
             "inventory_result": deepcopy(inventory_result),
+            "source": "deterministic_general_interaction_runtime",
+        }
+
+    container_result = {}
+    if kind == "put":
+        container_result = apply_container_interaction(
+            simulation_state,
+            semantic_action_v2=enriched_action,
+            tick=tick,
+        )
+        interaction_result = {
+            "resolved": bool(container_result.get("resolved")),
+            "changed_state": bool(container_result.get("changed_state")),
+            "reason": _safe_str(container_result.get("reason")),
+            "semantic_action_v2": deepcopy(enriched_action),
+            "target_resolution": deepcopy(target_result),
+            "secondary_target_resolution": deepcopy(secondary_result),
+            "container_result": deepcopy(container_result),
+            "source": "deterministic_general_interaction_runtime",
+        }
+        return {
+            "handled": bool(interaction_result.get("resolved")),
+            "semantic_action_v2": deepcopy(enriched_action),
+            "interaction_result": deepcopy(interaction_result),
+            "container_result": deepcopy(container_result),
+            "source": "deterministic_general_interaction_runtime",
+        }
+
+    repair_result = {}
+    if kind == "repair":
+        repair_result = apply_repair_interaction(
+            simulation_state,
+            semantic_action_v2=enriched_action,
+            tick=tick,
+        )
+        interaction_result = {
+            "resolved": bool(repair_result.get("resolved")),
+            "changed_state": bool(repair_result.get("changed_state")),
+            "reason": _safe_str(repair_result.get("reason")),
+            "semantic_action_v2": deepcopy(enriched_action),
+            "target_resolution": deepcopy(target_result),
+            "secondary_target_resolution": deepcopy(secondary_result),
+            "repair_result": deepcopy(repair_result),
+            "source": "deterministic_general_interaction_runtime",
+        }
+        return {
+            "handled": bool(interaction_result.get("resolved")),
+            "semantic_action_v2": deepcopy(enriched_action),
+            "interaction_result": deepcopy(interaction_result),
+            "repair_result": deepcopy(repair_result),
             "source": "deterministic_general_interaction_runtime",
         }
 

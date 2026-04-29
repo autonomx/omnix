@@ -129,6 +129,36 @@ def normalize_item_instance(item: Dict[str, Any]) -> Dict[str, Any]:
             "max_durability": max(0.0, _safe_float(condition.get("max_durability"), 1.0)),
         }
 
+    container = _safe_dict(item.get("container") or definition.get("container"))
+    if container:
+        capacity = _safe_float(container.get("capacity_weight"), 0.0)
+        contained_items = [
+            normalize_item_instance(_safe_dict(contained))
+            for contained in _safe_list(container.get("items"))
+        ]
+        normalized["container"] = {
+            "capacity_weight": capacity,
+            "items": contained_items,
+        }
+
+    repair = _safe_dict(item.get("repair") or definition.get("repair"))
+    if repair:
+        normalized["repair"] = deepcopy(repair)
+
+    # Future item-system metadata. Preserve these now so later bundles do not
+    # hit the same normalization-loss bug that repair metadata hit.
+    consumable = _safe_dict(item.get("consumable") or definition.get("consumable"))
+    if consumable:
+        normalized["consumable"] = deepcopy(consumable)
+
+    ammo = _safe_dict(item.get("ammo") or definition.get("ammo"))
+    if ammo:
+        normalized["ammo"] = deepcopy(ammo)
+
+    crafting = _safe_dict(item.get("crafting") or definition.get("crafting"))
+    if crafting:
+        normalized["crafting"] = deepcopy(crafting)
+
     # Preserve lightweight custom state without allowing it to override normalized fields.
     for key in ("state", "metadata", "owner_id"):
         if key in item:
@@ -225,11 +255,83 @@ def add_item_to_items_list(items: List[Any], item: Dict[str, Any]) -> Dict[str, 
     }
 
 
+def remove_quantity_from_items_list(
+    items: List[Any],
+    *,
+    item_id: str = "",
+    definition_id: str = "",
+    quantity: int = 1,
+) -> Dict[str, Any]:
+    normalized_items = [normalize_item_instance(_safe_dict(item)) for item in _safe_list(items)]
+    quantity = max(1, _safe_int(quantity, 1))
+    removed = []
+    remaining_to_remove = quantity
+
+    for index, item in list(enumerate(normalized_items)):
+        if remaining_to_remove <= 0:
+            break
+
+        matches_id = item_id and _safe_str(item.get("item_id")) == _safe_str(item_id)
+        matches_def = definition_id and _safe_str(item.get("definition_id")) == _safe_str(definition_id)
+        if not matches_id and not matches_def:
+            continue
+
+        available = _safe_int(item.get("quantity"), 1)
+        take = min(available, remaining_to_remove)
+
+        removed_item = deepcopy(item)
+        removed_item["quantity"] = take
+        removed_item["total_weight"] = round(_safe_float(removed_item.get("unit_weight"), 0.0) * take, 4)
+        removed.append(removed_item)
+
+        remaining_qty = available - take
+        if remaining_qty <= 0:
+            normalized_items.pop(index)
+        else:
+            normalized_items[index]["quantity"] = remaining_qty
+            normalized_items[index]["total_weight"] = round(
+                _safe_float(normalized_items[index].get("unit_weight"), 0.0) * remaining_qty,
+                4,
+            )
+
+        remaining_to_remove -= take
+
+    return {
+        "removed_all": remaining_to_remove == 0,
+        "removed_items": removed,
+        "items": normalized_items,
+        "quantity_removed": quantity - remaining_to_remove,
+        "quantity_missing": remaining_to_remove,
+        "source": "deterministic_item_model",
+    }
+
+
+def calculate_item_total_weight(item: Dict[str, Any]) -> float:
+    normalized = normalize_item_instance(item)
+    own_weight = _safe_float(normalized.get("total_weight"), 0.0)
+
+    container = _safe_dict(normalized.get("container"))
+    contained = _safe_list(container.get("items"))
+    contained_weight = 0.0
+    for child in contained:
+        contained_weight += calculate_item_total_weight(_safe_dict(child))
+
+    return round(own_weight + contained_weight, 4)
+
+
+def calculate_container_contents_weight(item: Dict[str, Any]) -> float:
+    normalized = normalize_item_instance(item)
+    container = _safe_dict(normalized.get("container"))
+    total = 0.0
+    for child in _safe_list(container.get("items")):
+        total += calculate_item_total_weight(_safe_dict(child))
+    return round(total, 4)
+
+
 def calculate_inventory_weight(items: List[Any]) -> float:
     total = 0.0
     for item in _safe_list(items):
-        normalized = normalize_item_instance(_safe_dict(item))
-        total += _safe_float(normalized.get("total_weight"), 0.0)
+        total += calculate_item_total_weight(_safe_dict(item))
     return round(total, 4)
 
 

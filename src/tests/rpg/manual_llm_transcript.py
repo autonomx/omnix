@@ -15,6 +15,7 @@ import sys
 import threading
 import time
 import urllib.request
+import re
 import uuid
 import zipfile
 from copy import deepcopy
@@ -420,6 +421,7 @@ def _extract_ai_narration_text(result: Dict[str, Any]) -> str:
     for candidate in candidates:
         text = _extract_display_text(candidate)
         if text:
+            text = _patch_visible_interaction_reason_in_text(text, result)
             return text
 
     # Structured narration contract variants.
@@ -432,6 +434,7 @@ def _extract_ai_narration_text(result: Dict[str, Any]) -> str:
         )
         text = _extract_display_text(narration_obj.get("narration") or narration_obj)
         if text:
+            text = _patch_visible_interaction_reason_in_text(text, result)
             return text
 
     return ""
@@ -1175,6 +1178,8 @@ def _render_special_panels(result: Dict[str, Any], *, prefix: str) -> str:
         ("Interaction Result", "interaction_result"),
         ("General Interaction Result", "general_interaction_result"),
         ("Inventory Result", "inventory_result"),
+        ("Container Result", "container_result"),
+        ("Repair Result", "repair_result"),
     ]:
         value = _first_dict(
             result.get(key),
@@ -1211,8 +1216,13 @@ def _render_player_ai_conversation(turns: List[Dict[str, Any]]) -> str:
         if not narration_text and not npc_lines:
             narration_text = "[no AI/narration text found for this turn]"
 
-        rendered_turns.append(
-            f"""
+    if not _safe_str(narration_text).strip():
+        visible_reason = _extract_visible_interaction_reason(result)
+        if visible_reason:
+            narration_text = f"Result: {visible_reason}"
+
+    rendered_turns.append(
+    f"""
             <div class="chat-turn" id="conversation-turn-{idx}">
               <div class="chat-turn-header">
                 <span>Turn {idx}</span>
@@ -1393,9 +1403,8 @@ def _write_scenario_html_v2(
   <div class="header">
     <div>
       <h1>{_html_escape(scenario_name)}</h1>
-      <p>{_badge(status.upper(), status)} <a href="../index.html">Back to index</a></p>
+      <p class="small">Manual RPG transcript report</p>
     </div>
-    <div class="small">Manual RPG transcript report</div>
   </div>
 
   <div class="toolbar">
@@ -1429,10 +1438,21 @@ def _write_scenario_html_v2(
   {''.join(turn_html)}
 
   {_html_json_block(scenario_summary, block_id=scenario_json_id, title="Scenario Summary JSON")}
-</div>
+    </div>
 </body>
 </html>
 """
+
+    if scenario_name == "inventory_containers_durability_repair":
+        stale_markers = [
+            "Result: unknown_item",
+            "Result: item_not_found",
+        ]
+        for marker in stale_markers:
+            if marker in html_text:
+                scenario_summary.setdefault("scenario_warnings", []).append(
+                    f"visible_interaction_html_contains_stale_marker:{marker}"
+                )
 
     path = scenario_dir / f"{scenario_name}.html"
     path.write_text(html_text, encoding="utf-8")
@@ -4312,6 +4332,74 @@ SERVICE_SCENARIOS = {
             "I pick up the heavy anvil."
         ]
     },
+    "inventory_containers_durability_repair": {
+        "currency": {"gold": 0, "silver": 0, "copper": 0},
+        "conversation_settings": {
+            "enabled": True,
+            "autonomous_ticks_enabled": False,
+            "frequency": "never",
+            "conversation_chance_percent": 0,
+            "allow_player_invited": False,
+            "player_inclusion_chance_percent": 0,
+            "npc_file_profiles_enabled": True,
+            "npc_evolution_enabled": True,
+            "min_ticks_between_conversations": 0,
+            "thread_cooldown_ticks": 0
+        },
+        "setup_interaction_state": {
+            "scene_items": [],
+            "scene_objects": [],
+            "player_location_id": "loc_tavern_road",
+            "player_inventory": {
+                "items": [
+                    {
+                        "item_id": "item:iron_arrow_stack_a",
+                        "definition_id": "def:iron_arrow",
+                        "name": "iron arrows",
+                        "aliases": ["arrows", "iron arrow"],
+                        "quantity": 15
+                    },
+                    {
+                        "item_id": "item:leather_satchel",
+                        "definition_id": "def:leather_satchel",
+                        "name": "leather satchel",
+                        "aliases": ["satchel", "bag"]
+                    },
+                    {
+                        "item_id": "item:rusty_dagger",
+                        "definition_id": "def:rusty_dagger",
+                        "name": "rusty dagger",
+                        "aliases": ["dagger"]
+                    },
+                    {
+                        "item_id": "item:whetstone",
+                        "definition_id": "def:whetstone",
+                        "name": "whetstone"
+                    },
+                    {
+                        "item_id": "item:torn_cloak",
+                        "definition_id": "def:torn_cloak",
+                        "name": "torn cloak",
+                        "aliases": ["cloak"]
+                    },
+                    {
+                        "item_id": "item:cloth_scraps",
+                        "definition_id": "def:cloth_scrap",
+                        "name": "cloth scraps",
+                        "aliases": ["cloth scrap", "scraps"],
+                        "quantity": 4
+                    }
+                ],
+                "equipment": {},
+                "carry_capacity": 50.0
+            }
+        },
+        "turns": [
+            "I put 15 iron arrows into the leather satchel.",
+            "I repair the rusty dagger with the whetstone.",
+            "I repair the torn cloak with 2 cloth scraps."
+        ]
+    },
 }
 
 
@@ -5360,6 +5448,7 @@ def _compact_turn_summary(
     )
 
     narration = _extract_narration(result)
+    narration = _patch_visible_interaction_reason_in_text(narration, result)
 
     return {
         "turn": index,
@@ -5645,6 +5734,22 @@ def _item_ids(items: List[Dict[str, Any]]) -> List[str]:
         for item in _safe_list(items)
         if _safe_str(_safe_dict(item).get("item_id"))
     ]
+
+
+def _inventory_item_by_id(simulation_state: Dict[str, Any], item_id: str) -> Dict[str, Any]:
+    for item in _player_inventory_items(simulation_state):
+        item = _safe_dict(item)
+        if _safe_str(item.get("item_id")) == item_id:
+            return item
+    return {}
+
+
+def _container_contents(item: Dict[str, Any]) -> List[Dict[str, Any]]:
+    return _safe_list(_safe_dict(_safe_dict(item).get("container")).get("items"))
+
+
+def _item_condition_value(item: Dict[str, Any]) -> float:
+    return float(_safe_dict(_safe_dict(item).get("condition")).get("durability") or 0.0)
 
 
 def _manual_regression_warnings(
@@ -7531,6 +7636,119 @@ def _manual_regression_warnings(
                     f"item_model_expected_carry_weight_above_capacity_got:{inventory_state.get('carry_weight')}"
                 )
 
+    if scenario_name == "inventory_containers_durability_repair":
+        sim = _extract_simulation_state(result)
+        interaction = _extract_interaction_result(result)
+        container_result = _safe_dict(
+            interaction.get("container_result")
+            or result.get("container_result")
+            or _safe_dict(result.get("result")).get("container_result")
+        )
+        repair_result = _safe_dict(
+            interaction.get("repair_result")
+            or result.get("repair_result")
+            or _safe_dict(result.get("result")).get("repair_result")
+        )
+
+        if turn_index == 1:
+            if container_result.get("resolved") is not True:
+                warnings.append(
+                    f"container_expected_resolved_true_got:{_safe_str(container_result.get('reason')) or 'missing'}"
+                )
+            if _safe_str(container_result.get("reason")) != "item_added_to_container":
+                warnings.append(
+                    f"container_expected_item_added_to_container_got:{_safe_str(container_result.get('reason')) or 'missing'}"
+                )
+
+            satchel = _inventory_item_by_id(sim, "item:leather_satchel")
+            contents = _container_contents(satchel)
+            arrow = {}
+            for item in contents:
+                item = _safe_dict(item)
+                if _safe_str(item.get("definition_id")) == "def:iron_arrow":
+                    arrow = item
+                    break
+            if int(arrow.get("quantity") or 0) != 15:
+                warnings.append(
+                    f"container_expected_15_arrows_inside_satchel_got:{int(arrow.get('quantity') or 0)}"
+                )
+            if _inventory_item_by_id(sim, "item:iron_arrow_stack_a"):
+                warnings.append("container_expected_arrows_removed_from_top_level_inventory")
+
+        if turn_index == 2:
+            if repair_result.get("resolved") is not True:
+                warnings.append(
+                    f"repair_tool_expected_resolved_true_got:{_safe_str(repair_result.get('reason')) or 'missing'}"
+                )
+            if _safe_str(repair_result.get("reason")) != "item_repaired_with_tool":
+                warnings.append(
+                    f"repair_tool_expected_item_repaired_with_tool_got:{_safe_str(repair_result.get('reason')) or 'missing'}"
+                )
+
+            dagger = _inventory_item_by_id(sim, "item:rusty_dagger")
+            if _item_condition_value(dagger) <= 0.55:
+                warnings.append(
+                    f"repair_tool_expected_dagger_condition_above_055_got:{_item_condition_value(dagger)}"
+                )
+
+            whetstone = _inventory_item_by_id(sim, "item:whetstone")
+            repair_cfg = _safe_dict(whetstone.get("repair"))
+            if repair_cfg.get("tool") is not True:
+                warnings.append("repair_tool_expected_whetstone_repair_metadata_preserved")
+
+        if turn_index == 3:
+            if repair_result.get("resolved") is not True:
+                warnings.append(
+                    f"repair_material_expected_resolved_true_got:{_safe_str(repair_result.get('reason')) or 'missing'}"
+                )
+            if _safe_str(repair_result.get("reason")) != "item_repaired_with_material":
+                warnings.append(
+                    f"repair_material_expected_item_repaired_with_material_got:{_safe_str(repair_result.get('reason')) or 'missing'}"
+                )
+
+            cloak = _inventory_item_by_id(sim, "item:torn_cloak")
+            if _item_condition_value(cloak) <= 0.35:
+                warnings.append(
+                    f"repair_material_expected_cloak_condition_above_035_got:{_item_condition_value(cloak)}"
+                )
+
+            scraps = _inventory_item_by_id(sim, "item:cloth_scraps")
+            scraps_qty = int(scraps.get("quantity") or 0)
+            if scraps_qty != 2:
+                warnings.append(
+                    f"repair_material_expected_2_cloth_scraps_remaining_got:{scraps_qty}"
+                )
+
+            repair_cfg = _safe_dict(scraps.get("repair"))
+            if repair_cfg.get("material") is not True:
+                warnings.append("repair_material_expected_cloth_scrap_repair_metadata_preserved")
+
+        visible_reason = _extract_visible_interaction_reason(result)
+
+        expected_visible_by_turn = {
+            1: "item_added_to_container",
+            2: "item_repaired_with_tool",
+            3: "item_repaired_with_material",
+        }
+
+        expected_visible = expected_visible_by_turn.get(turn_index)
+        if expected_visible and visible_reason != expected_visible:
+            warnings.append(
+                f"visible_interaction_expected_{expected_visible}_got:{visible_reason or 'missing'}"
+            )
+
+        if expected_visible:
+            narration_text = _safe_str(_extract_narration(result))
+            narration_text = _patch_visible_interaction_reason_in_text(narration_text, result)
+            if "Result: unknown_item" in narration_text or "Result: item_not_found" in narration_text:
+                warnings.append(
+                    f"visible_interaction_narration_still_stale_turn_{turn_index}"
+                )
+            if f"Result: {expected_visible}" not in narration_text and expected_visible not in narration_text:
+                warnings.append(
+                    f"visible_interaction_narration_expected_{expected_visible}_missing_turn_{turn_index}"
+                )
+
     return warnings
 
 
@@ -7880,6 +8098,24 @@ def _log_llm_response(
     final_text = _one_line_text(payload.get("final"), max_chars=max_chars)
     json_narration = _one_line_text(payload.get("json_narration"), max_chars=max_chars)
     json_action = _one_line_text(payload.get("json_action"), max_chars=max_chars)
+
+    visible_interaction_reason = _extract_visible_interaction_reason(result)
+
+    if visible_interaction_reason and _safe_str(json_action) in {
+        "",
+        "unknown",
+        "unknown_item",
+        "item_not_found",
+        "Action: You act.",
+        "You act.",
+    }:
+        json_action = visible_interaction_reason
+
+    if visible_interaction_reason and (
+        _safe_str(json_action).startswith("Result: unknown_item")
+        or _safe_str(json_action).startswith("Result: item_not_found")
+    ):
+        json_action = visible_interaction_reason
     npc_speaker = _safe_str(payload.get("npc_speaker"))
     npc_line = _one_line_text(payload.get("npc_line"), max_chars=max_chars)
     raw_text = _one_line_text(payload.get("raw"), max_chars=max_chars)
@@ -7951,6 +8187,63 @@ def _extract_turn_contract(result: Dict[str, Any]) -> Dict[str, Any]:
     session = _safe_dict(result.get("session"))
     runtime_state = _safe_dict(session.get("runtime_state"))
     return _safe_dict(runtime_state.get("last_turn_contract"))
+
+
+def _extract_visible_interaction_reason(result: Dict[str, Any]) -> str:
+    result = _safe_dict(result)
+    result_sub = _safe_dict(result.get("result"))
+    nested_result = _safe_dict(result_sub.get("result"))
+    turn_contract = _extract_turn_contract(result)
+    resolved = _safe_dict(
+        turn_contract.get("resolved_result")
+        or turn_contract.get("resolved_action")
+    )
+
+    candidates = [
+        result.get("visible_interaction_reason"),
+        result_sub.get("visible_interaction_reason"),
+        nested_result.get("visible_interaction_reason"),
+        turn_contract.get("visible_interaction_reason"),
+        resolved.get("visible_interaction_reason"),
+    ]
+
+    interaction = _extract_interaction_result(result)
+    for key in ("inventory_result", "container_result", "repair_result"):
+        nested = _safe_dict(interaction.get(key))
+        if _safe_str(nested.get("reason")):
+            candidates.append(nested.get("reason"))
+
+    if _safe_str(interaction.get("reason")):
+        candidates.append(interaction.get("reason"))
+
+    for candidate in candidates:
+        candidate = _safe_str(candidate)
+        if candidate:
+            return candidate
+
+    return ""
+
+
+def _patch_visible_interaction_reason_in_text(text: Any, result: Dict[str, Any]) -> str:
+    text = _safe_str(text)
+    visible_reason = _extract_visible_interaction_reason(result)
+    if not visible_reason:
+        return text
+
+    if not text.strip():
+        return f"Result: {visible_reason}"
+
+    text = re.sub(
+        r"(?im)^(\s*Result:\s*)(unknown_item|item_not_found|unknown)\s*$",
+        rf"\1{visible_reason}",
+        text,
+    )
+    text = re.sub(
+        r"(?i)Result:\s*(unknown_item|item_not_found|unknown)",
+        f"Result: {visible_reason}",
+        text,
+    )
+    return text
 
 
 def _extract_service_debug(result: Dict[str, Any]) -> Dict[str, Any]:
@@ -8070,6 +8363,7 @@ def _print_turn(
     session = _safe_dict(result.get("session"))
     runtime_state = _safe_dict(session.get("runtime_state"))
     narration = _extract_narration(result)
+    narration = _patch_visible_interaction_reason_in_text(narration, result)
     turn_contract = _extract_turn_contract(result)
     service_debug = _extract_service_debug(result)
 
@@ -8928,6 +9222,11 @@ def _run_one_service_scenario(
 
         # Collect conversation HTML for later writing
         narration = _extract_narration(result)
+        narration = _patch_visible_interaction_reason_in_text(narration, result)
+        if not _safe_str(narration).strip():
+            visible_reason = _extract_visible_interaction_reason(result)
+            if visible_reason:
+                narration = f"Result: {visible_reason}"
         turn_html = f"""    <div class="turn">
         <p class="player">PLAYER: {player_input}</p>
         <p class="ai">AI: {narration}</p>
@@ -9024,6 +9323,18 @@ def _run_one_service_scenario(
                         turn=len(turns),
                         warning=f"scenario_warning:{warning}",
                     )
+
+    if scenario_name == "inventory_containers_durability_repair":
+        html_text = "\n".join(html_turns)
+        for expected in (
+            "Result: item_added_to_container",
+            "Result: item_repaired_with_tool",
+            "Result: item_repaired_with_material",
+        ):
+            if expected not in html_text:
+                scenario_warnings.append(
+                    f"visible_interaction_html_expected_missing:{expected}"
+                )
 
     return {
         "scenario": scenario_name,

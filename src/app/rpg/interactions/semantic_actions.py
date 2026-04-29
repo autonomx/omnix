@@ -11,6 +11,7 @@ SUPPORTED_ACTION_KINDS = {
     "take",
     "drop",
     "give",
+    "put",
     "use",
     "repair",
     "equip",
@@ -244,6 +245,29 @@ def resolve_semantic_action_v2(
             "source": "deterministic_semantic_action_resolver_v2",
         }
 
+    if re.search(r"\b(put|place|stow)\b", text):
+        item_ref = ""
+        container_ref = ""
+        quantity = 1
+
+        match = re.search(r"\b(?:put|place|stow)\s+([^,.!?]+?)\s+(?:into|in|inside)\s+([^,.!?]+)", text, re.I)
+        if match:
+            raw_item = _clean_target_ref(match.group(1))
+            quantity, item_ref = _parse_leading_quantity(raw_item)
+            container_ref = _clean_target_ref(match.group(2))
+
+        return {
+            "resolved": True,
+            "kind": "put",
+            "actor_id": actor_id,
+            "target_ref": item_ref,
+            "secondary_target_ref": container_ref,
+            "quantity": quantity,
+            "confidence": "high" if item_ref and container_ref else "low",
+            "raw_input": raw,
+            "source": "deterministic_semantic_action_resolver_v2",
+        }
+
     if re.search(r"\b(use)\b", text):
         item_ref = ""
         target_ref = ""
@@ -271,6 +295,7 @@ def resolve_semantic_action_v2(
     if re.search(r"\b(repair|fix|mend)\b", text):
         target_ref = ""
         tool_ref = ""
+        secondary_quantity = 1
 
         match = re.search(r"\b(?:repair|fix|mend)\s+(.+)$", text, re.I)
         if match:
@@ -278,7 +303,7 @@ def resolve_semantic_action_v2(
             if " with " in remainder:
                 target_part, tool_part = remainder.split(" with ", 1)
                 target_ref = _clean_target_ref(target_part)
-                tool_ref = _clean_target_ref(tool_part)
+                secondary_quantity, tool_ref = _parse_leading_quantity(tool_part)
             else:
                 target_ref = _clean_target_ref(remainder)
 
@@ -289,6 +314,7 @@ def resolve_semantic_action_v2(
             "target_ref": target_ref,
             "secondary_target_ref": tool_ref,
             "tool_ref": tool_ref,
+            "secondary_quantity": secondary_quantity,
             "confidence": "high" if target_ref else "low",
             "raw_input": raw,
             "source": "deterministic_semantic_action_resolver_v2",
