@@ -1020,6 +1020,191 @@
             .replace(/'/g, '&#039;');
     }
 
+    // ── Character Card Panel (Bundle BJ-BK-BL) ───────────────────────────────
+
+    async function rpgFetchCharacterCards(sessionId) {
+        var url = '/api/rpg/session/character_cards?session_id=' + encodeURIComponent(sessionId || '');
+        var response = await fetch(url);
+        return await response.json();
+    }
+
+    async function rpgUpdateCharacterCard(npcId, updates) {
+        var response = await fetch('/api/rpg/npc_profiles/' + encodeURIComponent(npcId) + '/update', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({updates: updates, edited_by: 'ui'})
+        });
+        return await response.json();
+    }
+
+    async function rpgDraftCharacterCard(npcId) {
+        var response = await fetch('/api/rpg/npc_profiles/' + encodeURIComponent(npcId) + '/draft', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({})
+        });
+        return await response.json();
+    }
+
+    async function rpgApproveCharacterCardDraft(npcId) {
+        var response = await fetch('/api/rpg/npc_profiles/' + encodeURIComponent(npcId) + '/approve_draft', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({})
+        });
+        return await response.json();
+    }
+
+    async function rpgGenerateCharacterPortraitPrompt(npcId) {
+        var response = await fetch('/api/rpg/npc_profiles/' + encodeURIComponent(npcId) + '/portrait_prompt', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({})
+        });
+        return await response.json();
+    }
+
+    async function rpgGenerateNpcProfile(npcId, payload) {
+        payload = payload || {};
+        var response = await fetch('/api/rpg/npc_profiles/' + encodeURIComponent(npcId) + '/generate', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(payload)
+        });
+        return await response.json();
+    }
+
+    function rpgEnsureCharacterCardsPanel() {
+        var panel = document.getElementById('rpg-character-cards-panel');
+        if (panel) return panel;
+
+        var host =
+            document.getElementById('rpg-side-panels') ||
+            document.getElementById('rpg-top-panels') ||
+            document.querySelector('.rpg-layout') ||
+            document.body;
+
+        panel = document.createElement('section');
+        panel.id = 'rpg-character-cards-panel';
+        panel.className = 'rpg-character-cards-panel';
+        panel.innerHTML =
+            '<div class="rpg-panel-header">' +
+                '<h3>Character Cards</h3>' +
+                '<button type="button" id="rpg-refresh-character-cards">Refresh</button>' +
+            '</div>' +
+            '<div id="rpg-character-cards-list" class="rpg-character-cards-list"></div>';
+        host.appendChild(panel);
+
+        var refresh = panel.querySelector('#rpg-refresh-character-cards');
+        if (refresh) {
+            refresh.addEventListener('click', function() { rpgLoadCharacterCards(); });
+        }
+
+        return panel;
+    }
+
+    function rpgRenderCharacterCards(cardsResult) {
+        var panel = rpgEnsureCharacterCardsPanel();
+        var list = panel.querySelector('#rpg-character-cards-list');
+        if (!list) return;
+
+        var cards = Array.isArray(cardsResult && cardsResult.cards) ? cardsResult.cards : [];
+        var missingIds = Array.isArray(cardsResult && cardsResult.missing_profile_npc_ids)
+            ? cardsResult.missing_profile_npc_ids
+            : [];
+
+        if (!cards.length && !missingIds.length) {
+            list.innerHTML = '<div class="rpg-muted">No character cards available yet.</div>';
+            return;
+        }
+
+        var missingHtml = missingIds.map(function(npcId) {
+            var displayName = String(npcId).replace('npc:', '');
+            return '<article class="rpg-character-card missing-profile" data-npc-id="' + escapeHtml(npcId) + '">' +
+                '<header>' +
+                    '<strong>' + escapeHtml(displayName) + '</strong>' +
+                    '<span class="rpg-pill">No profile</span>' +
+                '</header>' +
+                '<button type="button" data-action="generate-profile">Generate Profile</button>' +
+            '</article>';
+        }).join('');
+
+        var cardsHtml = cards.map(function(card) {
+            var npcId = card.npc_id || '';
+            var bio = card.biography || {};
+            var personality = card.personality || {};
+            var evolution = card.evolution || {};
+            var draft = ((card.draft_summary || {}).draft_state || {});
+            var portrait = card.portrait || {};
+            var traits = Array.isArray(personality.traits) ? personality.traits.join(', ') : '';
+
+            return '<article class="rpg-character-card" data-npc-id="' + escapeHtml(npcId) + '">' +
+                '<header>' +
+                    '<strong>' + escapeHtml(card.name || npcId) + '</strong>' +
+                    '<span class="rpg-pill">' + escapeHtml(evolution.current_role || card.origin || 'NPC') + '</span>' +
+                '</header>' +
+                '<p>' + escapeHtml(bio.short_summary || 'No summary yet.') + '</p>' +
+                '<div class="rpg-card-row"><b>Traits:</b> ' + escapeHtml(traits || '\u2014') + '</div>' +
+                '<div class="rpg-card-row"><b>Draft:</b> ' + escapeHtml(draft.status || 'none') + '</div>' +
+                '<div class="rpg-card-row"><b>Portrait prompt:</b> ' + (portrait.prompt ? 'saved' : 'none') + '</div>' +
+                '<details>' +
+                    '<summary>Edit / Draft</summary>' +
+                    '<label>Private notes</label>' +
+                    '<textarea class="rpg-card-private-notes">' + escapeHtml(bio.private_notes || '') + '</textarea>' +
+                    '<div class="rpg-card-actions">' +
+                        '<button type="button" data-action="save-card">Save</button>' +
+                        '<button type="button" data-action="draft-card">Draft</button>' +
+                        '<button type="button" data-action="approve-draft">Approve Draft</button>' +
+                        '<button type="button" data-action="portrait-prompt">Portrait Prompt</button>' +
+                    '</div>' +
+                '</details>' +
+            '</article>';
+        }).join('');
+
+        list.innerHTML = missingHtml + cardsHtml;
+
+        list.querySelectorAll('.rpg-character-card button').forEach(function(button) {
+            button.addEventListener('click', async function(event) {
+                var cardEl = event.target.closest('.rpg-character-card');
+                var npcId = cardEl && cardEl.getAttribute('data-npc-id');
+                var action = event.target.getAttribute('data-action');
+                if (!npcId || !action) return;
+
+                if (action === 'generate-profile') {
+                    await rpgGenerateNpcProfile(npcId, {
+                        name: String(npcId).replace('npc:', ''),
+                        source_event: 'ui_manual_profile_generation',
+                    });
+                } else if (action === 'save-card') {
+                    var textarea = cardEl.querySelector('.rpg-card-private-notes');
+                    var privateNotes = textarea ? textarea.value : '';
+                    await rpgUpdateCharacterCard(npcId, {biography: {private_notes: privateNotes}});
+                } else if (action === 'draft-card') {
+                    await rpgDraftCharacterCard(npcId);
+                } else if (action === 'approve-draft') {
+                    await rpgApproveCharacterCardDraft(npcId);
+                } else if (action === 'portrait-prompt') {
+                    await rpgGenerateCharacterPortraitPrompt(npcId);
+                }
+
+                await rpgLoadCharacterCards();
+            });
+        });
+    }
+
+    async function rpgLoadCharacterCards() {
+        try {
+            rpgEnsureCharacterCardsPanel();
+            var sessionId = rpgState.sessionId || '';
+            var result = await rpgFetchCharacterCards(sessionId);
+            rpgRenderCharacterCards(result);
+        } catch (error) {
+            console.warn('[RPG] Failed to load character cards', error);
+        }
+    }
+
+    // ── End Character Card Panel ──────────────────────────────────────────────
+
     function rpgServiceActionsFromPayload(payload) {
         payload = payload || {};
         var contract = payload.turn_contract || payload.contract || {};
@@ -1771,6 +1956,27 @@
         modeSelect.addEventListener('change', function() {
             ticksInput.disabled = modeSelect.value === 'until_next_command';
         });
+
+        // NPC Profile Settings
+        var npcProfileSection = document.createElement('div');
+        npcProfileSection.innerHTML = '<h4>NPC Profiles</h4>';
+        var autoCreateLabel = document.createElement('label');
+        var autoCreateCheckbox = document.createElement('input');
+        autoCreateCheckbox.type = 'checkbox';
+        autoCreateCheckbox.id = 'rpgAutoCreateNpcProfilesToggle';
+        var currentAutoCreate = true;
+        if (
+          window.RpgConversationSettings &&
+          typeof window.RpgConversationSettings.loadSettings === 'function'
+        ) {
+            currentAutoCreate = window.RpgConversationSettings.loadSettings().auto_create_npc_profiles_on_introduction !== false;
+        }
+        autoCreateCheckbox.checked = currentAutoCreate;
+        autoCreateLabel.appendChild(autoCreateCheckbox);
+        autoCreateLabel.appendChild(document.createTextNode(' Auto-create NPC profiles when first introduced'));
+        npcProfileSection.appendChild(autoCreateLabel);
+        settingsSection.appendChild(npcProfileSection);
+
         var saveBtn = document.createElement('button');
         saveBtn.className = 'btn btn-primary';
         saveBtn.textContent = 'Save Settings';
@@ -1778,6 +1984,13 @@
             var responseLength = document.getElementById('rpgResponseLength').value;
             var interactionDurationMode = document.getElementById('rpgInteractionDurationMode').value;
             var interactionDurationTicks = parseInt(document.getElementById('rpgInteractionDurationTicks').value, 10);
+            var autoCreateNpcProfiles = !!(document.getElementById('rpgAutoCreateNpcProfilesToggle') || {}).checked;
+            // Persist auto-create toggle to conversation settings store
+            if (window.RpgConversationSettings && typeof window.RpgConversationSettings.saveSettings === 'function') {
+                var cs = window.RpgConversationSettings.loadSettings();
+                cs.auto_create_npc_profiles_on_introduction = autoCreateNpcProfiles;
+                window.RpgConversationSettings.saveSettings(cs);
+            }
             // Persist to server
             if (rpgState.sessionId) {
                 fetch('/api/rpg/session/settings', {
@@ -1788,7 +2001,12 @@
                         settings: {
                             response_length: responseLength,
                             interaction_duration_mode: interactionDurationMode,
-                            interaction_duration_ticks: interactionDurationTicks
+                            interaction_duration_ticks: interactionDurationTicks,
+                            npc_profile_generation: {
+                                auto_create_on_introduction: autoCreateNpcProfiles,
+                                allow_manual_create: true,
+                                draft_with_llm_on_create: false,
+                            },
                         },
                     }),
                 }).then(function(response) {
@@ -2188,6 +2406,8 @@
             // Clear the feed
             var feed = el('rpgNarrativeFeed');
             if (feed) feed.innerHTML = '<div class="rpg-msg rpg-msg--system">Game loaded. Continue your adventure!</div>';
+            rpgEnsureCharacterCardsPanel();
+            rpgLoadCharacterCards();
             startLivingWorld();
         } catch (e) {
             alert('Failed to load game');
@@ -3406,7 +3626,10 @@
         } finally {
             setLoading(false);
             persistSnapshot();
-            if (rpgState.sessionId) startLivingWorld();
+            if (rpgState.sessionId) {
+                startLivingWorld();
+                rpgLoadCharacterCards();
+            }
         }
     }
 

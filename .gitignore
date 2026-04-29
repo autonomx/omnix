@@ -50,6 +50,19 @@ Thumbs.db
 *.onnx
 parakeet-tdt-0.6b-v2/
 
+# Runtime RPG data
+/resources/data/rpg_sessions/
+/resources/data/generated_images/
+/resources/data/test-results/
+
+# Temporary generated profile draft files
+/resources/data/rpg_npc_profiles/*.draft.json
+/resources/data/rpg_npc_profiles/*.tmp
+
+# Bad legacy runtime-data locations
+/src/data/
+/src/resources/
+
 # Data files
 resources/data/
 

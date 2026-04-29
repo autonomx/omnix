@@ -77,6 +77,7 @@ for logger_name in ['app.rpg', 'rpg']:
     rpg_logger.propagate = True
 
 import app.shared as shared
+from app.runtime_paths import generated_images_root, resources_models_root
 from app.image.api import router as image_router
 from app.image.chat_hooks import maybe_enqueue_chat_image
 from app.image.story_hooks import maybe_enqueue_story_scene_image
@@ -490,7 +491,7 @@ async def serve_generated_image(filename: str):
     if normalized.startswith("..") or normalized.startswith("/"):
         return JSONResponse({"ok": False, "error": "invalid_filename"}, status_code=400)
 
-    image_dir = Path(shared.BASE_DIR) / "resources" / "data" / "generated_images"
+    image_dir = generated_images_root()
     file_path = image_dir / normalized
 
     # Ensure the resolved path is still inside image_dir
@@ -2440,7 +2441,7 @@ async def story_parse(request: Request):
 @app.get("/api/llamacpp/server/status")
 async def llamacpp_status():
     """Get llama.cpp server status"""
-    server_dir = Path(shared.BASE_DIR) / 'models' / 'server'
+    server_dir = resources_models_root() / 'server'
     binary = None
     for n in ["llama-server.exe", "llama-server", "llama.exe", "llama"]:
         if (server_dir / n).exists():
@@ -2482,8 +2483,8 @@ async def llamacpp_start(request: Request):
     model = data.get('model', '')
     if not model:
         return JSONResponse({"success": False, "error": "Model required"}, status_code=400)
-    
-    server_dir = Path(shared.BASE_DIR) / 'models' / 'server'
+
+    server_dir = resources_models_root() / 'server'
     binary = None
     for n in ["llama-server.exe", "llama-server", "llama.exe", "llama"]:
         if (server_dir / n).exists():
@@ -2494,7 +2495,7 @@ async def llamacpp_start(request: Request):
     
     m_path = model if _os.path.isabs(model) else None
     if not m_path:
-        for p in [Path(shared.BASE_DIR) / 'models' / 'llm' / model, server_dir / model]:
+        for p in [resources_models_root() / 'llm' / model, server_dir / model]:
             if p.exists():
                 m_path = str(p)
                 break
@@ -2727,7 +2728,7 @@ async def get_llm_models():
     """Get available local LLM models (for llama.cpp)"""
     import os
     models = []
-    llm_dir = os.path.join(shared.BASE_DIR, 'models', 'llm')
+    llm_dir = str(resources_models_root() / 'llm')
     if os.path.exists(llm_dir):
         for f in os.listdir(llm_dir):
             if f.lower().endswith('.gguf'):
@@ -2744,7 +2745,7 @@ async def delete_llm_model(filename):
     # URL decode the filename
     from urllib.parse import unquote
     filename = unquote(filename)
-    p = os.path.join(shared.BASE_DIR, 'models', 'llm', filename)
+    p = str(resources_models_root() / 'llm' / filename)
     if os.path.exists(p):
         os.remove(p)
         return {"success": True}

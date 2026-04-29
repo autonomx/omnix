@@ -8,6 +8,7 @@ from typing import Any, Dict
 from PIL import Image, ImageDraw
 
 from app.image.providers.base import BaseImageProvider, ImageGenerationResult
+from app.runtime_paths import generated_images_root
 
 
 def _safe_str(value: Any) -> str:
@@ -43,7 +44,7 @@ class MockImageProvider(BaseImageProvider):
         image.save(buffer, format="PNG")
         image_bytes = buffer.getvalue()
 
-        out_dir = os.path.join("resources", "data", "generated_images")
+        out_dir = str(generated_images_root())
         os.makedirs(out_dir, exist_ok=True)
         file_path = os.path.join(out_dir, f"mock_{kind}.png")
         with open(file_path, "wb") as f:

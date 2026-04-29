@@ -7,7 +7,9 @@ import os
 import re
 from typing import Any, Dict
 
-ASSET_DIR = os.path.join("resources", "data", "generated_images")
+from app.runtime_paths import generated_images_root
+
+ASSET_DIR = str(generated_images_root())
 MANIFEST_PATH = os.path.join(ASSET_DIR, "manifest.json")
 
 

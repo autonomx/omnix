@@ -290,6 +290,41 @@ from app.rpg.party.companion_quests import (
     seed_companion_quests_for_active_companions,
 )
 from app.rpg.party.party_composition import project_party_composition_effects
+from app.rpg.profiles.character_cards import list_character_cards_for_simulation_state
+from app.rpg.profiles.dynamic_npc_profiles import load_npc_profile
+from app.rpg.profiles.profile_drafts import profile_draft_summary
+from app.rpg.interactions.interaction_runtime import resolve_general_interaction
+
+
+def _active_companion_profiles_summary(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
+    party_state = _safe_dict(_safe_dict(simulation_state.get("player_state")).get("party_state"))
+    summaries = {}
+    for companion in _safe_list(party_state.get("companions")):
+        companion = _safe_dict(companion)
+        npc_id = _safe_str(companion.get("npc_id"))
+        if not npc_id:
+            continue
+        profile = load_npc_profile(npc_id)
+        if profile:
+            draft_summary = profile_draft_summary(npc_id)
+            summaries[npc_id] = {
+                "npc_id": npc_id,
+                "name": _safe_str(profile.get("name")),
+                "origin": _safe_str(profile.get("origin")),
+                "biography": _safe_dict(profile.get("biography")),
+                "personality": _safe_dict(profile.get("personality")),
+                "morality": _safe_dict(profile.get("morality")),
+                "evolution": _safe_dict(profile.get("evolution")),
+                "card_edit_state": _safe_dict(profile.get("card_edit_state")),
+                "draft_summary": copy.deepcopy(draft_summary),
+                "source": "deterministic_dynamic_npc_profile_store",
+            }
+
+    return {
+        "profiles": summaries,
+        "count": len(summaries),
+        "source": "deterministic_dynamic_npc_profile_store",
+    }
 
 
 def _player_party_state_from_simulation(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
@@ -501,12 +536,16 @@ def _try_resolve_pending_companion_offer_at_turn_start(
         ),
         "party_state": _player_party_state_from_simulation(simulation_state),
         "npc_response_beat": npc_response_beat,
+        "npc_profile_summary": copy.deepcopy(_active_companion_profiles_summary(simulation_state)),
+        "character_cards_summary": copy.deepcopy(list_character_cards_for_simulation_state(simulation_state)),
         "conversation_thread_state": copy.deepcopy(
             _safe_dict(simulation_state.get("conversation_thread_state"))
         ),
         "source": "deterministic_session_runtime",
     }
 
+    npc_profile_summary = copy.deepcopy(_active_companion_profiles_summary(simulation_state))
+    _character_cards_summary = copy.deepcopy(list_character_cards_for_simulation_state(simulation_state))
     return {
         "resolved": True,
         "accepted": bool(acceptance_result.get("accepted")),
@@ -516,6 +555,8 @@ def _try_resolve_pending_companion_offer_at_turn_start(
         "companion_acceptance_result": copy.deepcopy(acceptance_result),
         "companion_dialogue_result": copy.deepcopy(companion_dialogue_result),
         "party_state": _player_party_state_from_simulation(simulation_state),
+        "npc_profile_summary": npc_profile_summary,
+        "character_cards_summary": _character_cards_summary,
         "source": "deterministic_session_runtime",
     }
 
@@ -8105,6 +8146,18 @@ def apply_turn(
         result["party_composition_effects"] = copy.deepcopy(party_composition_result)
         result["result"]["party_composition_effects"] = copy.deepcopy(party_composition_result)
         resolved_result["party_composition_effects"] = copy.deepcopy(party_composition_result)
+
+        _npc_profile_summary = copy.deepcopy(_active_companion_profiles_summary(simulation_state))
+        _character_cards_sum = copy.deepcopy(list_character_cards_for_simulation_state(simulation_state))
+        conversation_result["npc_profile_summary"] = _npc_profile_summary
+        conversation_result["character_cards_summary"] = _character_cards_sum
+        result["npc_profile_summary"] = _npc_profile_summary
+        result["character_cards_summary"] = _character_cards_sum
+        result["result"]["npc_profile_summary"] = _npc_profile_summary
+        result["result"]["character_cards_summary"] = _character_cards_sum
+        resolved_result["npc_profile_summary"] = _npc_profile_summary
+        resolved_result["character_cards_summary"] = _character_cards_sum
+
         turn_contract["resolved_result"] = copy.deepcopy(resolved_result)
         result["conversation_result"] = conversation_result
         result["result"]["conversation_result"] = conversation_result
@@ -8222,6 +8275,12 @@ def apply_turn(
 
         return result
 
+    general_interaction_result = resolve_general_interaction(
+        simulation_state,
+        player_input=player_input,
+        actor_id="player",
+    )
+
     authoritative_result = _apply_turn_authoritative(
         session_id,
         player_input,
@@ -8300,6 +8359,18 @@ def apply_turn(
         final_result["companion_quest_summary"] = copy.deepcopy(_companion_quest_sum)
         final_result["party_composition_effects"] = copy.deepcopy(_party_composition)
 
+        _nps = copy.deepcopy(_active_companion_profiles_summary(_post_action_sim))
+        _ccs = copy.deepcopy(list_character_cards_for_simulation_state(_post_action_sim))
+        final_result["npc_profile_summary"] = _nps
+        final_result["character_cards_summary"] = _ccs
+        final_result["semantic_action_v2"] = copy.deepcopy(
+            _safe_dict(general_interaction_result.get("semantic_action_v2"))
+        )
+        final_result["interaction_result"] = copy.deepcopy(
+            _safe_dict(general_interaction_result.get("interaction_result"))
+        )
+        final_result["general_interaction_result"] = copy.deepcopy(general_interaction_result)
+
         _nested = _safe_dict(final_result.get("result"))
         _nested["party_aware_turn_context"] = copy.deepcopy(_party_aware_ctx)
         _nested["companion_presence_summary"] = copy.deepcopy(_companion_presence)
@@ -8312,6 +8383,15 @@ def apply_turn(
         _nested["companion_quest_progress_result"] = copy.deepcopy(_companion_quest_progress)
         _nested["companion_quest_summary"] = copy.deepcopy(_companion_quest_sum)
         _nested["party_composition_effects"] = copy.deepcopy(_party_composition)
+        _nested["npc_profile_summary"] = _nps
+        _nested["character_cards_summary"] = _ccs
+        _nested["semantic_action_v2"] = copy.deepcopy(
+            _safe_dict(general_interaction_result.get("semantic_action_v2"))
+        )
+        _nested["interaction_result"] = copy.deepcopy(
+            _safe_dict(general_interaction_result.get("interaction_result"))
+        )
+        _nested["general_interaction_result"] = copy.deepcopy(general_interaction_result)
         final_result["result"] = _nested
 
         _tc = _safe_dict(final_result.get("turn_contract"))
@@ -8327,6 +8407,15 @@ def apply_turn(
         _rr["companion_quest_progress_result"] = copy.deepcopy(_companion_quest_progress)
         _rr["companion_quest_summary"] = copy.deepcopy(_companion_quest_sum)
         _rr["party_composition_effects"] = copy.deepcopy(_party_composition)
+        _rr["npc_profile_summary"] = _nps
+        _rr["character_cards_summary"] = _ccs
+        _rr["semantic_action_v2"] = copy.deepcopy(
+            _safe_dict(general_interaction_result.get("semantic_action_v2"))
+        )
+        _rr["interaction_result"] = copy.deepcopy(
+            _safe_dict(general_interaction_result.get("interaction_result"))
+        )
+        _rr["general_interaction_result"] = copy.deepcopy(general_interaction_result)
         _tc["resolved_result"] = _rr
         final_result["turn_contract"] = _tc
 
@@ -8345,6 +8434,8 @@ def apply_turn(
                 "companion_quest_progress_result": copy.deepcopy(_companion_quest_progress),
                 "companion_quest_summary": copy.deepcopy(_companion_quest_sum),
                 "party_composition_effects": copy.deepcopy(_party_composition),
+                "npc_profile_summary": _nps,
+                "character_cards_summary": _ccs,
                 "source": "deterministic_companion_turn_runtime",
             }
         elif _safe_dict(final_result.get("conversation_result")):
@@ -8354,6 +8445,8 @@ def apply_turn(
             _conv["companion_quest_progress_result"] = copy.deepcopy(_companion_quest_progress)
             _conv["companion_quest_summary"] = copy.deepcopy(_companion_quest_sum)
             _conv["party_composition_effects"] = copy.deepcopy(_party_composition)
+            _conv["npc_profile_summary"] = _nps
+            _conv["character_cards_summary"] = _ccs
             final_result["conversation_result"] = _conv
 
     session = _sync_session_if_companion_runtime_mutated(

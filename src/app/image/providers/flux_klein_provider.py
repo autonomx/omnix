@@ -17,6 +17,7 @@ from app.image.flux_pipeline_compat import (
     validate_flux_repo_runtime,
 )
 from app.image.providers.base import BaseImageProvider, ImageGenerationResult
+from app.runtime_paths import generated_images_root
 from app.shared import DATA_DIR
 
 _PIPELINE_LOCK = threading.Lock()
@@ -224,7 +225,7 @@ class FluxKleinImageProvider(BaseImageProvider):
         image_bytes = buffer.getvalue()
         buffer.close()
 
-        out_dir = os.path.join(DATA_DIR, "generated_images")
+        out_dir = str(generated_images_root())
         os.makedirs(out_dir, exist_ok=True)
         filename = f"{_safe_str(payload.get('kind')).strip() or 'image'}_{os.getpid()}_{id(image)}.png"
         file_path = os.path.normpath(os.path.join(out_dir, filename))

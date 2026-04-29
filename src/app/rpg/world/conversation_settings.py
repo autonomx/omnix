@@ -137,7 +137,12 @@ def conversation_settings_from_runtime(runtime_state: Dict[str, Any] | None) -> 
     settings = deepcopy(DEFAULT_CONVERSATION_SETTINGS)
     settings.update(nested)
     settings.update(explicit)
-    return normalize_conversation_settings(settings)
+    result = normalize_conversation_settings(settings)
+    # Pass through npc_profile_generation so companion offer gating can read it.
+    npc_profile_gen = _safe_dict(runtime_settings.get("npc_profile_generation"))
+    if npc_profile_gen:
+        result["npc_profile_generation"] = npc_profile_gen
+    return result
 
 
 def normalize_conversation_settings(settings: Dict[str, Any]) -> Dict[str, Any]:

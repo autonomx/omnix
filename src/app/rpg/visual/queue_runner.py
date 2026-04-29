@@ -16,6 +16,7 @@ from app.rpg.visual.job_queue import (
 )
 from app.rpg.visual.providers import image_generation_enabled
 from app.rpg.visual.worker import process_pending_image_requests
+from app.runtime_paths import generated_images_root
 from app.shared import DATA_DIR
 
 
@@ -66,7 +67,7 @@ def _public_generated_image_url(image_path: str) -> str:
     if not image_path:
         return ""
     try:
-        root = (Path(DATA_DIR) / "generated_images").resolve()
+        root = generated_images_root().resolve()
         path = Path(image_path).resolve()
         rel = path.relative_to(root).as_posix()
         return f"/generated-images/{rel}"

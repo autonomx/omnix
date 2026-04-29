@@ -1887,6 +1887,10 @@ def handle_pending_player_conversation_response(
                 npc_id=responder_id,
                 join_intent=companion_join_intent,
                 tick=tick,
+                profile_auto_create=_safe_dict(settings.get("npc_profile_generation")).get(
+                    "auto_create_on_introduction",
+                    True,
+                ),
             )
 
         npc_response_beat["companion_offer_record_result"] = deepcopy(

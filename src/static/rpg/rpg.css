@@ -217,3 +217,73 @@
 .rpg-conv-setting select {
   max-width: 95px;
 }
+
+/* -- Character Card Panel (Bundle BJ-BK-BL) ---------------------------- */
+
+.rpg-character-cards-panel {
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 12px;
+  padding: 12px;
+  margin: 12px 0;
+  background: rgba(0,0,0,0.18);
+}
+
+.rpg-character-cards-panel .rpg-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.rpg-character-cards-list {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 10px;
+}
+
+.rpg-character-card {
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 10px;
+  padding: 10px;
+  background: rgba(255,255,255,0.04);
+}
+
+.rpg-character-card header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.rpg-character-card p {
+  margin: 8px 0;
+}
+
+.rpg-card-row {
+  font-size: 0.9rem;
+  opacity: 0.9;
+  margin: 4px 0;
+}
+
+.rpg-pill {
+  border: 1px solid rgba(255,255,255,0.16);
+  border-radius: 999px;
+  padding: 2px 8px;
+  font-size: 0.78rem;
+  opacity: 0.85;
+}
+
+.rpg-card-private-notes {
+  width: 100%;
+  min-height: 72px;
+  margin-top: 6px;
+  border-radius: 8px;
+}
+
+.rpg-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}

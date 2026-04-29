@@ -47,6 +47,8 @@
     scene_activity_cooldown_ticks: 3,
     allow_scene_activity_world_events: true,
     allow_scene_activity_world_signals: true,
+    // Bundle BM-BN-BO — NPC Profile Auto-creation
+    auto_create_npc_profiles_on_introduction: true,
   };
 
   function loadSettings() {
@@ -164,6 +166,7 @@
           ${numberInput("Scene activity cooldown", "scene_activity_cooldown_ticks", settings, 0, 20)}
           ${boolInput("Scene activity world events", "allow_scene_activity_world_events", settings)}
           ${boolInput("Scene activity world signals", "allow_scene_activity_world_signals", settings)}
+          ${boolInput("Auto-create NPC profiles when first introduced", "auto_create_npc_profiles_on_introduction", settings)}
         </div>
       </details>
     `;
@@ -188,6 +191,13 @@
     payload = payload || {};
     payload.runtime_settings = payload.runtime_settings || {};
     payload.runtime_settings.conversation_settings = loadSettings();
+    payload.runtime_settings.npc_profile_generation = {
+      auto_create_on_introduction: !!document.getElementById("rpgAutoCreateNpcProfilesToggle")
+        ? document.getElementById("rpgAutoCreateNpcProfilesToggle").checked
+        : loadSettings().auto_create_npc_profiles_on_introduction !== false,
+      allow_manual_create: true,
+      draft_with_llm_on_create: false,
+    };
     return payload;
   }
 

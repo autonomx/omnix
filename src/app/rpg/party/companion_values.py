@@ -3,6 +3,8 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any, Dict, List
 
+from app.rpg.profiles.dynamic_npc_profiles import load_npc_profile
+
 
 def _safe_str(value: Any) -> str:
     return "" if value is None else str(value)
@@ -159,19 +161,51 @@ def build_companion_value_profile(
     npc_id = _safe_str(npc_id)
     profile = deepcopy(_default_value_profile_for_npc(npc_id))
 
+    file_profile = load_npc_profile(npc_id)
+    if file_profile:
+        personality = _safe_dict(file_profile.get("personality"))
+        morality = _safe_dict(file_profile.get("morality"))
+        biography = _safe_dict(file_profile.get("biography"))
+        evolution = _safe_dict(file_profile.get("evolution"))
+
+        traits = _safe_list(personality.get("traits"))
+        if traits:
+            profile["traits"] = traits
+
+        if morality:
+            profile["morality"] = {
+                "lawfulness": _safe_int(morality.get("lawfulness"), 0),
+                "compassion": _safe_int(morality.get("compassion"), 0),
+                "honor": _safe_int(morality.get("honor"), 0),
+                "vengefulness": _safe_int(morality.get("vengefulness"), 0),
+                "greed": _safe_int(morality.get("greed"), 0),
+                "opportunism": _safe_int(morality.get("opportunism"), 0),
+            }
+
+        profile["biography_summary"] = _safe_str(biography.get("short_summary"))
+        profile["file_profile_origin"] = _safe_str(file_profile.get("origin"))
+        profile["file_profile_loaded"] = True
+
+        if _safe_str(evolution.get("identity_arc")):
+            profile["identity_arc"] = _safe_str(evolution.get("identity_arc"))
+        if _safe_str(evolution.get("current_role")):
+            profile["current_role"] = _safe_str(evolution.get("current_role"))
+
     companion = _party_companion(simulation_state, npc_id)
-    evolution = _npc_evolution(simulation_state, npc_id)
+    evolution_state = _npc_evolution(simulation_state, npc_id)
 
     identity_arc = (
         _safe_str(companion.get("identity_arc"))
-        or _safe_str(evolution.get("identity_arc"))
+        or _safe_str(evolution_state.get("identity_arc"))
+        or _safe_str(profile.get("identity_arc"))
     )
     current_role = (
         _safe_str(companion.get("current_role"))
-        or _safe_str(evolution.get("current_role"))
+        or _safe_str(evolution_state.get("current_role"))
+        or _safe_str(profile.get("current_role"))
     )
     motivations = _safe_list(companion.get("active_motivations")) or _safe_list(
-        evolution.get("active_motivations")
+        evolution_state.get("active_motivations")
     )
 
     profile["identity_arc"] = identity_arc

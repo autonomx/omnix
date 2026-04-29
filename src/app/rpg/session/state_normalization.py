@@ -34,6 +34,12 @@ _FAST_TURN_DEFAULTS = {
 _MAX_NPC_REACTION_RECORDS = 64
 _MAX_INTERACTION_REACTION_STATE = 16
 
+DEFAULT_NPC_PROFILE_SETTINGS: Dict[str, Any] = {
+    "auto_create_on_introduction": True,
+    "allow_manual_create": True,
+    "draft_with_llm_on_create": False,
+}
+
 
 def _safe_dict(value: Any) -> Dict[str, Any]:
     return value if isinstance(value, dict) else {}
@@ -75,6 +81,21 @@ def _safe_bool(value: Any, default: bool = False) -> bool:
         return bool(value)
     except Exception:
         return default
+
+
+def npc_profile_settings(settings: Dict[str, Any]) -> Dict[str, Any]:
+    configured = _safe_dict(settings.get("npc_profile_generation"))
+    return {
+        "auto_create_on_introduction": bool(
+            configured.get("auto_create_on_introduction", True)
+        ),
+        "allow_manual_create": bool(
+            configured.get("allow_manual_create", True)
+        ),
+        "draft_with_llm_on_create": bool(
+            configured.get("draft_with_llm_on_create", False)
+        ),
+    }
 
 
 def _normalize_final_narration_text(text: str) -> str:
@@ -150,6 +171,10 @@ def _normalize_runtime_settings(value: Dict[str, Any]) -> Dict[str, Any]:
     raw_conv = value.get("conversation_settings")
     if isinstance(raw_conv, dict):
         result["conversation_settings"] = normalize_conversation_settings(raw_conv)
+    # Preserve npc_profile_generation settings.
+    raw_npc_profile_gen = value.get("npc_profile_generation")
+    if isinstance(raw_npc_profile_gen, dict):
+        result["npc_profile_generation"] = npc_profile_settings(value)
     return result
 
 

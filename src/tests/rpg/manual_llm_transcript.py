@@ -25,6 +25,7 @@ from typing import Any, Dict, List, Sequence
 # Add src to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 
+from app.runtime_paths import resources_data_root
 from app.rpg.session.runtime import apply_turn
 from app.rpg.world.conversation_threads import has_pending_player_conversation_response
 
@@ -35,14 +36,14 @@ MANUAL_HTML_DIR_NAME = "html"
 MANUAL_HTML_SCENARIO_DIR_NAME = "scenarios"
 MANUAL_HTML_JSON_PREVIEW_CHARS = 160_000
 
-OUTPUT_DIR = Path(__file__).parent.parent.parent.parent / "resources" / "test-results"
-OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-OUTPUT_PATH = OUTPUT_DIR / "manual_rpg_llm_transcript.txt"
-SERVICE_OUTPUT_PATH = OUTPUT_DIR / "manual_rpg_service_scenarios_all.txt"
-CODE_DIFF_PATH = OUTPUT_DIR / "code-diff.txt"
-RESULTS_ZIP_PATH = OUTPUT_DIR / "manual-rpg-test-results.zip"
-TOKEN_USAGE_PATH = OUTPUT_DIR / "token-usage.txt"
-CONVERSATION_PATH = OUTPUT_DIR / "conversation.html"
+TEST_RESULTS_ROOT = resources_data_root() / "test-results"
+TEST_RESULTS_ROOT.mkdir(parents=True, exist_ok=True)
+OUTPUT_PATH = TEST_RESULTS_ROOT / "manual_rpg_llm_transcript.txt"
+SERVICE_OUTPUT_PATH = TEST_RESULTS_ROOT / "manual_rpg_service_scenarios_all.txt"
+CODE_DIFF_PATH = TEST_RESULTS_ROOT / "code-diff.txt"
+RESULTS_ZIP_PATH = TEST_RESULTS_ROOT / "manual-rpg-test-results.zip"
+TOKEN_USAGE_PATH = TEST_RESULTS_ROOT / "token-usage.txt"
+CONVERSATION_PATH = TEST_RESULTS_ROOT / "conversation.html"
 REPO_ROOT = Path(__file__).resolve().parents[3]
 SRC_ROOT = REPO_ROOT / "src"
 RPG_SESSION_DIRS = [
@@ -1160,6 +1161,19 @@ def _render_special_panels(result: Dict[str, Any], *, prefix: str) -> str:
         ("Direct Companion Turn Result", "direct_companion_turn_result"),
         ("Party State", "party_state"),
         ("NPC Arc Continuity Result", "npc_arc_continuity_result"),
+        ("NPC Profile Summary", "npc_profile_summary"),
+        ("NPC Profile Update Result", "npc_profile_update_result"),
+        ("NPC Profile Draft Result", "npc_profile_draft_result"),
+        ("NPC Profile Draft Approval Result", "npc_profile_draft_approval_result"),
+        ("NPC Profile Draft Rejection Result", "npc_profile_draft_rejection_result"),
+        ("NPC Profile Draft Summary", "npc_profile_draft_summary"),
+        ("Character Cards Summary", "character_cards_summary"),
+        ("Character Card Result", "character_card_result"),
+        ("Character Card Update Result", "character_card_update_result"),
+        ("Character Card Portrait Prompt Result", "character_card_portrait_prompt_result"),
+        ("Semantic Action v2", "semantic_action_v2"),
+        ("Interaction Result", "interaction_result"),
+        ("General Interaction Result", "general_interaction_result"),
     ]:
         value = _first_dict(
             result.get(key),
@@ -1795,7 +1809,7 @@ def _write_current_transcript_outputs(*, max_chunk_bytes: int = MANUAL_LOG_MAX_C
     output_map: Dict[str, Path] = {}
 
     if "flat_summary" in channels:
-        output_map["flat_summary"] = OUTPUT_DIR / "manual_rpg_llm_transcript__summary.txt"
+        output_map["flat_summary"] = TEST_RESULTS_ROOT / "manual_rpg_llm_transcript__summary.txt"
 
     if "flat_legacy" in channels:
         output_map["flat_legacy"] = OUTPUT_PATH
@@ -1803,10 +1817,10 @@ def _write_current_transcript_outputs(*, max_chunk_bytes: int = MANUAL_LOG_MAX_C
     for channel in channels:
         if channel.startswith("flat_turn_"):
             suffix = channel.replace("flat_turn_", "turn_")
-            output_map[channel] = OUTPUT_DIR / f"manual_rpg_llm_transcript__{suffix}.txt"
+            output_map[channel] = TEST_RESULTS_ROOT / f"manual_rpg_llm_transcript__{suffix}.txt"
 
     if "service_summary" in channels:
-        output_map["service_summary"] = OUTPUT_DIR / "manual_rpg_service_scenarios__summary.txt"
+        output_map["service_summary"] = TEST_RESULTS_ROOT / "manual_rpg_service_scenarios__summary.txt"
 
     if "service_legacy" in channels:
         output_map["service_legacy"] = SERVICE_OUTPUT_PATH
@@ -1817,7 +1831,7 @@ def _write_current_transcript_outputs(*, max_chunk_bytes: int = MANUAL_LOG_MAX_C
         if channel in {"service_summary", "service_legacy"}:
             continue
         scenario_name = channel.replace("service_", "", 1)
-        output_map[channel] = OUTPUT_DIR / f"manual_rpg_service_scenarios__{scenario_name}.txt"
+        output_map[channel] = TEST_RESULTS_ROOT / f"manual_rpg_service_scenarios__{scenario_name}.txt"
 
     _write_all_outputs(output_map, max_chunk_bytes=max_chunk_bytes)
 
@@ -2416,8 +2430,8 @@ def write_results_zip(path: Path = RESULTS_ZIP_PATH) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     candidates = sorted(
         candidate
-        for candidate in OUTPUT_DIR.rglob("*")
-        if _is_result_zip_candidate(candidate) and _should_include_in_results_zip(candidate, output_dir=OUTPUT_DIR)
+        for candidate in TEST_RESULTS_ROOT.rglob("*")
+        if _is_result_zip_candidate(candidate) and _should_include_in_results_zip(candidate, output_dir=TEST_RESULTS_ROOT)
     )
 
     if path.exists():
@@ -2425,7 +2439,7 @@ def write_results_zip(path: Path = RESULTS_ZIP_PATH) -> None:
 
     with zipfile.ZipFile(path, mode="w", compression=zipfile.ZIP_DEFLATED) as archive:
         for candidate in candidates:
-            archive.write(candidate, arcname=str(candidate.relative_to(OUTPUT_DIR)).replace("\\", "/"))
+            archive.write(candidate, arcname=str(candidate.relative_to(TEST_RESULTS_ROOT)).replace("\\", "/"))
 
     print(
         f"Wrote results zip to: {path.resolve()} ({len(candidates)} file(s))",
@@ -3989,6 +4003,184 @@ SERVICE_SCENARIOS = {
             "Bran, what do you think of the group?",
         ],
     },
+    "dynamic_npc_profiles_character_cards": {
+        "currency": {"gold": 0, "silver": 0, "copper": 0},
+        "conversation_settings": {
+            "enabled": True,
+            "autonomous_ticks_enabled": True,
+            "frequency": "always",
+            "conversation_chance_percent": 100,
+            "allow_player_invited": True,
+            "player_inclusion_chance_percent": 100,
+            "npc_file_profiles_enabled": True,
+            "npc_evolution_enabled": True,
+            "npc_party_eligibility_enabled": True,
+            "companion_join_intent_enabled": True,
+            "companion_acceptance_enabled": True,
+            "companion_dialogue_enabled": True,
+            "npc_arc_continuity_enabled": True,
+            "min_ticks_between_conversations": 0,
+            "thread_cooldown_ticks": 0,
+        },
+        "setup_party_state": {
+            "max_size": 3
+        },
+        "turns": [
+            "__manual_offer_companion_mira__",
+            "Yes, Mira can come.",
+            "__manual_edit_mira_profile__",
+            "Mira, what do you think we should do next?",
+        ],
+    },
+    "dynamic_npc_profile_llm_draft_approval": {
+        "currency": {"gold": 0, "silver": 0, "copper": 0},
+        "conversation_settings": {
+            "enabled": True,
+            "autonomous_ticks_enabled": True,
+            "frequency": "always",
+            "conversation_chance_percent": 100,
+            "allow_player_invited": True,
+            "player_inclusion_chance_percent": 100,
+            "npc_file_profiles_enabled": True,
+            "npc_evolution_enabled": True,
+            "npc_party_eligibility_enabled": True,
+            "companion_join_intent_enabled": True,
+            "companion_acceptance_enabled": True,
+            "companion_dialogue_enabled": True,
+            "npc_arc_continuity_enabled": True,
+            "min_ticks_between_conversations": 0,
+            "thread_cooldown_ticks": 0,
+        },
+        "setup_party_state": {
+            "max_size": 3
+        },
+        "turns": [
+            "__manual_offer_companion_mira__",
+            "Yes, Mira can come.",
+            "__manual_draft_mira_profile_with_llm__",
+            "__manual_approve_mira_profile_draft__",
+            "Mira, what do you think we should do next?",
+        ],
+    },
+    "character_card_ui_profile_portrait_integration": {
+        "currency": {"gold": 0, "silver": 0, "copper": 0},
+        "conversation_settings": {
+            "enabled": True,
+            "autonomous_ticks_enabled": True,
+            "frequency": "always",
+            "conversation_chance_percent": 100,
+            "allow_player_invited": True,
+            "player_inclusion_chance_percent": 100,
+            "npc_file_profiles_enabled": True,
+            "npc_evolution_enabled": True,
+            "npc_party_eligibility_enabled": True,
+            "companion_join_intent_enabled": True,
+            "companion_acceptance_enabled": True,
+            "companion_dialogue_enabled": True,
+            "npc_arc_continuity_enabled": True,
+            "min_ticks_between_conversations": 0,
+            "thread_cooldown_ticks": 0,
+        },
+        "setup_party_state": {
+            "max_size": 3
+        },
+        "turns": [
+            "__manual_offer_companion_mira__",
+            "Yes, Mira can come.",
+            "__manual_draft_mira_profile_with_llm__",
+            "__manual_approve_mira_profile_draft__",
+            "__manual_get_character_cards__",
+            "__manual_update_mira_card_field__",
+            "__manual_generate_mira_portrait_prompt__",
+            "Mira, what do you think we should do next?",
+        ],
+    },
+    "dynamic_npc_profile_generation_modes": {
+        "currency": {"gold": 0, "silver": 0, "copper": 0},
+        "conversation_settings": {
+            "enabled": True,
+            "autonomous_ticks_enabled": True,
+            "frequency": "always",
+            "conversation_chance_percent": 100,
+            "allow_player_invited": True,
+            "player_inclusion_chance_percent": 100,
+            "npc_file_profiles_enabled": True,
+            "npc_evolution_enabled": True,
+            "npc_party_eligibility_enabled": True,
+            "companion_join_intent_enabled": True,
+            "companion_acceptance_enabled": True,
+            "companion_dialogue_enabled": True,
+            "npc_arc_continuity_enabled": True,
+            "min_ticks_between_conversations": 0,
+            "thread_cooldown_ticks": 0,
+        },
+        "setup_party_state": {
+            "max_size": 3
+        },
+        "turns": [
+            "__manual_offer_companion_mira_no_auto_profile__",
+            "__manual_get_character_cards__",
+            "__manual_generate_mira_profile__",
+            "__manual_get_character_cards__",
+            "Yes, Mira can come.",
+            "__manual_get_character_cards__",
+        ],
+    },
+    "general_interaction_runtime": {
+        "currency": {"gold": 0, "silver": 0, "copper": 0},
+        "conversation_settings": {
+            "enabled": True,
+            "autonomous_ticks_enabled": False,
+            "frequency": "never",
+            "conversation_chance_percent": 0,
+            "allow_player_invited": False,
+            "player_inclusion_chance_percent": 0,
+            "npc_file_profiles_enabled": True,
+            "npc_evolution_enabled": True,
+            "min_ticks_between_conversations": 0,
+            "thread_cooldown_ticks": 0,
+        },
+        "setup_interaction_state": {
+            "scene_objects": [
+                {
+                    "object_id": "obj:broken_cart",
+                    "name": "broken cart",
+                    "aliases": ["cart", "wagon"],
+                    "location_id": "loc_tavern_road",
+                    "state": {"condition": "broken"},
+                },
+                {
+                    "object_id": "obj:locked_chest",
+                    "name": "locked chest",
+                    "aliases": ["chest"],
+                    "location_id": "loc_tavern_road",
+                    "state": {"locked": True, "open": False},
+                },
+            ],
+            "scene_items": [
+                {
+                    "item_id": "item:rusty_key",
+                    "name": "rusty key",
+                    "aliases": ["key"],
+                    "location_id": "loc_tavern_road",
+                },
+                {
+                    "item_id": "item:rope",
+                    "name": "rope",
+                    "aliases": ["length of rope"],
+                    "location_id": "loc_tavern_road",
+                },
+            ],
+            "player_location_id": "loc_tavern_road",
+        },
+        "turns": [
+            "I inspect the broken cart.",
+            "I open the locked chest.",
+            "I pick up the rusty key.",
+            "I use the rope on the broken cart.",
+            "I repair the broken cart with the rope.",
+        ],
+    },
 }
 
 
@@ -4040,6 +4232,10 @@ CONVERSATION_EXPECTED_SCENARIOS = {
     "companion_memory_personality_loyalty",
     "companion_quest_hooks_personal_arc_progression",
     "multi_companion_party_system",
+    "dynamic_npc_profiles_character_cards",
+    "dynamic_npc_profile_llm_draft_approval",
+    "character_card_ui_profile_portrait_integration",
+    "dynamic_npc_profile_generation_modes",
 }
 
 
@@ -5213,6 +5409,58 @@ def _companion_memory_summary_for(simulation_state: Dict[str, Any], npc_id: str)
         "memories": _safe_list(_safe_dict(_safe_dict(state.get("by_npc")).get(npc_id)).get("memories")),
         "relationship": _safe_dict(_safe_dict(state.get("relationship_by_npc")).get(npc_id)),
     }
+
+
+def _extract_interaction_result(result: Dict[str, Any]) -> Dict[str, Any]:
+    result = _safe_dict(result)
+    result_sub = _safe_dict(result.get("result"))
+    nested_result = _safe_dict(result_sub.get("result"))
+    turn_contract = _extract_turn_contract(result)
+    resolved = _safe_dict(
+        turn_contract.get("resolved_result")
+        or turn_contract.get("resolved_action")
+    )
+
+    candidates = [
+        result.get("interaction_result"),
+        result_sub.get("interaction_result"),
+        nested_result.get("interaction_result"),
+        turn_contract.get("interaction_result"),
+        resolved.get("interaction_result"),
+    ]
+
+    for candidate in candidates:
+        candidate = _safe_dict(candidate)
+        if candidate:
+            return candidate
+
+    return {}
+
+
+def _extract_semantic_action_v2(result: Dict[str, Any]) -> Dict[str, Any]:
+    result = _safe_dict(result)
+    result_sub = _safe_dict(result.get("result"))
+    nested_result = _safe_dict(result_sub.get("result"))
+    turn_contract = _extract_turn_contract(result)
+    resolved = _safe_dict(
+        turn_contract.get("resolved_result")
+        or turn_contract.get("resolved_action")
+    )
+
+    candidates = [
+        result.get("semantic_action_v2"),
+        result_sub.get("semantic_action_v2"),
+        nested_result.get("semantic_action_v2"),
+        turn_contract.get("semantic_action_v2"),
+        resolved.get("semantic_action_v2"),
+    ]
+
+    for candidate in candidates:
+        candidate = _safe_dict(candidate)
+        if candidate:
+            return candidate
+
+    return {}
 
 
 def _manual_regression_warnings(
@@ -6652,7 +6900,316 @@ def _manual_regression_warnings(
             if not any(_safe_str(_safe_dict(effect).get("kind")) == "companion_pair_tension" for effect in effects):
                 warnings.append("multi_companion_expected_bran_mira_pair_tension")
 
+    if scenario_name == "dynamic_npc_profiles_character_cards":
+        profile = _load_profile_for_test("npc:Mira")
+        conversation = _extract_conversation_result(result)
+
+        if turn_index >= 1:
+            if not profile:
+                warnings.append("dynamic_npc_profile_expected_mira_profile_file_created")
+            else:
+                if _safe_str(profile.get("npc_id")) != "npc:Mira":
+                    warnings.append(
+                        f"dynamic_npc_profile_expected_mira_id_got:{_safe_str(profile.get('npc_id')) or 'missing'}"
+                    )
+                if not _safe_dict(profile.get("biography")):
+                    warnings.append("dynamic_npc_profile_expected_biography_section")
+                if not _safe_dict(profile.get("personality")):
+                    warnings.append("dynamic_npc_profile_expected_personality_section")
+                if not _safe_dict(profile.get("morality")):
+                    warnings.append("dynamic_npc_profile_expected_morality_section")
+                if _safe_dict(profile.get("card_edit_state")).get("editable") is not True:
+                    warnings.append("dynamic_npc_profile_expected_editable_card")
+
+        if turn_index == 3:
+            if _safe_str(_safe_dict(profile.get("card_edit_state")).get("last_edited_by")) != "manual_test":
+                warnings.append(
+                    f"dynamic_npc_profile_expected_manual_edit_got:{_safe_str(_safe_dict(profile.get('card_edit_state')).get('last_edited_by')) or 'missing'}"
+                )
+            traits = {
+                _safe_str(item)
+                for item in _safe_list(_safe_dict(profile.get("personality")).get("traits"))
+            }
+            if "player-edited" not in traits:
+                warnings.append("dynamic_npc_profile_expected_player_edited_trait")
+
+        if turn_index == 4:
+            summary = _safe_dict(
+                conversation.get("npc_profile_summary")
+                or result.get("npc_profile_summary")
+                or _safe_dict(result.get("result")).get("npc_profile_summary")
+            )
+            profiles = _safe_dict(summary.get("profiles"))
+            mira = _safe_dict(profiles.get("npc:Mira"))
+            if not mira:
+                warnings.append("dynamic_npc_profile_expected_mira_in_runtime_profile_summary")
+            else:
+                traits = {
+                    _safe_str(item)
+                    for item in _safe_list(_safe_dict(mira.get("personality")).get("traits"))
+                }
+                if "player-edited" not in traits:
+                    warnings.append("dynamic_npc_profile_expected_runtime_summary_to_reflect_edit")
+
+    if scenario_name == "dynamic_npc_profile_llm_draft_approval":
+        profile = _load_profile_for_test("npc:Mira")
+        draft = _load_draft_for_test("npc:Mira")
+        conversation = _extract_conversation_result(result)
+
+        if turn_index >= 1:
+            if not profile:
+                warnings.append("profile_draft_expected_mira_profile_exists")
+
+        if turn_index == 3:
+            draft_result = _safe_dict(
+                result.get("npc_profile_draft_result")
+                or _safe_dict(result.get("result")).get("npc_profile_draft_result")
+            )
+            if draft_result.get("drafted") is not True:
+                warnings.append(
+                    f"profile_draft_expected_created_got:{_safe_str(draft_result.get('reason')) or 'missing'}"
+                )
+            if _safe_str(_safe_dict(draft_result.get("draft_state")).get("status")) != "pending_approval":
+                warnings.append(
+                    f"profile_draft_expected_pending_approval_got:{_safe_str(_safe_dict(draft_result.get('draft_state')).get('status')) or 'missing'}"
+                )
+            if _safe_str(draft.get("status")) != "pending_approval":
+                warnings.append(
+                    f"profile_draft_file_expected_pending_approval_got:{_safe_str(draft.get('status')) or 'missing'}"
+                )
+
+        if turn_index == 4:
+            approval = _safe_dict(
+                result.get("npc_profile_draft_approval_result")
+                or _safe_dict(result.get("result")).get("npc_profile_draft_approval_result")
+            )
+            if approval.get("approved") is not True:
+                warnings.append(
+                    f"profile_draft_expected_approval_success_got:{_safe_str(approval.get('reason')) or 'missing'}"
+                )
+
+            profile = _load_profile_for_test("npc:Mira")
+            if _safe_str(profile.get("origin")) != "llm_drafted_from_scaffold":
+                warnings.append(
+                    f"profile_draft_expected_profile_origin_llm_drafted_got:{_safe_str(profile.get('origin')) or 'missing'}"
+                )
+
+            edit_state = _safe_dict(profile.get("card_edit_state"))
+            if _safe_str(edit_state.get("last_edited_by")) != "llm_draft_approved":
+                warnings.append(
+                    f"profile_draft_expected_last_edited_by_approval_got:{_safe_str(edit_state.get('last_edited_by')) or 'missing'}"
+                )
+
+            biography = _safe_dict(profile.get("biography"))
+            if not _safe_str(biography.get("full_biography")):
+                warnings.append("profile_draft_expected_full_biography_after_approval")
+
+        if turn_index == 5:
+            summary = _safe_dict(
+                conversation.get("npc_profile_summary")
+                or result.get("npc_profile_summary")
+                or _safe_dict(result.get("result")).get("npc_profile_summary")
+            )
+            profiles = _safe_dict(summary.get("profiles"))
+            mira = _safe_dict(profiles.get("npc:Mira"))
+            if not mira:
+                warnings.append("profile_draft_expected_mira_runtime_profile_summary")
+            else:
+                if _safe_str(mira.get("origin")) != "llm_drafted_from_scaffold":
+                    warnings.append(
+                        f"profile_draft_expected_runtime_origin_llm_drafted_got:{_safe_str(mira.get('origin')) or 'missing'}"
+                    )
+                biography = _safe_dict(mira.get("biography"))
+                if not _safe_str(biography.get("full_biography")):
+                    warnings.append("profile_draft_expected_runtime_full_biography")
+
+    if scenario_name == "character_card_ui_profile_portrait_integration":
+        conversation = _extract_conversation_result(result)
+
+        if turn_index == 5:
+            cards = _safe_dict(
+                result.get("character_cards_summary")
+                or _safe_dict(result.get("result")).get("character_cards_summary")
+                or conversation.get("character_cards_summary")
+            )
+            card_list = _safe_list(cards.get("cards"))
+            if not any(_safe_str(_safe_dict(card).get("npc_id")) == "npc:Mira" for card in card_list):
+                warnings.append("character_cards_expected_mira_card_in_list")
+
+            mira = {}
+            for card in card_list:
+                card = _safe_dict(card)
+                if _safe_str(card.get("npc_id")) == "npc:Mira":
+                    mira = card
+                    break
+
+            if mira:
+                if _safe_str(mira.get("origin")) != "llm_drafted_from_scaffold":
+                    warnings.append(
+                        f"character_cards_expected_llm_drafted_origin_got:{_safe_str(mira.get('origin')) or 'missing'}"
+                    )
+                if not _safe_str(_safe_dict(mira.get("biography")).get("full_biography")):
+                    warnings.append("character_cards_expected_mira_full_biography")
+
+        if turn_index == 6:
+            update = _safe_dict(
+                result.get("character_card_update_result")
+                or _safe_dict(result.get("result")).get("character_card_update_result")
+            )
+            if update.get("ok") is not True:
+                warnings.append("character_card_expected_update_ok")
+
+            card = _safe_dict(
+                _safe_dict(update.get("card"))
+                or _safe_dict(result.get("character_card_result")).get("card")
+            )
+            traits = {
+                _safe_str(item)
+                for item in _safe_list(_safe_dict(card.get("personality")).get("traits"))
+            }
+            if "card-ui-edited" not in traits:
+                warnings.append("character_card_expected_card_ui_edited_trait")
+
+            edit_state = _safe_dict(card.get("card_edit_state"))
+            if _safe_str(edit_state.get("last_edited_by")) != "character_card_manual_test":
+                warnings.append(
+                    f"character_card_expected_last_edited_by_manual_test_got:{_safe_str(edit_state.get('last_edited_by')) or 'missing'}"
+                )
+
+        if turn_index == 7:
+            portrait = _safe_dict(
+                result.get("character_card_portrait_prompt_result")
+                or _safe_dict(result.get("result")).get("character_card_portrait_prompt_result")
+            )
+            if portrait.get("ok") is not True:
+                warnings.append("character_card_expected_portrait_prompt_ok")
+
+            prompt_result = _safe_dict(portrait.get("portrait_prompt_result"))
+            portrait_data = _safe_dict(prompt_result.get("portrait"))
+            prompt = _safe_str(portrait_data.get("prompt"))
+            if "Mira" not in prompt:
+                warnings.append("character_card_portrait_prompt_expected_name_mira")
+            if "cautious" not in prompt.lower() and "mediator" not in prompt.lower():
+                warnings.append("character_card_portrait_prompt_expected_profile_grounding")
+
+        if turn_index == 8:
+            summary = _safe_dict(
+                conversation.get("character_cards_summary")
+                or result.get("character_cards_summary")
+                or _safe_dict(result.get("result")).get("character_cards_summary")
+            )
+            cards = _safe_list(summary.get("cards"))
+            mira = {}
+            for card in cards:
+                card = _safe_dict(card)
+                if _safe_str(card.get("npc_id")) == "npc:Mira":
+                    mira = card
+                    break
+            if not mira:
+                warnings.append("character_card_expected_mira_card_available_on_later_turn")
+            else:
+                portrait = _safe_dict(mira.get("portrait"))
+                if not _safe_str(portrait.get("prompt")):
+                    warnings.append("character_card_expected_portrait_prompt_persisted")
+
+    if scenario_name == "dynamic_npc_profile_generation_modes":
+        conversation = _extract_conversation_result(result)
+
+        if turn_index == 1:
+            offer = _safe_dict(
+                result.get("companion_offer_result")
+                or _safe_dict(result.get("result")).get("companion_offer_result")
+            )
+            profile_result = _safe_dict(offer.get("profile_result"))
+            if profile_result.get("skipped") is not True:
+                warnings.append("profile_generation_modes_expected_profile_skipped_on_no_auto_create")
+            if _safe_str(profile_result.get("reason")) != "auto_profile_creation_disabled":
+                warnings.append(
+                    f"profile_generation_modes_expected_reason_auto_profile_creation_disabled_got:{_safe_str(profile_result.get('reason')) or 'missing'}"
+                )
+
+        if turn_index == 2:
+            cards_result = _safe_dict(
+                result.get("character_cards_summary")
+                or _safe_dict(result.get("result")).get("character_cards_summary")
+            )
+            missing = _safe_list(cards_result.get("missing_profile_npc_ids"))
+            if "npc:Mira" not in missing:
+                warnings.append("profile_generation_modes_expected_mira_in_missing_profile_ids")
+
+        if turn_index == 3:
+            gen = _safe_dict(
+                result.get("profile_generation_result")
+                or _safe_dict(result.get("result")).get("profile_generation_result")
+            )
+            if gen.get("ok") is not True:
+                warnings.append("profile_generation_modes_expected_generate_ok")
+            inner = _safe_dict(gen.get("profile_generation_result"))
+            if inner.get("created") is not True:
+                warnings.append("profile_generation_modes_expected_profile_created")
+
+        if turn_index == 4:
+            cards_result = _safe_dict(
+                result.get("character_cards_summary")
+                or _safe_dict(result.get("result")).get("character_cards_summary")
+            )
+            card_list = _safe_list(cards_result.get("cards"))
+            if not any(_safe_str(_safe_dict(c).get("npc_id")) == "npc:Mira" for c in card_list):
+                warnings.append("profile_generation_modes_expected_mira_card_after_generation")
+
+    if scenario_name == "general_interaction_runtime":
+        action = _extract_semantic_action_v2(result)
+        interaction = _extract_interaction_result(result)
+
+        expected_by_turn = {
+            1: ("inspect", "obj:broken_cart", "target_inspected"),
+            2: ("open", "obj:locked_chest", "open_requires_world_object_runtime"),
+            3: ("take", "item:rusty_key", "take_requires_inventory_runtime"),
+            4: ("use", "obj:broken_cart", "use_requires_item_interaction_runtime"),
+            5: ("repair", "obj:broken_cart", "repair_requires_item_condition_runtime"),
+        }
+
+        expected = expected_by_turn.get(turn_index)
+        if expected:
+            expected_kind, expected_target_id, expected_reason = expected
+
+            if _safe_str(action.get("kind")) != expected_kind:
+                warnings.append(
+                    f"general_interaction_expected_kind_{expected_kind}_got:{_safe_str(action.get('kind')) or 'missing'}"
+                )
+
+            if _safe_str(action.get("target_id")) != expected_target_id:
+                warnings.append(
+                    f"general_interaction_expected_target_{expected_target_id}_got:{_safe_str(action.get('target_id')) or 'missing'}"
+                )
+
+            if interaction.get("resolved") is not True:
+                warnings.append(
+                    f"general_interaction_expected_resolved_true_got:{_safe_str(interaction.get('reason')) or 'missing'}"
+                )
+
+            if _safe_str(interaction.get("reason")) != expected_reason:
+                warnings.append(
+                    f"general_interaction_expected_reason_{expected_reason}_got:{_safe_str(interaction.get('reason')) or 'missing'}"
+                )
+
     return warnings
+
+
+def _load_profile_for_test(npc_id: str) -> Dict[str, Any]:
+    try:
+        from app.rpg.profiles.dynamic_npc_profiles import load_npc_profile
+        return _safe_dict(load_npc_profile(npc_id))
+    except Exception:
+        return {}
+
+
+def _load_draft_for_test(npc_id: str) -> Dict[str, Any]:
+    try:
+        from app.rpg.profiles.profile_drafts import load_profile_draft
+        return _safe_dict(load_profile_draft(npc_id))
+    except Exception:
+        return {}
 
 
 def _seed_session_currency(session_id: str, currency: Dict[str, Any]) -> bool:
@@ -6758,6 +7315,29 @@ def _apply_manual_scenario_setup(session_id: str, scenario: Dict[str, Any]) -> b
         current_party.update(setup_party_state)
         player_state["party_state"] = current_party
         simulation_state["player_state"] = player_state
+
+    setup_interaction_state = _safe_dict(scenario.get("setup_interaction_state"))
+    if setup_interaction_state:
+        player_state = _safe_dict(simulation_state.get("player_state"))
+        if not player_state:
+            player_state = {}
+        location_id = _safe_str(
+            setup_interaction_state.get("player_location_id")
+            or player_state.get("location_id")
+            or simulation_state.get("location_id")
+        )
+        if location_id:
+            player_state["location_id"] = location_id
+            simulation_state["location_id"] = location_id
+        simulation_state["scene_objects"] = _safe_list(setup_interaction_state.get("scene_objects"))
+        simulation_state["scene_items"] = _safe_list(setup_interaction_state.get("scene_items"))
+        simulation_state["player_state"] = player_state
+
+        setup_payload = _safe_dict(session.get("setup_payload"))
+        metadata = _safe_dict(setup_payload.get("metadata"))
+        metadata["simulation_state"] = simulation_state
+        setup_payload["metadata"] = metadata
+        session["setup_payload"] = setup_payload
 
     runtime_state["runtime_settings"] = runtime_settings
     session["runtime_state"] = runtime_state
@@ -7412,7 +7992,7 @@ def run_manual_transcript(
                 before_items,
                 channel=turn_channel,
             )
-            output_map[turn_channel] = OUTPUT_DIR / f"manual_rpg_llm_transcript__turn_{index:02d}.txt"
+            output_map[turn_channel] = TEST_RESULTS_ROOT / f"manual_rpg_llm_transcript__turn_{index:02d}.txt"
         else:
             _print_turn(
                 index,
@@ -7426,7 +8006,7 @@ def run_manual_transcript(
     _emit_summary_block("Flat Manual Transcript Summary", summary_rows, summary_channel)
 
     if split_files:
-        output_map[summary_channel] = OUTPUT_DIR / "manual_rpg_llm_transcript__summary.txt"
+        output_map[summary_channel] = TEST_RESULTS_ROOT / "manual_rpg_llm_transcript__summary.txt"
         _write_all_outputs(output_map)
     else:
         _write_output(OUTPUT_PATH, channel=legacy_channel)
@@ -7720,6 +8300,280 @@ def _run_one_service_scenario(
                 "simulation_state": sim,
                 "session": session,
             }
+        elif _safe_str(player_input) == "__manual_edit_mira_profile__":
+            from app.rpg.profiles.dynamic_npc_profiles import (
+                ensure_dynamic_npc_profile,
+                load_npc_profile,
+                update_npc_character_card,
+            )
+
+            command = _safe_str(player_input)
+            sim = _extract_simulation_state(last_result) if last_result else _safe_dict(session.get("simulation_state"))
+            profile_result = update_npc_character_card(
+                "npc:Mira",
+                {
+                    "biography": {
+                        "short_summary": "Mira is a cautious mediator edited by the player.",
+                        "private_notes": "Player-edited test note."
+                    },
+                    "personality": {
+                        "traits": ["cautious", "observant", "diplomatic", "player-edited"],
+                        "speech_style": "calm, precise, and edited for test coverage"
+                    }
+                },
+                edited_by="manual_test",
+                tick=manual_turn_index,
+            )
+            result = {
+                "ok": True,
+                "result": {
+                    "ok": True,
+                    "manual_command": command,
+                    "npc_profile_update_result": profile_result,
+                    "simulation_state": sim,
+                },
+                "npc_profile_update_result": profile_result,
+                "simulation_state": sim,
+                "session": session,
+            }
+        elif _safe_str(player_input) == "__manual_draft_mira_profile_with_llm__":
+            from app.rpg.profiles.profile_drafts import (
+                create_pending_profile_draft,
+                profile_draft_summary,
+            )
+
+            command = _safe_str(player_input)
+            sim = _extract_simulation_state(last_result) if last_result else _safe_dict(session.get("simulation_state"))
+            draft_result = create_pending_profile_draft(
+                "npc:Mira",
+                tick=manual_turn_index,
+                created_by="deterministic_fallback_drafter",
+            )
+            result = {
+                "ok": True,
+                "result": {
+                    "ok": True,
+                    "manual_command": command,
+                    "npc_profile_draft_result": draft_result,
+                    "npc_profile_draft_summary": profile_draft_summary("npc:Mira"),
+                    "simulation_state": sim,
+                },
+                "npc_profile_draft_result": draft_result,
+                "npc_profile_draft_summary": profile_draft_summary("npc:Mira"),
+                "simulation_state": sim,
+                "session": session,
+            }
+        elif _safe_str(player_input) == "__manual_approve_mira_profile_draft__":
+            from app.rpg.profiles.profile_drafts import (
+                approve_profile_draft,
+                profile_draft_summary,
+            )
+
+            command = _safe_str(player_input)
+            sim = _extract_simulation_state(last_result) if last_result else _safe_dict(session.get("simulation_state"))
+            approval_result = approve_profile_draft(
+                "npc:Mira",
+                tick=manual_turn_index,
+                approved_by="llm_draft_approved",
+            )
+            result = {
+                "ok": True,
+                "result": {
+                    "ok": True,
+                    "manual_command": command,
+                    "npc_profile_draft_approval_result": approval_result,
+                    "npc_profile_draft_summary": profile_draft_summary("npc:Mira"),
+                    "simulation_state": sim,
+                },
+                "npc_profile_draft_approval_result": approval_result,
+                "npc_profile_draft_summary": profile_draft_summary("npc:Mira"),
+                "simulation_state": sim,
+                "session": session,
+            }
+        elif _safe_str(player_input) == "__manual_reject_mira_profile_draft__":
+            from app.rpg.profiles.profile_drafts import (
+                profile_draft_summary,
+                reject_profile_draft,
+            )
+
+            command = _safe_str(player_input)
+            sim = _extract_simulation_state(last_result) if last_result else _safe_dict(session.get("simulation_state"))
+            rejection_result = reject_profile_draft(
+                "npc:Mira",
+                tick=manual_turn_index,
+            )
+            result = {
+                "ok": True,
+                "result": {
+                    "ok": True,
+                    "manual_command": command,
+                    "npc_profile_draft_rejection_result": rejection_result,
+                    "npc_profile_draft_summary": profile_draft_summary("npc:Mira"),
+                    "simulation_state": sim,
+                },
+                "npc_profile_draft_rejection_result": rejection_result,
+                "npc_profile_draft_summary": profile_draft_summary("npc:Mira"),
+                "simulation_state": sim,
+                "session": session,
+            }
+        elif _safe_str(player_input) == "__manual_get_character_cards__":
+            from app.rpg.profiles.character_cards import (
+                list_character_cards_for_simulation_state,
+            )
+
+            command = _safe_str(player_input)
+            sim = _extract_simulation_state(last_result) if last_result else _safe_dict(session.get("simulation_state"))
+            cards_result = list_character_cards_for_simulation_state(sim)
+            result = {
+                "ok": True,
+                "result": {
+                    "ok": True,
+                    "manual_command": command,
+                    "character_cards_summary": cards_result,
+                    "simulation_state": sim,
+                },
+                "character_cards_summary": cards_result,
+                "simulation_state": sim,
+                "session": session,
+            }
+        elif _safe_str(player_input) == "__manual_update_mira_card_field__":
+            from app.rpg.profiles.character_cards import (
+                get_character_card,
+                update_character_card,
+            )
+
+            command = _safe_str(player_input)
+            sim = _extract_simulation_state(last_result) if last_result else _safe_dict(session.get("simulation_state"))
+            update_result = update_character_card(
+                "npc:Mira",
+                {
+                    "biography": {
+                        "private_notes": "Updated through the character-card service."
+                    },
+                    "personality": {
+                        "traits": ["cautious", "observant", "diplomatic", "card-ui-edited"],
+                    },
+                },
+                edited_by="character_card_manual_test",
+                tick=manual_turn_index,
+            )
+            result = {
+                "ok": True,
+                "result": {
+                    "ok": True,
+                    "manual_command": command,
+                    "character_card_update_result": update_result,
+                    "character_card_result": get_character_card("npc:Mira"),
+                    "simulation_state": sim,
+                },
+                "character_card_update_result": update_result,
+                "character_card_result": get_character_card("npc:Mira"),
+                "simulation_state": sim,
+                "session": session,
+            }
+        elif _safe_str(player_input) == "__manual_generate_mira_portrait_prompt__":
+            from app.rpg.profiles.character_cards import (
+                generate_character_card_portrait_prompt,
+                get_character_card,
+            )
+
+            command = _safe_str(player_input)
+            sim = _extract_simulation_state(last_result) if last_result else _safe_dict(session.get("simulation_state"))
+            portrait_result = generate_character_card_portrait_prompt(
+                "npc:Mira",
+                tick=manual_turn_index,
+            )
+            result = {
+                "ok": True,
+                "result": {
+                    "ok": True,
+                    "manual_command": command,
+                    "character_card_portrait_prompt_result": portrait_result,
+                    "character_card_result": get_character_card("npc:Mira"),
+                    "simulation_state": sim,
+                },
+                "character_card_portrait_prompt_result": portrait_result,
+                "character_card_result": get_character_card("npc:Mira"),
+                "simulation_state": sim,
+                "session": session,
+            }
+        elif _safe_str(player_input) == "__manual_offer_companion_mira_no_auto_profile__":
+            from app.rpg.world.companion_acceptance import record_manual_companion_join_offer_for_test_or_runtime
+
+            command = _safe_str(player_input)
+            sim = _extract_simulation_state(last_result) if last_result else _safe_dict(session.get("simulation_state"))
+            if not sim:
+                sim = _ensure_manual_simulation_roots(session)
+
+            offer_result = record_manual_companion_join_offer_for_test_or_runtime(
+                sim,
+                npc_id="npc:Mira",
+                name="Mira",
+                identity_arc="cautious_mediator",
+                current_role="Cautious mediator",
+                active_motivations=[
+                    {
+                        "kind": "protect_party",
+                        "summary": "Keep the party from rushing into needless danger.",
+                        "strength": 2,
+                    }
+                ],
+                tick=manual_turn_index,
+                reason="manual_test_offer_mira_no_auto_profile",
+                profile_auto_create=False,
+            )
+            _sync_manual_simulation_state(session, sim)
+            _save_manual_session_for_test(session, reason="manual companion offer carry-forward")
+            result = {
+                "ok": True,
+                "result": {
+                    "ok": True,
+                    "manual_command": command,
+                    "companion_offer_result": offer_result,
+                    "simulation_state": sim,
+                },
+                "companion_offer_result": offer_result,
+                "simulation_state": sim,
+                "session": session,
+            }
+        elif _safe_str(player_input) == "__manual_generate_mira_profile__":
+            from app.rpg.profiles.character_cards import (
+                generate_character_card_profile,
+                get_character_card,
+            )
+
+            command = _safe_str(player_input)
+            sim = _extract_simulation_state(last_result) if last_result else _safe_dict(session.get("simulation_state"))
+            gen_result = generate_character_card_profile(
+                npc_id="npc:Mira",
+                name="Mira",
+                identity_arc="cautious_mediator",
+                current_role="Cautious mediator",
+                active_motivations=[
+                    {
+                        "kind": "protect_party",
+                        "summary": "Keep the party from rushing into needless danger.",
+                        "strength": 2,
+                    }
+                ],
+                source_event="manual_profile_generation",
+                context_summary="Mira was introduced as a potential companion.",
+                tick=manual_turn_index,
+            )
+            result = {
+                "ok": True,
+                "result": {
+                    "ok": True,
+                    "manual_command": command,
+                    "profile_generation_result": gen_result,
+                    "character_card_result": get_character_card("npc:Mira"),
+                    "simulation_state": sim,
+                },
+                "profile_generation_result": gen_result,
+                "character_card_result": get_character_card("npc:Mira"),
+                "simulation_state": sim,
+                "session": session,
+            }
         else:
             result = apply_turn(session_id=session_id, player_input=player_input)
         extracted_location_id = _extract_current_location_id(result)
@@ -7962,7 +8816,7 @@ def run_service_scenarios(
                 })
                 if split_files:
                     output_map[f"service_{scenario_name}"] = (
-                        OUTPUT_DIR / f"manual_rpg_service_scenarios__{scenario_name}.txt"
+                        TEST_RESULTS_ROOT / f"manual_rpg_service_scenarios__{scenario_name}.txt"
                     )
     else:
         for item in scenario_items:
@@ -7997,13 +8851,13 @@ def run_service_scenarios(
             })
             if split_files:
                 output_map[f"service_{scenario_name}"] = (
-                    OUTPUT_DIR / f"manual_rpg_service_scenarios__{scenario_name}.txt"
+                    TEST_RESULTS_ROOT / f"manual_rpg_service_scenarios__{scenario_name}.txt"
                 )
 
     _emit_summary_block("Service Scenario Summary", scenario_summaries, summary_channel)
 
     if split_files:
-        output_map[summary_channel] = OUTPUT_DIR / "manual_rpg_service_scenarios__summary.txt"
+        output_map[summary_channel] = TEST_RESULTS_ROOT / "manual_rpg_service_scenarios__summary.txt"
         write_results = _write_all_outputs(output_map, max_chunk_bytes=max_log_chunk_bytes)
         # Update scenario summaries with log artifacts
         for summary in scenario_summaries:
@@ -8015,7 +8869,7 @@ def run_service_scenarios(
             # Write HTML for this scenario
             if not no_html_report:
                 scenario_html_path = _write_scenario_html_v2(
-                    output_dir=OUTPUT_DIR,
+                    output_dir=TEST_RESULTS_ROOT,
                     scenario_name=scenario_name,
                     scenario_summary=summary,
                     turns=summary.get("turns") or [],
@@ -8025,7 +8879,7 @@ def run_service_scenarios(
     else:
         suffix = selected if selected != "all" else "all"
         _write_output(
-            OUTPUT_DIR / f"manual_rpg_service_scenarios_{suffix}.txt",
+            TEST_RESULTS_ROOT / f"manual_rpg_service_scenarios_{suffix}.txt",
             channel=legacy_channel,
         )
         # For legacy mode, still write HTML
@@ -8034,7 +8888,7 @@ def run_service_scenarios(
                 scenario_name = summary.get("scenario")
                 # Write HTML for this scenario
                 scenario_html_path = _write_scenario_html_v2(
-                    output_dir=OUTPUT_DIR,
+                    output_dir=TEST_RESULTS_ROOT,
                     scenario_name=scenario_name,
                     scenario_summary=summary,
                     turns=summary.get("turns") or [],
@@ -8051,7 +8905,7 @@ def run_service_scenarios(
         "html_report": {
             "enabled": not no_html_report,
             "excluded_from_zip": True,
-            "local_dir": str((OUTPUT_DIR / MANUAL_HTML_DIR_NAME).resolve()),
+            "local_dir": str((TEST_RESULTS_ROOT / MANUAL_HTML_DIR_NAME).resolve()),
         },
         "scenarios": [
             {
@@ -8063,14 +8917,14 @@ def run_service_scenarios(
         ],
         "source": "manual_llm_transcript_chunk_manifest",
     }
-    (OUTPUT_DIR / "manual_log_chunks_manifest.json").write_text(
+    (TEST_RESULTS_ROOT / "manual_log_chunks_manifest.json").write_text(
         json.dumps(chunk_manifest, indent=2, ensure_ascii=False),
         encoding="utf-8",
     )
 
     if not no_html_report:
         _write_html_index_v2(
-            output_dir=OUTPUT_DIR,
+            output_dir=TEST_RESULTS_ROOT,
             scenario_summaries=scenario_summaries,
         )
 
@@ -8348,8 +9202,8 @@ def main() -> None:
 
     # Delete all files in output directory before running test
     import shutil
-    if OUTPUT_DIR.exists():
-        for item in OUTPUT_DIR.iterdir():
+    if TEST_RESULTS_ROOT.exists():
+        for item in TEST_RESULTS_ROOT.iterdir():
             if item.is_file():
                 item.unlink()
             elif item.is_dir():

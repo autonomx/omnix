@@ -6,6 +6,7 @@ from typing import Any, Dict, List
 from app.rpg.party.party_state import add_companion, ensure_party_state
 from app.rpg.party.companion_presence import current_player_location_id
 from app.rpg.world.npc_party_eligibility import evaluate_npc_party_join_eligibility
+from app.rpg.profiles.dynamic_npc_profiles import ensure_dynamic_npc_profile
 
 
 ACCEPTANCE_MARKERS = {
@@ -164,6 +165,7 @@ def record_companion_join_offer(
     npc_id: str,
     join_intent: Dict[str, Any],
     tick: int,
+    profile_auto_create: bool = True,
 ) -> Dict[str, Any]:
     npc_id = _safe_str(npc_id)
     intent = _safe_dict(join_intent)
@@ -181,6 +183,30 @@ def record_companion_join_offer(
     offer_id = f"companion_offer:{npc_id}:{int(tick or 0)}"
     eligibility = _safe_dict(intent.get("party_join_eligibility_result"))
 
+    profile_result: Dict[str, Any] = {
+        "created": False,
+        "skipped": True,
+        "reason": "auto_profile_creation_disabled",
+        "npc_id": npc_id,
+        "source": "deterministic_dynamic_npc_profile_store",
+    }
+
+    if profile_auto_create:
+        profile_result = ensure_dynamic_npc_profile(
+            npc_id=npc_id,
+            name=_safe_str(eligibility.get("name") or intent.get("name") or npc_id.replace("npc:", "")),
+            identity_arc=_safe_str(eligibility.get("identity_arc")),
+            current_role=_safe_str(eligibility.get("current_role")),
+            active_motivations=deepcopy(_safe_list(eligibility.get("active_motivations"))),
+            location_id=_safe_str(
+                _safe_dict(simulation_state.get("player_state")).get("location_id")
+                or simulation_state.get("location_id")
+            ),
+            source_event=_safe_str(intent.get("reason") or "companion_join_offer"),
+            context_summary=f"{_safe_str(eligibility.get('name') or npc_id)} was introduced as a potential companion.",
+            tick=int(tick or 0),
+        )
+
     pending[npc_id] = {
         "offer_id": offer_id,
         "npc_id": npc_id,
@@ -188,6 +214,7 @@ def record_companion_join_offer(
         "status": "pending_player_acceptance",
         "reason": _safe_str(intent.get("reason") or "eligible_to_join"),
         "party_join_eligibility_result": deepcopy(eligibility),
+        "profile_result": deepcopy(profile_result),
         "source": "deterministic_companion_acceptance",
     }
 
@@ -215,6 +242,7 @@ def record_companion_join_offer(
         "offer_id": offer_id,
         "npc_id": npc_id,
         "requires_player_acceptance": True,
+        "profile_result": deepcopy(profile_result),
         "source": "deterministic_companion_acceptance",
     }
 
@@ -537,6 +565,7 @@ def record_manual_companion_join_offer_for_test_or_runtime(
     active_motivations: List[Dict[str, Any]] | None = None,
     tick: int = 0,
     reason: str = "manual_companion_offer",
+    profile_auto_create: bool = True,
 ) -> Dict[str, Any]:
     join_intent = {
         "offered": True,
@@ -561,4 +590,5 @@ def record_manual_companion_join_offer_for_test_or_runtime(
         npc_id=_safe_str(npc_id),
         join_intent=join_intent,
         tick=tick,
+        profile_auto_create=profile_auto_create,
     )

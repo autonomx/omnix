@@ -15,11 +15,11 @@ from typing import Any, Dict, List, Optional
 
 from app.rpg.session.migrations import migrate_session_payload
 from app.rpg.session.session_store import _normalize_session, _safe_dict
-from app.shared import DATA_DIR
+from app.runtime_paths import repo_root, rpg_sessions_root
 
 logger = logging.getLogger(__name__)
-_SESSION_DIR = Path(DATA_DIR) / "rpg_sessions"
-_LEGACY_SESSION_DIR = Path("data/rpg_sessions")
+_SESSION_DIR = rpg_sessions_root()
+_LEGACY_SESSION_DIR = repo_root() / "data" / "rpg_sessions"
 _SAVE_VERSION = "1.0"
 
 

@@ -7,9 +7,10 @@ import os
 import shutil
 from typing import Any, Dict
 
+from app.runtime_paths import generated_images_root
 from app.shared import DATA_DIR
 
-CACHE_DIR = os.path.join(DATA_DIR, "generated_images", "_cache")
+CACHE_DIR = str(generated_images_root() / "_cache")
 INDEX_PATH = os.path.join(CACHE_DIR, "index.json")
 
 
