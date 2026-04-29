@@ -1186,6 +1186,8 @@ def _render_special_panels(result: Dict[str, Any], *, prefix: str) -> str:
         ("Merchant Result", "merchant_result"),
         ("Ammo Result", "ammo_result"),
         ("Equipment Stats", "equipment_stats"),
+        ("Companion Item Acceptance Result", "companion_item_acceptance_result"),
+        ("Companion Auto Equip Result", "companion_auto_equip_result"),
     ]:
         value = _first_dict(
             result.get(key),
@@ -4598,6 +4600,94 @@ SERVICE_SCENARIOS = {
             "I buy 2 oil flasks from Elara."
         ]
     },
+    "companion_inventory_auto_equip": {
+        "currency": {"gold": 0, "silver": 0, "copper": 0},
+        "conversation_settings": {
+            "enabled": True,
+            "autonomous_ticks_enabled": False,
+            "frequency": "never",
+            "conversation_chance_percent": 0,
+            "allow_player_invited": False,
+            "player_inclusion_chance_percent": 0,
+            "npc_file_profiles_enabled": True,
+            "npc_evolution_enabled": True,
+            "min_ticks_between_conversations": 0,
+            "thread_cooldown_ticks": 0
+        },
+        "setup_interaction_state": {
+            "scene_items": [],
+            "scene_objects": [],
+            "player_location_id": "loc_tavern_road",
+            "player_inventory": {
+                "items": [
+                    {
+                        "item_id": "item:hunting_bow",
+                        "definition_id": "def:hunting_bow",
+                        "name": "hunting bow",
+                        "aliases": ["bow"]
+                    },
+                    {
+                        "item_id": "item:padded_armor",
+                        "definition_id": "def:padded_armor",
+                        "name": "padded armor",
+                        "aliases": ["armor"]
+                    },
+                    {
+                        "item_id": "item:stolen_ring",
+                        "definition_id": "def:stolen_ring",
+                        "name": "stolen ring",
+                        "aliases": ["ring"]
+                    }
+                ],
+                "equipment": {},
+                "carry_capacity": 50.0
+            },
+            "party_state": {
+                "max_size": 4,
+                "companions": [
+                    {
+                        "npc_id": "npc:Bran",
+                        "name": "Bran",
+                        "role": "companion",
+                        "status": "active",
+                        "follow_mode": "following_player",
+                        "location_id": "loc_tavern_road",
+                        "current_role": "Displaced tavern keeper",
+                        "identity_arc": "revenge_after_losing_tavern",
+                        "active_motivations": ["revenge", "protect the party"],
+                        "loyalty": 35,
+                        "inventory": {
+                            "items": [],
+                            "equipment": {},
+                            "carry_capacity": 50.0
+                        }
+                    },
+                    {
+                        "npc_id": "npc:Captain_Aldric",
+                        "name": "Captain Aldric",
+                        "role": "companion",
+                        "status": "active",
+                        "follow_mode": "following_player",
+                        "location_id": "loc_tavern_road",
+                        "current_role": "Guard captain",
+                        "personality": "lawful honorable protective",
+                        "morality": "lawful guard justice",
+                        "loyalty": 20,
+                        "inventory": {
+                            "items": [],
+                            "equipment": {},
+                            "carry_capacity": 50.0
+                        }
+                    }
+                ]
+            }
+        },
+        "turns": [
+            "I give the hunting bow to Bran.",
+            "I give the padded armor to Bran.",
+            "I give the stolen ring to Captain Aldric."
+        ]
+    },
 }
 
 
@@ -5917,6 +6007,34 @@ def _player_inventory_item_by_definition(simulation_state: Dict[str, Any], defin
     return _inventory_item_by_definition(simulation_state, definition_id)
 
 
+def _companion_by_id(simulation_state: Dict[str, Any], npc_id: str) -> Dict[str, Any]:
+    party_state = _safe_dict(_safe_dict(simulation_state.get("player_state")).get("party_state"))
+    for companion in _safe_list(party_state.get("companions")):
+        companion = _safe_dict(companion)
+        if _safe_str(companion.get("npc_id")) == npc_id:
+            return companion
+    return {}
+
+
+def _companion_equipment(simulation_state: Dict[str, Any], npc_id: str) -> Dict[str, Any]:
+    companion = _companion_by_id(simulation_state, npc_id)
+    return _safe_dict(_safe_dict(companion.get("inventory")).get("equipment"))
+
+
+def _companion_inventory_item_by_definition(
+    simulation_state: Dict[str, Any],
+    npc_id: str,
+    definition_id: str,
+) -> Dict[str, Any]:
+    companion = _companion_by_id(simulation_state, npc_id)
+    items = _safe_list(_safe_dict(companion.get("inventory")).get("items"))
+    for item in items:
+        item = _safe_dict(item)
+        if _safe_str(item.get("definition_id")) == definition_id:
+            return item
+    return {}
+
+
 def _player_currency(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
     return _safe_dict(_safe_dict(simulation_state.get("player_state")).get("currency"))
 
@@ -6915,6 +7033,97 @@ def _manual_regression_warnings(
         if expected_visible and visible_reason != expected_visible:
             warnings.append(
                 f"loot_merchant_visible_expected_{expected_visible}_got:{visible_reason or 'missing'}"
+            )
+
+    if scenario_name == "companion_inventory_auto_equip":
+        sim = _extract_simulation_state(result)
+        interaction = _extract_interaction_result(result)
+        inventory = _safe_dict(
+            interaction.get("inventory_result")
+            or result.get("inventory_result")
+            or _safe_dict(result.get("result")).get("inventory_result")
+        )
+        acceptance = _safe_dict(
+            interaction.get("companion_item_acceptance_result")
+            or result.get("companion_item_acceptance_result")
+            or _safe_dict(result.get("result")).get("companion_item_acceptance_result")
+            or inventory.get("companion_item_acceptance_result")
+        )
+        auto_equip = _safe_dict(
+            interaction.get("companion_auto_equip_result")
+            or result.get("companion_auto_equip_result")
+            or _safe_dict(result.get("result")).get("companion_auto_equip_result")
+            or inventory.get("companion_auto_equip_result")
+        )
+
+        if turn_index == 1:
+            if inventory.get("resolved") is not True:
+                warnings.append(
+                    f"companion_inventory_bow_expected_resolved_true_got:{_safe_str(inventory.get('reason')) or 'missing'}"
+                )
+            if _safe_str(inventory.get("reason")) != "item_given_to_npc":
+                warnings.append(
+                    f"companion_inventory_bow_expected_item_given_to_npc_got:{_safe_str(inventory.get('reason')) or 'missing'}"
+                )
+            if acceptance.get("accepted") is not True:
+                warnings.append(
+                    f"companion_inventory_bow_expected_accepted_true_got:{_safe_str(acceptance.get('reason')) or 'missing'}"
+                )
+            if auto_equip.get("equipped") is not True:
+                warnings.append(
+                    f"companion_inventory_bow_expected_auto_equipped_true_got:{_safe_str(auto_equip.get('reason')) or 'missing'}"
+                )
+            equipment = _companion_equipment(sim, "npc:Bran")
+            if _safe_str(equipment.get("main_hand")) != "item:hunting_bow":
+                warnings.append(
+                    f"companion_inventory_bow_expected_bran_main_hand_bow_got:{_safe_str(equipment.get('main_hand')) or 'missing'}"
+                )
+
+        if turn_index == 2:
+            if _safe_str(inventory.get("reason")) != "item_given_to_npc":
+                warnings.append(
+                    f"companion_inventory_armor_expected_item_given_to_npc_got:{_safe_str(inventory.get('reason')) or 'missing'}"
+                )
+            if acceptance.get("accepted") is not True:
+                warnings.append(
+                    f"companion_inventory_armor_expected_accepted_true_got:{_safe_str(acceptance.get('reason')) or 'missing'}"
+                )
+            equipment = _companion_equipment(sim, "npc:Bran")
+            if _safe_str(equipment.get("body")) != "item:padded_armor":
+                warnings.append(
+                    f"companion_inventory_armor_expected_bran_body_armor_got:{_safe_str(equipment.get('body')) or 'missing'}"
+                )
+
+        if turn_index == 3:
+            if inventory.get("resolved") is not False:
+                warnings.append("companion_inventory_stolen_ring_expected_resolved_false")
+            if _safe_str(inventory.get("reason")) != "companion_refused_item":
+                warnings.append(
+                    f"companion_inventory_stolen_ring_expected_refused_got:{_safe_str(inventory.get('reason')) or 'missing'}"
+                )
+            if acceptance.get("accepted") is not False:
+                warnings.append(
+                    f"companion_inventory_stolen_ring_expected_accepted_false_got:{acceptance.get('accepted')}"
+                )
+            if _safe_str(acceptance.get("reason")) != "morality_refuses_stolen_goods":
+                warnings.append(
+                    f"companion_inventory_stolen_ring_expected_morality_refusal_got:{_safe_str(acceptance.get('reason')) or 'missing'}"
+                )
+
+            player_ring = _player_inventory_item_by_definition(sim, "def:stolen_ring")
+            if not player_ring:
+                warnings.append("companion_inventory_stolen_ring_expected_ring_remains_with_player")
+
+        expected_visible_by_turn = {
+            1: "item_given_to_npc",
+            2: "item_given_to_npc",
+            3: "companion_refused_item",
+        }
+        expected_visible = expected_visible_by_turn.get(turn_index)
+        visible_reason = _extract_visible_interaction_reason(result)
+        if expected_visible and visible_reason != expected_visible:
+            warnings.append(
+                f"companion_inventory_visible_expected_{expected_visible}_got:{visible_reason or 'missing'}"
             )
 
     conversation = _extract_conversation_result(result)

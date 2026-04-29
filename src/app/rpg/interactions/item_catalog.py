@@ -295,6 +295,17 @@ ITEM_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         "value": {"gold": 0, "silver": 1, "copper": 0},
         "tags": ["trinket", "bandit"],
     },
+    "def:stolen_ring": {
+        "definition_id": "def:stolen_ring",
+        "name": "stolen ring",
+        "kind": "trinket",
+        "stackable": False,
+        "max_stack": 1,
+        "unit_weight": 0.05,
+        "rarity": "uncommon",
+        "value": {"gold": 1, "silver": 0, "copper": 0},
+        "tags": ["valuable", "jewelry", "ring", "stolen", "illicit"],
+    },
 }
 
 
@@ -346,6 +357,8 @@ NAME_TO_DEFINITION_ID = {
     "bandit token": "def:bandit_token",
     "bandit tokens": "def:bandit_token",
     "token": "def:bandit_token",
+    "stolen ring": "def:stolen_ring",
+    "ring": "def:stolen_ring",
 }
 
 

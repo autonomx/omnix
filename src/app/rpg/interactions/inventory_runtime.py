@@ -10,6 +10,8 @@ from app.rpg.interactions.item_model import (
     recalculate_inventory_derived_fields,
     split_stack,
 )
+from app.rpg.interactions.companion_auto_equip import apply_companion_auto_equip
+from app.rpg.interactions.companion_item_policy import evaluate_companion_item_acceptance
 
 DEFAULT_EQUIPMENT_SLOTS = {
     "weapon": "main_hand",
@@ -321,6 +323,46 @@ def apply_inventory_interaction(
                 extra={"recipient_id": recipient_id},
             )
 
+        item = _clone_item_for_inventory(_safe_dict(inventory_items[index]))
+
+        companion = {}
+        party_state = _safe_dict(player_state.get("party_state"))
+        for candidate in _safe_list(party_state.get("companions")):
+            candidate = _safe_dict(candidate)
+            if _safe_str(candidate.get("npc_id")) == recipient_id:
+                companion = candidate
+                break
+
+        if not companion:
+            return _inventory_result(
+                resolved=False,
+                changed_state=False,
+                reason="recipient_companion_not_found",
+                action=action,
+                item=item,
+                extra={"recipient_id": recipient_id},
+            )
+
+        acceptance = evaluate_companion_item_acceptance(
+            companion=companion,
+            item=item,
+        )
+        if acceptance.get("accepted") is not True:
+            return _inventory_result(
+                resolved=False,
+                changed_state=False,
+                reason="companion_refused_item",
+                action=action,
+                item=item,
+                extra={
+                    "recipient_id": recipient_id,
+                    "companion_item_acceptance_result": deepcopy(acceptance),
+                },
+            )
+
+        # Remove from player only after acceptance.
+        item = _clone_item_for_inventory(_safe_dict(inventory_items.pop(index)))
+
         recipient_inventory = _companion_inventory(simulation_state, recipient_id)
         if not recipient_inventory:
             return _inventory_result(
@@ -328,19 +370,30 @@ def apply_inventory_interaction(
                 changed_state=False,
                 reason="recipient_inventory_not_available",
                 action=action,
-                extra={"recipient_id": recipient_id},
+                item=item,
+                extra={
+                    "recipient_id": recipient_id,
+                    "companion_item_acceptance_result": deepcopy(acceptance),
+                },
             )
 
-        item = _clone_item_for_inventory(_safe_dict(inventory_items.pop(index)))
         recipient_items = _safe_list(recipient_inventory.get("items"))
         recipient_add = add_item_to_items_list(recipient_items, item)
         recipient_inventory["items"] = recipient_add["items"]
         recipient_inventory = recalculate_inventory_derived_fields(recipient_inventory)
+        companion["inventory"] = recipient_inventory
 
         inventory["items"] = inventory_items
         inventory = recalculate_inventory_derived_fields(inventory)
         player_state["inventory"] = inventory
         simulation_state["player_state"] = player_state
+
+        auto_equip = apply_companion_auto_equip(
+            simulation_state,
+            npc_id=recipient_id,
+            item_id=_item_id(item),
+            tick=tick,
+        )
 
         return _inventory_result(
             resolved=True,
@@ -356,6 +409,8 @@ def apply_inventory_interaction(
                 "recipient_encumbrance_state": recipient_inventory.get("encumbrance_state"),
                 "carry_weight": inventory.get("carry_weight"),
                 "encumbrance_state": inventory.get("encumbrance_state"),
+                "companion_item_acceptance_result": deepcopy(acceptance),
+                "companion_auto_equip_result": deepcopy(auto_equip),
                 "tick": int(tick or 0),
             },
         )

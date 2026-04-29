@@ -229,6 +229,12 @@ def resolve_general_interaction(
         equipment_stats: Dict[str, Any] = {}
         if kind in {"equip", "unequip"}:
             equipment_stats = project_equipment_stats(simulation_state, actor_id="player")
+        companion_item_acceptance_result = _safe_dict(
+            inventory_result.get("companion_item_acceptance_result")
+        )
+        companion_auto_equip_result = _safe_dict(
+            inventory_result.get("companion_auto_equip_result")
+        )
         interaction_result = {
             "resolved": bool(inventory_result.get("resolved")),
             "changed_state": bool(inventory_result.get("changed_state")),
@@ -238,6 +244,8 @@ def resolve_general_interaction(
             "secondary_target_resolution": deepcopy(secondary_result),
             "inventory_result": deepcopy(inventory_result),
             "equipment_stats": deepcopy(equipment_stats),
+            "companion_item_acceptance_result": deepcopy(companion_item_acceptance_result),
+            "companion_auto_equip_result": deepcopy(companion_auto_equip_result),
             "source": "deterministic_general_interaction_runtime",
         }
 
@@ -247,6 +255,8 @@ def resolve_general_interaction(
             "interaction_result": deepcopy(interaction_result),
             "inventory_result": deepcopy(inventory_result),
             "equipment_stats": deepcopy(equipment_stats),
+            "companion_item_acceptance_result": deepcopy(companion_item_acceptance_result),
+            "companion_auto_equip_result": deepcopy(companion_auto_equip_result),
             "source": "deterministic_general_interaction_runtime",
         }
 

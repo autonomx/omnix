@@ -8441,6 +8441,13 @@ def apply_turn(
 
     inventory_result = _safe_dict(general_interaction_result.get("inventory_result"))
 
+    companion_item_acceptance_result = _safe_dict(
+        general_interaction_result.get("companion_item_acceptance_result")
+    )
+    companion_auto_equip_result = _safe_dict(
+        general_interaction_result.get("companion_auto_equip_result")
+    )
+
     container_result = _safe_dict(general_interaction_result.get("container_result"))
     repair_result = _safe_dict(general_interaction_result.get("repair_result"))
     consumable_result = _safe_dict(general_interaction_result.get("consumable_result"))
@@ -8546,6 +8553,8 @@ def apply_turn(
         final_result["crafting_result"] = copy.deepcopy(crafting_result)
         final_result["merchant_result"] = copy.deepcopy(merchant_result)
         final_result["loot_result"] = copy.deepcopy(loot_result)
+        final_result["companion_item_acceptance_result"] = copy.deepcopy(companion_item_acceptance_result)
+        final_result["companion_auto_equip_result"] = copy.deepcopy(companion_auto_equip_result)
         final_result["visible_interaction_reason"] = _interaction_visible_result_reason(general_interaction_result)
 
         _nested = _safe_dict(final_result.get("result"))
@@ -8577,6 +8586,8 @@ def apply_turn(
         _nested["crafting_result"] = copy.deepcopy(crafting_result)
         _nested["merchant_result"] = copy.deepcopy(merchant_result)
         _nested["loot_result"] = copy.deepcopy(loot_result)
+        _nested["companion_item_acceptance_result"] = copy.deepcopy(companion_item_acceptance_result)
+        _nested["companion_auto_equip_result"] = copy.deepcopy(companion_auto_equip_result)
         final_result["result"] = _nested
 
         _tc = _safe_dict(final_result.get("turn_contract"))
@@ -8609,6 +8620,8 @@ def apply_turn(
         _rr["crafting_result"] = copy.deepcopy(crafting_result)
         _rr["merchant_result"] = copy.deepcopy(merchant_result)
         _rr["loot_result"] = copy.deepcopy(loot_result)
+        _rr["companion_item_acceptance_result"] = copy.deepcopy(companion_item_acceptance_result)
+        _rr["companion_auto_equip_result"] = copy.deepcopy(companion_auto_equip_result)
 
         _rr = _apply_visible_interaction_reason_to_resolved_result(
             _rr,
@@ -8664,6 +8677,7 @@ def apply_turn(
         or crafting_result.get("changed_state") is True
         or merchant_result.get("changed_state") is True
         or loot_result.get("changed_state") is True
+        or companion_auto_equip_result.get("changed_state") is True
     ):
         session = _sync_session_simulation_state_for_early_return(
             session,
