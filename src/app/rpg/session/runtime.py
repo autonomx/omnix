@@ -289,6 +289,7 @@ from app.rpg.party.companion_quests import (
     seed_companion_quest_from_arc,
     seed_companion_quests_for_active_companions,
 )
+from app.rpg.party.party_composition import project_party_composition_effects
 
 
 def _player_party_state_from_simulation(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
@@ -7950,6 +7951,8 @@ def apply_turn(
             else companion_memory_summary(simulation_state)
         )
 
+        party_composition_result = project_party_composition_effects(simulation_state)
+
         resolved_result = {
             "ok": True,
             "action_type": "companion_acceptance",
@@ -7976,6 +7979,7 @@ def apply_turn(
             "companion_memory_summary": copy.deepcopy(companion_memory_summary_result),
             "companion_quest_seed_result": copy.deepcopy(companion_quest_seed_result),
             "companion_quest_summary": copy.deepcopy(companion_quest_summary_result),
+            "party_composition_effects": copy.deepcopy(party_composition_result),
             "source": "deterministic_session_runtime",
         }
 
@@ -8012,6 +8016,7 @@ def apply_turn(
                 "companion_memory_summary": copy.deepcopy(companion_memory_summary_result),
                 "companion_quest_seed_result": copy.deepcopy(companion_quest_seed_result),
                 "companion_quest_summary": copy.deepcopy(companion_quest_summary_result),
+                "party_composition_effects": copy.deepcopy(party_composition_result),
             },
             "turn_contract": turn_contract,
             "conversation_result": copy.deepcopy(conversation_result),
@@ -8026,6 +8031,7 @@ def apply_turn(
             "companion_memory_summary": copy.deepcopy(companion_memory_summary_result),
             "companion_quest_seed_result": copy.deepcopy(companion_quest_seed_result),
             "companion_quest_summary": copy.deepcopy(companion_quest_summary_result),
+            "party_composition_effects": copy.deepcopy(party_composition_result),
             "session": session,
         }
 
@@ -8095,6 +8101,11 @@ def apply_turn(
         conversation_result["companion_memory_summary"] = copy.deepcopy(companion_memory_summary_result)
         conversation_result["companion_quest_seed_result"] = copy.deepcopy(companion_quest_seed_result)
         conversation_result["companion_quest_summary"] = copy.deepcopy(companion_quest_summary_result)
+        conversation_result["party_composition_effects"] = copy.deepcopy(party_composition_result)
+        result["party_composition_effects"] = copy.deepcopy(party_composition_result)
+        result["result"]["party_composition_effects"] = copy.deepcopy(party_composition_result)
+        resolved_result["party_composition_effects"] = copy.deepcopy(party_composition_result)
+        turn_contract["resolved_result"] = copy.deepcopy(resolved_result)
         result["conversation_result"] = conversation_result
         result["result"]["conversation_result"] = conversation_result
         turn_contract["conversation_result"] = conversation_result
@@ -8275,6 +8286,7 @@ def apply_turn(
             reason="companion_quest_progress",
         )
         _companion_presence = companion_presence_summary(_post_action_sim)
+        _party_composition = project_party_composition_effects(_post_action_sim)
 
         final_result["party_aware_turn_context"] = copy.deepcopy(_party_aware_ctx)
         final_result["companion_presence_summary"] = copy.deepcopy(_companion_presence)
@@ -8286,6 +8298,7 @@ def apply_turn(
         final_result["companion_memory_summary"] = copy.deepcopy(_companion_mem_summary)
         final_result["companion_quest_progress_result"] = copy.deepcopy(_companion_quest_progress)
         final_result["companion_quest_summary"] = copy.deepcopy(_companion_quest_sum)
+        final_result["party_composition_effects"] = copy.deepcopy(_party_composition)
 
         _nested = _safe_dict(final_result.get("result"))
         _nested["party_aware_turn_context"] = copy.deepcopy(_party_aware_ctx)
@@ -8298,6 +8311,7 @@ def apply_turn(
         _nested["companion_memory_summary"] = copy.deepcopy(_companion_mem_summary)
         _nested["companion_quest_progress_result"] = copy.deepcopy(_companion_quest_progress)
         _nested["companion_quest_summary"] = copy.deepcopy(_companion_quest_sum)
+        _nested["party_composition_effects"] = copy.deepcopy(_party_composition)
         final_result["result"] = _nested
 
         _tc = _safe_dict(final_result.get("turn_contract"))
@@ -8312,6 +8326,7 @@ def apply_turn(
         _rr["companion_memory_summary"] = copy.deepcopy(_companion_mem_summary)
         _rr["companion_quest_progress_result"] = copy.deepcopy(_companion_quest_progress)
         _rr["companion_quest_summary"] = copy.deepcopy(_companion_quest_sum)
+        _rr["party_composition_effects"] = copy.deepcopy(_party_composition)
         _tc["resolved_result"] = _rr
         final_result["turn_contract"] = _tc
 
@@ -8329,6 +8344,7 @@ def apply_turn(
                 "companion_memory_summary": copy.deepcopy(_companion_mem_summary),
                 "companion_quest_progress_result": copy.deepcopy(_companion_quest_progress),
                 "companion_quest_summary": copy.deepcopy(_companion_quest_sum),
+                "party_composition_effects": copy.deepcopy(_party_composition),
                 "source": "deterministic_companion_turn_runtime",
             }
         elif _safe_dict(final_result.get("conversation_result")):
@@ -8337,6 +8353,7 @@ def apply_turn(
             _conv["companion_memory_summary"] = copy.deepcopy(_companion_mem_summary)
             _conv["companion_quest_progress_result"] = copy.deepcopy(_companion_quest_progress)
             _conv["companion_quest_summary"] = copy.deepcopy(_companion_quest_sum)
+            _conv["party_composition_effects"] = copy.deepcopy(_party_composition)
             final_result["conversation_result"] = _conv
 
     session = _sync_session_if_companion_runtime_mutated(

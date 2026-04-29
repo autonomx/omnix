@@ -1,84 +1,308 @@
-Bundle AX-AY-AZ — Companion Quest Hooks and Personal Arc Progression v1
+Bundle BA-BB-BC — Multi-Companion Party System v1
 
 Goal:
 
-AX — Seed companion personal quest hooks from evolution arcs.
-AY — Progress companion quests from deterministic backed events/actions.
-AZ — Update companion role/personality projection as the personal arc advances.
+BA — Multiple companion offers can coexist and be accepted/rejected deterministically.
+BB — Party limit is enforced consistently.
+BC — Basic party composition effects are projected deterministically.
 
-This bundle should not add multi-companion conflict yet. That comes in BA-BB-BC.
+This bundle should not add full companion conflict simulation yet. It only adds bounded multi-companion structure so future companion dynamics have a safe foundation.
 
 Expected behavior
 
-After Bran joins with:
-
-"identity_arc": "revenge_after_losing_tavern"
-
-runtime seeds:
+Multiple pending offers:
 
 {
-  "quest_id": "companion_bran_revenge",
-  "npc_id": "npc:Bran",
-  "source_arc": "revenge_after_losing_tavern",
-  "stage": "find_bandit_leads",
-  "status": "active"
+  "pending_companion_offers": {
+    "npc:Bran": {},
+    "npc:Mira": {}
+  }
 }
 
-If the player says:
+Player can accept a specific companion:
 
-Bran, we ask around for rumors about the bandits who burned your tavern.
+Yes, Bran can come.
 
-runtime advances the companion quest to:
+Runtime accepts Bran only.
+
+Party limit:
 
 {
-  "stage": "follow_bandit_lead",
-  "progress_reason": "player_sought_bandit_leads"
+  "party_state": {
+    "max_size": 1,
+    "companions": [
+      {"npc_id": "npc:Bran"}
+    ]
+  }
 }
 
-If the player says:
+Then:
 
-Bran, we follow the bandit tracks into the woods.
+Yes, Mira can come.
 
-runtime advances to:
+Should reject:
 
 {
-  "stage": "track_bandits",
-  "progress_reason": "player_followed_bandit_lead"
+  "accepted": false,
+  "reason": "party_full"
 }
 
-Bran’s projection should evolve:
+Party composition effect:
 
 {
-  "current_role": "Vengeful companion tracking bandits",
-  "identity_arc": "revenge_after_losing_tavern",
-  "arc_stage": "track_bandits"
+  "party_composition_effects": [
+    {
+      "kind": "companion_pair_tension",
+      "npc_ids": ["npc:Bran", "npc:Mira"],
+      "reason": "revenge_arc_vs_cautious_mediator"
+    }
+  ]
 }
-Patch 1 — Add companion quest runtime
+Patch 1 — Harden party limit enforcement
+File
+
+src/app/rpg/party/party_state.py
+
+Find add_companion(...).
+
+Before appending the new companion, add a max-size check.
+
+Look for something like:
+
+companions = _safe_list(party_state.get("companions"))
+if any(_safe_str(comp.get("npc_id")) == npc_id for comp in companions):
+    return player_state
+
+Immediately after duplicate check, add:
+
+max_size = _safe_int(party_state.get("max_size"), 3)
+if max_size < 1:
+    max_size = 1
+
+if len(companions) >= max_size:
+    party_state["last_add_companion_result"] = {
+        "added": False,
+        "npc_id": npc_id,
+        "reason": "party_full",
+        "party_size": len(companions),
+        "max_size": max_size,
+        "source": "deterministic_party_state",
+    }
+    player_state["party_state"] = party_state
+    return player_state
+
+Then after successfully appending the companion, add:
+
+party_state["last_add_companion_result"] = {
+    "added": True,
+    "npc_id": npc_id,
+    "reason": "companion_added",
+    "party_size": len(companions),
+    "max_size": max_size,
+    "source": "deterministic_party_state",
+}
+
+Make sure this is written after:
+
+companions.append(...)
+party_state["companions"] = companions
+
+Expected behavior:
+
+add_companion(...) never exceeds max_size.
+Patch 2 — Make companion acceptance detect party-full
+File
+
+src/app/rpg/world/companion_acceptance.py
+
+Inside resolve_companion_acceptance(...), find the accept branch where it calls:
+
+player_state = add_companion(...)
+
+After the call, it likely computes:
+
+after_count = len(...)
+accepted = after_count > before_count or any(...)
+
+Replace that section with this stricter logic:
+
+party_state_after = _safe_dict(player_state.get("party_state"))
+add_result = _safe_dict(party_state_after.get("last_add_companion_result"))
+after_companions = _safe_list(party_state_after.get("companions"))
+after_count = len(after_companions)
+
+accepted = (
+    add_result.get("added") is True
+    or (
+        after_count > before_count
+        and any(_safe_dict(comp).get("npc_id") == npc_id for comp in after_companions)
+    )
+)
+
+if not accepted and _safe_str(add_result.get("reason")) == "party_full":
+    pending.pop(npc_id, None)
+    entry = {
+        "offer_id": _safe_str(offer.get("offer_id")),
+        "npc_id": npc_id,
+        "status": "rejected_party_full",
+        "resolved_tick": int(tick or 0),
+        "party_size_before": before_count,
+        "party_size_after": after_count,
+        "reason": "party_full",
+        "source": "deterministic_companion_acceptance",
+    }
+    history.append(entry)
+
+    state["pending_offers"] = pending
+    state["history"] = history[-MAX_ACCEPTANCE_HISTORY:]
+    state["debug"] = deepcopy(entry)
+    _mirror_pending_offers_to_conversation_state(simulation_state)
+
+    return {
+        "resolved": True,
+        "accepted": False,
+        "rejected": False,
+        "npc_id": npc_id,
+        "reason": "party_full",
+        "offer": deepcopy(offer),
+        "party_join_eligibility_result": deepcopy(eligibility),
+        "party_state": deepcopy(player_state.get("party_state")),
+        "source": "deterministic_companion_acceptance",
+    }
+
+Then keep the normal accepted return path after this.
+
+This ensures a full party produces a clean deterministic rejection instead of ambiguous party_state_not_changed.
+
+Patch 3 — Improve pending-offer selection for multiple offers
+File
+
+src/app/rpg/world/companion_acceptance.py
+
+Find this function:
+
+def resolve_pending_companion_offer_response(...)
+
+Inside it, find the candidate selection logic. It probably currently does:
+
+candidate_name = ...
+mentioned = bool(candidate_name and candidate_name in normalized_input)
+candidates.append((0 if mentioned else 1, created_tick, npc_id))
+
+Replace candidate selection with this:
+
+candidates = []
+for npc_id, offer in pending.items():
+    offer = _safe_dict(offer)
+    eligibility = _safe_dict(offer.get("party_join_eligibility_result"))
+    candidate_name = _safe_str(
+        offer.get("name")
+        or eligibility.get("name")
+        or _safe_str(npc_id).replace("npc:", "")
+    )
+
+    name_token = candidate_name.lower()
+    id_token = _safe_str(npc_id).lower()
+    short_id_token = _safe_str(npc_id).replace("npc:", "").lower()
+
+    mentioned = any(
+        token and token in normalized_input
+        for token in {name_token, id_token, short_id_token}
+    )
+
+    candidates.append((
+        0 if mentioned else 1,
+        int(offer.get("created_tick") or 0),
+        _safe_str(npc_id),
+        bool(mentioned),
+    ))
+
+mentioned_candidates = [candidate for candidate in candidates if candidate[3]]
+
+if len(pending) > 1 and not mentioned_candidates:
+    return {
+        "resolved": False,
+        "accepted": False,
+        "rejected": False,
+        "reason": "multiple_pending_offers_require_specific_npc",
+        "pending_offer_count": len(pending),
+        "pending_npc_ids": sorted(_safe_str(key) for key in pending.keys()),
+        "debug": get_pending_companion_offer_debug(
+            simulation_state,
+            player_input=player_input,
+        ),
+        "source": "deterministic_companion_acceptance",
+    }
+
+candidates = mentioned_candidates or candidates
+candidates.sort()
+selected_npc_id = candidates[0][2] if candidates else ""
+
+This keeps current behavior for one pending offer:
+
+"Yes. Let's go." accepts the only pending offer.
+
+But makes multiple offers deterministic and explicit:
+
+"Yes." → rejected as ambiguous if Bran + Mira both pending.
+"Yes, Bran can come." → accepts Bran.
+Patch 4 — Add generic companion offer recording test helper
+File
+
+src/app/rpg/world/companion_acceptance.py
+
+Add this helper at the bottom. It is useful for tests and future generic companion offer paths.
+
+def record_manual_companion_join_offer_for_test_or_runtime(
+    simulation_state: Dict[str, Any],
+    *,
+    npc_id: str,
+    name: str,
+    identity_arc: str = "",
+    current_role: str = "",
+    active_motivations: List[Dict[str, Any]] | None = None,
+    tick: int = 0,
+    reason: str = "manual_companion_offer",
+) -> Dict[str, Any]:
+    join_intent = {
+        "offered": True,
+        "requested": True,
+        "npc_id": _safe_str(npc_id),
+        "reason": _safe_str(reason),
+        "requires_player_acceptance": True,
+        "party_join_eligibility_result": {
+            "eligible": True,
+            "npc_id": _safe_str(npc_id),
+            "name": _safe_str(name),
+            "identity_arc": _safe_str(identity_arc),
+            "current_role": _safe_str(current_role),
+            "active_motivations": deepcopy(_safe_list(active_motivations)),
+            "source": "deterministic_companion_acceptance",
+        },
+        "source": "deterministic_companion_acceptance",
+    }
+
+    return record_companion_join_offer(
+        simulation_state,
+        npc_id=_safe_str(npc_id),
+        join_intent=join_intent,
+        tick=tick,
+    )
+
+This avoids needing to run Bran’s full evolution path for every multi-companion unit test.
+
+Patch 5 — Add party composition runtime
 New file
 
-src/app/rpg/party/companion_quests.py
+src/app/rpg/party/party_composition.py
 
 from __future__ import annotations
 
 from copy import deepcopy
 from typing import Any, Dict, List
 
-from app.rpg.party.companion_presence import active_party_companions
 
-
-MAX_COMPANION_QUEST_EVENTS = 32
-
-
-BRAN_REVENGE_QUEST_ID = "companion_bran_revenge"
-
-BRAN_REVENGE_STAGES = [
-    "find_bandit_leads",
-    "follow_bandit_lead",
-    "track_bandits",
-    "confront_bandit_scout",
-    "find_bandit_leader",
-    "resolve_revenge",
-]
+MAX_PARTY_COMPOSITION_EFFECTS = 12
 
 
 def _safe_str(value: Any) -> str:
@@ -93,711 +317,107 @@ def _safe_list(value: Any) -> List[Any]:
     return value if isinstance(value, list) else []
 
 
-def _safe_int(value: Any, default: int = 0) -> int:
-    try:
-        return int(value)
-    except Exception:
-        return default
-
-
-def ensure_companion_quest_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
-    state = _safe_dict(simulation_state.get("companion_quest_state"))
-    if not state:
-        state = {}
-        simulation_state["companion_quest_state"] = state
-
-    if not isinstance(state.get("by_quest"), dict):
-        state["by_quest"] = {}
-
-    if not isinstance(state.get("by_npc"), dict):
-        state["by_npc"] = {}
-
-    if not isinstance(state.get("events"), list):
-        state["events"] = []
-
-    if not isinstance(state.get("debug"), dict):
-        state["debug"] = {}
-
-    return state
-
-
-def _party_companion(simulation_state: Dict[str, Any], npc_id: str) -> Dict[str, Any]:
-    for companion in active_party_companions(simulation_state):
+def active_companions_from_state(simulation_state: Dict[str, Any]) -> List[Dict[str, Any]]:
+    party_state = _safe_dict(_safe_dict(simulation_state.get("player_state")).get("party_state"))
+    companions = []
+    for companion in _safe_list(party_state.get("companions")):
         companion = _safe_dict(companion)
-        if _safe_str(companion.get("npc_id")) == npc_id:
-            return companion
-    return {}
-
-
-def _npc_evolution(simulation_state: Dict[str, Any], npc_id: str) -> Dict[str, Any]:
-    return _safe_dict(
-        _safe_dict(_safe_dict(simulation_state.get("npc_evolution_state")).get("by_npc")).get(npc_id)
-    )
-
-
-def _quest_event(
-    *,
-    quest_id: str,
-    npc_id: str,
-    kind: str,
-    reason: str,
-    tick: int,
-    before_stage: str = "",
-    after_stage: str = "",
-    metadata: Dict[str, Any] | None = None,
-) -> Dict[str, Any]:
-    return {
-        "quest_id": _safe_str(quest_id),
-        "npc_id": _safe_str(npc_id),
-        "kind": _safe_str(kind),
-        "reason": _safe_str(reason),
-        "tick": int(tick or 0),
-        "before_stage": _safe_str(before_stage),
-        "after_stage": _safe_str(after_stage),
-        "metadata": deepcopy(_safe_dict(metadata or {})),
-        "source": "deterministic_companion_quest_runtime",
-    }
-
-
-def _append_quest_event(state: Dict[str, Any], event: Dict[str, Any]) -> None:
-    events = _safe_list(state.get("events"))
-    events.append(deepcopy(event))
-    state["events"] = events[-MAX_COMPANION_QUEST_EVENTS:]
-    state["debug"] = {
-        "last_event": deepcopy(event),
-        "source": "deterministic_companion_quest_runtime",
-    }
-
-
-def _stage_index(stage: str) -> int:
-    try:
-        return BRAN_REVENGE_STAGES.index(_safe_str(stage))
-    except ValueError:
-        return -1
-
-
-def _bran_revenge_role_for_stage(stage: str) -> str:
-    stage = _safe_str(stage)
-
-    if stage == "find_bandit_leads":
-        return "Displaced tavern keeper seeking bandit leads"
-    if stage == "follow_bandit_lead":
-        return "Vengeful companion following a bandit lead"
-    if stage == "track_bandits":
-        return "Vengeful companion tracking bandits"
-    if stage == "confront_bandit_scout":
-        return "Hardened companion confronting the bandits"
-    if stage == "find_bandit_leader":
-        return "Avenger closing in on the bandit leader"
-    if stage == "resolve_revenge":
-        return "Changed survivor of the Rusty Flagon"
-    return "Displaced tavern keeper"
-
-
-def seed_companion_quest_from_arc(
-    simulation_state: Dict[str, Any],
-    *,
-    npc_id: str,
-    tick: int = 0,
-) -> Dict[str, Any]:
-    """Seed a personal companion quest from a known identity arc.
-
-    This is deterministic and idempotent. It does not create arbitrary quests.
-    """
-    npc_id = _safe_str(npc_id)
-    if not npc_id:
-        return {
-            "seeded": False,
-            "reason": "missing_npc_id",
-            "source": "deterministic_companion_quest_runtime",
-        }
-
-    companion = _party_companion(simulation_state, npc_id)
-    evolution = _npc_evolution(simulation_state, npc_id)
-
-    identity_arc = (
-        _safe_str(companion.get("identity_arc"))
-        or _safe_str(evolution.get("identity_arc"))
-    )
-
-    if identity_arc != "revenge_after_losing_tavern":
-        return {
-            "seeded": False,
-            "npc_id": npc_id,
-            "reason": "no_supported_companion_arc",
-            "identity_arc": identity_arc,
-            "source": "deterministic_companion_quest_runtime",
-        }
-
-    state = ensure_companion_quest_state(simulation_state)
-    by_quest = _safe_dict(state.get("by_quest"))
-    by_npc = _safe_dict(state.get("by_npc"))
-
-    quest_id = BRAN_REVENGE_QUEST_ID
-
-    existing = _safe_dict(by_quest.get(quest_id))
-    if existing:
-        return {
-            "seeded": False,
-            "already_exists": True,
-            "quest": deepcopy(existing),
-            "source": "deterministic_companion_quest_runtime",
-        }
-
-    quest = {
-        "quest_id": quest_id,
-        "npc_id": npc_id,
-        "title": "Bran's Revenge",
-        "source_arc": identity_arc,
-        "status": "active",
-        "stage": "find_bandit_leads",
-        "stage_index": _stage_index("find_bandit_leads"),
-        "summary": "Bran wants to find the bandits who destroyed the Rusty Flagon.",
-        "created_tick": int(tick or 0),
-        "updated_tick": int(tick or 0),
-        "source": "deterministic_companion_quest_runtime",
-    }
-
-    by_quest[quest_id] = quest
-    npc_quests = _safe_list(by_npc.get(npc_id))
-    if quest_id not in npc_quests:
-        npc_quests.append(quest_id)
-    by_npc[npc_id] = npc_quests
-
-    state["by_quest"] = by_quest
-    state["by_npc"] = by_npc
-
-    event = _quest_event(
-        quest_id=quest_id,
-        npc_id=npc_id,
-        kind="companion_quest_seeded",
-        reason="identity_arc_revenge_after_losing_tavern",
-        tick=tick,
-        after_stage="find_bandit_leads",
-    )
-    _append_quest_event(state, event)
-
-    apply_companion_quest_projection_to_npc(
-        simulation_state,
-        quest_id=quest_id,
-        tick=tick,
-    )
-
-    return {
-        "seeded": True,
-        "quest": deepcopy(quest),
-        "event": deepcopy(event),
-        "source": "deterministic_companion_quest_runtime",
-    }
-
-
-def seed_companion_quests_for_active_companions(
-    simulation_state: Dict[str, Any],
-    *,
-    tick: int = 0,
-) -> Dict[str, Any]:
-    results = []
-    for companion in active_party_companions(simulation_state):
-        npc_id = _safe_str(_safe_dict(companion).get("npc_id"))
-        if npc_id:
-            results.append(seed_companion_quest_from_arc(simulation_state, npc_id=npc_id, tick=tick))
-
-    return {
-        "seeded_any": any(_safe_dict(result).get("seeded") for result in results),
-        "results": results,
-        "source": "deterministic_companion_quest_runtime",
-    }
-
-
-def classify_companion_quest_progress_from_player_input(
-    simulation_state: Dict[str, Any],
-    *,
-    player_input: str,
-) -> Dict[str, Any]:
-    text = _safe_str(player_input).lower()
-
-    # V1 is explicit and bounded. It only progresses Bran's known revenge arc.
-    mentions_bran = "bran" in text or "npc:bran" in text
-    mentions_bandits = "bandit" in text or "bandits" in text
-    if not mentions_bran or not mentions_bandits:
-        return {
-            "matched": False,
-            "reason": "no_backed_companion_quest_progress_signal",
-            "source": "deterministic_companion_quest_runtime",
-        }
-
-    if any(marker in text for marker in ["ask around", "rumor", "rumors", "question the locals", "look for leads", "find leads"]):
-        return {
-            "matched": True,
-            "quest_id": BRAN_REVENGE_QUEST_ID,
-            "npc_id": "npc:Bran",
-            "target_stage": "follow_bandit_lead",
-            "reason": "player_sought_bandit_leads",
-            "source": "deterministic_companion_quest_runtime",
-        }
-
-    if any(marker in text for marker in ["follow the tracks", "follow tracks", "track the bandits", "trail", "into the woods"]):
-        return {
-            "matched": True,
-            "quest_id": BRAN_REVENGE_QUEST_ID,
-            "npc_id": "npc:Bran",
-            "target_stage": "track_bandits",
-            "reason": "player_followed_bandit_lead",
-            "source": "deterministic_companion_quest_runtime",
-        }
-
-    if any(marker in text for marker in ["bandit scout", "confront the scout", "capture the scout"]):
-        return {
-            "matched": True,
-            "quest_id": BRAN_REVENGE_QUEST_ID,
-            "npc_id": "npc:Bran",
-            "target_stage": "confront_bandit_scout",
-            "reason": "player_confronted_bandit_scout",
-            "source": "deterministic_companion_quest_runtime",
-        }
-
-    return {
-        "matched": False,
-        "reason": "bandit_reference_not_progress_action",
-        "source": "deterministic_companion_quest_runtime",
-    }
-
-
-def progress_companion_quest(
-    simulation_state: Dict[str, Any],
-    *,
-    quest_id: str,
-    target_stage: str,
-    reason: str,
-    tick: int = 0,
-) -> Dict[str, Any]:
-    state = ensure_companion_quest_state(simulation_state)
-    by_quest = _safe_dict(state.get("by_quest"))
-    quest = _safe_dict(by_quest.get(_safe_str(quest_id)))
-
-    if not quest:
-        return {
-            "progressed": False,
-            "reason": "quest_not_found",
-            "quest_id": _safe_str(quest_id),
-            "source": "deterministic_companion_quest_runtime",
-        }
-
-    if _safe_str(quest.get("status")) != "active":
-        return {
-            "progressed": False,
-            "reason": "quest_not_active",
-            "quest": deepcopy(quest),
-            "source": "deterministic_companion_quest_runtime",
-        }
-
-    before_stage = _safe_str(quest.get("stage"))
-    before_index = _stage_index(before_stage)
-    target_stage = _safe_str(target_stage)
-    target_index = _stage_index(target_stage)
-
-    if target_index < 0:
-        return {
-            "progressed": False,
-            "reason": "unsupported_target_stage",
-            "target_stage": target_stage,
-            "quest": deepcopy(quest),
-            "source": "deterministic_companion_quest_runtime",
-        }
-
-    if target_index <= before_index:
-        return {
-            "progressed": False,
-            "reason": "quest_stage_not_advanced",
-            "before_stage": before_stage,
-            "target_stage": target_stage,
-            "quest": deepcopy(quest),
-            "source": "deterministic_companion_quest_runtime",
-        }
-
-    # Prevent skipping too far in v1.
-    if target_index > before_index + 1:
-        return {
-            "progressed": False,
-            "reason": "quest_stage_skip_blocked",
-            "before_stage": before_stage,
-            "target_stage": target_stage,
-            "quest": deepcopy(quest),
-            "source": "deterministic_companion_quest_runtime",
-        }
-
-    quest["stage"] = target_stage
-    quest["stage_index"] = target_index
-    quest["updated_tick"] = int(tick or 0)
-    quest["current_role_projection"] = _bran_revenge_role_for_stage(target_stage)
-
-    by_quest[_safe_str(quest_id)] = quest
-    state["by_quest"] = by_quest
-
-    event = _quest_event(
-        quest_id=_safe_str(quest_id),
-        npc_id=_safe_str(quest.get("npc_id")),
-        kind="companion_quest_progressed",
-        reason=reason,
-        tick=tick,
-        before_stage=before_stage,
-        after_stage=target_stage,
-    )
-    _append_quest_event(state, event)
-
-    projection = apply_companion_quest_projection_to_npc(
-        simulation_state,
-        quest_id=_safe_str(quest_id),
-        tick=tick,
-    )
-
-    return {
-        "progressed": True,
-        "quest": deepcopy(quest),
-        "event": deepcopy(event),
-        "projection": deepcopy(projection),
-        "source": "deterministic_companion_quest_runtime",
-    }
-
-
-def maybe_progress_companion_quest_from_player_input(
-    simulation_state: Dict[str, Any],
-    *,
-    player_input: str,
-    tick: int = 0,
-) -> Dict[str, Any]:
-    seed_result = seed_companion_quests_for_active_companions(
-        simulation_state,
-        tick=tick,
-    )
-
-    classification = classify_companion_quest_progress_from_player_input(
-        simulation_state,
-        player_input=player_input,
-    )
-
-    if not classification.get("matched"):
-        return {
-            "progressed": False,
-            "seed_result": deepcopy(seed_result),
-            "classification": deepcopy(classification),
-            "reason": _safe_str(classification.get("reason")),
-            "source": "deterministic_companion_quest_runtime",
-        }
-
-    progress = progress_companion_quest(
-        simulation_state,
-        quest_id=_safe_str(classification.get("quest_id")),
-        target_stage=_safe_str(classification.get("target_stage")),
-        reason=_safe_str(classification.get("reason")),
-        tick=tick,
-    )
-
-    return {
-        "progressed": bool(progress.get("progressed")),
-        "seed_result": deepcopy(seed_result),
-        "classification": deepcopy(classification),
-        "progress": deepcopy(progress),
-        "source": "deterministic_companion_quest_runtime",
-    }
-
-
-def apply_companion_quest_projection_to_npc(
-    simulation_state: Dict[str, Any],
-    *,
-    quest_id: str,
-    tick: int = 0,
-) -> Dict[str, Any]:
-    state = ensure_companion_quest_state(simulation_state)
-    quest = _safe_dict(_safe_dict(state.get("by_quest")).get(_safe_str(quest_id)))
-
-    if not quest:
-        return {
-            "projected": False,
-            "reason": "quest_not_found",
-            "quest_id": _safe_str(quest_id),
-            "source": "deterministic_companion_quest_runtime",
-        }
-
-    npc_id = _safe_str(quest.get("npc_id"))
-    stage = _safe_str(quest.get("stage"))
-    role_projection = _bran_revenge_role_for_stage(stage)
-
-    projected_companion = {}
-
-    player_state = _safe_dict(simulation_state.get("player_state"))
-    party_state = _safe_dict(player_state.get("party_state"))
-    companions = _safe_list(party_state.get("companions"))
-    for index, companion in enumerate(companions):
-        companion = deepcopy(_safe_dict(companion))
-        if _safe_str(companion.get("npc_id")) != npc_id:
+        if not companion:
             continue
+        if _safe_str(companion.get("status") or "active") != "active":
+            continue
+        companions.append(companion)
+    return companions
 
-        companion["arc_stage"] = stage
-        companion["companion_quest_id"] = _safe_str(quest_id)
-        companion["current_role"] = role_projection
-        companion["last_arc_projection_tick"] = int(tick or 0)
-        companions[index] = companion
-        projected_companion = deepcopy(companion)
-        break
 
-    party_state["companions"] = companions
-    player_state["party_state"] = party_state
-    simulation_state["player_state"] = player_state
+def project_party_composition_effects(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
+    companions = active_companions_from_state(simulation_state)
+    effects: List[Dict[str, Any]] = []
 
-    evolution_state = _safe_dict(simulation_state.get("npc_evolution_state"))
-    by_npc = _safe_dict(evolution_state.get("by_npc"))
-    npc_evo = _safe_dict(by_npc.get(npc_id))
-    if npc_evo:
-        npc_evo["arc_stage"] = stage
-        npc_evo["companion_quest_id"] = _safe_str(quest_id)
-        npc_evo["current_role"] = role_projection
-        npc_evo["last_arc_projection_tick"] = int(tick or 0)
-        by_npc[npc_id] = npc_evo
-        evolution_state["by_npc"] = by_npc
-        simulation_state["npc_evolution_state"] = evolution_state
+    by_id = {
+        _safe_str(companion.get("npc_id")): companion
+        for companion in companions
+        if _safe_str(companion.get("npc_id"))
+    }
 
-    return {
+    bran = by_id.get("npc:Bran")
+    mira = by_id.get("npc:Mira")
+
+    if bran and mira:
+        bran_arc = _safe_str(bran.get("identity_arc"))
+        mira_role = _safe_str(mira.get("current_role") or mira.get("role"))
+
+        if bran_arc == "revenge_after_losing_tavern":
+            effects.append({
+                "kind": "companion_pair_tension",
+                "npc_ids": ["npc:Bran", "npc:Mira"],
+                "reason": "revenge_arc_vs_cautious_mediator",
+                "severity": 1,
+                "bounded": True,
+                "source": "deterministic_party_composition_runtime",
+            })
+
+    # Generic v1: if more than one active companion exists, expose stable party size context.
+    if len(companions) > 1:
+        effects.append({
+            "kind": "multi_companion_party_context",
+            "npc_ids": [_safe_str(companion.get("npc_id")) for companion in companions],
+            "reason": "multiple_active_companions",
+            "severity": 0,
+            "bounded": True,
+            "source": "deterministic_party_composition_runtime",
+        })
+
+    effects = effects[:MAX_PARTY_COMPOSITION_EFFECTS]
+
+    result = {
         "projected": True,
-        "npc_id": npc_id,
-        "quest_id": _safe_str(quest_id),
-        "stage": stage,
-        "current_role": role_projection,
-        "companion": deepcopy(projected_companion),
-        "source": "deterministic_companion_quest_runtime",
+        "active_companion_count": len(companions),
+        "effects": deepcopy(effects),
+        "source": "deterministic_party_composition_runtime",
     }
 
-
-def companion_quest_summary(simulation_state: Dict[str, Any], *, npc_id: str = "") -> Dict[str, Any]:
-    state = ensure_companion_quest_state(simulation_state)
-    by_quest = _safe_dict(state.get("by_quest"))
-    by_npc = _safe_dict(state.get("by_npc"))
-
-    if npc_id:
-        quest_ids = _safe_list(by_npc.get(_safe_str(npc_id)))
-        return {
-            "npc_id": _safe_str(npc_id),
-            "quests": [deepcopy(_safe_dict(by_quest.get(quest_id))) for quest_id in quest_ids],
-            "events": [
-                deepcopy(_safe_dict(event))
-                for event in _safe_list(state.get("events"))
-                if _safe_str(_safe_dict(event).get("npc_id")) == _safe_str(npc_id)
-            ],
-            "source": "deterministic_companion_quest_runtime",
-        }
-
-    return {
-        "by_quest": deepcopy(by_quest),
-        "by_npc": deepcopy(by_npc),
-        "events": deepcopy(_safe_list(state.get("events"))),
-        "source": "deterministic_companion_quest_runtime",
-    }
-Patch 2 — Seed companion quest after Bran joins
+    simulation_state["party_composition_effects"] = result
+    return result
+Patch 6 — Use composition projection in runtime
 File
 
 src/app/rpg/session/runtime.py
 
 Add import:
 
-from app.rpg.party.companion_quests import (
-    companion_quest_summary,
-    maybe_progress_companion_quest_from_player_input,
-    seed_companion_quest_from_arc,
-    seed_companion_quests_for_active_companions,
-)
+from app.rpg.party.party_composition import project_party_composition_effects
 
-In the AL-AM-AN.7 early companion acceptance return path, after this existing logic:
+Where companion presence/quest/memory summaries are projected, add:
 
-if acceptance.get("accepted") and accepted_npc_id:
-    companion_memory_result = record_companion_join_memory(...)
-    companion_loyalty_result = companion_loyalty_projection(...)
+party_composition_result = project_party_composition_effects(simulation_state)
 
-add:
+Include this in returned payloads:
 
-companion_quest_seed_result = {}
-companion_quest_summary_result = {}
+"party_composition_effects": deepcopy(party_composition_result),
 
-if acceptance.get("accepted") and accepted_npc_id:
-    companion_quest_seed_result = seed_companion_quest_from_arc(
-        simulation_state,
-        npc_id=accepted_npc_id,
-        tick=tick,
-    )
-    companion_quest_summary_result = companion_quest_summary(
-        simulation_state,
-        npc_id=accepted_npc_id,
-    )
-
-Then include these in the early return payloads:
-
-In conversation_result
-"companion_quest_seed_result": deepcopy(companion_quest_seed_result),
-"companion_quest_summary": deepcopy(companion_quest_summary_result),
-In resolved_result
-"companion_quest_seed_result": deepcopy(companion_quest_seed_result),
-"companion_quest_summary": deepcopy(companion_quest_summary_result),
-In top-level result and nested result["result"]
-"companion_quest_seed_result": deepcopy(companion_quest_seed_result),
-"companion_quest_summary": deepcopy(companion_quest_summary_result),
-
-This proves AX.
-
-Patch 3 — Progress companion quests on party-aware turns
-File
-
-src/app/rpg/session/runtime.py
-
-Near the start of apply_turn(...), after the existing AU-AV-AW drift call:
-
-companion_relationship_drift_result = maybe_apply_companion_relationship_drift_from_player_input(...)
-companion_memory_summary_result = companion_memory_summary(simulation_state)
-
-add:
-
-companion_quest_progress_result = maybe_progress_companion_quest_from_player_input(
-    simulation_state,
-    player_input=player_input,
-    tick=tick,
-)
-companion_quest_summary_result = companion_quest_summary(simulation_state)
-
-Then include these in returned payloads that already include companion fields:
-
-"companion_quest_progress_result": deepcopy(companion_quest_progress_result),
-"companion_quest_summary": deepcopy(companion_quest_summary_result),
-
-At minimum include in:
+Add it at minimum to:
 
 top-level result
 result["result"]
 turn_contract["resolved_result"]
-conversation_result for direct companion turns
-conversation_result for companion command turns
-normal final result payload if present
+conversation_result for companion acceptance
+conversation_result for companion command
+conversation_result for direct companion response
 
-This proves AY.
+If applying broadly is tedious, prioritize:
 
-Patch 4 — Make direct companion responses reflect quest stage
-File
-
-src/app/rpg/party/companion_turns.py
-
-Add import:
-
-from app.rpg.party.companion_quests import companion_quest_summary
-
-Inside maybe_build_direct_companion_turn_response(...), after loyalty projection is computed:
-
-loyalty = companion_loyalty_projection(simulation_state, npc_id=npc_id)
-loyalty_state = _safe_str(loyalty.get("loyalty_state"))
-
-add:
-
-quest_summary = companion_quest_summary(simulation_state, npc_id=npc_id)
-quests = _safe_list(quest_summary.get("quests"))
-active_quest = {}
-for quest in quests:
-    quest = _safe_dict(quest)
-    if _safe_str(quest.get("status")) == "active":
-        active_quest = quest
-        break
-quest_stage = _safe_str(active_quest.get("stage"))
-
-Then update the Bran advice line logic.
-
-Find the steady/default Bran revenge line:
-
-line = (
-    f"{name} glances back toward the road. "
-    "\"If those bandits left tracks or rumors behind, we follow them before they vanish.\""
-)
-
-Replace the whole Bran identity_arc == "revenge_after_losing_tavern" line selection with:
-
-if identity_arc == "revenge_after_losing_tavern" and intent in {"advice", "direct_companion_address"}:
-    if loyalty_state == "strained":
-        line = (
-            f"{name} looks away for a moment. "
-            "\"If we're still chasing the bandits, then say it plainly. I need to know this matters.\""
-        )
-    elif loyalty_state == "at_risk":
-        line = (
-            f"{name} keeps his voice low. "
-            "\"I will not keep walking beside someone who treats the Rusty Flagon like ash underfoot.\""
-        )
-    elif quest_stage == "follow_bandit_lead":
-        line = (
-            f"{name} leans forward, voice tight. "
-            "\"If there are rumors, then someone heard where those bandits ran. We follow the lead before it goes cold.\""
-        )
-    elif quest_stage == "track_bandits":
-        line = (
-            f"{name} studies the ground ahead. "
-            "\"Tracks, camp smoke, broken brush — anything they left behind can point us to them.\""
-        )
-    elif quest_stage == "confront_bandit_scout":
-        line = (
-            f"{name} lowers his voice. "
-            "\"A scout means the rest are close. We take him alive if we can — he may know where the leader hides.\""
-        )
-    elif loyalty_state == "loyal":
-        line = (
-            f"{name} nods with grim certainty. "
-            "\"We follow every rumor and every track until the bandits answer for it.\""
-        )
-    else:
-        line = (
-            f"{name} glances back toward the road. "
-            "\"If those bandits left tracks or rumors behind, we follow them before they vanish.\""
-        )
-
-In the returned dict, add:
-
-"companion_quest_summary": deepcopy(quest_summary),
-"active_companion_quest": deepcopy(active_quest),
-
-Inside npc_response_beat, add:
-
-"companion_quest_stage": quest_stage,
-"companion_quest_id": _safe_str(active_quest.get("quest_id")),
-
-This proves AZ in dialogue.
-
-Patch 5 — Keep companion presence projection updated after quest projection
-File
-
-src/app/rpg/session/runtime.py
-
-After:
-
-companion_quest_progress_result = maybe_progress_companion_quest_from_player_input(...)
-
-call existing projection if available:
-
-project_active_companions_into_presence(
-    simulation_state,
-    location_id=_safe_str(_safe_dict(simulation_state.get("player_state")).get("location_id"))
-    or _safe_str(simulation_state.get("location_id")),
-    tick=tick,
-    reason="companion_quest_progress",
-)
-
-This ensures role changes from:
-
-Displaced tavern keeper seeking bandit leads
-→ Vengeful companion following a bandit lead
-→ Vengeful companion tracking bandits
-
-also show up in companion presence summaries.
-
-Patch 6 — Manual transcript scenario
+companion acceptance early return
+direct companion response branch
+normal final result
+Patch 7 — Add manual scenario
 File
 
 src/tests/rpg/manual_llm_transcript.py
 
 Add scenario:
 
-"companion_quest_hooks_personal_arc_progression": {
+"multi_companion_party_system": {
     "currency": {"gold": 0, "silver": 0, "copper": 0},
     "conversation_settings": {
         "enabled": True,
@@ -817,7 +437,7 @@ Add scenario:
         "thread_cooldown_ticks": 0
     },
     "setup_world_event": {
-        "event_id": "event:test:bandit_attack_rusty_flagon_quest",
+        "event_id": "event:test:bandit_attack_rusty_flagon_multi",
         "kind": "location_destroyed",
         "location_id": "loc_tavern",
         "summary": "Bandits attacked and burned the Rusty Flagon.",
@@ -837,33 +457,119 @@ Add scenario:
             }
         }
     },
+    "setup_party_state": {
+        "max_size": 2
+    },
     "turns": [
         "__apply_world_event_evolution__",
         "__ambient_tick_player_invited__",
         "Bran, come with me and help me find the bandits.",
         "Yes. Let's go.",
-        "Bran, we ask around for rumors about the bandits who burned your tavern.",
-        "Bran, what do you think we should do next?",
-        "Bran, we follow the bandit tracks into the woods.",
-        "Bran, what do you think we should do next?"
+        "__manual_offer_companion_mira__",
+        "Yes, Mira can come.",
+        "__manual_offer_companion_alric__",
+        "Yes, Alric can come.",
+        "Bran, what do you think of the group?"
     ]
 },
 
 Add to scenario choices/list:
 
-"companion_quest_hooks_personal_arc_progression",
-Patch 7 — Manual HTML panels
+"multi_companion_party_system",
+Patch 8 — Support manual test commands
+File
+
+src/tests/rpg/manual_llm_transcript.py
+
+In the manual command handling section, add support for:
+
+__manual_offer_companion_mira__
+__manual_offer_companion_alric__
+
+Add imports near the top:
+
+from app.rpg.world.companion_acceptance import record_manual_companion_join_offer_for_test_or_runtime
+
+Where special manual commands are handled, add:
+
+if command == "__manual_offer_companion_mira__":
+    sim = _extract_simulation_state(last_result) if last_result else _safe_dict(session.get("simulation_state"))
+    record_manual_companion_join_offer_for_test_or_runtime(
+        sim,
+        npc_id="npc:Mira",
+        name="Mira",
+        identity_arc="cautious_mediator",
+        current_role="Cautious mediator",
+        active_motivations=[
+            {
+                "kind": "protect_party",
+                "summary": "Keep the party from rushing into needless danger.",
+                "strength": 2,
+            }
+        ],
+        tick=tick,
+        reason="manual_test_offer_mira",
+    )
+    session["simulation_state"] = sim
+    _save_session_if_available(session)
+    result = {
+        "ok": True,
+        "result": {
+            "ok": True,
+            "manual_command": command,
+            "simulation_state": sim,
+        },
+        "simulation_state": sim,
+        "session": session,
+    }
+    # continue normal result recording
+
+And:
+
+if command == "__manual_offer_companion_alric__":
+    sim = _extract_simulation_state(last_result) if last_result else _safe_dict(session.get("simulation_state"))
+    record_manual_companion_join_offer_for_test_or_runtime(
+        sim,
+        npc_id="npc:Alric",
+        name="Alric",
+        identity_arc="lawful_guard",
+        current_role="Lawful guard",
+        active_motivations=[
+            {
+                "kind": "protect_order",
+                "summary": "Preserve order and prevent reckless violence.",
+                "strength": 2,
+            }
+        ],
+        tick=tick,
+        reason="manual_test_offer_alric",
+    )
+    session["simulation_state"] = sim
+    _save_session_if_available(session)
+    result = {
+        "ok": True,
+        "result": {
+            "ok": True,
+            "manual_command": command,
+            "simulation_state": sim,
+        },
+        "simulation_state": sim,
+        "session": session,
+    }
+    # continue normal result recording
+
+Use the actual save helper name in your file. If there is no _save_session_if_available(...), use the same session persistence pattern already used by other manual commands.
+
+Patch 9 — Manual HTML panels
 File
 
 src/tests/rpg/manual_llm_transcript.py
 
 In _render_special_panels, add:
 
-("Companion Quest Seed Result", "companion_quest_seed_result"),
-("Companion Quest Progress Result", "companion_quest_progress_result"),
-("Companion Quest Summary", "companion_quest_summary"),
+("Party Composition Effects", "party_composition_effects"),
 
-Example companion panel list:
+Example:
 
 for label, key in [
     ("Party Join Eligibility", "party_join_eligibility_result"),
@@ -882,266 +588,260 @@ for label, key in [
     ("Companion Quest Summary", "companion_quest_summary"),
     ("Companion Presence Summary", "companion_presence_summary"),
     ("Companion Presence Projection", "companion_presence_projection"),
+    ("Party Composition Effects", "party_composition_effects"),
     ("Party Aware Turn Context", "party_aware_turn_context"),
     ("Direct Companion Turn Result", "direct_companion_turn_result"),
     ("Party State", "party_state"),
     ("NPC Arc Continuity Result", "npc_arc_continuity_result"),
 ]:
 
-Ensure value extraction includes:
+Ensure value extraction checks:
 
 result.get(key)
 nested_result.get(key)
 conversation.get(key)
 npc_response.get(key)
 simulation_state.get(key)
-Patch 8 — Manual validation
+Patch 10 — Manual validation
 File
 
 src/tests/rpg/manual_llm_transcript.py
 
-Add helper:
+Add helper if missing:
 
-def _companion_quest_for(simulation_state: Dict[str, Any], quest_id: str) -> Dict[str, Any]:
-    state = _safe_dict(simulation_state.get("companion_quest_state"))
-    return _safe_dict(_safe_dict(state.get("by_quest")).get(quest_id))
+def _party_companion_ids(simulation_state: Dict[str, Any]) -> List[str]:
+    party_state = _safe_dict(_safe_dict(simulation_state.get("player_state")).get("party_state"))
+    return [
+        _safe_str(_safe_dict(companion).get("npc_id"))
+        for companion in _safe_list(party_state.get("companions"))
+        if _safe_str(_safe_dict(companion).get("npc_id"))
+    ]
 
 Add to _manual_regression_warnings(...):
 
-    if scenario_name == "companion_quest_hooks_personal_arc_progression":
+    if scenario_name == "multi_companion_party_system":
         sim = _extract_simulation_state(result)
         conversation = _extract_conversation_result(result)
-        quest = _companion_quest_for(sim, "companion_bran_revenge")
+        companion_ids = _party_companion_ids(sim)
 
-        if turn_index >= 4:
-            if not quest:
-                warnings.append("companion_quest_expected_bran_revenge_quest_seeded_after_acceptance")
-            elif _safe_str(quest.get("stage")) != "find_bandit_leads" and turn_index == 4:
-                warnings.append(
-                    f"companion_quest_expected_initial_stage_find_bandit_leads_got:{_safe_str(quest.get('stage')) or 'missing'}"
-                )
-
-        if turn_index == 5:
-            progress = _safe_dict(
-                conversation.get("companion_quest_progress_result")
-                or result.get("companion_quest_progress_result")
-                or _safe_dict(result.get("result")).get("companion_quest_progress_result")
-            )
-            if progress.get("progressed") is not True:
-                warnings.append(
-                    f"companion_quest_expected_progress_to_follow_bandit_lead_got:{_safe_str(progress.get('reason')) or 'missing'}"
-                )
-            quest = _companion_quest_for(sim, "companion_bran_revenge")
-            if _safe_str(quest.get("stage")) != "follow_bandit_lead":
-                warnings.append(
-                    f"companion_quest_expected_stage_follow_bandit_lead_got:{_safe_str(quest.get('stage')) or 'missing'}"
-                )
+        if turn_index == 4:
+            if "npc:Bran" not in companion_ids:
+                warnings.append("multi_companion_expected_bran_joined")
 
         if turn_index == 6:
-            direct = _safe_dict(
-                conversation.get("direct_companion_turn_result")
-                or result.get("direct_companion_turn_result")
-                or _safe_dict(result.get("result")).get("direct_companion_turn_result")
+            acceptance = _safe_dict(
+                conversation.get("companion_acceptance_result")
+                or result.get("companion_acceptance_result")
+                or _safe_dict(result.get("result")).get("companion_acceptance_result")
             )
-            active_quest = _safe_dict(direct.get("active_companion_quest"))
-            if _safe_str(active_quest.get("stage")) != "follow_bandit_lead":
+            if acceptance.get("accepted") is not True:
                 warnings.append(
-                    f"companion_quest_expected_direct_response_stage_follow_bandit_lead_got:{_safe_str(active_quest.get('stage')) or 'missing'}"
+                    f"multi_companion_expected_mira_accepted_got:{_safe_str(acceptance.get('reason')) or 'missing'}"
                 )
-
-        if turn_index == 7:
-            progress = _safe_dict(
-                conversation.get("companion_quest_progress_result")
-                or result.get("companion_quest_progress_result")
-                or _safe_dict(result.get("result")).get("companion_quest_progress_result")
-            )
-            if progress.get("progressed") is not True:
-                warnings.append(
-                    f"companion_quest_expected_progress_to_track_bandits_got:{_safe_str(progress.get('reason')) or 'missing'}"
-                )
-            quest = _companion_quest_for(sim, "companion_bran_revenge")
-            if _safe_str(quest.get("stage")) != "track_bandits":
-                warnings.append(
-                    f"companion_quest_expected_stage_track_bandits_got:{_safe_str(quest.get('stage')) or 'missing'}"
-                )
-
-            bran = _find_companion(sim, "npc:Bran")
-            if _safe_str(bran.get("current_role")) != "Vengeful companion tracking bandits":
-                warnings.append(
-                    f"companion_arc_expected_tracking_role_got:{_safe_str(bran.get('current_role')) or 'missing'}"
-                )
+            if "npc:Mira" not in companion_ids:
+                warnings.append("multi_companion_expected_mira_in_party")
+            if len(companion_ids) != 2:
+                warnings.append(f"multi_companion_expected_party_size_2_got:{len(companion_ids)}")
 
         if turn_index == 8:
-            direct = _safe_dict(
-                conversation.get("direct_companion_turn_result")
-                or result.get("direct_companion_turn_result")
-                or _safe_dict(result.get("result")).get("direct_companion_turn_result")
+            acceptance = _safe_dict(
+                conversation.get("companion_acceptance_result")
+                or result.get("companion_acceptance_result")
+                or _safe_dict(result.get("result")).get("companion_acceptance_result")
             )
-            active_quest = _safe_dict(direct.get("active_companion_quest"))
-            if _safe_str(active_quest.get("stage")) != "track_bandits":
+            if acceptance.get("accepted") is not False:
+                warnings.append("multi_companion_expected_alric_rejected_due_party_full")
+            if _safe_str(acceptance.get("reason")) != "party_full":
                 warnings.append(
-                    f"companion_quest_expected_direct_response_stage_track_bandits_got:{_safe_str(active_quest.get('stage')) or 'missing'}"
+                    f"multi_companion_expected_party_full_got:{_safe_str(acceptance.get('reason')) or 'missing'}"
                 )
-            npc_response = _safe_dict(
-                conversation.get("npc_response_beat")
-                or direct.get("npc_response_beat")
+            if "npc:Alric" in companion_ids:
+                warnings.append("multi_companion_alric_should_not_join_full_party")
+            if len(companion_ids) != 2:
+                warnings.append(f"multi_companion_party_size_changed_after_rejected_join:{len(companion_ids)}")
+
+        if turn_index == 9:
+            composition = _safe_dict(
+                conversation.get("party_composition_effects")
+                or result.get("party_composition_effects")
+                or _safe_dict(result.get("result")).get("party_composition_effects")
+                or sim.get("party_composition_effects")
             )
-            if _safe_str(npc_response.get("companion_quest_stage")) != "track_bandits":
-                warnings.append(
-                    f"companion_quest_expected_npc_response_stage_track_bandits_got:{_safe_str(npc_response.get('companion_quest_stage')) or 'missing'}"
-                )
-Patch 9 — Unit tests
+            effects = _safe_list(composition.get("effects"))
+            if not any(_safe_str(_safe_dict(effect).get("kind")) == "multi_companion_party_context" for effect in effects):
+                warnings.append("multi_companion_expected_party_composition_context")
+            if not any(_safe_str(_safe_dict(effect).get("kind")) == "companion_pair_tension" for effect in effects):
+                warnings.append("multi_companion_expected_bran_mira_pair_tension")
+Patch 11 — Unit tests
 New file
 
-src/app/rpg/tests/test_bundle_ax_ay_az_companion_quest_progression.py
+src/app/rpg/tests/test_bundle_ba_bb_bc_multi_companion_party.py
 
-from app.rpg.party.companion_quests import (
-    companion_quest_summary,
-    maybe_progress_companion_quest_from_player_input,
-    seed_companion_quest_from_arc,
+from app.rpg.party.party_composition import project_party_composition_effects
+from app.rpg.world.companion_acceptance import (
+    record_manual_companion_join_offer_for_test_or_runtime,
+    resolve_pending_companion_offer_response,
 )
-from app.rpg.party.companion_turns import maybe_build_direct_companion_turn_response
 
 
-def _state_with_bran_companion():
+def _base_state(max_size=2):
     return {
         "location_id": "loc_tavern",
         "player_state": {
             "location_id": "loc_tavern",
             "party_state": {
-                "max_size": 3,
-                "companions": [
-                    {
-                        "npc_id": "npc:Bran",
-                        "name": "Bran",
-                        "role": "companion",
-                        "status": "active",
-                        "follow_mode": "following_player",
-                        "location_id": "loc_tavern",
-                        "identity_arc": "revenge_after_losing_tavern",
-                        "current_role": "Displaced tavern keeper",
-                    }
-                ],
+                "max_size": max_size,
+                "companions": [],
             },
-        },
-        "npc_evolution_state": {
-            "by_npc": {
-                "npc:Bran": {
-                    "npc_id": "npc:Bran",
-                    "identity_arc": "revenge_after_losing_tavern",
-                    "current_role": "Displaced tavern keeper",
-                }
-            }
         },
     }
 
 
-def test_seed_bran_revenge_quest_from_arc():
-    state = _state_with_bran_companion()
+def _companion_ids(state):
+    return [
+        companion["npc_id"]
+        for companion in state["player_state"]["party_state"]["companions"]
+    ]
 
-    result = seed_companion_quest_from_arc(
+
+def test_multiple_pending_offers_require_specific_acceptance():
+    state = _base_state(max_size=3)
+
+    record_manual_companion_join_offer_for_test_or_runtime(
         state,
         npc_id="npc:Bran",
+        name="Bran",
+        identity_arc="revenge_after_losing_tavern",
+        current_role="Displaced tavern keeper",
         tick=1,
     )
-
-    assert result["seeded"] is True
-    quest = result["quest"]
-    assert quest["quest_id"] == "companion_bran_revenge"
-    assert quest["stage"] == "find_bandit_leads"
-    assert quest["source_arc"] == "revenge_after_losing_tavern"
-
-
-def test_progress_to_follow_bandit_lead_from_rumor_search():
-    state = _state_with_bran_companion()
-    seed_companion_quest_from_arc(state, npc_id="npc:Bran", tick=1)
-
-    result = maybe_progress_companion_quest_from_player_input(
+    record_manual_companion_join_offer_for_test_or_runtime(
         state,
-        player_input="Bran, we ask around for rumors about the bandits who burned your tavern.",
+        npc_id="npc:Mira",
+        name="Mira",
+        identity_arc="cautious_mediator",
+        current_role="Cautious mediator",
         tick=2,
     )
 
-    assert result["progressed"] is True
-    progress = result["progress"]
-    assert progress["quest"]["stage"] == "follow_bandit_lead"
-
-    quest = state["companion_quest_state"]["by_quest"]["companion_bran_revenge"]
-    assert quest["stage"] == "follow_bandit_lead"
-
-
-def test_progress_to_track_bandits_from_tracks():
-    state = _state_with_bran_companion()
-    seed_companion_quest_from_arc(state, npc_id="npc:Bran", tick=1)
-    maybe_progress_companion_quest_from_player_input(
+    result = resolve_pending_companion_offer_response(
         state,
-        player_input="Bran, we ask around for rumors about the bandits who burned your tavern.",
-        tick=2,
-    )
-
-    result = maybe_progress_companion_quest_from_player_input(
-        state,
-        player_input="Bran, we follow the bandit tracks into the woods.",
+        player_input="Yes. Let's go.",
         tick=3,
     )
 
-    assert result["progressed"] is True
-    assert result["progress"]["quest"]["stage"] == "track_bandits"
-
-    bran = state["player_state"]["party_state"]["companions"][0]
-    assert bran["arc_stage"] == "track_bandits"
-    assert bran["current_role"] == "Vengeful companion tracking bandits"
+    assert result["resolved"] is False
+    assert result["reason"] == "multiple_pending_offers_require_specific_npc"
+    assert _companion_ids(state) == []
 
 
-def test_prevent_skipping_companion_quest_stage():
-    state = _state_with_bran_companion()
-    seed_companion_quest_from_arc(state, npc_id="npc:Bran", tick=1)
+def test_specific_acceptance_accepts_only_named_companion():
+    state = _base_state(max_size=3)
 
-    result = maybe_progress_companion_quest_from_player_input(
+    record_manual_companion_join_offer_for_test_or_runtime(
         state,
-        player_input="Bran, we follow the bandit tracks into the woods.",
+        npc_id="npc:Bran",
+        name="Bran",
+        identity_arc="revenge_after_losing_tavern",
+        current_role="Displaced tavern keeper",
+        tick=1,
+    )
+    record_manual_companion_join_offer_for_test_or_runtime(
+        state,
+        npc_id="npc:Mira",
+        name="Mira",
+        identity_arc="cautious_mediator",
+        current_role="Cautious mediator",
         tick=2,
     )
 
-    assert result["progressed"] is False
-    assert result["progress"]["reason"] == "quest_stage_skip_blocked"
-
-
-def test_direct_companion_response_uses_quest_stage():
-    state = _state_with_bran_companion()
-    seed_companion_quest_from_arc(state, npc_id="npc:Bran", tick=1)
-    maybe_progress_companion_quest_from_player_input(
+    result = resolve_pending_companion_offer_response(
         state,
-        player_input="Bran, we ask around for rumors about the bandits who burned your tavern.",
-        tick=2,
-    )
-
-    response = maybe_build_direct_companion_turn_response(
-        state,
-        player_input="Bran, what do you think we should do next?",
+        player_input="Yes, Mira can come.",
         tick=3,
     )
 
-    assert response["matched"] is True
-    assert response["active_companion_quest"]["stage"] == "follow_bandit_lead"
-    assert response["npc_response_beat"]["companion_quest_stage"] == "follow_bandit_lead"
-    assert "rumors" in response["line"].lower() or "lead" in response["line"].lower()
+    assert result["resolved"] is True
+    assert result["accepted"] is True
+    assert result["npc_id"] == "npc:Mira"
+    assert _companion_ids(state) == ["npc:Mira"]
+
+    pending = state["conversation_thread_state"]["pending_companion_offers"]
+    assert "npc:Bran" in pending
+    assert "npc:Mira" not in pending
 
 
-def test_companion_quest_summary_for_bran():
-    state = _state_with_bran_companion()
-    seed_companion_quest_from_arc(state, npc_id="npc:Bran", tick=1)
+def test_party_limit_rejects_new_companion_when_full():
+    state = _base_state(max_size=1)
 
-    summary = companion_quest_summary(state, npc_id="npc:Bran")
+    record_manual_companion_join_offer_for_test_or_runtime(
+        state,
+        npc_id="npc:Bran",
+        name="Bran",
+        identity_arc="revenge_after_losing_tavern",
+        current_role="Displaced tavern keeper",
+        tick=1,
+    )
+    accepted = resolve_pending_companion_offer_response(
+        state,
+        player_input="Yes, Bran can come.",
+        tick=2,
+    )
+    assert accepted["accepted"] is True
 
-    assert summary["npc_id"] == "npc:Bran"
-    assert summary["quests"][0]["quest_id"] == "companion_bran_revenge"
-    assert summary["events"][0]["kind"] == "companion_quest_seeded"
+    record_manual_companion_join_offer_for_test_or_runtime(
+        state,
+        npc_id="npc:Mira",
+        name="Mira",
+        identity_arc="cautious_mediator",
+        current_role="Cautious mediator",
+        tick=3,
+    )
+    rejected = resolve_pending_companion_offer_response(
+        state,
+        player_input="Yes, Mira can come.",
+        tick=4,
+    )
+
+    assert rejected["resolved"] is True
+    assert rejected["accepted"] is False
+    assert rejected["reason"] == "party_full"
+    assert _companion_ids(state) == ["npc:Bran"]
+
+
+def test_party_composition_projects_bran_mira_tension():
+    state = _base_state(max_size=3)
+    state["player_state"]["party_state"]["companions"] = [
+        {
+            "npc_id": "npc:Bran",
+            "name": "Bran",
+            "role": "companion",
+            "status": "active",
+            "identity_arc": "revenge_after_losing_tavern",
+            "current_role": "Vengeful companion tracking bandits",
+        },
+        {
+            "npc_id": "npc:Mira",
+            "name": "Mira",
+            "role": "companion",
+            "status": "active",
+            "identity_arc": "cautious_mediator",
+            "current_role": "Cautious mediator",
+        },
+    ]
+
+    result = project_party_composition_effects(state)
+
+    assert result["projected"] is True
+    assert result["active_companion_count"] == 2
+    kinds = {effect["kind"] for effect in result["effects"]}
+    assert "companion_pair_tension" in kinds
+    assert "multi_companion_party_context" in kinds
 
 Run:
 
-pytest src/app/rpg/tests/test_bundle_ax_ay_az_companion_quest_progression.py -q
+pytest src/app/rpg/tests/test_bundle_ba_bb_bc_multi_companion_party.py -q
 
 Expected:
 
-6 passed
+4 passed

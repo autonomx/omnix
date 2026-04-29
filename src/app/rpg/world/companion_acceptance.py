@@ -280,7 +280,11 @@ def resolve_companion_acceptance(
             "source": "deterministic_companion_acceptance",
         }
 
-    eligibility = evaluate_npc_party_join_eligibility(simulation_state, npc_id=npc_id)
+    stored_eligibility = _safe_dict(offer.get("party_join_eligibility_result"))
+    if stored_eligibility.get("eligible") is True:
+        eligibility = stored_eligibility
+    else:
+        eligibility = evaluate_npc_party_join_eligibility(simulation_state, npc_id=npc_id)
     if not eligibility.get("eligible"):
         pending.pop(npc_id, None)
         entry = {
@@ -325,15 +329,53 @@ def resolve_companion_acceptance(
         active_motivations=deepcopy(_safe_list(eligibility.get("active_motivations"))),
     )
 
-    after_count = len(_safe_list(_safe_dict(player_state.get("party_state")).get("companions")))
     simulation_state["player_state"] = player_state
 
-    pending.pop(npc_id, None)
+    party_state_after = _safe_dict(player_state.get("party_state"))
+    add_result = _safe_dict(party_state_after.get("last_add_companion_result"))
+    after_companions = _safe_list(party_state_after.get("companions"))
+    after_count = len(after_companions)
 
-    accepted = after_count > before_count or any(
-        _safe_dict(comp).get("npc_id") == npc_id
-        for comp in _safe_list(_safe_dict(player_state.get("party_state")).get("companions"))
+    accepted = (
+        add_result.get("added") is True
+        or (
+            after_count > before_count
+            and any(_safe_dict(comp).get("npc_id") == npc_id for comp in after_companions)
+        )
     )
+
+    if not accepted and _safe_str(add_result.get("reason")) == "party_full":
+        pending.pop(npc_id, None)
+        entry = {
+            "offer_id": _safe_str(offer.get("offer_id")),
+            "npc_id": npc_id,
+            "status": "rejected_party_full",
+            "resolved_tick": int(tick or 0),
+            "party_size_before": before_count,
+            "party_size_after": after_count,
+            "reason": "party_full",
+            "source": "deterministic_companion_acceptance",
+        }
+        history.append(entry)
+
+        state["pending_offers"] = pending
+        state["history"] = history[-MAX_ACCEPTANCE_HISTORY:]
+        state["debug"] = deepcopy(entry)
+        _mirror_pending_offers_to_conversation_state(simulation_state)
+
+        return {
+            "resolved": True,
+            "accepted": False,
+            "rejected": False,
+            "npc_id": npc_id,
+            "reason": "party_full",
+            "offer": deepcopy(offer),
+            "party_join_eligibility_result": deepcopy(eligibility),
+            "party_state": deepcopy(player_state.get("party_state")),
+            "source": "deterministic_companion_acceptance",
+        }
+
+    pending.pop(npc_id, None)
 
     entry = {
         "offer_id": _safe_str(offer.get("offer_id")),
@@ -414,25 +456,51 @@ def resolve_pending_companion_offer_response(
 
     normalized_input = _safe_str(player_input).lower()
 
-    # Deterministic candidate selection:
-    # 1. Prefer a pending NPC whose display/name token appears in player input.
-    # 2. If exactly one pending offer exists, resolve it.
-    # 3. Otherwise choose oldest created_tick, then npc_id for deterministic safety.
+    # Deterministic candidate selection with explicit NPC identification support.
     candidates = []
     for npc_id, offer in pending.items():
         offer = _safe_dict(offer)
+        eligibility = _safe_dict(offer.get("party_join_eligibility_result"))
         candidate_name = _safe_str(
             offer.get("name")
-            or _safe_dict(offer.get("party_join_eligibility_result")).get("name")
+            or eligibility.get("name")
             or _safe_str(npc_id).replace("npc:", "")
-        ).lower()
-        mentioned = bool(candidate_name and candidate_name in normalized_input)
+        )
+
+        name_token = candidate_name.lower()
+        id_token = _safe_str(npc_id).lower()
+        short_id_token = _safe_str(npc_id).replace("npc:", "").lower()
+
+        mentioned = any(
+            token and token in normalized_input
+            for token in {name_token, id_token, short_id_token}
+        )
+
         candidates.append((
             0 if mentioned else 1,
             int(offer.get("created_tick") or 0),
             _safe_str(npc_id),
+            bool(mentioned),
         ))
 
+    mentioned_candidates = [candidate for candidate in candidates if candidate[3]]
+
+    if len(pending) > 1 and not mentioned_candidates:
+        return {
+            "resolved": False,
+            "accepted": False,
+            "rejected": False,
+            "reason": "multiple_pending_offers_require_specific_npc",
+            "pending_offer_count": len(pending),
+            "pending_npc_ids": sorted(_safe_str(key) for key in pending.keys()),
+            "debug": get_pending_companion_offer_debug(
+                simulation_state,
+                player_input=player_input,
+            ),
+            "source": "deterministic_companion_acceptance",
+        }
+
+    candidates = mentioned_candidates or candidates
     candidates.sort()
     selected_npc_id = candidates[0][2] if candidates else ""
     if not selected_npc_id:
@@ -457,3 +525,40 @@ def resolve_pending_companion_offer_response(
     result["resolved_from_pending_offer_response"] = True
     result["pending_offer_count_before_resolution"] = len(pending)
     return result
+
+
+def record_manual_companion_join_offer_for_test_or_runtime(
+    simulation_state: Dict[str, Any],
+    *,
+    npc_id: str,
+    name: str,
+    identity_arc: str = "",
+    current_role: str = "",
+    active_motivations: List[Dict[str, Any]] | None = None,
+    tick: int = 0,
+    reason: str = "manual_companion_offer",
+) -> Dict[str, Any]:
+    join_intent = {
+        "offered": True,
+        "requested": True,
+        "npc_id": _safe_str(npc_id),
+        "reason": _safe_str(reason),
+        "requires_player_acceptance": True,
+        "party_join_eligibility_result": {
+            "eligible": True,
+            "npc_id": _safe_str(npc_id),
+            "name": _safe_str(name),
+            "identity_arc": _safe_str(identity_arc),
+            "current_role": _safe_str(current_role),
+            "active_motivations": deepcopy(_safe_list(active_motivations)),
+            "source": "deterministic_companion_acceptance",
+        },
+        "source": "deterministic_companion_acceptance",
+    }
+
+    return record_companion_join_offer(
+        simulation_state,
+        npc_id=_safe_str(npc_id),
+        join_intent=join_intent,
+        tick=tick,
+    )

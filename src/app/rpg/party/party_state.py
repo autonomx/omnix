@@ -140,8 +140,20 @@ def add_companion(
     if any(c.get("npc_id") == npc_id for c in companions):
         return player_state
 
-    # Check capacity
-    if len(companions) >= int(party.get("max_size", 3)):
+    max_size = _safe_int(party.get("max_size"), 3)
+    if max_size < 1:
+        max_size = 1
+
+    if len(companions) >= max_size:
+        party["last_add_companion_result"] = {
+            "added": False,
+            "npc_id": npc_id,
+            "reason": "party_full",
+            "party_size": len(companions),
+            "max_size": max_size,
+            "source": "deterministic_party_state",
+        }
+        player_state["party_state"] = party
         return player_state
 
     companions.append(_normalize_companion({
@@ -165,6 +177,14 @@ def add_companion(
     companions = sorted(companions, key=lambda c: str(c.get("npc_id")))
 
     party["companions"] = companions
+    party["last_add_companion_result"] = {
+        "added": True,
+        "npc_id": npc_id,
+        "reason": "companion_added",
+        "party_size": len(companions),
+        "max_size": max_size,
+        "source": "deterministic_party_state",
+    }
     player_state["party_state"] = party
     return player_state
 

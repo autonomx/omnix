@@ -1155,6 +1155,7 @@ def _render_special_panels(result: Dict[str, Any], *, prefix: str) -> str:
         ("Companion Quest Summary", "companion_quest_summary"),
         ("Companion Presence Summary", "companion_presence_summary"),
         ("Companion Presence Projection", "companion_presence_projection"),
+        ("Party Composition Effects", "party_composition_effects"),
         ("Party Aware Turn Context", "party_aware_turn_context"),
         ("Direct Companion Turn Result", "direct_companion_turn_result"),
         ("Party State", "party_state"),
@@ -3933,6 +3934,61 @@ SERVICE_SCENARIOS = {
             "Bran, what do you think we should do next?",
         ],
     },
+    "multi_companion_party_system": {
+        "currency": {"gold": 0, "silver": 0, "copper": 0},
+        "conversation_settings": {
+            "enabled": True,
+            "autonomous_ticks_enabled": True,
+            "frequency": "always",
+            "conversation_chance_percent": 100,
+            "allow_player_invited": True,
+            "player_inclusion_chance_percent": 100,
+            "npc_file_profiles_enabled": True,
+            "npc_evolution_enabled": True,
+            "npc_party_eligibility_enabled": True,
+            "companion_join_intent_enabled": True,
+            "companion_acceptance_enabled": True,
+            "companion_dialogue_enabled": True,
+            "npc_arc_continuity_enabled": True,
+            "min_ticks_between_conversations": 0,
+            "thread_cooldown_ticks": 0,
+        },
+        "setup_world_event": {
+            "event_id": "event:test:bandit_attack_rusty_flagon_multi",
+            "kind": "location_destroyed",
+            "location_id": "loc_tavern",
+            "summary": "Bandits attacked and burned the Rusty Flagon.",
+            "affected_npcs": ["npc:Bran"],
+        },
+        "setup_npc_reputation_state": {
+            "by_npc": {
+                "npc:Bran": {
+                    "npc_id": "npc:Bran",
+                    "familiarity": 3,
+                    "trust": 2,
+                    "annoyance": 0,
+                    "fear": 0,
+                    "respect": 2,
+                    "last_updated_tick": 1,
+                    "source": "deterministic_npc_reputation_runtime",
+                }
+            }
+        },
+        "setup_party_state": {
+            "max_size": 2,
+        },
+        "turns": [
+            "__apply_world_event_evolution__",
+            "__ambient_tick_player_invited__",
+            "Bran, come with me and help me find the bandits.",
+            "Yes. Let's go.",
+            "__manual_offer_companion_mira__",
+            "Yes, Mira can come.",
+            "__manual_offer_companion_alric__",
+            "Yes, Alric can come.",
+            "Bran, what do you think of the group?",
+        ],
+    },
 }
 
 
@@ -3983,6 +4039,7 @@ CONVERSATION_EXPECTED_SCENARIOS = {
     "companion_commands_roles_boundaries",
     "companion_memory_personality_loyalty",
     "companion_quest_hooks_personal_arc_progression",
+    "multi_companion_party_system",
 }
 
 
@@ -4016,6 +4073,15 @@ def _safe_int(value: Any, default: int = 0) -> int:
         return int(value)
     except Exception:
         return default
+
+
+def _party_companion_ids(simulation_state: Dict[str, Any]) -> List[str]:
+    party_state = _safe_dict(_safe_dict(simulation_state.get("player_state")).get("party_state"))
+    return [
+        _safe_str(_safe_dict(companion).get("npc_id"))
+        for companion in _safe_list(party_state.get("companions"))
+        if _safe_str(_safe_dict(companion).get("npc_id"))
+    ]
 
 
 def _find_companion_by_npc_id(simulation_state: Dict[str, Any], npc_id: str) -> Dict[str, Any]:
@@ -6532,6 +6598,60 @@ def _manual_regression_warnings(
                     f"companion_quest_expected_npc_response_stage_track_bandits_got:{_safe_str(npc_response.get('companion_quest_stage')) or 'missing'}"
                 )
 
+    if scenario_name == "multi_companion_party_system":
+        sim = _extract_simulation_state(result)
+        conversation = _extract_conversation_result(result)
+        companion_ids = _party_companion_ids(sim)
+
+        if turn_index == 4:
+            if "npc:Bran" not in companion_ids:
+                warnings.append("multi_companion_expected_bran_joined")
+
+        if turn_index == 6:
+            acceptance = _safe_dict(
+                conversation.get("companion_acceptance_result")
+                or result.get("companion_acceptance_result")
+                or _safe_dict(result.get("result")).get("companion_acceptance_result")
+            )
+            if acceptance.get("accepted") is not True:
+                warnings.append(
+                    f"multi_companion_expected_mira_accepted_got:{_safe_str(acceptance.get('reason')) or 'missing'}"
+                )
+            if "npc:Mira" not in companion_ids:
+                warnings.append("multi_companion_expected_mira_in_party")
+            if len(companion_ids) != 2:
+                warnings.append(f"multi_companion_expected_party_size_2_got:{len(companion_ids)}")
+
+        if turn_index == 8:
+            acceptance = _safe_dict(
+                conversation.get("companion_acceptance_result")
+                or result.get("companion_acceptance_result")
+                or _safe_dict(result.get("result")).get("companion_acceptance_result")
+            )
+            if acceptance.get("accepted") is not False:
+                warnings.append("multi_companion_expected_alric_rejected_due_party_full")
+            if _safe_str(acceptance.get("reason")) != "party_full":
+                warnings.append(
+                    f"multi_companion_expected_party_full_got:{_safe_str(acceptance.get('reason')) or 'missing'}"
+                )
+            if "npc:Alric" in companion_ids:
+                warnings.append("multi_companion_alric_should_not_join_full_party")
+            if len(companion_ids) != 2:
+                warnings.append(f"multi_companion_party_size_changed_after_rejected_join:{len(companion_ids)}")
+
+        if turn_index == 9:
+            composition = _safe_dict(
+                conversation.get("party_composition_effects")
+                or result.get("party_composition_effects")
+                or _safe_dict(result.get("result")).get("party_composition_effects")
+                or sim.get("party_composition_effects")
+            )
+            effects = _safe_list(composition.get("effects"))
+            if not any(_safe_str(_safe_dict(effect).get("kind")) == "multi_companion_party_context" for effect in effects):
+                warnings.append("multi_companion_expected_party_composition_context")
+            if not any(_safe_str(_safe_dict(effect).get("kind")) == "companion_pair_tension" for effect in effects):
+                warnings.append("multi_companion_expected_bran_mira_pair_tension")
+
     return warnings
 
 
@@ -6627,6 +6747,17 @@ def _apply_manual_scenario_setup(session_id: str, scenario: Dict[str, Any]) -> b
     setup_npc_evolution_state = _safe_dict(scenario.get("setup_npc_evolution_state"))
     if setup_npc_evolution_state:
         simulation_state["npc_evolution_state"] = deepcopy(setup_npc_evolution_state)
+
+    setup_party_state = _safe_dict(scenario.get("setup_party_state"))
+    if setup_party_state:
+        player_state = _safe_dict(simulation_state.get("player_state"))
+        if not player_state:
+            player_state = {}
+            simulation_state["player_state"] = player_state
+        current_party = _safe_dict(player_state.get("party_state"))
+        current_party.update(setup_party_state)
+        player_state["party_state"] = current_party
+        simulation_state["player_state"] = player_state
 
     runtime_state["runtime_settings"] = runtime_settings
     session["runtime_state"] = runtime_state
@@ -7534,6 +7665,61 @@ def _run_one_service_scenario(
             if command_sim:
                 _sync_manual_simulation_state(session, command_sim)
                 _save_manual_session_for_test(session, reason="manual command carry-forward")
+        elif _safe_str(player_input) in {"__manual_offer_companion_mira__", "__manual_offer_companion_alric__"}:
+            from app.rpg.world.companion_acceptance import record_manual_companion_join_offer_for_test_or_runtime
+
+            command = _safe_str(player_input)
+            sim = _extract_simulation_state(last_result) if last_result else _safe_dict(session.get("simulation_state"))
+            if not sim:
+                sim = _ensure_manual_simulation_roots(session)
+
+            if command == "__manual_offer_companion_mira__":
+                record_manual_companion_join_offer_for_test_or_runtime(
+                    sim,
+                    npc_id="npc:Mira",
+                    name="Mira",
+                    identity_arc="cautious_mediator",
+                    current_role="Cautious mediator",
+                    active_motivations=[
+                        {
+                            "kind": "protect_party",
+                            "summary": "Keep the party from rushing into needless danger.",
+                            "strength": 2,
+                        }
+                    ],
+                    tick=manual_turn_index,
+                    reason="manual_test_offer_mira",
+                )
+            elif command == "__manual_offer_companion_alric__":
+                record_manual_companion_join_offer_for_test_or_runtime(
+                    sim,
+                    npc_id="npc:Alric",
+                    name="Alric",
+                    identity_arc="lawful_guard",
+                    current_role="Lawful guard",
+                    active_motivations=[
+                        {
+                            "kind": "protect_order",
+                            "summary": "Preserve order and prevent reckless violence.",
+                            "strength": 2,
+                        }
+                    ],
+                    tick=manual_turn_index,
+                    reason="manual_test_offer_alric",
+                )
+
+            _sync_manual_simulation_state(session, sim)
+            _save_manual_session_for_test(session, reason="manual companion offer carry-forward")
+            result = {
+                "ok": True,
+                "result": {
+                    "ok": True,
+                    "manual_command": command,
+                    "simulation_state": sim,
+                },
+                "simulation_state": sim,
+                "session": session,
+            }
         else:
             result = apply_turn(session_id=session_id, player_input=player_input)
         extracted_location_id = _extract_current_location_id(result)
