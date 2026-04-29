@@ -5,6 +5,7 @@ from typing import Any, Dict
 
 from app.rpg.interactions.container_runtime import apply_container_interaction
 from app.rpg.interactions.consumable_runtime import apply_consumable_interaction
+from app.rpg.interactions.crafting_runtime import apply_crafting_interaction
 from app.rpg.interactions.equipment_runtime import project_equipment_stats
 from app.rpg.interactions.inventory_runtime import apply_inventory_interaction
 from app.rpg.interactions.repair_runtime import apply_repair_interaction
@@ -90,6 +91,29 @@ def resolve_general_interaction(
             "handled": False,
             "semantic_action_v2": deepcopy(action),
             "interaction_result": _build_unresolved_result(action, _safe_str(action.get("reason"))),
+            "source": "deterministic_general_interaction_runtime",
+        }
+
+    if kind == "craft":
+        enriched_action = deepcopy(action)
+        crafting_result = apply_crafting_interaction(
+            simulation_state,
+            semantic_action_v2=enriched_action,
+            tick=tick,
+        )
+        interaction_result = {
+            "resolved": bool(crafting_result.get("resolved")),
+            "changed_state": bool(crafting_result.get("changed_state")),
+            "reason": _safe_str(crafting_result.get("reason")),
+            "semantic_action_v2": deepcopy(enriched_action),
+            "crafting_result": deepcopy(crafting_result),
+            "source": "deterministic_general_interaction_runtime",
+        }
+        return {
+            "handled": bool(interaction_result.get("resolved")),
+            "semantic_action_v2": deepcopy(enriched_action),
+            "interaction_result": deepcopy(interaction_result),
+            "crafting_result": deepcopy(crafting_result),
             "source": "deterministic_general_interaction_runtime",
         }
 

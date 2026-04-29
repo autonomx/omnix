@@ -1181,6 +1181,7 @@ def _render_special_panels(result: Dict[str, Any], *, prefix: str) -> str:
         ("Container Result", "container_result"),
         ("Repair Result", "repair_result"),
         ("Consumable Result", "consumable_result"),
+        ("Crafting Result", "crafting_result"),
         ("Ammo Result", "ammo_result"),
         ("Equipment Stats", "equipment_stats"),
     ]:
@@ -1216,16 +1217,18 @@ def _render_player_ai_conversation(turns: List[Dict[str, Any]]) -> str:
             </div>
             """
 
+        narration_text = _patch_visible_interaction_reason_in_text(narration_text, result)
+
+        if not _safe_str(narration_text).strip():
+            visible_reason = _extract_visible_interaction_reason(result)
+            if visible_reason:
+                narration_text = f"Result: {visible_reason}"
+
         if not narration_text and not npc_lines:
             narration_text = "[no AI/narration text found for this turn]"
 
-    if not _safe_str(narration_text).strip():
-        visible_reason = _extract_visible_interaction_reason(result)
-        if visible_reason:
-            narration_text = f"Result: {visible_reason}"
-
-    rendered_turns.append(
-    f"""
+        rendered_turns.append(
+        f"""
             <div class="chat-turn" id="conversation-turn-{idx}">
               <div class="chat-turn-header">
                 <span>Turn {idx}</span>
@@ -1445,6 +1448,17 @@ def _write_scenario_html_v2(
 </body>
 </html>
 """
+
+    if scenario_name == "inventory_consumables_ammo_equipment_stats":
+        expected = "Result: ammo_consumed"
+        if expected not in html_text:
+            scenario_summary.setdefault("scenario_warnings", []).append(
+                f"manual_ammo_command_html_expected_missing:{expected}"
+            )
+        if '<div class="chat-bubble ai"></div>' in html_text or '<p class="ai">AI: </p>' in html_text:
+            scenario_summary.setdefault("scenario_warnings", []).append(
+                "manual_ammo_command_html_empty_ai_text"
+            )
 
     if scenario_name == "inventory_containers_durability_repair":
         stale_markers = [
@@ -4464,6 +4478,58 @@ SERVICE_SCENARIOS = {
             "__manual_consume_equipped_ammo__"
         ]
     },
+    "inventory_crafting_recipes_materials": {
+        "currency": {"gold": 0, "silver": 0, "copper": 0},
+        "conversation_settings": {
+            "enabled": True,
+            "autonomous_ticks_enabled": False,
+            "frequency": "never",
+            "conversation_chance_percent": 0,
+            "allow_player_invited": False,
+            "player_inclusion_chance_percent": 0,
+            "npc_file_profiles_enabled": True,
+            "npc_evolution_enabled": True,
+            "min_ticks_between_conversations": 0,
+            "thread_cooldown_ticks": 0
+        },
+        "setup_interaction_state": {
+            "scene_items": [],
+            "scene_objects": [],
+            "player_location_id": "loc_tavern_road",
+            "player_inventory": {
+                "items": [
+                    {
+                        "item_id": "item:wooden_sticks",
+                        "definition_id": "def:wooden_stick",
+                        "name": "wooden sticks",
+                        "aliases": ["stick", "sticks"],
+                        "quantity": 3
+                    },
+                    {
+                        "item_id": "item:cloth_scraps",
+                        "definition_id": "def:cloth_scrap",
+                        "name": "cloth scraps",
+                        "aliases": ["cloth scrap", "scraps"],
+                        "quantity": 3
+                    },
+                    {
+                        "item_id": "item:oil_flasks",
+                        "definition_id": "def:oil_flask",
+                        "name": "oil flasks",
+                        "aliases": ["oil", "flask of oil"],
+                        "quantity": 2
+                    }
+                ],
+                "equipment": {},
+                "carry_capacity": 50.0
+            }
+        },
+        "turns": [
+            "I craft a torch.",
+            "I craft iron arrows.",
+            "I craft a torch."
+        ]
+    },
 }
 
 
@@ -5779,6 +5845,10 @@ def _inventory_item_by_definition(simulation_state: Dict[str, Any], definition_i
     return {}
 
 
+def _player_inventory_item_by_definition(simulation_state: Dict[str, Any], definition_id: str) -> Dict[str, Any]:
+    return _inventory_item_by_definition(simulation_state, definition_id)
+
+
 def _player_inventory_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
     return _safe_dict(_safe_dict(simulation_state.get("player_state")).get("inventory"))
 
@@ -6576,6 +6646,61 @@ def _manual_regression_warnings(
                 warnings.append(
                     f"ammo_consume_expected_inventory_arrows_14_got:{int(arrows.get('quantity') or 0)}"
                 )
+
+    if scenario_name == "inventory_crafting_recipes_materials":
+        sim = _extract_simulation_state(result)
+        interaction = _extract_interaction_result(result)
+        crafting = _safe_dict(
+            interaction.get("crafting_result")
+            or result.get("crafting_result")
+            or _safe_dict(result.get("result")).get("crafting_result")
+        )
+
+        if turn_index == 1:
+            if crafting.get("resolved") is not True:
+                warnings.append(
+                    f"crafting_torch_expected_resolved_true_got:{_safe_str(crafting.get('reason')) or 'missing'}"
+                )
+            if _safe_str(crafting.get("reason")) != "recipe_crafted":
+                warnings.append(
+                    f"crafting_torch_expected_recipe_crafted_got:{_safe_str(crafting.get('reason')) or 'missing'}"
+                )
+            torch = _player_inventory_item_by_definition(sim, "def:torch")
+            if int(torch.get("quantity") or 0) != 1:
+                warnings.append(
+                    f"crafting_torch_expected_torch_quantity_1_got:{int(torch.get('quantity') or 0)}"
+                )
+
+        if turn_index == 2:
+            if crafting.get("resolved") is not True:
+                warnings.append(
+                    f"crafting_arrows_expected_resolved_true_got:{_safe_str(crafting.get('reason')) or 'missing'}"
+                )
+            arrows = _player_inventory_item_by_definition(sim, "def:iron_arrow")
+            if int(arrows.get("quantity") or 0) != 5:
+                warnings.append(
+                    f"crafting_arrows_expected_arrow_quantity_5_got:{int(arrows.get('quantity') or 0)}"
+                )
+
+        if turn_index == 3:
+            if crafting.get("resolved") is not False:
+                warnings.append("crafting_missing_materials_expected_resolved_false")
+            if _safe_str(crafting.get("reason")) != "missing_crafting_materials":
+                warnings.append(
+                    f"crafting_missing_materials_expected_missing_crafting_materials_got:{_safe_str(crafting.get('reason')) or 'missing'}"
+                )
+
+        expected_visible_by_turn = {
+            1: "recipe_crafted",
+            2: "recipe_crafted",
+            3: "missing_crafting_materials",
+        }
+        expected_visible = expected_visible_by_turn.get(turn_index)
+        visible_reason = _extract_visible_interaction_reason(result)
+        if expected_visible and visible_reason != expected_visible:
+            warnings.append(
+                f"crafting_visible_expected_{expected_visible}_got:{visible_reason or 'missing'}"
+            )
 
     conversation = _extract_conversation_result(result)
     simulation_state = _extract_simulation_state(result)
@@ -9410,11 +9535,18 @@ def _run_one_service_scenario(
             session["simulation_state"] = sim
             _sync_manual_simulation_state(session, sim)
             _save_manual_session_for_test(session, reason="manual consume ammo carry-forward")
+            visible_reason = "ammo_consumed" if ammo_result.get("consumed") is True else _safe_str(ammo_result.get("reason") or "ammo_not_consumed")
             result = {
                 "ok": True,
+                "visible_interaction_reason": visible_reason,
+                "narration_preview": f"Result: {visible_reason}",
+                "final_narration": f"Result: {visible_reason}",
                 "result": {
                     "ok": True,
                     "manual_command": command,
+                    "visible_interaction_reason": visible_reason,
+                    "narration_preview": f"Result: {visible_reason}",
+                    "final_narration": f"Result: {visible_reason}",
                     "ammo_result": ammo_result,
                     "equipment_stats": equipment_stats,
                     "simulation_state": sim,

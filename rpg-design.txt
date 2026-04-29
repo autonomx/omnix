@@ -1,276 +1,200 @@
-Bundle I10-I11-I12 — Consumables, Ammo, and Equipment Stats v1
+Bundle I13-I14-I15 — Crafting, Recipes, and Material Consumption v1
 
 Goal:
 
-I10 — Consumable items can apply bounded deterministic effects and decrement quantity.
-I11 — Ammo items can be selected/equipped and consumed by a deterministic ammo runtime hook.
-I12 — Equipped items project combat-ready equipment stats.
+I13 — Add deterministic recipe definitions.
+I14 — Resolve craft actions from player text.
+I15 — Consume required materials/tools and create output items.
+Cleanup — manual command turns like __manual_consume_equipped_ammo__ show visible AI/result text.
 
-This bundle should not implement full combat yet. It only prepares inventory state for combat.
+This should not add merchants/loot tables yet.
 
 Expected behavior
-Consumable
 
 Input:
 
-I drink the minor healing potion.
+I craft a torch.
 
-Expected:
-
-{
-  "consumable_result": {
-    "resolved": true,
-    "changed_state": true,
-    "reason": "consumable_used",
-    "item_id": "item:minor_healing_potion",
-    "effect": {
-      "kind": "heal",
-      "amount": 5
-    },
-    "quantity_before": 2,
-    "quantity_after": 1
-  }
-}
-
-Player health changes deterministically:
+Given inventory:
 
 {
-  "player_state": {
-    "hp": 15,
-    "max_hp": 20
-  }
+  "items": [
+    {"definition_id": "def:wooden_stick", "quantity": 1},
+    {"definition_id": "def:cloth_scrap", "quantity": 1},
+    {"definition_id": "def:oil_flask", "quantity": 1}
+  ]
 }
-
-after using a potion at hp=10.
-
-Ammo selection
-
-Input:
-
-I equip the iron arrows as ammo.
-
-Expected:
-
-{
-  "inventory_result": {
-    "resolved": true,
-    "changed_state": true,
-    "reason": "ammo_equipped",
-    "slot": "ammo",
-    "item_id": "item:iron_arrow_stack_a"
-  }
-}
-
-Equipment becomes:
-
-{
-  "equipment": {
-    "ammo": "item:iron_arrow_stack_a"
-  }
-}
-Ammo consumption hook
-
-A runtime function should support later combat:
-
-consume_equipped_ammo(simulation_state, actor_id="player", quantity=1)
 
 Expected result:
 
 {
-  "consumed": true,
-  "ammo_item_id": "item:iron_arrow_stack_a",
-  "quantity_before": 15,
-  "quantity_after": 14
-}
-Equipment stats
-
-Equipped items project stats:
-
-{
-  "equipment_stats": {
-    "damage_min": 1,
-    "damage_max": 4,
-    "armor": 1,
-    "accuracy_bonus": 1,
-    "encumbrance_penalty": 0
+  "crafting_result": {
+    "resolved": true,
+    "changed_state": true,
+    "reason": "recipe_crafted",
+    "recipe_id": "recipe:torch",
+    "materials_consumed": [
+      {"definition_id": "def:wooden_stick", "quantity": 1},
+      {"definition_id": "def:cloth_scrap", "quantity": 1},
+      {"definition_id": "def:oil_flask", "quantity": 1}
+    ],
+    "items_created": [
+      {"definition_id": "def:torch", "quantity": 1}
+    ]
   }
 }
-Patch 1 — Extend item catalog
+Patch 1 — Extend item catalog with crafting materials/output
 File
 src/app/rpg/interactions/item_catalog.py
 
-Add these definitions to ITEM_DEFINITIONS:
+Add definitions:
 
-    "def:minor_healing_potion": {
-        "definition_id": "def:minor_healing_potion",
-        "name": "minor healing potion",
-        "kind": "consumable",
+    "def:wooden_stick": {
+        "definition_id": "def:wooden_stick",
+        "name": "wooden stick",
+        "kind": "material",
+        "stackable": True,
+        "max_stack": 20,
+        "unit_weight": 0.4,
+        "rarity": "common",
+        "value": {"gold": 0, "silver": 0, "copper": 1},
+        "tags": ["material", "wood", "stick"],
+    },
+    "def:oil_flask": {
+        "definition_id": "def:oil_flask",
+        "name": "oil flask",
+        "kind": "material",
         "stackable": True,
         "max_stack": 10,
-        "unit_weight": 0.3,
+        "unit_weight": 0.5,
         "rarity": "common",
-        "value": {"gold": 0, "silver": 10, "copper": 0},
-        "tags": ["consumable", "potion", "healing"],
+        "value": {"gold": 0, "silver": 2, "copper": 0},
+        "tags": ["material", "oil", "flammable"],
+    },
+    "def:torch": {
+        "definition_id": "def:torch",
+        "name": "torch",
+        "kind": "tool",
+        "stackable": True,
+        "max_stack": 10,
+        "unit_weight": 0.7,
+        "rarity": "common",
+        "value": {"gold": 0, "silver": 1, "copper": 0},
+        "tags": ["tool", "light", "fire_source"],
         "consumable": {
             "effect": {
-                "kind": "heal",
-                "amount": 5,
+                "kind": "light_source",
+                "duration_turns": 20,
                 "target": "self"
             },
             "consumed_quantity": 1
         },
     },
-    "def:hunting_bow": {
-        "definition_id": "def:hunting_bow",
-        "name": "hunting bow",
-        "kind": "weapon",
-        "stackable": False,
-        "max_stack": 1,
-        "unit_weight": 2.0,
-        "rarity": "common",
-        "value": {"gold": 1, "silver": 5, "copper": 0},
-        "tags": ["weapon", "bow", "ranged"],
-        "equipment": {
-            "slot": "main_hand",
-            "requires_ammo_tag": "arrow",
-            "stats": {
-                "damage_min": 1,
-                "damage_max": 6,
-                "accuracy_bonus": 1,
-                "range": 4
-            },
-        },
-        "condition": {
-            "durability": 0.9,
-            "max_durability": 1.0,
-        },
-    },
-    "def:padded_armor": {
-        "definition_id": "def:padded_armor",
-        "name": "padded armor",
-        "kind": "armor",
-        "stackable": False,
-        "max_stack": 1,
-        "unit_weight": 6.0,
-        "rarity": "common",
-        "value": {"gold": 1, "silver": 2, "copper": 0},
-        "tags": ["armor", "armor_light", "body"],
-        "equipment": {
-            "slot": "body",
-            "stats": {
-                "armor": 1,
-                "stealth_penalty": 0
-            },
-        },
-        "condition": {
-            "durability": 0.85,
-            "max_durability": 1.0,
-        },
-    },
 
-Add aliases to NAME_TO_DEFINITION_ID:
+Add aliases:
 
-    "minor healing potion": "def:minor_healing_potion",
-    "healing potion": "def:minor_healing_potion",
-    "potion": "def:minor_healing_potion",
-    "hunting bow": "def:hunting_bow",
-    "bow": "def:hunting_bow",
-    "padded armor": "def:padded_armor",
-    "armor": "def:padded_armor",
-
-def:iron_arrow already exists from I4-I6 and should include:
-
-"tags": ["ammo", "arrow", "piercing"]
-Patch 2 — Extend semantic resolver for consumables/ammo
-File
-src/app/rpg/interactions/semantic_actions.py
-2.1 Add consume action kind
-
-In SUPPORTED_ACTION_KINDS, add:
-
-"consume",
-2.2 Add drink/eat/use consumable parser before generic use
-
-Before the generic use block, add:
-
-    if re.search(r"\b(drink|eat|consume|quaff)\b", text):
-        target = _first_match(
-            [
-                r"\b(?:drink|eat|consume|quaff)\s+([^,.!?]+)",
-            ],
-            text,
-        )
-        quantity, clean_target = _parse_leading_quantity(target)
-        return {
-            "resolved": True,
-            "kind": "consume",
-            "actor_id": actor_id,
-            "target_ref": clean_target,
-            "quantity": quantity,
-            "confidence": "high" if clean_target else "low",
-            "raw_input": raw,
-            "source": "deterministic_semantic_action_resolver_v2",
-        }
-2.3 Improve equip parsing for ammo
-
-In the existing equip block, after target is parsed, add detection:
-
-        equipment_slot = ""
-        if re.search(r"\bas ammo\b|\bammo slot\b|\bequip .* arrows", text):
-            equipment_slot = "ammo"
-
-Then include in the return dict:
-
-"equipment_slot": equipment_slot,
-
-Final equip return should include:
-
-        return {
-            "resolved": True,
-            "kind": "equip",
-            "actor_id": actor_id,
-            "target_ref": target,
-            "equipment_slot": equipment_slot,
-            "confidence": "high" if target else "low",
-            "raw_input": raw,
-            "source": "deterministic_semantic_action_resolver_v2",
-        }
-
-For input:
-
-I equip the iron arrows as ammo.
-
-target_ref should be:
-
-iron arrows as ammo
-
-If that happens, clean it by adding:
-
-        target = re.sub(r"\s+as\s+ammo$", "", target, flags=re.I).strip()
-
-before returning.
-
-Patch 3 — Update target resolver action types
-File
-src/app/rpg/interactions/target_resolver.py
-
-In expected_target_types_for_action(...), update:
-
-if action_kind in {"take", "drop", "equip", "unequip", "put", "repair", "consume"}:
-    return ["item"]
-Patch 4 — Add consumable runtime
+    "wooden stick": "def:wooden_stick",
+    "stick": "def:wooden_stick",
+    "sticks": "def:wooden_stick",
+    "oil flask": "def:oil_flask",
+    "oil": "def:oil_flask",
+    "flask of oil": "def:oil_flask",
+    "torch": "def:torch",
+    "torches": "def:torch",
+Patch 2 — Add recipe catalog
 New file
-src/app/rpg/interactions/consumable_runtime.py
+src/app/rpg/interactions/recipe_catalog.py
 from __future__ import annotations
 
 from copy import deepcopy
-from typing import Any, Dict
+from typing import Any, Dict, List
+
+
+RECIPES: Dict[str, Dict[str, Any]] = {
+    "recipe:torch": {
+        "recipe_id": "recipe:torch",
+        "name": "torch",
+        "aliases": ["torch", "a torch", "torches"],
+        "requires": [
+            {"definition_id": "def:wooden_stick", "quantity": 1},
+            {"definition_id": "def:cloth_scrap", "quantity": 1},
+            {"definition_id": "def:oil_flask", "quantity": 1},
+        ],
+        "produces": [
+            {"definition_id": "def:torch", "quantity": 1},
+        ],
+        "required_tool_tags": [],
+        "source": "deterministic_recipe_catalog",
+    },
+    "recipe:arrow_bundle": {
+        "recipe_id": "recipe:arrow_bundle",
+        "name": "iron arrows",
+        "aliases": ["iron arrows", "arrows", "arrow bundle"],
+        "requires": [
+            {"definition_id": "def:wooden_stick", "quantity": 2},
+            {"definition_id": "def:cloth_scrap", "quantity": 1},
+        ],
+        "produces": [
+            {"definition_id": "def:iron_arrow", "quantity": 5},
+        ],
+        "required_tool_tags": [],
+        "source": "deterministic_recipe_catalog",
+    },
+}
+
+
+def _safe_str(value: Any) -> str:
+    return "" if value is None else str(value)
+
+
+def _safe_list(value: Any) -> List[Any]:
+    return value if isinstance(value, list) else []
+
+
+def _norm(value: Any) -> str:
+    return _safe_str(value).strip().lower()
+
+
+def get_recipe(recipe_id: str) -> Dict[str, Any]:
+    return deepcopy(RECIPES.get(_safe_str(recipe_id), {}))
+
+
+def find_recipe_by_name(name: str) -> Dict[str, Any]:
+    target = _norm(name)
+    if not target:
+        return {}
+
+    for recipe in RECIPES.values():
+        names = [_safe_str(recipe.get("name"))]
+        names.extend(_safe_list(recipe.get("aliases")))
+        if target in {_norm(item) for item in names}:
+            return deepcopy(recipe)
+
+    # Conservative fuzzy fallback.
+    for recipe in RECIPES.values():
+        names = [_safe_str(recipe.get("name"))]
+        names.extend(_safe_list(recipe.get("aliases")))
+        for item in names:
+            normalized = _norm(item)
+            if target and (target in normalized or normalized in target):
+                return deepcopy(recipe)
+
+    return {}
+Patch 3 — Add crafting runtime
+New file
+src/app/rpg/interactions/crafting_runtime.py
+from __future__ import annotations
+
+from copy import deepcopy
+from typing import Any, Dict, List
 
 from app.rpg.interactions.item_model import (
+    add_item_to_items_list,
     normalize_item_instance,
     recalculate_inventory_derived_fields,
     remove_quantity_from_items_list,
 )
+from app.rpg.interactions.recipe_catalog import find_recipe_by_name, get_recipe
 
 
 def _safe_str(value: Any) -> str:
@@ -281,7 +205,7 @@ def _safe_dict(value: Any) -> Dict[str, Any]:
     return value if isinstance(value, dict) else {}
 
 
-def _safe_list(value: Any):
+def _safe_list(value: Any) -> List[Any]:
     return value if isinstance(value, list) else []
 
 
@@ -304,12 +228,15 @@ def _inventory(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
     return inv
 
 
-def _find_item(items, item_id: str) -> Dict[str, Any]:
+def _quantity_by_definition(items: List[Dict[str, Any]]) -> Dict[str, int]:
+    quantities: Dict[str, int] = {}
     for item in _safe_list(items):
-        item = normalize_item_instance(_safe_dict(item))
-        if _safe_str(item.get("item_id")) == item_id:
-            return item
-    return {}
+        normalized = normalize_item_instance(_safe_dict(item))
+        definition_id = _safe_str(normalized.get("definition_id"))
+        if not definition_id:
+            continue
+        quantities[definition_id] = quantities.get(definition_id, 0) + _safe_int(normalized.get("quantity"), 1)
+    return quantities
 
 
 def _result(
@@ -325,582 +252,219 @@ def _result(
         "changed_state": changed_state,
         "reason": reason,
         "semantic_action_v2": deepcopy(_safe_dict(action)),
-        "source": "deterministic_consumable_runtime",
+        "source": "deterministic_crafting_runtime",
     }
     payload.update(_safe_dict(extra or {}))
     return payload
 
 
-def apply_consumable_interaction(
+def apply_crafting_interaction(
     simulation_state: Dict[str, Any],
     *,
     semantic_action_v2: Dict[str, Any],
     tick: int = 0,
 ) -> Dict[str, Any]:
     action = _safe_dict(semantic_action_v2)
-    if _safe_str(action.get("kind")) != "consume":
+    if _safe_str(action.get("kind")) != "craft":
         return _result(
             resolved=False,
             changed_state=False,
-            reason="not_consumable_action",
+            reason="not_crafting_action",
             action=action,
         )
 
-    item_id = _safe_str(action.get("target_id"))
-    if not item_id:
+    recipe_ref = _safe_str(action.get("target_ref") or action.get("recipe_ref"))
+    recipe_id = _safe_str(action.get("recipe_id"))
+
+    recipe = get_recipe(recipe_id) if recipe_id else find_recipe_by_name(recipe_ref)
+    if not recipe:
         return _result(
             resolved=False,
             changed_state=False,
-            reason="missing_consumable_item",
+            reason="recipe_not_found",
             action=action,
+            extra={"recipe_ref": recipe_ref},
         )
 
     inv = _inventory(simulation_state)
     items = [normalize_item_instance(_safe_dict(item)) for item in _safe_list(inv.get("items"))]
-    item = _find_item(items, item_id)
-    if not item:
-        return _result(
-            resolved=False,
-            changed_state=False,
-            reason="consumable_not_in_inventory",
-            action=action,
-            extra={"item_id": item_id},
-        )
+    quantities = _quantity_by_definition(items)
 
-    consumable = _safe_dict(item.get("consumable"))
-    if not consumable:
-        return _result(
-            resolved=False,
-            changed_state=False,
-            reason="item_is_not_consumable",
-            action=action,
-            extra={"item_id": item_id},
-        )
+    missing = []
+    for requirement in _safe_list(recipe.get("requires")):
+        definition_id = _safe_str(_safe_dict(requirement).get("definition_id"))
+        required_qty = max(1, _safe_int(_safe_dict(requirement).get("quantity"), 1))
+        available_qty = quantities.get(definition_id, 0)
+        if available_qty < required_qty:
+            missing.append({
+                "definition_id": definition_id,
+                "required_quantity": required_qty,
+                "available_quantity": available_qty,
+            })
 
-    consumed_quantity = max(1, _safe_int(consumable.get("consumed_quantity"), 1))
-    quantity_before = max(1, _safe_int(item.get("quantity"), 1))
-    if quantity_before < consumed_quantity:
+    if missing:
         return _result(
             resolved=False,
             changed_state=False,
-            reason="insufficient_consumable_quantity",
+            reason="missing_crafting_materials",
             action=action,
             extra={
-                "item_id": item_id,
-                "required_quantity": consumed_quantity,
-                "available_quantity": quantity_before,
+                "recipe_id": _safe_str(recipe.get("recipe_id")),
+                "missing_materials": missing,
             },
         )
 
-    effect = _safe_dict(consumable.get("effect"))
-    effect_kind = _safe_str(effect.get("kind"))
+    consumed = []
+    updated_items = items
 
-    player_state = _safe_dict(simulation_state.get("player_state"))
-    effect_result = {
-        "applied": False,
-        "reason": "unsupported_consumable_effect",
-        "effect": deepcopy(effect),
-    }
-
-    if effect_kind == "heal":
-        amount = max(0, _safe_int(effect.get("amount"), 0))
-        hp_before = _safe_int(player_state.get("hp"), _safe_int(player_state.get("max_hp"), 20))
-        max_hp = max(1, _safe_int(player_state.get("max_hp"), 20))
-        hp_after = min(max_hp, hp_before + amount)
-        player_state["hp"] = hp_after
-        player_state["max_hp"] = max_hp
-        simulation_state["player_state"] = player_state
-        effect_result = {
-            "applied": True,
-            "kind": "heal",
-            "amount": amount,
-            "hp_before": hp_before,
-            "hp_after": hp_after,
-            "max_hp": max_hp,
-        }
-
-    remove_result = remove_quantity_from_items_list(
-        items,
-        item_id=item_id,
-        quantity=consumed_quantity,
-    )
-    if not remove_result.get("removed_all"):
-        return _result(
-            resolved=False,
-            changed_state=False,
-            reason="failed_to_consume_item_quantity",
-            action=action,
-            extra={"item_id": item_id},
+    for requirement in _safe_list(recipe.get("requires")):
+        definition_id = _safe_str(_safe_dict(requirement).get("definition_id"))
+        required_qty = max(1, _safe_int(_safe_dict(requirement).get("quantity"), 1))
+        remove_result = remove_quantity_from_items_list(
+            updated_items,
+            definition_id=definition_id,
+            quantity=required_qty,
         )
+        if not remove_result.get("removed_all"):
+            return _result(
+                resolved=False,
+                changed_state=False,
+                reason="failed_to_consume_crafting_materials",
+                action=action,
+                extra={
+                    "recipe_id": _safe_str(recipe.get("recipe_id")),
+                    "definition_id": definition_id,
+                },
+            )
 
-    inv["items"] = _safe_list(remove_result.get("items"))
+        updated_items = _safe_list(remove_result.get("items"))
+        consumed.append({
+            "definition_id": definition_id,
+            "quantity": required_qty,
+        })
+
+    created = []
+    add_result = {"items": updated_items}
+
+    for output in _safe_list(recipe.get("produces")):
+        definition_id = _safe_str(_safe_dict(output).get("definition_id"))
+        quantity = max(1, _safe_int(_safe_dict(output).get("quantity"), 1))
+        item = normalize_item_instance({
+            "definition_id": definition_id,
+            "quantity": quantity,
+            "source": "deterministic_crafting_runtime",
+        })
+        add_result = add_item_to_items_list(_safe_list(add_result.get("items")), item)
+        created.append({
+            "definition_id": definition_id,
+            "quantity": quantity,
+            "item": deepcopy(item),
+        })
+
+    inv["items"] = _safe_list(add_result.get("items"))
     inv = recalculate_inventory_derived_fields(inv)
     simulation_state["player_state"]["inventory"] = inv
 
     return _result(
         resolved=True,
         changed_state=True,
-        reason="consumable_used",
+        reason="recipe_crafted",
         action=action,
         extra={
-            "item_id": item_id,
-            "definition_id": _safe_str(item.get("definition_id")),
-            "effect": deepcopy(effect),
-            "effect_result": effect_result,
-            "quantity_before": quantity_before,
-            "quantity_after": quantity_before - consumed_quantity,
-            "quantity_consumed": consumed_quantity,
+            "recipe_id": _safe_str(recipe.get("recipe_id")),
+            "recipe_name": _safe_str(recipe.get("name")),
+            "materials_consumed": consumed,
+            "items_created": created,
+            "stacked": bool(add_result.get("stacked")),
+            "stack_events": deepcopy(_safe_list(add_result.get("stack_events"))),
             "carry_weight": inv.get("carry_weight"),
             "encumbrance_state": inv.get("encumbrance_state"),
             "tick": int(tick or 0),
         },
     )
-Patch 5 — Add equipment stats and ammo runtime
-New file
-src/app/rpg/interactions/equipment_runtime.py
-from __future__ import annotations
-
-from copy import deepcopy
-from typing import Any, Dict
-
-from app.rpg.interactions.item_model import (
-    normalize_item_instance,
-    recalculate_inventory_derived_fields,
-    remove_quantity_from_items_list,
-)
-
-
-DEFAULT_STATS = {
-    "damage_min": 0,
-    "damage_max": 1,
-    "armor": 0,
-    "accuracy_bonus": 0,
-    "range": 1,
-    "stealth_bonus": 0,
-    "stealth_penalty": 0,
-    "encumbrance_penalty": 0,
-}
-
-
-def _safe_str(value: Any) -> str:
-    return "" if value is None else str(value)
-
-
-def _safe_dict(value: Any) -> Dict[str, Any]:
-    return value if isinstance(value, dict) else {}
-
-
-def _safe_list(value: Any):
-    return value if isinstance(value, list) else []
-
-
-def _safe_int(value: Any, default: int = 0) -> int:
-    try:
-        return int(value)
-    except Exception:
-        return default
-
-
-def _inventory_for_actor(simulation_state: Dict[str, Any], actor_id: str) -> Dict[str, Any]:
-    if actor_id in {"", "player"}:
-        player_state = _safe_dict(simulation_state.get("player_state"))
-        inv = _safe_dict(player_state.get("inventory"))
-        if not isinstance(inv.get("items"), list):
-            inv["items"] = []
-        if not isinstance(inv.get("equipment"), dict):
-            inv["equipment"] = {}
-        player_state["inventory"] = inv
-        simulation_state["player_state"] = player_state
-        return inv
-
-    party_state = _safe_dict(_safe_dict(simulation_state.get("player_state")).get("party_state"))
-    for companion in _safe_list(party_state.get("companions")):
-        companion = _safe_dict(companion)
-        if _safe_str(companion.get("npc_id")) == actor_id:
-            inv = _safe_dict(companion.get("inventory"))
-            if not isinstance(inv.get("items"), list):
-                inv["items"] = []
-            if not isinstance(inv.get("equipment"), dict):
-                inv["equipment"] = {}
-            companion["inventory"] = inv
-            return inv
-
-    return {}
-
-
-def _find_item(items, item_id: str) -> Dict[str, Any]:
-    for item in _safe_list(items):
-        item = normalize_item_instance(_safe_dict(item))
-        if _safe_str(item.get("item_id")) == item_id:
-            return item
-    return {}
-
-
-def _item_tags(item: Dict[str, Any]) -> set[str]:
-    return {_safe_str(tag) for tag in _safe_list(item.get("tags")) if _safe_str(tag)}
-
-
-def project_equipment_stats(
-    simulation_state: Dict[str, Any],
-    *,
-    actor_id: str = "player",
-) -> Dict[str, Any]:
-    inv = _inventory_for_actor(simulation_state, actor_id)
-    items = [normalize_item_instance(_safe_dict(item)) for item in _safe_list(inv.get("items"))]
-    equipment = _safe_dict(inv.get("equipment"))
-
-    stats = deepcopy(DEFAULT_STATS)
-    equipped_items = []
-
-    for slot, item_id in equipment.items():
-        item = _find_item(items, _safe_str(item_id))
-        if not item:
-            continue
-
-        item_equipment = _safe_dict(item.get("equipment"))
-        item_stats = _safe_dict(item_equipment.get("stats"))
-        for key, value in item_stats.items():
-            stats[key] = _safe_int(stats.get(key), 0) + _safe_int(value, 0)
-
-        equipped_items.append({
-            "slot": _safe_str(slot),
-            "item_id": _safe_str(item_id),
-            "definition_id": _safe_str(item.get("definition_id")),
-            "name": _safe_str(item.get("name")),
-            "stats": deepcopy(item_stats),
-        })
-
-    encumbrance = _safe_str(inv.get("encumbrance_state"))
-    penalty = 0
-    if encumbrance == "burdened":
-        penalty = 1
-    elif encumbrance == "overloaded":
-        penalty = 3
-    elif encumbrance == "immobile":
-        penalty = 99
-
-    stats["encumbrance_penalty"] = penalty
-
-    result = {
-        "projected": True,
-        "actor_id": actor_id,
-        "stats": stats,
-        "equipped_items": equipped_items,
-        "source": "deterministic_equipment_runtime",
-    }
-
-    inv["equipment_stats"] = result
-    return result
-
-
-def ammo_compatible_with_equipped_weapon(
-    simulation_state: Dict[str, Any],
-    *,
-    actor_id: str = "player",
-) -> Dict[str, Any]:
-    inv = _inventory_for_actor(simulation_state, actor_id)
-    items = [normalize_item_instance(_safe_dict(item)) for item in _safe_list(inv.get("items"))]
-    equipment = _safe_dict(inv.get("equipment"))
-
-    weapon_id = _safe_str(equipment.get("main_hand"))
-    ammo_id = _safe_str(equipment.get("ammo"))
-
-    weapon = _find_item(items, weapon_id)
-    ammo = _find_item(items, ammo_id)
-
-    if not weapon_id or not weapon:
-        return {
-            "compatible": True,
-            "reason": "no_weapon_equipped",
-            "source": "deterministic_equipment_runtime",
-        }
-
-    required_tag = _safe_str(_safe_dict(weapon.get("equipment")).get("requires_ammo_tag"))
-    if not required_tag:
-        return {
-            "compatible": True,
-            "reason": "weapon_does_not_require_ammo",
-            "source": "deterministic_equipment_runtime",
-        }
-
-    if not ammo_id or not ammo:
-        return {
-            "compatible": False,
-            "reason": "required_ammo_not_equipped",
-            "required_ammo_tag": required_tag,
-            "source": "deterministic_equipment_runtime",
-        }
-
-    compatible = required_tag in _item_tags(ammo)
-    return {
-        "compatible": compatible,
-        "reason": "ammo_compatible" if compatible else "ammo_tag_mismatch",
-        "weapon_item_id": weapon_id,
-        "ammo_item_id": ammo_id,
-        "required_ammo_tag": required_tag,
-        "ammo_tags": sorted(_item_tags(ammo)),
-        "source": "deterministic_equipment_runtime",
-    }
-
-
-def consume_equipped_ammo(
-    simulation_state: Dict[str, Any],
-    *,
-    actor_id: str = "player",
-    quantity: int = 1,
-    tick: int = 0,
-) -> Dict[str, Any]:
-    inv = _inventory_for_actor(simulation_state, actor_id)
-    if not inv:
-        return {
-            "consumed": False,
-            "reason": "inventory_not_available",
-            "actor_id": actor_id,
-            "source": "deterministic_equipment_runtime",
-        }
-
-    compatibility = ammo_compatible_with_equipped_weapon(simulation_state, actor_id=actor_id)
-    if compatibility.get("compatible") is not True:
-        return {
-            "consumed": False,
-            "reason": _safe_str(compatibility.get("reason")),
-            "compatibility": compatibility,
-            "actor_id": actor_id,
-            "source": "deterministic_equipment_runtime",
-        }
-
-    equipment = _safe_dict(inv.get("equipment"))
-    ammo_id = _safe_str(equipment.get("ammo"))
-    if not ammo_id:
-        return {
-            "consumed": False,
-            "reason": "ammo_not_equipped",
-            "actor_id": actor_id,
-            "source": "deterministic_equipment_runtime",
-        }
-
-    items = [normalize_item_instance(_safe_dict(item)) for item in _safe_list(inv.get("items"))]
-    ammo = _find_item(items, ammo_id)
-    if not ammo:
-        return {
-            "consumed": False,
-            "reason": "equipped_ammo_not_found",
-            "actor_id": actor_id,
-            "ammo_item_id": ammo_id,
-            "source": "deterministic_equipment_runtime",
-        }
-
-    quantity = max(1, _safe_int(quantity, 1))
-    before = max(0, _safe_int(ammo.get("quantity"), 0))
-    if before < quantity:
-        return {
-            "consumed": False,
-            "reason": "insufficient_ammo",
-            "actor_id": actor_id,
-            "ammo_item_id": ammo_id,
-            "quantity_before": before,
-            "quantity_required": quantity,
-            "source": "deterministic_equipment_runtime",
-        }
-
-    remove_result = remove_quantity_from_items_list(
-        items,
-        item_id=ammo_id,
-        quantity=quantity,
-    )
-    if not remove_result.get("removed_all"):
-        return {
-            "consumed": False,
-            "reason": "failed_to_consume_ammo",
-            "actor_id": actor_id,
-            "ammo_item_id": ammo_id,
-            "source": "deterministic_equipment_runtime",
-        }
-
-    inv["items"] = _safe_list(remove_result.get("items"))
-    inv = recalculate_inventory_derived_fields(inv)
-
-    after = before - quantity
-    if after <= 0:
-        equipment.pop("ammo", None)
-    inv["equipment"] = equipment
-
-    if actor_id in {"", "player"}:
-        simulation_state["player_state"]["inventory"] = inv
-
-    return {
-        "consumed": True,
-        "actor_id": actor_id,
-        "ammo_item_id": ammo_id,
-        "quantity_before": before,
-        "quantity_after": after,
-        "quantity_consumed": quantity,
-        "equipment": deepcopy(equipment),
-        "carry_weight": inv.get("carry_weight"),
-        "encumbrance_state": inv.get("encumbrance_state"),
-        "tick": int(tick or 0),
-        "source": "deterministic_equipment_runtime",
-    }
-Patch 6 — Update inventory equip behavior for ammo slot
+Patch 4 — Extend semantic action resolver for craft
 File
-src/app/rpg/interactions/inventory_runtime.py
+src/app/rpg/interactions/semantic_actions.py
 
-Add import:
+Add to SUPPORTED_ACTION_KINDS:
 
-from app.rpg.interactions.equipment_runtime import project_equipment_stats
+"craft",
 
-In the equip branch, after:
+Add before generic use block:
 
-item = _safe_dict(inventory_items[index])
-slot = _slot_for_item(item)
-
-add:
-
-requested_slot = _safe_str(action.get("equipment_slot"))
-if requested_slot:
-    slot = requested_slot
-
-if slot == "ammo":
-    tags = {_safe_str(tag) for tag in _safe_list(item.get("tags"))}
-    if "ammo" not in tags:
-        return _inventory_result(
-            resolved=False,
-            changed_state=False,
-            reason="item_is_not_ammo",
-            action=action,
-            item=item,
+    if re.search(r"\b(craft|make|assemble|create)\b", text):
+        target = _first_match(
+            [
+                r"\b(?:craft|make|assemble|create)\s+([^,.!?]+)",
+            ],
+            text,
         )
-
-Change equipped reason in return:
-
-reason = "ammo_equipped" if slot == "ammo" else "item_equipped"
-
-Use that in _inventory_result(...).
-
-After saving equipment and recalculating inventory, add:
-
-equipment_stats = project_equipment_stats(simulation_state, actor_id="player")
-
-In return extra, add:
-
-"equipment_stats": deepcopy(equipment_stats),
-
-So final equip return becomes conceptually:
-
-return _inventory_result(
-    resolved=True,
-    changed_state=True,
-    reason=reason,
-    action=action,
-    item=item,
-    extra={
-        "item_id": target_id,
-        "slot": slot,
-        "equipment_stats": deepcopy(equipment_stats),
-        "carry_weight": inventory.get("carry_weight"),
-        "encumbrance_state": inventory.get("encumbrance_state"),
-        "tick": int(tick or 0),
-    },
-)
-
-In the unequip branch, after recalc, also project stats:
-
-equipment_stats = project_equipment_stats(simulation_state, actor_id="player")
-
-and include in return.
-
-Patch 7 — Wire consume runtime into interaction runtime
+        quantity, clean_target = _parse_leading_quantity(target)
+        return {
+            "resolved": True,
+            "kind": "craft",
+            "actor_id": actor_id,
+            "target_ref": clean_target,
+            "recipe_ref": clean_target,
+            "quantity": quantity,
+            "confidence": "high" if clean_target else "low",
+            "raw_input": raw,
+            "source": "deterministic_semantic_action_resolver_v2",
+        }
+Patch 5 — Wire crafting into interaction runtime
 File
 src/app/rpg/interactions/interaction_runtime.py
 
-Add imports:
+Add import:
 
-from app.rpg.interactions.consumable_runtime import apply_consumable_interaction
-from app.rpg.interactions.equipment_runtime import project_equipment_stats
+from app.rpg.interactions.crafting_runtime import apply_crafting_interaction
 
-Update _allowed_sources_for_action(...):
+In expected_target_types flow, crafting does not need a normal target resolution. So after semantic action is resolved and kind is known, before target resolution fails on missing target, add a direct craft branch.
 
-if kind in {"drop", "equip", "unequip", "give", "put", "repair", "consume"}:
-    return ["player_inventory"]
+Recommended placement: after kind = semantic_action_kind(action) and before resolving target_ref.
 
-After inventory/container/repair routing and before generic placeholder, add consumable routing. Put it before generic placeholder:
-
-    consumable_result = {}
-    if kind == "consume":
-        consumable_result = apply_consumable_interaction(
+    if kind == "craft":
+        enriched_action = deepcopy(action)
+        crafting_result = apply_crafting_interaction(
             simulation_state,
             semantic_action_v2=enriched_action,
             tick=tick,
         )
-        equipment_stats = project_equipment_stats(simulation_state, actor_id="player")
         interaction_result = {
-            "resolved": bool(consumable_result.get("resolved")),
-            "changed_state": bool(consumable_result.get("changed_state")),
-            "reason": _safe_str(consumable_result.get("reason")),
+            "resolved": bool(crafting_result.get("resolved")),
+            "changed_state": bool(crafting_result.get("changed_state")),
+            "reason": _safe_str(crafting_result.get("reason")),
             "semantic_action_v2": deepcopy(enriched_action),
-            "target_resolution": deepcopy(target_result),
-            "secondary_target_resolution": deepcopy(secondary_result),
-            "consumable_result": deepcopy(consumable_result),
-            "equipment_stats": deepcopy(equipment_stats),
+            "crafting_result": deepcopy(crafting_result),
             "source": "deterministic_general_interaction_runtime",
         }
         return {
             "handled": bool(interaction_result.get("resolved")),
             "semantic_action_v2": deepcopy(enriched_action),
             "interaction_result": deepcopy(interaction_result),
-            "consumable_result": deepcopy(consumable_result),
-            "equipment_stats": deepcopy(equipment_stats),
+            "crafting_result": deepcopy(crafting_result),
             "source": "deterministic_general_interaction_runtime",
         }
-
-Also after inventory equip/unequip actions, add equipment stats to the returned general result if not already present in inventory_result:
-
-equipment_stats = {}
-if kind in {"equip", "unequip"}:
-    equipment_stats = project_equipment_stats(simulation_state, actor_id="player")
-
-and include:
-
-"equipment_stats": deepcopy(equipment_stats),
-Patch 8 — Extend visible reason helper for consumables
+Patch 6 — Runtime payload exposure and persistence
 File
 src/app/rpg/session/runtime.py
 
-Find _interaction_visible_result_reason(...).
+Update _interaction_visible_result_reason(...) keys:
 
-Update keys from:
+for key in ("inventory_result", "container_result", "repair_result", "consumable_result", "crafting_result"):
 
-for key in ("inventory_result", "container_result", "repair_result"):
-
-to:
-
-for key in ("inventory_result", "container_result", "repair_result", "consumable_result"):
-
-Update _patch_visible_interaction_reason_into_payload_text(...) if it has key lists only for previous results. Add:
-
-"consumable_result"
-
-if applicable.
-
-Patch 9 — Persist and expose consumable/equipment results
-File
-src/app/rpg/session/runtime.py
-
-After:
-
-inventory_result = _safe_dict(general_interaction_result.get("inventory_result"))
-container_result = _safe_dict(general_interaction_result.get("container_result"))
-repair_result = _safe_dict(general_interaction_result.get("repair_result"))
-
-add:
+After current result extraction:
 
 consumable_result = _safe_dict(general_interaction_result.get("consumable_result"))
 equipment_stats = _safe_dict(general_interaction_result.get("equipment_stats"))
 
-Where payloads include the others, add:
+add:
 
-"consumable_result": deepcopy(consumable_result),
-"equipment_stats": deepcopy(equipment_stats),
+crafting_result = _safe_dict(general_interaction_result.get("crafting_result"))
+
+Where payloads include inventory/repair/etc., add:
+
+"crafting_result": deepcopy(crafting_result),
 
 Update persistence condition:
 
@@ -909,51 +473,69 @@ if (
     or container_result.get("changed_state") is True
     or repair_result.get("changed_state") is True
     or consumable_result.get("changed_state") is True
+    or crafting_result.get("changed_state") is True
 ):
-Patch 10 — Manual command for ammo hook
+Patch 7 — Fix manual command HTML text from I10-I12
 File
 src/tests/rpg/manual_llm_transcript.py
 
-Add import:
-
-from app.rpg.interactions.equipment_runtime import consume_equipped_ammo, project_equipment_stats
-
-Add manual command:
+In the manual command block for:
 
 if command == "__manual_consume_equipped_ammo__":
-    sim = _extract_simulation_state(last_result) if last_result else _safe_dict(session.get("simulation_state"))
-    ammo_result = consume_equipped_ammo(
-        sim,
-        actor_id="player",
-        quantity=1,
-        tick=tick,
-    )
-    equipment_stats = project_equipment_stats(sim, actor_id="player")
-    session["simulation_state"] = sim
-    result = {
+
+Add a visible reason into the result payload.
+
+Find:
+
+ammo_result = consume_equipped_ammo(...)
+equipment_stats = project_equipment_stats(...)
+
+After it, add:
+
+visible_reason = "ammo_consumed" if ammo_result.get("consumed") is True else _safe_str(ammo_result.get("reason") or "ammo_not_consumed")
+
+Then include this in both top-level and nested result dicts:
+
+"visible_interaction_reason": visible_reason,
+"narration_preview": f"Result: {visible_reason}",
+"final_narration": f"Result: {visible_reason}",
+
+Example:
+
+result = {
+    "ok": True,
+    "visible_interaction_reason": visible_reason,
+    "narration_preview": f"Result: {visible_reason}",
+    "final_narration": f"Result: {visible_reason}",
+    "result": {
         "ok": True,
-        "result": {
-            "ok": True,
-            "manual_command": command,
-            "ammo_result": ammo_result,
-            "equipment_stats": equipment_stats,
-            "simulation_state": sim,
-        },
+        "manual_command": command,
+        "visible_interaction_reason": visible_reason,
+        "narration_preview": f"Result: {visible_reason}",
+        "final_narration": f"Result: {visible_reason}",
         "ammo_result": ammo_result,
         "equipment_stats": equipment_stats,
         "simulation_state": sim,
-        "session": session,
-    }
+    },
+    "ammo_result": ammo_result,
+    "equipment_stats": equipment_stats,
+    "simulation_state": sim,
+    "session": session,
+}
 
-Use your existing manual-command result-recording pattern and do not fall through into normal apply_turn.
+This fixes the previously noted:
 
-Patch 11 — Manual scenario
+<p class="ai">AI: </p>
+
+for the ammo manual hook.
+
+Patch 8 — Manual scenario
 File
 src/tests/rpg/manual_llm_transcript.py
 
 Add scenario:
 
-"inventory_consumables_ammo_equipment_stats": {
+"inventory_crafting_recipes_materials": {
     "currency": {"gold": 0, "silver": 0, "copper": 0},
     "conversation_settings": {
         "enabled": True,
@@ -971,35 +553,28 @@ Add scenario:
         "scene_items": [],
         "scene_objects": [],
         "player_location_id": "loc_tavern_road",
-        "player_hp": 10,
-        "player_max_hp": 20,
         "player_inventory": {
             "items": [
                 {
-                    "item_id": "item:minor_healing_potions",
-                    "definition_id": "def:minor_healing_potion",
-                    "name": "minor healing potion",
-                    "aliases": ["healing potion", "potion"],
+                    "item_id": "item:wooden_sticks",
+                    "definition_id": "def:wooden_stick",
+                    "name": "wooden sticks",
+                    "aliases": ["stick", "sticks"],
+                    "quantity": 3
+                },
+                {
+                    "item_id": "item:cloth_scraps",
+                    "definition_id": "def:cloth_scrap",
+                    "name": "cloth scraps",
+                    "aliases": ["cloth scrap", "scraps"],
+                    "quantity": 3
+                },
+                {
+                    "item_id": "item:oil_flasks",
+                    "definition_id": "def:oil_flask",
+                    "name": "oil flasks",
+                    "aliases": ["oil", "flask of oil"],
                     "quantity": 2
-                },
-                {
-                    "item_id": "item:hunting_bow",
-                    "definition_id": "def:hunting_bow",
-                    "name": "hunting bow",
-                    "aliases": ["bow"]
-                },
-                {
-                    "item_id": "item:iron_arrow_stack_a",
-                    "definition_id": "def:iron_arrow",
-                    "name": "iron arrows",
-                    "aliases": ["arrows", "iron arrow"],
-                    "quantity": 15
-                },
-                {
-                    "item_id": "item:padded_armor",
-                    "definition_id": "def:padded_armor",
-                    "name": "padded armor",
-                    "aliases": ["armor"]
                 }
             ],
             "equipment": {},
@@ -1007,164 +582,102 @@ Add scenario:
         }
     },
     "turns": [
-        "I drink the minor healing potion.",
-        "I equip the hunting bow.",
-        "I equip the iron arrows as ammo.",
-        "I equip the padded armor.",
-        "__manual_consume_equipped_ammo__"
+        "I craft a torch.",
+        "I craft iron arrows.",
+        "I craft a torch."
     ]
 },
 
 Add scenario choice:
 
-"inventory_consumables_ammo_equipment_stats",
-Patch 12 — Extend setup interaction helper for HP
+"inventory_crafting_recipes_materials",
+
+Expected state:
+
+Turn 1: consumes 1 stick, 1 cloth, 1 oil; creates 1 torch.
+Turn 2: consumes 2 sticks, 1 cloth; creates 5 iron arrows.
+Turn 3: fails missing materials because sticks are 0.
+Patch 9 — HTML panels
 File
 src/tests/rpg/manual_llm_transcript.py
 
-In _apply_setup_interaction_state(...), after player_state is created, add:
+Add panel:
 
-if "player_hp" in setup:
-    player_state["hp"] = int(setup.get("player_hp") or 0)
-
-if "player_max_hp" in setup:
-    player_state["max_hp"] = int(setup.get("player_max_hp") or 1)
-Patch 13 — HTML panels
+("Crafting Result", "crafting_result"),
+Patch 10 — Manual validation
 File
 src/tests/rpg/manual_llm_transcript.py
 
-Add panels:
+Add helper if missing:
 
-("Consumable Result", "consumable_result"),
-("Ammo Result", "ammo_result"),
-("Equipment Stats", "equipment_stats"),
-
-Keep existing inventory/interaction panels.
-
-Patch 14 — Manual validation
-File
-src/tests/rpg/manual_llm_transcript.py
-
-Add helpers:
-
-def _player_hp(simulation_state: Dict[str, Any]) -> int:
-    return int(_safe_dict(simulation_state.get("player_state")).get("hp") or 0)
-
-
-def _player_max_hp(simulation_state: Dict[str, Any]) -> int:
-    return int(_safe_dict(simulation_state.get("player_state")).get("max_hp") or 0)
-
-
-def _player_inventory_item_by_id(simulation_state: Dict[str, Any], item_id: str) -> Dict[str, Any]:
+def _player_inventory_item_by_definition(simulation_state: Dict[str, Any], definition_id: str) -> Dict[str, Any]:
     for item in _player_inventory_items(simulation_state):
         item = _safe_dict(item)
-        if _safe_str(item.get("item_id")) == item_id:
+        if _safe_str(item.get("definition_id")) == definition_id:
             return item
     return {}
 
-Add to _manual_regression_warnings(...):
+Add validation block:
 
-    if scenario_name == "inventory_consumables_ammo_equipment_stats":
+    if scenario_name == "inventory_crafting_recipes_materials":
         sim = _extract_simulation_state(result)
         interaction = _extract_interaction_result(result)
-
-        consumable = _safe_dict(
-            interaction.get("consumable_result")
-            or result.get("consumable_result")
-            or _safe_dict(result.get("result")).get("consumable_result")
-        )
-        inventory = _safe_dict(
-            interaction.get("inventory_result")
-            or result.get("inventory_result")
-            or _safe_dict(result.get("result")).get("inventory_result")
-        )
-        ammo_result = _safe_dict(
-            result.get("ammo_result")
-            or _safe_dict(result.get("result")).get("ammo_result")
-        )
-        equipment_stats = _safe_dict(
-            interaction.get("equipment_stats")
-            or result.get("equipment_stats")
-            or _safe_dict(result.get("result")).get("equipment_stats")
+        crafting = _safe_dict(
+            interaction.get("crafting_result")
+            or result.get("crafting_result")
+            or _safe_dict(result.get("result")).get("crafting_result")
         )
 
         if turn_index == 1:
-            if consumable.get("resolved") is not True:
+            if crafting.get("resolved") is not True:
                 warnings.append(
-                    f"consumable_expected_resolved_true_got:{_safe_str(consumable.get('reason')) or 'missing'}"
+                    f"crafting_torch_expected_resolved_true_got:{_safe_str(crafting.get('reason')) or 'missing'}"
                 )
-            if _safe_str(consumable.get("reason")) != "consumable_used":
+            if _safe_str(crafting.get("reason")) != "recipe_crafted":
                 warnings.append(
-                    f"consumable_expected_consumable_used_got:{_safe_str(consumable.get('reason')) or 'missing'}"
+                    f"crafting_torch_expected_recipe_crafted_got:{_safe_str(crafting.get('reason')) or 'missing'}"
                 )
-            if _player_hp(sim) != 15:
-                warnings.append(f"consumable_expected_player_hp_15_got:{_player_hp(sim)}")
-            potion = _player_inventory_item_by_id(sim, "item:minor_healing_potions")
-            if int(potion.get("quantity") or 0) != 1:
+            torch = _player_inventory_item_by_definition(sim, "def:torch")
+            if int(torch.get("quantity") or 0) != 1:
                 warnings.append(
-                    f"consumable_expected_potion_quantity_1_got:{int(potion.get('quantity') or 0)}"
+                    f"crafting_torch_expected_torch_quantity_1_got:{int(torch.get('quantity') or 0)}"
                 )
 
         if turn_index == 2:
-            if _safe_str(inventory.get("reason")) != "item_equipped":
+            if crafting.get("resolved") is not True:
                 warnings.append(
-                    f"equipment_expected_bow_item_equipped_got:{_safe_str(inventory.get('reason')) or 'missing'}"
+                    f"crafting_arrows_expected_resolved_true_got:{_safe_str(crafting.get('reason')) or 'missing'}"
                 )
-            equipment = _player_equipment(sim)
-            if _safe_str(equipment.get("main_hand")) != "item:hunting_bow":
+            arrows = _player_inventory_item_by_definition(sim, "def:iron_arrow")
+            if int(arrows.get("quantity") or 0) != 5:
                 warnings.append(
-                    f"equipment_expected_main_hand_bow_got:{_safe_str(equipment.get('main_hand')) or 'missing'}"
+                    f"crafting_arrows_expected_arrow_quantity_5_got:{int(arrows.get('quantity') or 0)}"
                 )
 
         if turn_index == 3:
-            if _safe_str(inventory.get("reason")) != "ammo_equipped":
+            if crafting.get("resolved") is not False:
+                warnings.append("crafting_missing_materials_expected_resolved_false")
+            if _safe_str(crafting.get("reason")) != "missing_crafting_materials":
                 warnings.append(
-                    f"ammo_expected_ammo_equipped_got:{_safe_str(inventory.get('reason')) or 'missing'}"
-                )
-            equipment = _player_equipment(sim)
-            if _safe_str(equipment.get("ammo")) != "item:iron_arrow_stack_a":
-                warnings.append(
-                    f"ammo_expected_equipment_ammo_arrows_got:{_safe_str(equipment.get('ammo')) or 'missing'}"
+                    f"crafting_missing_materials_expected_missing_crafting_materials_got:{_safe_str(crafting.get('reason')) or 'missing'}"
                 )
 
-        if turn_index == 4:
-            if _safe_str(inventory.get("reason")) != "item_equipped":
-                warnings.append(
-                    f"equipment_expected_armor_item_equipped_got:{_safe_str(inventory.get('reason')) or 'missing'}"
-                )
-            equipment = _player_equipment(sim)
-            if _safe_str(equipment.get("body")) != "item:padded_armor":
-                warnings.append(
-                    f"equipment_expected_body_padded_armor_got:{_safe_str(equipment.get('body')) or 'missing'}"
-                )
-            stats = _safe_dict(equipment_stats.get("stats"))
-            if int(stats.get("armor") or 0) < 1:
-                warnings.append("equipment_stats_expected_armor_at_least_1")
-            if int(stats.get("damage_max") or 0) < 6:
-                warnings.append("equipment_stats_expected_bow_damage_max_at_least_6")
+Also add visible reason expectations:
 
-        if turn_index == 5:
-            if ammo_result.get("consumed") is not True:
-                warnings.append(
-                    f"ammo_consume_expected_consumed_true_got:{_safe_str(ammo_result.get('reason')) or 'missing'}"
-                )
-            if int(ammo_result.get("quantity_after") or -1) != 14:
-                warnings.append(
-                    f"ammo_consume_expected_quantity_after_14_got:{int(ammo_result.get('quantity_after') or -1)}"
-                )
-            arrows = _player_inventory_item_by_id(sim, "item:iron_arrow_stack_a")
-            if int(arrows.get("quantity") or 0) != 14:
-                warnings.append(
-                    f"ammo_consume_expected_inventory_arrows_14_got:{int(arrows.get('quantity') or 0)}"
-                )
-Patch 15 — Unit tests
+        expected_visible_by_turn = {
+            1: "recipe_crafted",
+            2: "recipe_crafted",
+            3: "missing_crafting_materials",
+        }
+        expected_visible = expected_visible_by_turn.get(turn_index)
+        visible_reason = _extract_visible_interaction_reason(result)
+        if expected_visible and visible_reason != expected_visible:
+            warnings.append(
+                f"crafting_visible_expected_{expected_visible}_got:{visible_reason or 'missing'}"
+            )
+Patch 11 — Unit tests
 New file
-src/app/rpg/tests/test_bundle_i10_i11_i12_consumables_ammo_equipment.py
-from app.rpg.interactions.equipment_runtime import (
-    ammo_compatible_with_equipped_weapon,
-    consume_equipped_ammo,
-    project_equipment_stats,
-)
+src/app/rpg/tests/test_bundle_i13_i14_i15_crafting.py
 from app.rpg.interactions.interaction_runtime import resolve_general_interaction
 
 
@@ -1173,35 +686,28 @@ def _state():
         "location_id": "loc_tavern_road",
         "player_state": {
             "location_id": "loc_tavern_road",
-            "hp": 10,
-            "max_hp": 20,
             "inventory": {
                 "items": [
                     {
-                        "item_id": "item:minor_healing_potions",
-                        "definition_id": "def:minor_healing_potion",
-                        "name": "minor healing potion",
-                        "aliases": ["healing potion", "potion"],
+                        "item_id": "item:wooden_sticks",
+                        "definition_id": "def:wooden_stick",
+                        "name": "wooden sticks",
+                        "aliases": ["stick", "sticks"],
+                        "quantity": 3,
+                    },
+                    {
+                        "item_id": "item:cloth_scraps",
+                        "definition_id": "def:cloth_scrap",
+                        "name": "cloth scraps",
+                        "aliases": ["cloth scrap", "scraps"],
+                        "quantity": 3,
+                    },
+                    {
+                        "item_id": "item:oil_flasks",
+                        "definition_id": "def:oil_flask",
+                        "name": "oil flasks",
+                        "aliases": ["oil", "flask of oil"],
                         "quantity": 2,
-                    },
-                    {
-                        "item_id": "item:hunting_bow",
-                        "definition_id": "def:hunting_bow",
-                        "name": "hunting bow",
-                        "aliases": ["bow"],
-                    },
-                    {
-                        "item_id": "item:iron_arrow_stack_a",
-                        "definition_id": "def:iron_arrow",
-                        "name": "iron arrows",
-                        "aliases": ["arrows", "iron arrow"],
-                        "quantity": 15,
-                    },
-                    {
-                        "item_id": "item:padded_armor",
-                        "definition_id": "def:padded_armor",
-                        "name": "padded armor",
-                        "aliases": ["armor"],
                     },
                 ],
                 "equipment": {},
@@ -1213,123 +719,85 @@ def _state():
     }
 
 
-def _inventory(state):
-    return state["player_state"]["inventory"]
-
-
-def _item(state, item_id):
-    for item in _inventory(state)["items"]:
-        if item.get("item_id") == item_id:
+def _item_by_def(state, definition_id):
+    for item in state["player_state"]["inventory"]["items"]:
+        if item.get("definition_id") == definition_id:
             return item
     return {}
 
 
-def test_consume_healing_potion_heals_and_decrements_quantity():
+def test_craft_torch_consumes_materials_and_creates_output():
     state = _state()
 
     result = resolve_general_interaction(
         state,
-        player_input="I drink the minor healing potion.",
+        player_input="I craft a torch.",
         tick=1,
     )
 
-    consumable = result["consumable_result"]
-    assert consumable["resolved"] is True
-    assert consumable["reason"] == "consumable_used"
-    assert consumable["effect_result"]["hp_before"] == 10
-    assert consumable["effect_result"]["hp_after"] == 15
+    crafting = result["crafting_result"]
+    assert crafting["resolved"] is True
+    assert crafting["changed_state"] is True
+    assert crafting["reason"] == "recipe_crafted"
+    assert crafting["recipe_id"] == "recipe:torch"
 
-    assert state["player_state"]["hp"] == 15
-    assert _item(state, "item:minor_healing_potions")["quantity"] == 1
+    assert _item_by_def(state, "def:torch")["quantity"] == 1
+    assert _item_by_def(state, "def:wooden_stick")["quantity"] == 2
+    assert _item_by_def(state, "def:cloth_scrap")["quantity"] == 2
+    assert _item_by_def(state, "def:oil_flask")["quantity"] == 1
 
 
-def test_equip_bow_arrows_and_armor_projects_stats():
+def test_craft_arrows_stacks_output():
     state = _state()
 
-    bow = resolve_general_interaction(
+    result = resolve_general_interaction(
         state,
-        player_input="I equip the hunting bow.",
+        player_input="I craft iron arrows.",
         tick=1,
     )
-    assert bow["inventory_result"]["reason"] == "item_equipped"
 
-    arrows = resolve_general_interaction(
+    crafting = result["crafting_result"]
+    assert crafting["resolved"] is True
+    assert crafting["reason"] == "recipe_crafted"
+    assert crafting["recipe_id"] == "recipe:arrow_bundle"
+
+    arrows = _item_by_def(state, "def:iron_arrow")
+    assert arrows["quantity"] == 5
+
+
+def test_crafting_missing_materials_fails_without_mutation():
+    state = _state()
+
+    resolve_general_interaction(
         state,
-        player_input="I equip the iron arrows as ammo.",
+        player_input="I craft a torch.",
+        tick=1,
+    )
+    resolve_general_interaction(
+        state,
+        player_input="I craft iron arrows.",
         tick=2,
     )
-    assert arrows["inventory_result"]["reason"] == "ammo_equipped"
-
-    armor = resolve_general_interaction(
+    result = resolve_general_interaction(
         state,
-        player_input="I equip the padded armor.",
+        player_input="I craft a torch.",
         tick=3,
     )
-    assert armor["inventory_result"]["reason"] == "item_equipped"
 
-    equipment = _inventory(state)["equipment"]
-    assert equipment["main_hand"] == "item:hunting_bow"
-    assert equipment["ammo"] == "item:iron_arrow_stack_a"
-    assert equipment["body"] == "item:padded_armor"
+    crafting = result["crafting_result"]
+    assert crafting["resolved"] is False
+    assert crafting["changed_state"] is False
+    assert crafting["reason"] == "missing_crafting_materials"
 
-    stats = project_equipment_stats(state)["stats"]
-    assert stats["damage_max"] >= 6
-    assert stats["armor"] >= 1
-    assert stats["accuracy_bonus"] >= 1
-
-
-def test_ammo_compatibility_and_consumption():
-    state = _state()
-
-    resolve_general_interaction(
-        state,
-        player_input="I equip the hunting bow.",
-        tick=1,
-    )
-    resolve_general_interaction(
-        state,
-        player_input="I equip the iron arrows as ammo.",
-        tick=2,
-    )
-
-    compat = ammo_compatible_with_equipped_weapon(state)
-    assert compat["compatible"] is True
-    assert compat["reason"] == "ammo_compatible"
-
-    consumed = consume_equipped_ammo(state, quantity=1, tick=3)
-    assert consumed["consumed"] is True
-    assert consumed["quantity_before"] == 15
-    assert consumed["quantity_after"] == 14
-
-    assert _item(state, "item:iron_arrow_stack_a")["quantity"] == 14
-
-
-def test_consuming_last_ammo_clears_ammo_slot():
-    state = _state()
-    _item(state, "item:iron_arrow_stack_a")["quantity"] = 1
-
-    resolve_general_interaction(
-        state,
-        player_input="I equip the hunting bow.",
-        tick=1,
-    )
-    resolve_general_interaction(
-        state,
-        player_input="I equip the iron arrows as ammo.",
-        tick=2,
-    )
-
-    consumed = consume_equipped_ammo(state, quantity=1, tick=3)
-    assert consumed["consumed"] is True
-    assert consumed["quantity_after"] == 0
-    assert "ammo" not in _inventory(state)["equipment"]
+    assert _item_by_def(state, "def:torch")["quantity"] == 1
+    assert not _item_by_def(state, "def:wooden_stick")
 
 Run:
 
-pytest src/app/rpg/tests/test_bundle_i10_i11_i12_consumables_ammo_equipment.py -q
+pytest src/app/rpg/tests/test_bundle_i13_i14_i15_crafting.py -q
 
 Expected:
 
-4 passed
-Run manual scenario
-pytest src/app/rpg/tests/test_bundle_i10_i11_i12_consumables_ammo_equipment.py -q
+3 passed
+Run validation
+pytest src/app/rpg/tests/test_bundle_i13_i14_i15_crafting.py -q

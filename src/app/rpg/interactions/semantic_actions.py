@@ -19,6 +19,7 @@ SUPPORTED_ACTION_KINDS = {
     "attack",
     "talk",
     "consume",
+    "craft",
     "unknown",
 }
 
@@ -282,6 +283,26 @@ def resolve_semantic_action_v2(
             "kind": "consume",
             "actor_id": actor_id,
             "target_ref": clean_target,
+            "quantity": quantity,
+            "confidence": "high" if clean_target else "low",
+            "raw_input": raw,
+            "source": "deterministic_semantic_action_resolver_v2",
+        }
+
+    if re.search(r"\b(craft|make|assemble|create)\b", text):
+        target = _first_match(
+            [
+                r"\b(?:craft|make|assemble|create)\s+([^,.!?]+)",
+            ],
+            text,
+        )
+        quantity, clean_target = _parse_leading_quantity(target)
+        return {
+            "resolved": True,
+            "kind": "craft",
+            "actor_id": actor_id,
+            "target_ref": clean_target,
+            "recipe_ref": clean_target,
             "quantity": quantity,
             "confidence": "high" if clean_target else "low",
             "raw_input": raw,

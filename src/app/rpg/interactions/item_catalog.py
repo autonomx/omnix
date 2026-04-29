@@ -144,6 +144,47 @@ ITEM_DEFINITIONS: Dict[str, Dict[str, Any]] = {
             "consumed": True,
         },
     },
+    "def:wooden_stick": {
+        "definition_id": "def:wooden_stick",
+        "name": "wooden stick",
+        "kind": "material",
+        "stackable": True,
+        "max_stack": 20,
+        "unit_weight": 0.4,
+        "rarity": "common",
+        "value": {"gold": 0, "silver": 0, "copper": 1},
+        "tags": ["material", "wood", "stick"],
+    },
+    "def:oil_flask": {
+        "definition_id": "def:oil_flask",
+        "name": "oil flask",
+        "kind": "material",
+        "stackable": True,
+        "max_stack": 10,
+        "unit_weight": 0.5,
+        "rarity": "common",
+        "value": {"gold": 0, "silver": 2, "copper": 0},
+        "tags": ["material", "oil", "flammable"],
+    },
+    "def:torch": {
+        "definition_id": "def:torch",
+        "name": "torch",
+        "kind": "tool",
+        "stackable": True,
+        "max_stack": 10,
+        "unit_weight": 0.7,
+        "rarity": "common",
+        "value": {"gold": 0, "silver": 1, "copper": 0},
+        "tags": ["tool", "light", "fire_source"],
+        "consumable": {
+            "effect": {
+                "kind": "light_source",
+                "duration_turns": 20,
+                "target": "self"
+            },
+            "consumed_quantity": 1
+        },
+    },
     "def:torn_cloak": {
         "definition_id": "def:torn_cloak",
         "name": "torn cloak",
@@ -267,6 +308,14 @@ NAME_TO_DEFINITION_ID = {
     "bow": "def:hunting_bow",
     "padded armor": "def:padded_armor",
     "armor": "def:padded_armor",
+    "wooden stick": "def:wooden_stick",
+    "stick": "def:wooden_stick",
+    "sticks": "def:wooden_stick",
+    "oil flask": "def:oil_flask",
+    "oil": "def:oil_flask",
+    "flask of oil": "def:oil_flask",
+    "torch": "def:torch",
+    "torches": "def:torch",
 }
 
 
