@@ -4,6 +4,7 @@ from copy import deepcopy
 from typing import Any, Dict, List
 
 from app.rpg.party.party_state import add_companion, ensure_party_state
+from app.rpg.party.companion_presence import current_player_location_id
 from app.rpg.world.npc_party_eligibility import evaluate_npc_party_join_eligibility
 
 
@@ -317,6 +318,8 @@ def resolve_companion_acceptance(
         role="companion",
         source="accepted_companion_offer",
         joined_tick=int(tick or 0),
+        follow_mode="following_player",
+        location_id=current_player_location_id(simulation_state),
         identity_arc=_safe_str(eligibility.get("identity_arc")),
         current_role=_safe_str(eligibility.get("current_role")),
         active_motivations=deepcopy(_safe_list(eligibility.get("active_motivations"))),

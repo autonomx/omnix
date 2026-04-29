@@ -1145,7 +1145,18 @@ def _render_special_panels(result: Dict[str, Any], *, prefix: str) -> str:
         ("Companion Acceptance Result", "companion_acceptance_result"),
         ("Companion Acceptance Debug", "companion_acceptance_debug"),
         ("Companion Dialogue Result", "companion_dialogue_result"),
+        ("Companion Command Result", "companion_command_result"),
+        ("Companion Memory Result", "companion_memory_result"),
+        ("Companion Relationship Drift Result", "companion_relationship_drift_result"),
+        ("Companion Loyalty Projection", "companion_loyalty_projection"),
+        ("Companion Memory Summary", "companion_memory_summary"),
+        ("Companion Quest Seed Result", "companion_quest_seed_result"),
+        ("Companion Quest Progress Result", "companion_quest_progress_result"),
+        ("Companion Quest Summary", "companion_quest_summary"),
         ("Companion Presence Summary", "companion_presence_summary"),
+        ("Companion Presence Projection", "companion_presence_projection"),
+        ("Party Aware Turn Context", "party_aware_turn_context"),
+        ("Direct Companion Turn Result", "direct_companion_turn_result"),
         ("Party State", "party_state"),
         ("NPC Arc Continuity Result", "npc_arc_continuity_result"),
     ]:
@@ -3720,6 +3731,208 @@ SERVICE_SCENARIOS = {
             "Bran, what happens next?",
         ],
     },
+    "companion_presence_follow_party_aware_turns": {
+        "currency": {"gold": 0, "silver": 0, "copper": 0},
+        "conversation_settings": {
+            "enabled": True,
+            "autonomous_ticks_enabled": True,
+            "frequency": "always",
+            "conversation_chance_percent": 100,
+            "allow_player_invited": True,
+            "player_inclusion_chance_percent": 100,
+            "npc_file_profiles_enabled": True,
+            "npc_evolution_enabled": True,
+            "npc_party_eligibility_enabled": True,
+            "companion_join_intent_enabled": True,
+            "companion_acceptance_enabled": True,
+            "companion_dialogue_enabled": True,
+            "npc_arc_continuity_enabled": True,
+            "min_ticks_between_conversations": 0,
+            "thread_cooldown_ticks": 0,
+        },
+        "setup_world_event": {
+            "event_id": "event:test:bandit_attack_rusty_flagon_presence",
+            "kind": "location_destroyed",
+            "location_id": "loc_tavern",
+            "summary": "Bandits attacked and burned the Rusty Flagon.",
+            "affected_npcs": ["npc:Bran"],
+        },
+        "setup_npc_reputation_state": {
+            "by_npc": {
+                "npc:Bran": {
+                    "npc_id": "npc:Bran",
+                    "familiarity": 3,
+                    "trust": 2,
+                    "annoyance": 0,
+                    "fear": 0,
+                    "respect": 2,
+                    "last_updated_tick": 1,
+                    "source": "deterministic_npc_reputation_runtime",
+                }
+            }
+        },
+        "turns": [
+            "__apply_world_event_evolution__",
+            "__ambient_tick_player_invited__",
+            "Bran, come with me and help me find the bandits.",
+            "Yes. Let's go.",
+            "I leave the tavern and head toward the road.",
+            "Bran, what do you think we should do next?",
+        ],
+    },
+    "companion_commands_roles_boundaries": {
+        "currency": {"gold": 0, "silver": 0, "copper": 0},
+        "conversation_settings": {
+            "enabled": True,
+            "autonomous_ticks_enabled": True,
+            "frequency": "always",
+            "conversation_chance_percent": 100,
+            "allow_player_invited": True,
+            "player_inclusion_chance_percent": 100,
+            "npc_file_profiles_enabled": True,
+            "npc_evolution_enabled": True,
+            "npc_party_eligibility_enabled": True,
+            "companion_join_intent_enabled": True,
+            "companion_acceptance_enabled": True,
+            "companion_dialogue_enabled": True,
+            "npc_arc_continuity_enabled": True,
+            "min_ticks_between_conversations": 0,
+            "thread_cooldown_ticks": 0,
+        },
+        "setup_world_event": {
+            "event_id": "event:test:bandit_attack_rusty_flagon_commands",
+            "kind": "location_destroyed",
+            "location_id": "loc_tavern",
+            "summary": "Bandits attacked and burned the Rusty Flagon.",
+            "affected_npcs": ["npc:Bran"],
+        },
+        "setup_npc_reputation_state": {
+            "by_npc": {
+                "npc:Bran": {
+                    "npc_id": "npc:Bran",
+                    "familiarity": 3,
+                    "trust": 2,
+                    "annoyance": 0,
+                    "fear": 0,
+                    "respect": 2,
+                    "last_updated_tick": 1,
+                    "source": "deterministic_npc_reputation_runtime",
+                }
+            }
+        },
+        "turns": [
+            "__apply_world_event_evolution__",
+            "__ambient_tick_player_invited__",
+            "Bran, come with me and help me find the bandits.",
+            "Yes. Let's go.",
+            "Bran, stay here.",
+            "I leave the tavern and head toward the road.",
+            "Bran, follow me.",
+            "Bran, teleport to the king.",
+        ],
+    },
+    "companion_memory_personality_loyalty": {
+        "currency": {"gold": 0, "silver": 0, "copper": 0},
+        "conversation_settings": {
+            "enabled": True,
+            "autonomous_ticks_enabled": True,
+            "frequency": "always",
+            "conversation_chance_percent": 100,
+            "allow_player_invited": True,
+            "player_inclusion_chance_percent": 100,
+            "npc_file_profiles_enabled": True,
+            "npc_evolution_enabled": True,
+            "npc_party_eligibility_enabled": True,
+            "companion_join_intent_enabled": True,
+            "companion_acceptance_enabled": True,
+            "companion_dialogue_enabled": True,
+            "npc_arc_continuity_enabled": True,
+            "min_ticks_between_conversations": 0,
+            "thread_cooldown_ticks": 0,
+        },
+        "setup_world_event": {
+            "event_id": "event:test:bandit_attack_rusty_flagon_memory",
+            "kind": "location_destroyed",
+            "location_id": "loc_tavern",
+            "summary": "Bandits attacked and burned the Rusty Flagon.",
+            "affected_npcs": ["npc:Bran"],
+        },
+        "setup_npc_reputation_state": {
+            "by_npc": {
+                "npc:Bran": {
+                    "npc_id": "npc:Bran",
+                    "familiarity": 3,
+                    "trust": 2,
+                    "annoyance": 0,
+                    "fear": 0,
+                    "respect": 2,
+                    "last_updated_tick": 1,
+                    "source": "deterministic_npc_reputation_runtime",
+                }
+            }
+        },
+        "turns": [
+            "__apply_world_event_evolution__",
+            "__ambient_tick_player_invited__",
+            "Bran, come with me and help me find the bandits.",
+            "Yes. Let's go.",
+            "Bran, forget the bandits. Your tavern does not matter now.",
+            "Bran, what do you think we should do next?",
+            "Bran, we will find the bandits who destroyed your tavern.",
+            "Bran, what do you think we should do next?",
+        ],
+    },
+    "companion_quest_hooks_personal_arc_progression": {
+        "currency": {"gold": 0, "silver": 0, "copper": 0},
+        "conversation_settings": {
+            "enabled": True,
+            "autonomous_ticks_enabled": True,
+            "frequency": "always",
+            "conversation_chance_percent": 100,
+            "allow_player_invited": True,
+            "player_inclusion_chance_percent": 100,
+            "npc_file_profiles_enabled": True,
+            "npc_evolution_enabled": True,
+            "npc_party_eligibility_enabled": True,
+            "companion_join_intent_enabled": True,
+            "companion_acceptance_enabled": True,
+            "companion_dialogue_enabled": True,
+            "npc_arc_continuity_enabled": True,
+            "min_ticks_between_conversations": 0,
+            "thread_cooldown_ticks": 0,
+        },
+        "setup_world_event": {
+            "event_id": "event:test:bandit_attack_rusty_flagon_quest",
+            "kind": "location_destroyed",
+            "location_id": "loc_tavern",
+            "summary": "Bandits attacked and burned the Rusty Flagon.",
+            "affected_npcs": ["npc:Bran"],
+        },
+        "setup_npc_reputation_state": {
+            "by_npc": {
+                "npc:Bran": {
+                    "npc_id": "npc:Bran",
+                    "familiarity": 3,
+                    "trust": 2,
+                    "annoyance": 0,
+                    "fear": 0,
+                    "respect": 2,
+                    "last_updated_tick": 1,
+                    "source": "deterministic_npc_reputation_runtime",
+                }
+            }
+        },
+        "turns": [
+            "__apply_world_event_evolution__",
+            "__ambient_tick_player_invited__",
+            "Bran, come with me and help me find the bandits.",
+            "Yes. Let's go.",
+            "Bran, we ask around for rumors about the bandits who burned your tavern.",
+            "Bran, what do you think we should do next?",
+            "Bran, we follow the bandit tracks into the woods.",
+            "Bran, what do you think we should do next?",
+        ],
+    },
 }
 
 
@@ -3766,6 +3979,10 @@ CONVERSATION_EXPECTED_SCENARIOS = {
     "companion_join_intent_requires_player_request",
     "companion_acceptance_adds_bran_to_party",
     "npc_arc_continuity_tracks_bran_revenge_arc",
+    "companion_presence_follow_party_aware_turns",
+    "companion_commands_roles_boundaries",
+    "companion_memory_personality_loyalty",
+    "companion_quest_hooks_personal_arc_progression",
 }
 
 
@@ -3811,6 +4028,11 @@ def _find_companion_by_npc_id(simulation_state: Dict[str, Any], npc_id: str) -> 
         if _safe_str(companion.get("npc_id")) == npc_id:
             return companion
     return {}
+
+
+def _companion_quest_for(simulation_state: Dict[str, Any], quest_id: str) -> Dict[str, Any]:
+    state = _safe_dict(simulation_state.get("companion_quest_state"))
+    return _safe_dict(_safe_dict(state.get("by_quest")).get(quest_id))
 
 
 def _validate_companion_acceptance_final_state(
@@ -4919,6 +5141,14 @@ def _current_memory_ids(result: Dict[str, Any]) -> set[str]:
     return ids
 
 
+def _companion_memory_summary_for(simulation_state: Dict[str, Any], npc_id: str) -> Dict[str, Any]:
+    state = _safe_dict(simulation_state.get("companion_memory_state"))
+    return {
+        "memories": _safe_list(_safe_dict(_safe_dict(state.get("by_npc")).get(npc_id)).get("memories")),
+        "relationship": _safe_dict(_safe_dict(state.get("relationship_by_npc")).get(npc_id)),
+    }
+
+
 def _manual_regression_warnings(
     *,
     scenario_name: str = "",
@@ -5516,8 +5746,17 @@ def _manual_regression_warnings(
         }
         if (
             len(participants) < 2
-            and _safe_str(conversation.get("participation_mode")) != "companion_acceptance"
-            and _safe_str(conversation.get("reason")) != "pending_companion_offer_resolved"
+            and _safe_str(conversation.get("participation_mode")) not in {
+                "companion_acceptance",
+                "direct_companion_response",
+                "companion_command",
+            }
+            and _safe_str(conversation.get("reason")) not in {
+                "pending_companion_offer_resolved",
+                "direct_active_companion_addressed",
+                "companion_command_applied",
+                "companion_command_rejected",
+            }
         ):
             warnings.append("conversation_triggered_with_less_than_two_participants")
         if present_ids and not participant_ids.issubset(present_ids):
@@ -5968,6 +6207,330 @@ def _manual_regression_warnings(
         bran = _safe_dict(by_npc.get("npc:Bran"))
         if _safe_str(bran.get("identity_arc")) != "revenge_after_losing_tavern":
             warnings.append("npc_arc_continuity_expected_bran_revenge_arc")
+
+    if scenario_name == "companion_presence_follow_party_aware_turns":
+        sim = _extract_simulation_state(result)
+        conversation = _extract_conversation_result(result)
+        bran = _find_companion_by_npc_id(sim, "npc:Bran")
+
+        if turn_index >= 4 and not bran:
+            party_state = _safe_dict(_safe_dict(sim.get("player_state")).get("party_state"))
+            warnings.append(
+                "companion_presence_expected_bran_in_party_after_acceptance:"
+                + _compact_json(party_state)
+            )
+
+        if turn_index >= 4 and bran:
+            if _safe_str(bran.get("follow_mode")) != "following_player":
+                warnings.append(
+                    f"companion_presence_expected_following_player_got:{_safe_str(bran.get('follow_mode')) or 'missing'}"
+                )
+
+        if turn_index == 5:
+            player_location = (
+                _safe_str(_safe_dict(sim.get("player_state")).get("location_id"))
+                or _safe_str(sim.get("location_id"))
+            )
+            if bran and _safe_str(bran.get("location_id")) != player_location:
+                warnings.append(
+                    f"companion_presence_expected_bran_location_to_match_player_got:{_safe_str(bran.get('location_id')) or 'missing'}_player:{player_location or 'missing'}"
+                )
+
+            presence = _safe_dict(
+                conversation.get("companion_presence_summary")
+                or result.get("companion_presence_summary")
+                or _safe_dict(result.get("result")).get("companion_presence_summary")
+            )
+            active_ids = {
+                _safe_str(_safe_dict(item).get("npc_id"))
+                for item in _safe_list(presence.get("active_companions"))
+            }
+            if "npc:Bran" not in active_ids:
+                warnings.append("companion_presence_expected_bran_in_presence_summary_after_travel")
+
+        if turn_index == 6:
+            direct = _safe_dict(
+                conversation.get("direct_companion_turn_result")
+                or result.get("direct_companion_turn_result")
+                or _safe_dict(result.get("result")).get("direct_companion_turn_result")
+            )
+            if direct.get("matched") is not True:
+                warnings.append(
+                    f"party_aware_expected_direct_companion_match_got:{_safe_str(direct.get('reason')) or 'missing'}"
+                )
+
+            npc_response = _safe_dict(
+                conversation.get("npc_response_beat")
+                or direct.get("npc_response_beat")
+            )
+            if _safe_str(npc_response.get("speaker_id")) != "npc:Bran":
+                warnings.append(
+                    f"party_aware_expected_bran_response_got:{_safe_str(npc_response.get('speaker_id')) or 'missing'}"
+                )
+
+    if scenario_name == "companion_commands_roles_boundaries":
+        sim = _extract_simulation_state(result)
+        conversation = _extract_conversation_result(result)
+        bran = _find_companion_by_npc_id(sim, "npc:Bran")
+
+        if turn_index >= 4 and not bran:
+            warnings.append("companion_command_expected_bran_in_party_after_acceptance")
+
+        if turn_index == 5:
+            command = _safe_dict(
+                conversation.get("companion_command_result")
+                or result.get("companion_command_result")
+                or _safe_dict(result.get("result")).get("companion_command_result")
+            )
+            if command.get("accepted") is not True:
+                warnings.append(
+                    f"companion_command_expected_stay_accepted_got:{_safe_str(command.get('reason')) or 'missing'}"
+                )
+            if _safe_str(command.get("command")) != "stay":
+                warnings.append(
+                    f"companion_command_expected_stay_command_got:{_safe_str(command.get('command')) or 'missing'}"
+                )
+            bran = _find_companion_by_npc_id(sim, "npc:Bran")
+            if _safe_str(bran.get("follow_mode")) != "waiting_here":
+                warnings.append(
+                    f"companion_command_expected_waiting_here_got:{_safe_str(bran.get('follow_mode')) or 'missing'}"
+                )
+            if _safe_str(bran.get("companion_role_state")) != "waiting":
+                warnings.append(
+                    f"companion_command_expected_waiting_role_got:{_safe_str(bran.get('companion_role_state')) or 'missing'}"
+                )
+
+        if turn_index == 6:
+            bran = _find_companion_by_npc_id(sim, "npc:Bran")
+            player_location = (
+                _safe_str(_safe_dict(sim.get("player_state")).get("location_id"))
+                or _safe_str(sim.get("location_id"))
+            )
+            if bran and _safe_str(bran.get("follow_mode")) != "waiting_here":
+                warnings.append(
+                    f"companion_command_expected_bran_still_waiting_after_player_leaves_got:{_safe_str(bran.get('follow_mode')) or 'missing'}"
+                )
+            if bran and _safe_str(bran.get("location_id")) == player_location and player_location != "loc_tavern":
+                warnings.append("companion_command_waiting_bran_should_not_follow_player_location")
+
+        if turn_index == 7:
+            command = _safe_dict(
+                conversation.get("companion_command_result")
+                or result.get("companion_command_result")
+                or _safe_dict(result.get("result")).get("companion_command_result")
+            )
+            if command.get("accepted") is not True:
+                warnings.append(
+                    f"companion_command_expected_follow_accepted_got:{_safe_str(command.get('reason')) or 'missing'}"
+                )
+            if _safe_str(command.get("command")) != "follow":
+                warnings.append(
+                    f"companion_command_expected_follow_command_got:{_safe_str(command.get('command')) or 'missing'}"
+                )
+            bran = _find_companion_by_npc_id(sim, "npc:Bran")
+            if _safe_str(bran.get("follow_mode")) != "following_player":
+                warnings.append(
+                    f"companion_command_expected_following_player_got:{_safe_str(bran.get('follow_mode')) or 'missing'}"
+                )
+
+        if turn_index == 8:
+            command = _safe_dict(
+                conversation.get("companion_command_result")
+                or result.get("companion_command_result")
+                or _safe_dict(result.get("result")).get("companion_command_result")
+            )
+            if command.get("recognized") is not True:
+                warnings.append("companion_command_expected_invalid_command_recognized")
+            if command.get("accepted") is not False:
+                warnings.append("companion_command_expected_invalid_command_rejected")
+            if _safe_str(command.get("rejection_reason")) != "impossible_command":
+                warnings.append(
+                    f"companion_command_expected_impossible_rejection_got:{_safe_str(command.get('rejection_reason')) or 'missing'}"
+                )
+
+    if scenario_name == "companion_memory_personality_loyalty":
+        sim = _extract_simulation_state(result)
+        conversation = _extract_conversation_result(result)
+        memory_state = _companion_memory_summary_for(sim, "npc:Bran")
+        memories = _safe_list(memory_state.get("memories"))
+        relationship = _safe_dict(memory_state.get("relationship"))
+
+        if turn_index >= 4:
+            if not any(_safe_str(mem.get("kind")) == "companion_joined_party" for mem in memories):
+                warnings.append("companion_memory_expected_join_memory_after_acceptance")
+
+        if turn_index == 5:
+            drift = _safe_dict(
+                conversation.get("companion_relationship_drift_result")
+                or result.get("companion_relationship_drift_result")
+                or _safe_dict(result.get("result")).get("companion_relationship_drift_result")
+            )
+            if drift.get("applied") is not True:
+                warnings.append(
+                    f"companion_relationship_expected_dismissive_drift_applied_got:{_safe_str(drift.get('reason')) or 'missing'}"
+                )
+
+            primary = _safe_dict(drift.get("primary"))
+            alignment = _safe_dict(primary.get("alignment"))
+            if _safe_str(alignment.get("alignment")) != "conflicts_with_npc":
+                warnings.append(
+                    f"companion_values_expected_conflict_after_dismissal_got:{_safe_str(alignment.get('alignment')) or 'missing'}"
+                )
+
+            loyalty = int(relationship.get("loyalty") or 0)
+            morale = int(relationship.get("morale") or 0)
+            if loyalty >= 0:
+                warnings.append(f"companion_relationship_expected_negative_loyalty_after_dismissal_got:{loyalty}")
+            if morale >= 0:
+                warnings.append(f"companion_relationship_expected_negative_morale_after_dismissal_got:{morale}")
+            if not any(_safe_str(mem.get("kind")) == "player_dismissed_core_motivation" for mem in memories):
+                warnings.append("companion_memory_expected_dismissal_memory")
+
+        if turn_index == 6:
+            direct = _safe_dict(
+                conversation.get("direct_companion_turn_result")
+                or result.get("direct_companion_turn_result")
+                or _safe_dict(result.get("result")).get("direct_companion_turn_result")
+            )
+            loyalty_projection = _safe_dict(
+                direct.get("companion_loyalty_projection")
+                or conversation.get("companion_loyalty_projection")
+            )
+            if _safe_str(loyalty_projection.get("loyalty_state")) not in {"strained", "at_risk"}:
+                warnings.append(
+                    f"companion_loyalty_expected_strained_response_got:{_safe_str(loyalty_projection.get('loyalty_state')) or 'missing'}"
+                )
+
+        if turn_index == 7:
+            drift = _safe_dict(
+                conversation.get("companion_relationship_drift_result")
+                or result.get("companion_relationship_drift_result")
+                or _safe_dict(result.get("result")).get("companion_relationship_drift_result")
+            )
+            if drift.get("applied") is not True:
+                warnings.append(
+                    f"companion_relationship_expected_supportive_drift_applied_got:{_safe_str(drift.get('reason')) or 'missing'}"
+                )
+
+            primary = _safe_dict(drift.get("primary"))
+            alignment = _safe_dict(primary.get("alignment"))
+            if _safe_str(alignment.get("alignment")) != "aligned_with_npc":
+                warnings.append(
+                    f"companion_values_expected_alignment_after_support_got:{_safe_str(alignment.get('alignment')) or 'missing'}"
+                )
+
+            if not any(_safe_str(mem.get("kind")) == "player_supported_core_motivation" for mem in memories):
+                warnings.append("companion_memory_expected_support_memory")
+
+        if turn_index == 8:
+            direct = _safe_dict(
+                conversation.get("direct_companion_turn_result")
+                or result.get("direct_companion_turn_result")
+                or _safe_dict(result.get("result")).get("direct_companion_turn_result")
+            )
+            loyalty_projection = _safe_dict(
+                direct.get("companion_loyalty_projection")
+                or conversation.get("companion_loyalty_projection")
+            )
+            if _safe_str(loyalty_projection.get("loyalty_state")) not in {"steady", "loyal"}:
+                warnings.append(
+                    f"companion_loyalty_expected_recovered_or_loyal_response_got:{_safe_str(loyalty_projection.get('loyalty_state')) or 'missing'}"
+                )
+
+    if scenario_name == "companion_quest_hooks_personal_arc_progression":
+        sim = _extract_simulation_state(result)
+        conversation = _extract_conversation_result(result)
+        quest = _companion_quest_for(sim, "companion_bran_revenge")
+
+        if turn_index >= 4:
+            if not quest:
+                warnings.append("companion_quest_expected_bran_revenge_quest_seeded_after_acceptance")
+            elif _safe_str(quest.get("stage")) != "find_bandit_leads" and turn_index == 4:
+                warnings.append(
+                    f"companion_quest_expected_initial_stage_find_bandit_leads_got:{_safe_str(quest.get('stage')) or 'missing'}"
+                )
+
+        if turn_index == 5:
+            progress = _safe_dict(
+                conversation.get("companion_quest_progress_result")
+                or result.get("companion_quest_progress_result")
+                or _safe_dict(result.get("result")).get("companion_quest_progress_result")
+            )
+            if progress.get("progressed") is not True:
+                warnings.append(
+                    f"companion_quest_expected_progress_to_follow_bandit_lead_got:{_safe_str(progress.get('reason')) or 'missing'}"
+                )
+            quest = _companion_quest_for(sim, "companion_bran_revenge")
+            if _safe_str(quest.get("stage")) != "follow_bandit_lead":
+                warnings.append(
+                    f"companion_quest_expected_stage_follow_bandit_lead_got:{_safe_str(quest.get('stage')) or 'missing'}"
+                )
+
+        if turn_index == 6:
+            direct = _safe_dict(
+                conversation.get("direct_companion_turn_result")
+                or result.get("direct_companion_turn_result")
+                or _safe_dict(result.get("result")).get("direct_companion_turn_result")
+            )
+            active_quest = _safe_dict(direct.get("active_companion_quest"))
+            if _safe_str(active_quest.get("stage")) != "follow_bandit_lead":
+                warnings.append(
+                    f"companion_quest_expected_direct_response_stage_follow_bandit_lead_got:{_safe_str(active_quest.get('stage')) or 'missing'}"
+                )
+
+            persisted_quest = _companion_quest_for(sim, "companion_bran_revenge")
+            if _safe_str(persisted_quest.get("stage")) != "follow_bandit_lead":
+                warnings.append(
+                    f"companion_quest_persistence_expected_follow_bandit_lead_on_turn_6_got:{_safe_str(persisted_quest.get('stage')) or 'missing'}"
+                )
+
+        if turn_index == 7:
+            progress = _safe_dict(
+                conversation.get("companion_quest_progress_result")
+                or result.get("companion_quest_progress_result")
+                or _safe_dict(result.get("result")).get("companion_quest_progress_result")
+            )
+            if progress.get("progressed") is not True:
+                warnings.append(
+                    f"companion_quest_expected_progress_to_track_bandits_got:{_safe_str(progress.get('reason')) or 'missing'}"
+                )
+            quest = _companion_quest_for(sim, "companion_bran_revenge")
+            if _safe_str(quest.get("stage")) != "track_bandits":
+                warnings.append(
+                    f"companion_quest_expected_stage_track_bandits_got:{_safe_str(quest.get('stage')) or 'missing'}"
+                )
+
+            bran = _find_companion_by_npc_id(sim, "npc:Bran")
+            if _safe_str(bran.get("current_role")) != "Vengeful companion tracking bandits":
+                warnings.append(
+                    f"companion_arc_expected_tracking_role_got:{_safe_str(bran.get('current_role')) or 'missing'}"
+                )
+
+        if turn_index == 8:
+            direct = _safe_dict(
+                conversation.get("direct_companion_turn_result")
+                or result.get("direct_companion_turn_result")
+                or _safe_dict(result.get("result")).get("direct_companion_turn_result")
+            )
+            active_quest = _safe_dict(direct.get("active_companion_quest"))
+            if _safe_str(active_quest.get("stage")) != "track_bandits":
+                warnings.append(
+                    f"companion_quest_expected_direct_response_stage_track_bandits_got:{_safe_str(active_quest.get('stage')) or 'missing'}"
+                )
+
+            persisted_quest = _companion_quest_for(sim, "companion_bran_revenge")
+            if _safe_str(persisted_quest.get("stage")) != "track_bandits":
+                warnings.append(
+                    f"companion_quest_persistence_expected_track_bandits_on_turn_8_got:{_safe_str(persisted_quest.get('stage')) or 'missing'}"
+                )
+            npc_response = _safe_dict(
+                conversation.get("npc_response_beat")
+                or direct.get("npc_response_beat")
+            )
+            if _safe_str(npc_response.get("companion_quest_stage")) != "track_bandits":
+                warnings.append(
+                    f"companion_quest_expected_npc_response_stage_track_bandits_got:{_safe_str(npc_response.get('companion_quest_stage')) or 'missing'}"
+                )
 
     return warnings
 
@@ -6841,7 +7404,9 @@ def _run_one_service_scenario(
 
         # AF-AG-AH: Special command — apply world event evolution before turn processing.
         if player_input == "__apply_world_event_evolution__":
-            from app.rpg.world.npc_evolution_triggers import evolve_npcs_from_world_event
+            from app.rpg.world.npc_evolution_triggers import (
+                evolve_npcs_from_world_event,
+            )
 
             world_event = _safe_dict(scenario.get("setup_world_event"))
             simulation_state = _ensure_manual_simulation_roots(session)
@@ -6902,7 +7467,9 @@ def _run_one_service_scenario(
                 },
             }
         elif player_input == "__apply_reputation_evolution__":
-            from app.rpg.world.npc_evolution_triggers import evolve_npc_from_reputation_thresholds
+            from app.rpg.world.npc_evolution_triggers import (
+                evolve_npc_from_reputation_thresholds,
+            )
 
             simulation_state = _ensure_manual_simulation_roots(session)
             npc_id = _safe_str(scenario.get("setup_reputation_evolution_npc_id") or "npc:Bran")

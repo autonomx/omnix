@@ -269,6 +269,26 @@ from app.rpg.world.companion_dialogue import (
     build_companion_join_dialogue,
     build_companion_presence_summary,
 )
+from app.rpg.party.companion_presence import (
+    build_party_aware_turn_context,
+    companion_presence_summary,
+    project_active_companions_into_presence,
+    sync_active_companions_to_player_location,
+)
+from app.rpg.party.companion_turns import maybe_build_direct_companion_turn_response
+from app.rpg.party.companion_commands import maybe_apply_companion_command
+from app.rpg.party.companion_memory import (
+    companion_memory_summary,
+    companion_loyalty_projection,
+    maybe_apply_companion_relationship_drift_from_player_input,
+    record_companion_join_memory,
+)
+from app.rpg.party.companion_quests import (
+    companion_quest_summary,
+    maybe_progress_companion_quest_from_player_input,
+    seed_companion_quest_from_arc,
+    seed_companion_quests_for_active_companions,
+)
 
 
 def _player_party_state_from_simulation(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
@@ -276,6 +296,97 @@ def _player_party_state_from_simulation(simulation_state: Dict[str, Any]) -> Dic
         _safe_dict(
             _safe_dict(simulation_state.get("player_state")).get("party_state")
         )
+    )
+
+
+def _sync_session_simulation_state_for_early_return(
+    session: Dict[str, Any],
+    simulation_state: Dict[str, Any],
+    *,
+    reason: str = "",
+) -> Dict[str, Any]:
+    """Persist simulation_state for early-return turn paths.
+
+    Normal apply_turn flows eventually pass through the standard session update
+    and save path. The companion-acceptance early return bypasses that path, so
+    without this helper Bran is present in Turn 4's returned result but missing
+    from Turn 5 after the manual runner reloads the saved session.
+    """
+    session = _safe_dict(session)
+    simulation_state = _safe_dict(simulation_state)
+
+    session["simulation_state"] = simulation_state
+
+    setup_payload = _safe_dict(session.get("setup_payload"))
+    metadata = _safe_dict(setup_payload.get("metadata"))
+    metadata["simulation_state"] = simulation_state
+    setup_payload["metadata"] = metadata
+    session["setup_payload"] = setup_payload
+
+    # Best-effort save. Lazy import avoids module-level circular imports.
+    try:
+        from app.rpg.session.service import save_session
+
+        save_session(session)
+    except Exception as exc:
+        session["early_return_persistence_warning"] = {
+            "reason": _safe_str(reason),
+            "error": f"{type(exc).__name__}: {exc}",
+            "source": "deterministic_session_runtime",
+        }
+
+    return session
+
+
+def _companion_runtime_mutated_state(
+    *,
+    companion_relationship_drift_result: Dict[str, Any] | None = None,
+    companion_quest_progress_result: Dict[str, Any] | None = None,
+    companion_memory_result: Dict[str, Any] | None = None,
+    companion_command_result: Dict[str, Any] | None = None,
+) -> bool:
+    """Return true when companion systems changed persistent simulation state."""
+    drift = _safe_dict(companion_relationship_drift_result)
+    quest = _safe_dict(companion_quest_progress_result)
+    memory = _safe_dict(companion_memory_result)
+    command = _safe_dict(companion_command_result)
+
+    if drift.get("applied") is True:
+        return True
+    if quest.get("progressed") is True:
+        return True
+    if _safe_dict(quest.get("seed_result")).get("seeded_any") is True:
+        return True
+    if memory.get("recorded") is True:
+        return True
+    if command.get("accepted") is True:
+        return True
+
+    return False
+
+
+def _sync_session_if_companion_runtime_mutated(
+    session: Dict[str, Any],
+    simulation_state: Dict[str, Any],
+    *,
+    reason: str,
+    companion_relationship_drift_result: Dict[str, Any] | None = None,
+    companion_quest_progress_result: Dict[str, Any] | None = None,
+    companion_memory_result: Dict[str, Any] | None = None,
+    companion_command_result: Dict[str, Any] | None = None,
+) -> Dict[str, Any]:
+    if not _companion_runtime_mutated_state(
+        companion_relationship_drift_result=companion_relationship_drift_result,
+        companion_quest_progress_result=companion_quest_progress_result,
+        companion_memory_result=companion_memory_result,
+        companion_command_result=companion_command_result,
+    ):
+        return session
+
+    return _sync_session_simulation_state_for_early_return(
+        session,
+        simulation_state,
+        reason=reason,
     )
 
 
@@ -7777,9 +7888,66 @@ def apply_turn(
         player_input=player_input,
         tick=tick,
     )
+    party_aware_turn_context = build_party_aware_turn_context(
+        simulation_state,
+        player_input=player_input,
+        tick=tick,
+    )
     if companion_acceptance_precheck.get("resolved"):
         conversation_result = _safe_dict(
             companion_acceptance_precheck.get("conversation_result")
+        )
+
+        project_active_companions_into_presence(
+            simulation_state,
+            location_id=_safe_str(_safe_dict(simulation_state.get("player_state")).get("location_id"))
+            or _safe_str(simulation_state.get("location_id")),
+            tick=tick,
+            reason="companion_acceptance_turn_start",
+        )
+        companion_presence = companion_presence_summary(simulation_state)
+        party_aware_turn_context = build_party_aware_turn_context(
+            simulation_state,
+            player_input=player_input,
+            tick=tick,
+        )
+
+        # AU-AV-AW Patch 3.1: record join memory and loyalty projection on acceptance.
+        companion_memory_result: dict = {}
+        companion_loyalty_result: dict = {}
+
+        acceptance = _safe_dict(companion_acceptance_precheck.get("companion_acceptance_result"))
+        accepted_npc_id = _safe_str(acceptance.get("npc_id"))
+
+        if acceptance.get("accepted") and accepted_npc_id:
+            companion_memory_result = record_companion_join_memory(
+                simulation_state,
+                npc_id=accepted_npc_id,
+                tick=tick,
+            )
+            companion_loyalty_result = companion_loyalty_projection(
+                simulation_state,
+                npc_id=accepted_npc_id,
+            )
+
+        companion_quest_seed_result: dict = {}
+        companion_quest_summary_result: dict = {}
+
+        if acceptance.get("accepted") and accepted_npc_id:
+            companion_quest_seed_result = seed_companion_quest_from_arc(
+                simulation_state,
+                npc_id=accepted_npc_id,
+                tick=tick,
+            )
+            companion_quest_summary_result = companion_quest_summary(
+                simulation_state,
+                npc_id=accepted_npc_id,
+            )
+
+        companion_memory_summary_result = (
+            companion_memory_summary(simulation_state, npc_id=accepted_npc_id)
+            if accepted_npc_id
+            else companion_memory_summary(simulation_state)
         )
 
         resolved_result = {
@@ -7798,6 +7966,16 @@ def apply_turn(
             "party_state": copy.deepcopy(
                 companion_acceptance_precheck.get("party_state")
             ),
+            "party_aware_turn_context": copy.deepcopy(party_aware_turn_context),
+            "companion_presence_summary": copy.deepcopy(companion_presence),
+            "companion_presence_projection": copy.deepcopy(
+                _safe_dict(simulation_state.get("companion_presence_projection"))
+            ),
+            "companion_memory_result": copy.deepcopy(companion_memory_result),
+            "companion_loyalty_projection": copy.deepcopy(companion_loyalty_result),
+            "companion_memory_summary": copy.deepcopy(companion_memory_summary_result),
+            "companion_quest_seed_result": copy.deepcopy(companion_quest_seed_result),
+            "companion_quest_summary": copy.deepcopy(companion_quest_summary_result),
             "source": "deterministic_session_runtime",
         }
 
@@ -7809,6 +7987,11 @@ def apply_turn(
             "resolved_result": copy.deepcopy(resolved_result),
             "conversation_result": copy.deepcopy(conversation_result),
             "simulation_state": simulation_state,
+            "party_aware_turn_context": copy.deepcopy(party_aware_turn_context),
+            "companion_presence_summary": copy.deepcopy(companion_presence),
+            "companion_presence_projection": copy.deepcopy(
+                _safe_dict(simulation_state.get("companion_presence_projection"))
+            ),
             "source": "deterministic_session_runtime",
         }
 
@@ -7819,21 +8002,212 @@ def apply_turn(
                 "resolved_result": copy.deepcopy(resolved_result),
                 "conversation_result": copy.deepcopy(conversation_result),
                 "simulation_state": simulation_state,
+                "party_aware_turn_context": copy.deepcopy(party_aware_turn_context),
+                "companion_presence_summary": copy.deepcopy(companion_presence),
+                "companion_presence_projection": copy.deepcopy(
+                    _safe_dict(simulation_state.get("companion_presence_projection"))
+                ),
+                "companion_memory_result": copy.deepcopy(companion_memory_result),
+                "companion_loyalty_projection": copy.deepcopy(companion_loyalty_result),
+                "companion_memory_summary": copy.deepcopy(companion_memory_summary_result),
+                "companion_quest_seed_result": copy.deepcopy(companion_quest_seed_result),
+                "companion_quest_summary": copy.deepcopy(companion_quest_summary_result),
             },
             "turn_contract": turn_contract,
             "conversation_result": copy.deepcopy(conversation_result),
             "simulation_state": simulation_state,
+            "party_aware_turn_context": copy.deepcopy(party_aware_turn_context),
+            "companion_presence_summary": copy.deepcopy(companion_presence),
+            "companion_presence_projection": copy.deepcopy(
+                _safe_dict(simulation_state.get("companion_presence_projection"))
+            ),
+            "companion_memory_result": copy.deepcopy(companion_memory_result),
+            "companion_loyalty_projection": copy.deepcopy(companion_loyalty_result),
+            "companion_memory_summary": copy.deepcopy(companion_memory_summary_result),
+            "companion_quest_seed_result": copy.deepcopy(companion_quest_seed_result),
+            "companion_quest_summary": copy.deepcopy(companion_quest_summary_result),
             "session": session,
         }
 
-        # Preserve normal session state persistence behavior.
-        if isinstance(session, dict):
-            session["simulation_state"] = simulation_state
-            setup_payload = _safe_dict(session.get("setup_payload"))
-            metadata = _safe_dict(setup_payload.get("metadata"))
-            metadata["simulation_state"] = simulation_state
-            setup_payload["metadata"] = metadata
-            session["setup_payload"] = setup_payload
+        session = _sync_session_simulation_state_for_early_return(
+            session,
+            simulation_state,
+            reason="companion_acceptance_turn_start",
+        )
+        result["session"] = session
+
+        # AO-AP-AQ Patch 4.3: project companions into presence after acceptance
+        project_active_companions_into_presence(
+            simulation_state,
+            location_id=_safe_str(_safe_dict(simulation_state.get("player_state")).get("location_id"))
+            or _safe_str(simulation_state.get("location_id")),
+            tick=tick,
+            reason="companion_acceptance_turn_start",
+        )
+        companion_presence = companion_presence_summary(simulation_state)
+        party_aware_turn_context = build_party_aware_turn_context(
+            simulation_state,
+            player_input=player_input,
+            tick=tick,
+        )
+        direct_companion_turn_result = maybe_build_direct_companion_turn_response(
+            simulation_state,
+            player_input=player_input,
+            tick=tick,
+        )
+
+        resolved_result["party_aware_turn_context"] = copy.deepcopy(party_aware_turn_context)
+        resolved_result["companion_presence_summary"] = copy.deepcopy(companion_presence)
+        resolved_result["companion_presence_projection"] = copy.deepcopy(
+            _safe_dict(simulation_state.get("companion_presence_projection"))
+        )
+        resolved_result["direct_companion_turn_result"] = copy.deepcopy(direct_companion_turn_result)
+
+        turn_contract["resolved_result"] = copy.deepcopy(resolved_result)
+        turn_contract["party_aware_turn_context"] = copy.deepcopy(party_aware_turn_context)
+        turn_contract["companion_presence_summary"] = copy.deepcopy(companion_presence)
+        turn_contract["companion_presence_projection"] = copy.deepcopy(
+            _safe_dict(simulation_state.get("companion_presence_projection"))
+        )
+
+        result["result"]["party_aware_turn_context"] = copy.deepcopy(party_aware_turn_context)
+        result["result"]["companion_presence_summary"] = copy.deepcopy(companion_presence)
+        result["result"]["companion_presence_projection"] = copy.deepcopy(
+            _safe_dict(simulation_state.get("companion_presence_projection"))
+        )
+        result["result"]["direct_companion_turn_result"] = copy.deepcopy(direct_companion_turn_result)
+
+        result["party_aware_turn_context"] = copy.deepcopy(party_aware_turn_context)
+        result["companion_presence_summary"] = copy.deepcopy(companion_presence)
+        result["companion_presence_projection"] = copy.deepcopy(
+            _safe_dict(simulation_state.get("companion_presence_projection"))
+        )
+        result["direct_companion_turn_result"] = copy.deepcopy(direct_companion_turn_result)
+
+        conversation_result["party_aware_turn_context"] = copy.deepcopy(party_aware_turn_context)
+        conversation_result["companion_presence_summary"] = copy.deepcopy(companion_presence)
+        conversation_result["companion_presence_projection"] = copy.deepcopy(
+            _safe_dict(simulation_state.get("companion_presence_projection"))
+        )
+        conversation_result["direct_companion_turn_result"] = copy.deepcopy(direct_companion_turn_result)
+        conversation_result["companion_memory_result"] = copy.deepcopy(companion_memory_result)
+        conversation_result["companion_loyalty_projection"] = copy.deepcopy(companion_loyalty_result)
+        conversation_result["companion_memory_summary"] = copy.deepcopy(companion_memory_summary_result)
+        conversation_result["companion_quest_seed_result"] = copy.deepcopy(companion_quest_seed_result)
+        conversation_result["companion_quest_summary"] = copy.deepcopy(companion_quest_summary_result)
+        result["conversation_result"] = conversation_result
+        result["result"]["conversation_result"] = conversation_result
+        turn_contract["conversation_result"] = conversation_result
+
+        return result
+
+    # AR-AS-AT: Companion command runtime (bounded, deterministic).
+    # This must run before the authoritative turn so that commands like
+    # "Bran, stay here." are treated as commands, not generic dialogue.
+    companion_command_result = maybe_apply_companion_command(
+        simulation_state,
+        player_input=player_input,
+        tick=tick,
+    )
+
+    if companion_command_result.get("recognized"):
+        conversation_result = {
+            "triggered": True,
+            "reason": (
+                "companion_command_applied"
+                if companion_command_result.get("accepted")
+                else "companion_command_rejected"
+            ),
+            "participation_mode": "companion_command",
+            "companion_command_result": copy.deepcopy(companion_command_result),
+            "npc_response_beat": copy.deepcopy(
+                _safe_dict(companion_command_result.get("npc_response_beat"))
+            ),
+            "party_aware_turn_context": copy.deepcopy(party_aware_turn_context),
+            "companion_presence_summary": copy.deepcopy(
+                companion_presence_summary(simulation_state)
+            ),
+            "companion_presence_projection": copy.deepcopy(
+                _safe_dict(simulation_state.get("companion_presence_projection"))
+            ),
+            "companion_relationship_drift_result": None,  # Not computed in this path
+            "companion_quest_progress_result": None,  # Not computed in this path
+            "companion_quest_summary": None,  # Not computed in this path
+            "companion_memory_summary": None,  # Not computed in this path
+            "source": "deterministic_companion_command_runtime",
+        }
+
+        resolved_result = {
+            "ok": True,
+            "action_type": "companion_command",
+            "semantic_action_type": "companion_command",
+            "semantic_family": "social",
+            "summary": (
+                "The companion command is applied."
+                if companion_command_result.get("accepted")
+                else "The companion command is rejected."
+            ),
+            "conversation_result": copy.deepcopy(conversation_result),
+            "companion_command_result": copy.deepcopy(companion_command_result),
+            "party_aware_turn_context": copy.deepcopy(party_aware_turn_context),
+            "companion_presence_summary": copy.deepcopy(
+                companion_presence_summary(simulation_state)
+            ),
+            "companion_presence_projection": copy.deepcopy(
+                _safe_dict(simulation_state.get("companion_presence_projection"))
+            ),
+            "companion_relationship_drift_result": None,  # Not computed in this path
+            "companion_quest_progress_result": None,  # Not computed in this path
+            "companion_quest_summary": None,  # Not computed in this path
+            "companion_memory_summary": None,  # Not computed in this path
+            "source": "deterministic_companion_command_runtime",
+        }
+
+        turn_contract = {
+            "ok": True,
+            "action_type": "companion_command",
+            "semantic_action_type": "companion_command",
+            "semantic_family": "social",
+            "resolved_result": copy.deepcopy(resolved_result),
+            "conversation_result": copy.deepcopy(conversation_result),
+            "simulation_state": simulation_state,
+            "source": "deterministic_companion_command_runtime",
+        }
+
+        result = {
+            "ok": True,
+            "result": {
+                "ok": True,
+                "resolved_result": copy.deepcopy(resolved_result),
+                "conversation_result": copy.deepcopy(conversation_result),
+                "simulation_state": simulation_state,
+                "companion_command_result": copy.deepcopy(companion_command_result),
+                "companion_relationship_drift_result": None,  # Not computed in this path
+                "companion_quest_progress_result": None,  # Not computed in this path
+                "companion_quest_summary": None,  # Not computed in this path
+                "companion_memory_summary": None,  # Not computed in this path
+            },
+            "turn_contract": turn_contract,
+            "conversation_result": copy.deepcopy(conversation_result),
+            "companion_command_result": copy.deepcopy(companion_command_result),
+            "simulation_state": simulation_state,
+            "companion_relationship_drift_result": None,  # Not computed in this path
+            "companion_quest_progress_result": None,  # Not computed in this path
+            "companion_quest_summary": None,  # Not computed in this path
+            "companion_memory_summary": None,  # Not computed in this path
+            "session": session,
+        }
+
+        session = _sync_session_if_companion_runtime_mutated(
+            session,
+            simulation_state,
+            reason="companion_command",
+            companion_relationship_drift_result=None,  # Not computed in this path
+            companion_quest_progress_result=None,  # Not computed in this path
+            companion_memory_result=None,  # Not computed in this path
+            companion_command_result=companion_command_result,
+        )
+        result["session"] = session
 
         return result
 
@@ -7845,7 +8219,136 @@ def apply_turn(
     )
     if not authoritative_result.get("ok"):
         return authoritative_result
-    return build_apply_turn_response(authoritative_result)
+    final_result = build_apply_turn_response(authoritative_result)
+
+    # AO-AP-AQ Patch 4.2 + 6: post-action companion presence projection
+    _post_action_sim = _safe_dict(
+        _safe_dict(final_result.get("session")).get("simulation_state")
+    ) or _safe_dict(
+        _safe_dict(authoritative_result.get("session")).get("simulation_state")
+    )
+    if _post_action_sim:
+        _post_loc = (
+            _safe_str(_safe_dict(_post_action_sim.get("player_state")).get("location_id"))
+            or _safe_str(_post_action_sim.get("location_id"))
+        )
+        project_active_companions_into_presence(
+            _post_action_sim,
+            location_id=_post_loc,
+            tick=tick,
+            reason="apply_turn_post_action",
+        )
+        _companion_presence = companion_presence_summary(_post_action_sim)
+        _party_aware_ctx = build_party_aware_turn_context(
+            _post_action_sim,
+            player_input=player_input,
+            tick=tick,
+        )
+        # AU-AV-AW Patch 3.2: apply personality-aware relationship drift on normal party turns.
+        _companion_drift = maybe_apply_companion_relationship_drift_from_player_input(
+            _post_action_sim,
+            player_input=player_input,
+            tick=tick,
+        )
+        _companion_mem_summary = companion_memory_summary(_post_action_sim)
+
+        # AX-AY-AZ Patch 3: progress companion quests from player input.
+        _companion_quest_progress = maybe_progress_companion_quest_from_player_input(
+            _post_action_sim,
+            player_input=player_input,
+            tick=tick,
+        )
+        _companion_quest_sum = companion_quest_summary(_post_action_sim)
+
+        _direct_companion = maybe_build_direct_companion_turn_response(
+            _post_action_sim,
+            player_input=player_input,
+            tick=tick,
+        )
+
+        # AX-AY-AZ Patch 5: re-project companion presence after quest stage changes.
+        project_active_companions_into_presence(
+            _post_action_sim,
+            location_id=_safe_str(_safe_dict(_post_action_sim.get("player_state")).get("location_id"))
+            or _safe_str(_post_action_sim.get("location_id")),
+            tick=tick,
+            reason="companion_quest_progress",
+        )
+        _companion_presence = companion_presence_summary(_post_action_sim)
+
+        final_result["party_aware_turn_context"] = copy.deepcopy(_party_aware_ctx)
+        final_result["companion_presence_summary"] = copy.deepcopy(_companion_presence)
+        final_result["companion_presence_projection"] = copy.deepcopy(
+            _safe_dict(_post_action_sim.get("companion_presence_projection"))
+        )
+        final_result["direct_companion_turn_result"] = copy.deepcopy(_direct_companion)
+        final_result["companion_relationship_drift_result"] = copy.deepcopy(_companion_drift)
+        final_result["companion_memory_summary"] = copy.deepcopy(_companion_mem_summary)
+        final_result["companion_quest_progress_result"] = copy.deepcopy(_companion_quest_progress)
+        final_result["companion_quest_summary"] = copy.deepcopy(_companion_quest_sum)
+
+        _nested = _safe_dict(final_result.get("result"))
+        _nested["party_aware_turn_context"] = copy.deepcopy(_party_aware_ctx)
+        _nested["companion_presence_summary"] = copy.deepcopy(_companion_presence)
+        _nested["companion_presence_projection"] = copy.deepcopy(
+            _safe_dict(_post_action_sim.get("companion_presence_projection"))
+        )
+        _nested["direct_companion_turn_result"] = copy.deepcopy(_direct_companion)
+        _nested["companion_relationship_drift_result"] = copy.deepcopy(_companion_drift)
+        _nested["companion_memory_summary"] = copy.deepcopy(_companion_mem_summary)
+        _nested["companion_quest_progress_result"] = copy.deepcopy(_companion_quest_progress)
+        _nested["companion_quest_summary"] = copy.deepcopy(_companion_quest_sum)
+        final_result["result"] = _nested
+
+        _tc = _safe_dict(final_result.get("turn_contract"))
+        _rr = _safe_dict(_tc.get("resolved_result"))
+        _rr["party_aware_turn_context"] = copy.deepcopy(_party_aware_ctx)
+        _rr["companion_presence_summary"] = copy.deepcopy(_companion_presence)
+        _rr["companion_presence_projection"] = copy.deepcopy(
+            _safe_dict(_post_action_sim.get("companion_presence_projection"))
+        )
+        _rr["direct_companion_turn_result"] = copy.deepcopy(_direct_companion)
+        _rr["companion_relationship_drift_result"] = copy.deepcopy(_companion_drift)
+        _rr["companion_memory_summary"] = copy.deepcopy(_companion_mem_summary)
+        _rr["companion_quest_progress_result"] = copy.deepcopy(_companion_quest_progress)
+        _rr["companion_quest_summary"] = copy.deepcopy(_companion_quest_sum)
+        _tc["resolved_result"] = _rr
+        final_result["turn_contract"] = _tc
+
+        if _direct_companion.get("matched") and not _safe_dict(final_result.get("conversation_result")):
+            final_result["conversation_result"] = {
+                "triggered": True,
+                "reason": "direct_active_companion_addressed",
+                "participation_mode": "direct_companion_response",
+                "npc_response_beat": copy.deepcopy(_direct_companion.get("npc_response_beat")),
+                "direct_companion_turn_result": copy.deepcopy(_direct_companion),
+                "party_aware_turn_context": copy.deepcopy(
+                    _direct_companion.get("party_aware_turn_context")
+                ),
+                "companion_relationship_drift_result": copy.deepcopy(_companion_drift),
+                "companion_memory_summary": copy.deepcopy(_companion_mem_summary),
+                "companion_quest_progress_result": copy.deepcopy(_companion_quest_progress),
+                "companion_quest_summary": copy.deepcopy(_companion_quest_sum),
+                "source": "deterministic_companion_turn_runtime",
+            }
+        elif _safe_dict(final_result.get("conversation_result")):
+            _conv = _safe_dict(final_result.get("conversation_result"))
+            _conv["companion_relationship_drift_result"] = copy.deepcopy(_companion_drift)
+            _conv["companion_memory_summary"] = copy.deepcopy(_companion_mem_summary)
+            _conv["companion_quest_progress_result"] = copy.deepcopy(_companion_quest_progress)
+            _conv["companion_quest_summary"] = copy.deepcopy(_companion_quest_sum)
+            final_result["conversation_result"] = _conv
+
+    session = _sync_session_if_companion_runtime_mutated(
+        session,
+        _post_action_sim,
+        reason="normal_apply_turn_companion_runtime",
+        companion_relationship_drift_result=_companion_drift,
+        companion_quest_progress_result=_companion_quest_progress,
+    )
+    final_result["session"] = session
+
+    return final_result
 
 
 
