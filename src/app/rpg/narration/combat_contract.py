@@ -106,6 +106,11 @@ def build_combat_narration_contract(
         "Do not repeat the player's command verbatim.",
     ]
 
+    if party_defeated:
+        constraints.append(
+            "Because party_defeated is true, explicitly state that you/the party are defeated, downed, overwhelmed, or fall. Do not merely imply it."
+        )
+
     return {
         "format_version": "combat_narration_contract_v1",
         "kind": "combat_narration",

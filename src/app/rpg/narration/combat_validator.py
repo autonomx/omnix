@@ -33,7 +33,12 @@ def validate_combat_narration(
 
     narration = _safe_str(payload.get("narration"))
     action = _safe_str(payload.get("action"))
-    full_text = f"{narration}\n{action}".strip()
+    hooks = payload.get("followup_hooks")
+    hooks_text = ""
+    if isinstance(hooks, list):
+        hooks_text = "\n".join(_safe_str(item) for item in hooks)
+
+    full_text = f"{narration}\n{action}\n{hooks_text}".strip()
 
     warnings: List[str] = []
 
@@ -55,7 +60,10 @@ def validate_combat_narration(
             warnings.append("combat_narration_missing_defeat_acknowledgement")
 
     if party_defeated:
-        party_terms = re.compile(r"\b(defeated|overwhelmed|fall|falls|collapse|downed|lose|lost)\b", re.I)
+        party_terms = re.compile(
+            r"\b(defeat|defeated|defeating|overwhelmed|fall|falls|fallen|collapse|collapses|collapsed|downed|goes down|lose|lost)\b",
+            re.I,
+        )
         if not party_terms.search(full_text):
             warnings.append("combat_narration_missing_party_defeat_acknowledgement")
 

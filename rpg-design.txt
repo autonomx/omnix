@@ -1,501 +1,600 @@
-Bundle J13-J14-J15 — Combat Narration Contract + LLM Presentation v1
+Bundle J16-J17-J18 — Combat UI, Combat Log, and Turn Controls v1
 
 Goal:
 
-J13 — Feed combat_result / combat_state into the narration contract.
-J14 — Make LLM combat narration describe resolved combat outcomes only.
-J15 — Add manual LLM transcript scenarios that prove the LLM was called and did not invent combat outcomes.
+J16 — Show combat state in the legacy RPG UI.
+J17 — Show combat log / latest combat result in readable form.
+J18 — Add turn-aware combat controls for player actions and manual actor resolution.
 
-This bundle should not change combat math, initiative, damage, ammo, loot, or party defeat logic.
+Use:
 
-Expected behavior
+src/static/rpg/*.js
+src/static/rpg/*.css
 
-Given deterministic result:
+Do not use React for this bundle.
 
-{
-  "combat_result": {
-    "reason": "combat_attack_resolved",
-    "actor_id": "player",
-    "target_id": "enemy:bandit_1",
-    "hit": true,
-    "damage_applied": 6,
-    "target_hp_before": 8,
-    "target_hp_after": 2,
-    "defeated": false
+This is a UI/presentation bundle only. Do not change combat math.
+
+Expected UI behavior
+
+When combat is active, RPG UI should show a combat panel with:
+
+Combat active
+Round: 1
+Current turn: You / Bran / Bandit
+Participants:
+- You: 20 / 20 HP
+- Bran: 16 / 16 HP
+- Bandit: 8 / 8 HP
+
+It should also show the latest combat event:
+
+You hit Bandit for 6 damage. Bandit HP: 8 → 2.
+
+If it is the player’s turn, show enabled buttons:
+
+Attack
+Defend
+Use Item
+Flee
+
+If it is not the player’s turn, disable player action buttons and show:
+
+Waiting for Bran...
+
+or:
+
+Waiting for Bandit...
+
+For development/manual flow, also add:
+
+Resolve Current Actor
+
+which sends:
+
+__manual_resolve_current_combat_actor__
+
+This should help companion/enemy turns progress until full automatic combat tick support arrives.
+
+Patch 1 — Add combat UI state helpers
+File
+src/static/rpg/rpg.js
+
+Add near other RPG state helpers:
+
+function rpgSafeObject(value) {
+  return value && typeof value === "object" && !Array.isArray(value) ? value : {};
+}
+
+function rpgSafeArray(value) {
+  return Array.isArray(value) ? value : [];
+}
+
+function rpgGetLatestCombatState(payload) {
+  payload = rpgSafeObject(payload);
+
+  const nested = rpgSafeObject(payload.result);
+  const session = rpgSafeObject(payload.session);
+  const sim = rpgSafeObject(payload.simulation_state || nested.simulation_state || session.simulation_state);
+
+  return rpgSafeObject(
+    payload.combat_state ||
+    nested.combat_state ||
+    sim.combat_state
+  );
+}
+
+function rpgGetLatestCombatResult(payload) {
+  payload = rpgSafeObject(payload);
+
+  const nested = rpgSafeObject(payload.result);
+  const interaction = rpgSafeObject(payload.interaction_result || nested.interaction_result);
+
+  return rpgSafeObject(
+    payload.combat_result ||
+    payload.enemy_combat_result ||
+    payload.companion_combat_result ||
+    nested.combat_result ||
+    nested.enemy_combat_result ||
+    nested.companion_combat_result ||
+    interaction.combat_result
+  );
+}
+
+function rpgCombatActorLabel(combatState, actorId) {
+  combatState = rpgSafeObject(combatState);
+  const participants = rpgSafeObject(combatState.participants);
+  const participant = rpgSafeObject(participants[actorId]);
+
+  if (actorId === "player") return "You";
+  return participant.name || actorId || "Unknown";
+}
+
+function rpgCombatParticipantRows(combatState) {
+  combatState = rpgSafeObject(combatState);
+  const participants = rpgSafeObject(combatState.participants);
+
+  return Object.keys(participants).map((actorId) => {
+    const p = rpgSafeObject(participants[actorId]);
+    return {
+      actorId,
+      name: p.name || rpgCombatActorLabel(combatState, actorId),
+      side: p.side || "",
+      hp: Number.isFinite(Number(p.hp)) ? Number(p.hp) : null,
+      maxHp: Number.isFinite(Number(p.max_hp)) ? Number(p.max_hp) : null,
+      status: p.status || "active",
+    };
+  });
+}
+
+function rpgDescribeCombatResult(combatState, combatResult) {
+  combatState = rpgSafeObject(combatState);
+  combatResult = rpgSafeObject(combatResult);
+
+  const reason = combatResult.reason || "";
+  const attack = rpgSafeObject(combatResult.attack_result);
+  const effective = Object.keys(attack).length ? attack : combatResult;
+
+  const actorId = effective.actor_id || combatResult.actor_id || combatResult.enemy_id || combatResult.npc_id || "";
+  const targetId = effective.target_id || combatResult.target_id || "";
+
+  const actorName = rpgCombatActorLabel(combatState, actorId);
+  const targetName = rpgCombatActorLabel(combatState, targetId);
+
+  if (reason === "combat_started") {
+    return "Combat started.";
   }
+
+  if (reason === "combat_turn_advanced") {
+    const current = rpgCombatActorLabel(combatState, combatResult.current_actor_id || combatState.current_actor_id);
+    return `Turn advanced. Current actor: ${current}.`;
+  }
+
+  if (reason === "not_actor_turn") {
+    const current = rpgCombatActorLabel(combatState, combatResult.current_actor_id || combatState.current_actor_id);
+    return `It is not your turn. Current actor: ${current}.`;
+  }
+
+  if (
+    reason === "combat_attack_resolved" ||
+    reason === "combat_defeat_resolved" ||
+    reason === "companion_combat_attack_resolved" ||
+    reason === "companion_combat_defeat_resolved" ||
+    reason === "enemy_combat_attack_resolved" ||
+    reason === "party_defeat_resolved"
+  ) {
+    const hit = effective.hit === true;
+    const damage = Number(effective.damage_applied || 0);
+    const before = effective.target_hp_before;
+    const after = effective.target_hp_after;
+
+    if (!hit) {
+      return `${actorName} attacks ${targetName} and misses.`;
+    }
+
+    const defeated = effective.defeated || reason === "combat_defeat_resolved" || reason === "party_defeat_resolved";
+    const hpText =
+      before !== undefined && after !== undefined
+        ? ` ${targetName} HP: ${before} → ${after}.`
+        : "";
+
+    if (defeated) {
+      return `${actorName} hits ${targetName} for ${damage} damage and defeats them.${hpText}`;
+    }
+
+    return `${actorName} hits ${targetName} for ${damage} damage.${hpText}`;
+  }
+
+  if (reason) {
+    return `Result: ${reason}`;
+  }
+
+  return "";
 }
-
-LLM narration may say:
-
-Your arrow strikes the bandit and drives him back, but he remains on his feet.
-
-It must not say:
-
-The bandit dies.
-
-unless:
-
-{
-  "defeated": true,
-  "reason": "combat_defeat_resolved"
-}
-Patch 1 — Add combat narration contract builder
-New file
-src/app/rpg/narration/combat_contract.py
-from __future__ import annotations
-
-from copy import deepcopy
-from typing import Any, Dict, List
-
-
-def _safe_str(value: Any) -> str:
-    return "" if value is None else str(value)
-
-
-def _safe_dict(value: Any) -> Dict[str, Any]:
-    return value if isinstance(value, dict) else {}
-
-
-def _safe_list(value: Any) -> List[Any]:
-    return value if isinstance(value, list) else []
-
-
-def _safe_int(value: Any, default: int = 0) -> int:
-    try:
-        return int(value)
-    except Exception:
-        return default
-
-
-def _participant_name(combat_state: Dict[str, Any], actor_id: str) -> str:
-    participant = _safe_dict(_safe_dict(combat_state.get("participants")).get(actor_id))
-    return _safe_str(participant.get("name") or actor_id)
-
-
-def build_combat_narration_contract(
-    *,
-    combat_result: Dict[str, Any],
-    combat_state: Dict[str, Any],
-) -> Dict[str, Any]:
-    combat_result = _safe_dict(combat_result)
-    combat_state = _safe_dict(combat_state)
-
-    reason = _safe_str(combat_result.get("reason"))
-    actor_id = _safe_str(combat_result.get("actor_id") or combat_result.get("enemy_id") or combat_result.get("npc_id"))
-    target_id = _safe_str(combat_result.get("target_id"))
-
-    attack_result = _safe_dict(combat_result.get("attack_result"))
-    if attack_result:
-        actor_id = _safe_str(attack_result.get("actor_id") or actor_id)
-        target_id = _safe_str(attack_result.get("target_id") or target_id)
-
-    effective = attack_result if attack_result else combat_result
-
-    actor_name = _participant_name(combat_state, actor_id) if actor_id else ""
-    target_name = _participant_name(combat_state, target_id) if target_id else ""
-
-    hit = effective.get("hit")
-    defeated = bool(effective.get("defeated") or reason in {"combat_defeat_resolved", "companion_combat_defeat_resolved"})
-    party_defeated = bool(combat_result.get("party_defeated") or reason == "party_defeat_resolved")
-    combat_ended = bool(combat_result.get("combat_ended") or effective.get("combat_ended") or not combat_state.get("active", True))
-
-    hp_before = _safe_int(effective.get("target_hp_before"), -1)
-    hp_after = _safe_int(effective.get("target_hp_after"), -1)
-
-    facts = {
-        "reason": reason,
-        "actor_id": actor_id,
-        "actor_name": actor_name,
-        "target_id": target_id,
-        "target_name": target_name,
-        "hit": hit,
-        "attack_roll": effective.get("attack_roll"),
-        "attack_total": effective.get("attack_total"),
-        "target_defense": effective.get("target_defense"),
-        "damage_applied": effective.get("damage_applied"),
-        "target_hp_before": hp_before,
-        "target_hp_after": hp_after,
-        "defeated": defeated,
-        "party_defeated": party_defeated,
-        "combat_ended": combat_ended,
-        "next_actor_id": _safe_str(effective.get("next_actor_id") or combat_state.get("current_actor_id")),
-        "round": _safe_int(combat_state.get("round"), 1),
-    }
-
-    ammo = _safe_dict(effective.get("ammo_result"))
-    if ammo:
-        facts["ammo_result"] = {
-            "consumed": bool(ammo.get("consumed")),
-            "ammo_item_id": _safe_str(ammo.get("ammo_item_id")),
-            "quantity_before": ammo.get("quantity_before"),
-            "quantity_after": ammo.get("quantity_after"),
-        }
-
-    loot = _safe_dict(effective.get("loot_result") or combat_result.get("loot_result"))
-    if loot:
-        facts["loot_result"] = {
-            "resolved": bool(loot.get("resolved")),
-            "reason": _safe_str(loot.get("reason")),
-            "loot_table_id": _safe_str(loot.get("loot_table_id")),
-            "items_created": deepcopy(_safe_list(loot.get("items_created"))),
-        }
-
-    constraints = [
-        "Narrate only the resolved combat facts in this contract.",
-        "Do not invent hits, misses, damage, death, loot, surrender, escape, dismemberment, or new enemies.",
-        "If defeated is false, do not say the target dies, collapses dead, is slain, is killed, or is finished.",
-        "If defeated is true, acknowledge that the target is defeated.",
-        "If party_defeated is true, acknowledge that the party/player is defeated.",
-        "Do not mention JSON, contract, simulation, validator, system, prompt, or LLM.",
-        "Do not repeat the player's command verbatim.",
-    ]
-
-    return {
-        "format_version": "combat_narration_contract_v1",
-        "kind": "combat_narration",
-        "facts": facts,
-        "constraints": constraints,
-        "raw_combat_result": deepcopy(combat_result),
-        "source": "deterministic_combat_narration_contract",
-    }
-
-
-def combat_contract_requires_llm(combat_result: Dict[str, Any]) -> bool:
-    reason = _safe_str(_safe_dict(combat_result).get("reason"))
-    return reason in {
-        "combat_started",
-        "combat_attack_resolved",
-        "combat_defeat_resolved",
-        "companion_combat_attack_resolved",
-        "companion_combat_defeat_resolved",
-        "enemy_combat_attack_resolved",
-        "party_defeat_resolved",
-    }
-Patch 2 — Add combat narration prompt
-New file
-src/app/rpg/narration/combat_prompt.py
-from __future__ import annotations
-
-import json
-from typing import Any, Dict
-
-
-def build_combat_narration_prompt(contract: Dict[str, Any]) -> str:
-    compact = json.dumps(contract, ensure_ascii=False, sort_keys=True)
-
-    return f"""You are the narration layer for a deterministic RPG combat system.
-
-You MUST narrate only the resolved combat facts provided below.
-You MUST NOT invent combat outcomes.
-You MUST NOT decide hits, misses, damage, defeat, loot, death, or turn order.
-You MUST NOT mention JSON, system, prompt, contract, simulation, validation, or LLM.
-
-Return strict JSON with exactly these keys:
-{{
-  "format_version": "rpg_narration_v2",
-  "narration": "2-5 sentences of grounded combat narration.",
-  "action": "Short resolved outcome, not the player's command.",
-  "npc": {{"speaker": "", "line": ""}},
-  "reward": "",
-  "followup_hooks": []
-}}
-
-Combat contract:
-{compact}
-"""
-Patch 3 — Add combat narration validator
-New file
-src/app/rpg/narration/combat_validator.py
-from __future__ import annotations
-
-import re
-from typing import Any, Dict, List
-
-
-DEATH_WORD_RE = re.compile(
-    r"\b(dies|dead|killed|slain|lifeless|corpse|finished\s+him|finished\s+her|finished\s+them|death)\b",
-    re.I,
-)
-
-META_RE = re.compile(
-    r"\b(json|contract|simulation|validator|system|prompt|llm|language model)\b",
-    re.I,
-)
-
-
-def _safe_str(value: Any) -> str:
-    return "" if value is None else str(value)
-
-
-def _safe_dict(value: Any) -> Dict[str, Any]:
-    return value if isinstance(value, dict) else {}
-
-
-def validate_combat_narration(
-    *,
-    narration_payload: Dict[str, Any],
-    combat_contract: Dict[str, Any],
-) -> Dict[str, Any]:
-    payload = _safe_dict(narration_payload)
-    contract = _safe_dict(combat_contract)
-    facts = _safe_dict(contract.get("facts"))
-
-    narration = _safe_str(payload.get("narration"))
-    action = _safe_str(payload.get("action"))
-    full_text = f"{narration}\n{action}".strip()
-
-    warnings: List[str] = []
-
-    if not narration.strip():
-        warnings.append("combat_narration_empty")
-
-    if META_RE.search(full_text):
-        warnings.append("combat_narration_meta_language")
-
-    defeated = facts.get("defeated") is True
-    party_defeated = facts.get("party_defeated") is True
-
-    if not defeated and not party_defeated and DEATH_WORD_RE.search(full_text):
-        warnings.append("combat_narration_invented_death")
-
-    if defeated:
-        defeat_terms = re.compile(r"\b(defeat|defeated|falls|drops|collapses|goes down|downed|slain|killed)\b", re.I)
-        if not defeat_terms.search(full_text):
-            warnings.append("combat_narration_missing_defeat_acknowledgement")
-
-    if party_defeated:
-        party_terms = re.compile(r"\b(defeated|overwhelmed|fall|falls|collapse|downed|lose|lost)\b", re.I)
-        if not party_terms.search(full_text):
-            warnings.append("combat_narration_missing_party_defeat_acknowledgement")
-
-    target_name = _safe_str(facts.get("target_name"))
-    if target_name and target_name.lower() not in full_text.lower():
-        warnings.append("combat_narration_missing_target_name")
-
-    actor_name = _safe_str(facts.get("actor_name"))
-    actor_id = _safe_str(facts.get("actor_id"))
-    if actor_id == "player":
-        # Player narration can use "you" instead of player name.
-        if "you" not in full_text.lower() and actor_name and actor_name.lower() not in full_text.lower():
-            warnings.append("combat_narration_missing_player_actor_reference")
-    elif actor_name and actor_name.lower() not in full_text.lower():
-        warnings.append("combat_narration_missing_actor_name")
-
-    return {
-        "ok": not warnings,
-        "warnings": warnings,
-        "source": "deterministic_combat_narration_validator",
-    }
-Patch 4 — Wire combat narration into session runtime
+Patch 2 — Add combat panel renderer
 File
-src/app/rpg/session/runtime.py
+src/static/rpg/rpg.js
 
-Add imports near narration imports:
+Add near other render helpers:
 
-from app.rpg.narration.combat_contract import (
-    build_combat_narration_contract,
-    combat_contract_requires_llm,
-)
-from app.rpg.narration.combat_prompt import build_combat_narration_prompt
-from app.rpg.narration.combat_validator import validate_combat_narration
+function rpgEnsureCombatPanel() {
+  const root =
+    document.querySelector("#rpg-top-panels") ||
+    document.querySelector(".rpg-top-panels") ||
+    document.querySelector("#rpgModePanel") ||
+    document.querySelector("#rpg-panel") ||
+    document.body;
 
-Find where the normal turn result has already extracted:
+  let panel = document.querySelector("#rpg-combat-panel");
+  if (panel) return panel;
 
-combat_result = _safe_dict(general_interaction_result.get("combat_result"))
-combat_state = _safe_dict(
-    general_interaction_result.get("combat_state")
-    or simulation_state.get("combat_state")
-)
+  panel = document.createElement("section");
+  panel.id = "rpg-combat-panel";
+  panel.className = "rpg-combat-panel rpg-panel-card";
+  panel.innerHTML = `
+    <div class="rpg-combat-header">
+      <div>
+        <div class="rpg-combat-title">Combat</div>
+        <div class="rpg-combat-subtitle" data-role="combat-status">Not in combat</div>
+      </div>
+      <div class="rpg-combat-round" data-role="combat-round"></div>
+    </div>
 
-After that, add:
+    <div class="rpg-combat-current" data-role="combat-current"></div>
 
-combat_narration_contract = {}
-combat_narration_validation = {}
+    <div class="rpg-combat-participants" data-role="combat-participants"></div>
 
-Then before fallback narration is finalized, add this block:
+    <div class="rpg-combat-log" data-role="combat-log"></div>
 
-if combat_contract_requires_llm(combat_result):
-    combat_narration_contract = build_combat_narration_contract(
-        combat_result=combat_result,
-        combat_state=combat_state,
-    )
+    <div class="rpg-combat-controls" data-role="combat-controls">
+      <button type="button" data-combat-action="attack">Attack</button>
+      <button type="button" data-combat-action="defend">Defend</button>
+      <button type="button" data-combat-action="use_item">Use Item</button>
+      <button type="button" data-combat-action="flee">Flee</button>
+      <button type="button" data-combat-action="resolve_current">Resolve Current Actor</button>
+    </div>
+  `;
 
-    combat_prompt = build_combat_narration_prompt(combat_narration_contract)
+  root.prepend(panel);
+  rpgWireCombatControls(panel);
 
-    # Use the same LLM/provider call path used by the existing narration layer.
-    # Adapt the function name here to your actual runtime helper.
-    combat_llm_payload = {}
-    try:
-        combat_llm_payload = _call_narration_llm_json(
-            prompt=combat_prompt,
-            purpose="combat_narration",
-        )
-    except NameError:
-        # If your runtime uses a differently named helper, replace this block
-        # with that helper. The important part is: this must call the real
-        # configured provider and return parsed JSON.
-        combat_llm_payload = {}
+  return panel;
+}
 
-    if combat_llm_payload:
-        combat_narration_validation = validate_combat_narration(
-            narration_payload=combat_llm_payload,
-            combat_contract=combat_narration_contract,
-        )
+function rpgRenderCombatPanel(payload) {
+  const combatState = rpgGetLatestCombatState(payload);
+  const combatResult = rpgGetLatestCombatResult(payload);
 
-        # Only use the LLM text if it passes the hard combat grounding checks.
-        if combat_narration_validation.get("ok") is True:
-            resolved_result["narration"] = _safe_str(combat_llm_payload.get("narration"))
-            resolved_result["action"] = _safe_str(combat_llm_payload.get("action"))
-            resolved_result["npc"] = _safe_dict(combat_llm_payload.get("npc"))
-            resolved_result["reward"] = _safe_str(combat_llm_payload.get("reward"))
-            resolved_result["followup_hooks"] = _safe_list(combat_llm_payload.get("followup_hooks"))
-            resolved_result["llm_called"] = True
-            resolved_result["llm_purpose"] = "combat_narration"
-        else:
-            resolved_result["llm_called"] = True
-            resolved_result["llm_purpose"] = "combat_narration"
-            resolved_result["combat_narration_rejected"] = True
+  const panel = rpgEnsureCombatPanel();
 
-Important: replace _call_narration_llm_json(...) with your actual existing narration LLM helper. Common likely names in your codebase may be something like:
+  const active = combatState.active === true;
+  panel.classList.toggle("is-active", active);
+  panel.classList.toggle("is-inactive", !active);
 
-_call_llm_json(...)
-_call_narrator(...)
-generate_narration(...)
-world_scene_narrator(...)
+  const statusEl = panel.querySelector('[data-role="combat-status"]');
+  const roundEl = panel.querySelector('[data-role="combat-round"]');
+  const currentEl = panel.querySelector('[data-role="combat-current"]');
+  const participantsEl = panel.querySelector('[data-role="combat-participants"]');
+  const logEl = panel.querySelector('[data-role="combat-log"]');
 
-The requirement is that this route uses the configured provider, not a dummy string.
+  if (!active && !combatResult.reason) {
+    statusEl.textContent = "Not in combat";
+    roundEl.textContent = "";
+    currentEl.textContent = "";
+    participantsEl.innerHTML = "";
+    logEl.textContent = "";
+    rpgUpdateCombatControls(panel, combatState);
+    return;
+  }
 
-Where final payloads are assembled, add:
+  const currentActorId = combatState.current_actor_id || "";
+  const currentActorName = rpgCombatActorLabel(combatState, currentActorId);
 
-"combat_narration_contract": deepcopy(combat_narration_contract),
-"combat_narration_validation": deepcopy(combat_narration_validation),
+  statusEl.textContent = active ? "Combat active" : `Combat ended${combatState.ended_reason ? `: ${combatState.ended_reason}` : ""}`;
+  roundEl.textContent = combatState.round ? `Round ${combatState.round}` : "";
+  currentEl.textContent = active && currentActorId ? `Current turn: ${currentActorName}` : "";
 
-Also add to nested result payloads if your manual extractor reads nested result fields.
+  const rows = rpgCombatParticipantRows(combatState);
+  participantsEl.innerHTML = rows
+    .map((row) => {
+      const hpText =
+        row.hp !== null && row.maxHp !== null
+          ? `${row.hp} / ${row.maxHp} HP`
+          : "HP unknown";
 
-Patch 5 — Safer integration option if runtime helper is messy
+      return `
+        <div class="rpg-combat-participant ${row.side === "enemy" ? "is-enemy" : "is-party"} ${row.status !== "active" ? "is-defeated" : ""}">
+          <span class="rpg-combat-participant-name">${rpgEscapeHtml(row.name)}</span>
+          <span class="rpg-combat-participant-side">${rpgEscapeHtml(row.side)}</span>
+          <span class="rpg-combat-participant-hp">${rpgEscapeHtml(hpText)}</span>
+          <span class="rpg-combat-participant-status">${rpgEscapeHtml(row.status)}</span>
+        </div>
+      `;
+    })
+    .join("");
 
-If direct session runtime wiring is too tangled, add a small adapter file.
+  const latest = rpgDescribeCombatResult(combatState, combatResult);
+  logEl.textContent = latest || "";
 
-New file
-src/app/rpg/narration/combat_service.py
-from __future__ import annotations
+  rpgUpdateCombatControls(panel, combatState);
+}
 
-import json
-from typing import Any, Awaitable, Callable, Dict
+function rpgUpdateCombatControls(panel, combatState) {
+  combatState = rpgSafeObject(combatState);
 
-from app.rpg.narration.combat_contract import build_combat_narration_contract
-from app.rpg.narration.combat_prompt import build_combat_narration_prompt
-from app.rpg.narration.combat_validator import validate_combat_narration
+  const active = combatState.active === true;
+  const currentActor = combatState.current_actor_id || "";
+  const isPlayerTurn = active && currentActor === "player";
 
+  const buttons = panel.querySelectorAll("[data-combat-action]");
+  buttons.forEach((button) => {
+    const action = button.getAttribute("data-combat-action");
 
-def _safe_dict(value: Any) -> Dict[str, Any]:
-    return value if isinstance(value, dict) else {}
-
-
-def _parse_json_object(text: str) -> Dict[str, Any]:
-    try:
-        parsed = json.loads(text)
-        return parsed if isinstance(parsed, dict) else {}
-    except Exception:
-        pass
-
-    start = text.find("{")
-    end = text.rfind("}")
-    if start >= 0 and end > start:
-        try:
-            parsed = json.loads(text[start : end + 1])
-            return parsed if isinstance(parsed, dict) else {}
-        except Exception:
-            return {}
-
-    return {}
-
-
-async def generate_combat_narration_with_provider(
-    *,
-    combat_result: Dict[str, Any],
-    combat_state: Dict[str, Any],
-    llm_call: Callable[[str], Awaitable[str]],
-) -> Dict[str, Any]:
-    contract = build_combat_narration_contract(
-        combat_result=combat_result,
-        combat_state=combat_state,
-    )
-    prompt = build_combat_narration_prompt(contract)
-    raw = await llm_call(prompt)
-    payload = _parse_json_object(raw)
-    validation = validate_combat_narration(
-        narration_payload=payload,
-        combat_contract=contract,
-    )
-
-    return {
-        "llm_called": True,
-        "raw": raw,
-        "payload": payload,
-        "combat_narration_contract": contract,
-        "combat_narration_validation": validation,
-        "accepted": validation.get("ok") is True,
-        "source": "combat_narration_service",
+    if (action === "resolve_current") {
+      button.disabled = !active;
+      button.title = active ? "Resolve current non-player actor for testing" : "No active combat";
+      return;
     }
 
-Then session runtime only needs to pass its existing provider-call function into this service.
+    button.disabled = !isPlayerTurn;
+    button.title = isPlayerTurn ? "" : active ? `Waiting for ${rpgCombatActorLabel(combatState, currentActor)}` : "No active combat";
+  });
+}
 
-Patch 6 — Manual transcript extraction helpers
+function rpgEscapeHtml(value) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
+
+If rpgEscapeHtml(...) already exists, do not duplicate it. Reuse the existing function.
+
+Patch 3 — Wire combat buttons
+File
+src/static/rpg/rpg.js
+
+Add:
+
+function rpgWireCombatControls(panel) {
+  if (!panel || panel.dataset.combatControlsWired === "1") return;
+  panel.dataset.combatControlsWired = "1";
+
+  panel.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-combat-action]");
+    if (!button || button.disabled) return;
+
+    const action = button.getAttribute("data-combat-action");
+
+    if (action === "attack") {
+      rpgSubmitCombatCommand("I attack the bandit.");
+      return;
+    }
+
+    if (action === "defend") {
+      rpgSubmitCombatCommand("I defend.");
+      return;
+    }
+
+    if (action === "use_item") {
+      rpgSubmitCombatCommand("I use a healing potion.");
+      return;
+    }
+
+    if (action === "flee") {
+      rpgSubmitCombatCommand("I try to flee.");
+      return;
+    }
+
+    if (action === "resolve_current") {
+      rpgSubmitCombatCommand("__manual_resolve_current_combat_actor__");
+      return;
+    }
+  });
+}
+
+function rpgSubmitCombatCommand(command) {
+  const input =
+    document.querySelector("#rpgInput") ||
+    document.querySelector("#rpg-input") ||
+    document.querySelector("[data-role='rpg-input']") ||
+    document.querySelector("textarea[name='rpg-input']");
+
+  const submit =
+    document.querySelector("#rpgSendBtn") ||
+    document.querySelector("#rpg-send") ||
+    document.querySelector("[data-role='rpg-send']");
+
+  if (input) {
+    input.value = command;
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  }
+
+  if (submit) {
+    submit.click();
+    return;
+  }
+
+  if (typeof window.rpgSendMessage === "function") {
+    window.rpgSendMessage(command);
+    return;
+  }
+
+  if (typeof window.sendRpgMessage === "function") {
+    window.sendRpgMessage(command);
+    return;
+  }
+
+  console.warn("[RPG][CombatUI] Could not submit combat command", command);
+}
+
+Adjust the selectors if your actual legacy UI uses different IDs. The fallback to window.rpgSendMessage / window.sendRpgMessage makes it less brittle.
+
+Patch 4 — Call renderer after each RPG turn/session update
+File
+src/static/rpg/rpg.js
+
+Find the code path that handles a completed RPG turn. It likely has one of these patterns:
+
+renderRpgTurn(result)
+appendRpgNarration(result)
+handleRpgTurnResponse(data)
+updateRpgSession(data)
+
+After the UI receives the response payload, add:
+
+rpgRenderCombatPanel(data);
+
+For example:
+
+@@
+ function handleRpgTurnResponse(data) {
+   ...
++  try {
++    rpgRenderCombatPanel(data);
++  } catch (err) {
++    console.warn("[RPG][CombatUI] render failed", err);
++  }
+ }
+
+Also call it after session load/get:
+
+@@
+ function handleRpgSessionLoaded(data) {
+   ...
++  try {
++    rpgRenderCombatPanel(data);
++  } catch (err) {
++    console.warn("[RPG][CombatUI] initial render failed", err);
++  }
+ }
+
+If the file uses fetch inline, add after successful JSON:
+
+const data = await response.json();
+...
+rpgRenderCombatPanel(data);
+
+The panel should render from any payload containing:
+
+combat_state
+result.combat_state
+session.simulation_state.combat_state
+simulation_state.combat_state
+Patch 5 — Add combat CSS
+File
+src/static/rpg/rpg.css
+
+If there is no rpg.css, use the active RPG stylesheet, possibly:
+
+src/static/rpg/styles.css
+src/static/style.css
+
+Add:
+
+.rpg-combat-panel {
+  border: 1px solid rgba(180, 140, 80, 0.35);
+  border-radius: 12px;
+  padding: 12px;
+  margin: 10px 0;
+  background: rgba(20, 16, 12, 0.86);
+  color: #f2e7d0;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+}
+
+.rpg-combat-panel.is-inactive {
+  opacity: 0.75;
+}
+
+.rpg-combat-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+  margin-bottom: 8px;
+}
+
+.rpg-combat-title {
+  font-weight: 700;
+  letter-spacing: 0.03em;
+}
+
+.rpg-combat-subtitle,
+.rpg-combat-round,
+.rpg-combat-current {
+  color: #d8c7a6;
+  font-size: 0.9rem;
+}
+
+.rpg-combat-current {
+  margin-bottom: 8px;
+}
+
+.rpg-combat-participants {
+  display: grid;
+  gap: 6px;
+  margin: 8px 0;
+}
+
+.rpg-combat-participant {
+  display: grid;
+  grid-template-columns: minmax(120px, 1.4fr) 80px 100px 90px;
+  gap: 8px;
+  align-items: center;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  padding: 6px 8px;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.rpg-combat-participant.is-enemy {
+  border-color: rgba(210, 80, 70, 0.35);
+}
+
+.rpg-combat-participant.is-party {
+  border-color: rgba(80, 150, 210, 0.35);
+}
+
+.rpg-combat-participant.is-defeated {
+  opacity: 0.55;
+  text-decoration: line-through;
+}
+
+.rpg-combat-participant-name {
+  font-weight: 650;
+}
+
+.rpg-combat-participant-side,
+.rpg-combat-participant-status {
+  text-transform: capitalize;
+  color: #cdbb9b;
+}
+
+.rpg-combat-log {
+  margin-top: 8px;
+  padding: 8px;
+  border-left: 3px solid rgba(220, 170, 90, 0.55);
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 8px;
+  min-height: 32px;
+}
+
+.rpg-combat-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.rpg-combat-controls button {
+  border: 1px solid rgba(240, 210, 160, 0.28);
+  border-radius: 8px;
+  padding: 7px 10px;
+  background: rgba(120, 80, 35, 0.5);
+  color: #f6e8cc;
+  cursor: pointer;
+}
+
+.rpg-combat-controls button:hover:not(:disabled) {
+  background: rgba(150, 100, 45, 0.65);
+}
+
+.rpg-combat-controls button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+Patch 6 — Add manual UI scenario for combat panel payload
+
+This is optional but useful for catching payload regressions.
+
 File
 src/tests/rpg/manual_llm_transcript.py
 
-Add helpers:
+Add scenario if you want a quick UI payload generator:
 
-def _extract_combat_narration_contract(result: Dict[str, Any]) -> Dict[str, Any]:
-    result = _safe_dict(result)
-    nested = _safe_dict(result.get("result"))
-    resolved = _safe_dict(_extract_turn_contract(result).get("resolved_result"))
-    return _first_dict(
-        result.get("combat_narration_contract"),
-        nested.get("combat_narration_contract"),
-        resolved.get("combat_narration_contract"),
-    )
-
-
-def _extract_combat_narration_validation(result: Dict[str, Any]) -> Dict[str, Any]:
-    result = _safe_dict(result)
-    nested = _safe_dict(result.get("result"))
-    resolved = _safe_dict(_extract_turn_contract(result).get("resolved_result"))
-    return _first_dict(
-        result.get("combat_narration_validation"),
-        nested.get("combat_narration_validation"),
-        resolved.get("combat_narration_validation"),
-    )
-
-
-def _llm_was_called_for_combat(result: Dict[str, Any]) -> bool:
-    result = _safe_dict(result)
-    nested = _safe_dict(result.get("result"))
-    resolved = _safe_dict(_extract_turn_contract(result).get("resolved_result"))
-
-    if result.get("llm_called") is True or nested.get("llm_called") is True or resolved.get("llm_called") is True:
-        purpose = _safe_str(result.get("llm_purpose") or nested.get("llm_purpose") or resolved.get("llm_purpose"))
-        return purpose in {"combat_narration", ""}
-
-    # Fallback for debug wrappers if your existing LLM transcript stores provider calls separately.
-    debug = _safe_dict(result.get("narration_debug") or nested.get("narration_debug"))
-    if debug.get("llm_called") is True:
-        return True
-
-    return False
-
-Add panels:
-
-("Combat Narration Contract", "combat_narration_contract"),
-("Combat Narration Validation", "combat_narration_validation"),
-Patch 7 — Add manual LLM combat scenarios
-File
-src/tests/rpg/manual_llm_transcript.py
-
-Add scenario:
-
-"combat_llm_attack_narration": {
+"combat_ui_payload_smoke": {
     "currency": {"gold": 0, "silver": 0, "copper": 0},
     "conversation_settings": {
         "enabled": True,
@@ -537,359 +636,84 @@ Add scenario:
             },
             "carry_capacity": 50.0
         },
-        "party_state": {"max_size": 4, "companions": []}
+        "party_state": {
+            "max_size": 4,
+            "companions": [
+                {
+                    "npc_id": "npc:Bran",
+                    "name": "Bran",
+                    "role": "companion",
+                    "status": "active",
+                    "identity_arc": "revenge_after_losing_tavern",
+                    "active_motivations": ["revenge"],
+                    "loyalty": 35,
+                    "inventory": {
+                        "items": [
+                            {
+                                "item_id": "item:bran_rusty_dagger",
+                                "definition_id": "def:rusty_dagger",
+                                "name": "rusty dagger"
+                            }
+                        ],
+                        "equipment": {
+                            "main_hand": "item:bran_rusty_dagger"
+                        },
+                        "carry_capacity": 50.0
+                    }
+                }
+            ]
+        }
     },
     "turns": [
         "I attack the bandit.",
-        "__manual_force_player_combat_turn__",
-        "I attack the bandit."
-    ]
-},
-
-Add defeat scenario:
-
-"combat_llm_defeat_narration": {
-    "currency": {"gold": 0, "silver": 0, "copper": 0},
-    "conversation_settings": {
-        "enabled": True,
-        "autonomous_ticks_enabled": False,
-        "frequency": "never",
-        "conversation_chance_percent": 0,
-        "allow_player_invited": False,
-        "player_inclusion_chance_percent": 0,
-        "npc_file_profiles_enabled": True,
-        "npc_evolution_enabled": True,
-        "min_ticks_between_conversations": 0,
-        "thread_cooldown_ticks": 0
-    },
-    "setup_interaction_state": {
-        "scene_items": [],
-        "scene_objects": [],
-        "player_location_id": "loc_tavern_road",
-        "player_hp": 20,
-        "player_max_hp": 20,
-        "player_inventory": {
-            "items": [
-                {
-                    "item_id": "item:hunting_bow",
-                    "definition_id": "def:hunting_bow",
-                    "name": "hunting bow",
-                    "aliases": ["bow"]
-                },
-                {
-                    "item_id": "item:iron_arrow_stack_a",
-                    "definition_id": "def:iron_arrow",
-                    "name": "iron arrows",
-                    "aliases": ["arrows", "iron arrow"],
-                    "quantity": 15
-                }
-            ],
-            "equipment": {
-                "main_hand": "item:hunting_bow",
-                "ammo": "item:iron_arrow_stack_a"
-            },
-            "carry_capacity": 50.0
-        },
-        "combat_state": {
-            "active": true,
-            "encounter_id": "enc:bandit_ambush",
-            "round": 1,
-            "turn_index": 0,
-            "current_actor_id": "player",
-            "initiative_order": [
-                {"actor_id": "player", "initiative": 20, "roll": 20, "bonus": 0},
-                {"actor_id": "enemy:bandit_1", "initiative": 1, "roll": 1, "bonus": 0}
-            ],
-            "participants": {
-                "player": {
-                    "actor_id": "player",
-                    "side": "party",
-                    "name": "You",
-                    "hp": 20,
-                    "max_hp": 20,
-                    "armor": 0,
-                    "defense": 10,
-                    "initiative_bonus": 0,
-                    "status": "active"
-                },
-                "enemy:bandit_1": {
-                    "actor_id": "enemy:bandit_1",
-                    "side": "enemy",
-                    "name": "Bandit",
-                    "hp": 2,
-                    "max_hp": 8,
-                    "armor": 0,
-                    "defense": 10,
-                    "initiative_bonus": 0,
-                    "status": "active",
-                    "loot_table_id": "loot:bandit_common"
-                }
-            },
-            "combat_log": [],
-            "source": "manual_combat_llm_defeat_test"
-        },
-        "party_state": {"max_size": 4, "companions": []}
-    },
-    "turns": [
-        "I attack the bandit."
-    ]
-},
-
-Add party defeat scenario:
-
-"combat_llm_party_defeat_narration": {
-    "currency": {"gold": 0, "silver": 0, "copper": 0},
-    "conversation_settings": {
-        "enabled": True,
-        "autonomous_ticks_enabled": False,
-        "frequency": "never",
-        "conversation_chance_percent": 0,
-        "allow_player_invited": False,
-        "player_inclusion_chance_percent": 0,
-        "npc_file_profiles_enabled": True,
-        "npc_evolution_enabled": True,
-        "min_ticks_between_conversations": 0,
-        "thread_cooldown_ticks": 0
-    },
-    "setup_interaction_state": {
-        "scene_items": [],
-        "scene_objects": [],
-        "player_location_id": "loc_tavern_road",
-        "player_hp": 3,
-        "player_max_hp": 20,
-        "player_inventory": {
-            "items": [],
-            "equipment": {},
-            "carry_capacity": 50.0
-        },
-        "party_state": {"max_size": 4, "companions": []},
-        "combat_state": {
-            "active": true,
-            "encounter_id": "enc:bandit_ambush",
-            "round": 1,
-            "turn_index": 0,
-            "current_actor_id": "enemy:bandit_1",
-            "initiative_order": [
-                {"actor_id": "enemy:bandit_1", "initiative": 20, "roll": 20, "bonus": 0},
-                {"actor_id": "player", "initiative": 1, "roll": 1, "bonus": 0}
-            ],
-            "participants": {
-                "enemy:bandit_1": {
-                    "actor_id": "enemy:bandit_1",
-                    "side": "enemy",
-                    "name": "Bandit",
-                    "hp": 8,
-                    "max_hp": 8,
-                    "armor": 0,
-                    "defense": 10,
-                    "damage_min": 3,
-                    "damage_max": 4,
-                    "accuracy_bonus": 5,
-                    "initiative_bonus": 0,
-                    "status": "active",
-                    "loot_table_id": "loot:bandit_common"
-                },
-                "player": {
-                    "actor_id": "player",
-                    "side": "party",
-                    "name": "You",
-                    "hp": 3,
-                    "max_hp": 20,
-                    "armor": 0,
-                    "defense": 10,
-                    "initiative_bonus": 0,
-                    "status": "active"
-                }
-            },
-            "combat_log": [],
-            "source": "manual_combat_llm_party_defeat_test"
-        }
-    },
-    "turns": [
+        "__manual_resolve_current_combat_actor__",
         "__manual_resolve_current_combat_actor__"
     ]
 },
 
-Add choices:
+Add validation:
 
-"combat_llm_attack_narration",
-"combat_llm_defeat_narration",
-"combat_llm_party_defeat_narration",
-Patch 8 — Manual validation for LLM combat narration
-File
-src/tests/rpg/manual_llm_transcript.py
-
-Add validation block inside _manual_regression_warnings(...):
-
-if scenario_name in {
-    "combat_llm_attack_narration",
-    "combat_llm_defeat_narration",
-    "combat_llm_party_defeat_narration",
-}:
+if scenario_name == "combat_ui_payload_smoke":
+    combat_state = _extract_combat_state(result)
     combat_result = _extract_combat_result(result)
-    enemy_combat = _extract_enemy_combat_result(result)
-    if enemy_combat:
-        combat_result = enemy_combat
-
-    contract = _extract_combat_narration_contract(result)
-    validation = _extract_combat_narration_validation(result)
-    narration_text = _safe_str(_extract_ai_narration_text(result) or _extract_narration(result))
-
     visible_reason = _extract_visible_interaction_reason(result)
 
-    # Only validate turns that actually produced combat resolution.
-    combat_reasons = {
-        "combat_started",
-        "combat_attack_resolved",
-        "combat_defeat_resolved",
-        "enemy_combat_attack_resolved",
-        "party_defeat_resolved",
-    }
+    if turn_index == 1:
+        if combat_state.get("active") is not True:
+            warnings.append("combat_ui_expected_active_combat_state")
+        participants = _safe_dict(combat_state.get("participants"))
+        for actor_id in ("player", "npc:Bran", "enemy:bandit_1"):
+            if actor_id not in participants:
+                warnings.append(f"combat_ui_expected_participant_missing:{actor_id}")
 
-    reason = _safe_str(combat_result.get("reason") or visible_reason)
-    if reason in combat_reasons:
-        if not _llm_was_called_for_combat(result):
-            warnings.append("combat_llm_expected_llm_called")
-
-        if not narration_text.strip():
-            warnings.append("combat_llm_expected_non_empty_narration")
-
-        if not contract:
-            warnings.append("combat_llm_expected_combat_narration_contract")
-
-        if not validation:
-            warnings.append("combat_llm_expected_combat_narration_validation")
-        else:
-            for warning in _safe_list(validation.get("warnings")):
-                warnings.append(f"combat_llm_validation:{warning}")
-
-        lower = narration_text.lower()
-
-        if reason == "combat_attack_resolved":
-            if any(word in lower for word in ["dies", "dead", "killed", "slain", "lifeless", "corpse"]):
-                warnings.append("combat_llm_attack_narration_invented_death")
-
-        if reason == "combat_defeat_resolved":
-            if not any(word in lower for word in ["defeat", "defeated", "falls", "collapses", "down", "drops", "slain", "killed"]):
-                warnings.append("combat_llm_defeat_narration_missing_defeat")
-
-        if reason == "party_defeat_resolved":
-            if not any(word in lower for word in ["defeat", "defeated", "overwhelmed", "fall", "falls", "collapse", "down"]):
-                warnings.append("combat_llm_party_defeat_narration_missing_defeat")
-
-        if any(word in lower for word in ["json", "contract", "simulation", "validator", "system prompt", "llm"]):
-            warnings.append("combat_llm_narration_contains_meta_language")
-Patch 9 — Add unit tests for contract/validator
-New file
-src/app/rpg/tests/test_bundle_j13_j14_j15_combat_narration.py
-from app.rpg.narration.combat_contract import build_combat_narration_contract
-from app.rpg.narration.combat_validator import validate_combat_narration
-
-
-def _combat_state():
-    return {
-        "active": True,
-        "round": 1,
-        "current_actor_id": "enemy:bandit_1",
-        "participants": {
-            "player": {"actor_id": "player", "name": "You", "side": "party", "hp": 20},
-            "enemy:bandit_1": {"actor_id": "enemy:bandit_1", "name": "Bandit", "side": "enemy", "hp": 2},
-        },
-    }
-
-
-def test_combat_contract_for_non_defeating_attack_blocks_death():
-    contract = build_combat_narration_contract(
-        combat_result={
-            "reason": "combat_attack_resolved",
-            "actor_id": "player",
-            "target_id": "enemy:bandit_1",
-            "hit": True,
-            "damage_applied": 6,
-            "target_hp_before": 8,
-            "target_hp_after": 2,
-            "defeated": False,
-        },
-        combat_state=_combat_state(),
-    )
-
-    assert contract["facts"]["defeated"] is False
-    assert contract["facts"]["target_name"] == "Bandit"
-
-    validation = validate_combat_narration(
-        narration_payload={
-            "narration": "Your arrow kills the bandit and leaves him dead.",
-            "action": "The bandit dies.",
-        },
-        combat_contract=contract,
-    )
-
-    assert validation["ok"] is False
-    assert "combat_narration_invented_death" in validation["warnings"]
-
-
-def test_combat_validator_accepts_grounded_attack():
-    contract = build_combat_narration_contract(
-        combat_result={
-            "reason": "combat_attack_resolved",
-            "actor_id": "player",
-            "target_id": "enemy:bandit_1",
-            "hit": True,
-            "damage_applied": 6,
-            "target_hp_before": 8,
-            "target_hp_after": 2,
-            "defeated": False,
-        },
-        combat_state=_combat_state(),
-    )
-
-    validation = validate_combat_narration(
-        narration_payload={
-            "narration": "Your shot catches the Bandit hard and drives him back, but he stays upright.",
-            "action": "You wound the Bandit.",
-        },
-        combat_contract=contract,
-    )
-
-    assert validation["ok"] is True
-    assert validation["warnings"] == []
-
-
-def test_combat_validator_requires_defeat_acknowledgement():
-    contract = build_combat_narration_contract(
-        combat_result={
-            "reason": "combat_defeat_resolved",
-            "actor_id": "player",
-            "target_id": "enemy:bandit_1",
-            "hit": True,
-            "damage_applied": 4,
-            "target_hp_before": 2,
-            "target_hp_after": 0,
-            "defeated": True,
-        },
-        combat_state=_combat_state(),
-    )
-
-    validation = validate_combat_narration(
-        narration_payload={
-            "narration": "Your arrow strikes the Bandit and sends him staggering.",
-            "action": "You wound the Bandit.",
-        },
-        combat_contract=contract,
-    )
-
-    assert validation["ok"] is False
-    assert "combat_narration_missing_defeat_acknowledgement" in validation["warnings"]
+    if visible_reason in {"", "no_supported_semantic_action_detected"}:
+        warnings.append(f"combat_ui_expected_visible_reason_got:{visible_reason or 'missing'}")
 
 Run:
 
-pytest src/app/rpg/tests/test_bundle_j13_j14_j15_combat_narration.py -q
+python src/tests/rpg/manual_llm_transcript.py --service-scenarios --scenario combat_ui_payload_smoke --fail-on-regression-warnings
+Patch 7 — Browser smoke check
 
-Expected:
+After patching UI, run the server and open RPG mode.
 
-3 passed
-Validation commands
+Test flow:
 
-Run unit tests:
+1. Start or load RPG session.
+2. Send: I attack the bandit.
+3. Combat panel appears.
+4. Panel shows participants and current actor.
+5. If current actor is not player, Attack button is disabled.
+6. Click Resolve Current Actor.
+7. Combat log updates.
+8. When current actor becomes player, Attack button enables.
+9. Click Attack.
+10. Combat log and participant HP update.
 
-pytest src/app/rpg/tests/test_bundle_j13_j14_j15_combat_narration.py -q
+Expected visual result:
+
+Combat active
+Round 1
+Current turn: Bandit / Bran / You
+Participants with HP/status
+Latest combat result
+Turn-aware buttons
