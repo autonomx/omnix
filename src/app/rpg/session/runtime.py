@@ -10,6 +10,7 @@ This replaces the legacy in-memory GameSession / pipeline.py / routes.py flow.
 """
 from __future__ import annotations
 
+from copy import deepcopy
 import copy
 import hashlib
 import json
@@ -148,7 +149,257 @@ def _apply_visible_interaction_reason_to_resolved_result(
     return resolved_result
 
 
-from app.rpg.action_resolver import resolve_player_action
+def _call_combat_narration_provider_text(prompt: str) -> str:
+    """Call the app's central active LLM provider for combat narration.
+
+    This must not hardcode Cerebras, LM Studio, OpenRouter, etc.
+    It should use whichever provider the app currently marks active.
+    """
+
+    system_text = (
+        "You are the RPG combat narration layer. "
+        "Return only the strict JSON requested by the user prompt."
+    )
+
+    # Preferred: use the same central gateway normal RPG narration uses.
+    try:
+        from app.shared import chat_completion  # type: ignore
+
+        raw = chat_completion(
+            messages=[
+                {"role": "system", "content": system_text},
+                {"role": "user", "content": prompt},
+            ],
+            stream=False,
+            purpose="combat_narration",
+        )
+        return _extract_llm_text_from_response(raw)
+    except ImportError:
+        pass
+
+    # Fallback: active provider object, but still fetched from central state.
+    try:
+        from app.shared import get_active_provider  # type: ignore
+
+        provider = get_active_provider()
+    except Exception:
+        try:
+            from app.shared import get_provider  # type: ignore
+
+            provider = get_provider()
+        except Exception as exc:
+            raise RuntimeError(
+                f"combat_narration_active_provider_not_available:{type(exc).__name__}: {exc}"
+            )
+
+    if provider is None:
+        raise RuntimeError("combat_narration_active_provider_not_available")
+
+    provider_debug = {
+        "type": type(provider).__name__,
+        "module": type(provider).__module__,
+        "has_chat_completion": hasattr(provider, "chat_completion"),
+    }
+
+    if not hasattr(provider, "chat_completion"):
+        raise RuntimeError(
+            "combat_narration_active_provider_has_no_chat_completion:"
+            + json.dumps(provider_debug, ensure_ascii=False, sort_keys=True)
+        )
+
+    try:
+        from app.providers.base import ChatMessage  # type: ignore
+
+        messages = [
+            ChatMessage(role="system", content=system_text),
+            ChatMessage(role="user", content=prompt),
+        ]
+    except Exception:
+        # Only use dict fallback if your active-provider gateway supports it.
+        # Most app providers expect ChatMessage.
+        messages = [
+            {"role": "system", "content": system_text},
+            {"role": "user", "content": prompt},
+        ]
+
+    try:
+        raw = provider.chat_completion(
+            messages=messages,
+            stream=False,
+        )
+    except Exception as exc:
+        raise RuntimeError(
+            "combat_narration_active_provider_call_failed:"
+            + f"{type(exc).__name__}: {exc}:"
+            + json.dumps(provider_debug, ensure_ascii=False, sort_keys=True)
+        )
+
+    return _extract_llm_text_from_response(raw)
+
+
+def _extract_llm_text_from_response(raw: Any) -> str:
+    if hasattr(raw, "content") and isinstance(getattr(raw, "content", None), str):
+        text = getattr(raw, "content")
+    elif isinstance(raw, dict):
+        if isinstance(raw.get("content"), str):
+            text = raw["content"]
+        elif isinstance(raw.get("text"), str):
+            text = raw["text"]
+        elif isinstance(raw.get("response"), str):
+            text = raw["response"]
+        elif isinstance(raw.get("message"), dict) and isinstance(raw["message"].get("content"), str):
+            text = raw["message"]["content"]
+        elif isinstance(raw.get("choices"), list) and raw["choices"]:
+            first = raw["choices"][0]
+            if isinstance(first, dict):
+                message = first.get("message")
+                if isinstance(message, dict) and isinstance(message.get("content"), str):
+                    text = message["content"]
+                elif isinstance(first.get("text"), str):
+                    text = first["text"]
+                else:
+                    text = json.dumps(raw, ensure_ascii=False)
+            else:
+                text = json.dumps(raw, ensure_ascii=False)
+        else:
+            text = json.dumps(raw, ensure_ascii=False)
+    else:
+        text = "" if raw is None else str(raw)
+
+    text = text.strip()
+    if not text:
+        raise RuntimeError("combat_narration_provider_returned_empty_text")
+
+    return text
+
+
+def _apply_combat_narration_if_needed(
+    payload: Dict[str, Any],
+    *,
+    combat_result: Dict[str, Any],
+    combat_state: Dict[str, Any],
+) -> Dict[str, Any]:
+    """Attach real LLM combat narration to the active result payload.
+
+    This must run before fallback visible narration is finalized.
+    """
+
+    payload = _safe_dict(payload)
+    combat_result = _safe_dict(combat_result)
+    combat_state = _safe_dict(combat_state)
+
+    payload["combat_narration_attempted"] = True
+
+    if not combat_contract_requires_llm(combat_result):
+        return payload
+    
+    payload["combat_narration_attempted"] = True
+    payload["llm_purpose"] = "combat_narration"
+    payload["combat_narration_error"] = ""
+
+    try:
+        combat_narration = generate_combat_narration_sync(
+            combat_result=combat_result,
+            combat_state=combat_state,
+            llm_json_call=_call_combat_narration_provider_text,
+        )
+
+        contract = _safe_dict(combat_narration.get("combat_narration_contract"))
+        validation = _safe_dict(combat_narration.get("combat_narration_validation"))
+        narration_payload = _safe_dict(combat_narration.get("payload"))
+
+        payload["llm_called"] = bool(combat_narration.get("llm_called"))
+        payload["llm_purpose"] = "combat_narration"
+        payload["combat_narration_contract"] = deepcopy(contract)
+        payload["combat_narration_validation"] = deepcopy(validation)
+        payload["combat_narration_payload"] = deepcopy(narration_payload)
+        payload["combat_narration_accepted"] = bool(combat_narration.get("accepted"))
+
+        if combat_narration.get("accepted") is True:
+            narration = _safe_str(narration_payload.get("narration"))
+            action = _safe_str(narration_payload.get("action"))
+
+            payload["narration"] = narration
+            payload["final_narration"] = narration
+            payload["narration_preview"] = narration
+            payload["raw_payload_narration"] = narration
+            payload["action"] = action
+            payload["npc"] = _safe_dict(narration_payload.get("npc"))
+            payload["reward"] = _safe_str(narration_payload.get("reward"))
+            payload["followup_hooks"] = _safe_list(narration_payload.get("followup_hooks"))
+        else:
+            payload["combat_narration_rejected"] = True
+            # Keep fallback, but expose validation warnings.
+            fallback = f"Result: {_safe_str(combat_result.get('reason'))}"
+            if not _safe_str(payload.get("narration")).strip():
+                payload["narration"] = fallback
+            if not _safe_str(payload.get("final_narration")).strip():
+                payload["final_narration"] = payload["narration"]
+            if not _safe_str(payload.get("narration_preview")).strip():
+                payload["narration_preview"] = payload["narration"]
+
+    except Exception as exc:
+        payload["llm_called"] = False
+        payload["llm_purpose"] = "combat_narration"
+        payload["combat_narration_error"] = f"{type(exc).__name__}: {exc}"
+        if not _safe_dict(payload.get("combat_narration_contract")):
+            payload["combat_narration_contract"] = build_combat_narration_contract(
+                combat_result=combat_result,
+                combat_state=combat_state,
+            )
+        if not _safe_dict(payload.get("combat_narration_validation")):
+            payload["combat_narration_validation"] = {
+                "ok": False,
+                "warnings": ["combat_narration_provider_error"],
+                "source": "deterministic_combat_narration_validator",
+            }
+        fallback = f"Result: {_safe_str(combat_result.get('reason'))}"
+        if not _safe_str(payload.get("narration")).strip():
+            payload["narration"] = fallback
+        if not _safe_str(payload.get("final_narration")).strip():
+            payload["final_narration"] = payload["narration"]
+        if not _safe_str(payload.get("narration_preview")).strip():
+            payload["narration_preview"] = payload["narration"]
+
+    return payload
+
+
+def _sync_combat_narration_fields(
+    target: Dict[str, Any],
+    source: Dict[str, Any],
+) -> Dict[str, Any]:
+    """Copy combat narration fields into the object that feeds final response assembly."""
+    target = _safe_dict(target)
+    source = _safe_dict(source)
+
+    keys = (
+        "combat_narration_attempted",
+        "llm_called",
+        "llm_purpose",
+        "combat_narration_contract",
+        "combat_narration_validation",
+        "combat_narration_payload",
+        "combat_narration_error",
+        "combat_narration_accepted",
+        "combat_narration_rejected",
+        "narration",
+        "final_narration",
+        "narration_preview",
+        "raw_payload_narration",
+        "action",
+        "npc",
+        "reward",
+        "followup_hooks",
+    )
+
+    for key in keys:
+        if key in source:
+            target[key] = deepcopy(source.get(key))
+
+    return target
+
+
+from app.rpg.action_resolver import resolve_player_action  # noqa: E402
 from app.rpg.ai.action_intelligence import get_action_advisory, merge_action_advisory
 from app.rpg.ai.ambient_dialogue import (
     apply_dialogue_cooldowns,
@@ -356,6 +607,13 @@ from app.rpg.session.narration_worker import (
     publish_narration_event,
     signal_narration_work,
 )
+from app.rpg.narration.combat_contract import (
+    build_combat_narration_contract,
+    combat_contract_requires_llm,
+)
+from app.rpg.narration.combat_prompt import build_combat_narration_prompt
+from app.rpg.narration.combat_service import generate_combat_narration_sync
+from app.rpg.narration.combat_validator import validate_combat_narration
 from app.rpg.session.response_builder import (
     build_apply_turn_response,
     build_turn_payload,
@@ -7201,6 +7459,27 @@ def _apply_turn_authoritative(
                     visible_reason=turn_contract["visible_interaction_reason"],
                 )
 
+            if combat_narration_contract:
+                turn_contract["combat_narration_contract"] = deepcopy(combat_narration_contract)
+            if combat_narration_validation:
+                turn_contract["combat_narration_validation"] = deepcopy(combat_narration_validation)
+
+            resolved_from_contract = _safe_dict(
+                turn_contract.get("resolved_result")
+                or turn_contract.get("resolved_action")
+            )
+            if resolved_from_contract:
+                resolved_from_contract["llm_called"] = combat_llm_called
+                resolved_from_contract["llm_purpose"] = "combat_narration" if combat_llm_called else ""
+                resolved_from_contract["combat_narration_contract"] = deepcopy(combat_narration_contract)
+                resolved_from_contract["combat_narration_validation"] = deepcopy(combat_narration_validation)
+                resolved_from_contract["combat_narration_payload"] = deepcopy(combat_narration_payload)
+                resolved_from_contract["combat_narration_error"] = combat_llm_error
+                if "resolved_result" in turn_contract:
+                    turn_contract["resolved_result"] = resolved_from_contract
+                else:
+                    turn_contract["resolved_action"] = resolved_from_contract
+
                 contract_resolved = _safe_dict(
                     turn_contract.get("resolved_result")
                     or turn_contract.get("resolved_action")
@@ -7945,31 +8224,35 @@ def process_next_narration_job(session_id: str) -> Dict[str, Any]:
                 conversation_id = f"conv_{turn_id}_{speaker_key}_{target_key}"
 
             if speaker or target:
-                # TODO: event_bus.publish("npc_conversation_artifact", {
-                #     "type": "npc_conversation_artifact",
-                #     "session_id": session_id,
-                #     "turn_id": turn_id,
-                #     "role": "npc_conversation",
-                #     "conversation_id": conversation_id,
-                #     "tick": artifact.get("tick"),
-                #     "speaker": speaker,
-                #     "target": target,
-                #     "line": line,
-                #     "text": line,
-                #     "used_llm": bool(artifact.get("used_llm")),
-                # })
-                pass
+                publish_narration_event(
+                    session_id,
+                    {
+                        "type": "npc_conversation_artifact",
+                        "session_id": session_id,
+                        "turn_id": turn_id,
+                        "role": "npc_conversation",
+                        "conversation_id": conversation_id,
+                        "tick": artifact.get("tick"),
+                        "speaker": speaker,
+                        "target": target,
+                        "line": line,
+                        "text": line,
+                        "used_llm": bool(artifact.get("used_llm")),
+                    },
+                )
             else:
-                # TODO: event_bus.publish("ambient_conversation_artifact", {
-                #     "type": "ambient_conversation_artifact",
-                #     "session_id": session_id,
-                #     "turn_id": turn_id,
-                #     "role": "ambient_narration",
-                #     "tick": artifact.get("tick"),
-                #     "text": _safe_str(artifact.get("narration") or line),
-                #     "used_llm": bool(artifact.get("used_llm")),
-                # })
-                pass
+                publish_narration_event(
+                    session_id,
+                    {
+                        "type": "ambient_conversation_artifact",
+                        "session_id": session_id,
+                        "turn_id": turn_id,
+                        "role": "ambient_narration",
+                        "tick": artifact.get("tick"),
+                        "text": _safe_str(artifact.get("narration") or line),
+                        "used_llm": bool(artifact.get("used_llm")),
+                    },
+                )
         else:
             publish_narration_event(
                 session_id,
@@ -8461,6 +8744,36 @@ def apply_turn(
         general_interaction_result.get("combat_state")
         or simulation_state.get("combat_state")
     )
+
+    # J13-J15: Combat narration must run in the active service-scenario path,
+    # before fallback "Result: ..." narration is finalized.
+    if combat_contract_requires_llm(combat_result):
+        general_interaction_result = _apply_combat_narration_if_needed(
+            general_interaction_result,
+            combat_result=combat_result,
+            combat_state=combat_state,
+        )
+        combat_result = _safe_dict(general_interaction_result.get("combat_result"))
+        combat_state = _safe_dict(
+            general_interaction_result.get("combat_state")
+            or simulation_state.get("combat_state")
+        )
+    combat_narration_contract = _safe_dict(
+        general_interaction_result.get("combat_narration_contract")
+    )
+    combat_narration_validation = _safe_dict(
+        general_interaction_result.get("combat_narration_validation")
+    )
+    combat_narration_payload = _safe_dict(
+        general_interaction_result.get("combat_narration_payload")
+    )
+    combat_llm_called = bool(general_interaction_result.get("llm_called"))
+    combat_llm_error = _safe_str(
+        general_interaction_result.get("combat_narration_error")
+    )
+    combat_narration_attempted = bool(
+        general_interaction_result.get("combat_narration_attempted")
+    )
     combat_loot_result = _safe_dict(combat_result.get("loot_result"))
     combat_ammo_result = _safe_dict(combat_result.get("ammo_result"))
 
@@ -8565,6 +8878,12 @@ def apply_turn(
         final_result["companion_auto_equip_result"] = copy.deepcopy(companion_auto_equip_result)
         final_result["combat_result"] = copy.deepcopy(combat_result)
         final_result["combat_state"] = copy.deepcopy(combat_state)
+        final_result["llm_called"] = combat_llm_called
+        final_result["llm_purpose"] = "combat_narration" if combat_llm_called or combat_llm_error else ""
+        final_result["combat_narration_contract"] = copy.deepcopy(combat_narration_contract)
+        final_result["combat_narration_validation"] = copy.deepcopy(combat_narration_validation)
+        final_result["combat_narration_payload"] = copy.deepcopy(combat_narration_payload)
+        final_result["combat_narration_error"] = combat_llm_error
         final_result["combat_loot_result"] = copy.deepcopy(combat_loot_result)
         final_result["combat_ammo_result"] = copy.deepcopy(combat_ammo_result)
         final_result["visible_interaction_reason"] = _interaction_visible_result_reason(general_interaction_result)
@@ -8602,8 +8921,16 @@ def apply_turn(
         _nested["companion_auto_equip_result"] = copy.deepcopy(companion_auto_equip_result)
         _nested["combat_result"] = copy.deepcopy(combat_result)
         _nested["combat_state"] = copy.deepcopy(combat_state)
+        _nested["llm_called"] = combat_llm_called
+        _nested["llm_purpose"] = "combat_narration" if combat_llm_called or combat_llm_error else ""
+        _nested["combat_narration_contract"] = copy.deepcopy(combat_narration_contract)
+        _nested["combat_narration_validation"] = copy.deepcopy(combat_narration_validation)
+        _nested["combat_narration_payload"] = copy.deepcopy(combat_narration_payload)
+        _nested["combat_narration_error"] = combat_llm_error
         _nested["combat_loot_result"] = copy.deepcopy(combat_loot_result)
         _nested["combat_ammo_result"] = copy.deepcopy(combat_ammo_result)
+        _nested["combat_narration_contract"] = copy.deepcopy(combat_narration_contract)
+        _nested["combat_narration_validation"] = copy.deepcopy(combat_narration_validation)
         final_result["result"] = _nested
 
         _tc = _safe_dict(final_result.get("turn_contract"))
@@ -8638,6 +8965,8 @@ def apply_turn(
         _rr["loot_result"] = copy.deepcopy(loot_result)
         _rr["companion_item_acceptance_result"] = copy.deepcopy(companion_item_acceptance_result)
         _rr["companion_auto_equip_result"] = copy.deepcopy(companion_auto_equip_result)
+        _rr["combat_narration_contract"] = copy.deepcopy(combat_narration_contract)
+        _rr["combat_narration_validation"] = copy.deepcopy(combat_narration_validation)
 
         _rr = _apply_visible_interaction_reason_to_resolved_result(
             _rr,

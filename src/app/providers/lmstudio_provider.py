@@ -67,7 +67,17 @@ class LMStudioProvider(BaseProvider):
         timeout = kwargs.pop('timeout', self.config.timeout)
         try:
             response = requests.request(method, url, timeout=timeout, **kwargs)
-            response.raise_for_status()
+            try:
+                response.raise_for_status()
+            except Exception as exc:
+                body = ""
+                try:
+                    body = response.text[:2000]
+                except Exception:
+                    body = ""
+                raise ConnectionError(
+                    f"HTTP error {response.status_code}: {exc}; response_body={body}"
+                ) from exc
             return response
         except RequestsConnectionError as e:
             raise ConnectionError(f"Failed to connect to LM Studio at {url}: {e}")
@@ -108,19 +118,25 @@ class LMStudioProvider(BaseProvider):
         if not messages:
             raise ValueError("Messages list cannot be empty")
 
-        # Prepare payload
+        # Prepare minimal OpenAI-compatible payload for LM Studio
+        resolved_model = model or self.config.model
+
         payload = {
-            "model": model or self.config.model,
             "messages": [msg.to_dict() for msg in messages],
+            "temperature": kwargs.get("temperature", 0.7),
             "stream": stream,
         }
 
-        # Add optional parameters
-        for key in ["temperature", "max_tokens", "top_p", "repeat_penalty", "presence_penalty", "frequency_penalty"]:
+        # LM Studio can reject an empty model string with HTTP 400.
+        # If no model is configured, omit the field and let the server use
+        # its currently loaded model.
+        if resolved_model:
+            payload["model"] = resolved_model
+
+        # Add other optional parameters only if explicitly provided
+        for key in ["max_tokens", "top_p"]:
             if key in kwargs:
                 payload[key] = kwargs[key]
-            elif key in self.config.extra_params:
-                payload[key] = self.config.extra_params[key]
 
         # Make request
         if stream:

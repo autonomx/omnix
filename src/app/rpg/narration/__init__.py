@@ -4,7 +4,7 @@ This module provides the Narrator Agent for converting events into
 compelling narrative prose.
 """
 
-from rpg.narration.narrator import NarratorAgent
+from app.rpg.narration.narrator import NarratorAgent
 
 __all__ = [
     "NarratorAgent",

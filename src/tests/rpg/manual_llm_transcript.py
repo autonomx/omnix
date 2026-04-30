@@ -31,6 +31,8 @@ from app.rpg.world.conversation_threads import has_pending_player_conversation_r
 from app.rpg.combat.runtime import advance_combat_turn
 from app.rpg.combat.companion_runtime import resolve_current_companion_combat_turn
 from app.runtime_paths import resources_data_root
+from app.rpg.narration.combat_contract import combat_contract_requires_llm
+from app.rpg.narration.combat_service import generate_combat_narration_sync
 
 MANUAL_LOG_MAX_CHUNK_BYTES = 1_000_000
 MANUAL_LOG_CHUNK_SOFT_BYTES = 850_000
@@ -409,12 +411,26 @@ def _extract_ai_narration_text(result: Dict[str, Any]) -> str:
         turn_contract.get("resolved_result"),
         turn_contract.get("resolved_action"),
     )
+    combat_payload = _safe_dict(result.get("combat_narration_payload"))
+    nested_combat_payload = _safe_dict(nested_result.get("combat_narration_payload"))
+    resolved_combat_payload = _safe_dict(resolved.get("combat_narration_payload"))
+    contract_combat_payload = _safe_dict(turn_contract.get("combat_narration_payload"))
 
     candidates = [
+        combat_payload.get("narration"),
+        nested_combat_payload.get("narration"),
+        resolved_combat_payload.get("narration"),
+        contract_combat_payload.get("narration"),
+        result.get("final_narration"),
         result.get("narration"),
+        result.get("narration_preview"),
+        nested_result.get("final_narration"),
         nested_result.get("narration"),
-        turn_contract.get("narration"),
+        nested_result.get("narration_preview"),
+        resolved.get("final_narration"),
         resolved.get("narration"),
+        resolved.get("narration_preview"),
+        # keep the existing candidates below this line
         resolved.get("narrative"),
         resolved.get("description"),
         resolved.get("text"),
@@ -440,6 +456,196 @@ def _extract_ai_narration_text(result: Dict[str, Any]) -> str:
             return text
 
     return ""
+
+
+def _copy_combat_narration_fields_from_sources(
+    target: Dict[str, Any],
+    *sources: Dict[str, Any],
+) -> Dict[str, Any]:
+    target = _safe_dict(target)
+
+    keys = (
+        "combat_narration_attempted",
+        "llm_called",
+        "llm_purpose",
+        "combat_narration_contract",
+        "combat_narration_validation",
+        "combat_narration_payload",
+        "combat_narration_error",
+        "combat_narration_accepted",
+        "combat_narration_rejected",
+        "narration",
+        "final_narration",
+        "narration_preview",
+        "raw_payload_narration",
+    )
+
+    for source in sources:
+        source = _safe_dict(source)
+        nested = _safe_dict(source.get("result"))
+        turn_contract = _extract_turn_contract(source)
+        resolved = _safe_dict(
+            turn_contract.get("resolved_result")
+            or turn_contract.get("resolved_action")
+        )
+
+        for candidate in (source, nested, resolved, turn_contract):
+            candidate = _safe_dict(candidate)
+            for key in keys:
+                value = candidate.get(key)
+                if value not in (None, "", {}, []):
+                    target[key] = value
+
+    payload = _safe_dict(target.get("combat_narration_payload"))
+    narration = _safe_str(payload.get("narration"))
+    if narration:
+        target["narration"] = narration
+        target["final_narration"] = narration
+        target["narration_preview"] = narration
+        target["raw_payload_narration"] = narration
+
+    return target
+
+
+def _copy_combat_narration_fields_into_turn_record(
+    turn_record: Dict[str, Any],
+    result: Dict[str, Any],
+) -> Dict[str, Any]:
+    return _copy_combat_narration_fields_from_sources(turn_record, result)
+
+
+def _manual_call_combat_narration_provider_text(prompt: str) -> str:
+    """Use the app's active provider for manual combat narration turns."""
+    system_text = (
+        "You are the RPG combat narration layer. "
+        "Return only the strict JSON requested by the user prompt."
+    )
+
+    try:
+        from app.shared import get_provider  # type: ignore
+        provider = get_provider()
+    except Exception as exc:
+        raise RuntimeError(
+            f"manual_combat_narration_provider_not_available:{type(exc).__name__}: {exc}"
+        )
+
+    if provider is None:
+        raise RuntimeError("manual_combat_narration_provider_not_available")
+
+    if not hasattr(provider, "chat_completion"):
+        raise RuntimeError(
+            "manual_combat_narration_provider_has_no_chat_completion:"
+            + type(provider).__name__
+        )
+
+    try:
+        from app.providers.base import ChatMessage  # type: ignore
+
+        messages = [
+            ChatMessage(role="system", content=system_text),
+            ChatMessage(role="user", content=prompt),
+        ]
+    except Exception as exc:
+        raise RuntimeError(
+            f"manual_combat_narration_chat_message_import_failed:{type(exc).__name__}: {exc}"
+        )
+
+    raw = provider.chat_completion(messages=messages, stream=False)
+
+    if hasattr(raw, "content") and isinstance(getattr(raw, "content", None), str):
+        text = getattr(raw, "content")
+    elif isinstance(raw, dict):
+        if isinstance(raw.get("content"), str):
+            text = raw["content"]
+        elif isinstance(raw.get("text"), str):
+            text = raw["text"]
+        elif isinstance(raw.get("response"), str):
+            text = raw["response"]
+        elif isinstance(raw.get("message"), dict) and isinstance(raw["message"].get("content"), str):
+            text = raw["message"]["content"]
+        elif isinstance(raw.get("choices"), list) and raw["choices"]:
+            first = raw["choices"][0]
+            if isinstance(first, dict):
+                message = first.get("message")
+                if isinstance(message, dict) and isinstance(message.get("content"), str):
+                    text = message["content"]
+                elif isinstance(first.get("text"), str):
+                    text = first["text"]
+                else:
+                    text = _compact_json(raw)
+            else:
+                text = _compact_json(raw)
+        else:
+            text = _compact_json(raw)
+    else:
+        text = "" if raw is None else str(raw)
+
+    text = text.strip()
+    if not text:
+        raise RuntimeError("manual_combat_narration_provider_returned_empty_text")
+
+    return text
+
+
+def _attach_manual_combat_narration_if_needed(
+    combat_result: Dict[str, Any],
+    combat_state: Dict[str, Any],
+) -> Dict[str, Any]:
+    combat_result = _safe_dict(combat_result)
+    combat_state = _safe_dict(combat_state)
+
+    if not combat_contract_requires_llm(combat_result):
+        return combat_result
+
+    combat_result["combat_narration_attempted"] = True
+    combat_result["llm_purpose"] = "combat_narration"
+
+    try:
+        generated = generate_combat_narration_sync(
+            combat_result=combat_result,
+            combat_state=combat_state,
+            llm_json_call=_manual_call_combat_narration_provider_text,
+        )
+
+        payload = _safe_dict(generated.get("payload"))
+
+        combat_result["llm_called"] = bool(generated.get("llm_called"))
+        combat_result["llm_purpose"] = "combat_narration"
+        combat_result["combat_narration_contract"] = _safe_dict(
+            generated.get("combat_narration_contract")
+        )
+        combat_result["combat_narration_validation"] = _safe_dict(
+            generated.get("combat_narration_validation")
+        )
+        combat_result["combat_narration_payload"] = payload
+        combat_result["combat_narration_error"] = ""
+        combat_result["combat_narration_accepted"] = bool(generated.get("accepted"))
+
+        if generated.get("accepted") is True:
+            narration = _safe_str(payload.get("narration"))
+            combat_result["narration"] = narration
+            combat_result["final_narration"] = narration
+            combat_result["narration_preview"] = narration
+            combat_result["raw_payload_narration"] = narration
+            combat_result["action"] = _safe_str(payload.get("action"))
+            combat_result["npc"] = _safe_dict(payload.get("npc"))
+            combat_result["reward"] = _safe_str(payload.get("reward"))
+            combat_result["followup_hooks"] = _safe_list(payload.get("followup_hooks"))
+
+    except Exception as exc:
+        combat_result["llm_called"] = False
+        combat_result["llm_purpose"] = "combat_narration"
+        combat_result["combat_narration_error"] = f"{type(exc).__name__}: {exc}"
+        combat_result.setdefault(
+            "combat_narration_validation",
+            {
+                "ok": False,
+                "warnings": ["combat_narration_provider_error"],
+                "source": "manual_combat_narration_validator",
+            },
+        )
+
+    return combat_result
 
 
 def _extract_npc_dialogue_lines(result: Dict[str, Any]) -> List[Dict[str, str]]:
@@ -1009,6 +1215,8 @@ def _render_special_panels(result: Dict[str, Any], *, prefix: str) -> str:
         ("Combat State", "combat_state"),
         ("Companion Combat Result", "companion_combat_result"),
         ("Enemy Combat Result", "enemy_combat_result"),
+        ("Combat Narration Contract", "combat_narration_contract"),
+        ("Combat Narration Validation", "combat_narration_validation"),
     ]:
         value = _first_dict(
             result.get(key),
@@ -1490,6 +1698,7 @@ def _write_html_index_v2(
     *,
     output_dir: Path,
     scenario_summaries: List[Dict[str, Any]],
+    scenario_names_to_run: List[str],
 ) -> str:
     html_root = output_dir / MANUAL_HTML_DIR_NAME
     html_root.mkdir(parents=True, exist_ok=True)
@@ -1541,11 +1750,12 @@ def _write_html_index_v2(
 </tr>
 """)
 
+    scenario_label = f"{len(scenario_summaries)} scenarios"
     html_text = f"""<!doctype html>
 <html>
 <head>
   <meta charset="utf-8">
-  <title>Manual RPG Test Report</title>
+  <title>Manual RPG Test Report — {scenario_label}</title>
   <style>{HTML_REPORT_CSS}</style>
 </head>
 <body>
@@ -1553,8 +1763,9 @@ def _write_html_index_v2(
 <div class="page">
   <div class="header">
     <div>
-      <h1>Manual RPG Test Report</h1>
+      <h1>Manual RPG Test Report — {scenario_label}</h1>
       <p class="small">Generated by manual_llm_transcript.py</p>
+      <p><strong>Scenario filters:</strong> {_html_escape(', '.join(scenario_names_to_run))}</p>
     </div>
   </div>
 
@@ -5079,6 +5290,214 @@ SERVICE_SCENARIOS = {
             "__manual_resolve_current_combat_actor__"
         ]
     },
+    "combat_llm_attack_narration": {
+        "currency": {"gold": 0, "silver": 0, "copper": 0},
+        "conversation_settings": {
+            "enabled": True,
+            "autonomous_ticks_enabled": False,
+            "frequency": "never",
+            "conversation_chance_percent": 0,
+            "allow_player_invited": False,
+            "player_inclusion_chance_percent": 0,
+            "npc_file_profiles_enabled": True,
+            "npc_evolution_enabled": True,
+            "min_ticks_between_conversations": 0,
+            "thread_cooldown_ticks": 0
+        },
+        "setup_interaction_state": {
+            "scene_items": [],
+            "scene_objects": [],
+            "player_location_id": "loc_tavern_road",
+            "player_hp": 20,
+            "player_max_hp": 20,
+            "player_inventory": {
+                "items": [
+                    {
+                        "item_id": "item:hunting_bow",
+                        "definition_id": "def:hunting_bow",
+                        "name": "hunting bow",
+                        "aliases": ["bow"]
+                    },
+                    {
+                        "item_id": "item:iron_arrow_stack_a",
+                        "definition_id": "def:iron_arrow",
+                        "name": "iron arrows",
+                        "aliases": ["arrows", "iron arrow"],
+                        "quantity": 15
+                    }
+                ],
+                "equipment": {
+                    "main_hand": "item:hunting_bow",
+                    "ammo": "item:iron_arrow_stack_a"
+                },
+                "carry_capacity": 50.0
+            },
+            "party_state": {"max_size": 4, "companions": []}
+        },
+        "turns": [
+            "I attack the bandit.",
+            "__manual_force_player_combat_turn__",
+            "I attack the bandit."
+        ]
+    },
+    "combat_llm_defeat_narration": {
+        "currency": {"gold": 0, "silver": 0, "copper": 0},
+        "conversation_settings": {
+            "enabled": True,
+            "autonomous_ticks_enabled": False,
+            "frequency": "never",
+            "conversation_chance_percent": 0,
+            "allow_player_invited": False,
+            "player_inclusion_chance_percent": 0,
+            "npc_file_profiles_enabled": True,
+            "npc_evolution_enabled": True,
+            "min_ticks_between_conversations": 0,
+            "thread_cooldown_ticks": 0
+        },
+        "setup_interaction_state": {
+            "scene_items": [],
+            "scene_objects": [],
+            "player_location_id": "loc_tavern_road",
+            "player_hp": 20,
+            "player_max_hp": 20,
+            "player_inventory": {
+                "items": [
+                    {
+                        "item_id": "item:hunting_bow",
+                        "definition_id": "def:hunting_bow",
+                        "name": "hunting bow",
+                        "aliases": ["bow"]
+                    },
+                    {
+                        "item_id": "item:iron_arrow_stack_a",
+                        "definition_id": "def:iron_arrow",
+                        "name": "iron arrows",
+                        "aliases": ["arrows", "iron arrow"],
+                        "quantity": 15
+                    }
+                ],
+                "equipment": {
+                    "main_hand": "item:hunting_bow",
+                    "ammo": "item:iron_arrow_stack_a"
+                },
+                "carry_capacity": 50.0
+            },
+            "combat_state": {
+                "active": True,
+                "encounter_id": "enc:bandit_ambush",
+                "round": 1,
+                "turn_index": 0,
+                "current_actor_id": "player",
+                "initiative_order": [
+                    {"actor_id": "player", "initiative": 20, "roll": 20, "bonus": 0},
+                    {"actor_id": "enemy:bandit_1", "initiative": 1, "roll": 1, "bonus": 0}
+                ],
+                "participants": {
+                    "player": {
+                        "actor_id": "player",
+                        "side": "party",
+                        "name": "You",
+                        "hp": 20,
+                        "max_hp": 20,
+                        "armor": 0,
+                        "defense": 10,
+                        "initiative_bonus": 0,
+                        "status": "active"
+                    },
+                    "enemy:bandit_1": {
+                        "actor_id": "enemy:bandit_1",
+                        "side": "enemy",
+                        "name": "Bandit",
+                        "hp": 2,
+                        "max_hp": 8,
+                        "armor": 0,
+                        "defense": 10,
+                        "initiative_bonus": 0,
+                        "status": "active",
+                        "loot_table_id": "loot:bandit_common"
+                    }
+                },
+                "combat_log": [],
+                "source": "manual_combat_llm_defeat_test"
+            },
+            "party_state": {"max_size": 4, "companions": []}
+        },
+        "turns": [
+            "I attack the bandit."
+        ]
+    },
+    "combat_llm_party_defeat_narration": {
+        "currency": {"gold": 0, "silver": 0, "copper": 0},
+        "conversation_settings": {
+            "enabled": True,
+            "autonomous_ticks_enabled": False,
+            "frequency": "never",
+            "conversation_chance_percent": 0,
+            "allow_player_invited": False,
+            "player_inclusion_chance_percent": 0,
+            "npc_file_profiles_enabled": True,
+            "npc_evolution_enabled": True,
+            "min_ticks_between_conversations": 0,
+            "thread_cooldown_ticks": 0
+        },
+        "setup_interaction_state": {
+            "scene_items": [],
+            "scene_objects": [],
+            "player_location_id": "loc_tavern_road",
+            "player_hp": 3,
+            "player_max_hp": 20,
+            "player_inventory": {
+                "items": [],
+                "equipment": {},
+                "carry_capacity": 50.0
+            },
+            "party_state": {"max_size": 4, "companions": []},
+                "combat_state": {
+                    "active": True,
+                    "encounter_id": "enc:bandit_ambush",
+                    "round": 1,
+                    "turn_index": 0,
+                    "current_actor_id": "enemy:bandit_1",
+                    "initiative_order": [
+                        {"actor_id": "enemy:bandit_1", "initiative": 20, "roll": 20, "bonus": 0},
+                        {"actor_id": "player", "initiative": 1, "roll": 1, "bonus": 0}
+                    ],
+                    "participants": {
+                        "enemy:bandit_1": {
+                            "actor_id": "enemy:bandit_1",
+                            "side": "enemy",
+                            "name": "Bandit",
+                            "hp": 8,
+                            "max_hp": 8,
+                            "armor": 0,
+                            "defense": 10,
+                            "damage_min": 3,
+                            "damage_max": 4,
+                            "accuracy_bonus": 5,
+                            "initiative_bonus": 0,
+                            "status": "active",
+                            "loot_table_id": "loot:bandit_common"
+                        },
+                        "player": {
+                            "actor_id": "player",
+                            "side": "party",
+                            "name": "You",
+                            "hp": 3,
+                            "max_hp": 20,
+                            "armor": 0,
+                            "defense": 10,
+                            "initiative_bonus": 0,
+                            "status": "active"
+                        }
+                    },
+                    "combat_log": [],
+                    "source": "manual_combat_llm_party_defeat_test"
+                }
+        },
+        "turns": [
+            "__manual_resolve_current_combat_actor__"
+        ]
+    },
 }
 
 
@@ -5246,6 +5665,55 @@ def _validate_companion_acceptance_final_state(
 
 def _safe_str(value: Any) -> str:
     return "" if value is None else str(value)
+
+
+def _normalize_requested_scenarios(raw: Any, *, valid_names: List[str]) -> List[str]:
+    values: List[str] = []
+
+    if raw is None:
+        raw_items = ["all"]
+    elif isinstance(raw, str):
+        raw_items = [raw]
+    elif isinstance(raw, list):
+        raw_items = raw
+    else:
+        raw_items = [str(raw)]
+
+    for item in raw_items:
+        text = _safe_str(item).strip()
+        if not text:
+            continue
+        for part in text.split(","):
+            name = _safe_str(part).strip()
+            if name:
+                values.append(name)
+
+    if not values:
+        values = ["all"]
+
+    # Preserve order while removing duplicates.
+    deduped: List[str] = []
+    seen = set()
+    for name in values:
+        if name not in seen:
+            deduped.append(name)
+            seen.add(name)
+
+    if "all" in deduped:
+        return ["all"]
+
+    valid = set(valid_names)
+    invalid = [name for name in deduped if name not in valid]
+    if invalid:
+        valid_preview = ", ".join(sorted(valid_names))
+        raise SystemExit(
+            "Unknown scenario(s): "
+            + ", ".join(invalid)
+            + "\n\nValid scenarios:\n"
+            + valid_preview
+        )
+
+    return deduped
 
 
 def _looks_like_synthetic_social_debug(value: Any) -> bool:
@@ -6429,6 +6897,60 @@ def _extract_companion_combat_result(result: Dict[str, Any]) -> Dict[str, Any]:
         result.get("companion_combat_result"),
         nested.get("companion_combat_result"),
     )
+
+
+def _extract_combat_narration_contract(result: Dict[str, Any]) -> Dict[str, Any]:
+    result = _safe_dict(result)
+    nested = _safe_dict(result.get("result"))
+    turn_contract = _extract_turn_contract(result)
+    resolved = _safe_dict(
+        turn_contract.get("resolved_result")
+        or turn_contract.get("resolved_action")
+    )
+
+    return _first_dict(
+        result.get("combat_narration_contract"),
+        nested.get("combat_narration_contract"),
+        resolved.get("combat_narration_contract"),
+        turn_contract.get("combat_narration_contract"),
+    )
+
+
+def _extract_combat_narration_validation(result: Dict[str, Any]) -> Dict[str, Any]:
+    result = _safe_dict(result)
+    nested = _safe_dict(result.get("result"))
+    turn_contract = _extract_turn_contract(result)
+    resolved = _safe_dict(
+        turn_contract.get("resolved_result")
+        or turn_contract.get("resolved_action")
+    )
+
+    return _first_dict(
+        result.get("combat_narration_validation"),
+        nested.get("combat_narration_validation"),
+        resolved.get("combat_narration_validation"),
+        turn_contract.get("combat_narration_validation"),
+    )
+
+
+def _llm_was_called_for_combat(result: Dict[str, Any]) -> bool:
+    result = _safe_dict(result)
+    nested = _safe_dict(result.get("result"))
+    turn_contract = _extract_turn_contract(result)
+    resolved = _safe_dict(
+        turn_contract.get("resolved_result")
+        or turn_contract.get("resolved_action")
+    )
+
+    for candidate in (result, nested, resolved, turn_contract):
+        candidate = _safe_dict(candidate)
+        if candidate.get("llm_called") is True:
+            purpose = _safe_str(candidate.get("llm_purpose"))
+            if purpose in {"", "combat_narration"}:
+                return True
+
+    debug = _safe_dict(result.get("narration_debug") or nested.get("narration_debug"))
+    return debug.get("llm_called") is True
 
 
 def _extract_semantic_action_v2(result: Dict[str, Any]) -> Dict[str, Any]:
@@ -8958,6 +9480,88 @@ def _manual_regression_warnings(
                     f"visible_interaction_narration_expected_{expected_visible}_missing_turn_{turn_index}"
                 )
 
+    if scenario_name in {
+        "combat_llm_attack_narration",
+        "combat_llm_defeat_narration",
+        "combat_llm_party_defeat_narration",
+    }:
+        combat_result = _extract_combat_result(result)
+        enemy_combat = _extract_enemy_combat_result(result)
+        if enemy_combat:
+            combat_result = enemy_combat
+
+        contract = _extract_combat_narration_contract(result)
+        validation = _extract_combat_narration_validation(result)
+        narration_text = _safe_str(_extract_ai_narration_text(result) or _extract_narration(result))
+
+        visible_reason = _extract_visible_interaction_reason(result)
+
+        # Only validate turns that actually produced combat resolution.
+        combat_reasons = {
+            "combat_started",
+            "combat_attack_resolved",
+            "combat_defeat_resolved",
+            "enemy_combat_attack_resolved",
+            "party_defeat_resolved",
+        }
+
+        reason = _safe_str(combat_result.get("reason") or visible_reason)
+        if reason in combat_reasons:
+            if not _llm_was_called_for_combat(result):
+                warnings.append("combat_llm_expected_llm_called")
+
+            if (
+                _safe_str(visible_reason) == "party_defeat_resolved"
+                and _safe_dict(result.get("combat_narration_payload"))
+                and not _llm_was_called_for_combat(result)
+            ):
+                warnings.append("combat_llm_payload_present_but_llm_called_not_copied")
+
+            if not narration_text.strip():
+                warnings.append("combat_llm_expected_non_empty_narration")
+
+            if not contract:
+                warnings.append("combat_llm_expected_combat_narration_contract")
+
+            if not validation:
+                warnings.append("combat_llm_expected_combat_narration_validation")
+            else:
+                for warning in _safe_list(validation.get("warnings")):
+                    warnings.append(f"combat_llm_validation:{warning}")
+
+            turn_contract = _extract_turn_contract(result)
+            resolved_contract = _safe_dict(
+                turn_contract.get("resolved_result")
+                or turn_contract.get("resolved_action")
+            )
+
+            error = _safe_str(
+                result.get("combat_narration_error")
+                or _safe_dict(result.get("result")).get("combat_narration_error")
+                or turn_contract.get("combat_narration_error")
+                or resolved_contract.get("combat_narration_error")
+            )
+
+            if error:
+                warnings.append(f"combat_llm_provider_error:{error}")
+
+            lower = narration_text.lower()
+
+            if reason == "combat_attack_resolved":
+                if any(word in lower for word in ["dies", "dead", "killed", "slain", "lifeless", "corpse"]):
+                    warnings.append("combat_llm_attack_narration_invented_death")
+
+            if reason == "combat_defeat_resolved":
+                if not any(word in lower for word in ["defeat", "defeated", "falls", "collapses", "down", "drops", "slain", "killed"]):
+                    warnings.append("combat_llm_defeat_narration_missing_defeat")
+
+            if reason == "party_defeat_resolved":
+                if not any(word in lower for word in ["defeat", "defeated", "overwhelmed", "fall", "falls", "collapse", "down"]):
+                    warnings.append("combat_llm_party_defeat_narration_missing_defeat")
+
+            if any(word in lower for word in ["json", "contract", "simulation", "validator", "system prompt", "llm"]):
+                warnings.append("combat_llm_narration_contains_meta_language")
+
     return warnings
 
 
@@ -10573,22 +11177,25 @@ def _run_one_service_scenario(
 
             visible_reason = _safe_str(result.get("visible_interaction_reason"))
             last_result = result
-            scenario_results.append(
-                {
-                    "turn_index": manual_turn_index,
-                    "player_input": player_input,
-                    "result": result,
-                    "narration_preview": f"Result: {visible_reason}",
-                    "final_narration": f"Result: {visible_reason}",
-                    "visible_interaction_reason": visible_reason,
-                    "regression_warnings": _manual_regression_warnings(
-                        scenario_name=scenario_name,
-                        turn_index=manual_turn_index,
-                        player_input=player_input,
-                        result=result,
-                    ),
-                }
+            turn_record = {
+                "turn_index": manual_turn_index,
+                "player_input": player_input,
+                "result": result,
+                "narration_preview": f"Result: {visible_reason}",
+                "final_narration": f"Result: {visible_reason}",
+                "visible_interaction_reason": visible_reason,
+            }
+            turn_record = _copy_combat_narration_fields_into_turn_record(
+                turn_record,
+                result,
             )
+            turn_record["regression_warnings"] = _manual_regression_warnings(
+                scenario_name=scenario_name,
+                turn_index=manual_turn_index,
+                player_input=player_input,
+                result=turn_record,
+            )
+            scenario_results.append(turn_record)
             continue
         elif _safe_str(player_input) == "__manual_resolve_current_combat_actor__":
             sim = _extract_simulation_state(last_result) if last_result else _safe_dict(session.get("simulation_state"))
@@ -10600,6 +11207,22 @@ def _run_one_service_scenario(
             )
 
             enemy_combat_result = _safe_dict(companion_combat_result.get("enemy_combat_result"))
+
+            combat_state = _safe_dict(sim.get("combat_state"))
+
+            if enemy_combat_result:
+                enemy_combat_result = _attach_manual_combat_narration_if_needed(
+                    enemy_combat_result,
+                    combat_state,
+                )
+                companion_combat_result["enemy_combat_result"] = enemy_combat_result
+            else:
+                companion_combat_result = _attach_manual_combat_narration_if_needed(
+                    companion_combat_result,
+                    combat_state,
+                )
+
+            combat_narration_source = enemy_combat_result if enemy_combat_result else companion_combat_result
 
             visible_reason = _safe_str(companion_combat_result.get("reason") or "combat_actor_not_resolved")
             session["simulation_state"] = sim
@@ -10649,23 +11272,59 @@ def _run_one_service_scenario(
                 "session": session,
             }
 
-            last_result = result
-            scenario_results.append(
-                {
-                    "turn_index": manual_turn_index,
-                    "player_input": player_input,
-                    "result": result,
-                    "narration_preview": f"Result: {visible_reason}",
-                    "final_narration": f"Result: {visible_reason}",
-                    "visible_interaction_reason": visible_reason,
-                    "regression_warnings": _manual_regression_warnings(
-                        scenario_name=scenario_name,
-                        turn_index=manual_turn_index,
-                        player_input=player_input,
-                        result=result,
-                    ),
-                }
+            result = _copy_combat_narration_fields_from_sources(
+                result,
+                combat_narration_source,
+                companion_combat_result,
+                enemy_combat_result,
             )
+
+            nested_result = _safe_dict(result.get("result"))
+            if nested_result:
+                nested_result = _copy_combat_narration_fields_from_sources(
+                    nested_result,
+                    result,
+                    combat_narration_source,
+                    companion_combat_result,
+                    enemy_combat_result,
+                )
+                result["result"] = nested_result
+
+            last_result = result
+            turn_record = {
+                "turn_index": manual_turn_index,
+                "player_input": player_input,
+                "result": result,
+                "narration_preview": _safe_str(
+                    result.get("narration_preview")
+                    or result.get("final_narration")
+                    or result.get("narration")
+                    or f"Result: {visible_reason}"
+                ),
+                "final_narration": _safe_str(
+                    result.get("final_narration")
+                    or result.get("narration_preview")
+                    or result.get("narration")
+                    or f"Result: {visible_reason}"
+                ),
+                "visible_interaction_reason": visible_reason,
+            }
+
+            turn_record = _copy_combat_narration_fields_from_sources(
+                turn_record,
+                result,
+                companion_combat_result,
+                enemy_combat_result,
+            )
+
+            turn_record["regression_warnings"] = _manual_regression_warnings(
+                scenario_name=scenario_name,
+                turn_index=manual_turn_index,
+                player_input=player_input,
+                result=turn_record,
+            )
+
+            scenario_results.append(turn_record)
             continue
         else:
             result = apply_turn(session_id=session_id, player_input=player_input)
@@ -10712,7 +11371,6 @@ def _run_one_service_scenario(
             before_items,
             channel=target_channel,
         )
-
         summary_row = _compact_turn_summary(
             index=index,
             player_input=player_input,
@@ -10721,6 +11379,11 @@ def _run_one_service_scenario(
             before_items=before_items,
         )
         summary_row["scenario_current_location_id"] = current_location_id
+
+        summary_row = _copy_combat_narration_fields_into_turn_record(
+            summary_row,
+            result,
+        )
 
         summary_row["scenario_warnings"] = _scenario_contamination_warnings(
             scenario_name=scenario_name,
@@ -10732,12 +11395,13 @@ def _run_one_service_scenario(
             allows_seeded_world_events=bool(_safe_list(scenario.get("setup_world_events"))),
             allows_seeded_journal_entries=bool(_safe_list(scenario.get("setup_journal_entries"))),
             allows_seeded_quest_state=bool(_safe_dict(scenario.get("setup_quest_state"))),
+
         )
         summary_row["regression_warnings"] = _manual_regression_warnings(
             scenario_name=scenario_name,
             turn_index=index,
             player_input=player_input,
-            result=result,
+            result=summary_row,
         )
         if fail_on_regression_warnings:
             for warning in summary_row["regression_warnings"]:
@@ -11128,10 +11792,18 @@ def run_service_scenarios(
     if reset_output:
         _reset_output()
 
-    if selected == "all":
-        scenario_items = list(SERVICE_SCENARIOS.items())
+    valid_scenario_names = sorted(SERVICE_SCENARIOS.keys())
+    requested_scenarios = _normalize_requested_scenarios(
+        selected,
+        valid_names=["all", *valid_scenario_names],
+    )
+
+    if requested_scenarios == ["all"]:
+        scenario_names_to_run = valid_scenario_names
     else:
-        scenario_items = [(selected, SERVICE_SCENARIOS[selected])]
+        scenario_names_to_run = requested_scenarios
+
+    scenario_items = [(name, SERVICE_SCENARIOS[name]) for name in scenario_names_to_run]
 
     summary_channel = "service_summary"
     legacy_channel = "service_legacy"
@@ -11140,7 +11812,9 @@ def run_service_scenarios(
 
     _emit("Manual RPG Service Scenario Summary", channel=summary_channel)
     _emit("", channel=summary_channel)
-    _emit(f"scenario_filter: {selected}", channel=summary_channel)
+    scenario_filter_label = scenario_names_to_run[0] if len(scenario_names_to_run) == 1 else "multiple"
+    _emit(f"scenario_filter: {scenario_filter_label}", channel=summary_channel)
+    _emit(f"scenario_filters: {scenario_names_to_run}", channel=summary_channel)
     _emit(f"scenario_count: {len(scenario_items)}", channel=summary_channel)
     _emit(f"manual_run_id: {run_id}", channel=summary_channel)
     _emit("", channel=summary_channel)
@@ -11148,7 +11822,9 @@ def run_service_scenarios(
     if not split_files:
         _emit("Manual RPG Service Scenario Transcript", channel=legacy_channel)
         _emit("", channel=legacy_channel)
-        _emit(f"scenario_filter: {selected}", channel=legacy_channel)
+        scenario_filter_label = scenario_names_to_run[0] if len(scenario_names_to_run) == 1 else "multiple"
+        _emit(f"scenario_filter: {scenario_filter_label}", channel=legacy_channel)
+        _emit(f"scenario_filters: {scenario_names_to_run}", channel=legacy_channel)
         _emit(f"scenario_count: {len(scenario_items)}", channel=legacy_channel)
         _emit("", channel=legacy_channel)
 
@@ -11295,7 +11971,10 @@ def run_service_scenarios(
                 )
                 summary["html_report"] = scenario_html_path
     else:
-        suffix = selected if selected != "all" else "all"
+        if len(scenario_names_to_run) == 1:
+            suffix = scenario_names_to_run[0]
+        else:
+            suffix = "multiple"
         _write_output(
             TEST_RESULTS_ROOT / f"manual_rpg_service_scenarios_{suffix}.txt",
             channel=legacy_channel,
@@ -11344,6 +12023,7 @@ def run_service_scenarios(
         _write_html_index_v2(
             output_dir=TEST_RESULTS_ROOT,
             scenario_summaries=scenario_summaries,
+            scenario_names_to_run=scenario_names_to_run,
         )
 
 
@@ -11546,9 +12226,19 @@ def main() -> None:
     )
     parser.add_argument(
         "--scenario",
-        default="all",
-        choices=["all", *sorted(SERVICE_SCENARIOS.keys())],
-        help="Run one named service scenario.",
+        nargs="+",
+        default=["all"],
+        metavar="SCENARIO",
+        help=(
+            "Scenario name(s) to run. Accepts one or more names, or comma-separated names. "
+            "Use 'all' to run all scenarios."
+        ),
+    )
+    parser.add_argument(
+        "--scenarios",
+        nargs="+",
+        dest="scenario",
+        help="Alias for --scenario. Accepts one or more scenario names.",
     )
     parser.add_argument(
         "--turn",
