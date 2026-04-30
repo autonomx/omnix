@@ -1,108 +1,68 @@
-Bundle J4-J6.1 + J7-J8-J9 — Combat Cleanup + Companion Combat Participation v1
+Bundle J10-J11-J12 — Enemy Combat AI, Enemy Attacks, and Party Defeat v1
 
 Goal:
 
-J4-J6.1 — Trim combat damage manual scenario so it stops after defeat.
-J7 — Companion combat actor turns can resolve deterministic attacks.
-J8 — Simple companion tactics choose target/action.
-J9 — Companion morale/revenge modifiers influence combat behavior.
+J10 — Enemy combat turns resolve deterministic attacks.
+J11 — Enemy AI selects valid party targets.
+J12 — Party defeat is detected when all party participants are down.
 
-This does not add full enemy AI yet. It makes companions participate so the combat loop can progress without manually forcing the player every time.
+This builds on:
 
-Part A — Current fix: trim J4-J6 scenario after defeat
-File
-src/tests/rpg/manual_llm_transcript.py
+J1-J9 combat state, player attacks, companion turns, morale modifiers
+I10-I12 equipment/ammo/stats
+I16-I18 loot generation after enemy defeat
 
-Find scenario:
+This should not add advanced enemy tactics, conditions, spells, fleeing, or full encounter balancing yet.
 
-"combat_actions_damage_defeat": {
+Expected behavior
+Enemy turn resolves attack
 
-Replace turns:
+If current actor is:
 
-@@
-     "turns": [
-         "I attack the bandit.",
-         "__manual_force_player_combat_turn__",
-         "I attack the bandit.",
-         "__manual_force_player_combat_turn__",
--        "I attack the bandit.",
--        "__manual_force_player_combat_turn__",
-         "I attack the bandit."
-     ]
- },
+"current_actor_id": "enemy:bandit_1"
 
-Then in the combat_actions_damage_defeat validation block, replace:
+Manual command:
 
-@@
--        attack_turns = {3, 5, 7}
--        force_turns = {2, 4, 6}
-+        attack_turns = {3, 5}
-+        force_turns = {2, 4}
-
-Replace final defeat check:
-
-@@
--        if turn_index == 7:
-+        if turn_index == 5:
-
-Update visible expectations:
-
-@@
-         expected_visible = {
-             1: "combat_started",
-             2: "combat_turn_forced_to_player",
-             3: {"combat_attack_resolved", "combat_defeat_resolved"},
-             4: "combat_turn_forced_to_player",
--            5: {"combat_attack_resolved", "combat_defeat_resolved"},
--            6: "combat_turn_forced_to_player",
--            7: {"combat_defeat_resolved", "combat_not_active", "combat_turn_forced_to_player"},
-+            5: "combat_defeat_resolved",
-         }.get(turn_index)
-
-Rerun:
-
-python src/tests/rpg/manual_llm_transcript.py --service-scenarios --scenario combat_actions_damage_defeat --fail-on-regression-warnings
+__manual_resolve_current_combat_actor__
 
 Expected:
 
-regression_warnings: []
-scenario_warnings: []
-Part B — Next phase: J7-J8-J9 Companion Combat Participation v1
-Expected behavior
-
-Scenario:
-
-I attack the bandit.
-__manual_resolve_current_combat_actor__
-__manual_resolve_current_combat_actor__
-
-If current actor is Bran, runtime resolves Bran’s attack:
-
 {
-  "companion_combat_result": {
+  "enemy_combat_result": {
     "resolved": true,
     "changed_state": true,
-    "reason": "companion_combat_attack_resolved",
-    "actor_id": "npc:Bran",
-    "target_id": "enemy:bandit_1",
-    "tactic": "revenge_attack",
-    "morale_state": "motivated"
+    "reason": "enemy_combat_attack_resolved",
+    "actor_id": "enemy:bandit_1",
+    "target_id": "player",
+    "target_hp_before": 20,
+    "target_hp_after": 17,
+    "damage_applied": 3
   }
 }
+Enemy chooses living target
 
-If current actor is enemy, for this bundle the manual command may just advance or return:
+Enemy should choose:
+
+player first if active/alive
+else first active companion
+Party defeat
+
+If all party participants are defeated:
 
 {
-  "combat_result": {
-    "reason": "non_companion_actor_not_handled"
+  "enemy_combat_result": {
+    "reason": "party_defeat_resolved",
+    "party_defeated": true,
+    "combat_ended": true
+  },
+  "combat_state": {
+    "active": false,
+    "ended_reason": "party_side_defeated"
   }
 }
-
-Enemy AI comes in the next bundle.
-
-Patch 1 — Add companion combat runtime
+Patch 1 — Add enemy combat runtime
 New file
-src/app/rpg/combat/companion_runtime.py
+src/app/rpg/combat/enemy_runtime.py
 from __future__ import annotations
 
 from copy import deepcopy
@@ -134,123 +94,94 @@ def _safe_int(value: Any, default: int = 0) -> int:
         return default
 
 
-def _player_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
-    return _safe_dict(simulation_state.get("player_state"))
+def _participant(combat_state: Dict[str, Any], actor_id: str) -> Dict[str, Any]:
+    return _safe_dict(_safe_dict(combat_state.get("participants")).get(actor_id))
 
 
-def _party_companions(simulation_state: Dict[str, Any]) -> List[Dict[str, Any]]:
-    party_state = _safe_dict(_player_state(simulation_state).get("party_state"))
-    return [_safe_dict(item) for item in _safe_list(party_state.get("companions"))]
-
-
-def _companion_by_id(simulation_state: Dict[str, Any], npc_id: str) -> Dict[str, Any]:
-    for companion in _party_companions(simulation_state):
-        if _safe_str(companion.get("npc_id")) == npc_id:
-            return companion
-    return {}
-
-
-def _living_enemy_ids(combat_state: Dict[str, Any]) -> List[str]:
-    ids: List[str] = []
+def living_party_targets(combat_state: Dict[str, Any]) -> List[str]:
+    targets: List[str] = []
     participants = _safe_dict(combat_state.get("participants"))
+
+    # Deterministic v1 priority: player first, then companions by actor_id.
+    player = _safe_dict(participants.get("player"))
+    if (
+        player
+        and _safe_str(player.get("side")) == "party"
+        and _safe_str(player.get("status") or "active") == "active"
+        and _safe_int(player.get("hp"), 0) > 0
+    ):
+        targets.append("player")
+
+    companion_ids = []
     for actor_id, participant in participants.items():
+        actor_id = _safe_str(actor_id)
         participant = _safe_dict(participant)
+        if actor_id == "player":
+            continue
         if (
-            _safe_str(participant.get("side")) == "enemy"
+            actor_id.startswith("npc:")
+            and _safe_str(participant.get("side")) == "party"
             and _safe_str(participant.get("status") or "active") == "active"
             and _safe_int(participant.get("hp"), 0) > 0
         ):
-            ids.append(_safe_str(actor_id))
-    return ids
+            companion_ids.append(actor_id)
+
+    targets.extend(sorted(companion_ids))
+    return targets
 
 
-def companion_morale_state(companion: Dict[str, Any]) -> Dict[str, Any]:
-    companion = _safe_dict(companion)
-
-    loyalty = _safe_int(
-        companion.get("loyalty"),
-        _safe_int(_safe_dict(companion.get("relationship")).get("loyalty"), 0),
-    )
-    identity_arc = _safe_str(companion.get("identity_arc"))
-    current_role = _safe_str(companion.get("current_role"))
-    motivations = " ".join(_safe_str(item) for item in _safe_list(companion.get("active_motivations")))
-
-    text = f"{identity_arc} {current_role} {motivations}".lower()
-
-    if "revenge" in text or "bandit" in text:
-        return {
-            "morale_state": "motivated",
-            "reason": "revenge_arc_motivated_against_bandits",
-            "accuracy_bonus": 1,
-            "damage_bonus": 1,
-            "loyalty": loyalty,
-            "source": "deterministic_companion_combat_runtime",
-        }
-
-    if loyalty < -25:
-        return {
-            "morale_state": "reluctant",
-            "reason": "low_loyalty_reluctant",
-            "accuracy_bonus": -1,
-            "damage_bonus": 0,
-            "loyalty": loyalty,
-            "source": "deterministic_companion_combat_runtime",
-        }
-
-    return {
-        "morale_state": "steady",
-        "reason": "neutral_morale",
-        "accuracy_bonus": 0,
-        "damage_bonus": 0,
-        "loyalty": loyalty,
-        "source": "deterministic_companion_combat_runtime",
-    }
-
-
-def choose_companion_combat_tactic(
+def choose_enemy_target(
     simulation_state: Dict[str, Any],
     *,
-    npc_id: str,
+    enemy_id: str,
 ) -> Dict[str, Any]:
     combat_state = get_combat_state(simulation_state)
-    companion = _companion_by_id(simulation_state, npc_id)
-    morale = companion_morale_state(companion)
-    enemies = _living_enemy_ids(combat_state)
+    enemy = _participant(combat_state, enemy_id)
 
-    if not companion:
+    if not enemy:
         return {
             "resolved": False,
-            "reason": "companion_not_found",
-            "npc_id": npc_id,
-            "source": "deterministic_companion_combat_runtime",
+            "reason": "enemy_not_found",
+            "enemy_id": enemy_id,
+            "source": "deterministic_enemy_combat_runtime",
         }
 
-    if not enemies:
+    if _safe_str(enemy.get("status") or "active") != "active" or _safe_int(enemy.get("hp"), 0) <= 0:
         return {
             "resolved": False,
-            "reason": "no_living_enemy_targets",
-            "npc_id": npc_id,
-            "morale": morale,
-            "source": "deterministic_companion_combat_runtime",
+            "reason": "enemy_not_active",
+            "enemy_id": enemy_id,
+            "source": "deterministic_enemy_combat_runtime",
         }
 
-    tactic = "revenge_attack" if morale.get("morale_state") == "motivated" else "attack_nearest_enemy"
+    targets = living_party_targets(combat_state)
+    if not targets:
+        return {
+            "resolved": False,
+            "reason": "no_living_party_targets",
+            "enemy_id": enemy_id,
+            "source": "deterministic_enemy_combat_runtime",
+        }
 
     return {
         "resolved": True,
-        "reason": "companion_tactic_selected",
-        "npc_id": npc_id,
-        "tactic": tactic,
-        "target_id": enemies[0],
-        "morale": morale,
-        "source": "deterministic_companion_combat_runtime",
+        "reason": "enemy_target_selected",
+        "enemy_id": enemy_id,
+        "target_id": targets[0],
+        "target_candidates": targets,
+        "tactic": "attack_first_living_party_target",
+        "source": "deterministic_enemy_combat_runtime",
     }
 
 
-def resolve_companion_combat_turn(
+def _party_defeated(combat_state: Dict[str, Any]) -> bool:
+    return not living_party_targets(combat_state)
+
+
+def resolve_enemy_combat_turn(
     simulation_state: Dict[str, Any],
     *,
-    npc_id: str,
+    enemy_id: str,
     session_id: str = "",
     tick: int = 0,
 ) -> Dict[str, Any]:
@@ -260,68 +191,94 @@ def resolve_companion_combat_turn(
             "resolved": False,
             "changed_state": False,
             "reason": "combat_not_active",
-            "npc_id": npc_id,
-            "source": "deterministic_companion_combat_runtime",
+            "enemy_id": enemy_id,
+            "source": "deterministic_enemy_combat_runtime",
         }
 
     current_actor = _safe_str(combat_state.get("current_actor_id"))
-    if current_actor != npc_id:
+    if current_actor != enemy_id:
         return {
             "resolved": False,
             "changed_state": False,
-            "reason": "not_companion_turn",
-            "npc_id": npc_id,
+            "reason": "not_enemy_turn",
+            "enemy_id": enemy_id,
             "current_actor_id": current_actor,
             "combat_state": deepcopy(combat_state),
-            "source": "deterministic_companion_combat_runtime",
+            "source": "deterministic_enemy_combat_runtime",
         }
 
-    tactic = choose_companion_combat_tactic(
+    target = choose_enemy_target(
         simulation_state,
-        npc_id=npc_id,
+        enemy_id=enemy_id,
     )
-    if tactic.get("resolved") is not True:
+    if target.get("resolved") is not True:
+        if _safe_str(target.get("reason")) == "no_living_party_targets":
+            combat_state["active"] = False
+            combat_state["ended_reason"] = "party_side_defeated"
+            simulation_state["combat_state"] = combat_state
+            return {
+                "resolved": True,
+                "changed_state": True,
+                "reason": "party_defeat_resolved",
+                "enemy_id": enemy_id,
+                "party_defeated": True,
+                "combat_ended": True,
+                "target_selection": deepcopy(target),
+                "combat_state": deepcopy(combat_state),
+                "source": "deterministic_enemy_combat_runtime",
+            }
+
         return {
             "resolved": False,
             "changed_state": False,
-            "reason": _safe_str(tactic.get("reason")),
-            "npc_id": npc_id,
-            "tactic": tactic,
+            "reason": _safe_str(target.get("reason")),
+            "enemy_id": enemy_id,
+            "target_selection": deepcopy(target),
             "combat_state": deepcopy(combat_state),
-            "source": "deterministic_companion_combat_runtime",
+            "source": "deterministic_enemy_combat_runtime",
         }
 
     attack = resolve_combat_attack(
         simulation_state,
-        actor_id=npc_id,
-        target_id=_safe_str(tactic.get("target_id")),
+        actor_id=enemy_id,
+        target_id=_safe_str(target.get("target_id")),
         session_id=session_id,
         tick=tick,
     )
 
-    reason = "companion_combat_attack_resolved"
-    if attack.get("reason") == "combat_defeat_resolved":
-        reason = "companion_combat_defeat_resolved"
+    combat_state = get_combat_state(simulation_state)
+    party_defeated = _party_defeated(combat_state)
+
+    if party_defeated:
+        combat_state["active"] = False
+        combat_state["ended_reason"] = "party_side_defeated"
+        simulation_state["combat_state"] = combat_state
+
+    reason = "enemy_combat_attack_resolved"
+    if party_defeated:
+        reason = "party_defeat_resolved"
     elif attack.get("resolved") is not True:
-        reason = _safe_str(attack.get("reason") or "companion_combat_attack_failed")
+        reason = _safe_str(attack.get("reason") or "enemy_combat_attack_failed")
 
     return {
-        "resolved": bool(attack.get("resolved")),
-        "changed_state": bool(attack.get("changed_state")),
+        "resolved": bool(attack.get("resolved")) or party_defeated,
+        "changed_state": bool(attack.get("changed_state")) or party_defeated,
         "reason": reason,
-        "npc_id": npc_id,
-        "actor_id": npc_id,
-        "target_id": _safe_str(tactic.get("target_id")),
-        "tactic": _safe_str(tactic.get("tactic")),
-        "morale": deepcopy(tactic.get("morale")),
+        "enemy_id": enemy_id,
+        "actor_id": enemy_id,
+        "target_id": _safe_str(target.get("target_id")),
+        "tactic": _safe_str(target.get("tactic")),
+        "target_selection": deepcopy(target),
         "attack_result": deepcopy(attack),
-        "combat_state": deepcopy(attack.get("combat_state") or simulation_state.get("combat_state") or {}),
+        "party_defeated": party_defeated,
+        "combat_ended": party_defeated,
+        "combat_state": deepcopy(simulation_state.get("combat_state") or {}),
         "tick": int(tick or 0),
-        "source": "deterministic_companion_combat_runtime",
+        "source": "deterministic_enemy_combat_runtime",
     }
 
 
-def resolve_current_companion_combat_turn(
+def resolve_current_enemy_combat_turn(
     simulation_state: Dict[str, Any],
     *,
     session_id: str = "",
@@ -333,173 +290,164 @@ def resolve_current_companion_combat_turn(
             "resolved": False,
             "changed_state": False,
             "reason": "combat_not_active",
-            "source": "deterministic_companion_combat_runtime",
+            "source": "deterministic_enemy_combat_runtime",
         }
 
     current_actor = _safe_str(combat_state.get("current_actor_id"))
-
-    if current_actor.startswith("npc:"):
-        return resolve_companion_combat_turn(
-            simulation_state,
-            npc_id=current_actor,
-            session_id=session_id,
-            tick=tick,
-        )
-
-    # Enemy AI is deliberately not implemented in J7-J9. Advance so manual
-    # tests can keep moving without pretending enemies have real tactics yet.
-    if current_actor.startswith("enemy:"):
-        advance = advance_combat_turn(simulation_state, tick=tick)
+    if not current_actor.startswith("enemy:"):
         return {
-            "resolved": True,
-            "changed_state": True,
-            "reason": "enemy_turn_skipped_for_v1",
+            "resolved": False,
+            "changed_state": False,
+            "reason": "current_actor_not_enemy",
             "actor_id": current_actor,
-            "advance_result": deepcopy(advance),
-            "combat_state": deepcopy(simulation_state.get("combat_state") or {}),
-            "source": "deterministic_companion_combat_runtime",
+            "combat_state": deepcopy(combat_state),
+            "source": "deterministic_enemy_combat_runtime",
         }
 
-    return {
-        "resolved": False,
-        "changed_state": False,
-        "reason": "current_actor_not_companion",
-        "actor_id": current_actor,
-        "combat_state": deepcopy(combat_state),
-        "source": "deterministic_companion_combat_runtime",
-    }
-Patch 2 — Let companion attacks use equipment damage without requiring player ammo
-File
-src/app/rpg/combat/runtime.py
-
-Find this block inside resolve_combat_attack(...):
-
-if actor_id == "player" and requires_ammo:
-    ammo_result = consume_equipped_ammo(...)
-
-Replace with:
-
-@@
--    if actor_id == "player" and requires_ammo:
-+    if requires_ammo:
-         ammo_result = consume_equipped_ammo(
-             simulation_state,
-             actor_id=actor_id,
-             quantity=1,
-             tick=tick,
-         )
--        if ammo_result.get("consumed") is not True:
-+        # Companions may not have ammo in this phase. Let melee/no-ammo
-+        # companions still resolve with their projected weapon stats unless
-+        # the player is explicitly using an ammo weapon.
-+        if ammo_result.get("consumed") is not True and actor_id == "player":
-             return {
-                 "resolved": False,
-                 "changed_state": False,
-                 "reason": "combat_ammo_required",
-
-This keeps strict ammo enforcement for the player, while avoiding companion combat being blocked before companion inventory/ammo AI is ready.
-
-Patch 3 — Add manual command for current combat actor
-File
-src/tests/rpg/manual_llm_transcript.py
-
-Add import:
-
-from app.rpg.combat.companion_runtime import resolve_current_companion_combat_turn
-
-Add handler near the other manual combat commands:
-
-elif _safe_str(player_input) == "__manual_resolve_current_combat_actor__":
-    sim = _extract_simulation_state(last_result) if last_result else _safe_dict(session.get("simulation_state"))
-
-    companion_combat_result = resolve_current_companion_combat_turn(
-        sim,
+    return resolve_enemy_combat_turn(
+        simulation_state,
+        enemy_id=current_actor,
         session_id=session_id,
         tick=tick,
     )
+Patch 2 — Stop skipping enemy turns in companion runtime
+File
+src/app/rpg/combat/companion_runtime.py
 
-    visible_reason = _safe_str(companion_combat_result.get("reason") or "combat_actor_not_resolved")
-    session["simulation_state"] = sim
+Add import:
 
-    persist_error = ""
-    try:
-        _save_manual_session_for_test(
-            session,
-            reason="manual_resolve_current_combat_actor",
-        )
-    except TypeError:
-        _save_manual_session_for_test(
-            session_id=session_id,
-            session=session,
-            reason="manual_resolve_current_combat_actor",
-        )
-    except Exception as exc:
-        persist_error = f"{type(exc).__name__}: {exc}"
-        visible_reason = "combat_actor_resolve_persist_failed"
+from app.rpg.combat.enemy_runtime import resolve_current_enemy_combat_turn
 
-    if persist_error:
-        companion_combat_result["persist_error"] = persist_error
-        companion_combat_result["reason"] = visible_reason
+Find in resolve_current_companion_combat_turn(...):
 
-    result = {
-        "ok": True,
-        "visible_interaction_reason": visible_reason,
-        "narration_preview": f"Result: {visible_reason}",
-        "final_narration": f"Result: {visible_reason}",
-        "result": {
-            "ok": True,
-            "manual_command": player_input,
-            "visible_interaction_reason": visible_reason,
-            "narration_preview": f"Result: {visible_reason}",
-            "final_narration": f"Result: {visible_reason}",
-            "companion_combat_result": companion_combat_result,
-            "combat_result": companion_combat_result,
-            "combat_state": _safe_dict(sim.get("combat_state")),
-            "simulation_state": sim,
-        },
-        "companion_combat_result": companion_combat_result,
-        "combat_result": companion_combat_result,
-        "combat_state": _safe_dict(sim.get("combat_state")),
-        "simulation_state": sim,
-        "session": session,
+# Enemy AI is deliberately not implemented in J7-J9. Advance so manual
+# tests can keep moving without pretending enemies have real tactics yet.
+if current_actor.startswith("enemy:"):
+    advance = advance_combat_turn(simulation_state, tick=tick)
+    return {
+        "resolved": True,
+        "changed_state": True,
+        "reason": "enemy_turn_skipped_for_v1",
+        ...
     }
 
-    last_result = result
-    scenario_results.append(
-        {
-            "turn_index": manual_turn_index,
-            "player_input": player_input,
-            "result": result,
-            "narration_preview": f"Result: {visible_reason}",
-            "final_narration": f"Result: {visible_reason}",
-            "visible_interaction_reason": visible_reason,
-            "regression_warnings": _manual_regression_warnings(
-                scenario_name=scenario_name,
-                turn_index=manual_turn_index,
-                player_input=player_input,
-                result=result,
-            ),
-        }
-    )
-    continue
+Replace with:
 
-If your turn records use a different list name than scenario_results, use the same list used by the existing manual command handlers.
+diff --git a/src/app/rpg/combat/companion_runtime.py b/src/app/rpg/combat/companion_runtime.py
+--- a/src/app/rpg/combat/companion_runtime.py
++++ b/src/app/rpg/combat/companion_runtime.py
+@@
+-from app.rpg.combat.runtime import (
+-    advance_combat_turn,
+-    get_combat_state,
+-    resolve_combat_attack,
+-)
++from app.rpg.combat.enemy_runtime import resolve_current_enemy_combat_turn
++from app.rpg.combat.runtime import (
++    get_combat_state,
++    resolve_combat_attack,
++)
+@@
+-    # Enemy AI is deliberately not implemented in J7-J9. Advance so manual
+-    # tests can keep moving without pretending enemies have real tactics yet.
+     if current_actor.startswith("enemy:"):
+-        advance = advance_combat_turn(simulation_state, tick=tick)
+-        return {
+-            "resolved": True,
+-            "changed_state": True,
+-            "reason": "enemy_turn_skipped_for_v1",
+-            "actor_id": current_actor,
+-            "advance_result": deepcopy(advance),
+-            "combat_state": deepcopy(simulation_state.get("combat_state") or {}),
+-            "source": "deterministic_companion_combat_runtime",
+-        }
++        enemy_result = resolve_current_enemy_combat_turn(
++            simulation_state,
++            session_id=session_id,
++            tick=tick,
++        )
++        return {
++            "resolved": bool(enemy_result.get("resolved")),
++            "changed_state": bool(enemy_result.get("changed_state")),
++            "reason": _safe_str(enemy_result.get("reason")),
++            "actor_id": current_actor,
++            "enemy_combat_result": deepcopy(enemy_result),
++            "combat_state": deepcopy(simulation_state.get("combat_state") or {}),
++            "source": "deterministic_companion_combat_runtime",
++        }
+Patch 3 — Enemy damage stats in combat runtime
 
-Patch 4 — Expose companion combat panels
+Currently enemies may have no equipment, so default damage is low but valid. To make enemy v1 meaningful, add enemy damage fields to participant and use them.
+
 File
-src/tests/rpg/manual_llm_transcript.py
+src/app/rpg/combat/runtime.py
 
-In special panels, add:
+In _default_enemy_bandit(), add:
 
-("Companion Combat Result", "companion_combat_result"),
-Patch 5 — Add manual scenario
+@@
+         "armor": 0,
+         "defense": 10,
++        "damage_min": 2,
++        "damage_max": 4,
++        "accuracy_bonus": 1,
+         "initiative_bonus": 0,
+
+In _participant_from_enemy(enemy), add:
+
+@@
+         "armor": _safe_int(enemy.get("armor"), 0),
+         "defense": _safe_int(enemy.get("defense"), 10),
++        "damage_min": _safe_int(enemy.get("damage_min"), 1),
++        "damage_max": _safe_int(enemy.get("damage_max"), 3),
++        "accuracy_bonus": _safe_int(enemy.get("accuracy_bonus"), 0),
+         "initiative_bonus": _safe_int(enemy.get("initiative_bonus"), 0),
+
+In _damage_bounds_for_actor(...), replace the current function body with enemy-aware logic:
+
+@@
+ def _damage_bounds_for_actor(simulation_state: Dict[str, Any], actor_id: str) -> Dict[str, int]:
++    combat_state = get_combat_state(simulation_state)
++    participant = _participant(combat_state, actor_id)
++    if _safe_str(participant.get("side")) == "enemy":
++        return {
++            "damage_min": max(1, _safe_int(participant.get("damage_min"), 1)),
++            "damage_max": max(1, _safe_int(participant.get("damage_max"), 3)),
++            "accuracy_bonus": _safe_int(participant.get("accuracy_bonus"), 0),
++            "encumbrance_penalty": 0,
++            "armor": _safe_int(participant.get("armor"), 0),
++        }
++
+     stats = _actor_equipment_stats(simulation_state, actor_id)
+     return {
+
+This ensures enemies are not stuck with player-style equipment defaults.
+
+Patch 4 — Sync defeated player/companion status from participant state
+File
+src/app/rpg/combat/runtime.py
+
+Inside resolve_combat_attack(...), after:
+
+if defeated:
+    target["status"] = "defeated"
+
+add:
+
+@@
+     if defeated:
+         target["status"] = "defeated"
++    elif hp_after > 0:
++        target["status"] = _safe_str(target.get("status") or "active")
+
+This already calls _sync_participant_hp_to_actor_state(...), so player/companion hp/status should update.
+
+Patch 5 — Manual scenario for enemy attack and party defeat
 File
 src/tests/rpg/manual_llm_transcript.py
 
 Add scenario:
 
-"companion_combat_participation": {
+"enemy_combat_ai_party_defeat": {
     "currency": {"gold": 0, "silver": 0, "copper": 0},
     "conversation_settings": {
         "enabled": True,
@@ -517,279 +465,293 @@ Add scenario:
         "scene_items": [],
         "scene_objects": [],
         "player_location_id": "loc_tavern_road",
-        "player_hp": 20,
+        "player_hp": 3,
         "player_max_hp": 20,
         "player_inventory": {
-            "items": [
-                {
-                    "item_id": "item:hunting_bow",
-                    "definition_id": "def:hunting_bow",
-                    "name": "hunting bow",
-                    "aliases": ["bow"]
-                },
-                {
-                    "item_id": "item:iron_arrow_stack_a",
-                    "definition_id": "def:iron_arrow",
-                    "name": "iron arrows",
-                    "aliases": ["arrows", "iron arrow"],
-                    "quantity": 15
-                }
-            ],
-            "equipment": {
-                "main_hand": "item:hunting_bow",
-                "ammo": "item:iron_arrow_stack_a"
-            },
+            "items": [],
+            "equipment": {},
             "carry_capacity": 50.0
         },
         "party_state": {
             "max_size": 4,
-            "companions": [
+            "companions": []
+        },
+        "combat_state": {
+            "active": true,
+            "encounter_id": "enc:bandit_ambush",
+            "round": 1,
+            "turn_index": 0,
+            "current_actor_id": "enemy:bandit_1",
+            "initiative_order": [
                 {
-                    "npc_id": "npc:Bran",
-                    "name": "Bran",
-                    "role": "companion",
-                    "status": "active",
-                    "follow_mode": "following_player",
-                    "location_id": "loc_tavern_road",
-                    "current_role": "Displaced tavern keeper",
-                    "identity_arc": "revenge_after_losing_tavern",
-                    "active_motivations": ["revenge", "protect the party"],
-                    "loyalty": 35,
-                    "inventory": {
-                        "items": [
-                            {
-                                "item_id": "item:bran_rusty_dagger",
-                                "definition_id": "def:rusty_dagger",
-                                "name": "rusty dagger",
-                                "aliases": ["dagger"]
-                            }
-                        ],
-                        "equipment": {
-                            "main_hand": "item:bran_rusty_dagger"
-                        },
-                        "carry_capacity": 50.0
-                    }
+                    "actor_id": "enemy:bandit_1",
+                    "initiative": 20,
+                    "roll": 20,
+                    "bonus": 0
+                },
+                {
+                    "actor_id": "player",
+                    "initiative": 1,
+                    "roll": 1,
+                    "bonus": 0
                 }
-            ]
+            ],
+            "participants": {
+                "enemy:bandit_1": {
+                    "actor_id": "enemy:bandit_1",
+                    "side": "enemy",
+                    "name": "Bandit",
+                    "hp": 8,
+                    "max_hp": 8,
+                    "armor": 0,
+                    "defense": 10,
+                    "damage_min": 3,
+                    "damage_max": 4,
+                    "accuracy_bonus": 5,
+                    "initiative_bonus": 0,
+                    "status": "active",
+                    "loot_table_id": "loot:bandit_common"
+                },
+                "player": {
+                    "actor_id": "player",
+                    "side": "party",
+                    "name": "You",
+                    "hp": 3,
+                    "max_hp": 20,
+                    "armor": 0,
+                    "defense": 10,
+                    "initiative_bonus": 0,
+                    "status": "active"
+                }
+            },
+            "combat_log": [],
+            "source": "manual_enemy_combat_test"
         }
     },
     "turns": [
-        "I attack the bandit.",
-        "__manual_resolve_current_combat_actor__",
-        "__manual_resolve_current_combat_actor__",
-        "__manual_force_player_combat_turn__",
-        "I attack the bandit."
+        "__manual_resolve_current_combat_actor__"
     ]
 },
 
 Add scenario choice:
 
-"companion_combat_participation",
+"enemy_combat_ai_party_defeat",
+Patch 6 — Setup helper must install combat_state
+File
+src/tests/rpg/manual_llm_transcript.py
 
-Expected flow:
+Inside setup application for setup_interaction_state, add:
 
-Turn 1 starts combat.
-Turn 2 resolves whoever is current after combat start.
-Turn 3 resolves next actor if needed.
-Turn 4 forces player turn.
-Turn 5 player attack can finish or continue combat.
-Patch 6 — Manual validation
+@@
+         if isinstance(setup_interaction_state.get("merchant_state"), dict):
+             simulation_state["merchant_state"] = _safe_dict(
+                 setup_interaction_state.get("merchant_state")
+             )
++
++        if isinstance(setup_interaction_state.get("combat_state"), dict):
++            simulation_state["combat_state"] = _safe_dict(
++                setup_interaction_state.get("combat_state")
++            )
+Patch 7 — Manual extraction and panels
 File
 src/tests/rpg/manual_llm_transcript.py
 
 Add helper:
 
-def _extract_companion_combat_result(result: Dict[str, Any]) -> Dict[str, Any]:
+def _extract_enemy_combat_result(result: Dict[str, Any]) -> Dict[str, Any]:
     result = _safe_dict(result)
     nested = _safe_dict(result.get("result"))
     interaction = _extract_interaction_result(result)
+    companion = _extract_companion_combat_result(result)
     return _first_dict(
-        interaction.get("companion_combat_result"),
-        result.get("companion_combat_result"),
-        nested.get("companion_combat_result"),
+        interaction.get("enemy_combat_result"),
+        result.get("enemy_combat_result"),
+        nested.get("enemy_combat_result"),
+        companion.get("enemy_combat_result"),
     )
+
+Add panel:
+
+("Enemy Combat Result", "enemy_combat_result"),
+
+In the manual command handler for __manual_resolve_current_combat_actor__, after companion_combat_result is returned, also expose nested enemy result:
+
+enemy_combat_result = _safe_dict(companion_combat_result.get("enemy_combat_result"))
+
+Then add to result dicts:
+
+"enemy_combat_result": enemy_combat_result,
+
+both top-level and nested.
+
+Patch 8 — Manual validation
+File
+src/tests/rpg/manual_llm_transcript.py
 
 Add validation block:
 
-if scenario_name == "companion_combat_participation":
-    combat_result = _extract_combat_result(result)
-    companion_combat = _extract_companion_combat_result(result)
+if scenario_name == "enemy_combat_ai_party_defeat":
+    enemy_combat = _extract_enemy_combat_result(result)
     combat_state = _extract_combat_state(result)
+    sim = _extract_simulation_state(result)
     visible_reason = _extract_visible_interaction_reason(result)
 
     if turn_index == 1:
-        if _safe_str(combat_result.get("reason")) != "combat_started":
+        if enemy_combat.get("resolved") is not True:
             warnings.append(
-                f"companion_combat_start_expected_combat_started_got:{_safe_str(combat_result.get('reason')) or 'missing'}"
-            )
-        participants = _safe_dict(combat_state.get("participants"))
-        if "npc:Bran" not in participants:
-            warnings.append("companion_combat_expected_bran_participant")
-
-    if turn_index in {2, 3}:
-        reason = _safe_str(companion_combat.get("reason") or combat_result.get("reason"))
-        allowed = {
-            "companion_combat_attack_resolved",
-            "companion_combat_defeat_resolved",
-            "enemy_turn_skipped_for_v1",
-            "current_actor_not_companion",
-            "combat_not_active",
-        }
-        if reason not in allowed:
-            warnings.append(
-                f"companion_combat_actor_resolve_unexpected_reason:{reason or 'missing'}"
+                f"enemy_combat_expected_resolved_true_got:{_safe_str(enemy_combat.get('reason')) or 'missing'}"
             )
 
-        if reason in {"companion_combat_attack_resolved", "companion_combat_defeat_resolved"}:
-            if _safe_str(companion_combat.get("actor_id")) != "npc:Bran":
-                warnings.append(
-                    f"companion_combat_expected_actor_bran_got:{_safe_str(companion_combat.get('actor_id')) or 'missing'}"
-                )
-            morale = _safe_dict(companion_combat.get("morale"))
-            if _safe_str(morale.get("morale_state")) != "motivated":
-                warnings.append(
-                    f"companion_combat_expected_bran_motivated_got:{_safe_str(morale.get('morale_state')) or 'missing'}"
-                )
-
-    if turn_index == 4:
-        if _safe_str(combat_result.get("reason")) != "combat_turn_forced_to_player":
+        if _safe_str(enemy_combat.get("reason")) not in {
+            "enemy_combat_attack_resolved",
+            "party_defeat_resolved",
+        }:
             warnings.append(
-                f"companion_combat_force_expected_player_turn_got:{_safe_str(combat_result.get('reason')) or 'missing'}"
+                f"enemy_combat_expected_attack_or_party_defeat_got:{_safe_str(enemy_combat.get('reason')) or 'missing'}"
             )
 
-    if turn_index == 5:
-        reason = _safe_str(combat_result.get("reason"))
-        if reason not in {"combat_attack_resolved", "combat_defeat_resolved", "combat_not_active"}:
+        if _safe_str(enemy_combat.get("actor_id")) != "enemy:bandit_1":
             warnings.append(
-                f"companion_combat_player_attack_expected_attack_or_defeat_got:{reason or 'missing'}"
+                f"enemy_combat_expected_actor_bandit_got:{_safe_str(enemy_combat.get('actor_id')) or 'missing'}"
             )
 
-    if visible_reason in {"no_supported_semantic_action_detected", ""}:
-        warnings.append(
-            f"companion_combat_visible_reason_invalid:{visible_reason or 'missing'}"
-        )
-Patch 7 — Unit tests
+        if _safe_str(enemy_combat.get("target_id")) != "player":
+            warnings.append(
+                f"enemy_combat_expected_target_player_got:{_safe_str(enemy_combat.get('target_id')) or 'missing'}"
+            )
+
+        attack = _safe_dict(enemy_combat.get("attack_result"))
+        if int(attack.get("damage_applied") or 0) <= 0:
+            warnings.append("enemy_combat_expected_positive_damage")
+
+        player_state = _safe_dict(sim.get("player_state"))
+        if int(player_state.get("hp") or 999) > 0 and enemy_combat.get("party_defeated") is True:
+            warnings.append(
+                f"enemy_combat_party_defeat_expected_player_hp_zero_got:{int(player_state.get('hp') or 999)}"
+            )
+
+        if enemy_combat.get("party_defeated") is not True:
+            warnings.append("enemy_combat_expected_party_defeated_true")
+
+        if combat_state.get("active") is not False:
+            warnings.append("enemy_combat_expected_combat_inactive_after_party_defeat")
+
+        if _safe_str(combat_state.get("ended_reason")) != "party_side_defeated":
+            warnings.append(
+                f"enemy_combat_expected_party_side_defeated_got:{_safe_str(combat_state.get('ended_reason')) or 'missing'}"
+            )
+
+        if visible_reason != "party_defeat_resolved":
+            warnings.append(
+                f"enemy_combat_visible_expected_party_defeat_resolved_got:{visible_reason or 'missing'}"
+            )
+Patch 9 — Unit tests
 New file
-src/app/rpg/tests/test_bundle_j7_j8_j9_companion_combat.py
-from app.rpg.combat.companion_runtime import (
-    choose_companion_combat_tactic,
-    companion_morale_state,
-    resolve_companion_combat_turn,
+src/app/rpg/tests/test_bundle_j10_j11_j12_enemy_combat.py
+from app.rpg.combat.enemy_runtime import (
+    choose_enemy_target,
+    resolve_current_enemy_combat_turn,
 )
-from app.rpg.combat.runtime import start_combat_encounter
+from app.rpg.combat.runtime import get_combat_state
 
 
 def _state():
     return {
-        "session_id": "unit_companion_combat",
+        "session_id": "unit_enemy_combat",
         "location_id": "loc_tavern_road",
         "player_state": {
             "location_id": "loc_tavern_road",
-            "hp": 20,
+            "hp": 3,
             "max_hp": 20,
             "inventory": {
                 "items": [],
                 "equipment": {},
                 "carry_capacity": 50.0,
             },
-            "party_state": {
-                "companions": [
-                    {
-                        "npc_id": "npc:Bran",
-                        "name": "Bran",
-                        "role": "companion",
-                        "status": "active",
-                        "current_role": "Displaced tavern keeper",
-                        "identity_arc": "revenge_after_losing_tavern",
-                        "active_motivations": ["revenge"],
-                        "loyalty": 35,
-                        "inventory": {
-                            "items": [
-                                {
-                                    "item_id": "item:bran_rusty_dagger",
-                                    "definition_id": "def:rusty_dagger",
-                                    "name": "rusty dagger",
-                                }
-                            ],
-                            "equipment": {
-                                "main_hand": "item:bran_rusty_dagger",
-                            },
-                            "carry_capacity": 50.0,
-                        },
-                    }
-                ]
+            "party_state": {"companions": []},
+        },
+        "combat_state": {
+            "active": True,
+            "encounter_id": "enc:bandit_ambush",
+            "round": 1,
+            "turn_index": 0,
+            "current_actor_id": "enemy:bandit_1",
+            "initiative_order": [
+                {"actor_id": "enemy:bandit_1", "initiative": 20, "roll": 20, "bonus": 0},
+                {"actor_id": "player", "initiative": 1, "roll": 1, "bonus": 0},
+            ],
+            "participants": {
+                "enemy:bandit_1": {
+                    "actor_id": "enemy:bandit_1",
+                    "side": "enemy",
+                    "name": "Bandit",
+                    "hp": 8,
+                    "max_hp": 8,
+                    "armor": 0,
+                    "defense": 10,
+                    "damage_min": 3,
+                    "damage_max": 4,
+                    "accuracy_bonus": 5,
+                    "initiative_bonus": 0,
+                    "status": "active",
+                    "loot_table_id": "loot:bandit_common",
+                },
+                "player": {
+                    "actor_id": "player",
+                    "side": "party",
+                    "name": "You",
+                    "hp": 3,
+                    "max_hp": 20,
+                    "armor": 0,
+                    "defense": 10,
+                    "initiative_bonus": 0,
+                    "status": "active",
+                },
             },
+            "combat_log": [],
         },
         "scene_items": [],
         "scene_objects": [],
     }
 
 
-def _force_bran_turn(state):
-    combat = state["combat_state"]
-    for idx, row in enumerate(combat["initiative_order"]):
-        if row["actor_id"] == "npc:Bran":
-            combat["turn_index"] = idx
-            combat["current_actor_id"] = "npc:Bran"
-            state["combat_state"] = combat
-            return
-
-
-def test_bran_revenge_arc_sets_motivated_morale():
+def test_enemy_selects_player_first():
     state = _state()
-    bran = state["player_state"]["party_state"]["companions"][0]
 
-    morale = companion_morale_state(bran)
+    target = choose_enemy_target(state, enemy_id="enemy:bandit_1")
 
-    assert morale["morale_state"] == "motivated"
-    assert morale["accuracy_bonus"] >= 1
+    assert target["resolved"] is True
+    assert target["target_id"] == "player"
 
 
-def test_companion_tactic_targets_living_enemy():
+def test_enemy_attack_can_defeat_party():
     state = _state()
-    start_combat_encounter(state, encounter_id="enc:bandit_ambush", tick=1)
 
-    tactic = choose_companion_combat_tactic(state, npc_id="npc:Bran")
-
-    assert tactic["resolved"] is True
-    assert tactic["target_id"] == "enemy:bandit_1"
-    assert tactic["tactic"] == "revenge_attack"
-
-
-def test_companion_combat_turn_resolves_attack():
-    state = _state()
-    start_combat_encounter(state, encounter_id="enc:bandit_ambush", tick=1)
-    _force_bran_turn(state)
-
-    result = resolve_companion_combat_turn(
+    result = resolve_current_enemy_combat_turn(
         state,
-        npc_id="npc:Bran",
-        session_id="unit_companion_combat",
-        tick=2,
+        session_id="unit_enemy_combat",
+        tick=1,
     )
 
     assert result["resolved"] is True
-    assert result["reason"] in {
-        "companion_combat_attack_resolved",
-        "companion_combat_defeat_resolved",
-    }
-    assert result["actor_id"] == "npc:Bran"
-    assert result["target_id"] == "enemy:bandit_1"
-    assert result["morale"]["morale_state"] == "motivated"
+    assert result["reason"] == "party_defeat_resolved"
+    assert result["party_defeated"] is True
+    assert result["combat_ended"] is True
+
+    combat = get_combat_state(state)
+    assert combat["active"] is False
+    assert combat["ended_reason"] == "party_side_defeated"
+    assert state["player_state"]["hp"] == 0
 
 Run:
 
-pytest src/app/rpg/tests/test_bundle_j7_j8_j9_companion_combat.py -q
+pytest src/app/rpg/tests/test_bundle_j10_j11_j12_enemy_combat.py -q
 
 Expected:
 
-3 passed
+2 passed
 Validation
 
-Run current fix first:
+Run:
 
-python src/tests/rpg/manual_llm_transcript.py --service-scenarios --scenario combat_actions_damage_defeat --fail-on-regression-warnings
-
-Then new phase:
-
-pytest src/app/rpg/tests/test_bundle_j7_j8_j9_companion_combat.py -q
+pytest src/app/rpg/tests/test_bundle_j10_j11_j12_enemy_combat.py -q

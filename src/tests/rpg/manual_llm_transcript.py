@@ -1008,6 +1008,7 @@ def _render_special_panels(result: Dict[str, Any], *, prefix: str) -> str:
         ("Combat Result", "combat_result"),
         ("Combat State", "combat_state"),
         ("Companion Combat Result", "companion_combat_result"),
+        ("Enemy Combat Result", "enemy_combat_result"),
     ]:
         value = _first_dict(
             result.get(key),
@@ -4993,6 +4994,91 @@ SERVICE_SCENARIOS = {
             "I attack the bandit."
         ]
     },
+    "enemy_combat_ai_party_defeat": {
+        "currency": {"gold": 0, "silver": 0, "copper": 0},
+        "conversation_settings": {
+            "enabled": True,
+            "autonomous_ticks_enabled": False,
+            "frequency": "never",
+            "conversation_chance_percent": 0,
+            "allow_player_invited": False,
+            "player_inclusion_chance_percent": 0,
+            "npc_file_profiles_enabled": True,
+            "npc_evolution_enabled": True,
+            "min_ticks_between_conversations": 0,
+            "thread_cooldown_ticks": 0
+        },
+        "setup_interaction_state": {
+            "scene_items": [],
+            "scene_objects": [],
+            "player_location_id": "loc_tavern_road",
+            "player_hp": 3,
+            "player_max_hp": 20,
+            "player_inventory": {
+                "items": [],
+                "equipment": {},
+                "carry_capacity": 50.0
+            },
+            "party_state": {
+                "max_size": 4,
+                "companions": []
+            },
+            "combat_state": {
+                "active": True,
+                "encounter_id": "enc:bandit_ambush",
+                "round": 1,
+                "turn_index": 0,
+                "current_actor_id": "enemy:bandit_1",
+                "initiative_order": [
+                    {
+                        "actor_id": "enemy:bandit_1",
+                        "initiative": 20,
+                        "roll": 20,
+                        "bonus": 0
+                    },
+                    {
+                        "actor_id": "player",
+                        "initiative": 1,
+                        "roll": 1,
+                        "bonus": 0
+                    }
+                ],
+                "participants": {
+                    "enemy:bandit_1": {
+                        "actor_id": "enemy:bandit_1",
+                        "side": "enemy",
+                        "name": "Bandit",
+                        "hp": 8,
+                        "max_hp": 8,
+                        "armor": 0,
+                        "defense": 10,
+                        "damage_min": 3,
+                        "damage_max": 4,
+                        "accuracy_bonus": 5,
+                        "initiative_bonus": 0,
+                        "status": "active",
+                        "loot_table_id": "loot:bandit_common"
+                    },
+                    "player": {
+                        "actor_id": "player",
+                        "side": "party",
+                        "name": "You",
+                        "hp": 3,
+                        "max_hp": 20,
+                        "armor": 0,
+                        "defense": 10,
+                        "initiative_bonus": 0,
+                        "status": "active"
+                    }
+                },
+                "combat_log": [],
+                "source": "manual_enemy_combat_test"
+            }
+        },
+        "turns": [
+            "__manual_resolve_current_combat_actor__"
+        ]
+    },
 }
 
 
@@ -5066,6 +5152,7 @@ NON_CONVERSATION_ALLOWED_SCENARIOS = {
     "inventory_crafting_recipes_materials",
     "inventory_loot_merchant_economy",
     "combat_state_initiative_turn_gating",
+    "enemy_combat_ai_party_defeat",
 }
 
 
@@ -6306,6 +6393,19 @@ def _extract_combat_result(result: Dict[str, Any]) -> Dict[str, Any]:
         interaction.get("combat_result"),
         result.get("combat_result"),
         nested.get("combat_result"),
+    )
+
+
+def _extract_enemy_combat_result(result: Dict[str, Any]) -> Dict[str, Any]:
+    result = _safe_dict(result)
+    nested = _safe_dict(result.get("result"))
+    interaction = _extract_interaction_result(result)
+    companion = _extract_companion_combat_result(result)
+    return _first_dict(
+        interaction.get("enemy_combat_result"),
+        result.get("enemy_combat_result"),
+        nested.get("enemy_combat_result"),
+        companion.get("enemy_combat_result"),
     )
 
 
@@ -9014,7 +9114,14 @@ def _apply_manual_scenario_setup(session_id: str, scenario: Dict[str, Any]) -> b
         if "player_max_hp" in setup_interaction_state:
             player_state["max_hp"] = int(setup_interaction_state.get("player_max_hp") or 1)
         if isinstance(setup_interaction_state.get("merchant_state"), dict):
-            simulation_state["merchant_state"] = _safe_dict(setup_interaction_state.get("merchant_state"))
+            simulation_state["merchant_state"] = _safe_dict(
+                setup_interaction_state.get("merchant_state")
+            )
+
+        if isinstance(setup_interaction_state.get("combat_state"), dict):
+            simulation_state["combat_state"] = _safe_dict(
+                setup_interaction_state.get("combat_state")
+            )
         simulation_state["player_state"] = player_state
 
         setup_payload = _safe_dict(session.get("setup_payload"))
@@ -10492,6 +10599,8 @@ def _run_one_service_scenario(
                 tick=manual_turn_index,
             )
 
+            enemy_combat_result = _safe_dict(companion_combat_result.get("enemy_combat_result"))
+
             visible_reason = _safe_str(companion_combat_result.get("reason") or "combat_actor_not_resolved")
             session["simulation_state"] = sim
 
@@ -10527,11 +10636,13 @@ def _run_one_service_scenario(
                     "narration_preview": f"Result: {visible_reason}",
                     "final_narration": f"Result: {visible_reason}",
                     "companion_combat_result": companion_combat_result,
+                    "enemy_combat_result": enemy_combat_result,
                     "combat_result": companion_combat_result,
                     "combat_state": _safe_dict(sim.get("combat_state")),
                     "simulation_state": sim,
                 },
                 "companion_combat_result": companion_combat_result,
+                "enemy_combat_result": enemy_combat_result,
                 "combat_result": companion_combat_result,
                 "combat_state": _safe_dict(sim.get("combat_state")),
                 "simulation_state": sim,
@@ -10929,6 +11040,62 @@ def _run_one_service_scenario(
                 f"companion_combat_visible_reason_invalid:{visible_reason or 'missing'}"
             )
 
+    if scenario_name == "enemy_combat_ai_party_defeat":
+        enemy_combat = _extract_enemy_combat_result(result)
+        combat_state = _extract_combat_state(result)
+        sim = _extract_simulation_state(result)
+        visible_reason = _extract_visible_interaction_reason(result)
+
+        if manual_turn_index == 1:
+            if enemy_combat.get("resolved") is not True:
+                scenario_warnings.append(
+                    f"enemy_combat_expected_resolved_true_got:{_safe_str(enemy_combat.get('reason')) or 'missing'}"
+                )
+
+            if _safe_str(enemy_combat.get("reason")) not in {
+                "enemy_combat_attack_resolved",
+                "party_defeat_resolved",
+            }:
+                scenario_warnings.append(
+                    f"enemy_combat_expected_attack_or_party_defeat_got:{_safe_str(enemy_combat.get('reason')) or 'missing'}"
+                )
+
+            if _safe_str(enemy_combat.get("actor_id")) != "enemy:bandit_1":
+                scenario_warnings.append(
+                    f"enemy_combat_expected_actor_bandit_got:{_safe_str(enemy_combat.get('actor_id')) or 'missing'}"
+                )
+
+            if _safe_str(enemy_combat.get("target_id")) != "player":
+                scenario_warnings.append(
+                    f"enemy_combat_expected_target_player_got:{_safe_str(enemy_combat.get('target_id')) or 'missing'}"
+                )
+
+            attack = _safe_dict(enemy_combat.get("attack_result"))
+            if int(attack.get("damage_applied") or 0) <= 0:
+                scenario_warnings.append("enemy_combat_expected_positive_damage")
+
+            player_state = _safe_dict(sim.get("player_state"))
+            player_hp = int(player_state.get("hp", 0))
+            if player_hp > 0 and enemy_combat.get("party_defeated") is True:
+                scenario_warnings.append(
+                    f"enemy_combat_party_defeat_expected_player_hp_zero_got:{player_hp}"
+                )
+
+            if enemy_combat.get("party_defeated") is not True:
+                scenario_warnings.append("enemy_combat_expected_party_defeated_true")
+
+            if combat_state.get("active") is not False:
+                scenario_warnings.append("enemy_combat_expected_combat_inactive_after_party_defeat")
+
+            if _safe_str(combat_state.get("ended_reason")) != "party_side_defeated":
+                scenario_warnings.append(
+                    f"enemy_combat_expected_party_side_defeated_got:{_safe_str(combat_state.get('ended_reason')) or 'missing'}"
+                )
+
+            if visible_reason != "party_defeat_resolved":
+                scenario_warnings.append(
+                    f"enemy_combat_visible_expected_party_defeat_resolved_got:{visible_reason or 'missing'}"
+                )
 
     return {
         "scenario": scenario_name,

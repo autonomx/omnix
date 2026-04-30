@@ -3,8 +3,8 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any, Dict, List
 
+from app.rpg.combat.enemy_runtime import resolve_current_enemy_combat_turn
 from app.rpg.combat.runtime import (
-    advance_combat_turn,
     get_combat_state,
     resolve_combat_attack,
 )
@@ -244,16 +244,18 @@ def resolve_current_companion_combat_turn(
             tick=tick,
         )
 
-    # Enemy AI is deliberately not implemented in J7-J9. Advance so manual
-    # tests can keep moving without pretending enemies have real tactics yet.
     if current_actor.startswith("enemy:"):
-        advance = advance_combat_turn(simulation_state, tick=tick)
+        enemy_result = resolve_current_enemy_combat_turn(
+            simulation_state,
+            session_id=session_id,
+            tick=tick,
+        )
         return {
-            "resolved": True,
-            "changed_state": True,
-            "reason": "enemy_turn_skipped_for_v1",
+            "resolved": bool(enemy_result.get("resolved")),
+            "changed_state": bool(enemy_result.get("changed_state")),
+            "reason": _safe_str(enemy_result.get("reason")),
             "actor_id": current_actor,
-            "advance_result": deepcopy(advance),
+            "enemy_combat_result": deepcopy(enemy_result),
             "combat_state": deepcopy(simulation_state.get("combat_state") or {}),
             "source": "deterministic_companion_combat_runtime",
         }

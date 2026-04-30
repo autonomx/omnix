@@ -58,6 +58,9 @@ def _default_enemy_bandit() -> Dict[str, Any]:
         "max_hp": 8,
         "armor": 0,
         "defense": 10,
+        "damage_min": 2,
+        "damage_max": 4,
+        "accuracy_bonus": 1,
         "initiative_bonus": 0,
         "status": "active",
         "loot_table_id": "loot:bandit_common",
@@ -111,6 +114,9 @@ def _participant_from_enemy(enemy: Dict[str, Any]) -> Dict[str, Any]:
         "max_hp": _safe_int(enemy.get("max_hp"), 10),
         "armor": _safe_int(enemy.get("armor"), 0),
         "defense": _safe_int(enemy.get("defense"), 10),
+        "damage_min": _safe_int(enemy.get("damage_min"), 1),
+        "damage_max": _safe_int(enemy.get("damage_max"), 3),
+        "accuracy_bonus": _safe_int(enemy.get("accuracy_bonus"), 0),
         "initiative_bonus": _safe_int(enemy.get("initiative_bonus"), 0),
         "status": _safe_str(enemy.get("status") or "active"),
         "loot_table_id": _safe_str(enemy.get("loot_table_id")),
@@ -194,6 +200,17 @@ def _actor_equipment_stats(simulation_state: Dict[str, Any], actor_id: str) -> D
 
 
 def _damage_bounds_for_actor(simulation_state: Dict[str, Any], actor_id: str) -> Dict[str, int]:
+    combat_state = get_combat_state(simulation_state)
+    participant = _participant(combat_state, actor_id)
+    if _safe_str(participant.get("side")) == "enemy":
+        return {
+            "damage_min": max(1, _safe_int(participant.get("damage_min"), 1)),
+            "damage_max": max(1, _safe_int(participant.get("damage_max"), 3)),
+            "accuracy_bonus": _safe_int(participant.get("accuracy_bonus"), 0),
+            "encumbrance_penalty": 0,
+            "armor": _safe_int(participant.get("armor"), 0),
+        }
+
     stats = _actor_equipment_stats(simulation_state, actor_id)
     return {
         "damage_min": max(1, _safe_int(stats.get("damage_min"), 1)),
@@ -615,6 +632,8 @@ def resolve_combat_attack(
     defeated = hp_after <= 0
     if defeated:
         target["status"] = "defeated"
+    elif hp_after > 0:
+        target["status"] = _safe_str(target.get("status") or "active")
 
     participants[target_id] = target
     combat_state["participants"] = participants
