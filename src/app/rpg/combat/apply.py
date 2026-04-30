@@ -35,6 +35,12 @@ def apply_attack_resolution(
     combat_state["active"] = True
     combat_state["phase"] = "active"
     combat_state["last_resolution"] = dict(resolution)
+
+    defense_modifiers = _safe_dict(combat_state.get("defense_modifiers"))
+    if target_id in defense_modifiers:
+        defense_modifiers.pop(target_id, None)
+    combat_state["defense_modifiers"] = defense_modifiers
+
     recent = list(combat_state.get("recent_events") or [])
     recent.append({
         "type": "attack_resolution",
@@ -50,3 +56,60 @@ def apply_attack_resolution(
         combat_state["current_target_id"] = ""
 
     return simulation_state, combat_state
+
+
+def apply_defense_resolution(
+    simulation_state: Dict[str, Any],
+    combat_state: Dict[str, Any],
+    resolution: Dict[str, Any],
+) -> tuple[Dict[str, Any], Dict[str, Any]]:
+    state = normalize_combat_state(combat_state)
+    actor_id = str(resolution.get("actor_id") or "")
+    bonus = int(resolution.get("defense_bonus", 0) or 0)
+
+    modifiers = _safe_dict(state.get("defense_modifiers"))
+    if actor_id and bonus > 0:
+        modifiers[actor_id] = {
+            "bonus": bonus,
+            "duration": "next_incoming_attack",
+        }
+    state["defense_modifiers"] = modifiers
+
+    recent = list(state.get("recent_events") or [])
+    recent.append({
+        "type": "defense_resolution",
+        "actor_id": actor_id,
+        "defense_bonus": bonus,
+    })
+    state["recent_events"] = recent[-24:]
+    state["last_resolution"] = dict(resolution)
+    return simulation_state, state
+
+
+def apply_flee_resolution(
+    simulation_state: Dict[str, Any],
+    combat_state: Dict[str, Any],
+    resolution: Dict[str, Any],
+) -> tuple[Dict[str, Any], Dict[str, Any]]:
+    state = normalize_combat_state(combat_state)
+    actor_id = str(resolution.get("actor_id") or "")
+    success = bool(resolution.get("success"))
+
+    recent = list(state.get("recent_events") or [])
+    recent.append({
+        "type": "flee_resolution",
+        "actor_id": actor_id,
+        "success": success,
+    })
+    state["recent_events"] = recent[-24:]
+    state["last_resolution"] = dict(resolution)
+
+    if success:
+        state["active"] = False
+        state["phase"] = "resolved"
+        state["exit_reason"] = "fled"
+        state["winner_ids"] = []
+        state["loser_ids"] = []
+        state["pending_npc_turn"] = False
+
+    return simulation_state, state

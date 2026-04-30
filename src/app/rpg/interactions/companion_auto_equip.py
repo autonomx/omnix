@@ -4,7 +4,10 @@ from copy import deepcopy
 from typing import Any, Dict, List
 
 from app.rpg.interactions.equipment_runtime import project_equipment_stats
-from app.rpg.interactions.item_model import normalize_item_instance, recalculate_inventory_derived_fields
+from app.rpg.interactions.item_model import (
+    normalize_item_instance,
+    recalculate_inventory_derived_fields,
+)
 
 
 def _safe_str(value: Any) -> str:

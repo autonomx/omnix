@@ -57,6 +57,50 @@ class AttackResolution:
             "target_hp_before": self.target_hp_before,
             "target_hp_after": self.target_hp_after,
             "target_downed": self.target_downed,
+             "rolls": list(self.rolls),
+             "notes": list(self.notes),
+         }
+
+
+@dataclass(frozen=True)
+class DefenseResolution:
+    combat_id: str
+    actor_id: str
+    action_type: str
+    defense_bonus: int
+    duration: str
+    notes: List[str]
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "combat_id": self.combat_id,
+            "actor_id": self.actor_id,
+            "action_type": self.action_type,
+            "defense_bonus": self.defense_bonus,
+            "duration": self.duration,
+            "notes": list(self.notes),
+        }
+
+
+@dataclass(frozen=True)
+class FleeResolution:
+    combat_id: str
+    actor_id: str
+    action_type: str
+    success: bool
+    flee_total: int
+    difficulty_total: int
+    rolls: List[Dict[str, Any]]
+    notes: List[str]
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "combat_id": self.combat_id,
+            "actor_id": self.actor_id,
+            "action_type": self.action_type,
+            "success": self.success,
+            "flee_total": self.flee_total,
+            "difficulty_total": self.difficulty_total,
             "rolls": list(self.rolls),
             "notes": list(self.notes),
         }

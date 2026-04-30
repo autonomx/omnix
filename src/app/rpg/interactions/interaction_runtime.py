@@ -3,6 +3,12 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any, Dict
 
+from app.rpg.combat.runtime import (
+    gate_combat_action,
+    is_combat_active,
+    resolve_combat_attack,
+    start_combat_encounter,
+)
 from app.rpg.interactions.consumable_runtime import apply_consumable_interaction
 from app.rpg.interactions.container_runtime import apply_container_interaction
 from app.rpg.interactions.crafting_runtime import apply_crafting_interaction
@@ -17,12 +23,6 @@ from app.rpg.interactions.semantic_actions import (
 from app.rpg.interactions.target_resolver import (
     expected_target_types_for_action,
     resolve_target_ref,
-)
-from app.rpg.combat.runtime import (
-    gate_combat_action,
-    is_combat_active,
-    resolve_combat_attack,
-    start_combat_encounter,
 )
 
 

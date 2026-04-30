@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import ast
 import concurrent.futures
 import contextlib
 import difflib
@@ -26,13 +27,13 @@ from typing import Any, Dict, List, Sequence
 # Add src to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 
-from app.rpg.session.runtime import apply_turn
-from app.rpg.world.conversation_threads import has_pending_player_conversation_response
-from app.rpg.combat.runtime import advance_combat_turn
 from app.rpg.combat.companion_runtime import resolve_current_companion_combat_turn
-from app.runtime_paths import resources_data_root
+from app.rpg.combat.runtime import advance_combat_turn
 from app.rpg.narration.combat_contract import combat_contract_requires_llm
 from app.rpg.narration.combat_service import generate_combat_narration_sync
+from app.rpg.session.runtime import apply_turn
+from app.rpg.world.conversation_threads import has_pending_player_conversation_response
+from app.runtime_paths import resources_data_root
 
 MANUAL_LOG_MAX_CHUNK_BYTES = 1_000_000
 MANUAL_LOG_CHUNK_SOFT_BYTES = 850_000
@@ -5574,6 +5575,109 @@ SERVICE_SCENARIOS = {
             "__manual_resolve_current_combat_actor__"
         ]
     },
+
+    "combat_defend_reduces_next_incoming_attack": {
+        "currency": {"gold": 0, "silver": 0, "copper": 0},
+        "conversation_settings": {
+            "enabled": True,
+            "autonomous_ticks_enabled": False,
+            "frequency": "never",
+            "conversation_chance_percent": 0,
+            "allow_player_invited": False,
+            "player_inclusion_chance_percent": 0,
+            "npc_file_profiles_enabled": True,
+            "npc_evolution_enabled": True,
+            "min_ticks_between_conversations": 0,
+            "thread_cooldown_ticks": 0
+        },
+        "setup_interaction_state": {
+            "scene_items": [],
+            "scene_objects": [],
+            "player_location_id": "loc_tavern_road",
+            "player_hp": 20,
+            "player_max_hp": 20,
+            "player_inventory": {"items": [], "equipment": {}, "carry_capacity": 50.0},
+            "party_state": {"max_size": 4, "companions": []}
+        },
+        "turns": [
+            "I attack the bandit.",
+            "__manual_force_player_combat_turn__",
+            "I defend."
+        ]
+    },
+
+    "combat_use_item_consumes_turn_and_applies_effect": {
+        "currency": {"gold": 0, "silver": 0, "copper": 0},
+        "conversation_settings": {
+            "enabled": True,
+            "autonomous_ticks_enabled": False,
+            "frequency": "never",
+            "conversation_chance_percent": 0,
+            "allow_player_invited": False,
+            "player_inclusion_chance_percent": 0,
+            "npc_file_profiles_enabled": True,
+            "npc_evolution_enabled": True,
+            "min_ticks_between_conversations": 0,
+            "thread_cooldown_ticks": 0
+        },
+        "setup_interaction_state": {
+            "scene_items": [],
+            "scene_objects": [],
+            "player_location_id": "loc_tavern_road",
+            "player_hp": 5,
+            "player_max_hp": 20,
+            "player_inventory": {
+                "items": [
+                    {
+                        "item_id": "item:minor_healing_potion",
+                        "definition_id": "item:minor_healing_potion",
+                        "name": "minor healing potion",
+                        "aliases": ["potion", "healing potion"],
+                        "qty": 1,
+                        "quantity": 1
+                    }
+                ],
+                "equipment": {},
+                "carry_capacity": 50.0
+            },
+            "party_state": {"max_size": 4, "companions": []}
+        },
+        "turns": [
+            "I attack the bandit.",
+            "__manual_force_player_combat_turn__",
+            "I drink the healing potion."
+        ]
+    },
+
+    "combat_flee_success_or_failure_is_authoritative": {
+        "currency": {"gold": 0, "silver": 0, "copper": 0},
+        "conversation_settings": {
+            "enabled": True,
+            "autonomous_ticks_enabled": False,
+            "frequency": "never",
+            "conversation_chance_percent": 0,
+            "allow_player_invited": False,
+            "player_inclusion_chance_percent": 0,
+            "npc_file_profiles_enabled": True,
+            "npc_evolution_enabled": True,
+            "min_ticks_between_conversations": 0,
+            "thread_cooldown_ticks": 0
+        },
+        "setup_interaction_state": {
+            "scene_items": [],
+            "scene_objects": [],
+            "player_location_id": "loc_tavern_road",
+            "player_hp": 20,
+            "player_max_hp": 20,
+            "player_inventory": {"items": [], "equipment": {}, "carry_capacity": 50.0},
+            "party_state": {"max_size": 4, "companions": []}
+        },
+        "turns": [
+            "I attack the bandit.",
+            "__manual_force_player_combat_turn__",
+            "I flee."
+        ]
+    },
 }
 
 
@@ -7199,6 +7303,121 @@ def _container_contents(item: Dict[str, Any]) -> List[Dict[str, Any]]:
 
 def _item_condition_value(item: Dict[str, Any]) -> float:
     return float(_safe_dict(_safe_dict(item).get("condition")).get("durability") or 0.0)
+
+
+def _turn_has_combat_action(turn_summary: Dict[str, Any], expected_action_type: str) -> bool:
+    combat_result = _safe_dict(turn_summary.get("combat_result"))
+    raw_combat_result = _safe_dict(turn_summary.get("raw_combat_result"))
+    turn_contract = _safe_dict(turn_summary.get("turn_contract"))
+    contract_combat_result = _safe_dict(turn_contract.get("combat_result"))
+    resolved_combat_result = _safe_dict(
+        _safe_dict(turn_summary.get("resolved_result")).get("combat_result")
+    )
+    result_combat_result = _safe_dict(
+        _safe_dict(turn_summary.get("result")).get("combat_result")
+    )
+    final_payload_combat_result = _safe_dict(
+        _safe_dict(turn_summary.get("final_result")).get("combat_result")
+    )
+
+    candidates = [
+        combat_result,
+        raw_combat_result,
+        contract_combat_result,
+        resolved_combat_result,
+        result_combat_result,
+        final_payload_combat_result,
+        _safe_dict(turn_summary.get("inventory_result")),
+    ]
+
+    for candidate in candidates:
+        if _safe_str(candidate.get("action_type")).strip().lower() == expected_action_type:
+            return True
+
+    return False
+
+
+def _turn_has_successful_combat_item_use(turn_summary: Dict[str, Any]) -> bool:
+    combat_result = _safe_dict(turn_summary.get("combat_result"))
+    raw_combat_result = _safe_dict(turn_summary.get("raw_combat_result"))
+    resolved_result = _safe_dict(turn_summary.get("resolved_result"))
+    resolved_combat_result = _safe_dict(resolved_result.get("combat_result"))
+    inventory_result = _safe_dict(turn_summary.get("inventory_result"))
+    consumable_result = _safe_dict(turn_summary.get("consumable_result"))
+    resolved_consumable_result = _safe_dict(resolved_result.get("consumable_result"))
+
+    candidates = [
+        combat_result,
+        raw_combat_result,
+        resolved_combat_result,
+        inventory_result,
+    ]
+
+    for candidate in candidates:
+        if _safe_str(candidate.get("action_type")).strip().lower() != "use_item":
+            continue
+        if candidate.get("ok") is True:
+            return True
+        if _safe_str(candidate.get("reason")).strip() == "consumable_used":
+            return True
+        if bool(_safe_dict(candidate.get("effect_result")).get("applied")):
+            return True
+
+    for candidate in [consumable_result, resolved_consumable_result]:
+        if _safe_str(candidate.get("reason")).strip() == "consumable_used":
+            return True
+        if bool(_safe_dict(candidate.get("effect_result")).get("applied")):
+            return True
+
+    # Deep fallback: successful consumable results may live under
+    # result.interaction_result.consumable_result or
+    # result.general_interaction_result.interaction_result.consumable_result.
+    def _walk_for_successful_consumable(value: Any, depth: int = 0) -> bool:
+        if depth > 7:
+            return False
+        if isinstance(value, dict):
+            direct = _safe_dict(value.get("consumable_result"))
+            if _safe_str(direct.get("reason")).strip() == "consumable_used":
+                return True
+            if bool(_safe_dict(direct.get("effect_result")).get("applied")):
+                return True
+            if _safe_str(value.get("reason")).strip() == "consumable_used":
+                return True
+            if bool(_safe_dict(value.get("effect_result")).get("applied")):
+                return True
+            return any(_walk_for_successful_consumable(v, depth + 1) for v in value.values())
+        if isinstance(value, list):
+            return any(_walk_for_successful_consumable(v, depth + 1) for v in value)
+        return False
+
+    if _walk_for_successful_consumable(turn_summary):
+        return True
+
+    parsed_result = _safe_parse_manual_mapping_payload(turn_summary.get("result"))
+    if parsed_result and _walk_for_successful_consumable(parsed_result):
+        return True
+
+    return False
+
+
+def _safe_parse_manual_mapping_payload(value: Any) -> Dict[str, Any]:
+    if isinstance(value, dict):
+        return _safe_dict(value)
+    if not isinstance(value, str):
+        return {}
+    text = value.strip()
+    if not text.startswith("{"):
+        return {}
+    try:
+        parsed = json.loads(text)
+        return _safe_dict(parsed)
+    except Exception:
+        pass
+    try:
+        parsed = ast.literal_eval(text)
+        return _safe_dict(parsed)
+    except Exception:
+        return {}
 
 
 def _manual_regression_warnings(
@@ -11488,6 +11707,62 @@ def _run_one_service_scenario(
             before_currency=before_currency,
             before_items=before_items,
         )
+
+        # J19-J21:
+        # The apply-turn runtime can rescue combat utility actions late and
+        # mirror them into the final payload. Keep the compact per-turn summary
+        # aligned with those final fields before scenario validators inspect it.
+        #
+        # Without this, the raw result may correctly contain:
+        #   combat_result.action_type == "flee"
+        #   visible_interaction_reason == "combat_flee"
+        # while summary_row still looks empty and incorrectly emits:
+        #   combat_flee_command_did_not_route_to_flee_action
+        final_resolved_result = _safe_dict(result.get("resolved_result"))
+        final_combat_result = _safe_dict(
+            result.get("combat_result")
+            or _safe_dict(result.get("turn_contract")).get("combat_result")
+            or final_resolved_result.get("combat_result")
+        )
+        final_npc_combat_result = _safe_dict(
+            result.get("npc_combat_result")
+            or final_resolved_result.get("npc_combat_result")
+        )
+        final_combat_state = _safe_dict(
+            result.get("combat_state")
+            or final_resolved_result.get("combat_state")
+        )
+        final_visible_reason = _safe_str(
+            result.get("visible_interaction_reason")
+            or final_resolved_result.get("visible_interaction_reason")
+        ).strip()
+        final_inventory_result = _safe_dict(
+            result.get("inventory_result")
+            or final_resolved_result.get("inventory_result")
+        )
+        final_consumable_result = _safe_dict(
+            result.get("consumable_result")
+            or final_resolved_result.get("consumable_result")
+        )
+
+        if final_resolved_result:
+            summary_row["resolved_result"] = final_resolved_result
+        if final_combat_result:
+            summary_row["combat_result"] = final_combat_result
+            summary_row["raw_combat_result"] = final_combat_result
+        if final_inventory_result:
+            summary_row["inventory_result"] = final_inventory_result
+        if final_consumable_result:
+            summary_row["consumable_result"] = final_consumable_result
+        if final_npc_combat_result:
+            summary_row["npc_combat_result"] = final_npc_combat_result
+        if final_combat_state:
+            summary_row["combat_state"] = final_combat_state
+        if final_visible_reason:
+            summary_row["visible_interaction_reason"] = final_visible_reason
+        if _safe_str(final_combat_result.get("action_type")).strip():
+            summary_row["action_type"] = _safe_str(final_combat_result.get("action_type")).strip()
+
         summary_row["scenario_current_location_id"] = current_location_id
 
         summary_row = _copy_combat_narration_fields_into_turn_record(
@@ -11507,6 +11782,36 @@ def _run_one_service_scenario(
             allows_seeded_quest_state=bool(_safe_dict(scenario.get("setup_quest_state"))),
 
         )
+
+        if scenario_name == "combat_flee_success_or_failure_is_authoritative":
+            if _safe_str(player_input).strip().lower() in {"i flee.", "i flee"}:
+                if not _turn_has_combat_action(summary_row, "flee"):
+                    summary_row.setdefault("scenario_warnings", []).append(
+                        "combat_flee_command_did_not_route_to_flee_action"
+                    )
+                if "no_supported_semantic_action_detected" in _safe_str(summary_row.get("narration_preview")):
+                    summary_row.setdefault("scenario_warnings", []).append(
+                        "combat_flee_fell_through_to_no_supported_semantic_action"
+                    )
+
+        if scenario_name == "combat_defend_reduces_next_incoming_attack":
+            if "defend" in _safe_str(player_input).lower():
+                if not _turn_has_combat_action(summary_row, "defend"):
+                    summary_row.setdefault("scenario_warnings", []).append(
+                        "combat_defend_command_did_not_route_to_defend_action"
+                    )
+
+        if scenario_name == "combat_use_item_consumes_turn_and_applies_effect":
+            text = _safe_str(player_input).lower()
+            if "potion" in text or "drink" in text or "use" in text:
+                if not _turn_has_combat_action(summary_row, "use_item"):
+                    summary_row.setdefault("scenario_warnings", []).append(
+                        "combat_use_item_command_did_not_route_to_use_item_action"
+                    )
+                if not _turn_has_successful_combat_item_use(summary_row):
+                    summary_row.setdefault("scenario_warnings", []).append(
+                        "combat_use_item_did_not_apply_successfully"
+                    )
         summary_row["regression_warnings"] = _manual_regression_warnings(
             scenario_name=scenario_name,
             turn_index=index,
@@ -11527,6 +11832,10 @@ def _run_one_service_scenario(
                     warning=f"scenario_warning:{warning}",
                 )
         _record_regression_warnings(summary_row)
+
+        # Scenario-level warning aggregation happens after scenario_results is complete.
+        # Do not reference scenario_summary inside the per-turn loop.
+
         scenario_results.append(summary_row)
 
         if _turn_applied_currency_mutation(result):
@@ -11804,6 +12113,59 @@ def _run_one_service_scenario(
                 f"companion_combat_visible_reason_invalid:{visible_reason or 'missing'}"
             )
 
+        if scenario_name == "combat_defend_reduces_next_incoming_attack":
+            combat_result = _safe_dict(
+                result.get("combat_result")
+                or _safe_dict(result.get("turn_contract")).get("combat_result")
+                or _safe_dict(_safe_dict(result.get("resolved_result")).get("combat_result"))
+            )
+            notes = [str(x) for x in _safe_list(combat_result.get("notes"))]
+            if "defense_stance" not in notes:
+                scenario_summary.setdefault("scenario_warnings", []).append(
+                    "combat_defend_missing_defense_stance_note"
+                )
+
+        if scenario_name == "combat_use_item_consumes_turn_and_applies_effect":
+            combat_result = _safe_dict(
+                result.get("combat_result")
+                or _safe_dict(result.get("turn_contract")).get("combat_result")
+                or _safe_dict(_safe_dict(result.get("resolved_result")).get("combat_result"))
+            )
+            if combat_result.get("action_type") != "use_item":
+                scenario_summary.setdefault("scenario_warnings", []).append(
+                    "combat_use_item_missing_use_item_combat_result"
+                )
+            consumable_result = _safe_dict(
+                result.get("consumable_result")
+                or _safe_dict(result.get("resolved_result")).get("consumable_result")
+            )
+            item_ok = (
+                combat_result.get("ok") is True
+                or _safe_str(combat_result.get("reason")).strip() == "consumable_used"
+                or bool(_safe_dict(combat_result.get("effect_result")).get("applied"))
+                or _safe_str(consumable_result.get("reason")).strip() == "consumable_used"
+                or bool(_safe_dict(consumable_result.get("effect_result")).get("applied"))
+            )
+            if not item_ok:
+                scenario_summary.setdefault("scenario_warnings", []).append(
+                    "combat_use_item_not_ok"
+                )
+
+        if scenario_name == "combat_flee_success_or_failure_is_authoritative":
+            combat_result = _safe_dict(
+                result.get("combat_result")
+                or _safe_dict(result.get("turn_contract")).get("combat_result")
+                or _safe_dict(_safe_dict(result.get("resolved_result")).get("combat_result"))
+            )
+            if combat_result.get("action_type") != "flee":
+                scenario_summary.setdefault("scenario_warnings", []).append(
+                    "combat_flee_missing_flee_combat_result"
+                )
+            if "success" not in combat_result:
+                scenario_summary.setdefault("scenario_warnings", []).append(
+                    "combat_flee_missing_success_boolean"
+                )
+
     if scenario_name == "enemy_combat_ai_party_defeat":
         enemy_combat = _extract_enemy_combat_result(result)
         combat_state = _extract_combat_state(result)
@@ -11860,6 +12222,13 @@ def _run_one_service_scenario(
                 scenario_warnings.append(
                     f"enemy_combat_visible_expected_party_defeat_resolved_got:{visible_reason or 'missing'}"
                 )
+
+    scenario_warnings: List[str] = []
+    for row in scenario_results:
+        for warning in _safe_list(_safe_dict(row).get("scenario_warnings")):
+            warning = _safe_str(warning).strip()
+            if warning and warning not in scenario_warnings:
+                scenario_warnings.append(warning)
 
     return {
         "scenario": scenario_name,
@@ -12128,6 +12497,19 @@ def run_service_scenarios(
 
 
 def run_requested_transcripts(args: argparse.Namespace) -> None:
+    raw_scenario_args = args.scenario or [["all"]]
+    scenario_filters: List[str] = []
+    for group in raw_scenario_args:
+        if isinstance(group, str):
+            group = [group]
+        for value in group:
+            for part in str(value).split(","):
+                part = part.strip()
+                if part:
+                    scenario_filters.append(part)
+    if not scenario_filters:
+        scenario_filters = ["all"]
+
     _reset_output()
     _reset_token_usage()
     _reset_regression_warnings()
@@ -12182,7 +12564,7 @@ def run_requested_transcripts(args: argparse.Namespace) -> None:
         with open(CONVERSATION_PATH, "a", encoding="utf-8") as f:
             f.write("    <h2>Service Scenarios</h2>\n")
         run_service_scenarios(
-            args.scenario,
+            scenario_filters,
             split_files=not args.single_file,
             run_id=run_id,
             stable_session_ids=args.stable_session_ids,
@@ -12326,16 +12708,19 @@ def main() -> None:
     )
     parser.add_argument(
         "--scenario",
+        action="append",
         nargs="+",
-        default=["all"],
+        default=[],
         metavar="SCENARIO",
         help=(
-            "Scenario name(s) to run. Accepts one or more names, or comma-separated names. "
+            "Scenario name(s) to run. Can be passed multiple times. "
+            "Accepts one or more names, or comma-separated names. "
             "Use 'all' to run all scenarios."
         ),
     )
     parser.add_argument(
         "--scenarios",
+        action="append",
         nargs="+",
         dest="scenario",
         help="Alias for --scenario. Accepts one or more scenario names.",
