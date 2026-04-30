@@ -1672,6 +1672,103 @@
         return 'That action cannot be completed.';
     }
 
+    function getRpgPresentationAvailableActions(payload) {
+        payload = (payload && typeof payload === 'object') ? payload : {};
+
+        var candidates = [
+            payload.presentation,
+            payload.turn_contract && payload.turn_contract.presentation,
+            payload.resolved_result && payload.resolved_result.presentation,
+            payload.resolved_result && payload.resolved_result.service_result,
+            payload.service_result,
+        ];
+
+        for (var i = 0; i < candidates.length; i++) {
+            var candidate = candidates[i];
+            if (!candidate || typeof candidate !== 'object') continue;
+            if (Array.isArray(candidate.available_actions)) {
+                return candidate.available_actions.filter(function(action) {
+                    return action && typeof action === 'object';
+                });
+            }
+        }
+
+        return [];
+    }
+
+    function ensureRpgServiceActionsPanel() {
+        var existing = document.getElementById('rpgServiceActionsPanel');
+        if (existing) return existing;
+
+        var panel = document.createElement('div');
+        panel.id = 'rpgServiceActionsPanel';
+        panel.className = 'rpg-service-actions';
+        panel.style.display = 'none';
+
+        var choicePanel = document.getElementById('rpgChoicePanel');
+        if (choicePanel && choicePanel.parentNode) {
+            choicePanel.parentNode.insertBefore(panel, choicePanel);
+        } else {
+            var feed = document.getElementById('rpgNarrativeFeed');
+            if (feed && feed.parentNode) {
+                feed.parentNode.insertBefore(panel, feed.nextSibling);
+            }
+        }
+
+        return panel;
+    }
+
+    function renderRpgServiceActions(actions) {
+        var panel = ensureRpgServiceActionsPanel();
+        if (!panel) return;
+
+        actions = Array.isArray(actions) ? actions : [];
+
+        if (!actions.length) {
+            panel.innerHTML = '';
+            panel.style.display = 'none';
+            return;
+        }
+
+        var buttons = actions.map(function(action, index) {
+            action = action || {};
+            var label = String(action.label || action.command || action.offer_id || 'Service option');
+            var command = String(action.command || label);
+            var actionId = String(action.action_id || ('service-action-' + index));
+
+            return (
+                '<button type="button" class="rpg-service-action-btn" ' +
+                'data-rpg-service-action-id="' + escapeHtml(actionId) + '" ' +
+                'data-rpg-service-command="' + escapeHtml(command) + '">' +
+                escapeHtml(label) +
+                '</button>'
+            );
+        }).join('');
+
+        panel.innerHTML =
+            '<div class="rpg-service-actions-title">Available services</div>' +
+            '<div class="rpg-service-actions-list">' + buttons + '</div>';
+        panel.style.display = '';
+    }
+
+    function updateRpgServiceActionsFromPayload(payload) {
+        renderRpgServiceActions(getRpgPresentationAvailableActions(payload));
+    }
+
+    document.addEventListener('click', function(event) {
+        var button = event.target && event.target.closest
+            ? event.target.closest('.rpg-service-action-btn')
+            : null;
+
+        if (!button || button.disabled) return;
+
+        var command = button.getAttribute('data-rpg-service-command') || button.textContent || '';
+        command = String(command || '').trim();
+        if (!command || rpgState.isLoading) return;
+
+        handleRPGInput(command);
+    });
+
     // ─── TTS / Voice ───────────────────────────────────────────────────────────
 
     /** Detect a character's probable gender from their name. */
