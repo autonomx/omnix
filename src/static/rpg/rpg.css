@@ -287,3 +287,117 @@
   gap: 6px;
   margin-top: 8px;
 }
+
+/* Combat UI (Bundle J16-J17-J18) */
+
+.rpg-combat-panel {
+  border: 1px solid rgba(180, 140, 80, 0.35);
+  border-radius: 12px;
+  padding: 12px;
+  margin: 10px 0;
+  background: rgba(20, 16, 12, 0.86);
+  color: #f2e7d0;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+}
+
+.rpg-combat-panel.is-inactive {
+  opacity: 0.75;
+}
+
+.rpg-combat-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+  margin-bottom: 8px;
+}
+
+.rpg-combat-title {
+  font-weight: 700;
+  letter-spacing: 0.03em;
+}
+
+.rpg-combat-subtitle,
+.rpg-combat-round,
+.rpg-combat-current {
+  color: #d8c7a6;
+  font-size: 0.9rem;
+}
+
+.rpg-combat-current {
+  margin-bottom: 8px;
+}
+
+.rpg-combat-participants {
+  display: grid;
+  gap: 6px;
+  margin: 8px 0;
+}
+
+.rpg-combat-participant {
+  display: grid;
+  grid-template-columns: minmax(120px, 1.4fr) 80px 100px 90px;
+  gap: 8px;
+  align-items: center;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  padding: 6px 8px;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.rpg-combat-participant.is-enemy {
+  border-color: rgba(210, 80, 70, 0.35);
+}
+
+.rpg-combat-participant.is-party {
+  border-color: rgba(80, 150, 210, 0.35);
+}
+
+.rpg-combat-participant.is-defeated {
+  opacity: 0.55;
+  text-decoration: line-through;
+}
+
+.rpg-combat-participant-name {
+  font-weight: 650;
+}
+
+.rpg-combat-participant-side,
+.rpg-combat-participant-status {
+  text-transform: capitalize;
+  color: #cdbb9b;
+}
+
+.rpg-combat-log {
+  margin-top: 8px;
+  padding: 8px;
+  border-left: 3px solid rgba(220, 170, 90, 0.55);
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 8px;
+  min-height: 32px;
+}
+
+.rpg-combat-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.rpg-combat-controls button {
+  border: 1px solid rgba(240, 210, 160, 0.28);
+  border-radius: 8px;
+  padding: 7px 10px;
+  background: rgba(120, 80, 35, 0.5);
+  color: #f6e8cc;
+  cursor: pointer;
+}
+
+.rpg-combat-controls button:hover:not(:disabled) {
+  background: rgba(150, 100, 45, 0.65);
+}
+
+.rpg-combat-controls button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}

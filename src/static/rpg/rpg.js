@@ -1020,6 +1020,138 @@
             .replace(/'/g, '&#039;');
     }
 
+    // ── Combat UI Helpers (Bundle J16-J17-J18) ───────────────────────────────
+
+    function rpgSafeObject(value) {
+      return value && typeof value === "object" && !Array.isArray(value) ? value : {};
+    }
+
+    function rpgSafeArray(value) {
+      return Array.isArray(value) ? value : [];
+    }
+
+    function rpgGetLatestCombatState(payload) {
+      payload = rpgSafeObject(payload);
+
+      const nested = rpgSafeObject(payload.result);
+      const session = rpgSafeObject(payload.session);
+      const sim = rpgSafeObject(payload.simulation_state || nested.simulation_state || session.simulation_state);
+
+      return rpgSafeObject(
+        payload.combat_state ||
+        nested.combat_state ||
+        sim.combat_state
+      );
+    }
+
+    function rpgGetLatestCombatResult(payload) {
+      payload = rpgSafeObject(payload);
+
+      const nested = rpgSafeObject(payload.result);
+      const interaction = rpgSafeObject(payload.interaction_result || nested.interaction_result);
+
+      return rpgSafeObject(
+        payload.combat_result ||
+        payload.enemy_combat_result ||
+        payload.companion_combat_result ||
+        nested.combat_result ||
+        nested.enemy_combat_result ||
+        nested.companion_combat_result ||
+        interaction.combat_result
+      );
+    }
+
+    function rpgCombatActorLabel(combatState, actorId) {
+      combatState = rpgSafeObject(combatState);
+      const participants = rpgSafeObject(combatState.participants);
+      const participant = rpgSafeObject(participants[actorId]);
+
+      if (actorId === "player") return "You";
+      return participant.name || actorId || "Unknown";
+    }
+
+    function rpgCombatParticipantRows(combatState) {
+      combatState = rpgSafeObject(combatState);
+      const participants = rpgSafeObject(combatState.participants);
+
+      return Object.keys(participants).map((actorId) => {
+        const p = rpgSafeObject(participants[actorId]);
+        return {
+          actorId,
+          name: p.name || rpgCombatActorLabel(combatState, actorId),
+          side: p.side || "",
+          hp: Number.isFinite(Number(p.hp)) ? Number(p.hp) : null,
+          maxHp: Number.isFinite(Number(p.max_hp)) ? Number(p.max_hp) : null,
+          status: p.status || "active",
+        };
+      });
+    }
+
+    function rpgDescribeCombatResult(combatState, combatResult) {
+      combatState = rpgSafeObject(combatState);
+      combatResult = rpgSafeObject(combatResult);
+
+      const reason = combatResult.reason || "";
+      const attack = rpgSafeObject(combatResult.attack_result);
+      const effective = Object.keys(attack).length ? attack : combatResult;
+
+      const actorId = effective.actor_id || combatResult.actor_id || combatResult.enemy_id || combatResult.npc_id || "";
+      const targetId = effective.target_id || combatResult.target_id || "";
+
+      const actorName = rpgCombatActorLabel(combatState, actorId);
+      const targetName = rpgCombatActorLabel(combatState, targetId);
+
+      if (reason === "combat_started") {
+        return "Combat started.";
+      }
+
+      if (reason === "combat_turn_advanced") {
+        const current = rpgCombatActorLabel(combatState, combatResult.current_actor_id || combatState.current_actor_id);
+        return `Turn advanced. Current actor: ${current}.`;
+      }
+
+      if (reason === "not_actor_turn") {
+        const current = rpgCombatActorLabel(combatState, combatResult.current_actor_id || combatState.current_actor_id);
+        return `It is not your turn. Current actor: ${current}.`;
+      }
+
+      if (
+        reason === "combat_attack_resolved" ||
+        reason === "combat_defeat_resolved" ||
+        reason === "companion_combat_attack_resolved" ||
+        reason === "companion_combat_defeat_resolved" ||
+        reason === "enemy_combat_attack_resolved" ||
+        reason === "party_defeat_resolved"
+      ) {
+        const hit = effective.hit === true;
+        const damage = Number(effective.damage_applied || 0);
+        const before = effective.target_hp_before;
+        const after = effective.target_hp_after;
+
+        if (!hit) {
+          return `${actorName} attacks ${targetName} and misses.`;
+        }
+
+        const defeated = effective.defeated || reason === "combat_defeat_resolved" || reason === "party_defeat_resolved";
+        const hpText =
+          before !== undefined && after !== undefined
+            ? ` ${targetName} HP: ${before} → ${after}.`
+            : "";
+
+        if (defeated) {
+          return `${actorName} hits ${targetName} for ${damage} damage and defeats them.${hpText}`;
+        }
+
+        return `${actorName} hits ${targetName} for ${damage} damage.${hpText}`;
+      }
+
+      if (reason) {
+        return `Result: ${reason}`;
+      }
+
+      return "";
+    }
+
     // ── Character Card Panel (Bundle BJ-BK-BL) ───────────────────────────────
 
     async function rpgFetchCharacterCards(sessionId) {
@@ -1205,97 +1337,183 @@
 
     // ── End Character Card Panel ──────────────────────────────────────────────
 
-    function rpgServiceActionsFromPayload(payload) {
-        payload = payload || {};
-        var contract = payload.turn_contract || payload.contract || {};
-        var presentation = payload.presentation || contract.presentation || {};
-        var actions = presentation.available_actions || [];
+    // ── Combat Panel Renderer (Bundle J16-J17-J18) ───────────────────────────
 
-        if ((!actions || !actions.length) && payload.result && payload.result.presentation) {
-            actions = payload.result.presentation.available_actions || [];
-        }
+    function rpgEnsureCombatPanel() {
+      const root =
+        document.querySelector("#rpg-top-panels") ||
+        document.querySelector(".rpg-top-panels") ||
+        document.querySelector("#rpgModePanel") ||
+        document.querySelector("#rpg-panel") ||
+        document.body;
 
-        if ((!actions || !actions.length) && payload.raw && payload.raw.presentation) {
-            actions = payload.raw.presentation.available_actions || [];
-        }
+      let panel = document.querySelector("#rpg-combat-panel");
+      if (panel) return panel;
 
-        return Array.isArray(actions) ? actions : [];
+      panel = document.createElement("section");
+      panel.id = "rpg-combat-panel";
+      panel.className = "rpg-combat-panel rpg-panel-card";
+      panel.innerHTML = `
+        <div class="rpg-combat-header">
+          <div>
+            <div class="rpg-combat-title">Combat</div>
+            <div class="rpg-combat-subtitle" data-role="combat-status">Not in combat</div>
+          </div>
+          <div class="rpg-combat-round" data-role="combat-round"></div>
+        </div>
+
+        <div class="rpg-combat-current" data-role="combat-current"></div>
+
+        <div class="rpg-combat-participants" data-role="combat-participants"></div>
+
+        <div class="rpg-combat-log" data-role="combat-log"></div>
+
+        <div class="rpg-combat-controls" data-role="combat-controls">
+          <button type="button" data-combat-action="attack">Attack</button>
+          <button type="button" data-combat-action="defend">Defend</button>
+          <button type="button" data-combat-action="use_item">Use Item</button>
+          <button type="button" data-combat-action="flee">Flee</button>
+          <button type="button" data-combat-action="resolve_current">Resolve Current Actor</button>
+        </div>
+      `;
+
+      root.prepend(panel);
+      rpgWireCombatControls(panel);
+
+      return panel;
     }
 
-    function renderRpgServiceActions(container, actions) {
-        if (!container) return;
-        actions = Array.isArray(actions) ? actions : [];
+    function rpgRenderCombatPanel(payload) {
+      const combatState = rpgGetLatestCombatState(payload);
+      const combatResult = rpgGetLatestCombatResult(payload);
 
-        if (!actions.length) {
-            container.innerHTML = '';
-            container.style.display = 'none';
-            return;
-        }
+      const panel = rpgEnsureCombatPanel();
 
-        container.style.display = '';
-        container.innerHTML =
-            '<div class="rpg-service-actions-title">Available actions</div>' +
-            '<div class="rpg-service-actions-list">' +
-            actions.map(function(action) {
-                var label = String(action.label || action.command || action.action_id || 'Action');
-                var command = String(action.command || '');
-                var actionId = String(action.action_id || '');
-                return (
-                    '<button type="button" class="rpg-service-action-btn" ' +
-                    'data-rpg-service-command="' + escapeHtml(command) + '" ' +
-                    'data-rpg-service-action-id="' + escapeHtml(actionId) + '">' +
-                    escapeHtml(label) +
-                    '</button>'
-                );
-            }).join('') +
-            '</div>';
+      const active = combatState.active === true;
+      panel.classList.toggle("is-active", active);
+      panel.classList.toggle("is-inactive", !active);
+
+      const statusEl = panel.querySelector('[data-role="combat-status"]');
+      const roundEl = panel.querySelector('[data-role="combat-round"]');
+      const currentEl = panel.querySelector('[data-role="combat-current"]');
+      const participantsEl = panel.querySelector('[data-role="combat-participants"]');
+      const logEl = panel.querySelector('[data-role="combat-log"]');
+
+      if (!active && !combatResult.reason) {
+        statusEl.textContent = "Not in combat";
+        roundEl.textContent = "";
+        currentEl.textContent = "";
+        participantsEl.innerHTML = "";
+        logEl.textContent = "";
+        rpgUpdateCombatControls(panel, combatState);
+        return;
+      }
+
+      const currentActorId = combatState.current_actor_id || "";
+      const currentActorName = rpgCombatActorLabel(combatState, currentActorId);
+
+      statusEl.textContent = active ? "Combat active" : `Combat ended${combatState.ended_reason ? `: ${combatState.ended_reason}` : ""}`;
+      roundEl.textContent = combatState.round ? `Round ${combatState.round}` : "";
+      currentEl.textContent = active && currentActorId ? `Current turn: ${currentActorName}` : "";
+
+      const rows = rpgCombatParticipantRows(combatState);
+      participantsEl.innerHTML = rows
+        .map((row) => {
+          const hpText =
+            row.hp !== null && row.maxHp !== null
+              ? `${row.hp} / ${row.maxHp} HP`
+              : "HP unknown";
+
+          return `
+            <div class="rpg-combat-participant ${row.side === "enemy" ? "is-enemy" : "is-party"} ${row.status !== "active" ? "is-defeated" : ""}">
+              <span class="rpg-combat-participant-name">${escapeHtml(row.name)}</span>
+              <span class="rpg-combat-participant-side">${escapeHtml(row.side)}</span>
+              <span class="rpg-combat-participant-hp">${escapeHtml(hpText)}</span>
+              <span class="rpg-combat-participant-status">${escapeHtml(row.status)}</span>
+            </div>
+          `;
+        })
+        .join("");
+
+      const latest = rpgDescribeCombatResult(combatState, combatResult);
+      logEl.textContent = latest || "";
+
+      rpgUpdateCombatControls(panel, combatState);
     }
 
-    function updateRpgServiceActionsFromPayload(payload) {
-        var container =
-            document.getElementById('rpg-service-actions') ||
-            document.querySelector('[data-rpg-service-actions]');
-        if (!container) return;
-        renderRpgServiceActions(container, rpgServiceActionsFromPayload(payload || {}));
+    function rpgWireCombatControls(panel) {
+      if (!panel || panel.dataset.combatControlsWired === "1") return;
+      panel.dataset.combatControlsWired = "1";
+
+      panel.addEventListener("click", (event) => {
+        const button = event.target.closest("[data-combat-action]");
+        if (!button || button.disabled) return;
+
+        const action = button.getAttribute("data-combat-action");
+
+        if (action === "attack") {
+          rpgSubmitCombatCommand("I attack the bandit.");
+          return;
+        }
+
+        if (action === "defend") {
+          rpgSubmitCombatCommand("I defend.");
+          return;
+        }
+
+        if (action === "use_item") {
+          rpgSubmitCombatCommand("I use a healing potion.");
+          return;
+        }
+
+        if (action === "flee") {
+          rpgSubmitCombatCommand("I try to flee.");
+          return;
+        }
+
+        if (action === "resolve_current") {
+          rpgSubmitCombatCommand("__manual_resolve_current_combat_actor__");
+          return;
+        }
+      });
     }
 
-    document.addEventListener('click', function(event) {
-        var button = event.target && event.target.closest
-            ? event.target.closest('.rpg-service-action-btn')
-            : null;
-        if (!button) return;
+    function rpgSubmitCombatCommand(command) {
+      const input =
+        document.querySelector("#rpgInput") ||
+        document.querySelector("#rpg-input") ||
+        document.querySelector("[data-role='rpg-input']") ||
+        document.querySelector("textarea[name='rpg-input']");
 
-        var command = button.getAttribute('data-rpg-service-command') || '';
-        if (!command) return;
+      const submit =
+        document.querySelector("#rpgSendBtn") ||
+        document.querySelector("#rpg-send") ||
+        document.querySelector("[data-role='rpg-send']");
 
-        event.preventDefault();
+      if (input) {
+        input.value = command;
+        input.dispatchEvent(new Event("input", { bubbles: true }));
+      }
 
-        var input =
-            document.getElementById('rpgInput') ||
-            document.getElementById('rpg-input') ||
-            document.querySelector('[data-rpg-input]') ||
-            document.getElementById('messageInput');
+      if (submit) {
+        submit.click();
+        return;
+      }
 
-        if (input) {
-            input.value = command;
-            input.dispatchEvent(new Event('input', { bubbles: true }));
-        }
+      if (typeof window.rpgSendMessage === "function") {
+        window.rpgSendMessage(command);
+        return;
+      }
 
-        if (typeof window.sendRpgCommand === 'function') {
-            window.sendRpgCommand(command);
-            return;
-        }
+      if (typeof window.sendRpgMessage === "function") {
+        window.sendRpgMessage(command);
+        return;
+      }
 
-        var sendButton =
-            document.getElementById('rpgSendBtn') ||
-            document.getElementById('rpg-send-btn') ||
-            document.querySelector('[data-rpg-send]') ||
-            document.getElementById('sendBtn');
+      console.warn("[RPG][CombatUI] Could not submit combat command", command);
+    }
 
-        if (sendButton) {
-            sendButton.click();
-        }
-    });
+    // ── End Combat Panel Renderer ─────────────────────────────────────────────
 
     function formatCurrency(currency) {
         currency = (currency && typeof currency === 'object') ? currency : {};
@@ -3228,6 +3446,13 @@
         messages.forEach(function (msg) {
             appendMessage(msg);
         });
+
+        // Render combat panel on session load
+        try {
+            rpgRenderCombatPanel(data);
+        } catch (err) {
+            console.warn("[RPG][CombatUI] initial render failed in onSessionLoaded", err);
+        }
     }
 
     function handleStreamEventPayload(payload) {
@@ -3762,6 +3987,13 @@
         if (update.rolls && update.rolls.length) {
             updateState({ rolls: rpgState.rolls.concat(update.rolls) });
             enqueueDice(update.rolls);
+        }
+
+        // Render combat panel after turn update
+        try {
+            rpgRenderCombatPanel(update);
+        } catch (err) {
+            console.warn("[RPG][CombatUI] render failed in applyUpdate", err);
         }
     }
 

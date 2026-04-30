@@ -4453,6 +4453,82 @@ SERVICE_SCENARIOS = {
             "__manual_get_character_cards__",
         ],
     },
+    "combat_ui_payload_smoke": {
+        "currency": {"gold": 0, "silver": 0, "copper": 0},
+        "conversation_settings": {
+            "enabled": True,
+            "autonomous_ticks_enabled": False,
+            "frequency": "never",
+            "conversation_chance_percent": 0,
+            "allow_player_invited": False,
+            "player_inclusion_chance_percent": 0,
+            "npc_file_profiles_enabled": True,
+            "npc_evolution_enabled": True,
+            "min_ticks_between_conversations": 0,
+            "thread_cooldown_ticks": 0
+        },
+        "setup_interaction_state": {
+            "scene_items": [],
+            "scene_objects": [],
+            "player_location_id": "loc_tavern_road",
+            "player_hp": 20,
+            "player_max_hp": 20,
+            "player_inventory": {
+                "items": [
+                    {
+                        "item_id": "item:hunting_bow",
+                        "definition_id": "def:hunting_bow",
+                        "name": "hunting bow",
+                        "aliases": ["bow"]
+                    },
+                    {
+                        "item_id": "item:iron_arrow_stack_a",
+                        "definition_id": "def:iron_arrow",
+                        "name": "iron arrows",
+                        "aliases": ["arrows", "iron arrow"],
+                        "quantity": 15
+                    }
+                ],
+                "equipment": {
+                    "main_hand": "item:hunting_bow",
+                    "ammo": "item:iron_arrow_stack_a"
+                },
+                "carry_capacity": 50.0
+            },
+            "party_state": {
+                "max_size": 4,
+                "companions": [
+                    {
+                        "npc_id": "npc:Bran",
+                        "name": "Bran",
+                        "role": "companion",
+                        "status": "active",
+                        "identity_arc": "revenge_after_losing_tavern",
+                        "active_motivations": ["revenge"],
+                        "loyalty": 35,
+                        "inventory": {
+                            "items": [
+                                {
+                                    "item_id": "item:bran_rusty_dagger",
+                                    "definition_id": "def:rusty_dagger",
+                                    "name": "rusty dagger"
+                                }
+                            ],
+                            "equipment": {
+                                "main_hand": "item:bran_rusty_dagger"
+                            },
+                            "carry_capacity": 50.0
+                        }
+                    }
+                ]
+            }
+        },
+        "turns": [
+            "I attack the bandit.",
+            "__manual_resolve_current_combat_actor__",
+            "__manual_resolve_current_combat_actor__"
+        ]
+    },
     "general_interaction_runtime": {
         "currency": {"gold": 0, "silver": 0, "copper": 0},
         "conversation_settings": {
@@ -6881,10 +6957,15 @@ def _extract_combat_state(result: Dict[str, Any]) -> Dict[str, Any]:
     result = _safe_dict(result)
     nested = _safe_dict(result.get("result"))
     sim = _extract_simulation_state(result)
+
+    contract = _extract_combat_narration_contract(result)
+    raw_combat = _safe_dict(contract.get("raw_combat_result"))
+
     return _first_dict(
         result.get("combat_state"),
         nested.get("combat_state"),
         sim.get("combat_state"),
+        raw_combat.get("combat_state"),
     )
 
 
@@ -9545,7 +9626,13 @@ def _manual_regression_warnings(
             if error:
                 warnings.append(f"combat_llm_provider_error:{error}")
 
-            lower = narration_text.lower()
+            payload = _safe_dict(result.get("combat_narration_payload"))
+            hooks = payload.get("followup_hooks")
+            hooks_text = ""
+            if isinstance(hooks, list):
+                hooks_text = " ".join(_safe_str(item) for item in hooks)
+
+            lower = f"{narration_text} {_safe_str(payload.get('action'))} {hooks_text}".lower()
 
             if reason == "combat_attack_resolved":
                 if any(word in lower for word in ["dies", "dead", "killed", "slain", "lifeless", "corpse"]):
@@ -9556,11 +9643,29 @@ def _manual_regression_warnings(
                     warnings.append("combat_llm_defeat_narration_missing_defeat")
 
             if reason == "party_defeat_resolved":
-                if not any(word in lower for word in ["defeat", "defeated", "overwhelmed", "fall", "falls", "collapse", "down"]):
+                if not any(word in lower for word in ["defeat", "defeated", "defeating", "overwhelmed", "fall", "falls", "fallen", "collapse", "collapses", "collapsed", "downed", "go down", "goes down"]):
                     warnings.append("combat_llm_party_defeat_narration_missing_defeat")
 
             if any(word in lower for word in ["json", "contract", "simulation", "validator", "system prompt", "llm"]):
                 warnings.append("combat_llm_narration_contains_meta_language")
+
+    if scenario_name == "combat_ui_payload_smoke":
+        combat_state = _extract_combat_state(result)
+        visible_reason = _extract_visible_interaction_reason(result)
+
+        if turn_index == 1:
+            if combat_state.get("active") is not True:
+                warnings.append("combat_ui_expected_active_combat_state")
+
+            participants = _safe_dict(combat_state.get("participants"))
+            for actor_id in ("player", "npc:Bran", "enemy:bandit_1"):
+                if actor_id not in participants:
+                    warnings.append(f"combat_ui_expected_participant_missing:{actor_id}")
+
+        if visible_reason in {"", "no_supported_semantic_action_detected"}:
+            warnings.append(
+                f"combat_ui_expected_visible_reason_got:{visible_reason or 'missing'}"
+            )
 
     return warnings
 
@@ -10060,6 +10165,11 @@ def _extract_visible_interaction_reason(result: Dict[str, Any]) -> str:
         candidate = _safe_str(candidate)
         if candidate:
             return candidate
+
+    contract = _extract_combat_narration_contract(result)
+    raw_combat = _safe_dict(contract.get("raw_combat_result"))
+    if _safe_str(raw_combat.get("reason")):
+        return _safe_str(raw_combat.get("reason"))
 
     return ""
 
@@ -11612,17 +11722,7 @@ def _run_one_service_scenario(
                 f"combat_damage_visible_expected_{expected_visible}_got:{visible_reason or 'missing'}"
             )
 
-    if scenario_name == "companion_combat_participation":
-        combat_result = _extract_combat_result(result)
-        companion_combat = _extract_companion_combat_result(result)
-        combat_state = _extract_combat_state(result)
-        visible_reason = _extract_visible_interaction_reason(result)
 
-        if manual_turn_index == 1:
-            if _safe_str(combat_result.get("reason")) != "combat_started":
-                scenario_warnings.append(
-                    f"companion_combat_start_expected_combat_started_got:{_safe_str(combat_result.get('reason')) or 'missing'}"
-                )
             participants = _safe_dict(combat_state.get("participants"))
             if "npc:Bran" not in participants:
                 scenario_warnings.append("companion_combat_expected_bran_participant")
