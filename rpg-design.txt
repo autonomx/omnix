@@ -1,719 +1,763 @@
-Bundle J16-J17-J18 — Combat UI, Combat Log, and Turn Controls v1
+Yes. For J19-J21 — Defend / Use Item / Flee, I’d keep this backend-first and UI-light.
 
 Goal:
 
-J16 — Show combat state in the legacy RPG UI.
-J17 — Show combat log / latest combat result in readable form.
-J18 — Add turn-aware combat controls for player actions and manual actor resolution.
+J19 Defend:
+- Player can defend during active combat.
+- Defend applies an authoritative temporary defense bonus.
+- Next incoming attack against that actor consumes the defense bonus.
 
-Use:
+J20 Use Item:
+- Player can use a consumable during combat.
+- Item effects apply authoritatively.
+- Turn advances after item use.
+- NPC can immediately respond if initiative reaches NPC.
 
-src/static/rpg/*.js
-src/static/rpg/*.css
+J21 Flee:
+- Player can attempt to flee during combat.
+- Success ends combat with exit_reason = fled.
+- Failure consumes the turn and may allow NPC response.
 
-Do not use React for this bundle.
+Below is the patch spec.
 
-This is a UI/presentation bundle only. Do not change combat math.
-
-Expected UI behavior
-
-When combat is active, RPG UI should show a combat panel with:
-
-Combat active
-Round: 1
-Current turn: You / Bran / Bandit
-Participants:
-- You: 20 / 20 HP
-- Bran: 16 / 16 HP
-- Bandit: 8 / 8 HP
-
-It should also show the latest combat event:
-
-You hit Bandit for 6 damage. Bandit HP: 8 → 2.
-
-If it is the player’s turn, show enabled buttons:
-
-Attack
-Defend
-Use Item
-Flee
-
-If it is not the player’s turn, disable player action buttons and show:
-
-Waiting for Bran...
-
-or:
-
-Waiting for Bandit...
-
-For development/manual flow, also add:
-
-Resolve Current Actor
-
-which sends:
-
-__manual_resolve_current_combat_actor__
-
-This should help companion/enemy turns progress until full automatic combat tick support arrives.
-
-Patch 1 — Add combat UI state helpers
+Patch 1 — Extend combat models
 File
-src/static/rpg/rpg.js
-
-Add near other RPG state helpers:
-
-function rpgSafeObject(value) {
-  return value && typeof value === "object" && !Array.isArray(value) ? value : {};
-}
-
-function rpgSafeArray(value) {
-  return Array.isArray(value) ? value : [];
-}
-
-function rpgGetLatestCombatState(payload) {
-  payload = rpgSafeObject(payload);
-
-  const nested = rpgSafeObject(payload.result);
-  const session = rpgSafeObject(payload.session);
-  const sim = rpgSafeObject(payload.simulation_state || nested.simulation_state || session.simulation_state);
-
-  return rpgSafeObject(
-    payload.combat_state ||
-    nested.combat_state ||
-    sim.combat_state
-  );
-}
-
-function rpgGetLatestCombatResult(payload) {
-  payload = rpgSafeObject(payload);
-
-  const nested = rpgSafeObject(payload.result);
-  const interaction = rpgSafeObject(payload.interaction_result || nested.interaction_result);
-
-  return rpgSafeObject(
-    payload.combat_result ||
-    payload.enemy_combat_result ||
-    payload.companion_combat_result ||
-    nested.combat_result ||
-    nested.enemy_combat_result ||
-    nested.companion_combat_result ||
-    interaction.combat_result
-  );
-}
-
-function rpgCombatActorLabel(combatState, actorId) {
-  combatState = rpgSafeObject(combatState);
-  const participants = rpgSafeObject(combatState.participants);
-  const participant = rpgSafeObject(participants[actorId]);
-
-  if (actorId === "player") return "You";
-  return participant.name || actorId || "Unknown";
-}
-
-function rpgCombatParticipantRows(combatState) {
-  combatState = rpgSafeObject(combatState);
-  const participants = rpgSafeObject(combatState.participants);
-
-  return Object.keys(participants).map((actorId) => {
-    const p = rpgSafeObject(participants[actorId]);
-    return {
-      actorId,
-      name: p.name || rpgCombatActorLabel(combatState, actorId),
-      side: p.side || "",
-      hp: Number.isFinite(Number(p.hp)) ? Number(p.hp) : null,
-      maxHp: Number.isFinite(Number(p.max_hp)) ? Number(p.max_hp) : null,
-      status: p.status || "active",
-    };
-  });
-}
-
-function rpgDescribeCombatResult(combatState, combatResult) {
-  combatState = rpgSafeObject(combatState);
-  combatResult = rpgSafeObject(combatResult);
-
-  const reason = combatResult.reason || "";
-  const attack = rpgSafeObject(combatResult.attack_result);
-  const effective = Object.keys(attack).length ? attack : combatResult;
-
-  const actorId = effective.actor_id || combatResult.actor_id || combatResult.enemy_id || combatResult.npc_id || "";
-  const targetId = effective.target_id || combatResult.target_id || "";
-
-  const actorName = rpgCombatActorLabel(combatState, actorId);
-  const targetName = rpgCombatActorLabel(combatState, targetId);
-
-  if (reason === "combat_started") {
-    return "Combat started.";
-  }
-
-  if (reason === "combat_turn_advanced") {
-    const current = rpgCombatActorLabel(combatState, combatResult.current_actor_id || combatState.current_actor_id);
-    return `Turn advanced. Current actor: ${current}.`;
-  }
-
-  if (reason === "not_actor_turn") {
-    const current = rpgCombatActorLabel(combatState, combatResult.current_actor_id || combatState.current_actor_id);
-    return `It is not your turn. Current actor: ${current}.`;
-  }
-
-  if (
-    reason === "combat_attack_resolved" ||
-    reason === "combat_defeat_resolved" ||
-    reason === "companion_combat_attack_resolved" ||
-    reason === "companion_combat_defeat_resolved" ||
-    reason === "enemy_combat_attack_resolved" ||
-    reason === "party_defeat_resolved"
-  ) {
-    const hit = effective.hit === true;
-    const damage = Number(effective.damage_applied || 0);
-    const before = effective.target_hp_before;
-    const after = effective.target_hp_after;
-
-    if (!hit) {
-      return `${actorName} attacks ${targetName} and misses.`;
-    }
-
-    const defeated = effective.defeated || reason === "combat_defeat_resolved" || reason === "party_defeat_resolved";
-    const hpText =
-      before !== undefined && after !== undefined
-        ? ` ${targetName} HP: ${before} → ${after}.`
-        : "";
-
-    if (defeated) {
-      return `${actorName} hits ${targetName} for ${damage} damage and defeats them.${hpText}`;
-    }
-
-    return `${actorName} hits ${targetName} for ${damage} damage.${hpText}`;
-  }
-
-  if (reason) {
-    return `Result: ${reason}`;
-  }
-
-  return "";
-}
-Patch 2 — Add combat panel renderer
-File
-src/static/rpg/rpg.js
-
-Add near other render helpers:
-
-function rpgEnsureCombatPanel() {
-  const root =
-    document.querySelector("#rpg-top-panels") ||
-    document.querySelector(".rpg-top-panels") ||
-    document.querySelector("#rpgModePanel") ||
-    document.querySelector("#rpg-panel") ||
-    document.body;
-
-  let panel = document.querySelector("#rpg-combat-panel");
-  if (panel) return panel;
-
-  panel = document.createElement("section");
-  panel.id = "rpg-combat-panel";
-  panel.className = "rpg-combat-panel rpg-panel-card";
-  panel.innerHTML = `
-    <div class="rpg-combat-header">
-      <div>
-        <div class="rpg-combat-title">Combat</div>
-        <div class="rpg-combat-subtitle" data-role="combat-status">Not in combat</div>
-      </div>
-      <div class="rpg-combat-round" data-role="combat-round"></div>
-    </div>
-
-    <div class="rpg-combat-current" data-role="combat-current"></div>
-
-    <div class="rpg-combat-participants" data-role="combat-participants"></div>
-
-    <div class="rpg-combat-log" data-role="combat-log"></div>
-
-    <div class="rpg-combat-controls" data-role="combat-controls">
-      <button type="button" data-combat-action="attack">Attack</button>
-      <button type="button" data-combat-action="defend">Defend</button>
-      <button type="button" data-combat-action="use_item">Use Item</button>
-      <button type="button" data-combat-action="flee">Flee</button>
-      <button type="button" data-combat-action="resolve_current">Resolve Current Actor</button>
-    </div>
-  `;
-
-  root.prepend(panel);
-  rpgWireCombatControls(panel);
-
-  return panel;
-}
-
-function rpgRenderCombatPanel(payload) {
-  const combatState = rpgGetLatestCombatState(payload);
-  const combatResult = rpgGetLatestCombatResult(payload);
-
-  const panel = rpgEnsureCombatPanel();
-
-  const active = combatState.active === true;
-  panel.classList.toggle("is-active", active);
-  panel.classList.toggle("is-inactive", !active);
-
-  const statusEl = panel.querySelector('[data-role="combat-status"]');
-  const roundEl = panel.querySelector('[data-role="combat-round"]');
-  const currentEl = panel.querySelector('[data-role="combat-current"]');
-  const participantsEl = panel.querySelector('[data-role="combat-participants"]');
-  const logEl = panel.querySelector('[data-role="combat-log"]');
-
-  if (!active && !combatResult.reason) {
-    statusEl.textContent = "Not in combat";
-    roundEl.textContent = "";
-    currentEl.textContent = "";
-    participantsEl.innerHTML = "";
-    logEl.textContent = "";
-    rpgUpdateCombatControls(panel, combatState);
-    return;
-  }
-
-  const currentActorId = combatState.current_actor_id || "";
-  const currentActorName = rpgCombatActorLabel(combatState, currentActorId);
-
-  statusEl.textContent = active ? "Combat active" : `Combat ended${combatState.ended_reason ? `: ${combatState.ended_reason}` : ""}`;
-  roundEl.textContent = combatState.round ? `Round ${combatState.round}` : "";
-  currentEl.textContent = active && currentActorId ? `Current turn: ${currentActorName}` : "";
-
-  const rows = rpgCombatParticipantRows(combatState);
-  participantsEl.innerHTML = rows
-    .map((row) => {
-      const hpText =
-        row.hp !== null && row.maxHp !== null
-          ? `${row.hp} / ${row.maxHp} HP`
-          : "HP unknown";
-
-      return `
-        <div class="rpg-combat-participant ${row.side === "enemy" ? "is-enemy" : "is-party"} ${row.status !== "active" ? "is-defeated" : ""}">
-          <span class="rpg-combat-participant-name">${rpgEscapeHtml(row.name)}</span>
-          <span class="rpg-combat-participant-side">${rpgEscapeHtml(row.side)}</span>
-          <span class="rpg-combat-participant-hp">${rpgEscapeHtml(hpText)}</span>
-          <span class="rpg-combat-participant-status">${rpgEscapeHtml(row.status)}</span>
-        </div>
-      `;
-    })
-    .join("");
-
-  const latest = rpgDescribeCombatResult(combatState, combatResult);
-  logEl.textContent = latest || "";
-
-  rpgUpdateCombatControls(panel, combatState);
-}
-
-function rpgUpdateCombatControls(panel, combatState) {
-  combatState = rpgSafeObject(combatState);
-
-  const active = combatState.active === true;
-  const currentActor = combatState.current_actor_id || "";
-  const isPlayerTurn = active && currentActor === "player";
-
-  const buttons = panel.querySelectorAll("[data-combat-action]");
-  buttons.forEach((button) => {
-    const action = button.getAttribute("data-combat-action");
-
-    if (action === "resolve_current") {
-      button.disabled = !active;
-      button.title = active ? "Resolve current non-player actor for testing" : "No active combat";
-      return;
-    }
-
-    button.disabled = !isPlayerTurn;
-    button.title = isPlayerTurn ? "" : active ? `Waiting for ${rpgCombatActorLabel(combatState, currentActor)}` : "No active combat";
-  });
-}
-
-function rpgEscapeHtml(value) {
-  return String(value ?? "")
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#039;");
-}
-
-If rpgEscapeHtml(...) already exists, do not duplicate it. Reuse the existing function.
-
-Patch 3 — Wire combat buttons
-File
-src/static/rpg/rpg.js
-
-Add:
-
-function rpgWireCombatControls(panel) {
-  if (!panel || panel.dataset.combatControlsWired === "1") return;
-  panel.dataset.combatControlsWired = "1";
-
-  panel.addEventListener("click", (event) => {
-    const button = event.target.closest("[data-combat-action]");
-    if (!button || button.disabled) return;
-
-    const action = button.getAttribute("data-combat-action");
-
-    if (action === "attack") {
-      rpgSubmitCombatCommand("I attack the bandit.");
-      return;
-    }
-
-    if (action === "defend") {
-      rpgSubmitCombatCommand("I defend.");
-      return;
-    }
-
-    if (action === "use_item") {
-      rpgSubmitCombatCommand("I use a healing potion.");
-      return;
-    }
-
-    if (action === "flee") {
-      rpgSubmitCombatCommand("I try to flee.");
-      return;
-    }
-
-    if (action === "resolve_current") {
-      rpgSubmitCombatCommand("__manual_resolve_current_combat_actor__");
-      return;
-    }
-  });
-}
-
-function rpgSubmitCombatCommand(command) {
-  const input =
-    document.querySelector("#rpgInput") ||
-    document.querySelector("#rpg-input") ||
-    document.querySelector("[data-role='rpg-input']") ||
-    document.querySelector("textarea[name='rpg-input']");
-
-  const submit =
-    document.querySelector("#rpgSendBtn") ||
-    document.querySelector("#rpg-send") ||
-    document.querySelector("[data-role='rpg-send']");
-
-  if (input) {
-    input.value = command;
-    input.dispatchEvent(new Event("input", { bubbles: true }));
-  }
-
-  if (submit) {
-    submit.click();
-    return;
-  }
-
-  if (typeof window.rpgSendMessage === "function") {
-    window.rpgSendMessage(command);
-    return;
-  }
-
-  if (typeof window.sendRpgMessage === "function") {
-    window.sendRpgMessage(command);
-    return;
-  }
-
-  console.warn("[RPG][CombatUI] Could not submit combat command", command);
-}
-
-Adjust the selectors if your actual legacy UI uses different IDs. The fallback to window.rpgSendMessage / window.sendRpgMessage makes it less brittle.
-
-Patch 4 — Call renderer after each RPG turn/session update
-File
-src/static/rpg/rpg.js
-
-Find the code path that handles a completed RPG turn. It likely has one of these patterns:
-
-renderRpgTurn(result)
-appendRpgNarration(result)
-handleRpgTurnResponse(data)
-updateRpgSession(data)
-
-After the UI receives the response payload, add:
-
-rpgRenderCombatPanel(data);
-
-For example:
-
+src/app/rpg/combat/models.py
+Add after AttackResolution
 @@
- function handleRpgTurnResponse(data) {
-   ...
-+  try {
-+    rpgRenderCombatPanel(data);
-+  } catch (err) {
-+    console.warn("[RPG][CombatUI] render failed", err);
-+  }
- }
-
-Also call it after session load/get:
-
+ class AttackResolution:
 @@
- function handleRpgSessionLoaded(data) {
-   ...
-+  try {
-+    rpgRenderCombatPanel(data);
-+  } catch (err) {
-+    console.warn("[RPG][CombatUI] initial render failed", err);
-+  }
- }
-
-If the file uses fetch inline, add after successful JSON:
-
-const data = await response.json();
-...
-rpgRenderCombatPanel(data);
-
-The panel should render from any payload containing:
-
-combat_state
-result.combat_state
-session.simulation_state.combat_state
-simulation_state.combat_state
-Patch 5 — Add combat CSS
+         return {
+             "combat_id": self.combat_id,
+             "actor_id": self.actor_id,
+             "target_id": self.target_id,
+             "target_name": self.target_name,
+@@
+             "notes": list(self.notes),
+         }
++
++
++@dataclass(frozen=True)
++class DefenseResolution:
++    combat_id: str
++    actor_id: str
++    action_type: str
++    defense_bonus: int
++    duration: str
++    notes: List[str]
++
++    def to_dict(self) -> Dict[str, Any]:
++        return {
++            "combat_id": self.combat_id,
++            "actor_id": self.actor_id,
++            "action_type": self.action_type,
++            "defense_bonus": self.defense_bonus,
++            "duration": self.duration,
++            "notes": list(self.notes),
++        }
++
++
++@dataclass(frozen=True)
++class FleeResolution:
++    combat_id: str
++    actor_id: str
++    action_type: str
++    success: bool
++    flee_total: int
++    difficulty_total: int
++    rolls: List[Dict[str, Any]]
++    notes: List[str]
++
++    def to_dict(self) -> Dict[str, Any]:
++        return {
++            "combat_id": self.combat_id,
++            "actor_id": self.actor_id,
++            "action_type": self.action_type,
++            "success": self.success,
++            "flee_total": self.flee_total,
++            "difficulty_total": self.difficulty_total,
++            "rolls": list(self.rolls),
++            "notes": list(self.notes),
++        }
+Patch 2 — Add defend/flee resolution
 File
-src/static/rpg/rpg.css
+src/app/rpg/combat/resolver.py
+Change import
+-from app.rpg.combat.models import AttackIntent, AttackResolution
++from app.rpg.combat.models import AttackIntent, AttackResolution, DefenseResolution, FleeResolution
+Add helper after _skill(...)
+@@
+ def _skill(actor: Dict[str, Any], name: str, default: int = 0) -> int:
+     skills = _safe_dict(actor.get("skills"))
+     return _safe_int(skills.get(name), default)
++
++
++def _combat_defense_bonus(combat_state: Dict[str, Any], actor_id: str) -> int:
++    modifiers = _safe_dict(combat_state.get("defense_modifiers"))
++    modifier = _safe_dict(modifiers.get(actor_id))
++    return max(0, _safe_int(modifier.get("bonus"), 0))
+Modify resolve_attack(...)
 
-If there is no rpg.css, use the active RPG stylesheet, possibly:
+Find:
 
-src/static/rpg/styles.css
-src/static/style.css
+defense_total = 10 + defense_mod
 
-Add:
+Replace with:
 
-.rpg-combat-panel {
-  border: 1px solid rgba(180, 140, 80, 0.35);
-  border-radius: 12px;
-  padding: 12px;
-  margin: 10px 0;
-  background: rgba(20, 16, 12, 0.86);
-  color: #f2e7d0;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
-}
+-    defense_total = 10 + defense_mod
++    defense_total = 10 + defense_mod + _combat_defense_bonus(combat_state, intent.target_id)
 
-.rpg-combat-panel.is-inactive {
-  opacity: 0.75;
-}
+Find:
 
-.rpg-combat-header {
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
-  align-items: flex-start;
-  margin-bottom: 8px;
-}
+if hit:
+    notes.append("attack_hit")
+else:
+    notes.append("attack_missed")
 
-.rpg-combat-title {
-  font-weight: 700;
-  letter-spacing: 0.03em;
-}
+Replace with:
 
-.rpg-combat-subtitle,
-.rpg-combat-round,
-.rpg-combat-current {
-  color: #d8c7a6;
-  font-size: 0.9rem;
-}
+-    if hit:
++    if _combat_defense_bonus(combat_state, intent.target_id) > 0:
++        notes.append("target_defending")
++
++    if hit:
+         notes.append("attack_hit")
+     else:
+         notes.append("attack_missed")
+Add at end of file
++
++def resolve_defend(
++    simulation_state: Dict[str, Any],
++    combat_state: Dict[str, Any],
++    actor_id: str,
++) -> DefenseResolution:
++    actor = _get_actor(simulation_state, actor_id)
++    endurance = _stat(actor, "endurance", 0)
++    evasion = _skill(actor, "evasion", 0)
++    defense_bonus = max(2, 3 + max(0, endurance // 2) + max(0, evasion // 2))
++
++    return DefenseResolution(
++        combat_id=str(combat_state.get("combat_id") or ""),
++        actor_id=actor_id,
++        action_type="defend",
++        defense_bonus=defense_bonus,
++        duration="next_incoming_attack",
++        notes=["defense_stance"],
++    )
++
++
++def resolve_flee(
++    simulation_state: Dict[str, Any],
++    combat_state: Dict[str, Any],
++    actor_id: str,
++    *,
++    turn_id: str,
++    tick: int,
++) -> FleeResolution:
++    actor = _get_actor(simulation_state, actor_id)
++    agility = _stat(actor, "agility", 0)
++    evasion = _skill(actor, "evasion", 0)
++
++    roll = deterministic_d20(f"{turn_id}:{tick}:flee:{actor_id}")
++    flee_total = int(roll.get("result", 0) or 0) + agility + evasion
++
++    participant_ids = [str(x) for x in combat_state.get("participants") or [] if str(x or "").strip()]
++    enemy_count = 0
++    highest_enemy_pressure = 0
++    actor_team = str(actor.get("combat_team") or actor.get("team") or actor.get("faction") or "party")
++
++    for other_id in participant_ids:
++        if other_id == actor_id:
++            continue
++        other = _get_actor(simulation_state, other_id)
++        if not other:
++            continue
++        other_team = str(other.get("combat_team") or other.get("team") or other.get("faction") or "enemy")
++        if other_team == actor_team:
++            continue
++        resources = _safe_dict(other.get("resources"))
++        if _safe_int(resources.get("hp"), 0) <= 0:
++            continue
++        enemy_count += 1
++        highest_enemy_pressure = max(
++            highest_enemy_pressure,
++            _stat(other, "agility", 0) + _skill(other, "awareness", 0),
++        )
++
++    difficulty_total = 10 + highest_enemy_pressure + max(0, enemy_count - 1) * 2
++    success = flee_total >= difficulty_total
++    notes = ["flee_success" if success else "flee_failed"]
++
++    return FleeResolution(
++        combat_id=str(combat_state.get("combat_id") or ""),
++        actor_id=actor_id,
++        action_type="flee",
++        success=success,
++        flee_total=flee_total,
++        difficulty_total=difficulty_total,
++        rolls=[roll],
++        notes=notes,
++    )
+Patch 3 — Apply defend/flee state changes
+File
+src/app/rpg/combat/apply.py
+Add after apply_attack_resolution(...)
++
++def apply_defense_resolution(
++    simulation_state: Dict[str, Any],
++    combat_state: Dict[str, Any],
++    resolution: Dict[str, Any],
++) -> tuple[Dict[str, Any], Dict[str, Any]]:
++    state = normalize_combat_state(combat_state)
++    actor_id = str(resolution.get("actor_id") or "")
++    bonus = int(resolution.get("defense_bonus", 0) or 0)
++
++    modifiers = _safe_dict(state.get("defense_modifiers"))
++    if actor_id and bonus > 0:
++        modifiers[actor_id] = {
++            "bonus": bonus,
++            "duration": "next_incoming_attack",
++        }
++    state["defense_modifiers"] = modifiers
++
++    recent = list(state.get("recent_events") or [])
++    recent.append({
++        "type": "defense_resolution",
++        "actor_id": actor_id,
++        "defense_bonus": bonus,
++    })
++    state["recent_events"] = recent[-24:]
++    state["last_resolution"] = dict(resolution)
++    return simulation_state, state
++
++
++def apply_flee_resolution(
++    simulation_state: Dict[str, Any],
++    combat_state: Dict[str, Any],
++    resolution: Dict[str, Any],
++) -> tuple[Dict[str, Any], Dict[str, Any]]:
++    state = normalize_combat_state(combat_state)
++    actor_id = str(resolution.get("actor_id") or "")
++    success = bool(resolution.get("success"))
++
++    recent = list(state.get("recent_events") or [])
++    recent.append({
++        "type": "flee_resolution",
++        "actor_id": actor_id,
++        "success": success,
++    })
++    state["recent_events"] = recent[-24:]
++    state["last_resolution"] = dict(resolution)
++
++    if success:
++        state["active"] = False
++        state["phase"] = "resolved"
++        state["exit_reason"] = "fled"
++        state["winner_ids"] = []
++        state["loser_ids"] = []
++        state["pending_npc_turn"] = False
++
++    return simulation_state, state
+Also update apply_attack_resolution(...) to consume defense bonus
 
-.rpg-combat-current {
-  margin-bottom: 8px;
-}
+Find this block near the end:
 
-.rpg-combat-participants {
-  display: grid;
-  gap: 6px;
-  margin: 8px 0;
-}
+combat_state["last_resolution"] = dict(resolution)
+recent = list(combat_state.get("recent_events") or [])
 
-.rpg-combat-participant {
-  display: grid;
-  grid-template-columns: minmax(120px, 1.4fr) 80px 100px 90px;
-  gap: 8px;
-  align-items: center;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 8px;
-  padding: 6px 8px;
-  background: rgba(255, 255, 255, 0.04);
-}
+Replace with:
 
-.rpg-combat-participant.is-enemy {
-  border-color: rgba(210, 80, 70, 0.35);
-}
+     combat_state["active"] = True
+     combat_state["phase"] = "active"
+     combat_state["last_resolution"] = dict(resolution)
++
++    defense_modifiers = _safe_dict(combat_state.get("defense_modifiers"))
++    if target_id in defense_modifiers:
++        defense_modifiers.pop(target_id, None)
++    combat_state["defense_modifiers"] = defense_modifiers
++
+     recent = list(combat_state.get("recent_events") or [])
+Patch 4 — Preserve defense_modifiers in combat state
+File
+src/app/rpg/combat/state.py
+Add to build_empty_combat_state()
+         "pending_npc_turn": False,
++        "defense_modifiers": {},
+         "winner_ids": [],
+Add to normalize_combat_state(...)
+         "pending_npc_turn": bool(state.get("pending_npc_turn", False)),
++        "defense_modifiers": _safe_dict(state.get("defense_modifiers")),
+         "winner_ids": [str(x) for x in _safe_list(state.get("winner_ids")) if str(x or "").strip()],
+Patch 5 — Runtime combat routing for defend/use-item/flee
+File
+src/app/rpg/session/runtime.py
+Change imports
 
-.rpg-combat-participant.is-party {
-  border-color: rgba(80, 150, 210, 0.35);
-}
+Find:
 
-.rpg-combat-participant.is-defeated {
-  opacity: 0.55;
-  text-decoration: line-through;
-}
+from app.rpg.combat.apply import apply_attack_resolution
 
-.rpg-combat-participant-name {
-  font-weight: 650;
-}
+Replace with:
 
-.rpg-combat-participant-side,
-.rpg-combat-participant-status {
-  text-transform: capitalize;
-  color: #cdbb9b;
-}
+-from app.rpg.combat.apply import apply_attack_resolution
++from app.rpg.combat.apply import (
++    apply_attack_resolution,
++    apply_defense_resolution,
++    apply_flee_resolution,
++)
 
-.rpg-combat-log {
-  margin-top: 8px;
-  padding: 8px;
-  border-left: 3px solid rgba(220, 170, 90, 0.55);
-  background: rgba(255, 255, 255, 0.04);
-  border-radius: 8px;
-  min-height: 32px;
-}
+Find:
 
-.rpg-combat-controls {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-top: 10px;
-}
+from app.rpg.combat.resolver import resolve_attack
 
-.rpg-combat-controls button {
-  border: 1px solid rgba(240, 210, 160, 0.28);
-  border-radius: 8px;
-  padding: 7px 10px;
-  background: rgba(120, 80, 35, 0.5);
-  color: #f6e8cc;
-  cursor: pointer;
-}
+Replace with:
 
-.rpg-combat-controls button:hover:not(:disabled) {
-  background: rgba(150, 100, 45, 0.65);
-}
+-from app.rpg.combat.resolver import resolve_attack
++from app.rpg.combat.resolver import resolve_attack, resolve_defend, resolve_flee
 
-.rpg-combat-controls button:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
-}
-Patch 6 — Add manual UI scenario for combat panel payload
+Find:
 
-This is optional but useful for catching payload regressions.
+from app.rpg.items.item_effects import apply_item_use
 
+Replace with:
+
+-from app.rpg.items.item_effects import apply_item_use
++from app.rpg.items.item_effects import apply_item_effects, apply_item_use
+Add helpers after _action_requests_hostile_combat(...)
++
++def _action_requests_combat_defend(action: Dict[str, Any], player_input: str) -> bool:
++    action = _safe_dict(action)
++    action_type = _safe_str(action.get("action_type")).strip().lower()
++    text = _safe_str(player_input).strip().lower()
++    return action_type in {"defend", "block", "dodge", "guard"} or any(
++        term in text for term in ("defend", "block", "guard", "brace", "take cover")
++    )
++
++
++def _action_requests_combat_flee(action: Dict[str, Any], player_input: str) -> bool:
++    action = _safe_dict(action)
++    action_type = _safe_str(action.get("action_type")).strip().lower()
++    text = _safe_str(player_input).strip().lower()
++    return action_type in {"flee", "retreat", "escape"} or any(
++        term in text for term in ("flee", "run away", "retreat", "escape", "withdraw")
++    )
++
++
++def _action_requests_combat_use_item(action: Dict[str, Any], player_input: str) -> bool:
++    action = _safe_dict(action)
++    action_type = _safe_str(action.get("action_type")).strip().lower()
++    text = _safe_str(player_input).strip().lower()
++    return action_type == "use_item" or any(
++        term in text for term in ("use ", "drink ", "eat ", "consume ", "quaff ")
++    )
++
++
++def _infer_inventory_item_id_from_text(
++    simulation_state: Dict[str, Any],
++    action: Dict[str, Any],
++    player_input: str,
++) -> str:
++    explicit = _safe_str(action.get("item_id")).strip()
++    if explicit:
++        return explicit
++
++    text = _safe_str(player_input).strip().lower()
++    player_state = _safe_dict(simulation_state.get("player_state"))
++    inventory_state = normalize_inventory_state(_safe_dict(player_state.get("inventory_state")))
++
++    for item in _safe_list(inventory_state.get("items")):
++        item = _safe_dict(item)
++        item_id = _safe_str(item.get("item_id")).strip()
++        if not item_id:
++            continue
++        names = [
++            _safe_str(item.get("name")),
++            _safe_str(item.get("definition_id")),
++            item_id,
++        ]
++        names.extend([_safe_str(x) for x in _safe_list(item.get("aliases"))])
++        for name in names:
++            name_lc = name.strip().lower()
++            if name_lc and name_lc in text:
++                return item_id
++
++    # Safe fallback for common phrasing like "drink a potion".
++    for item in _safe_list(inventory_state.get("items")):
++        item = _safe_dict(item)
++        item_id = _safe_str(item.get("item_id")).strip()
++        name_lc = _safe_str(item.get("name")).strip().lower()
++        if item_id and any(token in name_lc for token in ("potion", "draught", "elixir", "food", "ration")):
++            return item_id
++
++    return ""
+Update derive_action_candidates(...)
+
+Find:
+
+if any(w in text for w in ["use", "drink", "eat", "consume"]):
+    candidates.append({"action_type": "use_item", "priority": 5})
+
+Replace with:
+
+-    if any(w in text for w in ["use", "drink", "eat", "consume"]):
+-        candidates.append({"action_type": "use_item", "priority": 5})
++    if any(w in text for w in ["use", "drink", "eat", "consume", "quaff"]):
++        candidates.append({"action_type": "use_item", "priority": 9})
++
++    if any(w in text for w in ["flee", "retreat", "escape", "withdraw", "run away"]):
++        candidates.append({"action_type": "flee", "priority": 10})
+Replace combat handling section
+
+Inside _apply_turn_authoritative(...), find this block:
+
+normalized_action_type = _safe_str(_safe_dict(action).get("action_type")).strip().lower()
+target_id = _safe_str(_safe_dict(action).get("target_id")).strip()
+is_combat_action = _action_requests_hostile_combat(action, player_input)
+
+Replace with:
+
+     normalized_action_type = _safe_str(_safe_dict(action).get("action_type")).strip().lower()
+     target_id = _safe_str(_safe_dict(action).get("target_id")).strip()
+-    is_combat_action = _action_requests_hostile_combat(action, player_input)
++    is_combat_attack = _action_requests_hostile_combat(action, player_input)
++    is_combat_defend = _action_requests_combat_defend(action, player_input)
++    is_combat_flee = _action_requests_combat_flee(action, player_input)
++    is_combat_use_item = _action_requests_combat_use_item(action, player_input)
++    is_combat_action = is_combat_attack or (
++        combat_state.get("active") and (is_combat_defend or is_combat_flee or is_combat_use_item)
++    )
+
+Find:
+
+if is_combat_action and target_id:
+
+Replace the first occurrence with:
+
+-    if is_combat_action and target_id:
++    if is_combat_attack and target_id:
+
+Find the second occurrence:
+
+if is_combat_action and target_id:
+
+Replace with:
+
+-    if is_combat_action and target_id:
++    if is_combat_attack and target_id:
+
+Now add this new block after the combat gate check and before the attack block:
+
++
++    if combat_state.get("active") and is_combat_action and not is_combat_attack:
++        current_actor_id = get_current_actor_id(combat_state)
++        if current_actor_id and _safe_str(current_actor_id) != _safe_str(player_actor_id):
++            resolved_result = _build_combat_gate_result(current_actor_id, player_actor_id)
++            grounded = _derive_grounded_scene_context(after_action_state, runtime_state, resolved_result)
++            narration_context = {
++                "player_input": player_input,
++                "action_type": normalized_action_type,
++                "resolved_result": resolved_result,
++                "simulation_state": after_action_state,
++                "runtime_state": runtime_state,
++                "combat_result": {},
++                "npc_combat_result": {},
++                "combat_state": combat_state,
++                "grounded": grounded,
++                "xp_result": {},
++                "skill_xp_result": {},
++                "level_up": [],
++                "skill_level_ups": [],
++                "settings": runtime_state.get("runtime_settings", {}),
++                "conversation_threads": build_conversation_thread_prompt_context(
++                    runtime_state,
++                    current_tick=final_tick,
++                    limit=4,
++                ),
++            }
++            return {
++                "ok": True,
++                "simulation_state": after_action_state,
++                "runtime_state": runtime_state,
++                "result": resolved_result,
++                "narration_context": narration_context,
++                "turn_id": turn_id,
++                "tick": final_tick,
++            }
++
++        if is_combat_defend:
++            defense_resolution = resolve_defend(
++                after_action_state,
++                combat_state,
++                _safe_str(player_actor_id),
++            )
++            defense_dict = defense_resolution.to_dict()
++            after_action_state, combat_state = apply_defense_resolution(
++                after_action_state,
++                combat_state,
++                defense_dict,
++            )
++            if combat_state.get("active"):
++                combat_state = advance_turn(combat_state)
++                current_after_player = get_current_actor_id(combat_state)
++                if current_after_player and not _actor_is_player(after_action_state, current_after_player):
++                    after_action_state, combat_state, npc_combat_result = run_npc_turn(
++                        after_action_state,
++                        combat_state,
++                        tick=final_tick,
++                    )
++                    combat_state = evaluate_combat_exit(after_action_state, combat_state)
++
++            runtime_state = _set_combat_state(runtime_state, combat_state)
++            combat_result = defense_dict
++            authoritative["simulation_state"] = after_action_state
++            resolved_result["combat_result"] = combat_result
++            if npc_combat_result:
++                resolved_result["npc_combat_result"] = npc_combat_result
++            authoritative["result"] = resolved_result
++
++        elif is_combat_flee:
++            flee_resolution = resolve_flee(
++                after_action_state,
++                combat_state,
++                _safe_str(player_actor_id),
++                turn_id=turn_id,
++                tick=final_tick,
++            )
++            flee_dict = flee_resolution.to_dict()
++            after_action_state, combat_state = apply_flee_resolution(
++                after_action_state,
++                combat_state,
++                flee_dict,
++            )
++            if combat_state.get("active"):
++                combat_state = advance_turn(combat_state)
++                current_after_player = get_current_actor_id(combat_state)
++                if current_after_player and not _actor_is_player(after_action_state, current_after_player):
++                    after_action_state, combat_state, npc_combat_result = run_npc_turn(
++                        after_action_state,
++                        combat_state,
++                        tick=final_tick,
++                    )
++                    combat_state = evaluate_combat_exit(after_action_state, combat_state)
++
++            runtime_state = _set_combat_state(runtime_state, combat_state)
++            combat_result = flee_dict
++            authoritative["simulation_state"] = after_action_state
++            resolved_result["combat_result"] = combat_result
++            if npc_combat_result:
++                resolved_result["npc_combat_result"] = npc_combat_result
++            authoritative["result"] = resolved_result
++
++        elif is_combat_use_item:
++            item_id = _infer_inventory_item_id_from_text(after_action_state, action, player_input)
++            item_result = apply_item_effects(after_action_state, item_id)
++            after_action_state = _ensure_simulation_state(_safe_dict(item_result.get("simulation_state")))
++            use_result = _safe_dict(item_result.get("result"))
++            use_result.setdefault("action_type", "use_item")
++            use_result.setdefault("combat_id", _safe_str(combat_state.get("combat_id")))
++            use_result.setdefault("notes", ["combat_item_used"] if use_result.get("ok") else ["combat_item_failed"])
++
++            recent = list(combat_state.get("recent_events") or [])
++            recent.append({
++                "type": "use_item_resolution",
++                "actor_id": _safe_str(player_actor_id),
++                "item_id": item_id,
++                "ok": bool(use_result.get("ok")),
++                "reason": _safe_str(use_result.get("reason")),
++            })
++            combat_state["recent_events"] = recent[-24:]
++            combat_state["last_resolution"] = dict(use_result)
++
++            if combat_state.get("active"):
++                combat_state = advance_turn(combat_state)
++                current_after_player = get_current_actor_id(combat_state)
++                if current_after_player and not _actor_is_player(after_action_state, current_after_player):
++                    after_action_state, combat_state, npc_combat_result = run_npc_turn(
++                        after_action_state,
++                        combat_state,
++                        tick=final_tick,
++                    )
++                    combat_state = evaluate_combat_exit(after_action_state, combat_state)
++
++            runtime_state = _set_combat_state(runtime_state, combat_state)
++            combat_result = use_result
++            authoritative["simulation_state"] = after_action_state
++            resolved_result["combat_result"] = combat_result
++            resolved_result["inventory_result"] = use_result
++            if npc_combat_result:
++                resolved_result["npc_combat_result"] = npc_combat_result
++            authoritative["result"] = resolved_result
+
+Important: the existing attack block stays as-is after this, except it should now be gated by is_combat_attack.
+
+Patch 6 — Make item use actually apply effects outside combat too
+File
+src/app/rpg/session/runtime.py
+
+Find:
+
+def _use_item_action(
+    simulation_state: Dict[str, Any],
+    action: Dict[str, Any],
+) -> Dict[str, Any]:
+    item_id = _safe_str(action.get("item_id")).strip()
+    result = apply_item_use(simulation_state, item_id)
+
+Replace with:
+
+ def _use_item_action(
+     simulation_state: Dict[str, Any],
+     action: Dict[str, Any],
+ ) -> Dict[str, Any]:
+     item_id = _safe_str(action.get("item_id")).strip()
+-    result = apply_item_use(simulation_state, item_id)
++    result = apply_item_effects(simulation_state, item_id)
+     return {
+         "simulation_state": _safe_dict(result.get("simulation_state")),
+         "result": _safe_dict(result.get("result")),
+     }
+Patch 7 — Add manual scenarios
 File
 src/tests/rpg/manual_llm_transcript.py
 
-Add scenario if you want a quick UI payload generator:
+Add these entries to SERVICE_SCENARIOS.
 
-"combat_ui_payload_smoke": {
-    "currency": {"gold": 0, "silver": 0, "copper": 0},
-    "conversation_settings": {
-        "enabled": True,
-        "autonomous_ticks_enabled": False,
-        "frequency": "never",
-        "conversation_chance_percent": 0,
-        "allow_player_invited": False,
-        "player_inclusion_chance_percent": 0,
-        "npc_file_profiles_enabled": True,
-        "npc_evolution_enabled": True,
-        "min_ticks_between_conversations": 0,
-        "thread_cooldown_ticks": 0
-    },
-    "setup_interaction_state": {
-        "scene_items": [],
-        "scene_objects": [],
-        "player_location_id": "loc_tavern_road",
-        "player_hp": 20,
-        "player_max_hp": 20,
-        "player_inventory": {
-            "items": [
-                {
-                    "item_id": "item:hunting_bow",
-                    "definition_id": "def:hunting_bow",
-                    "name": "hunting bow",
-                    "aliases": ["bow"]
-                },
-                {
-                    "item_id": "item:iron_arrow_stack_a",
-                    "definition_id": "def:iron_arrow",
-                    "name": "iron arrows",
-                    "aliases": ["arrows", "iron arrow"],
-                    "quantity": 15
-                }
-            ],
-            "equipment": {
-                "main_hand": "item:hunting_bow",
-                "ammo": "item:iron_arrow_stack_a"
-            },
-            "carry_capacity": 50.0
-        },
-        "party_state": {
-            "max_size": 4,
-            "companions": [
-                {
-                    "npc_id": "npc:Bran",
-                    "name": "Bran",
-                    "role": "companion",
-                    "status": "active",
-                    "identity_arc": "revenge_after_losing_tavern",
-                    "active_motivations": ["revenge"],
-                    "loyalty": 35,
-                    "inventory": {
-                        "items": [
-                            {
-                                "item_id": "item:bran_rusty_dagger",
-                                "definition_id": "def:rusty_dagger",
-                                "name": "rusty dagger"
-                            }
-                        ],
-                        "equipment": {
-                            "main_hand": "item:bran_rusty_dagger"
-                        },
-                        "carry_capacity": 50.0
-                    }
-                }
-            ]
-        }
-    },
-    "turns": [
-        "I attack the bandit.",
-        "__manual_resolve_current_combat_actor__",
-        "__manual_resolve_current_combat_actor__"
-    ]
-},
++    "combat_defend_reduces_next_incoming_attack": {
++        "currency": {"gold": 0, "silver": 0, "copper": 0},
++        "conversation_settings": {
++            "enabled": True,
++            "autonomous_ticks_enabled": False,
++            "frequency": "never",
++            "conversation_chance_percent": 0,
++            "allow_player_invited": False,
++            "player_inclusion_chance_percent": 0,
++            "npc_file_profiles_enabled": True,
++            "npc_evolution_enabled": True,
++            "min_ticks_between_conversations": 0,
++            "thread_cooldown_ticks": 0
++        },
++        "setup_interaction_state": {
++            "scene_items": [],
++            "scene_objects": [],
++            "player_location_id": "loc_tavern_road",
++            "player_hp": 20,
++            "player_max_hp": 20,
++            "player_inventory": {"items": [], "equipment": {}, "carry_capacity": 50.0},
++            "party_state": {"max_size": 4, "companions": []}
++        },
++        "turns": [
++            "I attack the bandit.",
++            "__manual_force_player_combat_turn__",
++            "I defend."
++        ]
++    },
++
++    "combat_use_item_consumes_turn_and_applies_effect": {
++        "currency": {"gold": 0, "silver": 0, "copper": 0},
++        "conversation_settings": {
++            "enabled": True,
++            "autonomous_ticks_enabled": False,
++            "frequency": "never",
++            "conversation_chance_percent": 0,
++            "allow_player_invited": False,
++            "player_inclusion_chance_percent": 0,
++            "npc_file_profiles_enabled": True,
++            "npc_evolution_enabled": True,
++            "min_ticks_between_conversations": 0,
++            "thread_cooldown_ticks": 0
++        },
++        "setup_interaction_state": {
++            "scene_items": [],
++            "scene_objects": [],
++            "player_location_id": "loc_tavern_road",
++            "player_hp": 5,
++            "player_max_hp": 20,
++            "player_inventory": {
++                "items": [
++                    {
++                        "item_id": "item:minor_healing_potion",
++                        "definition_id": "item:minor_healing_potion",
++                        "name": "minor healing potion",
++                        "aliases": ["potion", "healing potion"],
++                        "qty": 1,
++                        "quantity": 1
++                    }
++                ],
++                "equipment": {},
++                "carry_capacity": 50.0
++            },
++            "party_state": {"max_size": 4, "companions": []}
++        },
++        "turns": [
++            "I attack the bandit.",
++            "__manual_force_player_combat_turn__",
++            "I drink the healing potion."
++        ]
++    },
++
++    "combat_flee_success_or_failure_is_authoritative": {
++        "currency": {"gold": 0, "silver": 0, "copper": 0},
++        "conversation_settings": {
++            "enabled": True,
++            "autonomous_ticks_enabled": False,
++            "frequency": "never",
++            "conversation_chance_percent": 0,
++            "allow_player_invited": False,
++            "player_inclusion_chance_percent": 0,
++            "npc_file_profiles_enabled": True,
++            "npc_evolution_enabled": True,
++            "min_ticks_between_conversations": 0,
++            "thread_cooldown_ticks": 0
++        },
++        "setup_interaction_state": {
++            "scene_items": [],
++            "scene_objects": [],
++            "player_location_id": "loc_tavern_road",
++            "player_hp": 20,
++            "player_max_hp": 20,
++            "player_inventory": {"items": [], "equipment": {}, "carry_capacity": 50.0},
++            "party_state": {"max_size": 4, "companions": []}
++        },
++        "turns": [
++            "I attack the bandit.",
++            "__manual_force_player_combat_turn__",
++            "I flee."
++        ]
++    },
+Patch 8 — Add scenario warnings
+File
+src/tests/rpg/manual_llm_transcript.py
 
-Add validation:
+Where the script already inspects scenario results for combat warnings, add checks like this:
 
-if scenario_name == "combat_ui_payload_smoke":
-    combat_state = _extract_combat_state(result)
-    combat_result = _extract_combat_result(result)
-    visible_reason = _extract_visible_interaction_reason(result)
++        if scenario_name == "combat_defend_reduces_next_incoming_attack":
++            combat_result = _safe_dict(result.get("combat_result") or _safe_dict(result.get("turn_contract")).get("combat_result"))
++            notes = [str(x) for x in _safe_list(combat_result.get("notes"))]
++            if "defense_stance" not in notes:
++                scenario_summary.setdefault("scenario_warnings", []).append(
++                    "combat_defend_missing_defense_stance_note"
++                )
++
++        if scenario_name == "combat_use_item_consumes_turn_and_applies_effect":
++            combat_result = _safe_dict(result.get("combat_result") or _safe_dict(result.get("turn_contract")).get("combat_result"))
++            if combat_result.get("action_type") != "use_item":
++                scenario_summary.setdefault("scenario_warnings", []).append(
++                    "combat_use_item_missing_use_item_combat_result"
++                )
++            if combat_result.get("ok") is not True:
++                scenario_summary.setdefault("scenario_warnings", []).append(
++                    "combat_use_item_not_ok"
++                )
++
++        if scenario_name == "combat_flee_success_or_failure_is_authoritative":
++            combat_result = _safe_dict(result.get("combat_result") or _safe_dict(result.get("turn_contract")).get("combat_result"))
++            if combat_result.get("action_type") != "flee":
++                scenario_summary.setdefault("scenario_warnings", []).append(
++                    "combat_flee_missing_flee_combat_result"
++                )
++            if "success" not in combat_result:
++                scenario_summary.setdefault("scenario_warnings", []).append(
++                    "combat_flee_missing_success_boolean"
++                )
 
-    if turn_index == 1:
-        if combat_state.get("active") is not True:
-            warnings.append("combat_ui_expected_active_combat_state")
-        participants = _safe_dict(combat_state.get("participants"))
-        for actor_id in ("player", "npc:Bran", "enemy:bandit_1"):
-            if actor_id not in participants:
-                warnings.append(f"combat_ui_expected_participant_missing:{actor_id}")
-
-    if visible_reason in {"", "no_supported_semantic_action_detected"}:
-        warnings.append(f"combat_ui_expected_visible_reason_got:{visible_reason or 'missing'}")
-
-Run:
-
-python src/tests/rpg/manual_llm_transcript.py --service-scenarios --scenario combat_ui_payload_smoke --fail-on-regression-warnings
-Patch 7 — Browser smoke check
-
-After patching UI, run the server and open RPG mode.
-
-Test flow:
-
-1. Start or load RPG session.
-2. Send: I attack the bandit.
-3. Combat panel appears.
-4. Panel shows participants and current actor.
-5. If current actor is not player, Attack button is disabled.
-6. Click Resolve Current Actor.
-7. Combat log updates.
-8. When current actor becomes player, Attack button enables.
-9. Click Attack.
-10. Combat log and participant HP update.
-
-Expected visual result:
-
-Combat active
-Round 1
-Current turn: Bandit / Bran / You
-Participants with HP/status
-Latest combat result
-Turn-aware buttons
+If that exact warning inspection area is awkward, add this logic wherever the current combat_llm_attack_narration / combat_llm_defeat_narration scenario validations live.

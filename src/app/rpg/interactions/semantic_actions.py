@@ -22,6 +22,9 @@ SUPPORTED_ACTION_KINDS = {
     "craft",
     "buy",
     "sell",
+    "defend",
+    "flee",
+    "use_item",
     "unknown",
 }
 
@@ -470,6 +473,45 @@ def resolve_semantic_action_v2(
             "actor_id": actor_id,
             "target_ref": target,
             "confidence": "high" if target else "low",
+            "raw_input": raw,
+            "source": "deterministic_semantic_action_resolver_v2",
+        }
+
+    if re.search(r"\b(defend|guard|block|brace|take cover)\b", text):
+        return {
+            "resolved": True,
+            "kind": "defend",
+            "actor_id": actor_id,
+            "target_ref": "",
+            "confidence": "high",
+            "raw_input": raw,
+            "source": "deterministic_semantic_action_resolver_v2",
+        }
+
+    if re.search(r"\b(flee|retreat|escape|withdraw|run away)\b", text):
+        return {
+            "resolved": True,
+            "kind": "flee",
+            "actor_id": actor_id,
+            "target_ref": "",
+            "confidence": "high",
+            "raw_input": raw,
+            "source": "deterministic_semantic_action_resolver_v2",
+        }
+
+    if re.search(r"\b(use|drink|quaff|consume|eat)\b", text):
+        target = _first_match(
+            [
+                r"\b(?:use|drink|quaff|consume|eat)\s+(?:the\s+|a\s+|an\s+)?([^,.!?]+)",
+            ],
+            text,
+        )
+        return {
+            "resolved": True,
+            "kind": "use_item",
+            "actor_id": actor_id,
+            "target_ref": _clean_target_ref(target),
+            "confidence": "high" if target else "medium",
             "raw_input": raw,
             "source": "deterministic_semantic_action_resolver_v2",
         }

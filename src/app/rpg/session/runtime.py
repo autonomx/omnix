@@ -10,7 +10,7 @@ This replaces the legacy in-memory GameSession / pipeline.py / routes.py flow.
 """
 from __future__ import annotations
 
-from copy import deepcopy
+import ast
 import copy
 import hashlib
 import json
@@ -18,6 +18,7 @@ import logging
 import os
 import re
 import time as _time
+from copy import deepcopy
 from datetime import datetime, timezone
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
@@ -446,12 +447,16 @@ from app.rpg.ai.scene_weaver import (
 )
 from app.rpg.ai.semantic_action_intelligence import get_semantic_action_advisory
 from app.rpg.ai.world_scene_narrator import narrate_ambient_update, narrate_scene
-from app.rpg.combat.apply import apply_attack_resolution
+from app.rpg.combat.apply import (
+    apply_attack_resolution,
+    apply_defense_resolution,
+    apply_flee_resolution,
+)
 from app.rpg.combat.initiative import advance_turn, begin_combat
 from app.rpg.combat.lifecycle import build_combat_participants, evaluate_combat_exit
 from app.rpg.combat.models import AttackIntent
 from app.rpg.combat.npc_turns import run_npc_turn
-from app.rpg.combat.resolver import resolve_attack
+from app.rpg.combat.resolver import resolve_attack, resolve_defend, resolve_flee
 from app.rpg.combat.state import (
     build_empty_combat_state,
     get_current_actor_id,
@@ -501,7 +506,7 @@ from app.rpg.items.inventory_state import (
     remove_inventory_item,
     unequip_inventory_slot,
 )
-from app.rpg.items.item_effects import apply_item_use
+from app.rpg.items.item_effects import apply_item_effects, apply_item_use
 from app.rpg.items.world_items import (
     drop_world_item,
     ensure_world_item_state,
@@ -517,6 +522,13 @@ from app.rpg.memory.dialogue_context import (
 from app.rpg.memory.memory_state import ensure_memory_state
 from app.rpg.memory.social_effects import apply_general_social_effects
 from app.rpg.memory.world_memory_state import ensure_world_memory_state
+from app.rpg.narration.combat_contract import (
+    build_combat_narration_contract,
+    combat_contract_requires_llm,
+)
+from app.rpg.narration.combat_prompt import build_combat_narration_prompt
+from app.rpg.narration.combat_service import generate_combat_narration_sync
+from app.rpg.narration.combat_validator import validate_combat_narration
 from app.rpg.party.companion_commands import maybe_apply_companion_command
 from app.rpg.party.companion_memory import (
     companion_loyalty_projection,
@@ -607,13 +619,6 @@ from app.rpg.session.narration_worker import (
     publish_narration_event,
     signal_narration_work,
 )
-from app.rpg.narration.combat_contract import (
-    build_combat_narration_contract,
-    combat_contract_requires_llm,
-)
-from app.rpg.narration.combat_prompt import build_combat_narration_prompt
-from app.rpg.narration.combat_service import generate_combat_narration_sync
-from app.rpg.narration.combat_validator import validate_combat_narration
 from app.rpg.session.response_builder import (
     build_apply_turn_response,
     build_turn_payload,
@@ -5096,6 +5101,95 @@ def _set_combat_state(runtime_state: Dict[str, Any], combat_state: Dict[str, Any
     return runtime_state
 
 
+def _active_combat_utility_kind(
+    runtime_state: Dict[str, Any],
+    semantic_action_record: Dict[str, Any],
+    player_input: str,
+) -> str:
+    combat_state = _safe_dict(_extract_active_combat_state_for_turn(runtime_state))
+    if not combat_state.get("active"):
+        return ""
+
+    text = _safe_str(player_input).strip().lower()
+    semantic_kind = _safe_str(
+        _safe_dict(semantic_action_record).get("kind")
+        or _safe_dict(semantic_action_record).get("action_type")
+    ).strip().lower()
+
+    if semantic_kind == "defend" or any(
+        term in text for term in ("defend", "guard", "block", "brace", "take cover")
+    ):
+        return "defend"
+
+    if semantic_kind == "flee" or any(
+        term in text for term in ("flee", "run away", "retreat", "escape", "withdraw")
+    ):
+        return "flee"
+
+    if semantic_kind == "use_item" or any(
+        term in text for term in ("use ", "drink ", "quaff ", "consume ", "eat ")
+    ):
+        return "use_item"
+
+    return ""
+
+
+def _force_active_combat_utility_action(
+    runtime_state: Dict[str, Any],
+    action: Dict[str, Any],
+    semantic_action_record: Dict[str, Any],
+    player_input: str,
+) -> Dict[str, Any]:
+    combat_state = _get_combat_state(runtime_state)
+    if not _safe_dict(combat_state).get("active"):
+        return _safe_dict(action)
+
+    action = dict(_safe_dict(action))
+    text = _safe_str(player_input).strip().lower()
+    semantic_kind = _safe_str(
+        _safe_dict(semantic_action_record).get("kind")
+        or _safe_dict(semantic_action_record).get("action_type")
+    ).strip().lower()
+
+    if semantic_kind == "defend" or any(term in text for term in ("defend", "guard", "block", "brace", "take cover")):
+        action["action_type"] = "defend"
+        action.pop("target_id", None)
+        return action
+
+    if semantic_kind == "flee" or any(term in text for term in ("flee", "run away", "retreat", "escape", "withdraw")):
+        action["action_type"] = "flee"
+        action.pop("target_id", None)
+        return action
+
+    if semantic_kind == "use_item" or any(term in text for term in ("use ", "drink ", "quaff ", "consume ", "eat ")):
+        action["action_type"] = "use_item"
+        action.pop("target_id", None)
+        return action
+
+    return action
+
+
+def _extract_active_combat_state_for_turn(
+    runtime_state: Dict[str, Any],
+    resolved_result: Dict[str, Any] | None = None,
+) -> Dict[str, Any]:
+    combat_state = _safe_dict(_get_combat_state(runtime_state))
+    if combat_state.get("active"):
+        return combat_state
+
+    resolved_result = _safe_dict(resolved_result)
+    direct = _safe_dict(resolved_result.get("combat_state"))
+    if direct.get("active"):
+        return normalize_combat_state(direct)
+
+    interaction_result = _safe_dict(resolved_result.get("interaction_result"))
+    interaction_combat = _safe_dict(_safe_dict(interaction_result.get("combat_result")).get("combat_state"))
+    if interaction_combat.get("active"):
+        return normalize_combat_state(interaction_combat)
+
+    return combat_state
+
+
 def _lookup_actor_by_id(simulation_state: Dict[str, Any], actor_id: str) -> Dict[str, Any]:
     for collection_key in ("actor_states", "npc_states"):
         for actor in _safe_list(simulation_state.get(collection_key)):
@@ -5130,6 +5224,73 @@ def _action_requests_hostile_combat(action: Dict[str, Any], player_input: str) -
         hostile_terms = ("attack", "punch", "hit", "kick", "strike", "stab", "slash", "smash", "kill")
         return any(term in text for term in hostile_terms)
     return False
+
+
+def _action_requests_combat_defend(action: Dict[str, Any], player_input: str) -> bool:
+    action = _safe_dict(action)
+    action_type = _safe_str(action.get("action_type")).strip().lower()
+    text = _safe_str(player_input).strip().lower()
+    return action_type in {"defend", "block", "dodge", "guard"} or any(
+        term in text for term in ("defend", "block", "guard", "brace", "take cover")
+    )
+
+
+def _action_requests_combat_flee(action: Dict[str, Any], player_input: str) -> bool:
+    action = _safe_dict(action)
+    action_type = _safe_str(action.get("action_type")).strip().lower()
+    text = _safe_str(player_input).strip().lower()
+    return action_type in {"flee", "retreat", "escape"} or any(
+        term in text for term in ("flee", "run away", "retreat", "escape", "withdraw")
+    )
+
+
+def _action_requests_combat_use_item(action: Dict[str, Any], player_input: str) -> bool:
+    action = _safe_dict(action)
+    action_type = _safe_str(action.get("action_type")).strip().lower()
+    text = _safe_str(player_input).strip().lower()
+    return action_type == "use_item" or any(
+        term in text for term in ("use ", "drink ", "eat ", "consume ", "quaff ")
+    )
+
+
+def _infer_inventory_item_id_from_text(
+    simulation_state: Dict[str, Any],
+    action: Dict[str, Any],
+    player_input: str,
+) -> str:
+    explicit = _safe_str(action.get("item_id")).strip()
+    if explicit:
+        return explicit
+
+    text = _safe_str(player_input).strip().lower()
+    player_state = _safe_dict(simulation_state.get("player_state"))
+    inventory_state = normalize_inventory_state(_safe_dict(player_state.get("inventory_state")))
+
+    for item in _safe_list(inventory_state.get("items")):
+        item = _safe_dict(item)
+        item_id = _safe_str(item.get("item_id")).strip()
+        if not item_id:
+            continue
+        names = [
+            _safe_str(item.get("name")),
+            _safe_str(item.get("definition_id")),
+            item_id,
+        ]
+        names.extend([_safe_str(x) for x in _safe_list(item.get("aliases"))])
+        for name in names:
+            name_lc = name.strip().lower()
+            if name_lc and name_lc in text:
+                return item_id
+
+    # Safe fallback for common phrasing like "drink a potion".
+    for item in _safe_list(inventory_state.get("items")):
+        item = _safe_dict(item)
+        item_id = _safe_str(item.get("item_id")).strip()
+        name_lc = _safe_str(item.get("name")).strip().lower()
+        if item_id and any(token in name_lc for token in ("potion", "draught", "elixir", "food", "ration")):
+            return item_id
+
+    return ""
 
 
 def _interaction_trace_enabled(runtime_state: Dict[str, Any]) -> bool:
@@ -5965,7 +6126,7 @@ def _use_item_action(
     action: Dict[str, Any],
 ) -> Dict[str, Any]:
     item_id = _safe_str(action.get("item_id")).strip()
-    result = apply_item_use(simulation_state, item_id)
+    result = apply_item_effects(simulation_state, item_id)
     return {
         "simulation_state": _safe_dict(result.get("simulation_state")),
         "result": _safe_dict(result.get("result")),
@@ -6224,7 +6385,7 @@ def _apply_authoritative_action(
         blocked_result["effect_result"] = {
             "items_added": [],
             "service_effects": {},
-        }
+            }
         return {
             "simulation_state": gated_state,
             "result": blocked_result,
@@ -6733,8 +6894,11 @@ def derive_action_candidates(simulation_state, player_input, runtime_state=None)
         )
     if any(w in text for w in ["equip", "wear", "wield"]):
         candidates.append({"action_type": "equip_item", "priority": 5})
-    if any(w in text for w in ["use", "drink", "eat", "consume"]):
-        candidates.append({"action_type": "use_item", "priority": 5})
+    if any(w in text for w in ["use", "drink", "eat", "consume", "quaff"]):
+        candidates.append({"action_type": "use_item", "priority": 9})
+
+    if any(w in text for w in ["flee", "retreat", "escape", "withdraw", "run away"]):
+        candidates.append({"action_type": "flee", "priority": 10})
 
     if not candidates:
         # Open-ended fallback: use observe as the safe minimum,
@@ -6780,6 +6944,666 @@ def save_runtime_session(session: Dict[str, Any]) -> Dict[str, Any]:
     return save_canonical_session(session, compact=compact)
 
 
+def _find_active_combat_state_deep(payload: Any, *, max_depth: int = 6) -> Dict[str, Any]:
+    """Find an active combat_state nested anywhere inside a turn payload.
+
+    J19-J21 rescue path:
+    In the current turn pipeline, active combat state can be present in the
+    authoritative result payload even when runtime_state has not yet been
+    updated. This helper lets combat utility actions recover that state before
+    unsupported_interaction_kind becomes the final visible result.
+    """
+    seen: set[int] = set()
+
+    def walk(value: Any, depth: int) -> Dict[str, Any]:
+        if depth > max_depth:
+            return {}
+        if not isinstance(value, (dict, list)):
+            return {}
+
+        obj_id = id(value)
+        if obj_id in seen:
+            return {}
+        seen.add(obj_id)
+
+        if isinstance(value, dict):
+            direct = _safe_dict(value.get("combat_state"))
+            if direct.get("active"):
+                return normalize_combat_state(direct)
+
+            for nested in value.values():
+                found = walk(nested, depth + 1)
+                if found.get("active"):
+                    return found
+
+        if isinstance(value, list):
+            for nested in value:
+                found = walk(nested, depth + 1)
+                if found.get("active"):
+                    return found
+
+        return {}
+
+    return walk(payload, 0)
+
+
+def _combat_utility_kind_from_semantic_or_text(
+    semantic_action_record: Dict[str, Any],
+    player_input: str,
+) -> str:
+    text = _safe_str(player_input).strip().lower()
+    semantic_kind = _safe_str(
+        _safe_dict(semantic_action_record).get("kind")
+        or _safe_dict(semantic_action_record).get("action_type")
+    ).strip().lower()
+
+    if semantic_kind == "defend" or any(
+        term in text for term in ("defend", "guard", "block", "brace", "take cover")
+    ):
+        return "defend"
+
+    if semantic_kind == "flee" or any(
+        term in text for term in ("flee", "run away", "retreat", "escape", "withdraw")
+    ):
+        return "flee"
+
+    if semantic_kind == "use_item" or any(
+        term in text for term in ("use ", "drink ", "quaff ", "consume ", "eat ")
+    ):
+        return "use_item"
+
+    return ""
+
+
+def _extract_semantic_action_record_for_turn(
+    semantic_action_record: Dict[str, Any],
+    authoritative: Dict[str, Any] | None = None,
+) -> Dict[str, Any]:
+    """Return the best semantic action record available for this turn.
+
+    Some semantic action records are produced inside _apply_authoritative_action(...)
+    and therefore are not available in the earlier local semantic_action_record
+    variable. J19-J21 post-authoritative combat utility rescue must inspect the
+    authoritative result shape too, otherwise commands like "I flee" remain
+    stuck as unsupported_interaction_kind even though authoritative.result has
+    semantic_action_v2.kind == "flee".
+    """
+    local = _safe_dict(semantic_action_record)
+    if _safe_str(local.get("kind") or local.get("action_type")).strip():
+        return local
+
+    authoritative = _safe_dict(authoritative)
+    result = _safe_dict(authoritative.get("result"))
+
+    direct = _safe_dict(result.get("semantic_action_v2"))
+    if _safe_str(direct.get("kind") or direct.get("action_type")).strip():
+        return direct
+
+    interaction_result = _safe_dict(result.get("interaction_result"))
+    interaction_semantic = _safe_dict(interaction_result.get("semantic_action_v2"))
+    if _safe_str(interaction_semantic.get("kind") or interaction_semantic.get("action_type")).strip():
+        return interaction_semantic
+
+    general_interaction_result = _safe_dict(result.get("general_interaction_result"))
+    general_semantic = _safe_dict(general_interaction_result.get("semantic_action_v2"))
+    if _safe_str(general_semantic.get("kind") or general_semantic.get("action_type")).strip():
+        return general_semantic
+
+    nested_interaction = _safe_dict(general_interaction_result.get("interaction_result"))
+    nested_semantic = _safe_dict(nested_interaction.get("semantic_action_v2"))
+    if _safe_str(nested_semantic.get("kind") or nested_semantic.get("action_type")).strip():
+        return nested_semantic
+
+    return local
+
+
+def _resolved_result_is_unsupported_combat_utility(
+    resolved_result: Dict[str, Any],
+    player_input: str,
+) -> str:
+    """Return defend/flee/use_item when a finished result should be rescued.
+
+    This is the last-chance J19-J21 guard. Earlier branches can miss because
+    combat_state is assembled late in the current runtime pipeline. By the time
+    resolved_result is fully populated, we can reliably see both:
+    - semantic_action_v2.kind
+    - combat_state.active
+    """
+    resolved_result = _safe_dict(resolved_result)
+    combat_state = _safe_dict(resolved_result.get("combat_state"))
+    if not combat_state.get("active"):
+        combat_state = _find_active_combat_state_deep(resolved_result)
+    if not combat_state.get("active"):
+        return ""
+
+    reason = _safe_str(
+        resolved_result.get("visible_interaction_reason")
+        or _safe_dict(resolved_result.get("interaction_result")).get("reason")
+    ).strip()
+
+    if reason not in {
+        "unsupported_interaction_kind",
+        "no_supported_semantic_action_detected",
+        "",
+    }:
+        return ""
+
+    semantic = _safe_dict(resolved_result.get("semantic_action_v2"))
+    if not semantic:
+        semantic = _safe_dict(_safe_dict(resolved_result.get("interaction_result")).get("semantic_action_v2"))
+    if not semantic:
+        semantic = _safe_dict(_safe_dict(resolved_result.get("general_interaction_result")).get("semantic_action_v2"))
+    if not semantic:
+        semantic = _safe_dict(
+            _safe_dict(
+                _safe_dict(resolved_result.get("general_interaction_result")).get("interaction_result")
+            ).get("semantic_action_v2")
+        )
+
+    return _combat_utility_kind_from_semantic_or_text(semantic, player_input)
+
+
+def _rescue_final_apply_turn_combat_utility_result(
+    final_result: Dict[str, Any],
+    player_input: str,
+) -> Dict[str, Any]:
+    """Last-mile J19-J21 rescue after build_apply_turn_response(...).
+
+    Some combat utility failures only become visible after the final apply-turn
+    response is assembled. At that point the useful fields may be siblings:
+
+    - final_result.semantic_action_v2.kind == flee / defend / use_item
+    - final_result.combat_state.active == true
+    - final_result.visible_interaction_reason == unsupported_interaction_kind
+    - final_result.resolved_result == {}
+
+    The earlier in-authoritative rescue cannot see that final sibling shape.
+    This wrapper-level rescue rewrites the completed unsupported result into an
+    authoritative combat utility result before the manual transcript and UI see it.
+    """
+    final_result = dict(_safe_dict(final_result))
+
+    resolved_result = dict(_safe_dict(final_result.get("resolved_result")))
+    result_obj = _safe_dict(final_result.get("result")) or _safe_parse_mapping_payload(
+        final_result.get("result")
+    )
+
+    candidate = dict(resolved_result)
+
+    if not _safe_dict(candidate.get("combat_state")).get("active"):
+        candidate["combat_state"] = _safe_dict(final_result.get("combat_state"))
+    if not _safe_dict(candidate.get("combat_state")).get("active"):
+        candidate["combat_state"] = _safe_dict(result_obj.get("combat_state"))
+    if not _safe_dict(candidate.get("combat_state")).get("active"):
+        candidate["combat_state"] = _find_active_combat_state_deep(final_result)
+
+    if not _safe_dict(candidate.get("semantic_action_v2")):
+        candidate["semantic_action_v2"] = _safe_dict(final_result.get("semantic_action_v2"))
+    if not _safe_dict(candidate.get("semantic_action_v2")):
+        candidate["semantic_action_v2"] = _safe_dict(result_obj.get("semantic_action_v2"))
+
+    if not _safe_dict(candidate.get("interaction_result")):
+        candidate["interaction_result"] = _safe_dict(final_result.get("interaction_result"))
+    if not _safe_dict(candidate.get("interaction_result")):
+        candidate["interaction_result"] = _safe_dict(result_obj.get("interaction_result"))
+
+    if not _safe_dict(candidate.get("general_interaction_result")):
+        candidate["general_interaction_result"] = _safe_dict(final_result.get("general_interaction_result"))
+    if not _safe_dict(candidate.get("general_interaction_result")):
+        candidate["general_interaction_result"] = _safe_dict(result_obj.get("general_interaction_result"))
+
+    if not _safe_str(candidate.get("visible_interaction_reason")).strip():
+        candidate["visible_interaction_reason"] = _safe_str(
+            final_result.get("visible_interaction_reason")
+            or result_obj.get("visible_interaction_reason")
+            or _safe_dict(candidate.get("interaction_result")).get("reason")
+            or _safe_dict(
+                _safe_dict(candidate.get("general_interaction_result")).get("interaction_result")
+            ).get("reason")
+        ).strip()
+
+    utility_kind = _resolved_result_is_unsupported_combat_utility(candidate, player_input)
+    if not utility_kind:
+        return final_result
+
+    combat_state = normalize_combat_state(_safe_dict(candidate.get("combat_state")))
+    if not combat_state.get("active"):
+        return final_result
+
+    session = _safe_dict(final_result.get("session"))
+    simulation_state = _ensure_simulation_state(
+        _safe_dict(session.get("simulation_state"))
+        or _safe_dict(final_result.get("simulation_state"))
+    )
+    runtime_state = (
+        _safe_dict(session.get("runtime_state"))
+        or _safe_dict(final_result.get("runtime_state"))
+        or {}
+    )
+
+    turn_id = _safe_str(final_result.get("turn_id")).strip() or _build_turn_id(runtime_state)
+    tick = _safe_int(final_result.get("tick"), _safe_int(runtime_state.get("tick"), 0))
+    player_actor_id = "player"
+
+    combat_result: Dict[str, Any] = {}
+    npc_combat_result: Dict[str, Any] = {}
+
+    current_actor_id = get_current_actor_id(combat_state)
+    if current_actor_id and _safe_str(current_actor_id) != player_actor_id:
+        resolved_result = _build_combat_gate_result(current_actor_id, player_actor_id)
+
+    elif utility_kind == "defend":
+        defense_resolution = resolve_defend(
+            simulation_state,
+            combat_state,
+            player_actor_id,
+        )
+        combat_result = defense_resolution.to_dict()
+        simulation_state, combat_state = apply_defense_resolution(
+            simulation_state,
+            combat_state,
+            combat_result,
+        )
+        resolved_result["action_type"] = "defend"
+        resolved_result["outcome"] = "defended"
+        resolved_result["visible_interaction_reason"] = "combat_defend"
+        resolved_result["combat_result"] = combat_result
+
+    elif utility_kind == "flee":
+        flee_resolution = resolve_flee(
+            simulation_state,
+            combat_state,
+            player_actor_id,
+            turn_id=turn_id,
+            tick=tick,
+        )
+        combat_result = flee_resolution.to_dict()
+        simulation_state, combat_state = apply_flee_resolution(
+            simulation_state,
+            combat_state,
+            combat_result,
+        )
+        resolved_result["action_type"] = "flee"
+        resolved_result["outcome"] = "fled" if combat_result.get("success") else "flee_failed"
+        resolved_result["visible_interaction_reason"] = "combat_flee"
+        resolved_result["combat_result"] = combat_result
+
+    elif utility_kind == "use_item":
+        # J20:
+        # The normal item/consumable runtime may already have resolved and
+        # applied the item before this final rescue runs. Prefer that successful
+        # result instead of trying to infer/apply the item a second time, which
+        # can produce item_id="" and unknown_item after the item was consumed.
+        prior_consumable_result = _safe_dict(
+            final_result.get("consumable_result")
+            or result_obj.get("consumable_result")
+            or resolved_result.get("consumable_result")
+        )
+        if not _is_successful_consumable_result(prior_consumable_result):
+            prior_consumable_result = _extract_successful_consumable_result_from_payload(
+                {
+                    "final_result": final_result,
+                    "result": result_obj,
+                    "resolved_result": resolved_result,
+                }
+            )
+        if not _is_successful_consumable_result(prior_consumable_result):
+            prior_consumable_result = _extract_successful_consumable_result_from_string_payload(
+                final_result.get("result")
+            )
+
+        prior_inventory_result = _safe_dict(
+            final_result.get("inventory_result")
+            or result_obj.get("inventory_result")
+            or resolved_result.get("inventory_result")
+        )
+
+        combat_result = (
+            _combat_result_from_consumable_result(prior_consumable_result)
+            or _combat_result_from_consumable_result(prior_inventory_result)
+        )
+
+        if not combat_result:
+            item_id = _infer_inventory_item_id_from_text(simulation_state, {}, player_input)
+            item_result = apply_item_effects(simulation_state, item_id)
+            simulation_state = _ensure_simulation_state(_safe_dict(item_result.get("simulation_state")))
+            combat_result = _safe_dict(item_result.get("result"))
+            combat_result.setdefault("action_type", "use_item")
+            combat_result.setdefault("combat_id", _safe_str(combat_state.get("combat_id")))
+            combat_result.setdefault(
+                "notes",
+                ["combat_item_used"] if combat_result.get("ok") else ["combat_item_failed"],
+            )
+
+        resolved_result["action_type"] = "use_item"
+        resolved_result["outcome"] = "item_used" if combat_result.get("ok") else "item_use_failed"
+        resolved_result["visible_interaction_reason"] = "combat_use_item"
+        resolved_result["combat_result"] = combat_result
+        resolved_result["inventory_result"] = combat_result
+        resolved_result["consumable_result"] = prior_consumable_result or combat_result
+
+    if combat_state.get("active"):
+        combat_state = advance_turn(combat_state)
+        current_after_player = get_current_actor_id(combat_state)
+        if current_after_player and not _actor_is_player(simulation_state, current_after_player):
+            simulation_state, combat_state, npc_combat_result = run_npc_turn(
+                simulation_state,
+                combat_state,
+                tick=tick,
+            )
+            combat_state = evaluate_combat_exit(simulation_state, combat_state)
+
+    runtime_state = _set_combat_state(runtime_state, combat_state)
+    resolved_result["combat_state"] = combat_state
+    resolved_result["interaction_result"] = {}
+    resolved_result["general_interaction_result"] = {}
+
+    if npc_combat_result:
+        resolved_result["npc_combat_result"] = npc_combat_result
+
+    if not session:
+        session = {}
+    session["simulation_state"] = simulation_state
+    session["runtime_state"] = runtime_state
+
+    reason = _safe_str(resolved_result.get("visible_interaction_reason")).strip()
+
+    final_result["session"] = session
+    final_result["simulation_state"] = simulation_state
+    final_result["runtime_state"] = runtime_state
+    final_result["resolved_result"] = resolved_result
+    final_result["combat_result"] = combat_result
+    final_result["npc_combat_result"] = npc_combat_result
+    final_result["combat_state"] = combat_state
+    final_result["interaction_result"] = {}
+    final_result["general_interaction_result"] = {}
+    final_result["visible_interaction_reason"] = reason
+    final_result["action_type"] = utility_kind
+    final_result["outcome"] = _safe_str(resolved_result.get("outcome"))
+
+    if utility_kind == "use_item":
+        final_result["inventory_result"] = combat_result
+
+    # Keep non-LLM fallback narration deterministic for manual/UI visibility.
+    final_result["narration"] = f"Result: {reason}"
+    final_result["final_narration"] = f"Result: {reason}"
+    final_result["summary"] = f"Result: {reason}"
+
+    return final_result
+
+
+def _combat_result_from_consumable_result(consumable_result: Dict[str, Any]) -> Dict[str, Any]:
+    consumable_result = _safe_dict(consumable_result)
+    if not consumable_result:
+        return {}
+
+    reason = _safe_str(consumable_result.get("reason")).strip()
+    effect_result = _safe_dict(consumable_result.get("effect_result"))
+    applied = bool(effect_result.get("applied"))
+
+    if reason != "consumable_used" and not applied:
+        return {}
+
+    item_id = _safe_str(consumable_result.get("item_id")).strip()
+    combat_result = dict(consumable_result)
+    combat_result["ok"] = True
+    combat_result["action_type"] = "use_item"
+    combat_result["item_id"] = item_id
+    combat_result["reason"] = reason or "consumable_used"
+    combat_result["notes"] = ["combat_item_used"]
+    return combat_result
+
+
+def _is_successful_consumable_result(value: Dict[str, Any]) -> bool:
+    value = _safe_dict(value)
+    if not value:
+        return False
+    if _safe_str(value.get("reason")).strip() == "consumable_used":
+        return True
+    if bool(_safe_dict(value.get("effect_result")).get("applied")):
+        return True
+    return False
+
+
+def _extract_successful_consumable_result_from_payload(payload: Any, *, max_depth: int = 7) -> Dict[str, Any]:
+    """Find a successful consumable_result anywhere in a nested apply-turn payload."""
+    seen: set[int] = set()
+
+    def walk(value: Any, depth: int) -> Dict[str, Any]:
+        if depth > max_depth:
+            return {}
+        if not isinstance(value, (dict, list)):
+            return {}
+
+        obj_id = id(value)
+        if obj_id in seen:
+            return {}
+        seen.add(obj_id)
+
+        if isinstance(value, dict):
+            direct = _safe_dict(value.get("consumable_result"))
+            if _is_successful_consumable_result(direct):
+                return direct
+
+            # Some payloads expose the consumable result as the interaction
+            # result itself rather than under a consumable_result key.
+            if _is_successful_consumable_result(value):
+                return _safe_dict(value)
+
+            for nested in value.values():
+                found = walk(nested, depth + 1)
+                if found:
+                    return found
+
+        if isinstance(value, list):
+            for nested in value:
+                found = walk(nested, depth + 1)
+                if found:
+                    return found
+
+        return {}
+
+    return walk(payload, 0)
+
+
+def _safe_parse_mapping_payload(value: Any) -> Dict[str, Any]:
+    """Parse dict payloads that were serialized as JSON or Python repr strings.
+
+    Manual/apply-turn payloads sometimes carry the authoritative result as a
+    stringified Python dict. J20 consumable success can live only inside that
+    string, so plain _safe_dict(...) cannot see it.
+    """
+    if isinstance(value, dict):
+        return _safe_dict(value)
+    if not isinstance(value, str):
+        return {}
+
+    text = value.strip()
+    if not text or not text.startswith("{"):
+        return {}
+
+    try:
+        parsed = json.loads(text)
+        return _safe_dict(parsed)
+    except Exception:
+        pass
+
+    try:
+        parsed = ast.literal_eval(text)
+        return _safe_dict(parsed)
+    except Exception:
+        return {}
+
+
+def _extract_successful_consumable_result_from_string_payload(value: Any) -> Dict[str, Any]:
+    parsed = _safe_parse_mapping_payload(value)
+    if not parsed:
+        return {}
+    return _extract_successful_consumable_result_from_payload(parsed)
+
+
+def _mirror_rescued_combat_utility_result(final_result: Dict[str, Any]) -> Dict[str, Any]:
+    """Ensure rescued J19-J21 results are consistent at top level.
+
+    The wrapper-level rescue can successfully rewrite final_result["resolved_result"],
+    but later apply_turn enrichment can leave old sibling fields in place:
+
+    - final_result["combat_result"] == {}
+    - final_result["visible_interaction_reason"] == "unsupported_interaction_kind"
+    - final_result["interaction_result"]["reason"] == "unsupported_interaction_kind"
+
+    Manual validation and UI code often read the top-level fields, so mirror the
+    rescued combat utility result back to the final top-level payload.
+    """
+    final_result = dict(_safe_dict(final_result))
+    resolved_result = _safe_dict(final_result.get("resolved_result"))
+
+    reason = _safe_str(resolved_result.get("visible_interaction_reason")).strip()
+    if reason not in {"combat_defend", "combat_flee", "combat_use_item"}:
+        return final_result
+
+    combat_result = _safe_dict(resolved_result.get("combat_result"))
+    if not combat_result:
+        return final_result
+
+    final_result["combat_result"] = combat_result
+    final_result["visible_interaction_reason"] = reason
+    final_result["action_type"] = _safe_str(resolved_result.get("action_type")).strip()
+    final_result["outcome"] = _safe_str(resolved_result.get("outcome")).strip()
+    final_result["interaction_result"] = {}
+    final_result["general_interaction_result"] = {}
+
+    if _safe_dict(resolved_result.get("combat_state")):
+        final_result["combat_state"] = _safe_dict(resolved_result.get("combat_state"))
+
+    if _safe_dict(resolved_result.get("npc_combat_result")):
+        final_result["npc_combat_result"] = _safe_dict(resolved_result.get("npc_combat_result"))
+
+    if reason == "combat_use_item":
+        final_result["inventory_result"] = _safe_dict(
+            resolved_result.get("inventory_result") or combat_result
+        )
+        final_result["consumable_result"] = _safe_dict(
+            resolved_result.get("consumable_result")
+            or final_result.get("consumable_result")
+            or combat_result
+        )
+
+    final_result["narration"] = f"Result: {reason}"
+    final_result["final_narration"] = f"Result: {reason}"
+    final_result["summary"] = f"Result: {reason}"
+
+    # Some transcript/debug builders stringify final_result["result"]. Keep it
+    # aligned too when it is a dict payload.
+    result_obj = dict(
+        _safe_dict(final_result.get("result"))
+        or _safe_parse_mapping_payload(final_result.get("result"))
+    )
+    if result_obj:
+        result_obj["combat_result"] = combat_result
+        result_obj["visible_interaction_reason"] = reason
+        result_obj["action_type"] = final_result["action_type"]
+        result_obj["outcome"] = final_result["outcome"]
+        result_obj["interaction_result"] = {}
+        result_obj["general_interaction_result"] = {}
+        if reason == "combat_use_item":
+            result_obj["inventory_result"] = _safe_dict(
+                final_result.get("inventory_result") or combat_result
+            )
+            result_obj["consumable_result"] = _safe_dict(
+                final_result.get("consumable_result") or combat_result
+            )
+        final_result["result"] = result_obj
+
+    return final_result
+
+
+def _reconcile_combat_use_item_with_successful_consumable(final_result: Dict[str, Any]) -> Dict[str, Any]:
+    """Final J20 consistency pass.
+
+    A combat use-item turn can have a successful consumable result from the
+    general interaction runtime while the later combat utility rescue still
+    mirrors a failed fallback result:
+
+        combat_result.reason = unknown_item
+        combat_result.item_id = ""
+
+    If any successful consumable_result exists anywhere in the final payload,
+    prefer it as the authoritative combat_result/inventory_result.
+    """
+    final_result = dict(_safe_dict(final_result))
+
+    reason = _safe_str(final_result.get("visible_interaction_reason")).strip()
+    resolved_result = dict(_safe_dict(final_result.get("resolved_result")))
+    resolved_reason = _safe_str(resolved_result.get("visible_interaction_reason")).strip()
+
+    if reason != "combat_use_item" and resolved_reason != "combat_use_item":
+        return final_result
+
+    successful_consumable = _extract_successful_consumable_result_from_payload(final_result)
+    if not successful_consumable:
+        successful_consumable = _extract_successful_consumable_result_from_string_payload(
+            final_result.get("result")
+        )
+
+    if not successful_consumable:
+        return final_result
+
+    combat_result = _combat_result_from_consumable_result(successful_consumable)
+    if not combat_result:
+        return final_result
+
+    combat_result["combat_id"] = _safe_str(
+        _safe_dict(final_result.get("combat_state")).get("combat_id")
+        or _safe_dict(resolved_result.get("combat_state")).get("combat_id")
+        or combat_result.get("combat_id")
+    )
+    combat_result["action_type"] = "use_item"
+    combat_result["ok"] = True
+    combat_result["notes"] = ["combat_item_used"]
+
+    resolved_result["action_type"] = "use_item"
+    resolved_result["outcome"] = "item_used"
+    resolved_result["visible_interaction_reason"] = "combat_use_item"
+    resolved_result["combat_result"] = combat_result
+    resolved_result["inventory_result"] = combat_result
+    resolved_result["consumable_result"] = successful_consumable
+    resolved_result["interaction_result"] = {}
+    resolved_result["general_interaction_result"] = {}
+
+    final_result["resolved_result"] = resolved_result
+    final_result["combat_result"] = combat_result
+    final_result["raw_combat_result"] = combat_result
+    final_result["inventory_result"] = combat_result
+    final_result["consumable_result"] = successful_consumable
+    final_result["visible_interaction_reason"] = "combat_use_item"
+    final_result["action_type"] = "use_item"
+    final_result["outcome"] = "item_used"
+    final_result["interaction_result"] = {}
+    final_result["general_interaction_result"] = {}
+    final_result["narration"] = "Result: combat_use_item"
+    final_result["final_narration"] = "Result: combat_use_item"
+    final_result["summary"] = "Result: combat_use_item"
+
+    result_obj = dict(
+        _safe_dict(final_result.get("result"))
+        or _safe_parse_mapping_payload(final_result.get("result"))
+    )
+    if result_obj:
+        result_obj["combat_result"] = combat_result
+        result_obj["raw_combat_result"] = combat_result
+        result_obj["inventory_result"] = combat_result
+        result_obj["consumable_result"] = successful_consumable
+        result_obj["visible_interaction_reason"] = "combat_use_item"
+        result_obj["action_type"] = "use_item"
+        result_obj["outcome"] = "item_used"
+        result_obj["interaction_result"] = {}
+        result_obj["general_interaction_result"] = {}
+        final_result["result"] = result_obj
+
+    return final_result
+
+
 def _apply_turn_authoritative(
     session_id: str,
     player_input: str,
@@ -6800,6 +7624,7 @@ def _apply_turn_authoritative(
     runtime_state = _copy_dict(session.get("runtime_state"))
     setup = apply_adventure_defaults(_copy_dict(session.get("setup_payload")))
     simulation_state = _ensure_simulation_state(_safe_dict(session.get("simulation_state")))
+    player_actor_id = "player"
     _t_load = _time.monotonic()
 
     if performance_override:
@@ -6867,7 +7692,21 @@ def _apply_turn_authoritative(
         runtime_state.setdefault("turn_execution_index", {})
 
     mode = _safe_str(runtime_state.get("mode")).strip().lower() or "live"
-    current_tick = int(runtime_state.get("tick", 0) or 0)
+    current_tick = _safe_int(runtime_state.get("tick"), 0)
+
+    # Stable turn identifiers for every authoritative path.
+    #
+    # J19-J21 added early/post-authoritative combat utility paths for:
+    # - defend
+    # - use_item
+    # - flee
+    #
+    # Those branches can return before the older lower-scope turn_id/final_tick
+    # locals are initialized. Define them here so all branches can safely use
+    # the same deterministic turn metadata.
+    turn_id = _build_turn_id(runtime_state)
+    final_tick = current_tick
+
     ambient_tick_command = is_ambient_tick_command(player_input)
     ambient_tick_result = {}
     recall_request_conversation_result = {}
@@ -7040,6 +7879,14 @@ def _apply_turn_authoritative(
     action_metadata["semantic_action"] = semantic_action_record
     action["metadata"] = action_metadata
 
+    action = _force_active_combat_utility_action(
+        runtime_state,
+        action,
+        semantic_action_record,
+        player_input,
+    )
+    action_type = _safe_str(action.get("action_type")).strip()
+
     service_after_semantic = resolve_service_turn(
         player_input=player_input,
         action=action,
@@ -7066,9 +7913,320 @@ def _apply_turn_authoritative(
         semantic_action_record=semantic_action_record,
     )
 
+    action = _force_active_combat_utility_action(
+        runtime_state,
+        action,
+        semantic_action_record,
+        player_input,
+    )
+    action_type = _safe_str(action.get("action_type")).strip()
+
+    active_combat_utility_kind = _active_combat_utility_kind(
+        runtime_state,
+        semantic_action_record,
+        player_input,
+    )
+
+    if active_combat_utility_kind:
+        combat_state = _safe_dict(_get_combat_state(runtime_state))
+        combat_state = normalize_combat_state(combat_state)
+
+        after_action_state = _ensure_simulation_state(simulation_state)
+        resolved_result: Dict[str, Any] = {
+            "action_type": active_combat_utility_kind,
+            "outcome": active_combat_utility_kind,
+            "visible_interaction_reason": f"combat_{active_combat_utility_kind}",
+            "semantic_action_v2": semantic_action_record,
+            "interaction_result": {},
+            "conversation_result": {
+                "triggered": False,
+                "reason": "combat_utility_action",
+                "source": "deterministic_conversation_thread_runtime",
+            },
+        }
+
+        combat_result: Dict[str, Any] = {}
+        npc_combat_result: Dict[str, Any] = {}
+
+        current_actor_id = get_current_actor_id(combat_state)
+        if current_actor_id and _safe_str(current_actor_id) != _safe_str(player_actor_id):
+            resolved_result = _build_combat_gate_result(current_actor_id, player_actor_id)
+            grounded = _derive_grounded_scene_context(after_action_state, runtime_state, resolved_result)
+            narration_context = {
+                "player_input": player_input,
+                "action_type": active_combat_utility_kind,
+                "resolved_result": resolved_result,
+                "simulation_state": after_action_state,
+                "runtime_state": runtime_state,
+                "combat_result": {},
+                "npc_combat_result": {},
+                "combat_state": combat_state,
+                "grounded": grounded,
+                "xp_result": {},
+                "skill_xp_result": {},
+                "level_up": [],
+                "skill_level_ups": [],
+                "settings": runtime_state.get("runtime_settings", {}),
+                "conversation_threads": build_conversation_thread_prompt_context(
+                    runtime_state,
+                     current_tick=current_tick,
+                    limit=4,
+                ),
+            }
+            return {
+                "ok": True,
+                "simulation_state": after_action_state,
+                "runtime_state": runtime_state,
+                "result": resolved_result,
+                "narration_context": narration_context,
+                "turn_id": turn_id,
+                "tick": current_tick,
+            }
+
+        if active_combat_utility_kind == "defend":
+            defense_resolution = resolve_defend(
+                after_action_state,
+                combat_state,
+                _safe_str(player_actor_id),
+            )
+            combat_result = defense_resolution.to_dict()
+            after_action_state, combat_state = apply_defense_resolution(
+                after_action_state,
+                combat_state,
+                combat_result,
+            )
+            resolved_result["outcome"] = "defended"
+            resolved_result["combat_result"] = combat_result
+
+        elif active_combat_utility_kind == "flee":
+            flee_resolution = resolve_flee(
+                after_action_state,
+                combat_state,
+                _safe_str(player_actor_id),
+                turn_id=_build_turn_id(runtime_state),
+                tick=current_tick,
+            )
+            combat_result = flee_resolution.to_dict()
+            after_action_state, combat_state = apply_flee_resolution(
+                after_action_state,
+                combat_state,
+                combat_result,
+            )
+            resolved_result["outcome"] = "fled" if combat_result.get("success") else "flee_failed"
+            resolved_result["combat_result"] = combat_result
+
+        elif active_combat_utility_kind == "use_item":
+            item_id = _infer_inventory_item_id_from_text(after_action_state, action, player_input)
+            item_result = apply_item_effects(after_action_state, item_id)
+            after_action_state = _ensure_simulation_state(_safe_dict(item_result.get("simulation_state")))
+            combat_result = _safe_dict(item_result.get("result"))
+            combat_result.setdefault("action_type", "use_item")
+            combat_result.setdefault("combat_id", _safe_str(combat_state.get("combat_id")))
+            combat_result.setdefault(
+                "notes",
+                ["combat_item_used"] if combat_result.get("ok") else ["combat_item_failed"],
+            )
+            resolved_result["outcome"] = "item_used" if combat_result.get("ok") else "item_use_failed"
+            resolved_result["combat_result"] = combat_result
+            resolved_result["inventory_result"] = combat_result
+
+        if combat_state.get("active"):
+            combat_state = advance_turn(combat_state)
+            current_after_player = get_current_actor_id(combat_state)
+            if current_after_player and not _actor_is_player(after_action_state, current_after_player):
+                after_action_state, combat_state, npc_combat_result = run_npc_turn(
+                    after_action_state,
+                    combat_state,
+                    tick=current_tick,
+                )
+                combat_state = evaluate_combat_exit(after_action_state, combat_state)
+
+        runtime_state = _set_combat_state(runtime_state, combat_state)
+
+        if npc_combat_result:
+            resolved_result["npc_combat_result"] = npc_combat_result
+
+        grounded = _derive_grounded_scene_context(after_action_state, runtime_state, resolved_result)
+        narration_context = {
+            "player_input": player_input,
+            "action_type": active_combat_utility_kind,
+            "resolved_result": resolved_result,
+            "simulation_state": after_action_state,
+            "runtime_state": runtime_state,
+            "combat_result": combat_result,
+            "npc_combat_result": npc_combat_result,
+            "combat_state": combat_state,
+            "grounded": grounded,
+            "xp_result": {},
+            "skill_xp_result": {},
+            "level_up": [],
+            "skill_level_ups": [],
+            "settings": runtime_state.get("runtime_settings", {}),
+            "conversation_threads": build_conversation_thread_prompt_context(
+                runtime_state,
+                current_tick=current_tick,
+                limit=4,
+            ),
+        }
+
+        return {
+            "ok": True,
+            "simulation_state": after_action_state,
+            "runtime_state": runtime_state,
+            "result": resolved_result,
+            "narration_context": narration_context,
+            "turn_id": _build_turn_id(runtime_state),
+            "tick": current_tick,
+        }
+
     before_state = copy.deepcopy(simulation_state)
     authoritative = _apply_authoritative_action(simulation_state, runtime_state, action)
     authoritative_simulation_state = _safe_dict(authoritative.get("simulation_state"))
+
+    post_authoritative_semantic_action_record = _extract_semantic_action_record_for_turn(
+        semantic_action_record,
+        authoritative,
+    )
+    post_authoritative_utility_kind = _combat_utility_kind_from_semantic_or_text(
+        post_authoritative_semantic_action_record,
+        player_input,
+    )
+    post_authoritative_combat_state = _find_active_combat_state_deep(authoritative)
+
+    # J19-J21:
+    # Active-combat utility commands may not see active combat in runtime_state
+    # before _apply_authoritative_action(...). In that case, the generic
+    # interaction runtime can return unsupported_interaction_kind while carrying
+    # the active combat_state inside the authoritative payload. Rescue those
+    # commands here and resolve them as combat actions before the unsupported
+    # interaction becomes the final visible result.
+    if post_authoritative_utility_kind and post_authoritative_combat_state.get("active"):
+        utility_turn_id = _build_turn_id(runtime_state)
+        utility_tick = current_tick
+        combat_state = normalize_combat_state(post_authoritative_combat_state)
+        after_action_state = _ensure_simulation_state(authoritative_simulation_state or simulation_state)
+
+        resolved_result: Dict[str, Any] = {
+            "action_type": post_authoritative_utility_kind,
+            "outcome": post_authoritative_utility_kind,
+            "visible_interaction_reason": f"combat_{post_authoritative_utility_kind}",
+            "semantic_action_v2": post_authoritative_semantic_action_record,
+            "interaction_result": {},
+            "conversation_result": {
+                "triggered": False,
+                "reason": "combat_utility_action",
+                "source": "deterministic_conversation_thread_runtime",
+            },
+        }
+
+        combat_result: Dict[str, Any] = {}
+        npc_combat_result: Dict[str, Any] = {}
+
+        current_actor_id = get_current_actor_id(combat_state)
+        if current_actor_id and _safe_str(current_actor_id) != _safe_str(player_actor_id):
+            resolved_result = _build_combat_gate_result(current_actor_id, player_actor_id)
+
+        elif post_authoritative_utility_kind == "defend":
+            defense_resolution = resolve_defend(
+                after_action_state,
+                combat_state,
+                _safe_str(player_actor_id),
+            )
+            combat_result = defense_resolution.to_dict()
+            after_action_state, combat_state = apply_defense_resolution(
+                after_action_state,
+                combat_state,
+                combat_result,
+            )
+            resolved_result["outcome"] = "defended"
+            resolved_result["combat_result"] = combat_result
+
+        elif post_authoritative_utility_kind == "flee":
+            flee_resolution = resolve_flee(
+                after_action_state,
+                combat_state,
+                _safe_str(player_actor_id),
+                turn_id=utility_turn_id,
+                tick=utility_tick,
+            )
+            combat_result = flee_resolution.to_dict()
+            after_action_state, combat_state = apply_flee_resolution(
+                after_action_state,
+                combat_state,
+                combat_result,
+            )
+            resolved_result["outcome"] = "fled" if combat_result.get("success") else "flee_failed"
+            resolved_result["combat_result"] = combat_result
+
+        elif post_authoritative_utility_kind == "use_item":
+            item_id = _infer_inventory_item_id_from_text(after_action_state, action, player_input)
+            item_result = apply_item_effects(after_action_state, item_id)
+            after_action_state = _ensure_simulation_state(_safe_dict(item_result.get("simulation_state")))
+            combat_result = _safe_dict(item_result.get("result"))
+            combat_result.setdefault("action_type", "use_item")
+            combat_result.setdefault("combat_id", _safe_str(combat_state.get("combat_id")))
+            combat_result.setdefault(
+                "notes",
+                ["combat_item_used"] if combat_result.get("ok") else ["combat_item_failed"],
+            )
+            resolved_result["outcome"] = "item_used" if combat_result.get("ok") else "item_use_failed"
+            resolved_result["combat_result"] = combat_result
+            resolved_result["inventory_result"] = combat_result
+
+        if combat_state.get("active"):
+            combat_state = advance_turn(combat_state)
+            current_after_player = get_current_actor_id(combat_state)
+            if current_after_player and not _actor_is_player(after_action_state, current_after_player):
+                after_action_state, combat_state, npc_combat_result = run_npc_turn(
+                    after_action_state,
+                    combat_state,
+                    tick=utility_tick,
+                )
+                combat_state = evaluate_combat_exit(after_action_state, combat_state)
+
+        runtime_state = _set_combat_state(runtime_state, combat_state)
+
+        if npc_combat_result:
+            resolved_result["npc_combat_result"] = npc_combat_result
+
+        grounded = _derive_grounded_scene_context(after_action_state, runtime_state, resolved_result)
+        narration_context = {
+            "player_input": player_input,
+            "action_type": post_authoritative_utility_kind,
+            "resolved_result": resolved_result,
+            "simulation_state": after_action_state,
+            "runtime_state": runtime_state,
+            "combat_result": combat_result,
+            "npc_combat_result": npc_combat_result,
+            "combat_state": combat_state,
+            "grounded": grounded,
+            "xp_result": {},
+            "skill_xp_result": {},
+            "level_up": [],
+            "skill_level_ups": [],
+            "settings": runtime_state.get("runtime_settings", {}),
+            "conversation_threads": build_conversation_thread_prompt_context(
+                runtime_state,
+                current_tick=utility_tick,
+                limit=4,
+            ),
+        }
+
+        return {
+            "ok": True,
+            "simulation_state": after_action_state,
+            "runtime_state": runtime_state,
+            "session": {
+                "id": f"session:{session_id}",
+                "session_id": session_id,
+                "simulation_state": after_action_state,
+                "runtime_state": runtime_state,
+            },
+            "result": resolved_result,
+            "narration_context": narration_context,
+            "turn_id": utility_turn_id,
+            "tick": utility_tick,
+        }
     if authoritative_simulation_state:
         simulation_state = authoritative_simulation_state
     after_action_state = _ensure_simulation_state(_safe_dict(authoritative.get("simulation_state")))
@@ -7084,14 +8242,48 @@ def _apply_turn_authoritative(
     resolved_result = _safe_dict(service_resolution.get("resolved_result"))
     action = _safe_dict(service_resolution.get("action"))
 
-    combat_state = _get_combat_state(runtime_state)
+    combat_state = _extract_active_combat_state_for_turn(runtime_state, resolved_result)
+    if combat_state.get("active"):
+        runtime_state = _set_combat_state(runtime_state, combat_state)
 
     combat_result: Dict[str, Any] = {}
     npc_combat_result: Dict[str, Any] = {}
     normalized_action_type = _safe_str(_safe_dict(action).get("action_type")).strip().lower()
     target_id = _safe_str(_safe_dict(action).get("target_id")).strip()
-    is_combat_action = _action_requests_hostile_combat(action, player_input)
-    if is_combat_action and target_id:
+
+    # J19-J21:
+    # Combat utility actions must be recognized directly from player text when
+    # combat is already active. Do not require the general semantic-action layer
+    # to classify them first, because otherwise clear commands like "I flee."
+    # can fall through to no_supported_semantic_action_detected before the
+    # combat runtime sees them.
+    if combat_state.get("active"):
+        action_obj = _safe_dict(action)
+        if not normalized_action_type:
+            if _action_requests_combat_defend(action_obj, player_input):
+                action_obj = dict(action_obj)
+                action_obj["action_type"] = "defend"
+                action = action_obj
+                normalized_action_type = "defend"
+            elif _action_requests_combat_flee(action_obj, player_input):
+                action_obj = dict(action_obj)
+                action_obj["action_type"] = "flee"
+                action = action_obj
+                normalized_action_type = "flee"
+            elif _action_requests_combat_use_item(action_obj, player_input):
+                action_obj = dict(action_obj)
+                action_obj["action_type"] = "use_item"
+                action = action_obj
+                normalized_action_type = "use_item"
+
+    is_combat_attack = _action_requests_hostile_combat(action, player_input)
+    is_combat_defend = _action_requests_combat_defend(action, player_input)
+    is_combat_flee = _action_requests_combat_flee(action, player_input)
+    is_combat_use_item = _action_requests_combat_use_item(action, player_input)
+    is_combat_action = is_combat_attack or (
+        combat_state.get("active") and (is_combat_defend or is_combat_flee or is_combat_use_item)
+    )
+    if is_combat_attack and target_id:
         target_actor = _lookup_actor_by_id(after_action_state, target_id)
         if not target_actor:
             is_combat_action = False
@@ -7118,7 +8310,7 @@ def _apply_turn_authoritative(
                 "settings": runtime_state.get("runtime_settings", {}),
                 "conversation_threads": build_conversation_thread_prompt_context(
                     runtime_state,
-                    current_tick=final_tick,
+                     current_tick=current_tick,
                     limit=4,
                 ),
             }
@@ -7129,10 +8321,196 @@ def _apply_turn_authoritative(
                 "result": resolved_result,
                 "narration_context": narration_context,
                 "turn_id": turn_id,
-                "tick": final_tick,
+                "tick": current_tick,
             }
 
-    if is_combat_action and target_id:
+
+    if combat_state.get("active") and is_combat_action and not is_combat_attack:
+        current_actor_id = get_current_actor_id(combat_state)
+        if current_actor_id and _safe_str(current_actor_id) != _safe_str(player_actor_id):
+            resolved_result = _build_combat_gate_result(current_actor_id, player_actor_id)
+            grounded = _derive_grounded_scene_context(after_action_state, runtime_state, resolved_result)
+            narration_context = {
+                "player_input": player_input,
+                "action_type": normalized_action_type,
+                "resolved_result": resolved_result,
+                "simulation_state": after_action_state,
+                "runtime_state": runtime_state,
+                "combat_result": {},
+                "npc_combat_result": {},
+                "combat_state": combat_state,
+                "grounded": grounded,
+                "xp_result": {},
+                "skill_xp_result": {},
+                "level_up": [],
+                "skill_level_ups": [],
+                "settings": runtime_state.get("runtime_settings", {}),
+                "conversation_threads": build_conversation_thread_prompt_context(
+                    runtime_state,
+                    current_tick=current_tick,
+                    limit=4,
+                ),
+            }
+            return {
+                "ok": True,
+                "simulation_state": after_action_state,
+                "runtime_state": runtime_state,
+                "result": resolved_result,
+                "narration_context": narration_context,
+                "turn_id": _build_turn_id(runtime_state),
+                "tick": current_tick,
+            }
+
+        if is_combat_defend:
+            defense_resolution = resolve_defend(
+                after_action_state,
+                combat_state,
+                _safe_str(player_actor_id),
+            )
+            defense_dict = defense_resolution.to_dict()
+            after_action_state, combat_state = apply_defense_resolution(
+                after_action_state,
+                combat_state,
+                defense_dict,
+            )
+            if combat_state.get("active"):
+                combat_state = advance_turn(combat_state)
+                current_after_player = get_current_actor_id(combat_state)
+                if current_after_player and not _actor_is_player(after_action_state, current_after_player):
+                    after_action_state, combat_state, npc_combat_result = run_npc_turn(
+                        after_action_state,
+                        combat_state,
+                        tick=current_tick,
+                    )
+                    combat_state = evaluate_combat_exit(after_action_state, combat_state)
+
+            runtime_state = _set_combat_state(runtime_state, combat_state)
+            combat_result = defense_dict
+            authoritative["simulation_state"] = after_action_state
+            resolved_result["combat_result"] = combat_result
+            resolved_result["action_type"] = "defend"
+            resolved_result["outcome"] = "defended"
+            resolved_result["visible_interaction_reason"] = "combat_defend"
+            resolved_result["interaction_result"] = {}
+            if npc_combat_result:
+                resolved_result["npc_combat_result"] = npc_combat_result
+            authoritative["result"] = resolved_result
+
+        elif is_combat_flee:
+            flee_resolution = resolve_flee(
+                after_action_state,
+                combat_state,
+                _safe_str(player_actor_id),
+                turn_id=turn_id,
+                tick=final_tick,
+            )
+            flee_dict = flee_resolution.to_dict()
+            after_action_state, combat_state = apply_flee_resolution(
+                after_action_state,
+                combat_state,
+                flee_dict,
+            )
+            if combat_state.get("active"):
+                combat_state = advance_turn(combat_state)
+                current_after_player = get_current_actor_id(combat_state)
+                if current_after_player and not _actor_is_player(after_action_state, current_after_player):
+                    after_action_state, combat_state, npc_combat_result = run_npc_turn(
+                        after_action_state,
+                        combat_state,
+                        tick=current_tick,
+                    )
+                    combat_state = evaluate_combat_exit(after_action_state, combat_state)
+
+            runtime_state = _set_combat_state(runtime_state, combat_state)
+            combat_result = flee_dict
+            authoritative["simulation_state"] = after_action_state
+            resolved_result["combat_result"] = combat_result
+            resolved_result["action_type"] = "flee"
+            resolved_result["outcome"] = "fled" if flee_dict.get("success") else "flee_failed"
+            resolved_result["visible_interaction_reason"] = "combat_flee"
+            resolved_result["interaction_result"] = {}
+            if npc_combat_result:
+                resolved_result["npc_combat_result"] = npc_combat_result
+            authoritative["result"] = resolved_result
+
+        elif is_combat_use_item:
+            item_id = _infer_inventory_item_id_from_text(after_action_state, action, player_input)
+            item_result = apply_item_effects(after_action_state, item_id)
+            after_action_state = _ensure_simulation_state(_safe_dict(item_result.get("simulation_state")))
+            use_result = _safe_dict(item_result.get("result"))
+            use_result.setdefault("action_type", "use_item")
+            use_result.setdefault("combat_id", _safe_str(combat_state.get("combat_id")))
+            use_result.setdefault("notes", ["combat_item_used"] if use_result.get("ok") else ["combat_item_failed"])
+
+            recent = list(combat_state.get("recent_events") or [])
+            recent.append({
+                "type": "use_item_resolution",
+                "actor_id": _safe_str(player_actor_id),
+                "item_id": item_id,
+                "ok": bool(use_result.get("ok")),
+                "reason": _safe_str(use_result.get("reason")),
+            })
+            combat_state["recent_events"] = recent[-24:]
+            combat_state["last_resolution"] = dict(use_result)
+
+            if combat_state.get("active"):
+                combat_state = advance_turn(combat_state)
+                current_after_player = get_current_actor_id(combat_state)
+                if current_after_player and not _actor_is_player(after_action_state, current_after_player):
+                    after_action_state, combat_state, npc_combat_result = run_npc_turn(
+                        after_action_state,
+                        combat_state,
+                        tick=current_tick,
+                    )
+                    combat_state = evaluate_combat_exit(after_action_state, combat_state)
+
+            runtime_state = _set_combat_state(runtime_state, combat_state)
+            combat_result = use_result
+            authoritative["simulation_state"] = after_action_state
+            resolved_result["combat_result"] = combat_result
+            resolved_result["action_type"] = "use_item"
+            resolved_result["outcome"] = "item_used" if use_result.get("ok") else "item_use_failed"
+            resolved_result["visible_interaction_reason"] = "combat_use_item"
+            resolved_result["interaction_result"] = {}
+            resolved_result["inventory_result"] = use_result
+            if npc_combat_result:
+                resolved_result["npc_combat_result"] = npc_combat_result
+            authoritative["result"] = resolved_result
+
+    if combat_state.get("active") and is_combat_action and not is_combat_attack:
+        grounded = _derive_grounded_scene_context(after_action_state, runtime_state, resolved_result)
+        narration_context = {
+            "player_input": player_input,
+            "action_type": normalized_action_type,
+            "resolved_result": resolved_result,
+            "simulation_state": after_action_state,
+            "runtime_state": runtime_state,
+            "combat_result": combat_result,
+            "npc_combat_result": npc_combat_result,
+            "combat_state": combat_state,
+            "grounded": grounded,
+            "xp_result": {},
+            "skill_xp_result": {},
+            "level_up": [],
+            "skill_level_ups": [],
+            "settings": runtime_state.get("runtime_settings", {}),
+            "conversation_threads": build_conversation_thread_prompt_context(
+                    runtime_state,
+                    current_tick=current_tick,
+                    limit=4,
+                ),
+            }
+        return {
+            "ok": True,
+            "simulation_state": after_action_state,
+            "runtime_state": runtime_state,
+            "result": resolved_result,
+            "narration_context": narration_context,
+            "turn_id": _build_turn_id(runtime_state),
+            "tick": current_tick,
+        }
+
+    if is_combat_attack and target_id:
         if not combat_state.get("active"):
             participant_ids = build_combat_participants(
                 after_action_state,
@@ -7172,7 +8550,7 @@ def _apply_turn_authoritative(
                 "settings": runtime_state.get("runtime_settings", {}),
                 "conversation_threads": build_conversation_thread_prompt_context(
                     runtime_state,
-                    current_tick=final_tick,
+                     current_tick=current_tick,
                     limit=4,
                 ),
             }
@@ -7183,7 +8561,7 @@ def _apply_turn_authoritative(
                 "result": resolved_result,
                 "narration_context": narration_context,
                 "turn_id": turn_id,
-                "tick": final_tick,
+                "tick": current_tick,
             }
 
         intent = AttackIntent(
@@ -7211,7 +8589,7 @@ def _apply_turn_authoritative(
                 after_action_state, combat_state, npc_combat_result = run_npc_turn(
                     after_action_state,
                     combat_state,
-                    tick=final_tick,
+                    tick=current_tick,
                 )
                 combat_state = evaluate_combat_exit(after_action_state, combat_state)
         runtime_state = _set_combat_state(runtime_state, combat_state)
@@ -7645,6 +9023,140 @@ def _apply_turn_authoritative(
         npc_combat_result=npc_combat_result,
         combat_state=combat_state,
     )
+
+    # J19-J21 final rescue:
+    # If the generic interaction runtime produced unsupported_interaction_kind
+    # but the completed resolved_result contains an active combat_state plus a
+    # combat utility semantic action, resolve it here before narration sees the
+    # unsupported fallback.
+    # Build a rescue candidate from both resolved_result and sibling turn fields.
+    # In the current pipeline, unsupported_interaction_kind can leave
+    # resolved_result as {}, while combat_state and semantic_action_v2 live
+    # beside it in the assembled turn payload.
+    last_chance_candidate = dict(_safe_dict(resolved_result))
+    if not _safe_dict(last_chance_candidate.get("combat_state")).get("active"):
+        last_chance_candidate["combat_state"] = _safe_dict(combat_state)
+    if not _safe_dict(last_chance_candidate.get("combat_state")).get("active"):
+        last_chance_candidate["combat_state"] = _find_active_combat_state_deep(authoritative)
+
+    if not _safe_dict(last_chance_candidate.get("semantic_action_v2")):
+        last_chance_candidate["semantic_action_v2"] = _extract_semantic_action_record_for_turn(
+            semantic_action_record,
+            authoritative,
+        )
+
+    if not _safe_str(last_chance_candidate.get("visible_interaction_reason")).strip():
+        last_chance_candidate["visible_interaction_reason"] = _safe_str(
+            resolved_result.get("visible_interaction_reason")
+            or _safe_dict(resolved_result.get("interaction_result")).get("reason")
+            or _safe_dict(_safe_dict(authoritative.get("result")).get("interaction_result")).get("reason")
+            or _safe_dict(_safe_dict(_safe_dict(authoritative.get("result")).get("general_interaction_result")).get("interaction_result")).get("reason")
+        ).strip()
+
+    if not _safe_dict(last_chance_candidate.get("interaction_result")):
+        last_chance_candidate["interaction_result"] = _safe_dict(
+            _safe_dict(authoritative.get("result")).get("interaction_result")
+        )
+
+    if not _safe_dict(last_chance_candidate.get("general_interaction_result")):
+        last_chance_candidate["general_interaction_result"] = _safe_dict(
+            _safe_dict(authoritative.get("result")).get("general_interaction_result")
+        )
+
+    last_chance_utility_kind = _resolved_result_is_unsupported_combat_utility(
+        last_chance_candidate,
+        player_input,
+    )
+
+    if last_chance_utility_kind:
+        rescued_combat_state = normalize_combat_state(
+            _safe_dict(last_chance_candidate.get("combat_state"))
+        )
+        combat_state = rescued_combat_state
+        combat_result = {}
+        npc_combat_result = {}
+
+        current_actor_id = get_current_actor_id(combat_state)
+        if current_actor_id and _safe_str(current_actor_id) != _safe_str("player"):
+            resolved_result = _build_combat_gate_result(current_actor_id, "player")
+
+        elif last_chance_utility_kind == "defend":
+            defense_resolution = resolve_defend(
+                after_state,
+                combat_state,
+                _safe_str("player"),
+            )
+            combat_result = defense_resolution.to_dict()
+            after_state, combat_state = apply_defense_resolution(
+                after_state,
+                combat_state,
+                combat_result,
+            )
+            resolved_result["action_type"] = "defend"
+            resolved_result["outcome"] = "defended"
+            resolved_result["visible_interaction_reason"] = "combat_defend"
+            resolved_result["combat_result"] = combat_result
+            resolved_result["interaction_result"] = {}
+            resolved_result["general_interaction_result"] = {}
+
+        elif last_chance_utility_kind == "flee":
+            flee_resolution = resolve_flee(
+                after_state,
+                combat_state,
+                _safe_str("player"),
+                turn_id=_build_turn_id(runtime_state),
+                tick=current_tick,
+            )
+            combat_result = flee_resolution.to_dict()
+            after_state, combat_state = apply_flee_resolution(
+                after_state,
+                combat_state,
+                combat_result,
+            )
+            resolved_result["action_type"] = "flee"
+            resolved_result["outcome"] = "fled" if combat_result.get("success") else "flee_failed"
+            resolved_result["visible_interaction_reason"] = "combat_flee"
+            resolved_result["combat_result"] = combat_result
+            resolved_result["interaction_result"] = {}
+            resolved_result["general_interaction_result"] = {}
+
+        elif last_chance_utility_kind == "use_item":
+            item_id = _infer_inventory_item_id_from_text(after_state, action, player_input)
+            item_result = apply_item_effects(after_state, item_id)
+            after_state = _ensure_simulation_state(
+                _safe_dict(item_result.get("simulation_state"))
+            )
+            combat_result = _safe_dict(item_result.get("result"))
+            combat_result.setdefault("action_type", "use_item")
+            combat_result.setdefault("combat_id", _safe_str(combat_state.get("combat_id")))
+            combat_result.setdefault(
+                "notes",
+                ["combat_item_used"] if combat_result.get("ok") else ["combat_item_failed"],
+            )
+            resolved_result["action_type"] = "use_item"
+            resolved_result["outcome"] = "item_used" if combat_result.get("ok") else "item_use_failed"
+            resolved_result["visible_interaction_reason"] = "combat_use_item"
+            resolved_result["combat_result"] = combat_result
+            resolved_result["inventory_result"] = combat_result
+            resolved_result["interaction_result"] = {}
+            resolved_result["general_interaction_result"] = {}
+
+        if combat_state.get("active"):
+            combat_state = advance_turn(combat_state)
+            current_after_player = get_current_actor_id(combat_state)
+            if current_after_player and not _actor_is_player(after_state, current_after_player):
+                after_state, combat_state, npc_combat_result = run_npc_turn(
+                    after_state,
+                    combat_state,
+                    tick=current_tick,
+                )
+                combat_state = evaluate_combat_exit(after_state, combat_state)
+
+        runtime_state = _set_combat_state(runtime_state, combat_state)
+        resolved_result["combat_state"] = combat_state
+
+        if npc_combat_result:
+            resolved_result["npc_combat_result"] = npc_combat_result
 
     grounded = _derive_grounded_scene_context(after_state, runtime_state, resolved_result)
     current_scene = _apply_grounded_scene_overlay(current_scene, grounded)
@@ -8786,6 +10298,42 @@ def apply_turn(
     if not authoritative_result.get("ok"):
         return authoritative_result
     final_result = build_apply_turn_response(authoritative_result)
+    final_result = _rescue_final_apply_turn_combat_utility_result(
+        final_result,
+        player_input,
+    )
+
+    # Defaults for post-action companion runtime.
+    # Some authoritative paths, including J19-J21 combat utility rescue paths,
+    # may return before a full session-shaped payload exists. Keep the normal
+    # companion enrichment code safe by initializing these before the optional
+    # _post_action_sim block.
+    _post_action_sim: Dict[str, Any] = {}
+    _party_aware_ctx: Dict[str, Any] = {}
+    _companion_presence: Dict[str, Any] = {}
+    _direct_companion: Dict[str, Any] = {}
+    _companion_drift: Dict[str, Any] = {
+        "applied": False,
+        "reason": "no_post_action_simulation_state",
+        "results": [],
+        "source": "deterministic_companion_memory_runtime",
+    }
+    _companion_mem_summary: Dict[str, Any] = {
+        "by_npc": {},
+        "source": "deterministic_companion_memory_runtime",
+    }
+    _companion_quest_progress: Dict[str, Any] = {
+        "progressed": False,
+        "reason": "no_post_action_simulation_state",
+        "source": "deterministic_companion_quest_runtime",
+    }
+    _companion_quest_sum: Dict[str, Any] = {
+        "quests": [],
+        "source": "deterministic_companion_quest_runtime",
+    }
+    _party_composition: Dict[str, Any] = {}
+    _nps: List[Dict[str, Any]] = []
+    _ccs: List[Dict[str, Any]] = []
 
     # AO-AP-AQ Patch 4.2 + 6: post-action companion presence projection
     _post_action_sim = _safe_dict(
@@ -9006,13 +10554,14 @@ def apply_turn(
             _conv["character_cards_summary"] = _ccs
             final_result["conversation_result"] = _conv
 
-    session = _sync_session_if_companion_runtime_mutated(
-        session,
-        _post_action_sim,
-        reason="normal_apply_turn_companion_runtime",
-        companion_relationship_drift_result=_companion_drift,
-        companion_quest_progress_result=_companion_quest_progress,
-    )
+    if _post_action_sim:
+        session = _sync_session_if_companion_runtime_mutated(
+            session,
+            _post_action_sim,
+            reason="normal_apply_turn_companion_runtime",
+            companion_relationship_drift_result=_companion_drift,
+            companion_quest_progress_result=_companion_quest_progress,
+        )
 
     if (
         inventory_result.get("changed_state") is True
@@ -9072,6 +10621,8 @@ def apply_turn(
 
         final_result = result
 
+    final_result = _mirror_rescued_combat_utility_result(final_result)
+    final_result = _reconcile_combat_use_item_with_successful_consumable(final_result)
     return final_result
 
 
