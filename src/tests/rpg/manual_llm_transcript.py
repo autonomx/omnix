@@ -2334,6 +2334,135 @@ def _manual_force_player_combat_turn_result(
     }
 
 
+def _manual_get_combat_state_from_session(session: Dict[str, Any]) -> Dict[str, Any]:
+    return _safe_dict(
+        _safe_dict(session.get("runtime_state")).get("combat_state")
+        or _safe_dict(session.get("simulation_state")).get("combat_state")
+    )
+
+
+def _manual_set_combat_state_on_session(session: Dict[str, Any], combat_state: Dict[str, Any]) -> Dict[str, Any]:
+    session = _safe_dict(session)
+    runtime_state = dict(_safe_dict(session.get("runtime_state")))
+    simulation_state = dict(_safe_dict(session.get("simulation_state")))
+    runtime_state["combat_state"] = combat_state
+    simulation_state["combat_state"] = combat_state
+    session["runtime_state"] = runtime_state
+    session["simulation_state"] = simulation_state
+    return session
+
+
+def _manual_set_combat_force_flags(
+    session: Dict[str, Any],
+    *,
+    attack_roll: int = 0,
+    damage: int = 0,
+) -> Dict[str, Any]:
+    combat_state = dict(_manual_get_combat_state_from_session(session))
+    if not combat_state:
+        return session
+
+    if attack_roll > 0:
+        combat_state["force_next_attack_roll"] = max(1, min(20, attack_roll))
+    if damage > 0:
+        combat_state["force_next_damage"] = max(1, damage)
+
+    return _manual_set_combat_state_on_session(session, combat_state)
+
+
+def _manual_force_enemy_turn(session: Dict[str, Any]) -> Dict[str, Any]:
+    combat_state = dict(_manual_get_combat_state_from_session(session))
+    if not combat_state.get("active"):
+        return session
+    participants = _safe_dict(combat_state.get("participants"))
+    initiative_order = _safe_list(combat_state.get("initiative_order"))
+
+    enemy_actor_id = ""
+    for row in initiative_order:
+        actor_id = _safe_str(_safe_dict(row).get("actor_id")).strip()
+        participant = _safe_dict(participants.get(actor_id))
+        if _safe_str(participant.get("side")).strip() == "enemy" and _safe_int(participant.get("hp"), 0) > 0:
+            enemy_actor_id = actor_id
+            break
+
+    if not enemy_actor_id:
+        for actor_id, participant in participants.items():
+            participant = _safe_dict(participant)
+            if _safe_str(participant.get("side")).strip() == "enemy" and _safe_int(participant.get("hp"), 0) > 0:
+                enemy_actor_id = str(actor_id)
+                break
+
+    if enemy_actor_id:
+        combat_state["current_actor_id"] = enemy_actor_id
+        for idx, row in enumerate(initiative_order):
+            if _safe_str(_safe_dict(row).get("actor_id")).strip() == enemy_actor_id:
+                combat_state["turn_index"] = idx
+                break
+
+    return _manual_set_combat_state_on_session(session, combat_state)
+
+
+def _manual_reduce_first_enemy_hp(session: Dict[str, Any], hp: int) -> Dict[str, Any]:
+    combat_state = dict(_manual_get_combat_state_from_session(session))
+    participants = dict(_safe_dict(combat_state.get("participants")))
+
+    for actor_id, participant in participants.items():
+        participant = dict(_safe_dict(participant))
+        if _safe_str(participant.get("side")).strip() != "enemy":
+            continue
+        participant["hp"] = max(0, hp)
+        resources = dict(_safe_dict(participant.get("resources")))
+        if resources:
+            resources["hp"] = max(0, hp)
+            participant["resources"] = resources
+        participants[actor_id] = participant
+        break
+
+    combat_state["participants"] = participants
+    return _manual_set_combat_state_on_session(session, combat_state)
+
+
+def _manual_carry_forward_session_from_result(
+    session: Dict[str, Any],
+    result: Dict[str, Any],
+    *,
+    reason: str = "",
+) -> Dict[str, Any]:
+    session = dict(_safe_dict(session))
+    result = _safe_dict(result)
+
+    returned_session = _safe_dict(
+        result.get("session")
+        or _safe_dict(result.get("result")).get("session")
+    )
+
+    if returned_session:
+        session.update(returned_session)
+        _save_manual_session_for_test(
+            session,
+            reason=reason or "manual result session carry-forward",
+        )
+        return session
+
+    simulation_state = _extract_simulation_state(result)
+    if simulation_state:
+        _sync_manual_simulation_state(session, simulation_state)
+
+    runtime_state = _safe_dict(result.get("runtime_state")) or _safe_dict(
+        _safe_dict(result.get("session")).get("runtime_state")
+    )
+    if runtime_state:
+        session["runtime_state"] = runtime_state
+
+    if simulation_state or runtime_state:
+        _save_manual_session_for_test(
+            session,
+            reason=reason or "manual result state carry-forward",
+        )
+
+    return session
+
+
 def _sanitize_manual_simulation_state_for_test(
     simulation_state: Dict[str, Any],
     *,
@@ -6944,6 +7073,148 @@ SERVICE_SCENARIOS = {
         },
         "turns": ["__manual_resolve_current_combat_actor__"],
     },
+
+    "combat_start_bandit_encounter_from_archetype": {
+        "currency": {"gold": 0, "silver": 0, "copper": 0},
+        "conversation_settings": {
+            "enabled": True,
+            "autonomous_ticks_enabled": False,
+            "frequency": "never",
+            "conversation_chance_percent": 0,
+            "allow_player_invited": False,
+            "player_inclusion_chance_percent": 0,
+        },
+        "setup_interaction_state": {
+            "player_location_id": "loc_tavern_road",
+            "player_hp": 20,
+            "player_max_hp": 20,
+            "player_inventory": {"items": [], "equipment": {}, "carry_capacity": 50.0},
+            "party_state": {"max_size": 4, "companions": []},
+        },
+        "turns": ["__manual_start_encounter__:bandit_easy"],
+    },
+
+    "combat_generated_enemy_can_be_attacked": {
+        "currency": {"gold": 0, "silver": 0, "copper": 0},
+        "conversation_settings": {
+            "enabled": True,
+            "autonomous_ticks_enabled": False,
+            "frequency": "never",
+            "conversation_chance_percent": 0,
+            "allow_player_invited": False,
+            "player_inclusion_chance_percent": 0,
+        },
+        "setup_interaction_state": {
+            "player_location_id": "loc_tavern_road",
+            "player_hp": 20,
+            "player_max_hp": 20,
+            "player_inventory": {"items": [], "equipment": {}, "carry_capacity": 50.0},
+            "party_state": {"max_size": 4, "companions": []},
+        },
+        "turns": [
+            "__manual_start_encounter__:bandit_easy",
+            "I attack the bandit grunt.",
+        ],
+    },
+
+    "combat_generated_enemy_ai_takes_turn": {
+        "currency": {"gold": 0, "silver": 0, "copper": 0},
+        "conversation_settings": {
+            "enabled": True,
+            "autonomous_ticks_enabled": False,
+            "frequency": "never",
+            "conversation_chance_percent": 0,
+            "allow_player_invited": False,
+            "player_inclusion_chance_percent": 0,
+        },
+        "setup_interaction_state": {
+            "player_location_id": "loc_tavern_road",
+            "player_hp": 20,
+            "player_max_hp": 20,
+            "player_inventory": {"items": [], "equipment": {}, "carry_capacity": 50.0},
+            "party_state": {"max_size": 4, "companions": []},
+        },
+        "turns": [
+            "__manual_start_encounter__:bandit_easy",
+            "__manual_force_enemy_turn__",
+            "__manual_resolve_current_combat_actor__",
+        ],
+    },
+
+    "combat_generated_encounter_victory_rewards": {
+        "currency": {"gold": 0, "silver": 0, "copper": 0},
+        "conversation_settings": {
+            "enabled": True,
+            "autonomous_ticks_enabled": False,
+            "frequency": "never",
+            "conversation_chance_percent": 0,
+            "allow_player_invited": False,
+            "player_inclusion_chance_percent": 0,
+        },
+        "setup_interaction_state": {
+            "player_location_id": "loc_tavern_road",
+            "player_hp": 20,
+            "player_max_hp": 20,
+            "player_inventory": {"items": [], "equipment": {}, "carry_capacity": 50.0},
+            "party_state": {"max_size": 4, "companions": []},
+        },
+        "turns": [
+            "__manual_start_encounter__:bandit_easy",
+            "__manual_reduce_first_enemy_hp__:1",
+            "__manual_force_next_attack_roll__:20",
+            "__manual_force_next_damage__:1",
+            "I attack the bandit grunt.",
+        ],
+    },
+
+    "combat_generated_encounter_victory_loot": {
+        "currency": {"gold": 0, "silver": 0, "copper": 0},
+        "conversation_settings": {
+            "enabled": True,
+            "autonomous_ticks_enabled": False,
+            "frequency": "never",
+            "conversation_chance_percent": 0,
+            "allow_player_invited": False,
+            "player_inclusion_chance_percent": 0,
+        },
+        "setup_interaction_state": {
+            "player_location_id": "loc_tavern_road",
+            "player_hp": 20,
+            "player_max_hp": 20,
+            "player_inventory": {"items": [], "equipment": {}, "carry_capacity": 50.0},
+            "party_state": {"max_size": 4, "companions": []},
+        },
+        "turns": [
+            "__manual_start_encounter__:bandit_easy",
+            "__manual_reduce_first_enemy_hp__:1",
+            "__manual_force_next_attack_roll__:20",
+            "__manual_force_next_damage__:1",
+            "I attack the bandit grunt.",
+        ],
+    },
+
+    "combat_scaling_easy_vs_hard_changes_enemy_budget": {
+        "currency": {"gold": 0, "silver": 0, "copper": 0},
+        "conversation_settings": {
+            "enabled": True,
+            "autonomous_ticks_enabled": False,
+            "frequency": "never",
+            "conversation_chance_percent": 0,
+            "allow_player_invited": False,
+            "player_inclusion_chance_percent": 0,
+        },
+        "setup_interaction_state": {
+            "player_location_id": "loc_tavern_road",
+            "player_hp": 20,
+            "player_max_hp": 20,
+            "player_inventory": {"items": [], "equipment": {}, "carry_capacity": 50.0},
+            "party_state": {"max_size": 4, "companions": []},
+        },
+        "turns": [
+            "__manual_start_encounter__:bandit_easy",
+            "__manual_start_encounter__:bandit_hard",
+        ],
+    },
 }
 
 
@@ -9031,6 +9302,75 @@ def _turn_has_combat_cleanup(turn_summary: Dict[str, Any]) -> bool:
 
     exit_reason = _safe_str(combat_state.get("exit_reason")).strip()
     return bool(exit_reason)
+
+
+def _extract_encounter_result(turn_summary: Dict[str, Any]) -> Dict[str, Any]:
+    return _first_dict(
+        turn_summary.get("encounter_result"),
+        _safe_dict(turn_summary.get("resolved_result")).get("encounter_result"),
+        _safe_dict(turn_summary.get("result")).get("encounter_result"),
+        _extract_nested_dict_by_key(turn_summary, "encounter_result"),
+    )
+
+
+def _encounter_started(turn_summary: Dict[str, Any]) -> bool:
+    encounter = _extract_encounter_result(turn_summary)
+    combat_state = _extract_turn_combat_state(turn_summary)
+    return bool(encounter.get("generated") is True and combat_state.get("active") is True)
+
+
+def _generated_enemy_present(turn_summary: Dict[str, Any]) -> bool:
+    combat_state = _extract_turn_combat_state(turn_summary)
+    participants = _safe_dict(combat_state.get("participants"))
+    return any(
+        _safe_str(_safe_dict(participant).get("archetype_id")).startswith("enemy:")
+        for participant in participants.values()
+    )
+
+
+def _generated_enemy_attacked(turn_summary: Dict[str, Any]) -> bool:
+    combat_result = _safe_dict(turn_summary.get("combat_result"))
+    resolved_combat = _safe_dict(_safe_dict(turn_summary.get("resolved_result")).get("combat_result"))
+    raw_combat_result = _safe_dict(turn_summary.get("raw_combat_result"))
+
+    candidates = [
+        combat_result,
+        resolved_combat,
+        raw_combat_result,
+        _safe_dict(_safe_dict(turn_summary.get("result")).get("combat_result")),
+    ]
+
+    for candidate in candidates:
+        target_id = _safe_str(candidate.get("target_id")).strip()
+        if target_id.startswith("enemy:"):
+            # AttackResolution may not always include action_type. Treat the
+            # presence of attack-roll / hit / damage fields against a generated
+            # enemy as a valid generated-enemy attack, including misses.
+            if (
+                _safe_str(candidate.get("action_type")).strip() in {"", "attack"}
+                and (
+                    "hit" in candidate
+                    or "attack_roll" in candidate
+                    or "damage_applied" in candidate
+                    or "target_hp_before" in candidate
+                    or "target_hp_after" in candidate
+                )
+            ):
+                return True
+
+    narration = _safe_str(
+        turn_summary.get("narration")
+        or turn_summary.get("final_narration")
+        or turn_summary.get("summary")
+    ).lower()
+    if "enemy:bandit_grunt:1" in narration and ("attack" in narration or "miss" in narration or "hit" in narration):
+        return True
+
+    return False
+
+
+def _encounter_budget_from_turn(turn_summary: Dict[str, Any]) -> int:
+    return _safe_int(_extract_encounter_result(turn_summary).get("budget"), 0)
 
 
 def _safe_parse_manual_mapping_payload(value: Any) -> Dict[str, Any]:
@@ -13195,6 +13535,59 @@ def _run_one_service_scenario(
                 "final_narration": f"Result: {visible_reason}",
                 "visible_interaction_reason": visible_reason,
             }
+        elif player_input == "__manual_force_enemy_turn__":
+            session = _manual_force_enemy_turn(session)
+            _save_manual_session_for_test(
+                session,
+                reason=f"{scenario_name}:manual_force_enemy_turn",
+            )
+            result = {
+                "ok": True,
+                "player_input": player_input,
+                "visible_interaction_reason": "manual_force_enemy_turn",
+                "combat_state": _manual_get_combat_state_from_session(session),
+                "session": session,
+                "narration": "Result: manual_force_enemy_turn",
+                "final_narration": "Result: manual_force_enemy_turn",
+            }
+            # append / summarize result as normal
+            visible_reason = "manual_force_enemy_turn"
+            last_result = result
+            turn_record = {
+                "turn_index": manual_turn_index,
+                "player_input": player_input,
+                "result": result,
+                "narration_preview": f"Result: {visible_reason}",
+                "final_narration": f"Result: {visible_reason}",
+                "visible_interaction_reason": visible_reason,
+            }
+        elif player_input.startswith("__manual_reduce_first_enemy_hp__:"):
+            hp = _safe_int(player_input.split(":", 1)[1], 1)
+            session = _manual_reduce_first_enemy_hp(session, hp)
+            _save_manual_session_for_test(
+                session,
+                reason=f"{scenario_name}:manual_reduce_first_enemy_hp",
+            )
+            result = {
+                "ok": True,
+                "player_input": player_input,
+                "visible_interaction_reason": "manual_reduce_first_enemy_hp",
+                "combat_state": _manual_get_combat_state_from_session(session),
+                "session": session,
+                "narration": "Result: manual_reduce_first_enemy_hp",
+                "final_narration": "Result: manual_reduce_first_enemy_hp",
+            }
+            # append / summarize result as normal
+            visible_reason = "manual_reduce_first_enemy_hp"
+            last_result = result
+            turn_record = {
+                "turn_index": manual_turn_index,
+                "player_input": player_input,
+                "result": result,
+                "narration_preview": f"Result: {visible_reason}",
+                "final_narration": f"Result: {visible_reason}",
+                "visible_interaction_reason": visible_reason,
+            }
             turn_record = _copy_combat_narration_fields_into_turn_record(
                 turn_record,
                 result,
@@ -13360,9 +13753,58 @@ def _run_one_service_scenario(
                 channel=target_channel,
             )
 
+            # after result has been produced for this turn
+            session = _manual_carry_forward_session_from_result(
+                session,
+                result,
+                reason=f"{scenario_name}:turn_{manual_turn_index}:carry_forward",
+            )
+
+            continue
+        elif player_input.startswith("__manual_force_next_attack_roll__:"):
+            roll = _safe_int(player_input.split(":", 1)[1], 20)
+            session = _manual_set_combat_force_flags(session, attack_roll=roll)
+            _save_manual_session_for_test(
+                session,
+                reason=f"{scenario_name}:manual_force_next_attack_roll",
+            )
+            result = {
+                "ok": True,
+                "player_input": player_input,
+                "visible_interaction_reason": "manual_force_next_attack_roll",
+                "combat_state": _manual_get_combat_state_from_session(session),
+                "session": session,
+                "narration": "Result: manual_force_next_attack_roll",
+                "final_narration": "Result: manual_force_next_attack_roll",
+            }
+            # append / summarize result as normal
+            continue
+        elif player_input.startswith("__manual_force_next_damage__:"):
+            damage = _safe_int(player_input.split(":", 1)[1], 1)
+            session = _manual_set_combat_force_flags(session, damage=damage)
+            _save_manual_session_for_test(
+                session,
+                reason=f"{scenario_name}:manual_force_next_damage",
+            )
+            result = {
+                "ok": True,
+                "player_input": player_input,
+                "visible_interaction_reason": "manual_force_next_damage",
+                "combat_state": _manual_get_combat_state_from_session(session),
+                "session": session,
+                "narration": "Result: manual_force_next_damage",
+                "final_narration": "Result: manual_force_next_damage",
+            }
+            # append / summarize result as normal
             continue
         else:
             result = apply_turn(session_id=session_id, player_input=player_input)
+        # after result has been produced for this turn
+        session = _manual_carry_forward_session_from_result(
+            session,
+            result,
+            reason=f"{scenario_name}:turn_{manual_turn_index}:carry_forward",
+        )
         extracted_location_id = _extract_current_location_id(result)
         if extracted_location_id:
             current_location_id = extracted_location_id
@@ -13641,6 +14083,45 @@ def _run_one_service_scenario(
                 summary_row.setdefault("scenario_warnings", []).append(
                     "enemy_ai_last_enemy_flee_did_not_resolve_victory"
                 )
+
+        if scenario_name == "combat_start_bandit_encounter_from_archetype":
+            if "__manual_start_encounter__" in _safe_str(player_input):
+                if not _encounter_started(summary_row):
+                    summary_row.setdefault("scenario_warnings", []).append(
+                        "generated_encounter_did_not_start"
+                    )
+                if not _generated_enemy_present(summary_row):
+                    summary_row.setdefault("scenario_warnings", []).append(
+                        "generated_encounter_missing_archetype_enemy"
+                    )
+
+        if scenario_name == "combat_generated_enemy_can_be_attacked":
+            if "attack" in _safe_str(player_input).lower():
+                if not _generated_enemy_attacked(summary_row):
+                    summary_row.setdefault("scenario_warnings", []).append(
+                        "generated_enemy_was_not_attacked"
+                    )
+
+        if scenario_name == "combat_generated_enemy_ai_takes_turn":
+            if player_input == "__manual_resolve_current_combat_actor__":
+                if not _extract_enemy_intent_result(summary_row):
+                    summary_row.setdefault("scenario_warnings", []).append(
+                        "generated_enemy_ai_missing_intent_result"
+                    )
+
+        if scenario_name == "combat_generated_encounter_victory_rewards":
+            if "attack" in _safe_str(player_input).lower():
+                if not _turn_has_granted_combat_reward(summary_row):
+                    summary_row.setdefault("scenario_warnings", []).append(
+                        "generated_encounter_victory_missing_reward"
+                    )
+
+        if scenario_name == "combat_generated_encounter_victory_loot":
+            if "attack" in _safe_str(player_input).lower():
+                if not _turn_has_generated_combat_loot(summary_row):
+                    summary_row.setdefault("scenario_warnings", []).append(
+                        "generated_encounter_victory_missing_loot"
+                    )
 
         summary_row["regression_warnings"] = _manual_regression_warnings(
             scenario_name=scenario_name,
@@ -14121,6 +14602,39 @@ def _run_one_service_scenario(
     if scenario_name == "combat_heal_downed_companion_revives":
         if not any(_turn_has_recovery_reason(row, "revived") for row in scenario_results):
             scenario_warnings.append("healing_downed_actor_did_not_revive")
+
+    if scenario_name == "combat_start_bandit_encounter_from_archetype":
+        if not any(_encounter_started(row) for row in scenario_results):
+            scenario_warnings.append("generated_encounter_did_not_start")
+        if not any(_generated_enemy_present(row) for row in scenario_results):
+            scenario_warnings.append("generated_encounter_missing_archetype_enemy")
+
+    if scenario_name == "combat_generated_enemy_can_be_attacked":
+        if not any(_generated_enemy_attacked(row) for row in scenario_results):
+            scenario_warnings.append("generated_enemy_was_not_attacked")
+
+    if scenario_name == "combat_generated_enemy_ai_takes_turn":
+        if not any(_extract_enemy_intent_result(row) for row in scenario_results):
+            scenario_warnings.append("generated_enemy_ai_missing_intent_result")
+
+    if scenario_name == "combat_generated_encounter_victory_rewards":
+        if not any(_turn_has_granted_combat_reward(row) for row in scenario_results):
+            scenario_warnings.append("generated_encounter_victory_missing_reward")
+
+    if scenario_name == "combat_generated_encounter_victory_loot":
+        if not any(_turn_has_generated_combat_loot(row) for row in scenario_results):
+            scenario_warnings.append("generated_encounter_victory_missing_loot")
+
+    if scenario_name == "combat_scaling_easy_vs_hard_changes_enemy_budget":
+        budgets = [
+            _encounter_budget_from_turn(row)
+            for row in scenario_results
+            if _encounter_budget_from_turn(row) > 0
+        ]
+        if len(budgets) < 2:
+            scenario_warnings.append("encounter_scaling_missing_easy_or_hard_budget")
+        elif max(budgets) <= min(budgets):
+            scenario_warnings.append("encounter_scaling_hard_budget_not_larger_than_easy")
 
     return {
         "scenario": scenario_name,
