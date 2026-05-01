@@ -447,43 +447,48 @@ from app.rpg.ai.scene_weaver import (
 )
 from app.rpg.ai.semantic_action_intelligence import get_semantic_action_advisory
 from app.rpg.ai.world_scene_narrator import narrate_ambient_update, narrate_scene
+from app.rpg.combat.abilities import (
+    decrement_participant_cooldowns,
+    resolve_combat_ability,
+)
 from app.rpg.combat.apply import (
     apply_attack_resolution,
     apply_defense_resolution,
     apply_flee_resolution,
 )
-from app.rpg.combat.initiative import advance_turn, begin_combat
-from app.rpg.combat.lifecycle import build_combat_participants, evaluate_combat_exit
-from app.rpg.combat.models import AttackIntent
-from app.rpg.combat.npc_turns import run_npc_turn
-from app.rpg.combat.recovery import stabilize_participant, revive_participant_with_healing
+from app.rpg.combat.companion_ai import (
+    apply_companion_intent,
+    choose_companion_intent,
+    parse_companion_command,
+)
 from app.rpg.combat.conditions import (
     add_status_effect_to_participant,
     build_condition_effect,
     build_condition_result,
     tick_start_of_turn_status_effects,
 )
-from app.rpg.combat.abilities import (
-    decrement_participant_cooldowns,
-    resolve_combat_ability,
-)
-from app.rpg.combat.resolver import resolve_attack, resolve_defend, resolve_flee
-from app.rpg.combat.state import (
-    combat_is_active,
-    get_current_actor_id,
-    normalize_combat_state,
-)
+from app.rpg.combat.encounters import build_encounter_from_preset
 from app.rpg.combat.initiative import advance_turn, begin_combat
 from app.rpg.combat.lifecycle import build_combat_participants, evaluate_combat_exit
 from app.rpg.combat.models import AttackIntent
 from app.rpg.combat.npc_turns import run_npc_turn
+from app.rpg.combat.positioning import (
+    can_attack_target,
+    flee_penalty_from_position,
+    reposition_participant,
+)
+from app.rpg.combat.recovery import (
+    revive_participant_with_healing,
+    stabilize_participant,
+)
 from app.rpg.combat.resolver import resolve_attack, resolve_defend, resolve_flee
 from app.rpg.combat.state import (
     build_empty_combat_state,
+    combat_is_active,
     get_current_actor_id,
     normalize_combat_state,
 )
-from app.rpg.combat.encounters import build_encounter_from_preset
+from app.rpg.combat.world_consequences import emit_combat_world_consequence
 from app.rpg.creator.defaults import apply_adventure_defaults
 from app.rpg.creator.schema import normalize_world_behavior_config
 from app.rpg.creator.world_player_actions import (
@@ -730,6 +735,36 @@ def _active_companion_profiles_summary(simulation_state: Dict[str, Any]) -> Dict
         "count": len(summaries),
         "source": "deterministic_dynamic_npc_profile_store",
     }
+
+
+def _is_companion_actor_id(actor_id: str) -> bool:
+    actor_id = _safe_str(actor_id).strip()
+    return actor_id.startswith("npc:") or actor_id.startswith("companion:")
+
+
+def _first_active_companion_actor_id(combat_state: Dict[str, Any]) -> str:
+    for actor_id, participant in _safe_dict(_safe_dict(combat_state).get("participants")).items():
+        participant = _safe_dict(participant)
+        if not _is_companion_actor_id(str(actor_id)):
+            continue
+        if _safe_int(participant.get("hp"), 0) <= 0:
+            continue
+        if _safe_str(participant.get("status")).strip().lower() in {"downed", "unconscious", "defeated", "dead", "fled"}:
+            continue
+        return str(actor_id)
+    return ""
+
+
+def _player_input_requests_reposition(player_input: str) -> bool:
+    text = _safe_str(player_input).strip().lower()
+    return "move closer" in text or "close distance" in text or "reposition" in text or "move to frontline" in text or "fall back" in text
+
+
+def _requested_reposition_values(player_input: str) -> Dict[str, str]:
+    text = _safe_str(player_input).strip().lower()
+    if "fall back" in text or "backline" in text or "far" in text:
+        return {"zone": "backline", "range_band": "far"}
+    return {"zone": "frontline", "range_band": "near"}
 
 
 def _player_party_state_from_simulation(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
@@ -5193,6 +5228,19 @@ def _set_combat_state(runtime_state: Dict[str, Any], combat_state: Dict[str, Any
     return runtime_state
 
 
+def _active_combat_state_from_runtime_or_simulation(
+    runtime_state: Dict[str, Any],
+    simulation_state: Dict[str, Any],
+) -> Dict[str, Any]:
+    combat_state = _safe_dict(_get_combat_state(runtime_state))
+    if combat_state.get("active"):
+        return combat_state
+    combat_state = _safe_dict(_safe_dict(simulation_state).get("combat_state"))
+    if combat_state.get("active"):
+        return combat_state
+    return {}
+
+
 def _active_combat_utility_kind(
     runtime_state: Dict[str, Any],
     semantic_action_record: Dict[str, Any],
@@ -9072,6 +9120,405 @@ def _reconcile_ability_cooldown_tick_for_manual_current_actor(
     return final_result
 
 
+def _reconcile_companion_turn_result(final_result: Dict[str, Any], player_input: str) -> Dict[str, Any]:
+    final_result = dict(_safe_dict(final_result))
+    if "__manual_resolve_current_combat_actor__" not in _safe_str(player_input):
+        return final_result
+
+    resolved_result = dict(_safe_dict(final_result.get("resolved_result")))
+    combat_state = dict(_safe_dict(final_result.get("combat_state") or resolved_result.get("combat_state") or _find_active_combat_state_deep(final_result)))
+    actor_id = _safe_str(combat_state.get("current_actor_id")).strip()
+
+    if not _is_companion_actor_id(actor_id):
+        return final_result
+
+    simulation_state = _safe_dict(_safe_dict(final_result.get("session")).get("simulation_state") or final_result.get("simulation_state"))
+    intent_result = choose_companion_intent(combat_state, actor_id)
+    simulation_state, combat_state, companion_result = apply_companion_intent(simulation_state, combat_state, intent_result)
+
+    resolved_result["action_type"] = companion_result.get("action_type", "companion_action")
+    resolved_result["visible_interaction_reason"] = "combat_companion_action"
+    resolved_result["outcome"] = companion_result.get("reason")
+    resolved_result["companion_result"] = companion_result
+    resolved_result["companion_intent_result"] = intent_result
+    resolved_result["companion_command_result"] = companion_result.get("companion_command_result", {})
+    resolved_result["combat_result"] = companion_result.get("combat_result", {})
+    resolved_result["ability_result"] = companion_result.get("ability_result", {})
+    resolved_result["position_result"] = companion_result.get("position_result", {})
+    resolved_result["combat_state"] = combat_state
+
+    final_result["resolved_result"] = resolved_result
+    final_result["companion_result"] = companion_result
+    final_result["companion_intent_result"] = intent_result
+    final_result["companion_command_result"] = companion_result.get("companion_command_result", {})
+    final_result["combat_result"] = companion_result.get("combat_result", {})
+    final_result["ability_result"] = companion_result.get("ability_result", {})
+    final_result["position_result"] = companion_result.get("position_result", {})
+    final_result["combat_state"] = combat_state
+    final_result["visible_interaction_reason"] = "combat_companion_action"
+    final_result["action_type"] = companion_result.get("action_type", "companion_action")
+    final_result["outcome"] = companion_result.get("reason")
+    final_result["narration"] = "Result: combat_companion_action"
+    final_result["final_narration"] = "Result: combat_companion_action"
+    final_result["summary"] = "Result: combat_companion_action"
+
+    session = _safe_dict(final_result.get("session"))
+    runtime_state = _safe_dict(session.get("runtime_state") or final_result.get("runtime_state"))
+    if runtime_state:
+        runtime_state["combat_state"] = combat_state
+        session["runtime_state"] = runtime_state
+        final_result["runtime_state"] = runtime_state
+    if simulation_state:
+        simulation_state["combat_state"] = combat_state
+        session["simulation_state"] = simulation_state
+        final_result["simulation_state"] = simulation_state
+    if session:
+        final_result["session"] = session
+
+    return final_result
+
+
+def _reconcile_invalid_companion_command(
+    final_result: Dict[str, Any],
+    player_input: str,
+) -> Dict[str, Any]:
+    final_result = dict(_safe_dict(final_result))
+    command = parse_companion_command(player_input)
+    if not command or command.get("command") != "invalid":
+        return final_result
+
+    resolved_result = dict(_safe_dict(final_result.get("resolved_result")))
+    combat_state = dict(_safe_dict(
+        final_result.get("combat_state")
+        or resolved_result.get("combat_state")
+        or _find_active_combat_state_deep(final_result)
+    ))
+
+    if not combat_state.get("active"):
+        return final_result
+
+    companion_command_result = {
+        "accepted": False,
+        "command": "invalid",
+        "reason": "unsupported_companion_command",
+    }
+    companion_intent_result = {
+        "selected": False,
+        "actor_id": _safe_str(command.get("companion_actor_id") or "npc:bran"),
+        "intent": "",
+        "reason": "invalid_command",
+        "companion_command_result": companion_command_result,
+    }
+
+    resolved_result["action_type"] = "companion_command"
+    resolved_result["visible_interaction_reason"] = "combat_companion_command_failed"
+    resolved_result["outcome"] = "invalid_command"
+    resolved_result["companion_intent_result"] = companion_intent_result
+    resolved_result["companion_command_result"] = companion_command_result
+    resolved_result["combat_state"] = combat_state
+    resolved_result["interaction_result"] = {}
+    resolved_result["general_interaction_result"] = {}
+    resolved_result["conversation_result"] = {
+        "triggered": False,
+        "reason": "combat_companion_command",
+    }
+
+    final_result["resolved_result"] = resolved_result
+    final_result["companion_intent_result"] = companion_intent_result
+    final_result["companion_command_result"] = companion_command_result
+    final_result["combat_state"] = combat_state
+    final_result["visible_interaction_reason"] = "combat_companion_command_failed"
+    final_result["action_type"] = "companion_command"
+    final_result["outcome"] = "invalid_command"
+    final_result["interaction_result"] = {}
+    final_result["general_interaction_result"] = {}
+    final_result["conversation_result"] = resolved_result["conversation_result"]
+    final_result["narration"] = "Result: combat_companion_command_failed"
+    final_result["final_narration"] = "Result: combat_companion_command_failed"
+    final_result["summary"] = "Result: combat_companion_command_failed"
+
+    result_obj = dict(_safe_dict(final_result.get("result")) or _safe_parse_mapping_payload(final_result.get("result")))
+    if result_obj:
+        result_obj["companion_intent_result"] = companion_intent_result
+        result_obj["companion_command_result"] = companion_command_result
+        result_obj["combat_state"] = combat_state
+        result_obj["visible_interaction_reason"] = "combat_companion_command_failed"
+        result_obj["action_type"] = "companion_command"
+        result_obj["outcome"] = "invalid_command"
+        result_obj["interaction_result"] = {}
+        result_obj["general_interaction_result"] = {}
+        final_result["result"] = result_obj
+
+    return final_result
+
+
+def _reconcile_companion_command_conversation_suppression(
+    final_result: Dict[str, Any],
+    player_input: str,
+) -> Dict[str, Any]:
+    final_result = dict(_safe_dict(final_result))
+    command = parse_companion_command(player_input)
+    if not command:
+        return final_result
+
+    resolved_result = dict(_safe_dict(final_result.get("resolved_result")))
+    combat_state = dict(_safe_dict(
+        final_result.get("combat_state")
+        or resolved_result.get("combat_state")
+        or _find_active_combat_state_deep(final_result)
+    ))
+
+    if not combat_state.get("active"):
+        return final_result
+
+    conversation_result = {
+        "triggered": False,
+        "reason": "combat_companion_command",
+    }
+
+    resolved_result["conversation_result"] = conversation_result
+    resolved_result["interaction_result"] = _safe_dict(resolved_result.get("interaction_result"))
+    resolved_result["general_interaction_result"] = {}
+
+    final_result["resolved_result"] = resolved_result
+    final_result["conversation_result"] = conversation_result
+    final_result["conversation_thread_state"] = {}
+    final_result["conversation_thread_count"] = 0
+    final_result["conversation_world_signal_count"] = 0
+    final_result["pending_player_response"] = {}
+    final_result["ambient_tick_result"] = {}
+    final_result["ambient_tick_applied"] = False
+    final_result["ambient_tick_status"] = ""
+
+    result_obj = dict(
+        _safe_dict(final_result.get("result"))
+        or _safe_parse_mapping_payload(final_result.get("result"))
+    )
+    if result_obj:
+        result_obj["conversation_result"] = conversation_result
+        result_obj["conversation_thread_state"] = {}
+        result_obj["conversation_thread_count"] = 0
+        result_obj["conversation_world_signal_count"] = 0
+        result_obj["pending_player_response"] = {}
+        result_obj["ambient_tick_result"] = {}
+        result_obj["ambient_tick_applied"] = False
+        result_obj["ambient_tick_status"] = ""
+        final_result["result"] = result_obj
+
+    return final_result
+
+
+def _reconcile_player_reposition_action(
+    final_result: Dict[str, Any],
+    player_input: str,
+) -> Dict[str, Any]:
+    final_result = dict(_safe_dict(final_result))
+    if not _player_input_requests_reposition(player_input):
+        return final_result
+
+    resolved_result = dict(_safe_dict(final_result.get("resolved_result")))
+    combat_state = dict(_safe_dict(
+        final_result.get("combat_state")
+        or resolved_result.get("combat_state")
+        or _find_active_combat_state_deep(final_result)
+    ))
+    if not combat_state.get("active"):
+        return final_result
+
+    vals = _requested_reposition_values(player_input)
+    combat_state, position_result = reposition_participant(
+        combat_state,
+        "player",
+        zone=vals["zone"],
+        range_band=vals["range_band"],
+    )
+
+    resolved_result["action_type"] = "reposition"
+    resolved_result["visible_interaction_reason"] = "combat_reposition"
+    resolved_result["outcome"] = position_result.get("reason")
+    resolved_result["position_result"] = position_result
+    resolved_result["combat_state"] = combat_state
+    resolved_result["interaction_result"] = {}
+    resolved_result["general_interaction_result"] = {}
+    resolved_result["conversation_result"] = {
+        "triggered": False,
+        "reason": "combat_reposition",
+    }
+
+    final_result["resolved_result"] = resolved_result
+    final_result["position_result"] = position_result
+    final_result["combat_state"] = combat_state
+    final_result["visible_interaction_reason"] = "combat_reposition"
+    final_result["action_type"] = "reposition"
+    final_result["outcome"] = position_result.get("reason")
+    final_result["interaction_result"] = {}
+    final_result["general_interaction_result"] = {}
+    final_result["conversation_result"] = resolved_result["conversation_result"]
+    final_result["narration"] = "Result: combat_reposition"
+    final_result["final_narration"] = "Result: combat_reposition"
+    final_result["summary"] = "Result: combat_reposition"
+
+    result_obj = dict(_safe_dict(final_result.get("result")) or _safe_parse_mapping_payload(final_result.get("result")))
+    if result_obj:
+        result_obj["position_result"] = position_result
+        result_obj["combat_state"] = combat_state
+        result_obj["visible_interaction_reason"] = "combat_reposition"
+        result_obj["action_type"] = "reposition"
+        result_obj["outcome"] = position_result.get("reason")
+        result_obj["interaction_result"] = {}
+        result_obj["general_interaction_result"] = {}
+        final_result["result"] = result_obj
+
+    session = _safe_dict(final_result.get("session"))
+    runtime_state = _safe_dict(session.get("runtime_state") or final_result.get("runtime_state"))
+    simulation_state = _safe_dict(session.get("simulation_state") or final_result.get("simulation_state"))
+    if runtime_state:
+        runtime_state["combat_state"] = combat_state
+        session["runtime_state"] = runtime_state
+        final_result["runtime_state"] = runtime_state
+    if simulation_state:
+        simulation_state["combat_state"] = combat_state
+        session["simulation_state"] = simulation_state
+        final_result["simulation_state"] = simulation_state
+    if session:
+        final_result["session"] = session
+
+    return final_result
+
+
+def _reconcile_position_attack_range_gate(final_result: Dict[str, Any], player_input: str) -> Dict[str, Any]:
+    final_result = dict(_safe_dict(final_result))
+    text = _safe_str(player_input).strip().lower()
+    if "attack" not in text:
+        return final_result
+
+    resolved_result = dict(_safe_dict(final_result.get("resolved_result")))
+    combat_state = dict(_safe_dict(final_result.get("combat_state") or resolved_result.get("combat_state") or _find_active_combat_state_deep(final_result)))
+    if not combat_state.get("active"):
+        return final_result
+
+    participants = _safe_dict(combat_state.get("participants"))
+    player = _safe_dict(participants.get("player"))
+    target = {}
+    target_id = ""
+
+    for actor_id, participant in participants.items():
+        participant = _safe_dict(participant)
+        if _safe_str(participant.get("side")).strip().lower() != "enemy":
+            continue
+        if _safe_int(participant.get("hp"), 0) <= 0:
+            continue
+        name = _safe_str(participant.get("name")).strip().lower()
+        if name and name in text:
+            target = participant
+            target_id = str(actor_id)
+            break
+
+    if not target:
+        for actor_id, participant in participants.items():
+            participant = _safe_dict(participant)
+            if _safe_str(participant.get("side")).strip().lower() == "enemy" and _safe_int(participant.get("hp"), 0) > 0:
+                target = participant
+                target_id = str(actor_id)
+                break
+
+    if not target:
+        return final_result
+
+    can_attack, reason = can_attack_target(player, target)
+    if can_attack:
+        return final_result
+
+    position_result = {
+        "changed": False,
+        "actor_id": "player",
+        "target_actor_id": target_id,
+        "reason": reason,
+        "blocked": True,
+    }
+
+    resolved_result["action_type"] = "attack"
+    resolved_result["visible_interaction_reason"] = "combat_position_blocked"
+    resolved_result["outcome"] = reason
+    resolved_result["position_result"] = position_result
+    resolved_result["combat_result"] = {
+        "resolved": False,
+        "action_type": "attack",
+        "reason": reason,
+        "target_id": target_id,
+    }
+    resolved_result["combat_state"] = combat_state
+
+    final_result["resolved_result"] = resolved_result
+    final_result["position_result"] = position_result
+    final_result["combat_result"] = resolved_result["combat_result"]
+    final_result["combat_state"] = combat_state
+    final_result["visible_interaction_reason"] = "combat_position_blocked"
+    final_result["action_type"] = "attack"
+    final_result["outcome"] = reason
+    final_result["narration"] = f"Result: {reason}"
+    final_result["final_narration"] = f"Result: {reason}"
+    final_result["summary"] = f"Result: {reason}"
+
+    return final_result
+
+
+def _reconcile_combat_world_consequences(final_result: Dict[str, Any]) -> Dict[str, Any]:
+    final_result = dict(_safe_dict(final_result))
+    resolved_result = dict(_safe_dict(final_result.get("resolved_result")))
+    combat_state = dict(_safe_dict(final_result.get("combat_state") or resolved_result.get("combat_state")))
+    combat_result = dict(_safe_dict(final_result.get("combat_result") or resolved_result.get("combat_result")))
+    if not combat_state:
+        combat_state = dict(_safe_dict(combat_result.get("combat_state")))
+
+    exit_reason = _safe_str(combat_state.get("exit_reason") or combat_result.get("exit_reason")).strip()
+    if not exit_reason:
+        return final_result
+
+    simulation_state = _safe_dict(_safe_dict(final_result.get("session")).get("simulation_state") or final_result.get("simulation_state"))
+    if not simulation_state:
+        return final_result
+
+    simulation_state, world_event_result = emit_combat_world_consequence(
+        simulation_state,
+        combat_state,
+        combat_result,
+    )
+
+    if not world_event_result.get("emitted") and world_event_result.get("reason") == "no_exit_reason":
+        return final_result
+
+    resolved_result["world_event_result"] = world_event_result
+    final_result["world_event_result"] = world_event_result
+    final_result["resolved_result"] = resolved_result
+
+    if world_event_result.get("emitted"):
+        kinds = [
+            _safe_str(_safe_dict(event).get("kind"))
+            for event in _safe_list(world_event_result.get("events"))
+        ]
+        if "combat_victory" in kinds:
+            final_result["narration"] = "Result: combat_victory_world_event"
+            final_result["final_narration"] = "Result: combat_victory_world_event"
+            final_result["summary"] = "Result: combat_victory_world_event"
+
+    session = _safe_dict(final_result.get("session"))
+    session["simulation_state"] = simulation_state
+    final_result["simulation_state"] = simulation_state
+    final_result["session"] = session
+
+    result_obj = dict(_safe_dict(final_result.get("result")) or _safe_parse_mapping_payload(final_result.get("result")))
+    if result_obj:
+        result_obj["world_event_result"] = world_event_result
+        if final_result.get("narration"):
+            result_obj["narration"] = final_result.get("narration")
+            result_obj["final_narration"] = final_result.get("final_narration")
+            result_obj["summary"] = final_result.get("summary")
+        final_result["result"] = result_obj
+
+    return final_result
+
+
 def _ability_id_from_player_input(player_input: str) -> str:
     text = _safe_str(player_input).strip().lower()
 
@@ -9865,6 +10312,147 @@ def _apply_turn_authoritative(
                 "simulation_state": simulation_state,
                 "runtime_state": runtime_state,
                 "combat_result": resolved_result["combat_result"],
+                "npc_combat_result": {},
+                "combat_state": combat_state,
+                "grounded": grounded,
+                "xp_result": {},
+                "skill_xp_result": {},
+                "level_up": [],
+                "skill_level_ups": [],
+                "settings": runtime_state.get("runtime_settings", {}),
+                "conversation_threads": [],
+            },
+            "turn_id": _build_turn_id(runtime_state),
+            "tick": current_tick,
+        }
+
+    companion_command = parse_companion_command(player_input)
+    active_combat_state = _active_combat_state_from_runtime_or_simulation(
+        runtime_state,
+        simulation_state,
+    )
+    if companion_command and active_combat_state.get("active"):
+        combat_state = active_combat_state
+        runtime_state = _set_combat_state(runtime_state, combat_state)
+        simulation_state["combat_state"] = combat_state
+        actor_id = _safe_str(companion_command.get("companion_actor_id")).strip()
+        intent_result = choose_companion_intent(combat_state, actor_id, command=companion_command)
+
+        if not intent_result.get("selected"):
+            resolved_result = {
+                "action_type": "companion_command",
+                "visible_interaction_reason": "combat_companion_command_failed",
+                "outcome": intent_result.get("reason"),
+                "companion_intent_result": intent_result,
+                "companion_command_result": intent_result.get("companion_command_result", {}),
+                "combat_state": combat_state,
+                "conversation_result": {"triggered": False, "reason": "combat_companion_command"},
+            }
+        else:
+            simulation_state, combat_state, companion_result = apply_companion_intent(
+                simulation_state,
+                combat_state,
+                intent_result,
+            )
+            runtime_state = _set_combat_state(runtime_state, combat_state)
+            resolved_result = {
+                "action_type": companion_result.get("action_type", "companion_action"),
+                "visible_interaction_reason": "combat_companion_action",
+                "outcome": companion_result.get("reason"),
+                "companion_result": companion_result,
+                "companion_intent_result": intent_result,
+                "companion_command_result": companion_result.get("companion_command_result", {}),
+                "combat_result": companion_result.get("combat_result", {}),
+                "ability_result": companion_result.get("ability_result", {}),
+                "position_result": companion_result.get("position_result", {}),
+                "combat_state": combat_state,
+                "conversation_result": {"triggered": False, "reason": "combat_companion_action"},
+            }
+
+        grounded = _derive_grounded_scene_context(simulation_state, runtime_state, resolved_result)
+        return {
+            "ok": True,
+            "simulation_state": simulation_state,
+            "runtime_state": runtime_state,
+            "session": {"simulation_state": simulation_state, "runtime_state": runtime_state},
+            "result": resolved_result,
+            "resolved_result": resolved_result,
+            "combat_result": resolved_result.get("combat_result", {}),
+            "ability_result": resolved_result.get("ability_result", {}),
+            "companion_result": resolved_result.get("companion_result", {}),
+            "companion_intent_result": resolved_result.get("companion_intent_result", {}),
+            "companion_command_result": resolved_result.get("companion_command_result", {}),
+            "combat_state": combat_state,
+            "visible_interaction_reason": resolved_result["visible_interaction_reason"],
+            "narration": f"Result: {resolved_result['visible_interaction_reason']}",
+            "final_narration": f"Result: {resolved_result['visible_interaction_reason']}",
+            "summary": f"Result: {resolved_result['visible_interaction_reason']}",
+            "narration_context": {
+                "player_input": player_input,
+                "action_type": resolved_result.get("action_type"),
+                "resolved_result": resolved_result,
+                "simulation_state": simulation_state,
+                "runtime_state": runtime_state,
+                "combat_result": resolved_result.get("combat_result", {}),
+                "npc_combat_result": {},
+                "combat_state": combat_state,
+                "grounded": grounded,
+                "xp_result": {},
+                "skill_xp_result": {},
+                "level_up": [],
+                "skill_level_ups": [],
+                "settings": runtime_state.get("runtime_settings", {}),
+                "conversation_threads": [],
+            },
+            "turn_id": _build_turn_id(runtime_state),
+            "tick": current_tick,
+        }
+
+    active_combat_state = _active_combat_state_from_runtime_or_simulation(
+        runtime_state,
+        simulation_state,
+    )
+    if _player_input_requests_reposition(player_input) and active_combat_state.get("active"):
+        combat_state = active_combat_state
+        runtime_state = _set_combat_state(runtime_state, combat_state)
+        simulation_state["combat_state"] = combat_state
+        vals = _requested_reposition_values(player_input)
+        combat_state, position_result = reposition_participant(
+            combat_state,
+            "player",
+            zone=vals["zone"],
+            range_band=vals["range_band"],
+        )
+        runtime_state = _set_combat_state(runtime_state, combat_state)
+        resolved_result = {
+            "action_type": "reposition",
+            "visible_interaction_reason": "combat_reposition",
+            "outcome": position_result.get("reason"),
+            "position_result": position_result,
+            "combat_state": combat_state,
+            "conversation_result": {"triggered": False, "reason": "combat_reposition"},
+        }
+        grounded = _derive_grounded_scene_context(simulation_state, runtime_state, resolved_result)
+        return {
+            "ok": True,
+            "simulation_state": simulation_state,
+            "runtime_state": runtime_state,
+            "session": {"simulation_state": simulation_state, "runtime_state": runtime_state},
+            "result": resolved_result,
+            "resolved_result": resolved_result,
+            "position_result": position_result,
+            "combat_state": combat_state,
+            "visible_interaction_reason": "combat_reposition",
+            "narration": "Result: combat_reposition",
+            "final_narration": "Result: combat_reposition",
+            "summary": "Result: combat_reposition",
+            "narration_context": {
+                "player_input": player_input,
+                "action_type": "reposition",
+                "resolved_result": resolved_result,
+                "simulation_state": simulation_state,
+                "runtime_state": runtime_state,
+                "combat_result": {},
                 "npc_combat_result": {},
                 "combat_state": combat_state,
                 "grounded": grounded,
@@ -12552,15 +13140,21 @@ def apply_turn(
         player_input,
     )
     final_result = _reconcile_combat_victory_rewards_and_loot(final_result)
+    final_result = _reconcile_combat_world_consequences(final_result)
     final_result = _reconcile_combat_recovery_action(final_result, player_input)
     final_result = _reconcile_condition_tick_for_manual_current_actor(final_result, player_input)
     final_result = _reconcile_forced_combat_conditions(final_result)
     final_result = _mirror_enemy_ai_combat_results(final_result)
+    final_result = _reconcile_position_attack_range_gate(final_result, player_input)
     final_result = _reconcile_generated_attack_not_actor_turn(final_result, player_input)
     final_result = _mirror_encounter_result(final_result)
     final_result = _reconcile_ability_cooldown_tick_for_manual_current_actor(final_result, player_input)
     final_result = _reconcile_player_combat_ability_action(final_result, player_input)
     final_result = _mirror_ability_results(final_result)
+    final_result = _reconcile_companion_turn_result(final_result, player_input)
+    final_result = _reconcile_invalid_companion_command(final_result, player_input)
+    final_result = _reconcile_player_reposition_action(final_result, player_input)
+    final_result = _reconcile_companion_command_conversation_suppression(final_result, player_input)
     return final_result
 
 

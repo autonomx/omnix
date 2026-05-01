@@ -4,15 +4,19 @@ from copy import deepcopy
 from typing import Any, Dict, List
 
 from app.rpg.combat.abilities import resolve_combat_ability
-from app.rpg.combat.enemy_ai import choose_enemy_intent, mark_enemy_fled, select_enemy_targets
+from app.rpg.combat.apply import apply_defense_resolution, apply_flee_resolution
+from app.rpg.combat.enemy_ai import (
+    choose_enemy_intent,
+    mark_enemy_fled,
+    select_enemy_targets,
+)
 from app.rpg.combat.lifecycle import evaluate_combat_exit
+from app.rpg.combat.resolver import resolve_defend
 from app.rpg.combat.runtime import (
     advance_combat_turn,
     get_combat_state,
     resolve_combat_attack,
 )
-from app.rpg.combat.apply import apply_defense_resolution, apply_flee_resolution
-from app.rpg.combat.resolver import resolve_defend
 
 
 def _safe_str(value: Any) -> str:

@@ -3,7 +3,6 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any, Dict, List
 
-
 MAX_STATUS_EFFECTS_PER_ACTOR = 12
 STACKING_KINDS = {"bleeding", "poisoned", "burning"}
 UNIQUE_KINDS = {"stunned", "stabilized", "unconscious", "downed", "prone", "guarded"}

@@ -27,10 +27,14 @@ from typing import Any, Dict, List, Sequence
 # Add src to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 
+from app.rpg.combat.companion_ai import (
+    apply_companion_intent,
+    choose_companion_intent,
+)
 from app.rpg.combat.companion_runtime import resolve_current_companion_combat_turn
+from app.rpg.combat.conditions import tick_start_of_turn_status_effects
 from app.rpg.combat.lifecycle import evaluate_combat_exit
 from app.rpg.combat.runtime import advance_combat_turn
-from app.rpg.combat.conditions import tick_start_of_turn_status_effects
 from app.rpg.narration.combat_contract import combat_contract_requires_llm
 from app.rpg.narration.combat_service import generate_combat_narration_sync
 from app.rpg.session.runtime import apply_turn
@@ -2420,6 +2424,81 @@ def _manual_reduce_first_enemy_hp(session: Dict[str, Any], hp: int) -> Dict[str,
 
     combat_state["participants"] = participants
     return _manual_set_combat_state_on_session(session, combat_state)
+
+
+def _manual_is_companion_actor_id(actor_id: str) -> bool:
+    actor_id = _safe_str(actor_id).strip()
+    return actor_id.startswith("npc:") or actor_id.startswith("companion:")
+
+
+def _manual_resolve_current_companion_ai_turn(session: Dict[str, Any]) -> Dict[str, Any]:
+    session = _safe_dict(session)
+    simulation_state = _safe_dict(session.get("simulation_state"))
+    runtime_state = _safe_dict(session.get("runtime_state"))
+    combat_state = _safe_dict(
+        runtime_state.get("combat_state")
+        or simulation_state.get("combat_state")
+    )
+
+    actor_id = _safe_str(combat_state.get("current_actor_id")).strip()
+    if not combat_state.get("active") or not _manual_is_companion_actor_id(actor_id):
+        return {
+            "ok": True,
+            "visible_interaction_reason": "current_actor_not_companion",
+            "combat_state": combat_state,
+            "result": {
+                "visible_interaction_reason": "current_actor_not_companion",
+                "combat_state": combat_state,
+            },
+            "session": session,
+            "narration": "Result: current_actor_not_companion",
+            "final_narration": "Result: current_actor_not_companion",
+        }
+
+    intent_result = choose_companion_intent(combat_state, actor_id)
+    simulation_state, combat_state, companion_result = apply_companion_intent(
+        simulation_state,
+        combat_state,
+        intent_result,
+    )
+
+    runtime_state["combat_state"] = combat_state
+    simulation_state["combat_state"] = combat_state
+    session["runtime_state"] = runtime_state
+    session["simulation_state"] = simulation_state
+
+    resolved_result = {
+        "action_type": companion_result.get("action_type", "companion_action"),
+        "visible_interaction_reason": "combat_companion_action",
+        "outcome": companion_result.get("reason"),
+        "companion_result": companion_result,
+        "companion_intent_result": intent_result,
+        "companion_command_result": companion_result.get("companion_command_result", {}),
+        "combat_result": companion_result.get("combat_result", {}),
+        "ability_result": companion_result.get("ability_result", {}),
+        "position_result": companion_result.get("position_result", {}),
+        "combat_state": combat_state,
+    }
+
+    return {
+        "ok": True,
+        "manual_command": "__manual_resolve_current_combat_actor__",
+        "visible_interaction_reason": "combat_companion_action",
+        "resolved_result": resolved_result,
+        "result": resolved_result,
+        "companion_combat_result": companion_result,
+        "companion_result": companion_result,
+        "companion_intent_result": intent_result,
+        "companion_command_result": companion_result.get("companion_command_result", {}),
+        "combat_result": companion_result.get("combat_result", {}),
+        "ability_result": companion_result.get("ability_result", {}),
+        "position_result": companion_result.get("position_result", {}),
+        "combat_state": combat_state,
+        "session": session,
+        "narration": "Result: combat_companion_action",
+        "final_narration": "Result: combat_companion_action",
+        "summary": "Result: combat_companion_action",
+    }
 
 
 def _manual_carry_forward_session_from_result(
@@ -7479,6 +7558,247 @@ SERVICE_SCENARIOS = {
         },
         "turns": ["__manual_resolve_current_combat_actor__"],
     },
+
+    "combat_companion_striker_attacks_enemy": {
+        "currency": {"gold": 0, "silver": 0, "copper": 0},
+        "conversation_settings": {"enabled": True, "autonomous_ticks_enabled": False, "frequency": "never", "conversation_chance_percent": 0},
+        "setup_interaction_state": {
+            "player_location_id": "loc_tavern_road",
+            "player_hp": 20,
+            "player_max_hp": 20,
+            "player_inventory": {"items": [], "equipment": {}, "carry_capacity": 50.0},
+            "party_state": {"max_size": 4, "companions": [{"npc_id": "npc:bran", "name": "Bran"}]},
+            "combat_state": {
+                "active": True,
+                "current_actor_id": "npc:bran",
+                "initiative_order": [{"actor_id": "npc:bran", "initiative": 20}, {"actor_id": "player", "initiative": 10}, {"actor_id": "enemy:bandit_1", "initiative": 1}],
+                "participants": {
+                    "npc:bran": {"actor_id": "npc:bran", "side": "party", "name": "Bran", "hp": 14, "max_hp": 14, "damage_min": 1, "damage_max": 4, "combat_role": "striker", "status": "active"},
+                    "player": {"actor_id": "player", "side": "party", "name": "You", "hp": 20, "max_hp": 20, "status": "active"},
+                    "enemy:bandit_1": {"actor_id": "enemy:bandit_1", "side": "enemy", "name": "Bandit", "hp": 8, "max_hp": 8, "status": "active"},
+                },
+            },
+        },
+        "turns": ["__manual_resolve_current_combat_actor__"],
+    },
+
+    "combat_companion_protector_defends_low_hp_player": {
+        "currency": {"gold": 0, "silver": 0, "copper": 0},
+        "conversation_settings": {"enabled": True, "autonomous_ticks_enabled": False, "frequency": "never", "conversation_chance_percent": 0},
+        "setup_interaction_state": {
+            "player_location_id": "loc_tavern_road",
+            "player_hp": 5,
+            "player_max_hp": 20,
+            "player_inventory": {"items": [], "equipment": {}, "carry_capacity": 50.0},
+            "party_state": {"max_size": 4, "companions": [{"npc_id": "npc:bran", "name": "Bran"}]},
+            "combat_state": {
+                "active": True,
+                "current_actor_id": "npc:bran",
+                "initiative_order": [{"actor_id": "npc:bran", "initiative": 20}, {"actor_id": "player", "initiative": 10}, {"actor_id": "enemy:bandit_1", "initiative": 1}],
+                "participants": {
+                    "npc:bran": {"actor_id": "npc:bran", "side": "party", "name": "Bran", "hp": 14, "max_hp": 14, "combat_role": "protector", "status": "active"},
+                    "player": {"actor_id": "player", "side": "party", "name": "You", "hp": 5, "max_hp": 20, "status": "active"},
+                    "enemy:bandit_1": {"actor_id": "enemy:bandit_1", "side": "enemy", "name": "Bandit", "hp": 8, "max_hp": 8, "status": "active"},
+                },
+            },
+        },
+        "turns": ["__manual_resolve_current_combat_actor__"],
+    },
+
+    "combat_player_commands_companion_attack": {
+        "currency": {"gold": 0, "silver": 0, "copper": 0},
+        "conversation_settings": {"enabled": True, "autonomous_ticks_enabled": False, "frequency": "never", "conversation_chance_percent": 0},
+        "setup_interaction_state": {
+            "player_location_id": "loc_tavern_road",
+            "player_hp": 20,
+            "player_max_hp": 20,
+            "player_inventory": {"items": [], "equipment": {}, "carry_capacity": 50.0},
+            "party_state": {"max_size": 4, "companions": [{"npc_id": "npc:bran", "name": "Bran"}]},
+            "combat_state": {
+                "active": True,
+                "current_actor_id": "player",
+                "initiative_order": [{"actor_id": "player", "initiative": 20}, {"actor_id": "npc:bran", "initiative": 10}, {"actor_id": "enemy:bandit_1", "initiative": 1}],
+                "participants": {
+                    "player": {"actor_id": "player", "side": "party", "name": "You", "hp": 20, "max_hp": 20, "status": "active"},
+                    "npc:bran": {"actor_id": "npc:bran", "side": "party", "name": "Bran", "hp": 14, "max_hp": 14, "damage_min": 1, "damage_max": 4, "combat_role": "striker", "status": "active"},
+                    "enemy:bandit_1": {"actor_id": "enemy:bandit_1", "side": "enemy", "name": "Bandit", "hp": 8, "max_hp": 8, "status": "active"},
+                },
+            },
+        },
+        "turns": ["Bran, attack the bandit."],
+    },
+
+    "combat_invalid_companion_command_fails_safely": {
+        "currency": {"gold": 0, "silver": 0, "copper": 0},
+        "conversation_settings": {"enabled": True, "autonomous_ticks_enabled": False, "frequency": "never", "conversation_chance_percent": 0},
+        "setup_interaction_state": {
+            "player_location_id": "loc_tavern_road",
+            "player_hp": 20,
+            "player_max_hp": 20,
+            "player_inventory": {"items": [], "equipment": {}, "carry_capacity": 50.0},
+            "party_state": {"max_size": 4, "companions": [{"npc_id": "npc:bran", "name": "Bran"}]},
+            "combat_state": {
+                "active": True,
+                "current_actor_id": "player",
+                "initiative_order": [{"actor_id": "player", "initiative": 20}, {"actor_id": "npc:bran", "initiative": 10}],
+                "participants": {
+                    "player": {"actor_id": "player", "side": "party", "name": "You", "hp": 20, "max_hp": 20, "status": "active"},
+                    "npc:bran": {"actor_id": "npc:bran", "side": "party", "name": "Bran", "hp": 14, "max_hp": 14, "combat_role": "striker", "status": "active"},
+                },
+            },
+        },
+        "turns": ["Bran, dance at the bandit."],
+    },
+
+    "combat_downed_companion_cannot_act": {
+        "currency": {"gold": 0, "silver": 0, "copper": 0},
+        "conversation_settings": {"enabled": True, "autonomous_ticks_enabled": False, "frequency": "never", "conversation_chance_percent": 0},
+        "setup_interaction_state": {
+            "player_location_id": "loc_tavern_road",
+            "player_hp": 20,
+            "player_max_hp": 20,
+            "player_inventory": {"items": [], "equipment": {}, "carry_capacity": 50.0},
+            "party_state": {"max_size": 4, "companions": [{"npc_id": "npc:bran", "name": "Bran"}]},
+            "combat_state": {
+                "active": True,
+                "current_actor_id": "npc:bran",
+                "initiative_order": [{"actor_id": "npc:bran", "initiative": 20}, {"actor_id": "player", "initiative": 10}],
+                "participants": {
+                    "npc:bran": {"actor_id": "npc:bran", "side": "party", "name": "Bran", "hp": 0, "max_hp": 14, "status": "downed", "combat_role": "striker"},
+                    "player": {"actor_id": "player", "side": "party", "name": "You", "hp": 20, "max_hp": 20, "status": "active"},
+                },
+            },
+        },
+        "turns": ["__manual_resolve_current_combat_actor__"],
+    },
+
+    "combat_melee_cannot_attack_far_target": {
+        "currency": {"gold": 0, "silver": 0, "copper": 0},
+        "conversation_settings": {"enabled": True, "autonomous_ticks_enabled": False, "frequency": "never", "conversation_chance_percent": 0},
+        "setup_interaction_state": {
+            "player_location_id": "loc_tavern_road",
+            "player_hp": 20,
+            "player_max_hp": 20,
+            "player_inventory": {"items": [], "equipment": {}, "carry_capacity": 50.0},
+            "party_state": {"max_size": 4, "companions": []},
+            "combat_state": {
+                "active": True,
+                "current_actor_id": "player",
+                "initiative_order": [{"actor_id": "player", "initiative": 20}, {"actor_id": "enemy:archer_1", "initiative": 1}],
+                "participants": {
+                    "player": {"actor_id": "player", "side": "party", "name": "You", "hp": 20, "max_hp": 20, "status": "active", "position": {"zone": "frontline", "range_band": "near", "engaged_with": []}},
+                    "enemy:archer_1": {"actor_id": "enemy:archer_1", "side": "enemy", "name": "Archer", "hp": 8, "max_hp": 8, "status": "active", "position": {"zone": "backline", "range_band": "far", "engaged_with": []}},
+                },
+            },
+        },
+        "turns": ["I attack the archer."],
+    },
+
+    "combat_reposition_moves_actor_near": {
+        "currency": {"gold": 0, "silver": 0, "copper": 0},
+        "conversation_settings": {"enabled": True, "autonomous_ticks_enabled": False, "frequency": "never", "conversation_chance_percent": 0},
+        "setup_interaction_state": {
+            "player_location_id": "loc_tavern_road",
+            "player_hp": 20,
+            "player_max_hp": 20,
+            "player_inventory": {"items": [], "equipment": {}, "carry_capacity": 50.0},
+            "party_state": {"max_size": 4, "companions": []},
+            "combat_state": {
+                "active": True,
+                "current_actor_id": "player",
+                "participants": {
+                    "player": {"actor_id": "player", "side": "party", "name": "You", "hp": 20, "max_hp": 20, "status": "active", "position": {"zone": "backline", "range_band": "far"}},
+                    "enemy:bandit_1": {"actor_id": "enemy:bandit_1", "side": "enemy", "name": "Bandit", "hp": 8, "max_hp": 8, "status": "active", "position": {"zone": "frontline", "range_band": "near"}},
+                },
+            },
+        },
+        "turns": ["I move closer."],
+    },
+
+    "combat_ranged_enemy_attacks_from_backline": {
+        "currency": {"gold": 0, "silver": 0, "copper": 0},
+        "conversation_settings": {"enabled": True, "autonomous_ticks_enabled": False, "frequency": "never", "conversation_chance_percent": 0},
+        "setup_interaction_state": {
+            "player_location_id": "loc_tavern_road",
+            "player_hp": 20,
+            "player_max_hp": 20,
+            "player_inventory": {"items": [], "equipment": {}, "carry_capacity": 50.0},
+            "party_state": {"max_size": 4, "companions": []},
+            "combat_state": {
+                "active": True,
+                "current_actor_id": "enemy:archer_1",
+                "initiative_order": [{"actor_id": "enemy:archer_1", "initiative": 20}, {"actor_id": "player", "initiative": 1}],
+                "participants": {
+                    "enemy:archer_1": {"actor_id": "enemy:archer_1", "side": "enemy", "name": "Archer", "hp": 8, "max_hp": 8, "status": "active", "tags": ["ranged", "archer"], "position": {"zone": "backline", "range_band": "far", "engaged_with": []}},
+                    "player": {"actor_id": "player", "side": "party", "name": "You", "hp": 20, "max_hp": 20, "status": "active", "position": {"zone": "frontline", "range_band": "near", "engaged_with": []}},
+                },
+            },
+        },
+        "turns": ["__manual_resolve_current_combat_actor__"],
+    },
+
+    "combat_victory_emits_world_event_once": {
+        "currency": {"gold": 0, "silver": 0, "copper": 0},
+        "conversation_settings": {"enabled": True, "autonomous_ticks_enabled": False, "frequency": "never", "conversation_chance_percent": 0},
+        "setup_interaction_state": {
+            "player_location_id": "loc_tavern_road",
+            "player_hp": 20,
+            "player_max_hp": 20,
+            "player_inventory": {"items": [], "equipment": {}, "carry_capacity": 50.0},
+            "party_state": {"max_size": 4, "companions": []},
+            "combat_state": {
+                "active": True,
+                "combat_id": "combat:world_event_bandit",
+                "current_actor_id": "player",
+                "initiative_order": [{"actor_id": "player", "initiative": 20}, {"actor_id": "enemy:bandit_1", "initiative": 1}],
+                "participants": {
+                    "player": {"actor_id": "player", "side": "party", "name": "You", "hp": 20, "max_hp": 20, "damage_min": 1, "status": "active"},
+                    "enemy:bandit_1": {"actor_id": "enemy:bandit_1", "side": "enemy", "name": "Bandit", "hp": 1, "max_hp": 8, "status": "active", "tags": ["bandit"], "loot_table_id": "loot:bandit_common"},
+                },
+            },
+        },
+        "turns": ["__manual_force_next_attack_roll__:20", "__manual_force_next_damage__:1", "I attack the bandit."],
+    },
+
+    "combat_flee_emits_no_victory_world_event": {
+        "currency": {"gold": 0, "silver": 0, "copper": 0},
+        "conversation_settings": {"enabled": True, "autonomous_ticks_enabled": False, "frequency": "never", "conversation_chance_percent": 0},
+        "setup_interaction_state": {
+            "player_location_id": "loc_tavern_road",
+            "player_hp": 20,
+            "player_max_hp": 20,
+            "player_inventory": {"items": [], "equipment": {}, "carry_capacity": 50.0},
+            "party_state": {"max_size": 4, "companions": []},
+            "combat_state": {
+                "active": False,
+                "exit_reason": "fled",
+            },
+        },
+        "turns": ["I flee."],
+    },
+
+    "combat_bandit_victory_lowers_bandit_pressure": {
+        "currency": {"gold": 0, "silver": 0, "copper": 0},
+        "conversation_settings": {"enabled": True, "autonomous_ticks_enabled": False, "frequency": "never", "conversation_chance_percent": 0},
+        "setup_interaction_state": {
+            "player_location_id": "loc_tavern_road",
+            "player_hp": 20,
+            "player_max_hp": 20,
+            "player_inventory": {"items": [], "equipment": {}, "carry_capacity": 50.0},
+            "party_state": {"max_size": 4, "companions": []},
+            "combat_state": {
+                "active": True,
+                "current_actor_id": "player",
+                "initiative_order": [{"actor_id": "player", "initiative": 20}],
+                "participants": {
+                    "player": {"actor_id": "player", "side": "party", "name": "You", "hp": 20, "max_hp": 20, "damage_min": 1, "status": "active"},
+                    "enemy:bandit_1": {"actor_id": "enemy:bandit_1", "side": "enemy", "name": "Bandit", "hp": 1, "max_hp": 8, "status": "active", "tags": ["bandit"], "loot_table_id": "loot:bandit_common"},
+                },
+            },
+        },
+        "turns": ["__manual_force_next_attack_roll__:20", "__manual_force_next_damage__:1", "I attack the bandit."],
+    },
+
 }
 
 
@@ -8391,6 +8711,21 @@ def _extract_world_event_state(result: Dict[str, Any]) -> Dict[str, Any]:
     return _safe_dict(simulation_state.get("world_event_state"))
 
 
+def _extract_world_event_result(result: Dict[str, Any]) -> Dict[str, Any]:
+    return _first_dict(
+        result.get("world_event_result"),
+        _safe_dict(result.get("resolved_result")).get("world_event_result"),
+        _safe_dict(result.get("result")).get("world_event_result"),
+        _extract_nested_dict_by_key(result, "world_event_result"),
+    )
+
+
+def _world_event_kind(result: Dict[str, Any], kind: str) -> bool:
+    world_event_result = _extract_world_event_result(result)
+    events = _safe_list(world_event_result.get("events"))
+    return any(_safe_str(_safe_dict(event).get("kind")) == kind for event in events)
+
+
 def _extract_location_state(result: Dict[str, Any]) -> Dict[str, Any]:
     result_sub = _safe_dict(_safe_dict(result).get("result"))
     direct = _safe_dict(result_sub.get("location_state"))
@@ -8943,6 +9278,33 @@ def _extract_companion_combat_result(result: Dict[str, Any]) -> Dict[str, Any]:
         interaction.get("companion_combat_result"),
         result.get("companion_combat_result"),
         nested.get("companion_combat_result"),
+    )
+
+
+def _extract_companion_intent_result(result: Dict[str, Any]) -> Dict[str, Any]:
+    return _first_dict(
+        result.get("companion_intent_result"),
+        _safe_dict(result.get("resolved_result")).get("companion_intent_result"),
+        _safe_dict(result.get("companion_result")).get("companion_intent_result"),
+        _extract_nested_dict_by_key(result, "companion_intent_result"),
+    )
+
+
+def _extract_position_result(result: Dict[str, Any]) -> Dict[str, Any]:
+    return _first_dict(
+        result.get("position_result"),
+        _safe_dict(result.get("resolved_result")).get("position_result"),
+        _safe_dict(result.get("companion_result")).get("position_result"),
+        _extract_nested_dict_by_key(result, "position_result"),
+    )
+
+
+def _extract_companion_command_result(result: Dict[str, Any]) -> Dict[str, Any]:
+    return _first_dict(
+        result.get("companion_command_result"),
+        _safe_dict(result.get("resolved_result")).get("companion_command_result"),
+        _safe_dict(result.get("companion_result")).get("companion_command_result"),
+        _extract_nested_dict_by_key(result, "companion_command_result"),
     )
 
 
@@ -13196,10 +13558,11 @@ def _run_one_service_scenario(
     seeded = _seed_session_currency(session_id, currency)
     setup_applied = _apply_manual_scenario_setup(session_id, scenario)
     if not seeded or not setup_applied:
+        scenario_error = "scenario_session_seed_failed"
         _record_scenario_error(
             scenario_name=scenario_name,
             session_id=session_id,
-            error="scenario_session_seed_failed",
+            error=scenario_error,
         )
         _emit("ERROR:", channel=target_channel)
         _emit(f"Could not create or seed scenario session: {session_id}", channel=target_channel)
@@ -13211,7 +13574,7 @@ def _run_one_service_scenario(
             "scenario": scenario_name,
             "session_id": session_id,
             "seeded_currency": currency,
-            "error": "scenario_session_seed_failed",
+            "error": scenario_error,
             "turns": [],
             "_channel": scenario_channel,
         }
@@ -13220,6 +13583,7 @@ def _run_one_service_scenario(
     scenario_results: List[Dict[str, Any]] = []
     html_turns: List[str] = []
     scenario_warnings: List[str] = []
+    scenario_error = ""
     current_currency = currency
     current_location_id = ""
 
@@ -13913,15 +14277,29 @@ def _run_one_service_scenario(
             continue
         elif _safe_str(player_input) == "__manual_resolve_current_combat_actor__":
             sim = _extract_simulation_state(last_result) if last_result else _safe_dict(session.get("simulation_state"))
+            result: Dict[str, Any] = {}
+            companion_combat_result: Dict[str, Any] = {}
 
-            session = _manual_tick_current_actor_conditions(session)
-            sim = _extract_simulation_state(last_result) if last_result else _safe_dict(session.get("simulation_state"))
+            combat_state = _manual_get_combat_state_from_session(session)
+            current_actor_id = _safe_str(combat_state.get("current_actor_id")).strip()
+            if _manual_is_companion_actor_id(current_actor_id):
+                result = _manual_resolve_current_companion_ai_turn(session)
+                session = _manual_carry_forward_session_from_result(
+                    session,
+                    result,
+                    reason=f"{scenario_name}:manual_companion_ai_turn",
+                )
+                sim = _safe_dict(session.get("simulation_state"))
+                companion_combat_result = _safe_dict(result.get("companion_combat_result") or result)
+            else:
+                session = _manual_tick_current_actor_conditions(session)
+                sim = _extract_simulation_state(last_result) if last_result else _safe_dict(session.get("simulation_state"))
 
-            companion_combat_result = resolve_current_companion_combat_turn(
-                sim,
-                session_id=session_id,
-                tick=manual_turn_index,
-            )
+                companion_combat_result = resolve_current_companion_combat_turn(
+                    sim,
+                    session_id=session_id,
+                    tick=manual_turn_index,
+                )
 
             enemy_combat_result = _safe_dict(companion_combat_result.get("enemy_combat_result"))
 
@@ -14301,10 +14679,57 @@ def _run_one_service_scenario(
                     )
             else:
                 visible_reason = _safe_str(summary_row.get("visible_interaction_reason")).strip()
+                player_text = _safe_str(summary_row.get("player_input") or player_input).strip().lower()
+                is_companion_combat_command = (
+                    "bran" in player_text
+                    and (
+                        _extract_companion_command_result(summary_row)
+                        or _extract_companion_intent_result(summary_row)
+                        or visible_reason in {
+                            "combat_companion_action",
+                            "combat_companion_command_failed",
+                            "combat_attack_resolved",
+                        }
+                    )
+                )
                 if visible_reason.startswith("combat_"):
                     summary_row.setdefault("scenario_warnings", []).append(
                         "combat_post_victory_world_action_still_routed_as_combat"
                     )
+
+                if visible_reason in {
+                    "combat_companion_action",
+                    "combat_companion_command_failed",
+                } or is_companion_combat_command:
+                    summary_row["conversation_result"] = {
+                        "triggered": False,
+                        "reason": "combat_companion_action",
+                    }
+                    summary_row["conversation_thread_state"] = {}
+                    summary_row["conversation_thread_count"] = 0
+                    summary_row["conversation_world_signal_count"] = 0
+                    summary_row["pending_player_response"] = {}
+                    summary_row["regression_warnings"] = [
+                        warning
+                        for warning in _safe_list(summary_row.get("regression_warnings"))
+                        if warning != "conversation_triggered_in_non_conversation_scenario"
+                    ]
+
+        world_event_result = _extract_world_event_result(summary_row)
+        if _safe_dict(world_event_result).get("source") == "combat":
+            summary_row["conversation_result"] = {
+                "triggered": False,
+                "reason": "combat_world_event",
+            }
+            summary_row["conversation_thread_state"] = {}
+            summary_row["conversation_thread_count"] = 0
+            summary_row["conversation_world_signal_count"] = 0
+            summary_row["pending_player_response"] = {}
+            summary_row["regression_warnings"] = [
+                warning
+                for warning in _safe_list(summary_row.get("regression_warnings"))
+                if warning != "conversation_triggered_in_non_conversation_scenario"
+            ]
 
         if scenario_name == "combat_post_combat_clears_temporary_modifiers":
             if not _turn_has_combat_cleanup(summary_row):
@@ -14711,6 +15136,7 @@ def _run_one_service_scenario(
                 scenario_warnings.append("companion_combat_expected_bran_participant")
 
         if manual_turn_index in {2, 3}:
+            companion_combat = _extract_companion_combat_result(result)
             reason = _safe_str(companion_combat.get("reason") or combat_result.get("reason"))
             allowed = {
                 "companion_combat_attack_resolved",
@@ -14795,7 +15221,7 @@ def _run_one_service_scenario(
             )
             notes = [str(x) for x in _safe_list(combat_result.get("notes"))]
             if "defense_stance" not in notes:
-                scenario_summary.setdefault("scenario_warnings", []).append(
+                summary_row.setdefault("scenario_warnings", []).append(
                     "combat_defend_missing_defense_stance_note"
                 )
 
@@ -14806,7 +15232,7 @@ def _run_one_service_scenario(
                 or _safe_dict(_safe_dict(result.get("resolved_result")).get("combat_result"))
             )
             if combat_result.get("action_type") != "use_item":
-                scenario_summary.setdefault("scenario_warnings", []).append(
+                summary_row.setdefault("scenario_warnings", []).append(
                     "combat_use_item_missing_use_item_combat_result"
                 )
             consumable_result = _safe_dict(
@@ -14821,7 +15247,7 @@ def _run_one_service_scenario(
                 or bool(_safe_dict(consumable_result.get("effect_result")).get("applied"))
             )
             if not item_ok:
-                scenario_summary.setdefault("scenario_warnings", []).append(
+                summary_row.setdefault("scenario_warnings", []).append(
                     "combat_use_item_not_ok"
                 )
 
@@ -14832,11 +15258,11 @@ def _run_one_service_scenario(
                 or _safe_dict(_safe_dict(result.get("resolved_result")).get("combat_result"))
             )
             if combat_result.get("action_type") != "flee":
-                scenario_summary.setdefault("scenario_warnings", []).append(
+                summary_row.setdefault("scenario_warnings", []).append(
                     "combat_flee_missing_flee_combat_result"
                 )
             if "success" not in combat_result:
-                scenario_summary.setdefault("scenario_warnings", []).append(
+                summary_row.setdefault("scenario_warnings", []).append(
                     "combat_flee_missing_success_boolean"
                 )
 
@@ -14998,6 +15424,48 @@ def _run_one_service_scenario(
             scenario_warnings.append("encounter_scaling_missing_easy_or_hard_budget")
         elif max(budgets) <= min(budgets):
             scenario_warnings.append("encounter_scaling_hard_budget_not_larger_than_easy")
+
+    if scenario_name == "combat_companion_protector_defends_low_hp_player":
+        if not any(
+            _safe_str(_extract_companion_intent_result(row).get("intent")) == "defend"
+            for row in scenario_results
+        ):
+            scenario_warnings.append("companion_protector_did_not_defend_low_hp_player")
+
+    if scenario_name == "combat_invalid_companion_command_fails_safely":
+        if not any(
+            _extract_companion_command_result(row).get("accepted") is False
+            for row in scenario_results
+        ):
+            scenario_warnings.append("invalid_companion_command_did_not_fail_safely")
+
+    if scenario_name == "combat_reposition_moves_actor_near":
+        if not any(
+            _extract_position_result(row).get("changed") is True
+            and _safe_str(_safe_dict(_extract_position_result(row).get("to")).get("range_band")) == "near"
+            for row in scenario_results
+        ):
+            scenario_warnings.append("reposition_did_not_move_actor_near")
+
+    if scenario_name == "combat_victory_emits_world_event_once":
+        if not any(_world_event_kind(row, "combat_victory") for row in scenario_results):
+            scenario_warnings.append("combat_victory_missing_world_event")
+
+    if scenario_name == "combat_bandit_victory_lowers_bandit_pressure":
+        found = False
+        for row in scenario_results:
+            result = _extract_world_event_result(row)
+            for event in _safe_list(result.get("events")):
+                pressure = _safe_dict(_safe_dict(event).get("pressure_deltas"))
+                if _safe_int(pressure.get("bandit_pressure"), 0) < 0:
+                    found = True
+        if not found:
+            scenario_warnings.append("bandit_victory_did_not_lower_bandit_pressure")
+
+    scenario_warnings = list(dict.fromkeys(scenario_warnings))
+    if scenario_error:
+        scenario_warnings.append(f"scenario_error:{scenario_error}")
+        scenario_warnings = list(dict.fromkeys(scenario_warnings))
 
     return {
         "scenario": scenario_name,
