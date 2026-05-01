@@ -28,6 +28,7 @@ from typing import Any, Dict, List, Sequence
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 
 from app.rpg.combat.companion_runtime import resolve_current_companion_combat_turn
+from app.rpg.combat.lifecycle import evaluate_combat_exit
 from app.rpg.combat.runtime import advance_combat_turn
 from app.rpg.narration.combat_contract import combat_contract_requires_llm
 from app.rpg.narration.combat_service import generate_combat_narration_sync
@@ -5364,7 +5365,7 @@ SERVICE_SCENARIOS = {
             }
         },
         "turns": [
-            "__manual_resolve_current_combat_actor__"
+            "I attack the bandit."
         ]
     },
     "combat_llm_attack_narration": {
@@ -5534,11 +5535,11 @@ SERVICE_SCENARIOS = {
                     "encounter_id": "enc:bandit_ambush",
                     "round": 1,
                     "turn_index": 0,
-                    "current_actor_id": "enemy:bandit_1",
-                    "initiative_order": [
-                        {"actor_id": "enemy:bandit_1", "initiative": 20, "roll": 20, "bonus": 0},
-                        {"actor_id": "player", "initiative": 1, "roll": 1, "bonus": 0}
-                    ],
+                "current_actor_id": "player",
+                "initiative_order": [
+                    {"actor_id": "player", "initiative": 20, "roll": 20, "bonus": 0},
+                    {"actor_id": "enemy:bandit_1", "initiative": 1, "roll": 1, "bonus": 0}
+                ],
                     "participants": {
                         "enemy:bandit_1": {
                             "actor_id": "enemy:bandit_1",
@@ -5572,7 +5573,588 @@ SERVICE_SCENARIOS = {
                 }
         },
         "turns": [
-            "__manual_resolve_current_combat_actor__"
+            "I attack the bandit."
+        ]
+    },
+
+    "combat_victory_grants_xp_once": {
+        "currency": {"gold": 0, "silver": 0, "copper": 0},
+        "conversation_settings": {
+            "enabled": True,
+            "autonomous_ticks_enabled": False,
+            "frequency": "never",
+            "conversation_chance_percent": 0,
+            "allow_player_invited": False,
+            "player_inclusion_chance_percent": 0,
+            "npc_file_profiles_enabled": True,
+            "npc_evolution_enabled": True,
+            "min_ticks_between_conversations": 0,
+            "thread_cooldown_ticks": 0
+        },
+        "setup_interaction_state": {
+            "scene_items": [],
+            "scene_objects": [],
+            "player_location_id": "loc_tavern_road",
+            "player_hp": 20,
+            "player_max_hp": 20,
+            "player_inventory": {
+                "items": [],
+                "equipment": {},
+                "carry_capacity": 50.0
+            },
+            "party_state": {"max_size": 4, "companions": []},
+            "combat_state": {
+                "active": True,
+                "encounter_id": "enc:bandit_ambush",
+                "round": 1,
+                "turn_index": 0,
+                "current_actor_id": "player",
+                "initiative_order": [
+                    {"actor_id": "player", "initiative": 20, "roll": 20, "bonus": 0},
+                    {"actor_id": "enemy:bandit_1", "initiative": 1, "roll": 1, "bonus": 0}
+                ],
+                "participants": {
+                    "player": {
+                        "actor_id": "player",
+                        "side": "party",
+                        "name": "You",
+                        "hp": 20,
+                        "max_hp": 20,
+                        "armor": 0,
+                        "defense": 10,
+                        "initiative_bonus": 0,
+                        "status": "active"
+                    },
+                    "enemy:bandit_1": {
+                        "actor_id": "enemy:bandit_1",
+                        "side": "enemy",
+                        "name": "Bandit",
+                        "hp": 1,
+                        "max_hp": 8,
+                        "armor": 0,
+                        "defense": 10,
+                        "initiative_bonus": 0,
+                        "status": "active",
+                        "loot_table_id": "loot:bandit_common"
+                    }
+                },
+                "combat_log": [],
+                "source": "manual_combat_victory_test"
+            }
+        },
+        "turns": [
+            "I attack the bandit."
+        ]
+    },
+
+    "combat_flee_grants_no_loot_or_xp": {
+        "currency": {"gold": 0, "silver": 0, "copper": 0},
+        "conversation_settings": {
+            "enabled": True,
+            "autonomous_ticks_enabled": False,
+            "frequency": "never",
+            "conversation_chance_percent": 0,
+            "allow_player_invited": False,
+            "player_inclusion_chance_percent": 0,
+            "npc_file_profiles_enabled": True,
+            "npc_evolution_enabled": True,
+            "min_ticks_between_conversations": 0,
+            "thread_cooldown_ticks": 0
+        },
+        "setup_interaction_state": {
+            "scene_items": [],
+            "scene_objects": [],
+            "player_location_id": "loc_tavern_road",
+            "player_hp": 5,  # Low HP to encourage flee
+            "player_max_hp": 20,
+            "player_inventory": {
+                "items": [],
+                "equipment": {},
+                "carry_capacity": 50.0
+            },
+            "party_state": {"max_size": 4, "companions": []},
+            "combat_state": {
+                "active": True,
+                "encounter_id": "enc:bandit_ambush",
+                "round": 1,
+                "turn_index": 1,
+                "current_actor_id": "player",
+                "initiative_order": [
+                    {"actor_id": "enemy:bandit_1", "initiative": 20, "roll": 20, "bonus": 0},
+                    {"actor_id": "player", "initiative": 1, "roll": 1, "bonus": 0}
+                ],
+                "participants": {
+                    "enemy:bandit_1": {
+                        "actor_id": "enemy:bandit_1",
+                        "side": "enemy",
+                        "name": "Bandit",
+                        "hp": 8,
+                        "max_hp": 8,
+                        "armor": 0,
+                        "defense": 10,
+                        "damage_min": 3,
+                        "damage_max": 4,
+                        "accuracy_bonus": 5,
+                        "initiative_bonus": 0,
+                        "status": "active",
+                        "loot_table_id": "loot:bandit_common"
+                    },
+                    "player": {
+                        "actor_id": "player",
+                        "side": "party",
+                        "name": "You",
+                        "hp": 5,
+                        "max_hp": 20,
+                        "armor": 0,
+                        "defense": 10,
+                        "initiative_bonus": 0,
+                        "status": "active"
+                    }
+                },
+                "combat_log": [
+                    {
+                        "kind": "attack",
+                        "round": 1,
+                        "turn_index": 0,
+                        "actor_id": "enemy:bandit_1",
+                        "target_id": "player",
+                        "attack_roll": 12,
+                        "attack_total": 17,
+                        "equipment_accuracy_bonus": 5,
+                        "morale_accuracy_bonus": 0,
+                        "target_defense": 10,
+                        "hit": True,
+                        "damage_roll": 3,
+                        "morale_damage_bonus": 0,
+                        "armor_reduction": 0,
+                        "damage_applied": 3,
+                        "target_hp_before": 8,
+                        "target_hp_after": 5,
+                        "defeated": False,
+                        "tick": 1
+                    }
+                ],
+                "source": "manual_combat_flee_test"
+            }
+        },
+        "turns": [
+            "I try to flee from combat."
+        ]
+    },
+
+    "combat_post_victory_returns_to_world_actions": {
+        "currency": {"gold": 0, "silver": 0, "copper": 0},
+        "conversation_settings": {
+            "enabled": True,
+            "autonomous_ticks_enabled": False,
+            "frequency": "never",
+            "conversation_chance_percent": 0,
+            "allow_player_invited": False,
+            "player_inclusion_chance_percent": 0,
+            "npc_file_profiles_enabled": True,
+            "npc_evolution_enabled": True,
+            "min_ticks_between_conversations": 0,
+            "thread_cooldown_ticks": 0
+        },
+        "setup_interaction_state": {
+            "scene_items": [],
+            "scene_objects": [],
+            "player_location_id": "loc_tavern_road",
+            "player_hp": 20,
+            "player_max_hp": 20,
+            "player_inventory": {
+                "items": [],
+                "equipment": {},
+                "carry_capacity": 50.0
+            },
+            "party_state": {"max_size": 4, "companions": []},
+            "combat_state": {
+                "active": False,  # Combat already resolved
+                "encounter_id": "enc:bandit_ambush",
+                "round": 1,
+                "turn_index": 1,
+                "current_actor_id": "",
+                "exit_reason": "victory",
+                "winner_ids": ["player"],
+                "loser_ids": ["enemy:bandit_1"],
+                "initiative_order": [
+                    {"actor_id": "enemy:bandit_1", "initiative": 20, "roll": 20, "bonus": 0},
+                    {"actor_id": "player", "initiative": 1, "roll": 1, "bonus": 0}
+                ],
+                "participants": {
+                    "enemy:bandit_1": {
+                        "actor_id": "enemy:bandit_1",
+                        "side": "enemy",
+                        "name": "Bandit",
+                        "hp": 0,
+                        "max_hp": 8,
+                        "armor": 0,
+                        "defense": 10,
+                        "damage_min": 3,
+                        "damage_max": 4,
+                        "accuracy_bonus": 5,
+                        "initiative_bonus": 0,
+                        "status": "downed",
+                        "loot_table_id": "loot:bandit_common"
+                    },
+                    "player": {
+                        "actor_id": "player",
+                        "side": "party",
+                        "name": "You",
+                        "hp": 20,
+                        "max_hp": 20,
+                        "armor": 0,
+                        "defense": 10,
+                        "initiative_bonus": 0,
+                        "status": "active"
+                    }
+                },
+                "combat_log": [
+                    {
+                        "kind": "attack",
+                        "round": 1,
+                        "turn_index": 0,
+                        "actor_id": "player",
+                        "target_id": "enemy:bandit_1",
+                        "attack_roll": 15,
+                        "attack_total": 20,
+                        "equipment_accuracy_bonus": 0,
+                        "morale_accuracy_bonus": 0,
+                        "target_defense": 10,
+                        "hit": True,
+                        "damage_roll": 5,
+                        "morale_damage_bonus": 0,
+                        "armor_reduction": 0,
+                        "damage_applied": 5,
+                        "target_hp_before": 5,
+                        "target_hp_after": 0,
+                        "defeated": True,
+                        "tick": 1
+                    }
+                ],
+                "pending_npc_turn": False,
+                "defense_modifiers": {},
+                "source": "manual_combat_post_victory_test"
+            }
+        },
+        "turns": [
+            "I look around."
+        ]
+    },
+
+    "combat_post_combat_clears_temporary_modifiers": {
+        "currency": {"gold": 0, "silver": 0, "copper": 0},
+        "conversation_settings": {
+            "enabled": True,
+            "autonomous_ticks_enabled": False,
+            "frequency": "never",
+            "conversation_chance_percent": 0,
+            "allow_player_invited": False,
+            "player_inclusion_chance_percent": 0,
+            "npc_file_profiles_enabled": True,
+            "npc_evolution_enabled": True,
+            "min_ticks_between_conversations": 0,
+            "thread_cooldown_ticks": 0
+        },
+        "setup_interaction_state": {
+            "scene_items": [],
+            "scene_objects": [],
+            "player_location_id": "loc_tavern_road",
+            "player_hp": 20,
+            "player_max_hp": 20,
+            "player_inventory": {
+                "items": [],
+                "equipment": {},
+                "carry_capacity": 50.0
+            },
+            "party_state": {"max_size": 4, "companions": []},
+            "combat_state": {
+                "active": False,
+                "encounter_id": "enc:bandit_ambush",
+                "round": 1,
+                "turn_index": 1,
+                "current_actor_id": "",
+                "exit_reason": "victory",
+                "winner_ids": ["player"],
+                "loser_ids": ["enemy:bandit_1"],
+                "initiative_order": [
+                    {"actor_id": "enemy:bandit_1", "initiative": 20, "roll": 20, "bonus": 0},
+                    {"actor_id": "player", "initiative": 1, "roll": 1, "bonus": 0}
+                ],
+                "participants": {
+                    "enemy:bandit_1": {
+                        "actor_id": "enemy:bandit_1",
+                        "side": "enemy",
+                        "name": "Bandit",
+                        "hp": 0,
+                        "max_hp": 8,
+                        "armor": 0,
+                        "defense": 10,
+                        "damage_min": 3,
+                        "damage_max": 4,
+                        "accuracy_bonus": 5,
+                        "initiative_bonus": 0,
+                        "status": "downed",
+                        "loot_table_id": "loot:bandit_common"
+                    },
+                    "player": {
+                        "actor_id": "player",
+                        "side": "party",
+                        "name": "You",
+                        "hp": 20,
+                        "max_hp": 20,
+                        "armor": 0,
+                        "defense": 10,
+                        "initiative_bonus": 0,
+                        "status": "active"
+                    }
+                },
+                "combat_log": [
+                    {
+                        "kind": "attack",
+                        "round": 1,
+                        "turn_index": 0,
+                        "actor_id": "player",
+                        "target_id": "enemy:bandit_1",
+                        "attack_roll": 15,
+                        "attack_total": 20,
+                        "equipment_accuracy_bonus": 0,
+                        "morale_accuracy_bonus": 0,
+                        "target_defense": 10,
+                        "hit": True,
+                        "damage_roll": 5,
+                        "morale_damage_bonus": 0,
+                        "armor_reduction": 0,
+                        "damage_applied": 5,
+                        "target_hp_before": 5,
+                        "target_hp_after": 0,
+                        "defeated": True,
+                        "tick": 1
+                    }
+                ],
+                "pending_npc_turn": False,
+                "defense_modifiers": {},  # Should be empty after combat
+                "source": "manual_combat_cleanup_test"
+            }
+        },
+        "turns": [
+            "I check my status."
+        ]
+    },
+
+    "combat_victory_generates_loot_once": {
+        "currency": {"gold": 0, "silver": 0, "copper": 0},
+        "conversation_settings": {
+            "enabled": True,
+            "autonomous_ticks_enabled": False,
+            "frequency": "never",
+            "conversation_chance_percent": 0,
+            "allow_player_invited": False,
+            "player_inclusion_chance_percent": 0,
+            "npc_file_profiles_enabled": True,
+            "npc_evolution_enabled": True,
+            "min_ticks_between_conversations": 0,
+            "thread_cooldown_ticks": 0
+        },
+        "setup_interaction_state": {
+            "scene_items": [],
+            "scene_objects": [],
+            "player_location_id": "loc_tavern_road",
+            "player_hp": 20,
+            "player_max_hp": 20,
+            "player_inventory": {
+                "items": [],
+                "equipment": {},
+                "carry_capacity": 50.0
+            },
+            "party_state": {"max_size": 4, "companions": []},
+            "combat_state": {
+                "active": True,
+                "encounter_id": "enc:bandit_ambush",
+                "round": 1,
+                "turn_index": 0,
+                "current_actor_id": "player",
+                "initiative_order": [
+                    {"actor_id": "player", "initiative": 20, "roll": 20, "bonus": 0},
+                    {"actor_id": "enemy:bandit_1", "initiative": 1, "roll": 1, "bonus": 0}
+                ],
+                "participants": {
+                    "player": {
+                        "actor_id": "player",
+                        "side": "party",
+                        "name": "You",
+                        "hp": 20,
+                        "max_hp": 20,
+                        "armor": 0,
+                        "defense": 10,
+                        "initiative_bonus": 0,
+                        "status": "active"
+                    },
+                    "enemy:bandit_1": {
+                        "actor_id": "enemy:bandit_1",
+                        "side": "enemy",
+                        "name": "Bandit",
+                        "hp": 1,
+                        "max_hp": 8,
+                        "armor": 0,
+                        "defense": 10,
+                        "initiative_bonus": 0,
+                        "status": "active",
+                        "loot_table_id": "loot:bandit_common"
+                    }
+                },
+                "combat_log": [],
+                "source": "manual_combat_loot_test"
+            }
+        },
+        "turns": [
+            "I attack the bandit."
+        ]
+    },
+
+    "combat_party_defeat_grants_no_player_loot": {
+        "currency": {"gold": 0, "silver": 0, "copper": 0},
+        "conversation_settings": {
+            "enabled": True,
+            "autonomous_ticks_enabled": False,
+            "frequency": "never",
+            "conversation_chance_percent": 0,
+            "allow_player_invited": False,
+            "player_inclusion_chance_percent": 0,
+            "npc_file_profiles_enabled": True,
+            "npc_evolution_enabled": True,
+            "min_ticks_between_conversations": 0,
+            "thread_cooldown_ticks": 0
+        },
+        "setup_interaction_state": {
+            "scene_items": [],
+            "scene_objects": [],
+            "player_location_id": "loc_tavern_road",
+            "player_hp": 3,
+            "player_max_hp": 20,
+            "player_inventory": {
+                "items": [],
+                "equipment": {},
+                "carry_capacity": 50.0
+            },
+            "party_state": {"max_size": 4, "companions": []},
+            "combat_state": {
+                "active": True,
+                "encounter_id": "enc:bandit_ambush",
+                "round": 1,
+                "turn_index": 0,
+                "current_actor_id": "player",
+                "initiative_order": [
+                    {"actor_id": "player", "initiative": 20, "roll": 20, "bonus": 0},
+                    {"actor_id": "enemy:bandit_1", "initiative": 1, "roll": 1, "bonus": 0}
+                ],
+                "participants": {
+                    "enemy:bandit_1": {
+                        "actor_id": "enemy:bandit_1",
+                        "side": "enemy",
+                        "name": "Bandit",
+                        "hp": 8,
+                        "max_hp": 8,
+                        "armor": 0,
+                        "defense": 10,
+                        "damage_min": 3,
+                        "damage_max": 4,
+                        "accuracy_bonus": 5,
+                        "initiative_bonus": 0,
+                        "status": "active",
+                        "loot_table_id": "loot:bandit_common"
+                    },
+                    "player": {
+                        "actor_id": "player",
+                        "side": "party",
+                        "name": "You",
+                        "hp": 3,
+                        "max_hp": 20,
+                        "armor": 0,
+                        "defense": 10,
+                        "initiative_bonus": 0,
+                        "status": "active"
+                    }
+                },
+                "combat_log": [],
+                "source": "manual_combat_party_defeat_test"
+            }
+        },
+        "turns": [
+            "I attack the bandit."
+        ]
+    },
+
+    "manual_party_defeat_text_artifact_has_body": {
+        "currency": {"gold": 0, "silver": 0, "copper": 0},
+        "conversation_settings": {
+            "enabled": True,
+            "autonomous_ticks_enabled": False,
+            "frequency": "never",
+            "conversation_chance_percent": 0,
+            "allow_player_invited": False,
+            "player_inclusion_chance_percent": 0,
+            "npc_file_profiles_enabled": True,
+            "npc_evolution_enabled": True,
+            "min_ticks_between_conversations": 0,
+            "thread_cooldown_ticks": 0
+        },
+        "setup_interaction_state": {
+            "scene_items": [],
+            "scene_objects": [],
+            "player_location_id": "loc_tavern_road",
+            "player_hp": 3,
+            "player_max_hp": 20,
+            "player_inventory": {
+                "items": [],
+                "equipment": {},
+                "carry_capacity": 50.0
+            },
+            "party_state": {"max_size": 4, "companions": []},
+            "combat_state": {
+                "active": True,
+                "encounter_id": "enc:bandit_ambush",
+                "round": 1,
+                "turn_index": 0,
+                "current_actor_id": "player",
+                "initiative_order": [
+                    {"actor_id": "player", "initiative": 20, "roll": 20, "bonus": 0},
+                    {"actor_id": "enemy:bandit_1", "initiative": 1, "roll": 1, "bonus": 0}
+                ],
+                "participants": {
+                    "enemy:bandit_1": {
+                        "actor_id": "enemy:bandit_1",
+                        "side": "enemy",
+                        "name": "Bandit",
+                        "hp": 8,
+                        "max_hp": 8,
+                        "armor": 0,
+                        "defense": 10,
+                        "damage_min": 3,
+                        "damage_max": 4,
+                        "accuracy_bonus": 5,
+                        "initiative_bonus": 0,
+                        "status": "active",
+                        "loot_table_id": "loot:bandit_common"
+                    },
+                    "player": {
+                        "actor_id": "player",
+                        "side": "party",
+                        "name": "You",
+                        "hp": 3,
+                        "max_hp": 20,
+                        "armor": 0,
+                        "defense": 10,
+                        "initiative_bonus": 0,
+                        "status": "active"
+                    }
+                },
+                "combat_log": [],
+                "source": "manual_combat_party_defeat_artifact_test"
+            }
+        },
+        "turns": [
+            "I attack the bandit."
         ]
     },
 
@@ -7398,6 +7980,209 @@ def _turn_has_successful_combat_item_use(turn_summary: Dict[str, Any]) -> bool:
         return True
 
     return False
+
+
+def _extract_nested_dict_by_key(value: Any, key: str, *, max_depth: int = 8) -> Dict[str, Any]:
+    seen: set[int] = set()
+
+    def walk(node: Any, depth: int) -> Dict[str, Any]:
+        if depth > max_depth:
+            return {}
+        if not isinstance(node, (dict, list)):
+            return {}
+
+        node_id = id(node)
+        if node_id in seen:
+            return {}
+        seen.add(node_id)
+
+        if isinstance(node, dict):
+            direct = _safe_dict(node.get(key))
+            if direct:
+                return direct
+            for nested in node.values():
+                found = walk(nested, depth + 1)
+                if found:
+                    return found
+
+        if isinstance(node, list):
+            for nested in node:
+                found = walk(nested, depth + 1)
+                if found:
+                    return found
+
+        return {}
+
+    return walk(value, 0)
+
+
+def _extract_turn_reward_result(turn_summary: Dict[str, Any]) -> Dict[str, Any]:
+    turn_summary = _safe_dict(turn_summary)
+    resolved_result = _safe_dict(turn_summary.get("resolved_result"))
+    result_obj = _safe_dict(turn_summary.get("result"))
+    turn_contract = _safe_dict(turn_summary.get("turn_contract"))
+
+    return _first_dict(
+        turn_summary.get("reward_result"),
+        resolved_result.get("reward_result"),
+        result_obj.get("reward_result"),
+        _safe_dict(result_obj.get("resolved_result")).get("reward_result"),
+        turn_contract.get("reward_result"),
+        _safe_dict(turn_contract.get("resolved_result")).get("reward_result"),
+        _extract_nested_dict_by_key(turn_summary, "reward_result"),
+    )
+
+
+def _extract_turn_loot_result(turn_summary: Dict[str, Any]) -> Dict[str, Any]:
+    turn_summary = _safe_dict(turn_summary)
+    resolved_result = _safe_dict(turn_summary.get("resolved_result"))
+    result_obj = _safe_dict(turn_summary.get("result"))
+    turn_contract = _safe_dict(turn_summary.get("turn_contract"))
+
+    return _first_dict(
+        turn_summary.get("loot_result"),
+        resolved_result.get("loot_result"),
+        result_obj.get("loot_result"),
+        _safe_dict(result_obj.get("resolved_result")).get("loot_result"),
+        turn_contract.get("loot_result"),
+        _safe_dict(turn_contract.get("resolved_result")).get("loot_result"),
+        _extract_nested_dict_by_key(turn_summary, "loot_result"),
+    )
+
+
+def _extract_turn_combat_state(turn_summary: Dict[str, Any]) -> Dict[str, Any]:
+    turn_summary = _safe_dict(turn_summary)
+    resolved_result = _safe_dict(turn_summary.get("resolved_result"))
+    result_obj = _safe_dict(turn_summary.get("result"))
+    turn_contract = _safe_dict(turn_summary.get("turn_contract"))
+
+    return _first_dict(
+        turn_summary.get("combat_state"),
+        resolved_result.get("combat_state"),
+        result_obj.get("combat_state"),
+        _safe_dict(result_obj.get("resolved_result")).get("combat_state"),
+        turn_contract.get("combat_state"),
+        _safe_dict(turn_contract.get("resolved_result")).get("combat_state"),
+        _extract_nested_dict_by_key(turn_summary, "combat_state"),
+    )
+
+
+def _turn_resolved_combat_victory(turn_summary: Dict[str, Any]) -> bool:
+    combat_state = _extract_turn_combat_state(turn_summary)
+    combat_result = _safe_dict(turn_summary.get("combat_result"))
+    resolved_result = _safe_dict(turn_summary.get("resolved_result"))
+    resolved_combat_result = _safe_dict(resolved_result.get("combat_result"))
+
+    # Victory can be represented directly by the attack resolution before the
+    # normalized post-combat state has been mirrored back into combat_state.
+    # This is the current J22/J23 manual scenario shape:
+    #   combat_result.defeated == true
+    #   combat_result.combat_ended == true
+    if (
+        combat_result.get("defeated") is True
+        and combat_result.get("combat_ended") is True
+    ):
+        return True
+    if (
+        resolved_combat_result.get("defeated") is True
+        and resolved_combat_result.get("combat_ended") is True
+    ):
+        return True
+
+    exit_reason = _safe_str(
+        combat_state.get("exit_reason")
+        or combat_state.get("resolution")
+        or combat_result.get("exit_reason")
+        or resolved_combat_result.get("exit_reason")
+        or resolved_result.get("outcome")
+    ).strip().lower()
+
+    if exit_reason in {"victory", "player_victory", "party_victory", "enemies_defeated"}:
+        return True
+
+    if combat_state and combat_state.get("active") is False:
+        winner_ids = [str(x) for x in _safe_list(combat_state.get("winner_ids"))]
+        loser_ids = [str(x) for x in _safe_list(combat_state.get("loser_ids"))]
+        if "player" in winner_ids and loser_ids:
+            return True
+
+    notes = [
+        _safe_str(x).strip().lower()
+        for x in (
+            _safe_list(combat_result.get("notes"))
+            + _safe_list(resolved_combat_result.get("notes"))
+            + _safe_list(combat_state.get("notes"))
+        )
+    ]
+    return any(note in {"combat_victory", "victory", "enemies_defeated"} for note in notes)
+
+
+def _turn_has_granted_combat_reward(turn_summary: Dict[str, Any]) -> bool:
+    reward_result = _extract_turn_reward_result(turn_summary)
+    if not reward_result:
+        return False
+
+    source = _safe_str(reward_result.get("source")).strip().lower()
+    granted = bool(reward_result.get("granted") or reward_result.get("applied"))
+    xp = _safe_int(
+        reward_result.get("xp")
+        or reward_result.get("xp_awarded")
+        or reward_result.get("total_xp"),
+        0,
+    )
+
+    return source == "combat" and granted and xp > 0
+
+
+def _turn_has_generated_combat_loot(turn_summary: Dict[str, Any]) -> bool:
+    loot_result = _extract_turn_loot_result(turn_summary)
+    if not loot_result:
+        return False
+
+    source = _safe_str(loot_result.get("source")).strip().lower()
+    generated = bool(loot_result.get("generated") or loot_result.get("created"))
+    items = _safe_list(loot_result.get("items"))
+    items_created = _safe_list(loot_result.get("items_created"))
+    currency = _safe_dict(loot_result.get("currency"))
+    loot_container_id = _safe_str(
+        loot_result.get("loot_container_id")
+        or loot_result.get("container_id")
+    ).strip()
+
+    # New normalized J23 shape.
+    has_value = bool(items or currency or loot_container_id)
+    if source == "combat" and generated and has_value:
+        return True
+
+    # Existing deterministic loot runtime shape.
+    # Example:
+    #   reason=loot_generated
+    #   changed_state=true
+    #   items_created=[...]
+    if (
+        _safe_str(loot_result.get("reason")).strip() == "loot_generated"
+        and bool(loot_result.get("changed_state"))
+        and bool(items_created)
+    ):
+        return True
+
+    return False
+
+
+def _turn_has_combat_cleanup(turn_summary: Dict[str, Any]) -> bool:
+    combat_state = _extract_turn_combat_state(turn_summary)
+    if not combat_state:
+        return False
+
+    if combat_state.get("active") is not False:
+        return False
+    if bool(combat_state.get("pending_npc_turn")):
+        return False
+    if _safe_dict(combat_state.get("defense_modifiers")):
+        return False
+
+    exit_reason = _safe_str(combat_state.get("exit_reason")).strip()
+    return bool(exit_reason)
 
 
 def _safe_parse_manual_mapping_payload(value: Any) -> Dict[str, Any]:
@@ -9868,6 +10653,54 @@ def _manual_regression_warnings(
             if any(word in lower for word in ["json", "contract", "simulation", "validator", "system prompt", "llm"]):
                 warnings.append("combat_llm_narration_contains_meta_language")
 
+    # J22-J24: Combat aftermath warnings
+    combat_state = _extract_combat_state(result)
+
+    if combat_state.get("exit_reason") == "victory":
+        # Only warn about missing rewards if combat was just resolved this turn
+        # (not if it was already resolved in a previous turn)
+        combat_just_resolved = (
+            result.get("visible_interaction_reason") in {
+                "combat_defeat_resolved", "party_defeat_resolved",
+                "combat_attack_resolved", "enemy_combat_attack_resolved"
+            }
+        )
+
+        if combat_just_resolved:
+            if not _safe_dict(combat_state.get("reward_result")):
+                warnings.append("combat_victory_missing_reward_result")
+            else:
+                reward_result = _safe_dict(combat_state.get("reward_result"))
+                if not reward_result.get("xp"):
+                    warnings.append("combat_reward_missing_xp")
+                if not reward_result.get("source"):
+                    warnings.append("combat_reward_missing_source")
+
+            if not _safe_dict(combat_state.get("loot_result")):
+                warnings.append("combat_victory_missing_loot_result")
+
+    if combat_state.get("exit_reason") == "party_defeat":
+        loot_result = _safe_dict(combat_state.get("loot_result"))
+        if loot_result.get("generated"):
+            warnings.append("combat_loot_generated_on_party_defeat")
+
+    if combat_state.get("exit_reason") == "fled":
+        reward_result = _safe_dict(combat_state.get("reward_result"))
+        if reward_result.get("granted"):
+            warnings.append("combat_reward_granted_on_flee")
+
+        loot_result = _safe_dict(combat_state.get("loot_result"))
+        if loot_result.get("generated"):
+            warnings.append("combat_loot_generated_on_flee")
+
+    if combat_state.get("exit_reason") in {"victory", "party_defeat", "fled", "resolved_nonfatal"}:
+        defense_modifiers = _safe_dict(combat_state.get("defense_modifiers"))
+        if defense_modifiers:
+            warnings.append("defense_modifiers_not_cleared_after_combat")
+
+        if combat_state.get("pending_npc_turn"):
+            warnings.append("pending_npc_turn_left_true_after_combat")
+
     if scenario_name == "combat_ui_payload_smoke":
         combat_state = _extract_combat_state(result)
         visible_reason = _extract_visible_interaction_reason(result)
@@ -11537,7 +12370,8 @@ def _run_one_service_scenario(
 
             enemy_combat_result = _safe_dict(companion_combat_result.get("enemy_combat_result"))
 
-            combat_state = _safe_dict(sim.get("combat_state"))
+            combat_state = evaluate_combat_exit(sim, _safe_dict(sim.get("combat_state")))
+            sim["combat_state"] = combat_state
 
             if enemy_combat_result:
                 enemy_combat_result = _attach_manual_combat_narration_if_needed(
@@ -11654,6 +12488,17 @@ def _run_one_service_scenario(
             )
 
             scenario_results.append(turn_record)
+
+            # Emit turn content to channel (fix for header-only artifact)
+            _print_turn(
+                index,
+                player_input,
+                result,
+                before_currency,
+                before_items,
+                channel=target_channel,
+            )
+
             continue
         else:
             result = apply_turn(session_id=session_id, player_input=player_input)
@@ -11812,6 +12657,46 @@ def _run_one_service_scenario(
                     summary_row.setdefault("scenario_warnings", []).append(
                         "combat_use_item_did_not_apply_successfully"
                     )
+
+        if scenario_name == "combat_victory_grants_xp_once":
+            if not _turn_resolved_combat_victory(summary_row):
+                summary_row.setdefault("scenario_warnings", []).append(
+                    "combat_victory_xp_scenario_did_not_resolve_victory"
+                )
+            if not _turn_has_granted_combat_reward(summary_row):
+                summary_row.setdefault("scenario_warnings", []).append(
+                    "combat_victory_missing_reward_result"
+                )
+
+        if scenario_name == "combat_victory_generates_loot_once":
+            if not _turn_resolved_combat_victory(summary_row):
+                summary_row.setdefault("scenario_warnings", []).append(
+                    "combat_victory_loot_scenario_did_not_resolve_victory"
+                )
+            if not _turn_has_generated_combat_loot(summary_row):
+                summary_row.setdefault("scenario_warnings", []).append(
+                    "combat_victory_missing_loot_result"
+                )
+
+        if scenario_name == "combat_post_victory_returns_to_world_actions":
+            text = _safe_str(player_input).lower()
+            if "__manual" in text or "attack" in text or "defeat" in text:
+                if not _turn_resolved_combat_victory(summary_row):
+                    summary_row.setdefault("scenario_warnings", []).append(
+                        "combat_post_victory_scenario_did_not_start_from_resolved_victory"
+                    )
+            else:
+                visible_reason = _safe_str(summary_row.get("visible_interaction_reason")).strip()
+                if visible_reason.startswith("combat_"):
+                    summary_row.setdefault("scenario_warnings", []).append(
+                        "combat_post_victory_world_action_still_routed_as_combat"
+                    )
+
+        if scenario_name == "combat_post_combat_clears_temporary_modifiers":
+            if not _turn_has_combat_cleanup(summary_row):
+                summary_row.setdefault("scenario_warnings", []).append(
+                    "combat_post_combat_cleanup_not_validated"
+                )
         summary_row["regression_warnings"] = _manual_regression_warnings(
             scenario_name=scenario_name,
             turn_index=index,
@@ -12229,6 +13114,48 @@ def _run_one_service_scenario(
             warning = _safe_str(warning).strip()
             if warning and warning not in scenario_warnings:
                 scenario_warnings.append(warning)
+
+    if scenario_name == "combat_victory_grants_xp_once":
+        if not any(_turn_resolved_combat_victory(row) for row in scenario_results):
+            if "combat_victory_xp_scenario_did_not_resolve_victory" not in scenario_warnings:
+                scenario_warnings.append("combat_victory_xp_scenario_did_not_resolve_victory")
+        if not any(_turn_has_granted_combat_reward(row) for row in scenario_results):
+            if "combat_victory_missing_reward_result" not in scenario_warnings:
+                scenario_warnings.append("combat_victory_missing_reward_result")
+
+    if scenario_name == "combat_victory_generates_loot_once":
+        if not any(_turn_resolved_combat_victory(row) for row in scenario_results):
+            if "combat_victory_loot_scenario_did_not_resolve_victory" not in scenario_warnings:
+                scenario_warnings.append("combat_victory_loot_scenario_did_not_resolve_victory")
+        if not any(_turn_has_generated_combat_loot(row) for row in scenario_results):
+            if "combat_victory_missing_loot_result" not in scenario_warnings:
+                scenario_warnings.append("combat_victory_missing_loot_result")
+
+    if scenario_name == "combat_post_victory_returns_to_world_actions":
+        if not any(_turn_resolved_combat_victory(row) for row in scenario_results):
+            if "combat_post_victory_scenario_did_not_start_from_resolved_victory" not in scenario_warnings:
+                scenario_warnings.append("combat_post_victory_scenario_did_not_start_from_resolved_victory")
+
+        world_turns = [
+            row for row in scenario_results
+            if "__manual" not in _safe_str(row.get("player_input")).lower()
+            and "attack" not in _safe_str(row.get("player_input")).lower()
+            and "defeat" not in _safe_str(row.get("player_input")).lower()
+        ]
+        if not world_turns:
+            if "combat_post_victory_world_action_not_validated" not in scenario_warnings:
+                scenario_warnings.append("combat_post_victory_world_action_not_validated")
+        elif any(
+            _safe_str(row.get("visible_interaction_reason")).strip().startswith("combat_")
+            for row in world_turns
+        ):
+            if "combat_post_victory_world_action_still_routed_as_combat" not in scenario_warnings:
+                scenario_warnings.append("combat_post_victory_world_action_still_routed_as_combat")
+
+    if scenario_name == "combat_post_combat_clears_temporary_modifiers":
+        if not any(_turn_has_combat_cleanup(row) for row in scenario_results):
+            if "combat_post_combat_cleanup_not_validated" not in scenario_warnings:
+                scenario_warnings.append("combat_post_combat_cleanup_not_validated")
 
     return {
         "scenario": scenario_name,

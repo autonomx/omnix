@@ -3,6 +3,7 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any, Dict, List
 
+from app.rpg.combat.lifecycle import evaluate_combat_exit
 from app.rpg.combat.runtime import (
     advance_combat_turn,
     get_combat_state,
@@ -148,8 +149,7 @@ def resolve_enemy_combat_turn(
     )
     if target.get("resolved") is not True:
         if _safe_str(target.get("reason")) == "no_living_party_targets":
-            combat_state["active"] = False
-            combat_state["ended_reason"] = "party_side_defeated"
+            combat_state = evaluate_combat_exit(simulation_state, combat_state)
             simulation_state["combat_state"] = combat_state
             return {
                 "resolved": True,
@@ -185,8 +185,7 @@ def resolve_enemy_combat_turn(
     party_defeated = _party_defeated(combat_state)
 
     if party_defeated:
-        combat_state["active"] = False
-        combat_state["ended_reason"] = "party_side_defeated"
+        combat_state = evaluate_combat_exit(simulation_state, combat_state)
         simulation_state["combat_state"] = combat_state
 
     reason = "enemy_combat_attack_resolved"
