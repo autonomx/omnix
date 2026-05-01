@@ -7604,6 +7604,204 @@ def _reconcile_combat_use_item_with_successful_consumable(final_result: Dict[str
     return final_result
 
 
+def _normalize_combat_loot_result_for_reward_phase(
+    loot_result: Dict[str, Any],
+    *,
+    combat_id: str = "",
+) -> Dict[str, Any]:
+    """Normalize existing loot runtime result into J23 combat loot shape."""
+    loot_result = _safe_dict(loot_result)
+    if not loot_result:
+        return {}
+
+    # Already normalized.
+    if loot_result.get("generated") and _safe_str(loot_result.get("source")) == "combat":
+        return loot_result
+
+    if _safe_str(loot_result.get("reason")).strip() != "loot_generated":
+        return {}
+
+    items_created = _safe_list(loot_result.get("items_created"))
+    items: List[Dict[str, Any]] = []
+    currency: Dict[str, int] = {}
+
+    for row in items_created:
+        row = _safe_dict(row)
+        item = _safe_dict(row.get("item"))
+        quantity = _safe_int(row.get("quantity") or item.get("quantity"), 1)
+        item_id = _safe_str(item.get("item_id") or row.get("item_id")).strip()
+        name = _safe_str(item.get("name") or row.get("name") or item_id).strip()
+        kind = _safe_str(item.get("kind")).strip()
+
+        if kind == "currency_item" or item_id.endswith("copper_coin") or "coin" in name.lower():
+            value = _safe_dict(item.get("value"))
+            copper_value = _safe_int(value.get("copper"), 1)
+            currency["copper"] = _safe_int(currency.get("copper"), 0) + max(1, copper_value) * max(1, quantity)
+            continue
+
+        if item_id:
+            items.append({
+                "item_id": item_id,
+                "name": name or item_id,
+                "quantity": max(1, quantity),
+            })
+
+    return {
+        "generated": True,
+        "source": "combat",
+        "combat_id": combat_id,
+        "loot_container_id": f"loot:combat:{combat_id}" if combat_id else "",
+        "items": items,
+        "currency": currency,
+        "raw_loot_result": loot_result,
+    }
+
+
+def _generate_fallback_combat_reward_result(
+    combat_result: Dict[str, Any],
+    combat_state: Dict[str, Any],
+) -> Dict[str, Any]:
+    """Generate a minimal deterministic J22 reward result for a victory turn."""
+    combat_result = _safe_dict(combat_result)
+    combat_state = _safe_dict(combat_state)
+
+    combat_id = _safe_str(
+        combat_state.get("combat_id")
+        or combat_result.get("combat_id")
+        or combat_result.get("encounter_id")
+        or "manual_combat"
+    ).strip()
+    target_id = _safe_str(combat_result.get("target_id") or "").strip()
+    defeated_count = 1 if target_id else 1
+
+    # Keep it intentionally simple and deterministic for now.
+    xp = 25 * defeated_count
+
+    return {
+        "granted": True,
+        "source": "combat",
+        "combat_id": combat_id,
+        "xp": xp,
+        "skill_xp": {
+            "combat": 10 * defeated_count,
+            "weapon": 5 * defeated_count,
+        },
+        "level_up": [],
+        "skill_level_ups": [],
+    }
+
+
+def _reconcile_combat_victory_rewards_and_loot(final_result: Dict[str, Any]) -> Dict[str, Any]:
+    """Final J22/J23 reconciliation for victory turns.
+
+    The current attack path can end combat through combat_result:
+      defeated=true
+      combat_ended=true
+
+    but reward_result/normalized loot_result may not be mirrored into the final
+    payload. This pass attaches J22/J23 result objects without affecting flee or
+    party-defeat paths.
+    """
+    final_result = dict(_safe_dict(final_result))
+    resolved_result = dict(_safe_dict(final_result.get("resolved_result")))
+    combat_result = _safe_dict(
+        final_result.get("combat_result")
+        or resolved_result.get("combat_result")
+    )
+    combat_state = _safe_dict(
+        final_result.get("combat_state")
+        or resolved_result.get("combat_state")
+    )
+
+    if not (
+        combat_result.get("defeated") is True
+        and combat_result.get("combat_ended") is True
+    ):
+        return final_result
+
+    # Avoid granting rewards for player/party defeat.
+    if combat_result.get("party_defeated") is True:
+        return final_result
+
+    combat_id = _safe_str(
+        combat_state.get("combat_id")
+        or combat_result.get("combat_id")
+        or combat_result.get("encounter_id")
+        or "manual_combat"
+    ).strip()
+
+    reward_result = _safe_dict(
+        final_result.get("reward_result")
+        or resolved_result.get("reward_result")
+        or combat_state.get("reward_result")
+        or combat_result.get("reward_result")
+    )
+    if not reward_result:
+        reward_result = _generate_fallback_combat_reward_result(combat_result, combat_state)
+
+    raw_loot_result = _safe_dict(
+        final_result.get("loot_result")
+        or resolved_result.get("loot_result")
+        or combat_state.get("loot_result")
+        or combat_result.get("loot_result")
+    )
+    loot_result = _normalize_combat_loot_result_for_reward_phase(
+        raw_loot_result,
+        combat_id=combat_id,
+    )
+
+    if reward_result:
+        resolved_result["reward_result"] = reward_result
+        final_result["reward_result"] = reward_result
+        combat_result["reward_result"] = reward_result
+
+    if loot_result:
+        resolved_result["loot_result"] = loot_result
+        final_result["loot_result"] = loot_result
+        combat_result["loot_result"] = loot_result
+
+    combat_state["active"] = False
+    combat_state["exit_reason"] = _safe_str(combat_state.get("exit_reason") or "victory")
+    combat_state["pending_npc_turn"] = False
+    combat_state["defense_modifiers"] = {}
+    if reward_result:
+        combat_state["reward_result"] = reward_result
+    if loot_result:
+        combat_state["loot_result"] = loot_result
+
+    resolved_result["combat_result"] = combat_result
+    resolved_result["combat_state"] = combat_state
+
+    final_result["resolved_result"] = resolved_result
+    final_result["combat_result"] = combat_result
+    final_result["raw_combat_result"] = combat_result
+    final_result["combat_state"] = combat_state
+    final_result["visible_interaction_reason"] = _safe_str(
+        final_result.get("visible_interaction_reason") or "combat_defeat_resolved"
+    )
+
+    if isinstance(final_result.get("result"), dict):
+        result_obj = dict(_safe_dict(final_result.get("result")))
+        result_obj["combat_result"] = combat_result
+        result_obj["combat_state"] = combat_state
+        if reward_result:
+            result_obj["reward_result"] = reward_result
+        if loot_result:
+            result_obj["loot_result"] = loot_result
+        final_result["result"] = result_obj
+
+    session = _safe_dict(final_result.get("session"))
+    runtime_state = _safe_dict(session.get("runtime_state") or final_result.get("runtime_state"))
+    if runtime_state:
+        runtime_state["combat_state"] = combat_state
+        session["runtime_state"] = runtime_state
+        final_result["runtime_state"] = runtime_state
+    if session:
+        final_result["session"] = session
+
+    return final_result
+
+
 def _apply_turn_authoritative(
     session_id: str,
     player_input: str,
@@ -10623,6 +10821,7 @@ def apply_turn(
 
     final_result = _mirror_rescued_combat_utility_result(final_result)
     final_result = _reconcile_combat_use_item_with_successful_consumable(final_result)
+    final_result = _reconcile_combat_victory_rewards_and_loot(final_result)
     return final_result
 
 
