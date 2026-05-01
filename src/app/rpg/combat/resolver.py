@@ -88,7 +88,18 @@ def resolve_attack(
         )
 
     attack_roll = deterministic_d20(f"{turn_id}:{tick}:attack:{intent.actor_id}:{intent.target_id}:{intent.action_type}")
+    forced_attack_roll = _safe_int(combat_state.get("force_next_attack_roll"), 0)
+    if forced_attack_roll > 0:
+        attack_roll = dict(attack_roll)
+        attack_roll["result"] = max(1, min(20, forced_attack_roll))
+        attack_roll["source"] = "manual_force_next_attack_roll"
+
     damage_roll = deterministic_damage_roll(f"{turn_id}:{tick}:damage:{intent.actor_id}:{intent.target_id}:{intent.action_type}", 4)
+    forced_damage = _safe_int(combat_state.get("force_next_damage"), 0)
+    if forced_damage > 0:
+        damage_roll = dict(damage_roll)
+        damage_roll["result"] = forced_damage
+        damage_roll["source"] = "manual_force_next_damage"
 
     strength = _stat(attacker, "strength", 0)
     agility = _stat(attacker, "agility", 0)

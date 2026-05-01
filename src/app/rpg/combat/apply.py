@@ -1,12 +1,28 @@
 from __future__ import annotations
 
-from typing import Any, Dict
+from typing import Any, Dict, List
 
 from app.rpg.combat.state import normalize_combat_state
+from app.rpg.combat.conditions import (
+    add_status_effect_to_participant,
+    build_condition_effect,
+    build_condition_result,
+)
 
 
 def _safe_dict(value: Any) -> Dict[str, Any]:
     return value if isinstance(value, dict) else {}
+
+
+def _safe_list(value: Any) -> List[Any]:
+    return value if isinstance(value, list) else []
+
+
+def _safe_int(value: Any, default: int = 0) -> int:
+    try:
+        return int(value)
+    except Exception:
+        return default
 
 
 def apply_attack_resolution(
@@ -15,7 +31,9 @@ def apply_attack_resolution(
     resolution: Dict[str, Any],
 ) -> tuple[Dict[str, Any], Dict[str, Any]]:
     combat_state = normalize_combat_state(combat_state)
+    resolution = dict(resolution)
     target_id = str(resolution.get("target_id") or "")
+    actor_id = str(resolution.get("actor_id") or "")
     hp_after = int(resolution.get("target_hp_after", 0) or 0)
 
     for collection_key in ("actor_states", "npc_states"):
@@ -36,6 +54,66 @@ def apply_attack_resolution(
     combat_state["phase"] = "active"
     combat_state["last_resolution"] = dict(resolution)
 
+    condition_result: Dict[str, Any] = {}
+    participants = _safe_dict(combat_state.get("participants"))
+    target_participant = _safe_dict(participants.get(target_id))
+
+    if target_participant and bool(resolution.get("hit")) and _safe_int(resolution.get("damage_applied"), 0) > 0:
+        effects_added: List[Dict[str, Any]] = []
+        effects_updated: List[Dict[str, Any]] = []
+
+        attack_roll = _safe_int(resolution.get("attack_roll"), 0)
+        damage_applied = _safe_int(resolution.get("damage_applied"), 0)
+        target_max_hp = _safe_int(
+            target_participant.get("max_hp")
+            or _safe_dict(target_participant.get("resources")).get("max_hp"),
+            0,
+        )
+
+        if attack_roll >= 20:
+            target_participant, added_result = add_status_effect_to_participant(
+                target_participant,
+                build_condition_effect(
+                    kind="bleeding",
+                    source_actor_id=actor_id,
+                    target_actor_id=target_id,
+                    duration_turns=3,
+                    magnitude=1,
+                    stacks=1,
+                ),
+            )
+            effects_added.extend(_safe_list(added_result.get("effects_added")))
+            effects_updated.extend(_safe_list(added_result.get("effects_updated")))
+
+        if target_max_hp > 0 and damage_applied * 2 >= target_max_hp:
+            target_participant, added_result = add_status_effect_to_participant(
+                target_participant,
+                build_condition_effect(
+                    kind="stunned",
+                    source_actor_id=actor_id,
+                    target_actor_id=target_id,
+                    duration_turns=1,
+                    magnitude=1,
+                    stacks=1,
+                    tick_timing="start_of_turn",
+                ),
+            )
+            effects_added.extend(_safe_list(added_result.get("effects_added")))
+            effects_updated.extend(_safe_list(added_result.get("effects_updated")))
+
+        participants[target_id] = target_participant
+        combat_state["participants"] = participants
+
+        if effects_added or effects_updated:
+            condition_result = build_condition_result(
+                source="combat",
+                target_actor_id=target_id,
+                effects_added=effects_added,
+                effects_updated=effects_updated,
+            )
+            resolution["condition_result"] = condition_result
+            combat_state["last_condition_result"] = condition_result
+
     defense_modifiers = _safe_dict(combat_state.get("defense_modifiers"))
     if target_id in defense_modifiers:
         defense_modifiers.pop(target_id, None)
@@ -54,6 +132,9 @@ def apply_attack_resolution(
 
     if bool(resolution.get("target_downed")):
         combat_state["current_target_id"] = ""
+
+    combat_state.pop("force_next_attack_roll", None)
+    combat_state.pop("force_next_damage", None)
 
     return simulation_state, combat_state
 

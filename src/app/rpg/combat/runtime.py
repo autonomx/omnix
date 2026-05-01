@@ -4,6 +4,11 @@ import hashlib
 from copy import deepcopy
 from typing import Any, Dict, List
 
+from app.rpg.combat.conditions import (
+    actor_has_condition,
+    remove_status_effects_from_participant,
+    tick_start_of_turn_status_effects,
+)
 from app.rpg.interactions.equipment_runtime import (
     consume_equipped_ammo,
     project_equipment_stats,
@@ -424,6 +429,46 @@ def advance_combat_turn(
     combat_state["turn_index"] = next_index
     combat_state["round"] = round_num
     combat_state["current_actor_id"] = _current_actor_id(combat_state)
+
+    participants = _safe_dict(combat_state.get("participants"))
+    current_actor_id = _safe_str(combat_state.get("current_actor_id")).strip()
+    current_participant = _safe_dict(participants.get(current_actor_id))
+
+    if current_participant:
+        current_participant, tick_result = tick_start_of_turn_status_effects(current_participant)
+        participants[current_actor_id] = current_participant
+        combat_state["participants"] = participants
+
+        if tick_result.get("ticked"):
+            combat_state["last_condition_tick_result"] = {
+                "actor_id": current_actor_id,
+                **tick_result,
+            }
+            recent = list(combat_state.get("recent_events") or [])
+            recent.append({
+                "type": "condition_tick",
+                "actor_id": current_actor_id,
+                "tick_result": tick_result,
+            })
+            combat_state["recent_events"] = recent[-24:]
+
+        if actor_has_condition(current_participant, "stunned"):
+            current_participant, removed = remove_status_effects_from_participant(
+                current_participant,
+                ["stunned"],
+            )
+            participants[current_actor_id] = current_participant
+            combat_state["participants"] = participants
+            combat_state["last_condition_result"] = {
+                "applied": True,
+                "source": "combat",
+                "target_actor_id": current_actor_id,
+                "effects_added": [],
+                "effects_updated": [],
+                "effects_removed": removed,
+                "reason": "stunned_skip_turn",
+            }
+            combat_state["pending_skip_turn_actor_id"] = current_actor_id
 
     combat_state.setdefault("combat_log", []).append({
         "kind": "turn_advanced",
