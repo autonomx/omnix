@@ -3,12 +3,15 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any, Dict, List
 
+from app.rpg.combat.enemy_ai import choose_enemy_intent, mark_enemy_fled, select_enemy_targets
 from app.rpg.combat.lifecycle import evaluate_combat_exit
 from app.rpg.combat.runtime import (
     advance_combat_turn,
     get_combat_state,
     resolve_combat_attack,
 )
+from app.rpg.combat.apply import apply_defense_resolution, apply_flee_resolution
+from app.rpg.combat.resolver import resolve_defend
 
 
 def _safe_str(value: Any) -> str:
@@ -143,40 +146,113 @@ def resolve_enemy_combat_turn(
             "source": "deterministic_enemy_combat_runtime",
         }
 
-    target = choose_enemy_target(
-        simulation_state,
-        enemy_id=enemy_id,
-    )
-    if target.get("resolved") is not True:
-        if _safe_str(target.get("reason")) == "no_living_party_targets":
-            combat_state = evaluate_combat_exit(simulation_state, combat_state)
-            simulation_state["combat_state"] = combat_state
-            return {
-                "resolved": True,
-                "changed_state": True,
-                "reason": "party_defeat_resolved",
-                "enemy_id": enemy_id,
-                "party_defeated": True,
-                "combat_ended": True,
-                "target_selection": deepcopy(target),
-                "combat_state": deepcopy(combat_state),
-                "source": "deterministic_enemy_combat_runtime",
-            }
+    enemy_intent_result = choose_enemy_intent(combat_state, enemy_id)
+    intent = str(enemy_intent_result.get("intent") or "")
 
+    if intent == "skip_turn":
+        combat_state["last_enemy_intent_result"] = enemy_intent_result
+        combat_state["last_morale_result"] = enemy_intent_result.get("morale_result", {})
+        combat_state["last_target_selection_result"] = enemy_intent_result.get("target_selection_result", {})
+
+        recent = list(combat_state.get("recent_events") or [])
+        recent.append({
+            "type": "enemy_skip_turn",
+            "actor_id": enemy_id,
+            "reason": "stunned",
+        })
+        combat_state["recent_events"] = recent[-24:]
+        simulation_state["combat_state"] = combat_state
+
+        combat_state = advance_combat_turn(combat_state)
+        simulation_state["combat_state"] = combat_state
         return {
-            "resolved": False,
-            "changed_state": False,
-            "reason": _safe_str(target.get("reason")),
+            "resolved": True,
+            "changed_state": True,
+            "reason": "enemy_skip_turn_stunned",
             "enemy_id": enemy_id,
-            "target_selection": deepcopy(target),
+            "action_type": "skip_turn",
+            "actor_id": enemy_id,
+            "reason": "stunned",
+            "enemy_intent_result": enemy_intent_result,
+            "morale_result": enemy_intent_result.get("morale_result", {}),
+            "target_selection_result": enemy_intent_result.get("target_selection_result", {}),
             "combat_state": deepcopy(combat_state),
+            "tick": int(tick or 0),
             "source": "deterministic_enemy_combat_runtime",
         }
+
+    if intent == "flee":
+        combat_state = mark_enemy_fled(combat_state, enemy_id)
+        combat_state["last_enemy_intent_result"] = enemy_intent_result
+        combat_state["last_morale_result"] = enemy_intent_result.get("morale_result", {})
+
+        simulation_state["combat_state"] = combat_state
+        combat_state = evaluate_combat_exit(simulation_state, combat_state)
+        if combat_state.get("active"):
+            combat_state = advance_combat_turn(combat_state)
+        simulation_state["combat_state"] = combat_state
+
+        return {
+            "resolved": True,
+            "changed_state": True,
+            "reason": "enemy_fled_low_morale",
+            "enemy_id": enemy_id,
+            "action_type": "flee",
+            "actor_id": enemy_id,
+            "reason": "low_morale",
+            "enemy_intent_result": enemy_intent_result,
+            "morale_result": enemy_intent_result.get("morale_result", {}),
+            "target_selection_result": {},
+            "combat_state": deepcopy(combat_state),
+            "tick": int(tick or 0),
+            "source": "deterministic_enemy_combat_runtime",
+        }
+
+    if intent == "defend":
+        defense_resolution = resolve_defend(
+            simulation_state,
+            combat_state,
+            enemy_id,
+        )
+        defense_dict = defense_resolution.to_dict()
+        simulation_state, combat_state = apply_defense_resolution(
+            simulation_state,
+            combat_state,
+            defense_dict,
+        )
+        combat_state["last_enemy_intent_result"] = enemy_intent_result
+        combat_state["last_morale_result"] = enemy_intent_result.get("morale_result", {})
+        combat_state = advance_combat_turn(combat_state)
+        simulation_state["combat_state"] = combat_state
+
+        return {
+            "resolved": True,
+            "changed_state": True,
+            "reason": "enemy_defended_low_hp",
+            "enemy_id": enemy_id,
+            "action_type": "defend",
+            "actor_id": enemy_id,
+            "reason": "low_hp_defensive",
+            "enemy_intent_result": enemy_intent_result,
+            "morale_result": enemy_intent_result.get("morale_result", {}),
+            "target_selection_result": {},
+            "combat_result": defense_dict,
+            "combat_state": deepcopy(combat_state),
+            "tick": int(tick or 0),
+            "source": "deterministic_enemy_combat_runtime",
+        }
+
+    # Attack path (existing logic with updated target selection)
+    target_selection_result = enemy_intent_result.get("target_selection_result") or select_enemy_targets(
+        combat_state,
+        enemy_id,
+    )
+    target_id = str(target_selection_result.get("target_actor_id") or "player")
 
     attack = resolve_combat_attack(
         simulation_state,
         actor_id=enemy_id,
-        target_id=_safe_str(target.get("target_id")),
+        target_id=target_id,
         session_id=session_id,
         tick=tick,
     )
@@ -194,15 +270,15 @@ def resolve_enemy_combat_turn(
     elif attack.get("resolved") is not True:
         reason = _safe_str(attack.get("reason") or "enemy_combat_attack_failed")
 
-    return {
+    result = {
         "resolved": bool(attack.get("resolved")) or party_defeated,
         "changed_state": bool(attack.get("changed_state")) or party_defeated,
         "reason": reason,
         "enemy_id": enemy_id,
         "actor_id": enemy_id,
-        "target_id": _safe_str(target.get("target_id")),
-        "tactic": _safe_str(target.get("tactic")),
-        "target_selection": deepcopy(target),
+        "target_id": target_id,
+        "tactic": _safe_str(target_selection_result.get("reason")),
+        "target_selection": deepcopy(target_selection_result),
         "attack_result": deepcopy(attack),
         "party_defeated": party_defeated,
         "combat_ended": party_defeated,
@@ -210,6 +286,13 @@ def resolve_enemy_combat_turn(
         "tick": int(tick or 0),
         "source": "deterministic_enemy_combat_runtime",
     }
+
+    # Add enemy AI result fields
+    result["enemy_intent_result"] = enemy_intent_result
+    result["target_selection_result"] = target_selection_result
+    result["morale_result"] = enemy_intent_result.get("morale_result", {})
+
+    return result
 
 
 def resolve_current_enemy_combat_turn(

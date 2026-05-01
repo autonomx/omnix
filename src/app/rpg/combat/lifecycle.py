@@ -55,8 +55,9 @@ def _actor_lookup(simulation_state: Dict[str, Any], actor_id: str) -> Dict[str, 
 def _is_downed(actor: Dict[str, Any]) -> bool:
     resources = _safe_dict(actor.get("resources"))
     hp = int(resources.get("hp", 0) or actor.get("hp", 0) or 0)
+    status = str(actor.get("status", "")).strip().lower()
     statuses = [str(x).strip().lower() for x in _safe_list(actor.get("status_effects"))]
-    return hp <= 0 or "downed" in statuses
+    return hp <= 0 or "downed" in statuses or status in {"fled", "defeated", "dead", "downed", "unconscious"}
 
 
 def _actor_team(actor: Dict[str, Any]) -> str:

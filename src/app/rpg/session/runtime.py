@@ -7571,6 +7571,76 @@ def _mirror_rescued_combat_utility_result(final_result: Dict[str, Any]) -> Dict[
     return final_result
 
 
+def _mirror_enemy_ai_combat_results(final_result: Dict[str, Any]) -> Dict[str, Any]:
+    final_result = dict(_safe_dict(final_result))
+    resolved_result = dict(_safe_dict(final_result.get("resolved_result")))
+    combat_state = _safe_dict(final_result.get("combat_state") or resolved_result.get("combat_state"))
+
+    npc_combat_result = _safe_dict(
+        final_result.get("npc_combat_result")
+        or final_result.get("enemy_combat_result")
+        or resolved_result.get("npc_combat_result")
+        or resolved_result.get("enemy_combat_result")
+    )
+
+    if not npc_combat_result:
+        npc_combat_result = _safe_dict(combat_state.get("last_npc_combat_result"))
+    if not npc_combat_result:
+        npc_combat_result = _safe_dict(combat_state.get("last_enemy_combat_result"))
+
+    enemy_intent_result = _safe_dict(
+        npc_combat_result.get("enemy_intent_result")
+        or combat_state.get("last_enemy_intent_result")
+    )
+    target_selection_result = _safe_dict(
+        npc_combat_result.get("target_selection_result")
+        or combat_state.get("last_target_selection_result")
+    )
+    morale_result = _safe_dict(
+        npc_combat_result.get("morale_result")
+        or combat_state.get("last_morale_result")
+    )
+
+    if not enemy_intent_result and not target_selection_result and not morale_result:
+        return final_result
+
+    if enemy_intent_result:
+        final_result["enemy_intent_result"] = enemy_intent_result
+        resolved_result["enemy_intent_result"] = enemy_intent_result
+    if target_selection_result:
+        final_result["target_selection_result"] = target_selection_result
+        resolved_result["target_selection_result"] = target_selection_result
+    if morale_result:
+        final_result["morale_result"] = morale_result
+        resolved_result["morale_result"] = morale_result
+
+    if npc_combat_result:
+        final_result["npc_combat_result"] = npc_combat_result
+        final_result["enemy_combat_result"] = npc_combat_result
+        resolved_result["npc_combat_result"] = npc_combat_result
+        resolved_result["enemy_combat_result"] = npc_combat_result
+
+    final_result["resolved_result"] = resolved_result
+
+    result_obj = dict(
+        _safe_dict(final_result.get("result"))
+        or _safe_parse_mapping_payload(final_result.get("result"))
+    )
+    if result_obj:
+        if enemy_intent_result:
+            result_obj["enemy_intent_result"] = enemy_intent_result
+        if target_selection_result:
+            result_obj["target_selection_result"] = target_selection_result
+        if morale_result:
+            result_obj["morale_result"] = morale_result
+        if npc_combat_result:
+            result_obj["npc_combat_result"] = npc_combat_result
+            result_obj["enemy_combat_result"] = npc_combat_result
+        final_result["result"] = result_obj
+
+    return final_result
+
+
 def _reconcile_combat_use_item_with_successful_consumable(final_result: Dict[str, Any]) -> Dict[str, Any]:
     """Final J20 consistency pass.
 
@@ -11314,6 +11384,7 @@ def apply_turn(
     final_result = _reconcile_combat_recovery_action(final_result, player_input)
     final_result = _reconcile_condition_tick_for_manual_current_actor(final_result, player_input)
     final_result = _reconcile_forced_combat_conditions(final_result)
+    final_result = _mirror_enemy_ai_combat_results(final_result)
     return final_result
 
 
