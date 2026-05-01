@@ -6588,6 +6588,362 @@ SERVICE_SCENARIOS = {
         },
         "turns": ["I use the healing potion on Bran."],
     },
+
+    "combat_enemy_targets_low_hp_companion": {
+        "currency": {"gold": 0, "silver": 0, "copper": 0},
+        "conversation_settings": {
+            "enabled": True,
+            "autonomous_ticks_enabled": False,
+            "frequency": "never",
+            "conversation_chance_percent": 0,
+            "allow_player_invited": False,
+            "player_inclusion_chance_percent": 0,
+        },
+        "setup_interaction_state": {
+            "player_location_id": "loc_tavern_road",
+            "player_hp": 20,
+            "player_max_hp": 20,
+            "player_inventory": {"items": [], "equipment": {}, "carry_capacity": 50.0},
+            "party_state": {
+                "max_size": 4,
+                "companions": [{"npc_id": "npc:bran", "name": "Bran"}],
+            },
+            "combat_state": {
+                "active": True,
+                "round": 1,
+                "turn_index": 0,
+                "current_actor_id": "enemy:bandit_1",
+                "initiative_order": [
+                    {"actor_id": "enemy:bandit_1", "initiative": 20, "roll": 20, "bonus": 0},
+                    {"actor_id": "player", "initiative": 10, "roll": 10, "bonus": 0},
+                    {"actor_id": "npc:bran", "initiative": 5, "roll": 5, "bonus": 0},
+                ],
+                "participants": {
+                    "enemy:bandit_1": {
+                        "actor_id": "enemy:bandit_1",
+                        "side": "enemy",
+                        "name": "Bandit",
+                        "hp": 12,
+                        "max_hp": 12,
+                        "status": "active",
+                        "morale_threshold": 20,
+                    },
+                    "player": {
+                        "actor_id": "player",
+                        "side": "party",
+                        "name": "You",
+                        "hp": 20,
+                        "max_hp": 20,
+                        "status": "active",
+                    },
+                    "npc:bran": {
+                        "actor_id": "npc:bran",
+                        "side": "party",
+                        "name": "Bran",
+                        "hp": 3,
+                        "max_hp": 14,
+                        "status": "active",
+                    },
+                },
+                "combat_log": [],
+                "source": "manual_enemy_ai_test",
+            },
+        },
+        "turns": ["__manual_resolve_current_combat_actor__"],
+    },
+
+    "combat_enemy_avoids_downed_target": {
+        "currency": {"gold": 0, "silver": 0, "copper": 0},
+        "conversation_settings": {
+            "enabled": True,
+            "autonomous_ticks_enabled": False,
+            "frequency": "never",
+            "conversation_chance_percent": 0,
+            "allow_player_invited": False,
+            "player_inclusion_chance_percent": 0,
+        },
+        "setup_interaction_state": {
+            "player_location_id": "loc_tavern_road",
+            "player_hp": 20,
+            "player_max_hp": 20,
+            "player_inventory": {"items": [], "equipment": {}, "carry_capacity": 50.0},
+            "party_state": {
+                "max_size": 4,
+                "companions": [{"npc_id": "npc:bran", "name": "Bran"}],
+            },
+            "combat_state": {
+                "active": True,
+                "round": 1,
+                "turn_index": 0,
+                "current_actor_id": "enemy:bandit_1",
+                "initiative_order": [
+                    {"actor_id": "enemy:bandit_1", "initiative": 20, "roll": 20, "bonus": 0},
+                    {"actor_id": "npc:bran", "initiative": 10, "roll": 10, "bonus": 0},
+                    {"actor_id": "player", "initiative": 5, "roll": 5, "bonus": 0},
+                ],
+                "participants": {
+                    "enemy:bandit_1": {
+                        "actor_id": "enemy:bandit_1",
+                        "side": "enemy",
+                        "name": "Bandit",
+                        "hp": 12,
+                        "max_hp": 12,
+                        "status": "active",
+                        "morale_threshold": 20,
+                    },
+                    "npc:bran": {
+                        "actor_id": "npc:bran",
+                        "side": "party",
+                        "name": "Bran",
+                        "hp": 0,
+                        "max_hp": 14,
+                        "status": "downed",
+                        "status_effects": [
+                            {
+                                "effect_id": "effect:downed:npc:bran:test",
+                                "kind": "downed",
+                                "source": "combat",
+                                "source_actor_id": "enemy:bandit_1",
+                                "target_actor_id": "npc:bran",
+                                "duration_turns": 999,
+                                "stacks": 1,
+                                "magnitude": 1,
+                                "tick_timing": "none",
+                            }
+                        ],
+                    },
+                    "player": {
+                        "actor_id": "player",
+                        "side": "party",
+                        "name": "You",
+                        "hp": 20,
+                        "max_hp": 20,
+                        "status": "active",
+                    },
+                },
+                "combat_log": [],
+                "source": "manual_enemy_ai_test",
+            },
+        },
+        "turns": ["__manual_resolve_current_combat_actor__"],
+    },
+
+    "combat_enemy_defends_when_low_hp_but_not_fleeing": {
+        "currency": {"gold": 0, "silver": 0, "copper": 0},
+        "conversation_settings": {
+            "enabled": True,
+            "autonomous_ticks_enabled": False,
+            "frequency": "never",
+            "conversation_chance_percent": 0,
+            "allow_player_invited": False,
+            "player_inclusion_chance_percent": 0,
+        },
+        "setup_interaction_state": {
+            "player_location_id": "loc_tavern_road",
+            "player_hp": 20,
+            "player_max_hp": 20,
+            "player_inventory": {"items": [], "equipment": {}, "carry_capacity": 50.0},
+            "party_state": {"max_size": 4, "companions": []},
+            "combat_state": {
+                "active": True,
+                "round": 1,
+                "turn_index": 0,
+                "current_actor_id": "enemy:bandit_1",
+                "initiative_order": [
+                    {"actor_id": "enemy:bandit_1", "initiative": 20, "roll": 20, "bonus": 0},
+                    {"actor_id": "player", "initiative": 10, "roll": 10, "bonus": 0},
+                ],
+                "participants": {
+                    "enemy:bandit_1": {
+                        "actor_id": "enemy:bandit_1",
+                        "side": "enemy",
+                        "name": "Bandit",
+                        "hp": 4,
+                        "max_hp": 12,
+                        "status": "active",
+                        "morale_threshold": 5,
+                    },
+                    "player": {
+                        "actor_id": "player",
+                        "side": "party",
+                        "name": "You",
+                        "hp": 20,
+                        "max_hp": 20,
+                        "status": "active",
+                    },
+                },
+                "combat_log": [],
+                "source": "manual_enemy_ai_test",
+            },
+        },
+        "turns": ["__manual_resolve_current_combat_actor__"],
+    },
+
+    "combat_enemy_flees_on_low_morale": {
+        "currency": {"gold": 0, "silver": 0, "copper": 0},
+        "conversation_settings": {
+            "enabled": True,
+            "autonomous_ticks_enabled": False,
+            "frequency": "never",
+            "conversation_chance_percent": 0,
+            "allow_player_invited": False,
+            "player_inclusion_chance_percent": 0,
+        },
+        "setup_interaction_state": {
+            "player_location_id": "loc_tavern_road",
+            "player_hp": 20,
+            "player_max_hp": 20,
+            "player_inventory": {"items": [], "equipment": {}, "carry_capacity": 50.0},
+            "party_state": {"max_size": 4, "companions": []},
+            "combat_state": {
+                "active": True,
+                "round": 1,
+                "turn_index": 0,
+                "current_actor_id": "enemy:bandit_1",
+                "initiative_order": [
+                    {"actor_id": "enemy:bandit_1", "initiative": 20, "roll": 20, "bonus": 0},
+                    {"actor_id": "player", "initiative": 10, "roll": 10, "bonus": 0},
+                ],
+                "participants": {
+                    "enemy:bandit_1": {
+                        "actor_id": "enemy:bandit_1",
+                        "side": "enemy",
+                        "name": "Bandit",
+                        "hp": 1,
+                        "max_hp": 12,
+                        "status": "active",
+                        "morale_threshold": 80,
+                    },
+                    "player": {
+                        "actor_id": "player",
+                        "side": "party",
+                        "name": "You",
+                        "hp": 20,
+                        "max_hp": 20,
+                        "status": "active",
+                    },
+                },
+                "combat_log": [],
+                "source": "manual_enemy_ai_test",
+            },
+        },
+        "turns": ["__manual_resolve_current_combat_actor__"],
+    },
+
+    "combat_enemy_stunned_skips_ai_intent": {
+        "currency": {"gold": 0, "silver": 0, "copper": 0},
+        "conversation_settings": {
+            "enabled": True,
+            "autonomous_ticks_enabled": False,
+            "frequency": "never",
+            "conversation_chance_percent": 0,
+            "allow_player_invited": False,
+            "player_inclusion_chance_percent": 0,
+        },
+        "setup_interaction_state": {
+            "player_location_id": "loc_tavern_road",
+            "player_hp": 20,
+            "player_max_hp": 20,
+            "player_inventory": {"items": [], "equipment": {}, "carry_capacity": 50.0},
+            "party_state": {"max_size": 4, "companions": []},
+            "combat_state": {
+                "active": True,
+                "round": 1,
+                "turn_index": 0,
+                "current_actor_id": "enemy:bandit_1",
+                "initiative_order": [
+                    {"actor_id": "enemy:bandit_1", "initiative": 20, "roll": 20, "bonus": 0},
+                    {"actor_id": "player", "initiative": 10, "roll": 10, "bonus": 0},
+                ],
+                "participants": {
+                    "enemy:bandit_1": {
+                        "actor_id": "enemy:bandit_1",
+                        "side": "enemy",
+                        "name": "Bandit",
+                        "hp": 8,
+                        "max_hp": 12,
+                        "status": "active",
+                        "morale_threshold": 20,
+                        "status_effects": [
+                            {
+                                "effect_id": "effect:stunned:enemy:bandit_1:test",
+                                "kind": "stunned",
+                                "source": "combat",
+                                "source_actor_id": "player",
+                                "target_actor_id": "enemy:bandit_1",
+                                "duration_turns": 1,
+                                "stacks": 1,
+                                "magnitude": 1,
+                                "tick_timing": "none",
+                            }
+                        ],
+                    },
+                    "player": {
+                        "actor_id": "player",
+                        "side": "party",
+                        "name": "You",
+                        "hp": 20,
+                        "max_hp": 20,
+                        "status": "active",
+                    },
+                },
+                "combat_log": [],
+                "source": "manual_enemy_ai_test",
+            },
+        },
+        "turns": ["__manual_resolve_current_combat_actor__"],
+    },
+
+    "combat_enemy_morale_victory_when_last_enemy_flees": {
+        "currency": {"gold": 0, "silver": 0, "copper": 0},
+        "conversation_settings": {
+            "enabled": True,
+            "autonomous_ticks_enabled": False,
+            "frequency": "never",
+            "conversation_chance_percent": 0,
+            "allow_player_invited": False,
+            "player_inclusion_chance_percent": 0,
+        },
+        "setup_interaction_state": {
+            "player_location_id": "loc_tavern_road",
+            "player_hp": 20,
+            "player_max_hp": 20,
+            "player_inventory": {"items": [], "equipment": {}, "carry_capacity": 50.0},
+            "party_state": {"max_size": 4, "companions": []},
+            "combat_state": {
+                "active": True,
+                "round": 1,
+                "turn_index": 0,
+                "current_actor_id": "enemy:bandit_1",
+                "initiative_order": [
+                    {"actor_id": "enemy:bandit_1", "initiative": 20, "roll": 20, "bonus": 0},
+                    {"actor_id": "player", "initiative": 10, "roll": 10, "bonus": 0},
+                ],
+                "participants": {
+                    "enemy:bandit_1": {
+                        "actor_id": "enemy:bandit_1",
+                        "side": "enemy",
+                        "name": "Bandit",
+                        "hp": 1,
+                        "max_hp": 12,
+                        "status": "active",
+                        "morale_threshold": 80,
+                    },
+                    "player": {
+                        "actor_id": "player",
+                        "side": "party",
+                        "name": "You",
+                        "hp": 20,
+                        "max_hp": 20,
+                        "status": "active",
+                    },
+                },
+                "combat_log": [],
+                "source": "manual_enemy_ai_test",
+            },
+        },
+        "turns": ["__manual_resolve_current_combat_actor__"],
+    },
 }
 
 
@@ -7964,6 +8320,67 @@ def _extract_enemy_combat_result(result: Dict[str, Any]) -> Dict[str, Any]:
         result.get("enemy_combat_result"),
         nested.get("enemy_combat_result"),
         companion.get("enemy_combat_result"),
+    )
+
+
+def _extract_enemy_intent_result(turn_summary: Dict[str, Any]) -> Dict[str, Any]:
+    return _first_dict(
+        turn_summary.get("enemy_intent_result"),
+        _safe_dict(turn_summary.get("resolved_result")).get("enemy_intent_result"),
+        _safe_dict(turn_summary.get("npc_combat_result")).get("enemy_intent_result"),
+        _safe_dict(turn_summary.get("enemy_combat_result")).get("enemy_intent_result"),
+        _extract_nested_dict_by_key(turn_summary, "enemy_intent_result"),
+    )
+
+
+def _extract_target_selection_result(turn_summary: Dict[str, Any]) -> Dict[str, Any]:
+    return _first_dict(
+        turn_summary.get("target_selection_result"),
+        _safe_dict(turn_summary.get("resolved_result")).get("target_selection_result"),
+        _safe_dict(turn_summary.get("npc_combat_result")).get("target_selection_result"),
+        _safe_dict(turn_summary.get("enemy_combat_result")).get("target_selection_result"),
+        _extract_nested_dict_by_key(turn_summary, "target_selection_result"),
+    )
+
+
+def _extract_morale_result(turn_summary: Dict[str, Any]) -> Dict[str, Any]:
+    return _first_dict(
+        turn_summary.get("morale_result"),
+        _safe_dict(turn_summary.get("resolved_result")).get("morale_result"),
+        _safe_dict(turn_summary.get("npc_combat_result")).get("morale_result"),
+        _safe_dict(turn_summary.get("enemy_combat_result")).get("morale_result"),
+        _extract_nested_dict_by_key(turn_summary, "morale_result"),
+    )
+
+
+def _enemy_intent_is(turn_summary: Dict[str, Any], intent: str) -> bool:
+    result = _extract_enemy_intent_result(turn_summary)
+    return _safe_str(result.get("intent")).strip() == intent
+
+
+def _enemy_target_is(turn_summary: Dict[str, Any], target_actor_id: str) -> bool:
+    result = _extract_target_selection_result(turn_summary)
+    return _safe_str(result.get("target_actor_id")).strip() == target_actor_id
+
+
+def _enemy_avoided_target(turn_summary: Dict[str, Any], target_actor_id: str) -> bool:
+    result = _extract_target_selection_result(turn_summary)
+    for row in _safe_list(result.get("avoided")):
+        if _safe_str(_safe_dict(row).get("actor_id")).strip() == target_actor_id:
+            return True
+    return False
+
+
+def _combat_resolved_victory_after_enemy_flee(turn_summary: Dict[str, Any]) -> bool:
+    combat_state = _extract_turn_combat_state(turn_summary)
+    if _safe_str(combat_state.get("exit_reason")).strip() == "victory" and combat_state.get("active") is False:
+        return True
+    morale = _extract_morale_result(turn_summary)
+    intent = _extract_enemy_intent_result(turn_summary)
+    return (
+        _safe_str(morale.get("intent")).strip() == "flee"
+        and _safe_str(intent.get("intent")).strip() == "flee"
+        and combat_state.get("active") is False
     )
 
 
@@ -13170,6 +13587,59 @@ def _run_one_service_scenario(
             if not _turn_has_recovery_reason(summary_row, "revived"):
                 summary_row.setdefault("scenario_warnings", []).append(
                     "healing_downed_actor_did_not_revive"
+                )
+
+        if scenario_name == "combat_enemy_targets_low_hp_companion":
+            if not _enemy_intent_is(summary_row, "attack"):
+                summary_row.setdefault("scenario_warnings", []).append(
+                    "enemy_ai_missing_attack_intent"
+                )
+            if not _enemy_target_is(summary_row, "npc:bran"):
+                summary_row.setdefault("scenario_warnings", []).append(
+                    "enemy_ai_did_not_target_low_hp_companion"
+                )
+
+        if scenario_name == "combat_enemy_avoids_downed_target":
+            if not _enemy_avoided_target(summary_row, "npc:bran"):
+                summary_row.setdefault("scenario_warnings", []).append(
+                    "enemy_ai_did_not_avoid_downed_target"
+                )
+            if _enemy_target_is(summary_row, "npc:bran"):
+                summary_row.setdefault("scenario_warnings", []).append(
+                    "enemy_ai_targeted_downed_actor"
+                )
+
+        if scenario_name == "combat_enemy_defends_when_low_hp_but_not_fleeing":
+            if not _enemy_intent_is(summary_row, "defend"):
+                summary_row.setdefault("scenario_warnings", []).append(
+                    "enemy_ai_low_hp_missing_defend_intent"
+                )
+
+        if scenario_name == "combat_enemy_flees_on_low_morale":
+            if not _enemy_intent_is(summary_row, "flee"):
+                summary_row.setdefault("scenario_warnings", []).append(
+                    "enemy_ai_low_morale_missing_flee_intent"
+                )
+            morale = _extract_morale_result(summary_row)
+            if _safe_str(morale.get("reason")).strip() != "low_morale":
+                summary_row.setdefault("scenario_warnings", []).append(
+                    "enemy_ai_missing_low_morale_reason"
+                )
+
+        if scenario_name == "combat_enemy_stunned_skips_ai_intent":
+            if not _enemy_intent_is(summary_row, "skip_turn"):
+                summary_row.setdefault("scenario_warnings", []).append(
+                    "enemy_ai_stunned_missing_skip_turn_intent"
+                )
+
+        if scenario_name == "combat_enemy_morale_victory_when_last_enemy_flees":
+            if not _enemy_intent_is(summary_row, "flee"):
+                summary_row.setdefault("scenario_warnings", []).append(
+                    "enemy_ai_last_enemy_missing_flee_intent"
+                )
+            if not _combat_resolved_victory_after_enemy_flee(summary_row):
+                summary_row.setdefault("scenario_warnings", []).append(
+                    "enemy_ai_last_enemy_flee_did_not_resolve_victory"
                 )
 
         summary_row["regression_warnings"] = _manual_regression_warnings(

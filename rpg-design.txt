@@ -1,30 +1,20 @@
-Below is a strict implementation spec for:
+Bundle J28-J30 — Enemy AI Tactics, Targeting, and Morale v1
 
-Bundle J25-J27 — Combat Conditions, Status Effects, and Downed Recovery v1
+Scope stays backend-first. The goal is deterministic enemy combat behavior with visible audit fields:
 
-Scope:
-
-J25 — Condition model + status effect lifecycle
-J26 — Condition application from combat
-J27 — Downed / stabilize / revive flow
-
-Keep UI minimal. The goal is authoritative backend state + manual validation.
-
-1. Add combat condition helpers
+enemy_intent_result
+target_selection_result
+morale_result
+npc_combat_result / enemy_combat_result
+1. Add enemy AI tactics module
 New file
-src/app/rpg/combat/conditions.py
+src/app/rpg/combat/enemy_ai.py
 
 Create:
 
 from __future__ import annotations
 
-from copy import deepcopy
 from typing import Any, Dict, List
-
-
-MAX_STATUS_EFFECTS_PER_ACTOR = 12
-STACKING_KINDS = {"bleeding", "poisoned", "burning"}
-UNIQUE_KINDS = {"stunned", "stabilized", "unconscious", "downed", "prone", "guarded"}
 
 
 def _safe_dict(value: Any) -> Dict[str, Any]:
@@ -46,734 +36,549 @@ def _safe_int(value: Any, default: int = 0) -> int:
         return default
 
 
-def normalize_status_effect(effect: Dict[str, Any]) -> Dict[str, Any]:
-    effect = _safe_dict(effect)
-    kind = _safe_str(effect.get("kind")).strip().lower()
-    target_actor_id = _safe_str(effect.get("target_actor_id")).strip()
+def _hp(participant: Dict[str, Any]) -> int:
+    participant = _safe_dict(participant)
+    resources = _safe_dict(participant.get("resources"))
+    return _safe_int(participant.get("hp", resources.get("hp")), 0)
+
+
+def _max_hp(participant: Dict[str, Any]) -> int:
+    participant = _safe_dict(participant)
+    resources = _safe_dict(participant.get("resources"))
+    return max(1, _safe_int(participant.get("max_hp", resources.get("max_hp")), 1))
+
+
+def _hp_ratio(participant: Dict[str, Any]) -> float:
+    return max(0.0, min(1.0, _hp(participant) / float(_max_hp(participant))))
+
+
+def _side(participant: Dict[str, Any]) -> str:
+    return _safe_str(
+        participant.get("side")
+        or participant.get("team")
+        or participant.get("combat_team")
+        or participant.get("faction")
+    ).strip().lower()
+
+
+def _status(participant: Dict[str, Any]) -> str:
+    return _safe_str(participant.get("status")).strip().lower()
+
+
+def _effect_kinds(participant: Dict[str, Any]) -> set[str]:
+    kinds: set[str] = set()
+    for effect in _safe_list(_safe_dict(participant).get("status_effects")):
+        kind = _safe_str(_safe_dict(effect).get("kind")).strip().lower()
+        if kind:
+            kinds.add(kind)
+    return kinds
+
+
+def is_active_combatant(participant: Dict[str, Any]) -> bool:
+    participant = _safe_dict(participant)
+    if not participant:
+        return False
+    if _hp(participant) <= 0:
+        return False
+    status = _status(participant)
+    if status in {"downed", "unconscious", "defeated", "dead", "fled"}:
+        return False
+    effects = _effect_kinds(participant)
+    if "downed" in effects or "unconscious" in effects:
+        return False
+    return True
+
+
+def is_enemy(participant: Dict[str, Any]) -> bool:
+    return _side(participant) in {"enemy", "hostile", "monster", "bandit"}
+
+
+def is_party(participant: Dict[str, Any]) -> bool:
+    return _side(participant) in {"party", "player", "ally", "companion"}
+
+
+def select_enemy_targets(
+    combat_state: Dict[str, Any],
+    actor_id: str,
+) -> Dict[str, Any]:
+    combat_state = _safe_dict(combat_state)
+    participants = _safe_dict(combat_state.get("participants"))
+    actor = _safe_dict(participants.get(actor_id))
+    actor_side = _side(actor)
+
+    candidates: List[Dict[str, Any]] = []
+    avoided: List[Dict[str, Any]] = []
+
+    for target_id, participant in participants.items():
+        target_id = str(target_id)
+        participant = _safe_dict(participant)
+
+        if target_id == actor_id:
+            continue
+
+        target_side = _side(participant)
+        hostile = target_side and target_side != actor_side
+        if actor_side in {"enemy", "hostile", "monster", "bandit"}:
+            hostile = is_party(participant)
+        elif actor_side in {"party", "player", "ally", "companion"}:
+            hostile = is_enemy(participant)
+
+        if not hostile:
+            continue
+
+        if not is_active_combatant(participant):
+            avoided.append({
+                "actor_id": target_id,
+                "name": participant.get("name", target_id),
+                "reason": "inactive_or_downed",
+                "hp": _hp(participant),
+                "status": participant.get("status", ""),
+                "effects": sorted(_effect_kinds(participant)),
+            })
+            continue
+
+        candidates.append({
+            "actor_id": target_id,
+            "name": participant.get("name", target_id),
+            "hp": _hp(participant),
+            "max_hp": _max_hp(participant),
+            "hp_ratio": _hp_ratio(participant),
+            "status": participant.get("status", ""),
+            "effects": sorted(_effect_kinds(participant)),
+        })
+
+    candidates.sort(key=lambda row: (float(row.get("hp_ratio", 1.0)), int(row.get("hp", 999999)), str(row.get("actor_id"))))
+    selected = candidates[0] if candidates else {}
 
     return {
-        "effect_id": _safe_str(
-            effect.get("effect_id")
-            or f"effect:{kind}:{target_actor_id}"
-        ).strip(),
-        "kind": kind,
-        "source": _safe_str(effect.get("source") or "combat").strip(),
-        "source_actor_id": _safe_str(effect.get("source_actor_id")).strip(),
-        "target_actor_id": target_actor_id,
-        "duration_turns": max(0, _safe_int(effect.get("duration_turns"), 1)),
-        "stacks": max(1, _safe_int(effect.get("stacks"), 1)),
-        "magnitude": max(0, _safe_int(effect.get("magnitude"), 0)),
-        "tick_timing": _safe_str(effect.get("tick_timing") or "start_of_turn").strip(),
+        "selected": bool(selected),
+        "actor_id": actor_id,
+        "target_actor_id": _safe_str(selected.get("actor_id")).strip(),
+        "reason": "lowest_active_hp_ratio" if selected else "no_active_hostile_targets",
+        "candidates": candidates,
+        "avoided": avoided,
     }
 
 
-def normalize_status_effects(effects: Any) -> List[Dict[str, Any]]:
-    normalized: List[Dict[str, Any]] = []
-    for effect in _safe_list(effects):
-        item = normalize_status_effect(_safe_dict(effect))
-        if item.get("kind") and item.get("target_actor_id") and item.get("duration_turns", 0) > 0:
-            normalized.append(item)
-    return normalized[:MAX_STATUS_EFFECTS_PER_ACTOR]
-
-
-def get_participant_status_effects(participant: Dict[str, Any]) -> List[Dict[str, Any]]:
-    participant = _safe_dict(participant)
-    return normalize_status_effects(participant.get("status_effects"))
-
-
-def set_participant_status_effects(
-    participant: Dict[str, Any],
-    effects: List[Dict[str, Any]],
+def evaluate_enemy_morale(
+    combat_state: Dict[str, Any],
+    actor_id: str,
 ) -> Dict[str, Any]:
-    participant = dict(_safe_dict(participant))
-    participant["status_effects"] = normalize_status_effects(effects)
-    return participant
+    combat_state = _safe_dict(combat_state)
+    participants = _safe_dict(combat_state.get("participants"))
+    actor = _safe_dict(participants.get(actor_id))
+
+    hp_ratio = _hp_ratio(actor)
+    effects = _effect_kinds(actor)
+
+    score = 70
+    reasons: List[str] = []
+
+    if hp_ratio <= 0.25:
+        score -= 35
+        reasons.append("low_hp")
+    elif hp_ratio <= 0.5:
+        score -= 15
+        reasons.append("wounded")
+
+    if "bleeding" in effects:
+        score -= 10
+        reasons.append("bleeding")
+    if "stunned" in effects:
+        score -= 15
+        reasons.append("stunned")
+
+    enemy_alive = 0
+    party_alive = 0
+    enemy_down = 0
+
+    actor_side = _side(actor)
+    for other_id, participant in participants.items():
+        participant = _safe_dict(participant)
+        side = _side(participant)
+
+        if actor_side in {"enemy", "hostile", "monster", "bandit"}:
+            same_side = is_enemy(participant)
+            hostile_side = is_party(participant)
+        else:
+            same_side = side == actor_side
+            hostile_side = side != actor_side
+
+        if same_side:
+            if is_active_combatant(participant):
+                enemy_alive += 1
+            else:
+                enemy_down += 1
+        elif hostile_side:
+            if is_active_combatant(participant):
+                party_alive += 1
+
+    if party_alive > enemy_alive:
+        score -= 10 * min(3, party_alive - enemy_alive)
+        reasons.append("outnumbered")
+
+    if enemy_down:
+        score -= 8 * min(3, enemy_down)
+        reasons.append("allies_down")
+
+    tags = {_safe_str(x).strip().lower() for x in _safe_list(actor.get("tags"))}
+    if "brave" in tags:
+        score += 20
+        reasons.append("brave")
+    if "cowardly" in tags:
+        score -= 20
+        reasons.append("cowardly")
+    if "boss" in tags:
+        score += 30
+        reasons.append("boss")
+
+    score = max(0, min(100, score))
+    threshold = _safe_int(actor.get("morale_threshold"), 35)
+    flee = score < threshold
+
+    return {
+        "checked": True,
+        "actor_id": actor_id,
+        "score": score,
+        "threshold": threshold,
+        "intent": "flee" if flee else "",
+        "reason": "low_morale" if flee else "morale_holds",
+        "factors": reasons,
+        "hp_ratio": hp_ratio,
+    }
 
 
-def actor_has_condition(participant: Dict[str, Any], kind: str) -> bool:
-    kind = _safe_str(kind).strip().lower()
-    return any(effect.get("kind") == kind for effect in get_participant_status_effects(participant))
+def choose_enemy_intent(
+    combat_state: Dict[str, Any],
+    actor_id: str,
+) -> Dict[str, Any]:
+    combat_state = _safe_dict(combat_state)
+    participants = _safe_dict(combat_state.get("participants"))
+    actor = _safe_dict(participants.get(actor_id))
+    effects = _effect_kinds(actor)
 
-
-def add_status_effect_to_participant(
-    participant: Dict[str, Any],
-    effect: Dict[str, Any],
-) -> tuple[Dict[str, Any], Dict[str, Any]]:
-    participant = dict(_safe_dict(participant))
-    incoming = normalize_status_effect(effect)
-    effects = get_participant_status_effects(participant)
-
-    if not incoming.get("kind") or not incoming.get("target_actor_id"):
-        return participant, {
-            "applied": False,
-            "reason": "invalid_effect",
-            "effects_added": [],
-            "effects_updated": [],
+    if "stunned" in effects:
+        return {
+            "selected": True,
+            "actor_id": actor_id,
+            "intent": "skip_turn",
+            "reason": "stunned",
+            "morale_result": {},
+            "target_selection_result": {},
         }
 
-    kind = incoming["kind"]
-    updated: List[Dict[str, Any]] = []
-    added: List[Dict[str, Any]] = []
+    morale_result = evaluate_enemy_morale(combat_state, actor_id)
+    if morale_result.get("intent") == "flee":
+        return {
+            "selected": True,
+            "actor_id": actor_id,
+            "intent": "flee",
+            "reason": "low_morale",
+            "morale_result": morale_result,
+            "target_selection_result": {},
+        }
 
-    merged = False
-    next_effects: List[Dict[str, Any]] = []
+    if _hp_ratio(actor) <= 0.4 and not _effect_kinds(actor).intersection({"bleeding", "stunned"}):
+        # Low but not panicking: defend.
+        return {
+            "selected": True,
+            "actor_id": actor_id,
+            "intent": "defend",
+            "reason": "low_hp_defensive",
+            "morale_result": morale_result,
+            "target_selection_result": {},
+        }
 
-    for existing in effects:
-        if existing.get("kind") == kind:
-            existing = dict(existing)
-            if kind in STACKING_KINDS:
-                existing["stacks"] = min(9, _safe_int(existing.get("stacks"), 1) + _safe_int(incoming.get("stacks"), 1))
-                existing["magnitude"] = max(
-                    _safe_int(existing.get("magnitude"), 0),
-                    _safe_int(incoming.get("magnitude"), 0),
-                )
-                existing["duration_turns"] = max(
-                    _safe_int(existing.get("duration_turns"), 0),
-                    _safe_int(incoming.get("duration_turns"), 0),
-                )
-            else:
-                existing["duration_turns"] = max(
-                    _safe_int(existing.get("duration_turns"), 0),
-                    _safe_int(incoming.get("duration_turns"), 0),
-                )
-                existing["magnitude"] = max(
-                    _safe_int(existing.get("magnitude"), 0),
-                    _safe_int(incoming.get("magnitude"), 0),
-                )
-                existing["stacks"] = max(
-                    _safe_int(existing.get("stacks"), 1),
-                    _safe_int(incoming.get("stacks"), 1),
-                )
+    target_selection_result = select_enemy_targets(combat_state, actor_id)
+    if not target_selection_result.get("selected"):
+        return {
+            "selected": True,
+            "actor_id": actor_id,
+            "intent": "hold",
+            "reason": "no_active_targets",
+            "morale_result": morale_result,
+            "target_selection_result": target_selection_result,
+        }
 
-            updated.append(existing)
-            next_effects.append(existing)
-            merged = True
-        else:
-            next_effects.append(existing)
-
-    if not merged:
-        next_effects.append(incoming)
-        added.append(incoming)
-
-    participant["status_effects"] = normalize_status_effects(next_effects)
-
-    return participant, {
-        "applied": True,
-        "reason": "effect_merged" if merged else "effect_added",
-        "effects_added": added,
-        "effects_updated": updated,
-    }
-
-
-def remove_status_effects_from_participant(
-    participant: Dict[str, Any],
-    kinds: List[str],
-) -> tuple[Dict[str, Any], List[Dict[str, Any]]]:
-    participant = dict(_safe_dict(participant))
-    wanted = {_safe_str(kind).strip().lower() for kind in kinds if _safe_str(kind).strip()}
-    removed: List[Dict[str, Any]] = []
-    kept: List[Dict[str, Any]] = []
-
-    for effect in get_participant_status_effects(participant):
-        if effect.get("kind") in wanted:
-            removed.append(effect)
-        else:
-            kept.append(effect)
-
-    participant["status_effects"] = normalize_status_effects(kept)
-    return participant, removed
-
-
-def tick_start_of_turn_status_effects(
-    participant: Dict[str, Any],
-) -> tuple[Dict[str, Any], Dict[str, Any]]:
-    participant = dict(_safe_dict(participant))
-    effects = get_participant_status_effects(participant)
-
-    hp_before = _safe_int(participant.get("hp"), _safe_int(_safe_dict(participant.get("resources")).get("hp"), 0))
-    hp_after = hp_before
-
-    ticked: List[Dict[str, Any]] = []
-    expired: List[Dict[str, Any]] = []
-    kept: List[Dict[str, Any]] = []
-
-    for effect in effects:
-        effect = dict(effect)
-        kind = effect.get("kind")
-        timing = effect.get("tick_timing") or "start_of_turn"
-        duration = _safe_int(effect.get("duration_turns"), 0)
-
-        if timing == "start_of_turn":
-            damage = 0
-            if kind in {"bleeding", "poisoned", "burning"}:
-                damage = max(1, _safe_int(effect.get("magnitude"), 1)) * max(1, _safe_int(effect.get("stacks"), 1))
-                hp_after = max(0, hp_after - damage)
-
-            duration -= 1
-            effect["duration_turns"] = max(0, duration)
-            ticked.append({
-                "kind": kind,
-                "damage": damage,
-                "stacks": effect.get("stacks"),
-                "magnitude": effect.get("magnitude"),
-                "duration_turns_after": effect["duration_turns"],
-            })
-
-        if _safe_int(effect.get("duration_turns"), 0) <= 0:
-            expired.append(effect)
-        else:
-            kept.append(effect)
-
-    participant["hp"] = hp_after
-    resources = dict(_safe_dict(participant.get("resources")))
-    if resources:
-        resources["hp"] = hp_after
-        participant["resources"] = resources
-
-    participant["status_effects"] = normalize_status_effects(kept)
-
-    return participant, {
-        "ticked": bool(ticked),
-        "hp_before": hp_before,
-        "hp_after": hp_after,
-        "effects_ticked": ticked,
-        "effects_expired": expired,
-    }
-
-
-def build_condition_effect(
-    *,
-    kind: str,
-    source_actor_id: str,
-    target_actor_id: str,
-    duration_turns: int,
-    magnitude: int = 1,
-    stacks: int = 1,
-    source: str = "combat",
-    tick_timing: str = "start_of_turn",
-) -> Dict[str, Any]:
-    kind = _safe_str(kind).strip().lower()
-    target_actor_id = _safe_str(target_actor_id).strip()
-    return normalize_status_effect({
-        "effect_id": f"effect:{kind}:{target_actor_id}:{source_actor_id}",
-        "kind": kind,
-        "source": source,
-        "source_actor_id": source_actor_id,
-        "target_actor_id": target_actor_id,
-        "duration_turns": duration_turns,
-        "stacks": stacks,
-        "magnitude": magnitude,
-        "tick_timing": tick_timing,
-    })
-
-
-def build_condition_result(
-    *,
-    source: str,
-    target_actor_id: str,
-    effects_added: List[Dict[str, Any]] | None = None,
-    effects_updated: List[Dict[str, Any]] | None = None,
-    effects_removed: List[Dict[str, Any]] | None = None,
-    tick_result: Dict[str, Any] | None = None,
-) -> Dict[str, Any]:
     return {
-        "applied": bool(effects_added or effects_updated or effects_removed or tick_result),
-        "source": source,
-        "target_actor_id": target_actor_id,
-        "effects_added": effects_added or [],
-        "effects_updated": effects_updated or [],
-        "effects_removed": effects_removed or [],
-        "tick_result": tick_result or {},
+        "selected": True,
+        "actor_id": actor_id,
+        "intent": "attack",
+        "reason": "attack_lowest_hp_active_target",
+        "morale_result": morale_result,
+        "target_selection_result": target_selection_result,
+        "target_actor_id": target_selection_result.get("target_actor_id", ""),
     }
-2. Normalize participant status effects in combat state
-File
-src/app/rpg/combat/state.py
 
-Add import:
 
-@@
- from typing import Any, Dict, List
-+from app.rpg.combat.conditions import normalize_status_effects
+def mark_enemy_fled(
+    combat_state: Dict[str, Any],
+    actor_id: str,
+) -> Dict[str, Any]:
+    combat_state = dict(_safe_dict(combat_state))
+    participants = dict(_safe_dict(combat_state.get("participants")))
+    participant = dict(_safe_dict(participants.get(actor_id)))
+    participant["status"] = "fled"
+    participant["hp"] = max(0, _hp(participant))
+    participants[actor_id] = participant
+    combat_state["participants"] = participants
 
-In normalize_combat_state(...), after participants are normalized, make sure each participant has bounded status effects.
+    fled = [str(x) for x in _safe_list(combat_state.get("fled_actor_ids"))]
+    if actor_id not in fled:
+        fled.append(actor_id)
+    combat_state["fled_actor_ids"] = fled
 
-Find where participants are copied/normalized. Add this after participants is built:
+    recent = list(combat_state.get("recent_events") or [])
+    recent.append({
+        "type": "enemy_fled",
+        "actor_id": actor_id,
+    })
+    combat_state["recent_events"] = recent[-24:]
+    return combat_state
+2. Wire enemy AI into NPC/enemy turn resolution
 
-@@
-     participants = _safe_dict(state.get("participants"))
-+    normalized_participants: Dict[str, Any] = {}
-+    for actor_id, participant in participants.items():
-+        participant = _safe_dict(participant)
-+        participant["status_effects"] = normalize_status_effects(participant.get("status_effects"))
-+        normalized_participants[str(actor_id)] = participant
-+    participants = normalized_participants
+You likely have either:
 
-Then ensure returned state uses:
+src/app/rpg/combat/runtime.py
 
-"participants": participants,
-3. Apply condition triggers after attacks
-File
-src/app/rpg/combat/apply.py
+or another function that handles enemy turns, often run_npc_turn(...).
 
-Add imports:
-
-@@
- from app.rpg.combat.state import normalize_combat_state
-+from app.rpg.combat.conditions import (
-+    add_status_effect_to_participant,
-+    build_condition_effect,
-+    build_condition_result,
-+)
-
-Inside apply_attack_resolution(...), after target HP/status is updated but before appending recent events, add deterministic condition triggers:
-
-@@
-     combat_state["last_resolution"] = dict(resolution)
-+
-+    condition_result: Dict[str, Any] = {}
-+    participants = _safe_dict(combat_state.get("participants"))
-+    target_participant = _safe_dict(participants.get(target_id))
-+
-+    if target_participant and bool(resolution.get("hit")) and _safe_int(resolution.get("damage_applied"), 0) > 0:
-+        effects_added: List[Dict[str, Any]] = []
-+        effects_updated: List[Dict[str, Any]] = []
-+
-+        attack_roll = _safe_int(resolution.get("attack_roll"), 0)
-+        damage_applied = _safe_int(resolution.get("damage_applied"), 0)
-+        target_max_hp = _safe_int(
-+            target_participant.get("max_hp")
-+            or _safe_dict(target_participant.get("resources")).get("max_hp"),
-+            0,
-+        )
-+
-+        if attack_roll >= 20:
-+            target_participant, added_result = add_status_effect_to_participant(
-+                target_participant,
-+                build_condition_effect(
-+                    kind="bleeding",
-+                    source_actor_id=actor_id,
-+                    target_actor_id=target_id,
-+                    duration_turns=3,
-+                    magnitude=1,
-+                    stacks=1,
-+                ),
-+            )
-+            effects_added.extend(_safe_list(added_result.get("effects_added")))
-+            effects_updated.extend(_safe_list(added_result.get("effects_updated")))
-+
-+        if target_max_hp > 0 and damage_applied * 2 >= target_max_hp:
-+            target_participant, added_result = add_status_effect_to_participant(
-+                target_participant,
-+                build_condition_effect(
-+                    kind="stunned",
-+                    source_actor_id=actor_id,
-+                    target_actor_id=target_id,
-+                    duration_turns=1,
-+                    magnitude=1,
-+                    stacks=1,
-+                    tick_timing="start_of_turn",
-+                ),
-+            )
-+            effects_added.extend(_safe_list(added_result.get("effects_added")))
-+            effects_updated.extend(_safe_list(added_result.get("effects_updated")))
-+
-+        participants[target_id] = target_participant
-+        combat_state["participants"] = participants
-+
-+        if effects_added or effects_updated:
-+            condition_result = build_condition_result(
-+                source="combat",
-+                target_actor_id=target_id,
-+                effects_added=effects_added,
-+                effects_updated=effects_updated,
-+            )
-+            resolution["condition_result"] = condition_result
-+            combat_state["last_condition_result"] = condition_result
-
-If resolution is frozen or not mutable in your file, do this first near the top of apply_attack_resolution(...):
-
-resolution = dict(resolution)
-
-Acceptance: attack result now carries:
-
-"condition_result": {
-  "applied": true,
-  "source": "combat",
-  "target_actor_id": "...",
-  "effects_added": [...]
-}
-4. Tick start-of-turn effects and skip stunned actors
 File
 src/app/rpg/combat/runtime.py
 
 Add imports:
 
 @@
-+from app.rpg.combat.conditions import (
-+    actor_has_condition,
-+    remove_status_effects_from_participant,
-+    tick_start_of_turn_status_effects,
-+)
++from app.rpg.combat.enemy_ai import choose_enemy_intent, mark_enemy_fled, select_enemy_targets
++from app.rpg.combat.apply import apply_defense_resolution, apply_flee_resolution
++from app.rpg.combat.resolver import resolve_defend
 
-Find advance_combat_turn(...) or the function that chooses/resolves current actor.
+In the function that resolves current NPC/enemy turn, before the old “attack player” fallback, insert:
 
-After advancing to a new current_actor_id, add:
+    enemy_intent_result = choose_enemy_intent(combat_state, current_actor_id)
+    intent = str(enemy_intent_result.get("intent") or "")
+
+    if intent == "skip_turn":
+        combat_state["last_enemy_intent_result"] = enemy_intent_result
+        combat_state["last_morale_result"] = enemy_intent_result.get("morale_result", {})
+        combat_state["last_target_selection_result"] = enemy_intent_result.get("target_selection_result", {})
+
+        recent = list(combat_state.get("recent_events") or [])
+        recent.append({
+            "type": "enemy_skip_turn",
+            "actor_id": current_actor_id,
+            "reason": "stunned",
+        })
+        combat_state["recent_events"] = recent[-24:]
+
+        combat_state = advance_turn(combat_state)
+        return simulation_state, combat_state, {
+            "action_type": "skip_turn",
+            "actor_id": current_actor_id,
+            "reason": "stunned",
+            "enemy_intent_result": enemy_intent_result,
+            "morale_result": enemy_intent_result.get("morale_result", {}),
+            "target_selection_result": enemy_intent_result.get("target_selection_result", {}),
+        }
+
+    if intent == "flee":
+        combat_state = mark_enemy_fled(combat_state, current_actor_id)
+        combat_state["last_enemy_intent_result"] = enemy_intent_result
+        combat_state["last_morale_result"] = enemy_intent_result.get("morale_result", {})
+
+        combat_state = evaluate_combat_exit(simulation_state, combat_state)
+        if combat_state.get("active"):
+            combat_state = advance_turn(combat_state)
+
+        return simulation_state, combat_state, {
+            "action_type": "flee",
+            "actor_id": current_actor_id,
+            "reason": "low_morale",
+            "enemy_intent_result": enemy_intent_result,
+            "morale_result": enemy_intent_result.get("morale_result", {}),
+            "target_selection_result": {},
+            "combat_state": combat_state,
+        }
+
+    if intent == "defend":
+        defense_resolution = resolve_defend(
+            simulation_state,
+            combat_state,
+            current_actor_id,
+        )
+        defense_dict = defense_resolution.to_dict()
+        simulation_state, combat_state = apply_defense_resolution(
+            simulation_state,
+            combat_state,
+            defense_dict,
+        )
+        combat_state["last_enemy_intent_result"] = enemy_intent_result
+        combat_state["last_morale_result"] = enemy_intent_result.get("morale_result", {})
+        combat_state = advance_turn(combat_state)
+
+        return simulation_state, combat_state, {
+            "action_type": "defend",
+            "actor_id": current_actor_id,
+            "reason": "low_hp_defensive",
+            "enemy_intent_result": enemy_intent_result,
+            "morale_result": enemy_intent_result.get("morale_result", {}),
+            "target_selection_result": {},
+            "combat_result": defense_dict,
+            "combat_state": combat_state,
+        }
+
+Then for the existing attack path, replace hardcoded target selection, usually "player", with:
+
+    target_selection_result = enemy_intent_result.get("target_selection_result") or select_enemy_targets(
+        combat_state,
+        current_actor_id,
+    )
+    target_id = str(target_selection_result.get("target_actor_id") or "player")
+
+And include these fields in the returned NPC/enemy combat result:
+
+    npc_result["enemy_intent_result"] = enemy_intent_result
+    npc_result["target_selection_result"] = target_selection_result
+    npc_result["morale_result"] = enemy_intent_result.get("morale_result", {})
+
+If your code builds a plain dict after resolve_attack(...), add:
+
+    attack_result["enemy_intent_result"] = enemy_intent_result
+    attack_result["target_selection_result"] = target_selection_result
+    attack_result["morale_result"] = enemy_intent_result.get("morale_result", {})
+
+Acceptance: every enemy turn returns one of:
+
+action_type = attack / defend / flee / skip_turn / hold
+enemy_intent_result.intent = ...
+3. Make enemy flee resolve victory if all enemies are gone
+File
+src/app/rpg/combat/lifecycle.py
+
+Patch your combat exit detection so fled enemies count as unavailable.
+
+Where you check alive enemies, treat these as inactive:
+
+status == fled
+actor_id in combat_state.fled_actor_ids
+
+If you have _is_downed(...), update it:
 
 @@
-+    participants = _safe_dict(combat_state.get("participants"))
-+    current_actor_id = _safe_str(combat_state.get("current_actor_id")).strip()
-+    current_participant = _safe_dict(participants.get(current_actor_id))
-+
-+    if current_participant:
-+        current_participant, tick_result = tick_start_of_turn_status_effects(current_participant)
-+        participants[current_actor_id] = current_participant
-+        combat_state["participants"] = participants
-+
-+        if tick_result.get("ticked"):
-+            combat_state["last_condition_tick_result"] = {
-+                "actor_id": current_actor_id,
-+                **tick_result,
-+            }
-+            recent = list(combat_state.get("recent_events") or [])
-+            recent.append({
-+                "type": "condition_tick",
-+                "actor_id": current_actor_id,
-+                "tick_result": tick_result,
-+            })
-+            combat_state["recent_events"] = recent[-24:]
-+
-+        if actor_has_condition(current_participant, "stunned"):
-+            current_participant, removed = remove_status_effects_from_participant(
-+                current_participant,
-+                ["stunned"],
-+            )
-+            participants[current_actor_id] = current_participant
-+            combat_state["participants"] = participants
-+            combat_state["last_condition_result"] = {
-+                "applied": True,
-+                "source": "combat",
-+                "target_actor_id": current_actor_id,
-+                "effects_added": [],
-+                "effects_updated": [],
-+                "effects_removed": removed,
-+                "reason": "stunned_skip_turn",
-+            }
-+            combat_state["pending_skip_turn_actor_id"] = current_actor_id
+ def _is_downed(actor: Dict[str, Any]) -> bool:
+     actor = _safe_dict(actor)
++    if _safe_str(actor.get("status")).strip().lower() in {"fled", "defeated", "dead", "downed", "unconscious"}:
++        return True
 
-If your runtime has a specific NPC turn resolver, add the skip check there too:
+If you count active enemies somewhere, add:
 
-if combat_state.get("pending_skip_turn_actor_id") == current_actor_id:
-    combat_state["pending_skip_turn_actor_id"] = ""
-    combat_state = advance_turn(combat_state)
-    return simulation_state, combat_state, {
-        "action_type": "skip_turn",
-        "reason": "stunned",
-        "actor_id": current_actor_id,
-        "condition_result": combat_state.get("last_condition_result", {}),
-    }
+fled_actor_ids = {str(x) for x in _safe_list(state.get("fled_actor_ids"))}
+...
+if actor_id in fled_actor_ids:
+    continue
+if _safe_str(actor.get("status")).strip().lower() == "fled":
+    continue
 
-Exact insertion depends on your existing run_npc_turn(...) shape. The acceptance test should look for either:
+When all enemies are defeated or fled, set:
 
-reason = stunned
-action_type = skip_turn
+state["active"] = False
+state["phase"] = "resolved"
+state["exit_reason"] = "victory"
+state["pending_npc_turn"] = False
+state["defense_modifiers"] = {}
+4. Final response reconciliation for enemy AI result fields
 
-or:
+We have learned from earlier bundles that many fields need final mirroring.
 
-last_condition_result.reason = stunned_skip_turn
-5. Add stabilize / revive helpers
-File
-src/app/rpg/combat/recovery.py
-
-Create:
-
-from __future__ import annotations
-
-from typing import Any, Dict, List
-
-from app.rpg.combat.conditions import (
-    add_status_effect_to_participant,
-    build_condition_effect,
-    remove_status_effects_from_participant,
-)
-
-
-def _safe_dict(value: Any) -> Dict[str, Any]:
-    return value if isinstance(value, dict) else {}
-
-
-def _safe_str(value: Any) -> str:
-    return "" if value is None else str(value)
-
-
-def _safe_int(value: Any, default: int = 0) -> int:
-    try:
-        return int(value)
-    except Exception:
-        return default
-
-
-def stabilize_participant(
-    combat_state: Dict[str, Any],
-    target_actor_id: str,
-    *,
-    source_actor_id: str = "player",
-) -> tuple[Dict[str, Any], Dict[str, Any]]:
-    combat_state = dict(_safe_dict(combat_state))
-    participants = dict(_safe_dict(combat_state.get("participants")))
-    target_actor_id = _safe_str(target_actor_id).strip()
-    participant = dict(_safe_dict(participants.get(target_actor_id)))
-
-    if not participant:
-        return combat_state, {
-            "applied": False,
-            "reason": "target_not_found",
-            "target_actor_id": target_actor_id,
-        }
-
-    hp = _safe_int(participant.get("hp"), 0)
-    if hp > 0:
-        return combat_state, {
-            "applied": False,
-            "reason": "target_not_downed",
-            "target_actor_id": target_actor_id,
-        }
-
-    participant, add_result = add_status_effect_to_participant(
-        participant,
-        build_condition_effect(
-            kind="stabilized",
-            source_actor_id=source_actor_id,
-            target_actor_id=target_actor_id,
-            duration_turns=999,
-            magnitude=1,
-            stacks=1,
-            tick_timing="none",
-        ),
-    )
-
-    participants[target_actor_id] = participant
-    combat_state["participants"] = participants
-
-    result = {
-        "applied": True,
-        "source": "combat",
-        "action_type": "stabilize",
-        "target_actor_id": target_actor_id,
-        "effects_added": add_result.get("effects_added", []),
-        "effects_updated": add_result.get("effects_updated", []),
-        "effects_removed": [],
-        "reason": "stabilized",
-    }
-    combat_state["last_recovery_result"] = result
-    return combat_state, result
-
-
-def revive_participant_with_healing(
-    combat_state: Dict[str, Any],
-    target_actor_id: str,
-    *,
-    amount: int,
-    source_actor_id: str = "player",
-) -> tuple[Dict[str, Any], Dict[str, Any]]:
-    combat_state = dict(_safe_dict(combat_state))
-    participants = dict(_safe_dict(combat_state.get("participants")))
-    target_actor_id = _safe_str(target_actor_id).strip()
-    participant = dict(_safe_dict(participants.get(target_actor_id)))
-
-    if not participant:
-        return combat_state, {
-            "applied": False,
-            "reason": "target_not_found",
-            "target_actor_id": target_actor_id,
-        }
-
-    hp_before = _safe_int(participant.get("hp"), 0)
-    max_hp = max(1, _safe_int(participant.get("max_hp"), 1))
-    hp_after = min(max_hp, max(0, hp_before) + max(0, amount))
-    participant["hp"] = hp_after
-
-    removed = []
-    if hp_after > 0:
-        participant, removed = remove_status_effects_from_participant(
-            participant,
-            ["downed", "unconscious"],
-        )
-        participant["status"] = "active"
-
-    participants[target_actor_id] = participant
-    combat_state["participants"] = participants
-
-    result = {
-        "applied": hp_after > hp_before,
-        "source": "combat",
-        "action_type": "revive",
-        "target_actor_id": target_actor_id,
-        "source_actor_id": source_actor_id,
-        "hp_before": hp_before,
-        "hp_after": hp_after,
-        "effects_removed": removed,
-        "reason": "revived" if hp_after > 0 else "not_revived",
-    }
-    combat_state["last_recovery_result"] = result
-    return combat_state, result
-6. Wire stabilize/revive text commands in session runtime
 File
 src/app/rpg/session/runtime.py
 
-Add import:
+Add helper near other final reconciliation helpers:
 
-@@
-+from app.rpg.combat.recovery import stabilize_participant, revive_participant_with_healing
+def _mirror_enemy_ai_combat_results(final_result: Dict[str, Any]) -> Dict[str, Any]:
+    final_result = dict(_safe_dict(final_result))
+    resolved_result = dict(_safe_dict(final_result.get("resolved_result")))
+    combat_state = _safe_dict(final_result.get("combat_state") or resolved_result.get("combat_state"))
 
-Add helpers near combat intent helpers:
-
-def _action_requests_stabilize(player_input: str) -> bool:
-    text = _safe_str(player_input).strip().lower()
-    return "stabilize" in text or "staunch" in text or "stop the bleeding" in text
-
-
-def _action_requests_revive_or_heal_other(player_input: str) -> bool:
-    text = _safe_str(player_input).strip().lower()
-    return ("revive" in text or "heal" in text or "healing potion" in text) and any(
-        name in text for name in ("bran", "companion", "ally")
+    npc_combat_result = _safe_dict(
+        final_result.get("npc_combat_result")
+        or final_result.get("enemy_combat_result")
+        or resolved_result.get("npc_combat_result")
+        or resolved_result.get("enemy_combat_result")
     )
 
+    if not npc_combat_result:
+        npc_combat_result = _safe_dict(combat_state.get("last_npc_combat_result"))
+    if not npc_combat_result:
+        npc_combat_result = _safe_dict(combat_state.get("last_enemy_combat_result"))
 
-def _infer_recovery_target_actor_id(runtime_state: Dict[str, Any], player_input: str) -> str:
-    text = _safe_str(player_input).strip().lower()
-    combat_state = _safe_dict(_get_combat_state(runtime_state))
-    participants = _safe_dict(combat_state.get("participants"))
+    enemy_intent_result = _safe_dict(
+        npc_combat_result.get("enemy_intent_result")
+        or combat_state.get("last_enemy_intent_result")
+    )
+    target_selection_result = _safe_dict(
+        npc_combat_result.get("target_selection_result")
+        or combat_state.get("last_target_selection_result")
+    )
+    morale_result = _safe_dict(
+        npc_combat_result.get("morale_result")
+        or combat_state.get("last_morale_result")
+    )
 
-    for actor_id, participant in participants.items():
-        participant = _safe_dict(participant)
-        name = _safe_str(participant.get("name")).strip().lower()
-        if name and name in text:
-            return str(actor_id)
+    if not enemy_intent_result and not target_selection_result and not morale_result:
+        return final_result
 
-    if "bran" in text:
-        for actor_id, participant in participants.items():
-            if "bran" in _safe_str(_safe_dict(participant).get("name")).strip().lower():
-                return str(actor_id)
+    if enemy_intent_result:
+        final_result["enemy_intent_result"] = enemy_intent_result
+        resolved_result["enemy_intent_result"] = enemy_intent_result
+    if target_selection_result:
+        final_result["target_selection_result"] = target_selection_result
+        resolved_result["target_selection_result"] = target_selection_result
+    if morale_result:
+        final_result["morale_result"] = morale_result
+        resolved_result["morale_result"] = morale_result
 
-    for actor_id, participant in participants.items():
-        participant = _safe_dict(participant)
-        if _safe_str(participant.get("side")).strip() == "party" and actor_id != "player":
-            return str(actor_id)
+    if npc_combat_result:
+        final_result["npc_combat_result"] = npc_combat_result
+        final_result["enemy_combat_result"] = npc_combat_result
+        resolved_result["npc_combat_result"] = npc_combat_result
+        resolved_result["enemy_combat_result"] = npc_combat_result
 
-    return ""
+    final_result["resolved_result"] = resolved_result
 
-In _apply_turn_authoritative(...), before generic unsupported fallback or before _apply_authoritative_action(...), add:
+    result_obj = dict(
+        _safe_dict(final_result.get("result"))
+        or _safe_parse_mapping_payload(final_result.get("result"))
+    )
+    if result_obj:
+        if enemy_intent_result:
+            result_obj["enemy_intent_result"] = enemy_intent_result
+        if target_selection_result:
+            result_obj["target_selection_result"] = target_selection_result
+        if morale_result:
+            result_obj["morale_result"] = morale_result
+        if npc_combat_result:
+            result_obj["npc_combat_result"] = npc_combat_result
+            result_obj["enemy_combat_result"] = npc_combat_result
+        final_result["result"] = result_obj
 
-    if combat_state.get("active") and _action_requests_stabilize(player_input):
-        target_actor_id = _infer_recovery_target_actor_id(runtime_state, player_input)
-        combat_state, recovery_result = stabilize_participant(
-            combat_state,
-            target_actor_id,
-            source_actor_id="player",
-        )
-        runtime_state = _set_combat_state(runtime_state, combat_state)
-        resolved_result = {
-            "action_type": "stabilize",
-            "visible_interaction_reason": "combat_stabilize",
-            "outcome": recovery_result.get("reason"),
-            "recovery_result": recovery_result,
-            "condition_result": recovery_result,
-            "combat_state": combat_state,
-            "conversation_result": {
-                "triggered": False,
-                "reason": "combat_recovery_action",
-            },
-        }
-        grounded = _derive_grounded_scene_context(simulation_state, runtime_state, resolved_result)
-        return {
-            "ok": True,
-            "simulation_state": simulation_state,
-            "runtime_state": runtime_state,
-            "session": {
-                "simulation_state": simulation_state,
-                "runtime_state": runtime_state,
-            },
-            "result": resolved_result,
-            "narration_context": {
-                "player_input": player_input,
-                "action_type": "stabilize",
-                "resolved_result": resolved_result,
-                "simulation_state": simulation_state,
-                "runtime_state": runtime_state,
-                "combat_result": {},
-                "npc_combat_result": {},
-                "combat_state": combat_state,
-                "grounded": grounded,
-                "xp_result": {},
-                "skill_xp_result": {},
-                "level_up": [],
-                "skill_level_ups": [],
-                "settings": runtime_state.get("runtime_settings", {}),
-                "conversation_threads": [],
-            },
-            "turn_id": turn_id,
-            "tick": final_tick,
-        }
+    return final_result
 
-Add a similar branch for revive/heal companion:
+Call it at the final success return:
 
-    if combat_state.get("active") and _action_requests_revive_or_heal_other(player_input):
-        target_actor_id = _infer_recovery_target_actor_id(runtime_state, player_input)
-        combat_state, recovery_result = revive_participant_with_healing(
-            combat_state,
-            target_actor_id,
-            amount=5,
-            source_actor_id="player",
-        )
-        runtime_state = _set_combat_state(runtime_state, combat_state)
-        resolved_result = {
-            "action_type": "revive",
-            "visible_interaction_reason": "combat_revive",
-            "outcome": recovery_result.get("reason"),
-            "recovery_result": recovery_result,
-            "combat_state": combat_state,
-            "conversation_result": {
-                "triggered": False,
-                "reason": "combat_recovery_action",
-            },
-        }
-        grounded = _derive_grounded_scene_context(simulation_state, runtime_state, resolved_result)
-        return {
-            "ok": True,
-            "simulation_state": simulation_state,
-            "runtime_state": runtime_state,
-            "session": {
-                "simulation_state": simulation_state,
-                "runtime_state": runtime_state,
-            },
-            "result": resolved_result,
-            "narration_context": {
-                "player_input": player_input,
-                "action_type": "revive",
-                "resolved_result": resolved_result,
-                "simulation_state": simulation_state,
-                "runtime_state": runtime_state,
-                "combat_result": {},
-                "npc_combat_result": {},
-                "combat_state": combat_state,
-                "grounded": grounded,
-                "xp_result": {},
-                "skill_xp_result": {},
-                "level_up": [],
-                "skill_level_ups": [],
-                "settings": runtime_state.get("runtime_settings", {}),
-                "conversation_threads": [],
-            },
-            "turn_id": turn_id,
-            "tick": final_tick,
-        }
-7. Manual scenario definitions
+@@
+     final_result = _reconcile_combat_recovery_action(final_result, player_input)
+     final_result = _reconcile_condition_tick_for_manual_current_actor(final_result, player_input)
+     final_result = _reconcile_forced_combat_conditions(final_result)
++    final_result = _mirror_enemy_ai_combat_results(final_result)
+     return final_result
+5. Add manual scenarios
 File
 src/tests/rpg/manual_llm_transcript.py
 
-Add these scenarios to SERVICE_SCENARIOS.
+Add these to SERVICE_SCENARIOS.
 
-    "combat_critical_hit_applies_bleeding": {
+    "combat_enemy_targets_low_hp_companion": {
         "currency": {"gold": 0, "silver": 0, "copper": 0},
         "conversation_settings": {
             "enabled": True,
@@ -788,18 +593,30 @@ Add these scenarios to SERVICE_SCENARIOS.
             "player_hp": 20,
             "player_max_hp": 20,
             "player_inventory": {"items": [], "equipment": {}, "carry_capacity": 50.0},
-            "party_state": {"max_size": 4, "companions": []},
+            "party_state": {
+                "max_size": 4,
+                "companions": [{"npc_id": "npc:bran", "name": "Bran"}],
+            },
             "combat_state": {
                 "active": True,
                 "round": 1,
                 "turn_index": 0,
-                "current_actor_id": "player",
-                "force_next_attack_roll": 20,
+                "current_actor_id": "enemy:bandit_1",
                 "initiative_order": [
-                    {"actor_id": "player", "initiative": 20, "roll": 20, "bonus": 0},
-                    {"actor_id": "enemy:bandit_1", "initiative": 1, "roll": 1, "bonus": 0},
+                    {"actor_id": "enemy:bandit_1", "initiative": 20, "roll": 20, "bonus": 0},
+                    {"actor_id": "player", "initiative": 10, "roll": 10, "bonus": 0},
+                    {"actor_id": "npc:bran", "initiative": 5, "roll": 5, "bonus": 0},
                 ],
                 "participants": {
+                    "enemy:bandit_1": {
+                        "actor_id": "enemy:bandit_1",
+                        "side": "enemy",
+                        "name": "Bandit",
+                        "hp": 12,
+                        "max_hp": 12,
+                        "status": "active",
+                        "morale_threshold": 20,
+                    },
                     "player": {
                         "actor_id": "player",
                         "side": "party",
@@ -808,25 +625,23 @@ Add these scenarios to SERVICE_SCENARIOS.
                         "max_hp": 20,
                         "status": "active",
                     },
-                    "enemy:bandit_1": {
-                        "actor_id": "enemy:bandit_1",
-                        "side": "enemy",
-                        "name": "Bandit",
-                        "hp": 12,
-                        "max_hp": 12,
-                        "defense": 10,
-                        "armor": 0,
+                    "npc:bran": {
+                        "actor_id": "npc:bran",
+                        "side": "party",
+                        "name": "Bran",
+                        "hp": 3,
+                        "max_hp": 14,
                         "status": "active",
                     },
                 },
                 "combat_log": [],
-                "source": "manual_condition_test",
+                "source": "manual_enemy_ai_test",
             },
         },
-        "turns": ["I attack the bandit."],
+        "turns": ["__manual_resolve_current_combat_actor__"],
     },
 
-    "combat_heavy_hit_applies_stunned": {
+    "combat_enemy_avoids_downed_target": {
         "currency": {"gold": 0, "silver": 0, "copper": 0},
         "conversation_settings": {
             "enabled": True,
@@ -841,18 +656,51 @@ Add these scenarios to SERVICE_SCENARIOS.
             "player_hp": 20,
             "player_max_hp": 20,
             "player_inventory": {"items": [], "equipment": {}, "carry_capacity": 50.0},
-            "party_state": {"max_size": 4, "companions": []},
+            "party_state": {
+                "max_size": 4,
+                "companions": [{"npc_id": "npc:bran", "name": "Bran"}],
+            },
             "combat_state": {
                 "active": True,
                 "round": 1,
                 "turn_index": 0,
-                "current_actor_id": "player",
-                "force_next_damage": 6,
+                "current_actor_id": "enemy:bandit_1",
                 "initiative_order": [
-                    {"actor_id": "player", "initiative": 20, "roll": 20, "bonus": 0},
-                    {"actor_id": "enemy:bandit_1", "initiative": 1, "roll": 1, "bonus": 0},
+                    {"actor_id": "enemy:bandit_1", "initiative": 20, "roll": 20, "bonus": 0},
+                    {"actor_id": "npc:bran", "initiative": 10, "roll": 10, "bonus": 0},
+                    {"actor_id": "player", "initiative": 5, "roll": 5, "bonus": 0},
                 ],
                 "participants": {
+                    "enemy:bandit_1": {
+                        "actor_id": "enemy:bandit_1",
+                        "side": "enemy",
+                        "name": "Bandit",
+                        "hp": 12,
+                        "max_hp": 12,
+                        "status": "active",
+                        "morale_threshold": 20,
+                    },
+                    "npc:bran": {
+                        "actor_id": "npc:bran",
+                        "side": "party",
+                        "name": "Bran",
+                        "hp": 0,
+                        "max_hp": 14,
+                        "status": "downed",
+                        "status_effects": [
+                            {
+                                "effect_id": "effect:downed:npc:bran:test",
+                                "kind": "downed",
+                                "source": "combat",
+                                "source_actor_id": "enemy:bandit_1",
+                                "target_actor_id": "npc:bran",
+                                "duration_turns": 999,
+                                "stacks": 1,
+                                "magnitude": 1,
+                                "tick_timing": "none",
+                            }
+                        ],
+                    },
                     "player": {
                         "actor_id": "player",
                         "side": "party",
@@ -861,25 +709,15 @@ Add these scenarios to SERVICE_SCENARIOS.
                         "max_hp": 20,
                         "status": "active",
                     },
-                    "enemy:bandit_1": {
-                        "actor_id": "enemy:bandit_1",
-                        "side": "enemy",
-                        "name": "Bandit",
-                        "hp": 12,
-                        "max_hp": 12,
-                        "defense": 10,
-                        "armor": 0,
-                        "status": "active",
-                    },
                 },
                 "combat_log": [],
-                "source": "manual_condition_test",
+                "source": "manual_enemy_ai_test",
             },
         },
-        "turns": ["I attack the bandit."],
+        "turns": ["__manual_resolve_current_combat_actor__"],
     },
 
-    "combat_bleeding_ticks_damage": {
+    "combat_enemy_defends_when_low_hp_but_not_fleeing": {
         "currency": {"gold": 0, "silver": 0, "copper": 0},
         "conversation_settings": {
             "enabled": True,
@@ -902,9 +740,18 @@ Add these scenarios to SERVICE_SCENARIOS.
                 "current_actor_id": "enemy:bandit_1",
                 "initiative_order": [
                     {"actor_id": "enemy:bandit_1", "initiative": 20, "roll": 20, "bonus": 0},
-                    {"actor_id": "player", "initiative": 1, "roll": 1, "bonus": 0},
+                    {"actor_id": "player", "initiative": 10, "roll": 10, "bonus": 0},
                 ],
                 "participants": {
+                    "enemy:bandit_1": {
+                        "actor_id": "enemy:bandit_1",
+                        "side": "enemy",
+                        "name": "Bandit",
+                        "hp": 4,
+                        "max_hp": 12,
+                        "status": "active",
+                        "morale_threshold": 5,
+                    },
                     "player": {
                         "actor_id": "player",
                         "side": "party",
@@ -913,38 +760,15 @@ Add these scenarios to SERVICE_SCENARIOS.
                         "max_hp": 20,
                         "status": "active",
                     },
-                    "enemy:bandit_1": {
-                        "actor_id": "enemy:bandit_1",
-                        "side": "enemy",
-                        "name": "Bandit",
-                        "hp": 8,
-                        "max_hp": 12,
-                        "defense": 10,
-                        "armor": 0,
-                        "status": "active",
-                        "status_effects": [
-                            {
-                                "effect_id": "effect:bleeding:enemy:bandit_1:test",
-                                "kind": "bleeding",
-                                "source": "combat",
-                                "source_actor_id": "player",
-                                "target_actor_id": "enemy:bandit_1",
-                                "duration_turns": 2,
-                                "stacks": 1,
-                                "magnitude": 1,
-                                "tick_timing": "start_of_turn",
-                            }
-                        ],
-                    },
                 },
                 "combat_log": [],
-                "source": "manual_condition_test",
+                "source": "manual_enemy_ai_test",
             },
         },
         "turns": ["__manual_resolve_current_combat_actor__"],
     },
 
-    "combat_stabilize_downed_companion": {
+    "combat_enemy_flees_on_low_morale": {
         "currency": {"gold": 0, "silver": 0, "copper": 0},
         "conversation_settings": {
             "enabled": True,
@@ -959,20 +783,26 @@ Add these scenarios to SERVICE_SCENARIOS.
             "player_hp": 20,
             "player_max_hp": 20,
             "player_inventory": {"items": [], "equipment": {}, "carry_capacity": 50.0},
-            "party_state": {
-                "max_size": 4,
-                "companions": [{"npc_id": "npc:bran", "name": "Bran"}],
-            },
+            "party_state": {"max_size": 4, "companions": []},
             "combat_state": {
                 "active": True,
                 "round": 1,
                 "turn_index": 0,
-                "current_actor_id": "player",
+                "current_actor_id": "enemy:bandit_1",
                 "initiative_order": [
-                    {"actor_id": "player", "initiative": 20, "roll": 20, "bonus": 0},
-                    {"actor_id": "npc:bran", "initiative": 10, "roll": 10, "bonus": 0},
+                    {"actor_id": "enemy:bandit_1", "initiative": 20, "roll": 20, "bonus": 0},
+                    {"actor_id": "player", "initiative": 10, "roll": 10, "bonus": 0},
                 ],
                 "participants": {
+                    "enemy:bandit_1": {
+                        "actor_id": "enemy:bandit_1",
+                        "side": "enemy",
+                        "name": "Bandit",
+                        "hp": 1,
+                        "max_hp": 12,
+                        "status": "active",
+                        "morale_threshold": 80,
+                    },
                     "player": {
                         "actor_id": "player",
                         "side": "party",
@@ -981,36 +811,15 @@ Add these scenarios to SERVICE_SCENARIOS.
                         "max_hp": 20,
                         "status": "active",
                     },
-                    "npc:bran": {
-                        "actor_id": "npc:bran",
-                        "side": "party",
-                        "name": "Bran",
-                        "hp": 0,
-                        "max_hp": 14,
-                        "status": "downed",
-                        "status_effects": [
-                            {
-                                "effect_id": "effect:downed:npc:bran:test",
-                                "kind": "downed",
-                                "source": "combat",
-                                "source_actor_id": "enemy:bandit_1",
-                                "target_actor_id": "npc:bran",
-                                "duration_turns": 999,
-                                "stacks": 1,
-                                "magnitude": 1,
-                                "tick_timing": "none",
-                            }
-                        ],
-                    },
                 },
                 "combat_log": [],
-                "source": "manual_recovery_test",
+                "source": "manual_enemy_ai_test",
             },
         },
-        "turns": ["I stabilize Bran."],
+        "turns": ["__manual_resolve_current_combat_actor__"],
     },
 
-    "combat_heal_downed_companion_revives": {
+    "combat_enemy_stunned_skips_ai_intent": {
         "currency": {"gold": 0, "silver": 0, "copper": 0},
         "conversation_settings": {
             "enabled": True,
@@ -1024,34 +833,40 @@ Add these scenarios to SERVICE_SCENARIOS.
             "player_location_id": "loc_tavern_road",
             "player_hp": 20,
             "player_max_hp": 20,
-            "player_inventory": {
-                "items": [
-                    {
-                        "item_id": "item:minor_healing_potion",
-                        "definition_id": "item:minor_healing_potion",
-                        "name": "minor healing potion",
-                        "aliases": ["potion", "healing potion"],
-                        "qty": 1,
-                        "quantity": 1,
-                    }
-                ],
-                "equipment": {},
-                "carry_capacity": 50.0,
-            },
-            "party_state": {
-                "max_size": 4,
-                "companions": [{"npc_id": "npc:bran", "name": "Bran"}],
-            },
+            "player_inventory": {"items": [], "equipment": {}, "carry_capacity": 50.0},
+            "party_state": {"max_size": 4, "companions": []},
             "combat_state": {
                 "active": True,
                 "round": 1,
                 "turn_index": 0,
-                "current_actor_id": "player",
+                "current_actor_id": "enemy:bandit_1",
                 "initiative_order": [
-                    {"actor_id": "player", "initiative": 20, "roll": 20, "bonus": 0},
-                    {"actor_id": "npc:bran", "initiative": 10, "roll": 10, "bonus": 0},
+                    {"actor_id": "enemy:bandit_1", "initiative": 20, "roll": 20, "bonus": 0},
+                    {"actor_id": "player", "initiative": 10, "roll": 10, "bonus": 0},
                 ],
                 "participants": {
+                    "enemy:bandit_1": {
+                        "actor_id": "enemy:bandit_1",
+                        "side": "enemy",
+                        "name": "Bandit",
+                        "hp": 8,
+                        "max_hp": 12,
+                        "status": "active",
+                        "morale_threshold": 20,
+                        "status_effects": [
+                            {
+                                "effect_id": "effect:stunned:enemy:bandit_1:test",
+                                "kind": "stunned",
+                                "source": "combat",
+                                "source_actor_id": "player",
+                                "target_actor_id": "enemy:bandit_1",
+                                "duration_turns": 1,
+                                "stacks": 1,
+                                "magnitude": 1,
+                                "tick_timing": "none",
+                            }
+                        ],
+                    },
                     "player": {
                         "actor_id": "player",
                         "side": "party",
@@ -1060,206 +875,195 @@ Add these scenarios to SERVICE_SCENARIOS.
                         "max_hp": 20,
                         "status": "active",
                     },
-                    "npc:bran": {
-                        "actor_id": "npc:bran",
+                },
+                "combat_log": [],
+                "source": "manual_enemy_ai_test",
+            },
+        },
+        "turns": ["__manual_resolve_current_combat_actor__"],
+    },
+
+    "combat_enemy_morale_victory_when_last_enemy_flees": {
+        "currency": {"gold": 0, "silver": 0, "copper": 0},
+        "conversation_settings": {
+            "enabled": True,
+            "autonomous_ticks_enabled": False,
+            "frequency": "never",
+            "conversation_chance_percent": 0,
+            "allow_player_invited": False,
+            "player_inclusion_chance_percent": 0,
+        },
+        "setup_interaction_state": {
+            "player_location_id": "loc_tavern_road",
+            "player_hp": 20,
+            "player_max_hp": 20,
+            "player_inventory": {"items": [], "equipment": {}, "carry_capacity": 50.0},
+            "party_state": {"max_size": 4, "companions": []},
+            "combat_state": {
+                "active": True,
+                "round": 1,
+                "turn_index": 0,
+                "current_actor_id": "enemy:bandit_1",
+                "initiative_order": [
+                    {"actor_id": "enemy:bandit_1", "initiative": 20, "roll": 20, "bonus": 0},
+                    {"actor_id": "player", "initiative": 10, "roll": 10, "bonus": 0},
+                ],
+                "participants": {
+                    "enemy:bandit_1": {
+                        "actor_id": "enemy:bandit_1",
+                        "side": "enemy",
+                        "name": "Bandit",
+                        "hp": 1,
+                        "max_hp": 12,
+                        "status": "active",
+                        "morale_threshold": 80,
+                    },
+                    "player": {
+                        "actor_id": "player",
                         "side": "party",
-                        "name": "Bran",
-                        "hp": 0,
-                        "max_hp": 14,
-                        "status": "downed",
-                        "status_effects": [
-                            {
-                                "effect_id": "effect:downed:npc:bran:test",
-                                "kind": "downed",
-                                "source": "combat",
-                                "source_actor_id": "enemy:bandit_1",
-                                "target_actor_id": "npc:bran",
-                                "duration_turns": 999,
-                                "stacks": 1,
-                                "magnitude": 1,
-                                "tick_timing": "none",
-                            },
-                            {
-                                "effect_id": "effect:unconscious:npc:bran:test",
-                                "kind": "unconscious",
-                                "source": "combat",
-                                "source_actor_id": "enemy:bandit_1",
-                                "target_actor_id": "npc:bran",
-                                "duration_turns": 999,
-                                "stacks": 1,
-                                "magnitude": 1,
-                                "tick_timing": "none",
-                            },
-                        ],
+                        "name": "You",
+                        "hp": 20,
+                        "max_hp": 20,
+                        "status": "active",
                     },
                 },
                 "combat_log": [],
-                "source": "manual_recovery_test",
+                "source": "manual_enemy_ai_test",
             },
         },
-        "turns": ["I use the healing potion on Bran."],
+        "turns": ["__manual_resolve_current_combat_actor__"],
     },
-8. Manual validators
+6. Add validators
 File
 src/tests/rpg/manual_llm_transcript.py
 
 Add helpers:
 
-def _extract_status_effects_from_turn(turn_summary: Dict[str, Any], actor_id: str = "") -> List[Dict[str, Any]]:
-    effects: List[Dict[str, Any]] = []
-
-    def walk(value: Any, depth: int = 0) -> None:
-        if depth > 8:
-            return
-        if isinstance(value, dict):
-            if isinstance(value.get("status_effects"), list):
-                if not actor_id or _safe_str(value.get("actor_id")) == actor_id:
-                    effects.extend([_safe_dict(x) for x in value.get("status_effects")])
-            for nested in value.values():
-                walk(nested, depth + 1)
-        elif isinstance(value, list):
-            for nested in value:
-                walk(nested, depth + 1)
-
-    walk(turn_summary)
-    return effects
+def _extract_enemy_intent_result(turn_summary: Dict[str, Any]) -> Dict[str, Any]:
+    return _first_dict(
+        turn_summary.get("enemy_intent_result"),
+        _safe_dict(turn_summary.get("resolved_result")).get("enemy_intent_result"),
+        _safe_dict(turn_summary.get("npc_combat_result")).get("enemy_intent_result"),
+        _safe_dict(turn_summary.get("enemy_combat_result")).get("enemy_intent_result"),
+        _extract_nested_dict_by_key(turn_summary, "enemy_intent_result"),
+    )
 
 
-def _turn_has_condition_result_kind(turn_summary: Dict[str, Any], kind: str) -> bool:
-    kind = _safe_str(kind).strip()
-    result = _extract_nested_dict_by_key(turn_summary, "condition_result")
-    if result:
-        for effect in _safe_list(result.get("effects_added")) + _safe_list(result.get("effects_updated")):
-            if _safe_str(_safe_dict(effect).get("kind")) == kind:
-                return True
-    for effect in _extract_status_effects_from_turn(turn_summary):
-        if _safe_str(effect.get("kind")) == kind:
+def _extract_target_selection_result(turn_summary: Dict[str, Any]) -> Dict[str, Any]:
+    return _first_dict(
+        turn_summary.get("target_selection_result"),
+        _safe_dict(turn_summary.get("resolved_result")).get("target_selection_result"),
+        _safe_dict(turn_summary.get("npc_combat_result")).get("target_selection_result"),
+        _safe_dict(turn_summary.get("enemy_combat_result")).get("target_selection_result"),
+        _extract_nested_dict_by_key(turn_summary, "target_selection_result"),
+    )
+
+
+def _extract_morale_result(turn_summary: Dict[str, Any]) -> Dict[str, Any]:
+    return _first_dict(
+        turn_summary.get("morale_result"),
+        _safe_dict(turn_summary.get("resolved_result")).get("morale_result"),
+        _safe_dict(turn_summary.get("npc_combat_result")).get("morale_result"),
+        _safe_dict(turn_summary.get("enemy_combat_result")).get("morale_result"),
+        _extract_nested_dict_by_key(turn_summary, "morale_result"),
+    )
+
+
+def _enemy_intent_is(turn_summary: Dict[str, Any], intent: str) -> bool:
+    result = _extract_enemy_intent_result(turn_summary)
+    return _safe_str(result.get("intent")).strip() == intent
+
+
+def _enemy_target_is(turn_summary: Dict[str, Any], target_actor_id: str) -> bool:
+    result = _extract_target_selection_result(turn_summary)
+    return _safe_str(result.get("target_actor_id")).strip() == target_actor_id
+
+
+def _enemy_avoided_target(turn_summary: Dict[str, Any], target_actor_id: str) -> bool:
+    result = _extract_target_selection_result(turn_summary)
+    for row in _safe_list(result.get("avoided")):
+        if _safe_str(_safe_dict(row).get("actor_id")).strip() == target_actor_id:
             return True
     return False
 
 
-def _turn_has_condition_tick_damage(turn_summary: Dict[str, Any], kind: str) -> bool:
-    tick = _extract_nested_dict_by_key(turn_summary, "last_condition_tick_result")
-    if not tick:
-        tick = _extract_nested_dict_by_key(turn_summary, "tick_result")
-    for effect in _safe_list(tick.get("effects_ticked")):
-        effect = _safe_dict(effect)
-        if _safe_str(effect.get("kind")) == kind and _safe_int(effect.get("damage"), 0) > 0:
-            return True
-    return False
+def _combat_resolved_victory_after_enemy_flee(turn_summary: Dict[str, Any]) -> bool:
+    combat_state = _extract_turn_combat_state(turn_summary)
+    if _safe_str(combat_state.get("exit_reason")).strip() == "victory" and combat_state.get("active") is False:
+        return True
+    morale = _extract_morale_result(turn_summary)
+    intent = _extract_enemy_intent_result(turn_summary)
+    return (
+        _safe_str(morale.get("intent")).strip() == "flee"
+        and _safe_str(intent.get("intent")).strip() == "flee"
+        and combat_state.get("active") is False
+    )
 
+Add per-turn warning checks:
 
-def _turn_has_recovery_reason(turn_summary: Dict[str, Any], reason: str) -> bool:
-    recovery = _extract_nested_dict_by_key(turn_summary, "recovery_result")
-    if not recovery:
-        recovery = _extract_nested_dict_by_key(turn_summary, "last_recovery_result")
-    return _safe_str(recovery.get("reason")) == reason
-
-Add per-turn warnings:
-
-        if scenario_name == "combat_critical_hit_applies_bleeding":
-            if not _turn_has_condition_result_kind(summary_row, "bleeding"):
+        if scenario_name == "combat_enemy_targets_low_hp_companion":
+            if not _enemy_intent_is(summary_row, "attack"):
                 summary_row.setdefault("scenario_warnings", []).append(
-                    "combat_critical_hit_missing_bleeding_condition"
+                    "enemy_ai_missing_attack_intent"
+                )
+            if not _enemy_target_is(summary_row, "npc:bran"):
+                summary_row.setdefault("scenario_warnings", []).append(
+                    "enemy_ai_did_not_target_low_hp_companion"
                 )
 
-        if scenario_name == "combat_heavy_hit_applies_stunned":
-            if not _turn_has_condition_result_kind(summary_row, "stunned"):
+        if scenario_name == "combat_enemy_avoids_downed_target":
+            if not _enemy_avoided_target(summary_row, "npc:bran"):
                 summary_row.setdefault("scenario_warnings", []).append(
-                    "combat_heavy_hit_missing_stunned_condition"
+                    "enemy_ai_did_not_avoid_downed_target"
+                )
+            if _enemy_target_is(summary_row, "npc:bran"):
+                summary_row.setdefault("scenario_warnings", []).append(
+                    "enemy_ai_targeted_downed_actor"
                 )
 
-        if scenario_name == "combat_bleeding_ticks_damage":
-            if not _turn_has_condition_tick_damage(summary_row, "bleeding"):
+        if scenario_name == "combat_enemy_defends_when_low_hp_but_not_fleeing":
+            if not _enemy_intent_is(summary_row, "defend"):
                 summary_row.setdefault("scenario_warnings", []).append(
-                    "combat_bleeding_tick_missing_damage"
+                    "enemy_ai_low_hp_missing_defend_intent"
                 )
 
-        if scenario_name == "combat_stabilize_downed_companion":
-            if not _turn_has_recovery_reason(summary_row, "stabilized"):
+        if scenario_name == "combat_enemy_flees_on_low_morale":
+            if not _enemy_intent_is(summary_row, "flee"):
                 summary_row.setdefault("scenario_warnings", []).append(
-                    "stabilize_missing_stabilized_condition"
+                    "enemy_ai_low_morale_missing_flee_intent"
+                )
+            morale = _extract_morale_result(summary_row)
+            if _safe_str(morale.get("reason")).strip() != "low_morale":
+                summary_row.setdefault("scenario_warnings", []).append(
+                    "enemy_ai_missing_low_morale_reason"
                 )
 
-        if scenario_name == "combat_heal_downed_companion_revives":
-            if not _turn_has_recovery_reason(summary_row, "revived"):
+        if scenario_name == "combat_enemy_stunned_skips_ai_intent":
+            if not _enemy_intent_is(summary_row, "skip_turn"):
                 summary_row.setdefault("scenario_warnings", []).append(
-                    "healing_downed_actor_did_not_revive"
+                    "enemy_ai_stunned_missing_skip_turn_intent"
                 )
 
-Add scenario-level aggregation warnings too, same pattern:
+        if scenario_name == "combat_enemy_morale_victory_when_last_enemy_flees":
+            if not _enemy_intent_is(summary_row, "flee"):
+                summary_row.setdefault("scenario_warnings", []).append(
+                    "enemy_ai_last_enemy_missing_flee_intent"
+                )
+            if not _combat_resolved_victory_after_enemy_flee(summary_row):
+                summary_row.setdefault("scenario_warnings", []).append(
+                    "enemy_ai_last_enemy_flee_did_not_resolve_victory"
+                )
 
-    if scenario_name == "combat_critical_hit_applies_bleeding":
-        if not any(_turn_has_condition_result_kind(row, "bleeding") for row in scenario_results):
-            scenario_warnings.append("combat_critical_hit_missing_bleeding_condition")
+Add scenario-level checks with any(...) over scenario_results for the same warnings, like the previous bundles.
 
-    if scenario_name == "combat_heavy_hit_applies_stunned":
-        if not any(_turn_has_condition_result_kind(row, "stunned") for row in scenario_results):
-            scenario_warnings.append("combat_heavy_hit_missing_stunned_condition")
+7. Run focused J28-J30
+python src/tests/rpg/manual_llm_transcript.py --service-scenarios --scenario combat_enemy_targets_low_hp_companion combat_enemy_avoids_downed_target combat_enemy_defends_when_low_hp_but_not_fleeing combat_enemy_flees_on_low_morale combat_enemy_stunned_skips_ai_intent combat_enemy_morale_victory_when_last_enemy_flees --fail-on-regression-warnings
 
-    if scenario_name == "combat_bleeding_ticks_damage":
-        if not any(_turn_has_condition_tick_damage(row, "bleeding") for row in scenario_results):
-            scenario_warnings.append("combat_bleeding_tick_missing_damage")
+Expected first pass may expose wiring issues. Final expected:
 
-    if scenario_name == "combat_stabilize_downed_companion":
-        if not any(_turn_has_recovery_reason(row, "stabilized") for row in scenario_results):
-            scenario_warnings.append("stabilize_missing_stabilized_condition")
-
-    if scenario_name == "combat_heal_downed_companion_revives":
-        if not any(_turn_has_recovery_reason(row, "revived") for row in scenario_results):
-            scenario_warnings.append("healing_downed_actor_did_not_revive")
-
-Deduplicate if needed before return.
-
-9. Add forced roll/damage support for manual tests
-
-Your scenarios above use:
-
-force_next_attack_roll
-force_next_damage
-
-If the resolver does not support those yet, add it.
-
-File
-src/app/rpg/combat/resolver.py
-
-In resolve_attack(...), after the normal roll is created:
-
-@@
-     attack_roll = deterministic_d20(...)
-+    forced_attack_roll = _safe_int(combat_state.get("force_next_attack_roll"), 0)
-+    if forced_attack_roll > 0:
-+        attack_roll = {
-+            "result": max(1, min(20, forced_attack_roll)),
-+            "source": "manual_force_next_attack_roll",
-+        }
-
-For damage:
-
-@@
-     damage_roll = deterministic_roll(...)
-+    forced_damage = _safe_int(combat_state.get("force_next_damage"), 0)
-+    if forced_damage > 0:
-+        damage_roll = {
-+            "result": forced_damage,
-+            "source": "manual_force_next_damage",
-+        }
-
-If your code stores roll fields differently, preserve existing shape but override result.
-
-After applying attack, clear these flags in apply_attack_resolution(...):
-
-combat_state.pop("force_next_attack_roll", None)
-combat_state.pop("force_next_damage", None)
-10. Run focused tests
-python src/tests/rpg/manual_llm_transcript.py --service-scenarios --scenario combat_critical_hit_applies_bleeding combat_heavy_hit_applies_stunned combat_bleeding_ticks_damage combat_stabilize_downed_companion combat_heal_downed_companion_revives --fail-on-regression-warnings
-
-Expected first run may expose integration errors. After fixes, expected:
-
-combat_critical_hit_applies_bleeding: PASS
-combat_heavy_hit_applies_stunned: PASS
-combat_bleeding_ticks_damage: PASS
-combat_stabilize_downed_companion: PASS
-combat_heal_downed_companion_revives: PASS
-
-Then broad combat regression:
+combat_enemy_targets_low_hp_companion: PASS
+combat_enemy_avoids_downed_target: PASS
+combat_enemy_defends_when_low_hp_but_not_fleeing: PASS
+combat_enemy_flees_on_low_morale: PASS
+combat_enemy_stunned_skips_ai_intent: PASS
+combat_enemy_morale_victory_when_last_enemy_flees: PASS
