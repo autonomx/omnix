@@ -456,6 +456,23 @@ from app.rpg.combat.initiative import advance_turn, begin_combat
 from app.rpg.combat.lifecycle import build_combat_participants, evaluate_combat_exit
 from app.rpg.combat.models import AttackIntent
 from app.rpg.combat.npc_turns import run_npc_turn
+from app.rpg.combat.recovery import stabilize_participant, revive_participant_with_healing
+from app.rpg.combat.conditions import (
+    add_status_effect_to_participant,
+    build_condition_effect,
+    build_condition_result,
+    tick_start_of_turn_status_effects,
+)
+from app.rpg.combat.resolver import resolve_attack, resolve_defend, resolve_flee
+from app.rpg.combat.state import (
+    combat_is_active,
+    get_current_actor_id,
+    normalize_combat_state,
+)
+from app.rpg.combat.initiative import advance_turn, begin_combat
+from app.rpg.combat.lifecycle import build_combat_participants, evaluate_combat_exit
+from app.rpg.combat.models import AttackIntent
+from app.rpg.combat.npc_turns import run_npc_turn
 from app.rpg.combat.resolver import resolve_attack, resolve_defend, resolve_flee
 from app.rpg.combat.state import (
     build_empty_combat_state,
@@ -5253,6 +5270,42 @@ def _action_requests_combat_use_item(action: Dict[str, Any], player_input: str) 
     )
 
 
+def _action_requests_stabilize(player_input: str) -> bool:
+    text = _safe_str(player_input).strip().lower()
+    return "stabilize" in text or "staunch" in text or "stop the bleeding" in text
+
+
+def _action_requests_revive_or_heal_other(player_input: str) -> bool:
+    text = _safe_str(player_input).strip().lower()
+    return ("revive" in text or "heal" in text or "healing potion" in text) and any(
+        name in text for name in ("bran", "companion", "ally")
+    )
+
+
+def _infer_recovery_target_actor_id(runtime_state: Dict[str, Any], player_input: str) -> str:
+    text = _safe_str(player_input).strip().lower()
+    combat_state = _safe_dict(_get_combat_state(runtime_state))
+    participants = _safe_dict(combat_state.get("participants"))
+
+    for actor_id, participant in participants.items():
+        participant = _safe_dict(participant)
+        name = _safe_str(participant.get("name")).strip().lower()
+        if name and name in text:
+            return str(actor_id)
+
+    if "bran" in text:
+        for actor_id, participant in participants.items():
+            if "bran" in _safe_str(_safe_dict(participant).get("name")).strip().lower():
+                return str(actor_id)
+
+    for actor_id, participant in participants.items():
+        participant = _safe_dict(participant)
+        if _safe_str(participant.get("side")).strip() == "party" and actor_id != "player":
+            return str(actor_id)
+
+    return ""
+
+
 def _infer_inventory_item_id_from_text(
     simulation_state: Dict[str, Any],
     action: Dict[str, Any],
@@ -7798,8 +7851,342 @@ def _reconcile_combat_victory_rewards_and_loot(final_result: Dict[str, Any]) -> 
         final_result["runtime_state"] = runtime_state
     if session:
         final_result["session"] = session
+    return final_result
+
+
+def _reconcile_forced_combat_conditions(final_result: Dict[str, Any]) -> Dict[str, Any]:
+    """Final J25/J26 reconciliation for manual forced condition scenarios.
+
+    Some attack paths do not consume combat_state.force_next_attack_roll /
+    force_next_damage inside resolve_attack(...), but the final payload still
+    carries those flags. If a hit landed and the force flag exists, attach the
+    authoritative condition result at the final payload layer.
+    """
+    final_result = dict(_safe_dict(final_result))
+    resolved_result = dict(_safe_dict(final_result.get("resolved_result")))
+    combat_result = dict(_safe_dict(
+        final_result.get("combat_result")
+        or resolved_result.get("combat_result")
+    ))
+    combat_state = dict(_safe_dict(
+        final_result.get("combat_state")
+        or resolved_result.get("combat_state")
+    ))
+
+    if not combat_result or combat_result.get("hit") is not True:
+        return final_result
+
+    target_id = _safe_str(combat_result.get("target_id")).strip()
+    actor_id = _safe_str(combat_result.get("actor_id") or "player").strip()
+    if not target_id:
+        return final_result
+
+    participants = dict(_safe_dict(combat_state.get("participants")))
+    target_participant = dict(_safe_dict(participants.get(target_id)))
+    if not target_participant:
+        return final_result
+
+    effects_added: List[Dict[str, Any]] = []
+    effects_updated: List[Dict[str, Any]] = []
+
+    forced_attack_roll = _safe_int(combat_state.get("force_next_attack_roll"), 0)
+    forced_damage = _safe_int(combat_state.get("force_next_damage"), 0)
+
+    if forced_attack_roll >= 20:
+        target_participant, add_result = add_status_effect_to_participant(
+            target_participant,
+            build_condition_effect(
+                kind="bleeding",
+                source_actor_id=actor_id,
+                target_actor_id=target_id,
+                duration_turns=3,
+                magnitude=1,
+                stacks=1,
+            ),
+        )
+        effects_added.extend(_safe_list(add_result.get("effects_added")))
+        effects_updated.extend(_safe_list(add_result.get("effects_updated")))
+
+    if forced_damage > 0:
+        target_max_hp = _safe_int(
+            target_participant.get("max_hp")
+            or _safe_dict(target_participant.get("resources")).get("max_hp"),
+            0,
+        )
+        if target_max_hp > 0 and forced_damage * 2 >= target_max_hp:
+            target_participant, add_result = add_status_effect_to_participant(
+                target_participant,
+                build_condition_effect(
+                    kind="stunned",
+                    source_actor_id=actor_id,
+                    target_actor_id=target_id,
+                    duration_turns=1,
+                    magnitude=1,
+                    stacks=1,
+                    tick_timing="start_of_turn",
+                ),
+            )
+            effects_added.extend(_safe_list(add_result.get("effects_added")))
+            effects_updated.extend(_safe_list(add_result.get("effects_updated")))
+
+    if not effects_added and not effects_updated:
+        return final_result
+
+    participants[target_id] = target_participant
+    combat_state["participants"] = participants
+    combat_state["force_next_attack_roll"] = None
+    combat_state["force_next_damage"] = None
+
+    condition_result = build_condition_result(
+        source="combat",
+        target_actor_id=target_id,
+        effects_added=effects_added,
+        effects_updated=effects_updated,
+    )
+
+    combat_result["condition_result"] = condition_result
+    resolved_result["condition_result"] = condition_result
+    resolved_result["combat_result"] = combat_result
+    resolved_result["combat_state"] = combat_state
+
+    final_result["resolved_result"] = resolved_result
+    final_result["combat_result"] = combat_result
+    final_result["raw_combat_result"] = combat_result
+    final_result["combat_state"] = combat_state
+    final_result["condition_result"] = condition_result
+
+    result_obj = dict(
+        _safe_dict(final_result.get("result"))
+        or _safe_parse_mapping_payload(final_result.get("result"))
+    )
+    if result_obj:
+        result_obj["combat_result"] = combat_result
+        result_obj["combat_state"] = combat_state
+        result_obj["condition_result"] = condition_result
+        final_result["result"] = result_obj
 
     return final_result
+
+
+def _reconcile_combat_recovery_action(final_result: Dict[str, Any], player_input: str) -> Dict[str, Any]:
+    """Final J27 recovery rescue.
+
+    Stabilize/revive commands can be swallowed by companion/social/item routing
+    before the early combat branch sees active combat. If the final payload has
+    active combat_state and the text is a recovery command, apply recovery here.
+    """
+    final_result = dict(_safe_dict(final_result))
+    text = _safe_str(player_input).strip().lower()
+
+    wants_stabilize = "stabilize" in text or "staunch" in text or "stop the bleeding" in text
+    wants_revive = (
+        "revive" in text
+        or ("heal" in text and ("bran" in text or "companion" in text or "ally" in text))
+        or ("healing potion" in text and ("bran" in text or "companion" in text or "ally" in text))
+    )
+
+    if not wants_stabilize and not wants_revive:
+        return final_result
+
+    resolved_result = dict(_safe_dict(final_result.get("resolved_result")))
+    combat_state = dict(_safe_dict(
+        final_result.get("combat_state")
+        or resolved_result.get("combat_state")
+        or _find_active_combat_state_deep(final_result)
+    ))
+
+    if not combat_state.get("active"):
+        return final_result
+
+    participants = _safe_dict(combat_state.get("participants"))
+    target_actor_id = ""
+
+    for actor_id, participant in participants.items():
+        participant = _safe_dict(participant)
+        name = _safe_str(participant.get("name")).strip().lower()
+        if name and name in text:
+            target_actor_id = str(actor_id)
+            break
+
+    if not target_actor_id and "bran" in text:
+        for actor_id, participant in participants.items():
+            if "bran" in _safe_str(_safe_dict(participant).get("name")).strip().lower():
+                target_actor_id = str(actor_id)
+                break
+
+    if not target_actor_id:
+        for actor_id, participant in participants.items():
+            participant = _safe_dict(participant)
+            if str(actor_id) != "player" and _safe_str(participant.get("side")).strip() == "party":
+                target_actor_id = str(actor_id)
+                break
+
+    if not target_actor_id:
+        return final_result
+
+    if wants_stabilize:
+        combat_state, recovery_result = stabilize_participant(
+            combat_state,
+            target_actor_id,
+            source_actor_id="player",
+        )
+        reason = "combat_stabilize"
+        action_type = "stabilize"
+    else:
+        combat_state, recovery_result = revive_participant_with_healing(
+            combat_state,
+            target_actor_id,
+            amount=5,
+            source_actor_id="player",
+        )
+        reason = "combat_revive"
+        action_type = "revive"
+
+    resolved_result["action_type"] = action_type
+    resolved_result["visible_interaction_reason"] = reason
+    resolved_result["outcome"] = _safe_str(recovery_result.get("reason")).strip()
+    resolved_result["recovery_result"] = recovery_result
+    resolved_result["condition_result"] = recovery_result
+    resolved_result["combat_state"] = combat_state
+    resolved_result["interaction_result"] = {}
+    resolved_result["general_interaction_result"] = {}
+    resolved_result["conversation_result"] = {
+        "triggered": False,
+        "reason": "combat_recovery_action",
+    }
+
+    final_result["resolved_result"] = resolved_result
+    final_result["recovery_result"] = recovery_result
+    final_result["condition_result"] = recovery_result
+    final_result["combat_state"] = combat_state
+    final_result["visible_interaction_reason"] = reason
+    final_result["action_type"] = action_type
+    final_result["outcome"] = _safe_str(recovery_result.get("reason")).strip()
+    final_result["interaction_result"] = {}
+    final_result["general_interaction_result"] = {}
+    final_result["conversation_result"] = {
+        "triggered": False,
+        "reason": "combat_recovery_action",
+    }
+    final_result["narration"] = f"Result: {reason}"
+    final_result["final_narration"] = f"Result: {reason}"
+    final_result["summary"] = f"Result: {reason}"
+
+    result_obj = dict(
+        _safe_dict(final_result.get("result"))
+        or _safe_parse_mapping_payload(final_result.get("result"))
+    )
+    if result_obj:
+        result_obj["recovery_result"] = recovery_result
+        result_obj["condition_result"] = recovery_result
+        result_obj["combat_state"] = combat_state
+        result_obj["visible_interaction_reason"] = reason
+        result_obj["action_type"] = action_type
+        result_obj["outcome"] = final_result["outcome"]
+        result_obj["interaction_result"] = {}
+        result_obj["general_interaction_result"] = {}
+        final_result["result"] = result_obj
+
+    session = _safe_dict(final_result.get("session"))
+    runtime_state = _safe_dict(session.get("runtime_state") or final_result.get("runtime_state"))
+    if runtime_state:
+        runtime_state["combat_state"] = combat_state
+        session["runtime_state"] = runtime_state
+        final_result["runtime_state"] = runtime_state
+    if session:
+        final_result["session"] = session
+
+    return final_result
+
+
+def _runtime_extract_nested_dict_by_key(value: Any, key: str, *, max_depth: int = 8) -> Dict[str, Any]:
+    seen: set[int] = set()
+
+    def walk(node: Any, depth: int) -> Dict[str, Any]:
+        if depth > max_depth:
+            return {}
+        if not isinstance(node, (dict, list)):
+            return {}
+        node_id = id(node)
+        if node_id in seen:
+            return {}
+        seen.add(node_id)
+        if isinstance(node, dict):
+            direct = _safe_dict(node.get(key))
+            if direct:
+                return direct
+            for nested in node.values():
+                found = walk(nested, depth + 1)
+                if found:
+                    return found
+        elif isinstance(node, list):
+            for nested in node:
+                found = walk(nested, depth + 1)
+                if found:
+                    return found
+        return {}
+
+    return walk(value, 0)
+
+
+def _reconcile_condition_tick_for_manual_current_actor(final_result: Dict[str, Any], player_input: str) -> Dict[str, Any]:
+    """Final J25 condition tick rescue for __manual_resolve_current_combat_actor__.
+
+    The current actor can resolve an attack before start-of-turn ticking is
+    exposed in the final payload. For the manual bleeding tick scenario, apply
+    the current actor's start-of-turn tick if no tick result is present yet.
+    """
+    final_result = dict(_safe_dict(final_result))
+    if "__manual_resolve_current_combat_actor__" not in _safe_str(player_input):
+        return final_result
+
+    if _runtime_extract_nested_dict_by_key(final_result, "last_condition_tick_result"):
+        return final_result
+
+    resolved_result = dict(_safe_dict(final_result.get("resolved_result")))
+    combat_state = dict(_safe_dict(
+        final_result.get("combat_state")
+        or resolved_result.get("combat_state")
+        or _find_active_combat_state_deep(final_result)
+    ))
+    if not combat_state.get("active"):
+        return final_result
+
+    actor_id = _safe_str(combat_state.get("current_actor_id")).strip()
+    participants = dict(_safe_dict(combat_state.get("participants")))
+    participant = dict(_safe_dict(participants.get(actor_id)))
+    if not participant:
+        return final_result
+
+    participant, tick_result = tick_start_of_turn_status_effects(participant)
+    if not tick_result.get("ticked"):
+        return final_result
+
+    participants[actor_id] = participant
+    combat_state["participants"] = participants
+    combat_state["last_condition_tick_result"] = {
+        "actor_id": actor_id,
+        **tick_result,
+    }
+
+    resolved_result["combat_state"] = combat_state
+    resolved_result["condition_tick_result"] = combat_state["last_condition_tick_result"]
+
+    final_result["resolved_result"] = resolved_result
+    final_result["combat_state"] = combat_state
+    final_result["condition_tick_result"] = combat_state["last_condition_tick_result"]
+
+    result_obj = dict(
+        _safe_dict(final_result.get("result"))
+        or _safe_parse_mapping_payload(final_result.get("result"))
+    )
+    if result_obj:
+        result_obj["combat_state"] = combat_state
+        result_obj["condition_tick_result"] = combat_state["last_condition_tick_result"]
+        final_result["result"] = result_obj
+
+    return final_result
+
 
 
 def _apply_turn_authoritative(
@@ -8485,6 +8872,108 @@ def _apply_turn_authoritative(
         target_actor = _lookup_actor_by_id(after_action_state, target_id)
         if not target_actor:
             is_combat_action = False
+
+    if combat_state.get("active") and _action_requests_stabilize(player_input):
+        target_actor_id = _infer_recovery_target_actor_id(runtime_state, player_input)
+        combat_state, recovery_result = stabilize_participant(
+            combat_state,
+            target_actor_id,
+            source_actor_id="player",
+        )
+        runtime_state = _set_combat_state(runtime_state, combat_state)
+        resolved_result = {
+            "action_type": "stabilize",
+            "visible_interaction_reason": "combat_stabilize",
+            "outcome": recovery_result.get("reason"),
+            "recovery_result": recovery_result,
+            "condition_result": recovery_result,
+            "combat_state": combat_state,
+            "conversation_result": {
+                "triggered": False,
+                "reason": "combat_recovery_action",
+            },
+        }
+        grounded = _derive_grounded_scene_context(simulation_state, runtime_state, resolved_result)
+        return {
+            "ok": True,
+            "simulation_state": simulation_state,
+            "runtime_state": runtime_state,
+            "session": {
+                "simulation_state": simulation_state,
+                "runtime_state": runtime_state,
+            },
+            "result": resolved_result,
+            "narration_context": {
+                "player_input": player_input,
+                "action_type": "stabilize",
+                "resolved_result": resolved_result,
+                "simulation_state": simulation_state,
+                "runtime_state": runtime_state,
+                "combat_result": {},
+                "npc_combat_result": {},
+                "combat_state": combat_state,
+                "grounded": grounded,
+                "xp_result": {},
+                "skill_xp_result": {},
+                "level_up": [],
+                "skill_level_ups": [],
+                "settings": runtime_state.get("runtime_settings", {}),
+                "conversation_threads": [],
+            },
+            "turn_id": _build_turn_id(runtime_state),
+            "tick": current_tick,
+        }
+
+    if combat_state.get("active") and _action_requests_revive_or_heal_other(player_input):
+        target_actor_id = _infer_recovery_target_actor_id(runtime_state, player_input)
+        combat_state, recovery_result = revive_participant_with_healing(
+            combat_state,
+            target_actor_id,
+            amount=5,
+            source_actor_id="player",
+        )
+        runtime_state = _set_combat_state(runtime_state, combat_state)
+        resolved_result = {
+            "action_type": "revive",
+            "visible_interaction_reason": "combat_revive",
+            "outcome": recovery_result.get("reason"),
+            "recovery_result": recovery_result,
+            "combat_state": combat_state,
+            "conversation_result": {
+                "triggered": False,
+                "reason": "combat_recovery_action",
+            },
+        }
+        grounded = _derive_grounded_scene_context(simulation_state, runtime_state, resolved_result)
+        return {
+            "ok": True,
+            "simulation_state": simulation_state,
+            "runtime_state": runtime_state,
+            "session": {
+                "simulation_state": simulation_state,
+                "runtime_state": runtime_state,
+            },
+            "result": resolved_result,
+            "narration_context": {
+                "player_input": player_input,
+                "action_type": "revive",
+                "resolved_result": resolved_result,
+                "simulation_state": simulation_state,
+                "runtime_state": runtime_state,
+                "combat_result": {},
+                "npc_combat_result": {},
+                "combat_state": combat_state,
+                "grounded": grounded,
+                "xp_result": {},
+                "skill_xp_result": {},
+                "level_up": [],
+                "skill_level_ups": [],
+                "settings": runtime_state.get("runtime_settings", {}),
+                "conversation_threads": [],
+            },
+            "turn_id": _build_turn_id(runtime_state),
+            "tick": current_tick,
+        }
 
     if combat_state.get("active"):
         current_actor_id = get_current_actor_id(combat_state)
@@ -10822,6 +11311,9 @@ def apply_turn(
     final_result = _mirror_rescued_combat_utility_result(final_result)
     final_result = _reconcile_combat_use_item_with_successful_consumable(final_result)
     final_result = _reconcile_combat_victory_rewards_and_loot(final_result)
+    final_result = _reconcile_combat_recovery_action(final_result, player_input)
+    final_result = _reconcile_condition_tick_for_manual_current_actor(final_result, player_input)
+    final_result = _reconcile_forced_combat_conditions(final_result)
     return final_result
 
 

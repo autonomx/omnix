@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from typing import Any, Dict, List
+from app.rpg.combat.conditions import normalize_status_effects
 
 
 def _safe_dict(value: Any) -> Dict[str, Any]:
@@ -9,6 +10,13 @@ def _safe_dict(value: Any) -> Dict[str, Any]:
 
 def _safe_list(value: Any) -> List[Any]:
     return value if isinstance(value, list) else []
+
+
+def _safe_int(value: Any, default: int = 0) -> int:
+    try:
+        return int(value)
+    except Exception:
+        return default
 
 
 def build_empty_combat_state() -> Dict[str, Any]:
@@ -38,12 +46,20 @@ def normalize_combat_state(value: Any) -> Dict[str, Any]:
     if not state:
         return build_empty_combat_state()
 
+    participants = _safe_dict(state.get("participants"))
+    normalized_participants: Dict[str, Any] = {}
+    for actor_id, participant in participants.items():
+        participant = _safe_dict(participant)
+        participant["status_effects"] = normalize_status_effects(participant.get("status_effects"))
+        normalized_participants[str(actor_id)] = participant
+    participants = normalized_participants
+
     return {
         "active": bool(state.get("active", False)),
         "combat_id": str(state.get("combat_id") or ""),
         "round": int(state.get("round", 0) or 0),
         "phase": str(state.get("phase") or "idle"),
-        "participants": _safe_list(state.get("participants")),
+        "participants": participants,
         "turn_order": [str(x) for x in _safe_list(state.get("turn_order")) if str(x or "").strip()],
         "initiative": {
             str(k): int(v or 0)
@@ -60,6 +76,8 @@ def normalize_combat_state(value: Any) -> Dict[str, Any]:
         "exit_reason": str(state.get("exit_reason") or ""),
         "last_resolution": _safe_dict(state.get("last_resolution")),
         "recent_events": _safe_list(state.get("recent_events"))[:24],
+        "force_next_attack_roll": _safe_int(state.get("force_next_attack_roll"), 0) if state.get("force_next_attack_roll") else None,
+        "force_next_damage": _safe_int(state.get("force_next_damage"), 0) if state.get("force_next_damage") else None,
     }
 
 

@@ -30,6 +30,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 from app.rpg.combat.companion_runtime import resolve_current_companion_combat_turn
 from app.rpg.combat.lifecycle import evaluate_combat_exit
 from app.rpg.combat.runtime import advance_combat_turn
+from app.rpg.combat.conditions import tick_start_of_turn_status_effects
 from app.rpg.narration.combat_contract import combat_contract_requires_llm
 from app.rpg.narration.combat_service import generate_combat_narration_sync
 from app.rpg.session.runtime import apply_turn
@@ -6260,6 +6261,333 @@ SERVICE_SCENARIOS = {
             "I flee."
         ]
     },
+
+    "combat_critical_hit_applies_bleeding": {
+        "currency": {"gold": 0, "silver": 0, "copper": 0},
+        "conversation_settings": {
+            "enabled": True,
+            "autonomous_ticks_enabled": False,
+            "frequency": "never",
+            "conversation_chance_percent": 0,
+            "allow_player_invited": False,
+            "player_inclusion_chance_percent": 0,
+        },
+        "setup_interaction_state": {
+            "player_location_id": "loc_tavern_road",
+            "player_hp": 20,
+            "player_max_hp": 20,
+            "player_inventory": {"items": [], "equipment": {}, "carry_capacity": 50.0},
+            "party_state": {"max_size": 4, "companions": []},
+            "combat_state": {
+                "active": True,
+                "round": 1,
+                "turn_index": 0,
+                "current_actor_id": "player",
+                "force_next_attack_roll": 20,
+                "initiative_order": [
+                    {"actor_id": "player", "initiative": 20, "roll": 20, "bonus": 0},
+                    {"actor_id": "enemy:bandit_1", "initiative": 1, "roll": 1, "bonus": 0},
+                ],
+                "participants": {
+                    "player": {
+                        "actor_id": "player",
+                        "side": "party",
+                        "name": "You",
+                        "hp": 20,
+                        "max_hp": 20,
+                        "status": "active",
+                    },
+                    "enemy:bandit_1": {
+                        "actor_id": "enemy:bandit_1",
+                        "side": "enemy",
+                        "name": "Bandit",
+                        "hp": 12,
+                        "max_hp": 12,
+                        "defense": 10,
+                        "armor": 0,
+                        "status": "active",
+                    },
+                },
+                "combat_log": [],
+                "source": "manual_condition_test",
+            },
+        },
+        "turns": ["I attack the bandit."],
+    },
+
+    "combat_heavy_hit_applies_stunned": {
+        "currency": {"gold": 0, "silver": 0, "copper": 0},
+        "conversation_settings": {
+            "enabled": True,
+            "autonomous_ticks_enabled": False,
+            "frequency": "never",
+            "conversation_chance_percent": 0,
+            "allow_player_invited": False,
+            "player_inclusion_chance_percent": 0,
+        },
+        "setup_interaction_state": {
+            "player_location_id": "loc_tavern_road",
+            "player_hp": 20,
+            "player_max_hp": 20,
+            "player_inventory": {"items": [], "equipment": {}, "carry_capacity": 50.0},
+            "party_state": {"max_size": 4, "companions": []},
+            "combat_state": {
+                "active": True,
+                "round": 1,
+                "turn_index": 0,
+                "current_actor_id": "player",
+                "force_next_damage": 6,
+                "initiative_order": [
+                    {"actor_id": "player", "initiative": 20, "roll": 20, "bonus": 0},
+                    {"actor_id": "enemy:bandit_1", "initiative": 1, "roll": 1, "bonus": 0},
+                ],
+                "participants": {
+                    "player": {
+                        "actor_id": "player",
+                        "side": "party",
+                        "name": "You",
+                        "hp": 20,
+                        "max_hp": 20,
+                        "status": "active",
+                    },
+                    "enemy:bandit_1": {
+                        "actor_id": "enemy:bandit_1",
+                        "side": "enemy",
+                        "name": "Bandit",
+                        "hp": 12,
+                        "max_hp": 12,
+                        "defense": 10,
+                        "armor": 0,
+                        "status": "active",
+                    },
+                },
+                "combat_log": [],
+                "source": "manual_condition_test",
+            },
+        },
+        "turns": ["I attack the bandit."],
+    },
+
+    "combat_bleeding_ticks_damage": {
+        "currency": {"gold": 0, "silver": 0, "copper": 0},
+        "conversation_settings": {
+            "enabled": True,
+            "autonomous_ticks_enabled": False,
+            "frequency": "never",
+            "conversation_chance_percent": 0,
+            "allow_player_invited": False,
+            "player_inclusion_chance_percent": 0,
+        },
+        "setup_interaction_state": {
+            "player_location_id": "loc_tavern_road",
+            "player_hp": 20,
+            "player_max_hp": 20,
+            "player_inventory": {"items": [], "equipment": {}, "carry_capacity": 50.0},
+            "party_state": {"max_size": 4, "companions": []},
+            "combat_state": {
+                "active": True,
+                "round": 1,
+                "turn_index": 0,
+                "current_actor_id": "enemy:bandit_1",
+                "initiative_order": [
+                    {"actor_id": "enemy:bandit_1", "initiative": 20, "roll": 20, "bonus": 0},
+                    {"actor_id": "player", "initiative": 1, "roll": 1, "bonus": 0},
+                ],
+                "participants": {
+                    "player": {
+                        "actor_id": "player",
+                        "side": "party",
+                        "name": "You",
+                        "hp": 20,
+                        "max_hp": 20,
+                        "status": "active",
+                    },
+                    "enemy:bandit_1": {
+                        "actor_id": "enemy:bandit_1",
+                        "side": "enemy",
+                        "name": "Bandit",
+                        "hp": 8,
+                        "max_hp": 12,
+                        "defense": 10,
+                        "armor": 0,
+                        "status": "active",
+                        "status_effects": [
+                            {
+                                "effect_id": "effect:bleeding:enemy:bandit_1:test",
+                                "kind": "bleeding",
+                                "source": "combat",
+                                "source_actor_id": "player",
+                                "target_actor_id": "enemy:bandit_1",
+                                "duration_turns": 2,
+                                "stacks": 1,
+                                "magnitude": 1,
+                                "tick_timing": "start_of_turn",
+                            }
+                        ],
+                    },
+                },
+                "combat_log": [],
+                "source": "manual_condition_test",
+            },
+        },
+        "turns": ["__manual_resolve_current_combat_actor__"],
+    },
+
+    "combat_stabilize_downed_companion": {
+        "currency": {"gold": 0, "silver": 0, "copper": 0},
+        "conversation_settings": {
+            "enabled": True,
+            "autonomous_ticks_enabled": False,
+            "frequency": "never",
+            "conversation_chance_percent": 0,
+            "allow_player_invited": False,
+            "player_inclusion_chance_percent": 0,
+        },
+        "setup_interaction_state": {
+            "player_location_id": "loc_tavern_road",
+            "player_hp": 20,
+            "player_max_hp": 20,
+            "player_inventory": {"items": [], "equipment": {}, "carry_capacity": 50.0},
+            "party_state": {
+                "max_size": 4,
+                "companions": [{"npc_id": "npc:bran", "name": "Bran"}],
+            },
+            "combat_state": {
+                "active": True,
+                "round": 1,
+                "turn_index": 0,
+                "current_actor_id": "player",
+                "initiative_order": [
+                    {"actor_id": "player", "initiative": 20, "roll": 20, "bonus": 0},
+                    {"actor_id": "npc:bran", "initiative": 10, "roll": 10, "bonus": 0},
+                ],
+                "participants": {
+                    "player": {
+                        "actor_id": "player",
+                        "side": "party",
+                        "name": "You",
+                        "hp": 20,
+                        "max_hp": 20,
+                        "status": "active",
+                    },
+                    "npc:bran": {
+                        "actor_id": "npc:bran",
+                        "side": "party",
+                        "name": "Bran",
+                        "hp": 0,
+                        "max_hp": 14,
+                        "status": "downed",
+                        "status_effects": [
+                            {
+                                "effect_id": "effect:downed:npc:bran:test",
+                                "kind": "downed",
+                                "source": "combat",
+                                "source_actor_id": "enemy:bandit_1",
+                                "target_actor_id": "npc:bran",
+                                "duration_turns": 999,
+                                "stacks": 1,
+                                "magnitude": 1,
+                                "tick_timing": "none",
+                            }
+                        ],
+                    },
+                },
+                "combat_log": [],
+                "source": "manual_recovery_test",
+            },
+        },
+        "turns": ["I stabilize Bran."],
+    },
+
+    "combat_heal_downed_companion_revives": {
+        "currency": {"gold": 0, "silver": 0, "copper": 0},
+        "conversation_settings": {
+            "enabled": True,
+            "autonomous_ticks_enabled": False,
+            "frequency": "never",
+            "conversation_chance_percent": 0,
+            "allow_player_invited": False,
+            "player_inclusion_chance_percent": 0,
+        },
+        "setup_interaction_state": {
+            "player_location_id": "loc_tavern_road",
+            "player_hp": 20,
+            "player_max_hp": 20,
+            "player_inventory": {
+                "items": [
+                    {
+                        "item_id": "item:minor_healing_potion",
+                        "definition_id": "item:minor_healing_potion",
+                        "name": "minor healing potion",
+                        "aliases": ["potion", "healing potion"],
+                        "qty": 1,
+                        "quantity": 1,
+                    }
+                ],
+                "equipment": {},
+                "carry_capacity": 50.0,
+            },
+            "party_state": {
+                "max_size": 4,
+                "companions": [{"npc_id": "npc:bran", "name": "Bran"}],
+            },
+            "combat_state": {
+                "active": True,
+                "round": 1,
+                "turn_index": 0,
+                "current_actor_id": "player",
+                "initiative_order": [
+                    {"actor_id": "player", "initiative": 20, "roll": 20, "bonus": 0},
+                    {"actor_id": "npc:bran", "initiative": 10, "roll": 10, "bonus": 0},
+                ],
+                "participants": {
+                    "player": {
+                        "actor_id": "player",
+                        "side": "party",
+                        "name": "You",
+                        "hp": 20,
+                        "max_hp": 20,
+                        "status": "active",
+                    },
+                    "npc:bran": {
+                        "actor_id": "npc:bran",
+                        "side": "party",
+                        "name": "Bran",
+                        "hp": 0,
+                        "max_hp": 14,
+                        "status": "downed",
+                        "status_effects": [
+                            {
+                                "effect_id": "effect:downed:npc:bran:test",
+                                "kind": "downed",
+                                "source": "combat",
+                                "source_actor_id": "enemy:bandit_1",
+                                "target_actor_id": "npc:bran",
+                                "duration_turns": 999,
+                                "stacks": 1,
+                                "magnitude": 1,
+                                "tick_timing": "none",
+                            },
+                            {
+                                "effect_id": "effect:unconscious:npc:bran:test",
+                                "kind": "unconscious",
+                                "source": "combat",
+                                "source_actor_id": "enemy:bandit_1",
+                                "target_actor_id": "npc:bran",
+                                "duration_turns": 999,
+                                "stacks": 1,
+                                "magnitude": 1,
+                                "tick_timing": "none",
+                            },
+                        ],
+                    },
+                },
+                "combat_log": [],
+                "source": "manual_recovery_test",
+            },
+        },
+        "turns": ["I use the healing potion on Bran."],
+    },
 }
 
 
@@ -7885,6 +8213,109 @@ def _container_contents(item: Dict[str, Any]) -> List[Dict[str, Any]]:
 
 def _item_condition_value(item: Dict[str, Any]) -> float:
     return float(_safe_dict(_safe_dict(item).get("condition")).get("durability") or 0.0)
+
+
+def _extract_status_effects_from_turn(turn_summary: Dict[str, Any], actor_id: str = "") -> List[Dict[str, Any]]:
+    effects: List[Dict[str, Any]] = []
+
+    def walk(value: Any, depth: int = 0) -> None:
+        if depth > 8:
+            return
+        if isinstance(value, dict):
+            if isinstance(value.get("status_effects"), list):
+                if not actor_id or _safe_str(value.get("actor_id")) == actor_id:
+                    effects.extend([_safe_dict(x) for x in value.get("status_effects")])
+            for nested in value.values():
+                walk(nested, depth + 1)
+        elif isinstance(value, list):
+            for nested in value:
+                walk(nested, depth + 1)
+
+    walk(turn_summary)
+    return effects
+
+
+def _turn_has_condition_result_kind(turn_summary: Dict[str, Any], kind: str) -> bool:
+    kind = _safe_str(kind).strip()
+    result = _extract_nested_dict_by_key(turn_summary, "condition_result")
+    if result:
+        for effect in _safe_list(result.get("effects_added")) + _safe_list(result.get("effects_updated")):
+            if _safe_str(_safe_dict(effect).get("kind")) == kind:
+                return True
+    for effect in _extract_status_effects_from_turn(turn_summary):
+        if _safe_str(effect.get("kind")) == kind:
+            return True
+    return False
+
+
+def _turn_has_condition_tick_damage(turn_summary: Dict[str, Any], kind: str) -> bool:
+    tick = _extract_nested_dict_by_key(turn_summary, "last_condition_tick_result")
+    if not tick:
+        tick = _extract_nested_dict_by_key(turn_summary, "tick_result")
+    for effect in _safe_list(tick.get("effects_ticked")):
+        effect = _safe_dict(effect)
+        if _safe_str(effect.get("kind")) == kind and _safe_int(effect.get("damage"), 0) > 0:
+            return True
+    return False
+
+
+def _turn_has_recovery_reason(turn_summary: Dict[str, Any], reason: str) -> bool:
+    recovery = _extract_nested_dict_by_key(turn_summary, "recovery_result")
+    if not recovery:
+        recovery = _extract_nested_dict_by_key(turn_summary, "last_recovery_result")
+    return _safe_str(recovery.get("reason")) == reason
+
+
+def _manual_tick_current_actor_conditions(session: Dict[str, Any]) -> Dict[str, Any]:
+    """Apply start-of-turn condition ticks for manual current-actor resolution.
+
+    Manual scenarios can jump directly to __manual_resolve_current_combat_actor__.
+    That bypasses the normal player turn boundary where condition ticks would
+    usually become visible. This keeps the manual transcript authoritative by
+    applying the current actor's start-of-turn status effects before resolving
+    that actor.
+    """
+    session = _safe_dict(session)
+    simulation_state = _safe_dict(session.get("simulation_state"))
+    runtime_state = _safe_dict(session.get("runtime_state"))
+
+    combat_state = _safe_dict(
+        runtime_state.get("combat_state")
+        or simulation_state.get("combat_state")
+    )
+    if not combat_state or not combat_state.get("active"):
+        return session
+
+    current_actor_id = _safe_str(combat_state.get("current_actor_id")).strip()
+    participants = dict(_safe_dict(combat_state.get("participants")))
+    participant = dict(_safe_dict(participants.get(current_actor_id)))
+    if not current_actor_id or not participant:
+        return session
+
+    participant, tick_result = tick_start_of_turn_status_effects(participant)
+    if not tick_result.get("ticked"):
+        return session
+
+    participants[current_actor_id] = participant
+    combat_state["participants"] = participants
+    combat_state["last_condition_tick_result"] = {
+        "actor_id": current_actor_id,
+        **tick_result,
+    }
+
+    recent = list(combat_state.get("recent_events") or [])
+    recent.append({
+        "type": "condition_tick",
+        "actor_id": current_actor_id,
+        "tick_result": tick_result,
+    })
+    combat_state["recent_events"] = recent[-24:]
+
+    runtime_state["combat_state"] = combat_state
+    simulation_state["combat_state"] = combat_state
+    session["runtime_state"] = runtime_state
+    session["simulation_state"] = simulation_state
+    return session
 
 
 def _turn_has_combat_action(turn_summary: Dict[str, Any], expected_action_type: str) -> bool:
@@ -12362,6 +12793,9 @@ def _run_one_service_scenario(
         elif _safe_str(player_input) == "__manual_resolve_current_combat_actor__":
             sim = _extract_simulation_state(last_result) if last_result else _safe_dict(session.get("simulation_state"))
 
+            session = _manual_tick_current_actor_conditions(session)
+            sim = _extract_simulation_state(last_result) if last_result else _safe_dict(session.get("simulation_state"))
+
             companion_combat_result = resolve_current_companion_combat_turn(
                 sim,
                 session_id=session_id,
@@ -12434,6 +12868,16 @@ def _run_one_service_scenario(
                 "simulation_state": sim,
                 "session": session,
             }
+
+            combat_state = _safe_dict(
+                _safe_dict(session.get("runtime_state")).get("combat_state")
+                or _safe_dict(session.get("simulation_state")).get("combat_state")
+            )
+            condition_tick_result = _safe_dict(combat_state.get("last_condition_tick_result"))
+            if condition_tick_result:
+                result["condition_tick_result"] = condition_tick_result
+                result["last_condition_tick_result"] = condition_tick_result
+                result.setdefault("combat_state", combat_state)
 
             result = _copy_combat_narration_fields_from_sources(
                 result,
@@ -12697,6 +13141,37 @@ def _run_one_service_scenario(
                 summary_row.setdefault("scenario_warnings", []).append(
                     "combat_post_combat_cleanup_not_validated"
                 )
+
+        if scenario_name == "combat_critical_hit_applies_bleeding":
+            if not _turn_has_condition_result_kind(summary_row, "bleeding"):
+                summary_row.setdefault("scenario_warnings", []).append(
+                    "combat_critical_hit_missing_bleeding_condition"
+                )
+
+        if scenario_name == "combat_heavy_hit_applies_stunned":
+            if not _turn_has_condition_result_kind(summary_row, "stunned"):
+                summary_row.setdefault("scenario_warnings", []).append(
+                    "combat_heavy_hit_missing_stunned_condition"
+                )
+
+        if scenario_name == "combat_bleeding_ticks_damage":
+            if not _turn_has_condition_tick_damage(summary_row, "bleeding"):
+                summary_row.setdefault("scenario_warnings", []).append(
+                    "combat_bleeding_tick_missing_damage"
+                )
+
+        if scenario_name == "combat_stabilize_downed_companion":
+            if not _turn_has_recovery_reason(summary_row, "stabilized"):
+                summary_row.setdefault("scenario_warnings", []).append(
+                    "stabilize_missing_stabilized_condition"
+                )
+
+        if scenario_name == "combat_heal_downed_companion_revives":
+            if not _turn_has_recovery_reason(summary_row, "revived"):
+                summary_row.setdefault("scenario_warnings", []).append(
+                    "healing_downed_actor_did_not_revive"
+                )
+
         summary_row["regression_warnings"] = _manual_regression_warnings(
             scenario_name=scenario_name,
             turn_index=index,
@@ -13156,6 +13631,26 @@ def _run_one_service_scenario(
         if not any(_turn_has_combat_cleanup(row) for row in scenario_results):
             if "combat_post_combat_cleanup_not_validated" not in scenario_warnings:
                 scenario_warnings.append("combat_post_combat_cleanup_not_validated")
+
+    if scenario_name == "combat_critical_hit_applies_bleeding":
+        if not any(_turn_has_condition_result_kind(row, "bleeding") for row in scenario_results):
+            scenario_warnings.append("combat_critical_hit_missing_bleeding_condition")
+
+    if scenario_name == "combat_heavy_hit_applies_stunned":
+        if not any(_turn_has_condition_result_kind(row, "stunned") for row in scenario_results):
+            scenario_warnings.append("combat_heavy_hit_missing_stunned_condition")
+
+    if scenario_name == "combat_bleeding_ticks_damage":
+        if not any(_turn_has_condition_tick_damage(row, "bleeding") for row in scenario_results):
+            scenario_warnings.append("combat_bleeding_tick_missing_damage")
+
+    if scenario_name == "combat_stabilize_downed_companion":
+        if not any(_turn_has_recovery_reason(row, "stabilized") for row in scenario_results):
+            scenario_warnings.append("stabilize_missing_stabilized_condition")
+
+    if scenario_name == "combat_heal_downed_companion_revives":
+        if not any(_turn_has_recovery_reason(row, "revived") for row in scenario_results):
+            scenario_warnings.append("healing_downed_actor_did_not_revive")
 
     return {
         "scenario": scenario_name,
