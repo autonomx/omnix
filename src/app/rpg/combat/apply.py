@@ -2,12 +2,12 @@ from __future__ import annotations
 
 from typing import Any, Dict, List
 
-from app.rpg.combat.state import normalize_combat_state
 from app.rpg.combat.conditions import (
     add_status_effect_to_participant,
     build_condition_effect,
     build_condition_result,
 )
+from app.rpg.combat.state import normalize_combat_state
 
 
 def _safe_dict(value: Any) -> Dict[str, Any]:

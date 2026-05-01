@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 from typing import Any, Dict, List
-from app.rpg.combat.conditions import normalize_status_effects
+
 from app.rpg.combat.abilities import normalize_ability_cooldowns
+from app.rpg.combat.conditions import normalize_status_effects
+from app.rpg.combat.positioning import normalize_position
 
 
 def _safe_dict(value: Any) -> Dict[str, Any]:
@@ -53,6 +55,8 @@ def normalize_combat_state(value: Any) -> Dict[str, Any]:
         participant = _safe_dict(participant)
         participant["status_effects"] = normalize_status_effects(participant.get("status_effects"))
         participant["ability_cooldowns"] = normalize_ability_cooldowns(participant.get("ability_cooldowns"))
+        participant["position"] = normalize_position(participant.get("position"))
+        participant["combat_role"] = participant.get("combat_role") or participant.get("role") or ""
         normalized_participants[str(actor_id)] = participant
     participants = normalized_participants
 

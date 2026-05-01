@@ -2,7 +2,10 @@ from __future__ import annotations
 
 from typing import Any, Dict, List
 
-from app.rpg.combat.archetypes import get_enemy_archetype, instantiate_enemy_from_archetype
+from app.rpg.combat.archetypes import (
+    get_enemy_archetype,
+    instantiate_enemy_from_archetype,
+)
 from app.rpg.combat.state import normalize_combat_state
 
 
