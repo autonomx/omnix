@@ -7215,6 +7215,270 @@ SERVICE_SCENARIOS = {
             "__manual_start_encounter__:bandit_hard",
         ],
     },
+
+    "combat_power_attack_adds_damage_bonus": {
+        "currency": {"gold": 0, "silver": 0, "copper": 0},
+        "conversation_settings": {"enabled": True, "autonomous_ticks_enabled": False, "frequency": "never", "conversation_chance_percent": 0},
+        "setup_interaction_state": {
+            "player_location_id": "loc_tavern_road",
+            "player_hp": 20,
+            "player_max_hp": 20,
+            "player_inventory": {"items": [], "equipment": {}, "carry_capacity": 50.0},
+            "party_state": {"max_size": 4, "companions": []},
+            "combat_state": {
+                "active": True,
+                "current_actor_id": "player",
+                "initiative_order": [{"actor_id": "player", "initiative": 20}, {"actor_id": "enemy:bandit_1", "initiative": 1}],
+                "participants": {
+                    "player": {"actor_id": "player", "side": "party", "name": "You", "hp": 20, "max_hp": 20, "damage_min": 1, "damage_max": 4, "status": "active"},
+                    "enemy:bandit_1": {"actor_id": "enemy:bandit_1", "side": "enemy", "name": "Bandit", "hp": 12, "max_hp": 12, "status": "active"},
+                },
+            },
+        },
+        "turns": ["I use power attack on the bandit."],
+    },
+
+    "combat_unknown_ability_fails_safely": {
+        "currency": {"gold": 0, "silver": 0, "copper": 0},
+        "conversation_settings": {"enabled": True, "autonomous_ticks_enabled": False, "frequency": "never", "conversation_chance_percent": 0},
+        "setup_interaction_state": {
+            "player_location_id": "loc_tavern_road",
+            "player_hp": 20,
+            "player_max_hp": 20,
+            "player_inventory": {"items": [], "equipment": {}, "carry_capacity": 50.0},
+            "party_state": {"max_size": 4, "companions": []},
+            "combat_state": {
+                "active": True,
+                "current_actor_id": "player",
+                "initiative_order": [{"actor_id": "player", "initiative": 20}, {"actor_id": "enemy:bandit_1", "initiative": 1}],
+                "participants": {
+                    "player": {"actor_id": "player", "side": "party", "name": "You", "hp": 20, "max_hp": 20, "damage_min": 1, "damage_max": 4, "status": "active"},
+                    "enemy:bandit_1": {"actor_id": "enemy:bandit_1", "side": "enemy", "name": "Bandit", "hp": 12, "max_hp": 12, "status": "active"},
+                },
+            },
+        },
+        "turns": ["I use unknown ability on the bandit."],
+    },
+
+    "combat_bleeding_slash_applies_bleeding": {
+        "currency": {"gold": 0, "silver": 0, "copper": 0},
+        "conversation_settings": {"enabled": True, "autonomous_ticks_enabled": False, "frequency": "never", "conversation_chance_percent": 0},
+        "setup_interaction_state": {
+            "player_location_id": "loc_tavern_road",
+            "player_hp": 20,
+            "player_max_hp": 20,
+            "player_inventory": {"items": [], "equipment": {}, "carry_capacity": 50.0},
+            "party_state": {"max_size": 4, "companions": []},
+            "combat_state": {
+                "active": True,
+                "current_actor_id": "player",
+                "initiative_order": [{"actor_id": "player", "initiative": 20}, {"actor_id": "enemy:bandit_1", "initiative": 1}],
+                "participants": {
+                    "player": {"actor_id": "player", "side": "party", "name": "You", "hp": 20, "max_hp": 20, "damage_min": 1, "damage_max": 4, "status": "active"},
+                    "enemy:bandit_1": {"actor_id": "enemy:bandit_1", "side": "enemy", "name": "Bandit", "hp": 12, "max_hp": 12, "status": "active"},
+                },
+            },
+        },
+        "turns": ["I use bleeding slash on the bandit."],
+    },
+
+    "combat_shield_bash_applies_stunned": {
+        "currency": {"gold": 0, "silver": 0, "copper": 0},
+        "conversation_settings": {"enabled": True, "autonomous_ticks_enabled": False, "frequency": "never", "conversation_chance_percent": 0},
+        "setup_interaction_state": {
+            "player_location_id": "loc_tavern_road",
+            "player_hp": 20,
+            "player_max_hp": 20,
+            "player_inventory": {"items": [], "equipment": {}, "carry_capacity": 50.0},
+            "party_state": {"max_size": 4, "companions": []},
+            "combat_state": {
+                "active": True,
+                "current_actor_id": "player",
+                "initiative_order": [{"actor_id": "player", "initiative": 20}, {"actor_id": "enemy:bandit_1", "initiative": 1}],
+                "participants": {
+                    "player": {"actor_id": "player", "side": "party", "name": "You", "hp": 20, "max_hp": 20, "damage_min": 1, "damage_max": 4, "status": "active"},
+                    "enemy:bandit_1": {"actor_id": "enemy:bandit_1", "side": "enemy", "name": "Bandit", "hp": 12, "max_hp": 12, "status": "active"},
+                },
+            },
+        },
+        "turns": ["I use shield bash on the bandit."],
+    },
+
+    "combat_ability_sets_cooldown": {
+        "currency": {"gold": 0, "silver": 0, "copper": 0},
+        "conversation_settings": {"enabled": True, "autonomous_ticks_enabled": False, "frequency": "never", "conversation_chance_percent": 0},
+        "setup_interaction_state": {
+            "player_location_id": "loc_tavern_road",
+            "player_hp": 20,
+            "player_max_hp": 20,
+            "player_inventory": {"items": [], "equipment": {}, "carry_capacity": 50.0},
+            "party_state": {"max_size": 4, "companions": []},
+            "combat_state": {
+                "active": True,
+                "current_actor_id": "player",
+                "initiative_order": [{"actor_id": "player", "initiative": 20}, {"actor_id": "enemy:bandit_1", "initiative": 1}],
+                "participants": {
+                    "player": {"actor_id": "player", "side": "party", "name": "You", "hp": 20, "max_hp": 20, "damage_min": 1, "damage_max": 4, "status": "active"},
+                    "enemy:bandit_1": {"actor_id": "enemy:bandit_1", "side": "enemy", "name": "Bandit", "hp": 12, "max_hp": 12, "status": "active"},
+                },
+            },
+        },
+        "turns": ["I use power attack on the bandit."],
+    },
+
+    "combat_ability_on_cooldown_fails": {
+        "currency": {"gold": 0, "silver": 0, "copper": 0},
+        "conversation_settings": {"enabled": True, "autonomous_ticks_enabled": False, "frequency": "never", "conversation_chance_percent": 0},
+        "setup_interaction_state": {
+            "player_location_id": "loc_tavern_road",
+            "player_hp": 20,
+            "player_max_hp": 20,
+            "player_inventory": {"items": [], "equipment": {}, "carry_capacity": 50.0},
+            "party_state": {"max_size": 4, "companions": []},
+            "combat_state": {
+                "active": True,
+                "current_actor_id": "player",
+                "initiative_order": [{"actor_id": "player", "initiative": 20}, {"actor_id": "enemy:bandit_1", "initiative": 1}],
+                "participants": {
+                    "player": {"actor_id": "player", "side": "party", "name": "You", "hp": 20, "max_hp": 20, "damage_min": 1, "damage_max": 4, "status": "active", "ability_cooldowns": {"ability:power_attack": 2}},
+                    "enemy:bandit_1": {"actor_id": "enemy:bandit_1", "side": "enemy", "name": "Bandit", "hp": 12, "max_hp": 12, "status": "active"},
+                },
+            },
+        },
+        "turns": ["I use power attack on the bandit."],
+    },
+
+    "combat_ability_cooldown_ticks_down": {
+        "currency": {"gold": 0, "silver": 0, "copper": 0},
+        "conversation_settings": {"enabled": True, "autonomous_ticks_enabled": False, "frequency": "never", "conversation_chance_percent": 0},
+        "setup_interaction_state": {
+            "player_location_id": "loc_tavern_road",
+            "player_hp": 20,
+            "player_max_hp": 20,
+            "player_inventory": {"items": [], "equipment": {}, "carry_capacity": 50.0},
+            "party_state": {"max_size": 4, "companions": []},
+            "combat_state": {
+                "active": True,
+                "current_actor_id": "player",
+                "initiative_order": [{"actor_id": "player", "initiative": 20}, {"actor_id": "enemy:bandit_1", "initiative": 1}],
+                "participants": {
+                    "player": {"actor_id": "player", "side": "party", "name": "You", "hp": 20, "max_hp": 20, "damage_min": 1, "damage_max": 4, "status": "active", "ability_cooldowns": {"ability:power_attack": 2}},
+                    "enemy:bandit_1": {"actor_id": "enemy:bandit_1", "side": "enemy", "name": "Bandit", "hp": 12, "max_hp": 12, "status": "active"},
+                },
+            },
+        },
+        "turns": ["__manual_resolve_current_combat_actor__"],
+    },
+
+    "combat_enemy_brute_uses_power_attack": {
+        "currency": {"gold": 0, "silver": 0, "copper": 0},
+        "conversation_settings": {"enabled": True, "autonomous_ticks_enabled": False, "frequency": "never", "conversation_chance_percent": 0},
+        "setup_interaction_state": {
+            "player_location_id": "loc_tavern_road",
+            "player_hp": 20,
+            "player_max_hp": 20,
+            "player_inventory": {"items": [], "equipment": {}, "carry_capacity": 50.0},
+            "party_state": {"max_size": 4, "companions": []},
+            "combat_state": {
+                "active": True,
+                "current_actor_id": "enemy:brute_1",
+                "initiative_order": [{"actor_id": "enemy:brute_1", "initiative": 20}, {"actor_id": "player", "initiative": 1}],
+                "participants": {
+                    "enemy:brute_1": {"actor_id": "enemy:brute_1", "side": "enemy", "name": "Brute", "hp": 18, "max_hp": 18, "damage_min": 2, "damage_max": 6, "tags": ["brute"], "status": "active", "morale_threshold": 5},
+                    "player": {"actor_id": "player", "side": "party", "name": "You", "hp": 20, "max_hp": 20, "status": "active"},
+                },
+            },
+        },
+        "turns": ["__manual_resolve_current_combat_actor__"],
+    },
+
+    "combat_enemy_ability_sets_cooldown": {
+        "currency": {"gold": 0, "silver": 0, "copper": 0},
+        "conversation_settings": {"enabled": True, "autonomous_ticks_enabled": False, "frequency": "never", "conversation_chance_percent": 0},
+        "setup_interaction_state": {
+            "player_location_id": "loc_tavern_road",
+            "player_hp": 20,
+            "player_max_hp": 20,
+            "player_inventory": {"items": [], "equipment": {}, "carry_capacity": 50.0},
+            "party_state": {"max_size": 4, "companions": []},
+            "combat_state": {
+                "active": True,
+                "current_actor_id": "enemy:brute_1",
+                "initiative_order": [{"actor_id": "enemy:brute_1", "initiative": 20}, {"actor_id": "player", "initiative": 1}],
+                "participants": {
+                    "enemy:brute_1": {"actor_id": "enemy:brute_1", "side": "enemy", "name": "Brute", "hp": 18, "max_hp": 18, "damage_min": 2, "damage_max": 6, "tags": ["brute"], "status": "active", "morale_threshold": 5},
+                    "player": {"actor_id": "player", "side": "party", "name": "You", "hp": 20, "max_hp": 20, "status": "active"},
+                },
+            },
+        },
+        "turns": ["__manual_resolve_current_combat_actor__"],
+    },
+
+    "combat_enemy_does_not_use_ability_on_cooldown": {
+        "currency": {"gold": 0, "silver": 0, "copper": 0},
+        "conversation_settings": {"enabled": True, "autonomous_ticks_enabled": False, "frequency": "never", "conversation_chance_percent": 0},
+        "setup_interaction_state": {
+            "player_location_id": "loc_tavern_road",
+            "player_hp": 20,
+            "player_max_hp": 20,
+            "player_inventory": {"items": [], "equipment": {}, "carry_capacity": 50.0},
+            "party_state": {"max_size": 4, "companions": []},
+            "combat_state": {
+                "active": True,
+                "current_actor_id": "enemy:brute_1",
+                "initiative_order": [{"actor_id": "enemy:brute_1", "initiative": 20}, {"actor_id": "player", "initiative": 1}],
+                "participants": {
+                    "enemy:brute_1": {"actor_id": "enemy:brute_1", "side": "enemy", "name": "Brute", "hp": 18, "max_hp": 18, "damage_min": 2, "damage_max": 6, "tags": ["brute"], "status": "active", "morale_threshold": 5, "ability_cooldowns": {"ability:power_attack": 2}},
+                    "player": {"actor_id": "player", "side": "party", "name": "You", "hp": 20, "max_hp": 20, "status": "active"},
+                },
+            },
+        },
+        "turns": ["__manual_resolve_current_combat_actor__"],
+    },
+
+    "combat_enemy_stunned_does_not_use_ability": {
+        "currency": {"gold": 0, "silver": 0, "copper": 0},
+        "conversation_settings": {"enabled": True, "autonomous_ticks_enabled": False, "frequency": "never", "conversation_chance_percent": 0},
+        "setup_interaction_state": {
+            "player_location_id": "loc_tavern_road",
+            "player_hp": 20,
+            "player_max_hp": 20,
+            "player_inventory": {"items": [], "equipment": {}, "carry_capacity": 50.0},
+            "party_state": {"max_size": 4, "companions": []},
+            "combat_state": {
+                "active": True,
+                "current_actor_id": "enemy:brute_1",
+                "initiative_order": [{"actor_id": "enemy:brute_1", "initiative": 20}, {"actor_id": "player", "initiative": 1}],
+                "participants": {
+                    "enemy:brute_1": {"actor_id": "enemy:brute_1", "side": "enemy", "name": "Brute", "hp": 18, "max_hp": 18, "damage_min": 2, "damage_max": 6, "tags": ["brute"], "status": "active", "morale_threshold": 5, "status_effects": [{"effect_id": "effect:stunned:enemy:brute_1:test", "kind": "stunned", "target_actor_id": "enemy:brute_1", "duration_turns": 1, "stacks": 1, "magnitude": 1, "tick_timing": "none"}]},
+                    "player": {"actor_id": "player", "side": "party", "name": "You", "hp": 20, "max_hp": 20, "status": "active"},
+                },
+            },
+        },
+        "turns": ["__manual_resolve_current_combat_actor__"],
+    },
+
+    "combat_enemy_low_morale_flees_before_ability": {
+        "currency": {"gold": 0, "silver": 0, "copper": 0},
+        "conversation_settings": {"enabled": True, "autonomous_ticks_enabled": False, "frequency": "never", "conversation_chance_percent": 0},
+        "setup_interaction_state": {
+            "player_location_id": "loc_tavern_road",
+            "player_hp": 20,
+            "player_max_hp": 20,
+            "player_inventory": {"items": [], "equipment": {}, "carry_capacity": 50.0},
+            "party_state": {"max_size": 4, "companions": []},
+            "combat_state": {
+                "active": True,
+                "current_actor_id": "enemy:brute_1",
+                "initiative_order": [{"actor_id": "enemy:brute_1", "initiative": 20}, {"actor_id": "player", "initiative": 1}],
+                "participants": {
+                    "enemy:brute_1": {"actor_id": "enemy:brute_1", "side": "enemy", "name": "Brute", "hp": 1, "max_hp": 18, "damage_min": 2, "damage_max": 6, "tags": ["brute"], "status": "active", "morale_threshold": 80},
+                    "player": {"actor_id": "player", "side": "party", "name": "You", "hp": 20, "max_hp": 20, "status": "active"},
+                },
+            },
+        },
+        "turns": ["__manual_resolve_current_combat_actor__"],
+    },
 }
 
 
@@ -9236,6 +9500,56 @@ def _turn_resolved_combat_victory(turn_summary: Dict[str, Any]) -> bool:
     return any(note in {"combat_victory", "victory", "enemies_defeated"} for note in notes)
 
 
+def _extract_ability_result(turn_summary: Dict[str, Any]) -> Dict[str, Any]:
+    return _first_dict(
+        turn_summary.get("ability_result"),
+        _safe_dict(turn_summary.get("resolved_result")).get("ability_result"),
+        _safe_dict(turn_summary.get("combat_result")).get("ability_result"),
+        _safe_dict(turn_summary.get("npc_combat_result")).get("ability_result"),
+        _safe_dict(turn_summary.get("enemy_combat_result")).get("ability_result"),
+        _extract_nested_dict_by_key(turn_summary, "ability_result"),
+    )
+
+
+def _ability_used(turn_summary: Dict[str, Any], ability_id: str) -> bool:
+    ability = _extract_ability_result(turn_summary)
+    return ability.get("used") is True and _safe_str(ability.get("ability_id")) == ability_id
+
+
+def _ability_failed_reason(turn_summary: Dict[str, Any], reason: str) -> bool:
+    ability = _extract_ability_result(turn_summary)
+    return ability.get("used") is False and _safe_str(ability.get("reason")) == reason
+
+
+def _ability_damage_at_least(turn_summary: Dict[str, Any], amount: int) -> bool:
+    ability = _extract_ability_result(turn_summary)
+    return _safe_int(ability.get("damage_applied"), 0) >= amount
+
+
+def _ability_set_cooldown(turn_summary: Dict[str, Any], ability_id: str) -> bool:
+    ability = _extract_ability_result(turn_summary)
+    if _safe_str(ability.get("ability_id")) == ability_id and _safe_int(ability.get("cooldown_turns"), 0) > 0:
+        return True
+    combat_state = _extract_turn_combat_state(turn_summary)
+    for participant in _safe_dict(combat_state.get("participants")).values():
+        cooldowns = _safe_dict(_safe_dict(participant).get("ability_cooldowns"))
+        if _safe_int(cooldowns.get(ability_id), 0) > 0:
+            return True
+    return False
+
+
+def _cooldown_ticked_down(turn_summary: Dict[str, Any], ability_id: str) -> bool:
+    tick = _extract_nested_dict_by_key(turn_summary, "ability_cooldown_tick_result")
+    before = _safe_dict(tick.get("before"))
+    after = _safe_dict(tick.get("after"))
+    return _safe_int(before.get(ability_id), 0) > _safe_int(after.get(ability_id), -1)
+
+
+def _enemy_intent_ability(turn_summary: Dict[str, Any], ability_id: str) -> bool:
+    intent = _extract_enemy_intent_result(turn_summary)
+    return _safe_str(intent.get("intent")) == "use_ability" and _safe_str(intent.get("ability_id")) == ability_id
+
+
 def _turn_has_granted_combat_reward(turn_summary: Dict[str, Any]) -> bool:
     reward_result = _extract_turn_reward_result(turn_summary)
     if not reward_result:
@@ -9341,6 +9655,11 @@ def _generated_enemy_attacked(turn_summary: Dict[str, Any]) -> bool:
     ]
 
     for candidate in candidates:
+        if _safe_str(candidate.get("reason")).strip() == "not_actor_turn":
+            continue
+        if candidate.get("resolved") is False:
+            continue
+
         target_id = _safe_str(candidate.get("target_id")).strip()
         if target_id.startswith("enemy:"):
             # AttackResolution may not always include action_type. Treat the
@@ -9357,14 +9676,6 @@ def _generated_enemy_attacked(turn_summary: Dict[str, Any]) -> bool:
                 )
             ):
                 return True
-
-    narration = _safe_str(
-        turn_summary.get("narration")
-        or turn_summary.get("final_narration")
-        or turn_summary.get("summary")
-    ).lower()
-    if "enemy:bandit_grunt:1" in narration and ("attack" in narration or "miss" in narration or "hit" in narration):
-        return True
 
     return False
 
@@ -14122,6 +14433,58 @@ def _run_one_service_scenario(
                     summary_row.setdefault("scenario_warnings", []).append(
                         "generated_encounter_victory_missing_loot"
                     )
+
+        if scenario_name == "combat_power_attack_adds_damage_bonus":
+            if not _ability_used(summary_row, "ability:power_attack"):
+                summary_row.setdefault("scenario_warnings", []).append("combat_power_attack_not_used")
+            if not _ability_damage_at_least(summary_row, 4):
+                summary_row.setdefault("scenario_warnings", []).append("combat_power_attack_missing_damage_bonus")
+
+        if scenario_name == "combat_unknown_ability_fails_safely":
+            if not _ability_failed_reason(summary_row, "unknown_ability"):
+                summary_row.setdefault("scenario_warnings", []).append("combat_unknown_ability_did_not_fail_safely")
+
+        if scenario_name == "combat_bleeding_slash_applies_bleeding":
+            if not _ability_used(summary_row, "ability:bleeding_slash"):
+                summary_row.setdefault("scenario_warnings", []).append("combat_bleeding_slash_not_used")
+            if not _turn_has_condition_result_kind(summary_row, "bleeding"):
+                summary_row.setdefault("scenario_warnings", []).append("combat_bleeding_slash_missing_bleeding")
+
+        if scenario_name == "combat_shield_bash_applies_stunned":
+            if not _ability_used(summary_row, "ability:shield_bash"):
+                summary_row.setdefault("scenario_warnings", []).append("combat_shield_bash_not_used")
+            if not _turn_has_condition_result_kind(summary_row, "stunned"):
+                summary_row.setdefault("scenario_warnings", []).append("combat_shield_bash_missing_stunned")
+
+        if scenario_name == "combat_ability_sets_cooldown":
+            if not _ability_set_cooldown(summary_row, "ability:power_attack"):
+                summary_row.setdefault("scenario_warnings", []).append("combat_ability_did_not_set_cooldown")
+
+        if scenario_name == "combat_ability_on_cooldown_fails":
+            if not _ability_failed_reason(summary_row, "ability_on_cooldown"):
+                summary_row.setdefault("scenario_warnings", []).append("combat_ability_on_cooldown_did_not_fail")
+
+        if scenario_name == "combat_ability_cooldown_ticks_down":
+            if not _cooldown_ticked_down(summary_row, "ability:power_attack"):
+                summary_row.setdefault("scenario_warnings", []).append("combat_ability_cooldown_did_not_tick_down")
+
+        if scenario_name == "combat_enemy_brute_uses_power_attack":
+            if not _enemy_intent_ability(summary_row, "ability:power_attack"):
+                summary_row.setdefault("scenario_warnings", []).append("combat_enemy_brute_missing_power_attack_intent")
+            if not _ability_used(summary_row, "ability:power_attack"):
+                summary_row.setdefault("scenario_warnings", []).append("combat_enemy_brute_power_attack_not_used")
+
+        if scenario_name == "combat_enemy_ability_sets_cooldown":
+            if not _ability_set_cooldown(summary_row, "ability:power_attack"):
+                summary_row.setdefault("scenario_warnings", []).append("combat_enemy_ability_did_not_set_cooldown")
+
+        if scenario_name == "combat_enemy_does_not_use_ability_on_cooldown":
+            if _enemy_intent_ability(summary_row, "ability:power_attack") or _ability_used(summary_row, "ability:power_attack"):
+                summary_row.setdefault("scenario_warnings", []).append("combat_enemy_used_ability_on_cooldown")
+
+        if scenario_name == "combat_enemy_stunned_does_not_use_ability":
+            if _enemy_intent_ability(summary_row, "ability:power_attack") or _ability_used(summary_row, "ability:power_attack"):
+                summary_row.setdefault("scenario_warnings", []).append("combat_enemy_stunned_used_ability")
 
         summary_row["regression_warnings"] = _manual_regression_warnings(
             scenario_name=scenario_name,

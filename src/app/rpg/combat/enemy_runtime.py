@@ -3,6 +3,7 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any, Dict, List
 
+from app.rpg.combat.abilities import resolve_combat_ability
 from app.rpg.combat.enemy_ai import choose_enemy_intent, mark_enemy_fled, select_enemy_targets
 from app.rpg.combat.lifecycle import evaluate_combat_exit
 from app.rpg.combat.runtime import (
@@ -237,6 +238,52 @@ def resolve_enemy_combat_turn(
             "morale_result": enemy_intent_result.get("morale_result", {}),
             "target_selection_result": {},
             "combat_result": defense_dict,
+            "combat_state": deepcopy(combat_state),
+            "tick": int(tick or 0),
+            "source": "deterministic_enemy_combat_runtime",
+        }
+
+    if intent == "use_ability":
+        ability_id = str(enemy_intent_result.get("ability_id") or "")
+        target_id = str(
+            enemy_intent_result.get("target_actor_id")
+            or _safe_dict(enemy_intent_result.get("target_selection_result")).get("target_actor_id")
+            or "player"
+        )
+
+        combat_state, ability_result = resolve_combat_ability(
+            combat_state,
+            actor_id=enemy_id,
+            target_id=target_id,
+            ability_id=ability_id,
+        )
+
+        combat_state["last_enemy_intent_result"] = enemy_intent_result
+        combat_state["last_morale_result"] = enemy_intent_result.get("morale_result", {})
+        combat_state["last_target_selection_result"] = enemy_intent_result.get("target_selection_result", {})
+        combat_state["last_ability_result"] = ability_result
+
+        simulation_state["combat_state"] = combat_state
+        combat_state = evaluate_combat_exit(simulation_state, combat_state)
+        if combat_state.get("active"):
+            combat_state = advance_combat_turn(combat_state)
+        simulation_state["combat_state"] = combat_state
+
+        return {
+            "resolved": True,
+            "changed_state": True,
+            "reason": "enemy_used_ability",
+            "enemy_id": enemy_id,
+            "action_type": "use_ability",
+            "actor_id": enemy_id,
+            "target_id": target_id,
+            "ability_id": ability_id,
+            "reason": ability_result.get("reason"),
+            "enemy_intent_result": enemy_intent_result,
+            "target_selection_result": enemy_intent_result.get("target_selection_result", {}),
+            "morale_result": enemy_intent_result.get("morale_result", {}),
+            "ability_result": ability_result,
+            "condition_result": ability_result.get("condition_result", {}),
             "combat_state": deepcopy(combat_state),
             "tick": int(tick or 0),
             "source": "deterministic_enemy_combat_runtime",

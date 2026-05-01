@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from typing import Any, Dict, List
 
+from app.rpg.combat.abilities import ability_is_on_cooldown, get_ability_definition
+
 
 def _safe_dict(value: Any) -> Dict[str, Any]:
     return value if isinstance(value, dict) else {}
@@ -234,6 +236,45 @@ def evaluate_enemy_morale(
     }
 
 
+def choose_enemy_ability(
+    combat_state: Dict[str, Any],
+    actor_id: str,
+    target_actor_id: str,
+) -> Dict[str, Any]:
+    participants = _safe_dict(_safe_dict(combat_state).get("participants"))
+    actor = _safe_dict(participants.get(actor_id))
+    target = _safe_dict(participants.get(target_actor_id))
+    tags = {_safe_str(x).strip().lower() for x in _safe_list(actor.get("tags"))}
+    target_effects = _effect_kinds(target)
+
+    ordered_candidates: List[tuple[str, str]] = []
+
+    if "brute" in tags and _hp_ratio(target) > 0.5:
+        ordered_candidates.append(("ability:power_attack", "brute_power_attack"))
+    if ("poison" in tags or "assassin" in tags) and "poisoned" not in target_effects:
+        ordered_candidates.append(("ability:poison_strike", "target_not_poisoned"))
+    if ("slasher" in tags or "bandit" in tags) and "bleeding" not in target_effects:
+        ordered_candidates.append(("ability:bleeding_slash", "target_not_bleeding"))
+    if ("shield" in tags or "guard" in tags) and "stunned" not in target_effects:
+        ordered_candidates.append(("ability:shield_bash", "target_not_stunned"))
+
+    for ability_id, reason in ordered_candidates:
+        if not get_ability_definition(ability_id):
+            continue
+        if ability_is_on_cooldown(actor, ability_id):
+            continue
+        return {
+            "selected": True,
+            "ability_id": ability_id,
+            "reason": reason,
+        }
+
+    return {
+        "selected": False,
+        "reason": "no_available_ability",
+    }
+
+
 def choose_enemy_intent(
     combat_state: Dict[str, Any],
     actor_id: str,
@@ -284,6 +325,23 @@ def choose_enemy_intent(
             "reason": "no_active_targets",
             "morale_result": morale_result,
             "target_selection_result": target_selection_result,
+        }
+
+    ability_choice = choose_enemy_ability(
+        combat_state,
+        actor_id,
+        _safe_str(target_selection_result.get("target_actor_id")).strip(),
+    )
+    if ability_choice.get("selected"):
+        return {
+            "selected": True,
+            "actor_id": actor_id,
+            "intent": "use_ability",
+            "ability_id": ability_choice.get("ability_id", ""),
+            "reason": ability_choice.get("reason", "preferred_available_ability"),
+            "morale_result": morale_result,
+            "target_selection_result": target_selection_result,
+            "target_actor_id": target_selection_result.get("target_actor_id", ""),
         }
 
     return {
