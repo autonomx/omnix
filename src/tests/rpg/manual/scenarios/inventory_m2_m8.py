@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from typing import Any, Dict
 
-
 INVENTORY_M2_M8_SCENARIOS: Dict[str, Dict[str, Any]] = {
     "general_interaction_runtime": {
         "currency": {"gold": 0, "silver": 0, "copper": 0},

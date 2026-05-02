@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from typing import Any, Dict
 
-
 SCENE_ACTIVITY_SCENARIOS: Dict[str, Dict[str, Any]] = {
     "scene_activity_respects_cooldown": {
         "currency": {

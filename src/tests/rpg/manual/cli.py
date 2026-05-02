@@ -18,6 +18,7 @@ from tests.rpg.manual.output_state import (
     _REGRESSION_WARNINGS,
 )
 from tests.rpg.manual.safe import _compact_json
+from tests.rpg.manual.threading_helpers import _default_scenario_workers
 from tests.rpg.manual.token_usage import write_token_usage_report
 
 
@@ -44,11 +45,11 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--scenario-workers",
         type=int,
-        default=None,
+        default=_default_scenario_workers(),
         help=(
             "Maximum number of service scenarios to run in parallel. "
             "Only turns within each scenario remain sequential. "
-            "Default: 4, or env OMNIX_MANUAL_SCENARIO_WORKERS if set."
+            "Default: 8, or env OMNIX_MANUAL_SCENARIO_WORKERS if set."
         ),
     )
     parser.add_argument(
@@ -166,6 +167,8 @@ def _apply_default_args(args: argparse.Namespace) -> argparse.Namespace:
 def main(argv: list[str] | None = None) -> None:
     parser = build_arg_parser()
     args = _apply_default_args(parser.parse_args(argv))
+
+    output_artifacts.clear_test_results_root()
 
     from tests.rpg.manual.runner import run_requested_transcripts
 

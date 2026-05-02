@@ -45,7 +45,9 @@ except Exception:
     NPC_SOCIAL_MEMORY_SCENARIOS = {}
 
 try:
-    from tests.rpg.manual.scenarios.npc_evolution_companions import NPC_EVOLUTION_COMPANIONS_SCENARIOS
+    from tests.rpg.manual.scenarios.npc_evolution_companions import (
+        NPC_EVOLUTION_COMPANIONS_SCENARIOS,
+    )
 except Exception:
     NPC_EVOLUTION_COMPANIONS_SCENARIOS = {}
 

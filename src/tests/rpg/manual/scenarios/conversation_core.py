@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from typing import Any, Dict
 
-
 CONVERSATION_CORE_SCENARIOS: Dict[str, Dict[str, Any]] = {
     "ambient_conversation": {
         "currency": {"gold": 0, "silver": 0, "copper": 0},

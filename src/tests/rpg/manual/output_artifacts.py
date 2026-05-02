@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import shutil
 import zipfile
 from pathlib import Path
 from typing import Any, Dict
@@ -30,6 +31,28 @@ def _reset_output(channel: str | None = None) -> None:
             _OUTPUTS.clear()
             return
         _OUTPUTS[channel] = []
+
+
+def clear_test_results_root() -> None:
+    root = TEST_RESULTS_ROOT
+
+    # Safety guard: only allow deleting a directory literally named test-results.
+    if root.name != "test-results":
+        raise RuntimeError(f"refusing_to_clear_unexpected_test_results_root:{root}")
+
+    if root.exists():
+        for child in root.iterdir():
+            if child.name in {".gitkeep"}:
+                continue
+            if child.is_dir():
+                shutil.rmtree(child)
+            else:
+                child.unlink()
+
+    root.mkdir(parents=True, exist_ok=True)
+
+    with _OUTPUT_LOCK:
+        _OUTPUTS.clear()
 
 
 def _chunk_lines_for_soft_limit(lines: list[str], max_chunk_bytes: int) -> list[list[str]]:
@@ -167,7 +190,7 @@ def _should_include_in_results_zip(path: Path) -> bool:
         return False
     if "__pycache__" in parts:
         return False
-    if path.suffix.lower() in {".pyc", ".pyo"}:
+    if path.suffix.lower() in {".pyc", ".pyo", ".zip"}:
         return False
     return path.is_file()
 

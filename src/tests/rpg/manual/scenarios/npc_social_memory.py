@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from typing import Any, Dict
 
-
 NPC_SOCIAL_MEMORY_SCENARIOS: Dict[str, Dict[str, Any]] = {
     "npc_goal_influences_response_style": {
         "currency": {"gold": 0, "silver": 0, "copper": 0},

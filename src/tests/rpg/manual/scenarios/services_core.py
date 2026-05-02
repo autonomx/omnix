@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from typing import Any, Dict
 
-
 SERVICES_CORE_SCENARIOS: Dict[str, Dict[str, Any]] = {
     "lodging_success": {
         "currency": {"gold": 0, "silver": 5, "copper": 0},

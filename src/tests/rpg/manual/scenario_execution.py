@@ -2,20 +2,13 @@ from __future__ import annotations
 
 from typing import Any, Dict, List
 
-from tests.rpg.manual.safe import _compact_json, _safe_dict, _safe_list
 from tests.rpg.manual import output_artifacts
 from tests.rpg.manual.output_state import (
     _REGRESSION_WARNING_LOCK,
     _REGRESSION_WARNING_ROWS,
     _REGRESSION_WARNINGS,
 )
-from tests.rpg.manual.session_helpers import (
-    _ensure_manual_session,
-    _manual_service_session_id,
-    _reset_manual_session_artifacts,
-    _seed_session_currency,
-    _thread_label,
-)
+from tests.rpg.manual.safe import _compact_json, _safe_dict, _safe_list
 from tests.rpg.manual.scenario_setup import _apply_manual_scenario_setup
 from tests.rpg.manual.scenario_summary import (
     _build_service_summary_row,
@@ -23,6 +16,13 @@ from tests.rpg.manual.scenario_summary import (
     _extract_service_memories,
     _extract_simulation_state,
     _pre_turn_contamination_snapshot,
+)
+from tests.rpg.manual.session_helpers import (
+    _ensure_manual_session,
+    _manual_service_session_id,
+    _reset_manual_session_artifacts,
+    _seed_session_currency,
+    _thread_label,
 )
 from tests.rpg.manual.turn_execution import _run_one_manual_turn
 
@@ -178,7 +178,7 @@ def _run_one_service_scenario(
     # Run turns
     turn_summaries = []
     pre_turn_snapshot = _pre_turn_contamination_snapshot(_ensure_manual_session(session_id)["simulation_state"])
-    for turn_index, turn in enumerate(turns):
+    for turn_index, turn in enumerate(turns, start=1):
         turn_summary = _run_one_manual_turn(
             session_id=session_id,
             turn=turn,
