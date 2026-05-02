@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from typing import Any, Dict
 
-
 NPC_EVOLUTION_COMPANIONS_SCENARIOS: Dict[str, Dict[str, Any]] = {
     "npc_file_profile_bran_loaded": {
         "currency": {"gold": 0, "silver": 0, "copper": 0},

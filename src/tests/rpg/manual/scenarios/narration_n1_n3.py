@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from typing import Any, Dict
 
-
 NARRATION_N1_N3_SCENARIOS: Dict[str, Dict[str, Any]] = {
     "narration_repetition_memory_tracks_recent_output": {
         "currency": {"gold": 0, "silver": 0, "copper": 0},

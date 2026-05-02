@@ -4,7 +4,13 @@ from copy import deepcopy
 from typing import Any, Dict
 
 from tests.rpg.manual.safe import _safe_dict, _safe_list
-from tests.rpg.manual.session_helpers import _ensure_manual_simulation_roots, _sync_manual_simulation_state, _save_manual_session_for_test, _manual_apply_interaction_seed_fields, _manual_apply_social_seed_fields
+from tests.rpg.manual.session_helpers import (
+    _ensure_manual_simulation_roots,
+    _manual_apply_interaction_seed_fields,
+    _manual_apply_social_seed_fields,
+    _save_manual_session_for_test,
+    _sync_manual_simulation_state,
+)
 
 
 def _apply_manual_scenario_setup(session_id: str, scenario: Dict[str, Any]) -> bool:

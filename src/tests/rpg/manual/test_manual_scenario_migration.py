@@ -1,17 +1,21 @@
 from __future__ import annotations
 
 from tests.rpg.manual.runner import build_service_scenarios
+from tests.rpg.manual.scenarios.expected_legacy_names import (
+    EXPECTED_LEGACY_SCENARIO_NAMES,
+)
 
 
 def test_manual_scenario_migration_audit():
-    """Audit migration progress by comparing old vs new scenario names.
+    """Audit migration by comparing expected legacy names vs new modular registry.
 
-    This test ensures we don't silently drop scenarios during refactoring.
-    Migration is complete - all scenarios should now be in the modular registry.
+    This test ensures we don't silently drop or add scenarios during refactoring.
+    It compares against the exact 136 old scenario names from manual_llm_transcript_old.py.
     """
 
-    # Migration complete - no old sources to compare against
-    all_old_names = set()
+    # Load expected legacy names (exact 136 from old monolith)
+    all_old_names = EXPECTED_LEGACY_SCENARIO_NAMES
+    print(f"Expected legacy scenario count: {len(all_old_names)}")
 
     # Load new scenarios (modular)
     new_scenarios = build_service_scenarios()

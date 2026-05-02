@@ -20,13 +20,16 @@ from tests.rpg.manual.output_state import (
     _REGRESSION_WARNING_ROWS,
 )
 from tests.rpg.manual.safe import _compact_json, _safe_dict, _safe_list, _safe_str
-from tests.rpg.manual.scenarios.registry import build_service_scenarios
-from tests.rpg.manual.token_usage import _reset_token_usage
 from tests.rpg.manual.scenario_execution import (
     _record_scenario_error,
     _run_one_service_scenario,
 )
-
+from tests.rpg.manual.scenarios.registry import build_service_scenarios
+from tests.rpg.manual.threading_helpers import (
+    _effective_scenario_workers,
+    _scenario_workers_source,
+)
+from tests.rpg.manual.token_usage import _reset_token_usage
 
 SERVICE_SCENARIOS = build_service_scenarios()
 
@@ -82,8 +85,27 @@ def run_service_scenarios(
     if not scenario_names_to_run:
         scenario_names_to_run = valid_names
 
-    max_workers = int(scenario_workers or 1)
-    use_parallel = bool(parallel_scenarios and max_workers > 1 and len(scenario_names_to_run) > 1)
+    max_workers = _effective_scenario_workers(
+        int(scenario_workers or 1),
+        len(scenario_names_to_run),
+        parallel=parallel_scenarios,
+    )
+    use_parallel = bool(max_workers > 1)
+
+    output_artifacts._emit(f"requested_parallel_scenarios: {parallel_scenarios}", channel="service_summary")
+    output_artifacts._emit(f"requested_scenario_workers: {scenario_workers}", channel="service_summary")
+    output_artifacts._emit(f"scenario_workers_source: {_scenario_workers_source()}", channel="service_summary")
+    output_artifacts._emit(f"scenario_count: {len(scenario_names_to_run)}", channel="service_summary")
+    output_artifacts._emit(f"parallel_scenarios: {bool(max_workers > 1)}", channel="service_summary")
+    output_artifacts._emit(f"scenario_workers: {max_workers}", channel="service_summary")
+
+    if parallel_scenarios and max_workers <= 1:
+        output_artifacts._emit(
+            "parallel_note: parallel requested but effective workers is 1; "
+            "this usually means only one scenario was selected or scenario-workers/env is 1.",
+            channel="service_summary",
+        )
+
     run_id = _new_manual_run_id()
 
     def run_one(name: str) -> Dict[str, Any]:
@@ -198,7 +220,8 @@ def run_requested_transcripts(args: argparse.Namespace) -> None:
         return
 
     # Flat transcript mode has been migrated to the CLI module.
-    from tests.rpg.manual.cli import main as cli_main
     import sys
+
+    from tests.rpg.manual.cli import main as cli_main
     sys.argv = ["manual_llm_transcript.py"] + (getattr(args, "transcript_args", []) or [])
     cli_main()
