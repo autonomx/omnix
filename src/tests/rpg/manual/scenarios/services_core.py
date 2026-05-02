@@ -9,6 +9,8 @@ SERVICES_CORE_SCENARIOS: Dict[str, Dict[str, Any]] = {
             "I ask Bran for a room to rent",
             "I buy Common room cot from Bran",
         ],
+        "allows_seeded_world_events": True,
+        "allows_seeded_journal_entries": True,
     },
     "shop_success": {
         "currency": {"gold": 0, "silver": 2, "copper": 0},
@@ -17,6 +19,8 @@ SERVICES_CORE_SCENARIOS: Dict[str, Dict[str, Any]] = {
             "I ask Elara what she sells",
             "I buy a torch from Elara",
         ],
+        "allows_seeded_world_events": True,
+        "allows_seeded_journal_entries": True,
     },
     "blocked_purchase": {
         "currency": {"gold": 0, "silver": 1, "copper": 0},
@@ -25,6 +29,8 @@ SERVICES_CORE_SCENARIOS: Dict[str, Dict[str, Any]] = {
             "I ask Elara what she sells",
             "I buy rope from Elara",
         ],
+        "allows_seeded_world_events": True,
+        "allows_seeded_journal_entries": True,
     },
     "paid_info": {
         "currency": {"gold": 0, "silver": 2, "copper": 0},
@@ -32,5 +38,7 @@ SERVICES_CORE_SCENARIOS: Dict[str, Dict[str, Any]] = {
             "I ask Bran if he has heard any rumors",
             "I buy Local rumor from Bran",
         ],
+        "allows_seeded_world_events": True,
+        "allows_seeded_journal_entries": True,
     },
 }

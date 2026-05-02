@@ -5,6 +5,7 @@ from typing import Any, Dict
 
 from tests.rpg.manual import output_artifacts
 from tests.rpg.manual.safe import _safe_dict, _safe_str
+from tests.rpg.manual.scenario_summary import _compact_result_for_summary
 from tests.rpg.manual.token_usage import _record_token_usage
 
 
@@ -82,7 +83,7 @@ def _run_one_manual_turn(
         turn_summary = {
             "turn_index": turn_index,
             "player_input": player_input,
-            "result": result,
+            "result": _compact_result_for_summary(result),
         }
 
         return turn_summary
