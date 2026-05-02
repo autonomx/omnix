@@ -760,6 +760,56 @@ def _extract_action_summary(result: Dict[str, Any]) -> str:
     return " | ".join(bits)
 
 
+def _extract_npc_response_style(result: Dict[str, Any]) -> str:
+    conversation = _extract_conversation_result(result)
+    style = _safe_str(conversation.get("npc_response_style"))
+    if style:
+        return style
+    style = _safe_str(_safe_dict(conversation.get("npc_response_beat")).get("response_style"))
+    if style:
+        return style
+    return _safe_str(_safe_dict(conversation.get("beat")).get("response_style"))
+
+
+def _pre_turn_contamination_snapshot(simulation_state: Dict[str, Any]) -> Dict[str, int]:
+    """Capture pre-turn state counts used by scenario contamination checks.
+
+    This helper is intentionally tolerant because many manual scenarios seed only
+    partial simulation_state. Missing sections should count as zero rather than
+    crashing the run.
+    """
+    simulation_state = _safe_dict(simulation_state)
+    if not simulation_state:
+        return {
+            "transaction_history_count": 0,
+            "active_services_count": 0,
+            "journal_entry_count": 0,
+            "world_event_count": 0,
+            "quest_count": 0,
+        }
+
+    journal_state = _safe_dict(simulation_state.get("journal_state"))
+    world_event_state = _safe_dict(simulation_state.get("world_event_state"))
+    quest_state = _safe_dict(simulation_state.get("quest_state"))
+
+    # Some newer bundles store world events directly on simulation_state.
+    world_events = _safe_list(world_event_state.get("events"))
+    if not world_events:
+        world_events = _safe_list(simulation_state.get("world_events"))
+
+    quests = _safe_list(quest_state.get("quests"))
+    if not quests:
+        quests = _safe_list(simulation_state.get("quests"))
+
+    return {
+        "transaction_history_count": len(_safe_list(simulation_state.get("transaction_history"))),
+        "active_services_count": len(_safe_list(simulation_state.get("active_services"))),
+        "journal_entry_count": len(_safe_list(journal_state.get("entries"))),
+        "world_event_count": len(world_events),
+        "quest_count": len(quests),
+    }
+
+
 HTML_REPORT_CSS = r"""
 :root {
   color-scheme: dark;
@@ -7799,6 +7849,521 @@ SERVICE_SCENARIOS = {
         "turns": ["__manual_force_next_attack_roll__:20", "__manual_force_next_damage__:1", "I attack the bandit."],
     },
 
+    "interaction_open_unlocked_chest": {
+        "currency": {"gold": 0, "silver": 0, "copper": 0},
+        "conversation_settings": {
+            "enabled": True,
+            "autonomous_ticks_enabled": False,
+            "frequency": "never",
+            "conversation_chance_percent": 0,
+        },
+        "setup_interaction_state": {
+            "player_location_id": "loc_tavern_cellar",
+            "player_hp": 20,
+            "player_max_hp": 20,
+            "player_inventory": {"items": [], "equipment": {}, "carry_capacity": 50.0},
+            "world_objects": {
+                "object:old_chest": {
+                    "object_id": "object:old_chest",
+                    "name": "Old Chest",
+                    "kind": "container",
+                    "location_id": "loc_tavern_cellar",
+                    "area_id": "cellar",
+                    "locked": False,
+                    "open": False,
+                    "reachable": True,
+                    "visible": True,
+                    "contents": [{"item_id": "item:copper_coin", "name": "Copper coin", "quantity": 12}],
+                }
+            },
+        },
+        "turns": ["I open the chest."],
+    },
+
+    "interaction_unlock_chest_with_key": {
+        "currency": {"gold": 0, "silver": 0, "copper": 0},
+        "conversation_settings": {
+            "enabled": True,
+            "autonomous_ticks_enabled": False,
+            "frequency": "never",
+            "conversation_chance_percent": 0,
+        },
+        "setup_interaction_state": {
+            "player_location_id": "loc_tavern_cellar",
+            "player_hp": 20,
+            "player_max_hp": 20,
+            "player_inventory": {
+                "items": [{"item_id": "item:iron_key", "name": "Iron key", "quantity": 1}],
+                "equipment": {},
+                "carry_capacity": 50.0,
+            },
+            "world_objects": {
+                "object:old_chest": {
+                    "object_id": "object:old_chest",
+                    "name": "Old Chest",
+                    "kind": "container",
+                    "location_id": "loc_tavern_cellar",
+                    "area_id": "cellar",
+                    "locked": True,
+                    "open": False,
+                    "required_key_id": "item:iron_key",
+                    "reachable": True,
+                    "visible": True,
+                    "contents": [{"item_id": "item:copper_coin", "name": "Copper coin", "quantity": 12}],
+                }
+            },
+        },
+        "turns": ["I use the iron key to unlock the chest."],
+    },
+
+    "interaction_unlock_chest_without_key_fails": {
+        "currency": {"gold": 0, "silver": 0, "copper": 0},
+        "conversation_settings": {
+            "enabled": True,
+            "autonomous_ticks_enabled": False,
+            "frequency": "never",
+            "conversation_chance_percent": 0,
+        },
+        "setup_interaction_state": {
+            "player_location_id": "loc_tavern_cellar",
+            "player_hp": 20,
+            "player_max_hp": 20,
+            "player_inventory": {"items": [], "equipment": {}, "carry_capacity": 50.0},
+            "world_objects": {
+                "object:old_chest": {
+                    "object_id": "object:old_chest",
+                    "name": "Old Chest",
+                    "kind": "container",
+                    "location_id": "loc_tavern_cellar",
+                    "area_id": "cellar",
+                    "locked": True,
+                    "open": False,
+                    "required_key_id": "item:iron_key",
+                    "reachable": True,
+                    "visible": True,
+                    "contents": [{"item_id": "item:copper_coin", "name": "Copper coin", "quantity": 12}],
+                }
+            },
+        },
+        "turns": ["I use the iron key to unlock the chest."],
+    },
+
+    "interaction_open_locked_chest_fails": {
+        "currency": {"gold": 0, "silver": 0, "copper": 0},
+        "conversation_settings": {
+            "enabled": True,
+            "autonomous_ticks_enabled": False,
+            "frequency": "never",
+            "conversation_chance_percent": 0,
+        },
+        "setup_interaction_state": {
+            "player_location_id": "loc_tavern_cellar",
+            "player_hp": 20,
+            "player_max_hp": 20,
+            "player_inventory": {"items": [], "equipment": {}, "carry_capacity": 50.0},
+            "world_objects": {
+                "object:old_chest": {
+                    "object_id": "object:old_chest",
+                    "name": "Old Chest",
+                    "kind": "container",
+                    "location_id": "loc_tavern_cellar",
+                    "area_id": "cellar",
+                    "locked": True,
+                    "open": False,
+                    "required_key_id": "item:iron_key",
+                    "reachable": True,
+                    "visible": True,
+                    "contents": [{"item_id": "item:copper_coin", "name": "Copper coin", "quantity": 12}],
+                }
+            },
+        },
+        "turns": ["I open the chest."],
+    },
+
+    "interaction_take_item_from_closed_chest_fails": {
+        "currency": {"gold": 0, "silver": 0, "copper": 0},
+        "conversation_settings": {
+            "enabled": True,
+            "autonomous_ticks_enabled": False,
+            "frequency": "never",
+            "conversation_chance_percent": 0,
+        },
+        "setup_interaction_state": {
+            "player_location_id": "loc_tavern_cellar",
+            "player_hp": 20,
+            "player_max_hp": 20,
+            "player_inventory": {"items": [], "equipment": {}, "carry_capacity": 50.0},
+            "world_objects": {
+                "object:old_chest": {
+                    "object_id": "object:old_chest",
+                    "name": "Old Chest",
+                    "kind": "container",
+                    "location_id": "loc_tavern_cellar",
+                    "area_id": "cellar",
+                    "locked": False,
+                    "open": False,
+                    "reachable": True,
+                    "visible": True,
+                    "contents": [{"item_id": "item:copper_coin", "name": "Copper coin", "quantity": 12}],
+                }
+            },
+        },
+        "turns": ["I take the coins from the chest."],
+    },
+
+    "interaction_take_item_from_open_chest_succeeds": {
+        "currency": {"gold": 0, "silver": 0, "copper": 0},
+        "conversation_settings": {
+            "enabled": True,
+            "autonomous_ticks_enabled": False,
+            "frequency": "never",
+            "conversation_chance_percent": 0,
+        },
+        "setup_interaction_state": {
+            "player_location_id": "loc_tavern_cellar",
+            "player_hp": 20,
+            "player_max_hp": 20,
+            "player_inventory": {"items": [], "equipment": {}, "carry_capacity": 50.0},
+            "world_objects": {
+                "object:old_chest": {
+                    "object_id": "object:old_chest",
+                    "name": "Old Chest",
+                    "kind": "container",
+                    "location_id": "loc_tavern_cellar",
+                    "area_id": "cellar",
+                    "locked": False,
+                    "open": True,
+                    "reachable": True,
+                    "visible": True,
+                    "contents": [{"item_id": "item:copper_coin", "name": "Copper coin", "quantity": 12}],
+                }
+            },
+        },
+        "turns": ["I take the coins from the chest."],
+    },
+
+    "interaction_unlock_door_with_key": {
+        "currency": {"gold": 0, "silver": 0, "copper": 0},
+        "conversation_settings": {
+            "enabled": True,
+            "autonomous_ticks_enabled": False,
+            "frequency": "never",
+            "conversation_chance_percent": 0,
+        },
+        "setup_interaction_state": {
+            "player_location_id": "loc_rusty_flagon",
+            "player_hp": 20,
+            "player_max_hp": 20,
+            "player_inventory": {
+                "items": [{"item_id": "item:cellar_key", "name": "Cellar key", "quantity": 1}],
+                "equipment": {},
+                "carry_capacity": 50.0,
+            },
+            "world_objects": {
+                "object:cellar_door": {
+                    "object_id": "object:cellar_door",
+                    "name": "Cellar Door",
+                    "kind": "door",
+                    "location_id": "loc_rusty_flagon",
+                    "area_id": "common_room",
+                    "locked": True,
+                    "open": False,
+                    "required_key_id": "item:cellar_key",
+                    "reachable": True,
+                    "visible": True,
+                    "blocks_movement": True,
+                }
+            },
+        },
+        "turns": ["I use the cellar key to unlock the door."],
+    },
+
+    "interaction_unlock_door_without_key_fails": {
+        "currency": {"gold": 0, "silver": 0, "copper": 0},
+        "conversation_settings": {
+            "enabled": True,
+            "autonomous_ticks_enabled": False,
+            "frequency": "never",
+            "conversation_chance_percent": 0,
+        },
+        "setup_interaction_state": {
+            "player_location_id": "loc_rusty_flagon",
+            "player_hp": 20,
+            "player_max_hp": 20,
+            "player_inventory": {"items": [], "equipment": {}, "carry_capacity": 50.0},
+            "world_objects": {
+                "object:cellar_door": {
+                    "object_id": "object:cellar_door",
+                    "name": "Cellar Door",
+                    "kind": "door",
+                    "location_id": "loc_rusty_flagon",
+                    "area_id": "common_room",
+                    "locked": True,
+                    "open": False,
+                    "required_key_id": "item:cellar_key",
+                    "reachable": True,
+                    "visible": True,
+                    "blocks_movement": True,
+                }
+            },
+        },
+        "turns": ["I use the cellar key to unlock the door."],
+    },
+
+    "narration_repetition_memory_tracks_recent_output": {
+        "currency": {"gold": 0, "silver": 0, "copper": 0},
+        "conversation_settings": {
+            "enabled": True,
+            "autonomous_ticks_enabled": False,
+            "frequency": "never",
+            "conversation_chance_percent": 0,
+        },
+        "setup_interaction_state": {
+            "player_location_id": "loc_tavern",
+            "player_hp": 20,
+            "player_max_hp": 20,
+            "runtime_state": {
+                "narration_quality": {
+                    "recent_openings": [],
+                    "recent_fingerprints": [],
+                    "recent_generic_phrases": [],
+                }
+            },
+        },
+        "turns": [
+            "I look around the tavern.",
+            "I look at the tables.",
+        ],
+    },
+
+    "npc_bran_refuses_unpaid_room": {
+        "currency": {"gold": 0, "silver": 0, "copper": 0},
+        "conversation_settings": {
+            "enabled": True,
+            "autonomous_ticks_enabled": False,
+            "frequency": "never",
+            "conversation_chance_percent": 0,
+        },
+        "setup_interaction_state": {
+            "player_location_id": "loc_rusty_flagon",
+            "player_hp": 20,
+            "player_max_hp": 20,
+            "relationships": {
+                "npc:bran": {
+                    "trust": 0,
+                    "relationship": 0,
+                    "score": 0,
+                },
+                "Bran": {
+                    "trust": 0,
+                    "relationship": 0,
+                    "score": 0,
+                },
+            },
+            "relationship_state": {
+                "npc:bran": {
+                    "trust": 0,
+                    "relationship": 0,
+                    "score": 0,
+                },
+                "Bran": {
+                    "trust": 0,
+                    "relationship": 0,
+                    "score": 0,
+                },
+            },
+            "social_state": {
+                "relationships": {
+                    "npc:bran": {
+                        "trust": 0,
+                        "relationship": 0,
+                        "score": 0,
+                    },
+                    "Bran": {
+                        "trust": 0,
+                        "relationship": 0,
+                        "score": 0,
+                    },
+                }
+            },
+            "service_state": {
+                "paid_services": [],
+            },
+            "npc_memories": [],
+        },
+        "turns": ["I ask Bran for a free room."],
+    },
+
+    "npc_bran_negotiates_high_trust_room": {
+        "currency": {"gold": 0, "silver": 0, "copper": 0},
+        "conversation_settings": {
+            "enabled": True,
+            "autonomous_ticks_enabled": False,
+            "frequency": "never",
+            "conversation_chance_percent": 0,
+        },
+        "setup_interaction_state": {
+            "player_location_id": "loc_rusty_flagon",
+            "player_hp": 20,
+            "player_max_hp": 20,
+            "relationships": {
+                "npc:bran": {
+                    "trust": 60,
+                    "relationship": 60,
+                    "score": 60,
+                },
+                "Bran": {
+                    "trust": 60,
+                    "relationship": 60,
+                    "score": 60,
+                },
+            },
+            "relationship_state": {
+                "npc:bran": {
+                    "trust": 60,
+                    "relationship": 60,
+                    "score": 60,
+                },
+                "Bran": {
+                    "trust": 60,
+                    "relationship": 60,
+                    "score": 60,
+                },
+            },
+            "social_state": {
+                "relationships": {
+                    "npc:bran": {
+                        "trust": 60,
+                        "relationship": 60,
+                        "score": 60,
+                    },
+                    "Bran": {
+                        "trust": 60,
+                        "relationship": 60,
+                        "score": 60,
+                    },
+                }
+            },
+            "service_state": {
+                "paid_services": [],
+            },
+            "npc_memories": [],
+        },
+        "turns": ["I ask Bran for a free room."],
+    },
+
+    "npc_bran_escalates_when_threatened": {
+        "currency": {"gold": 0, "silver": 0, "copper": 0},
+        "conversation_settings": {
+            "enabled": True,
+            "autonomous_ticks_enabled": False,
+            "frequency": "never",
+            "conversation_chance_percent": 0,
+        },
+        "setup_interaction_state": {
+            "player_location_id": "loc_rusty_flagon",
+            "player_hp": 20,
+            "player_max_hp": 20,
+            "relationships": {
+                "npc:bran": {
+                    "trust": 0,
+                    "relationship": 0,
+                    "score": 0,
+                },
+                "Bran": {
+                    "trust": 0,
+                    "relationship": 0,
+                    "score": 0,
+                },
+            },
+            "relationship_state": {
+                "npc:bran": {
+                    "trust": 0,
+                    "relationship": 0,
+                    "score": 0,
+                },
+                "Bran": {
+                    "trust": 0,
+                    "relationship": 0,
+                    "score": 0,
+                },
+            },
+            "social_state": {
+                "relationships": {
+                    "npc:bran": {
+                        "trust": 0,
+                        "relationship": 0,
+                        "score": 0,
+                    },
+                    "Bran": {
+                        "trust": 0,
+                        "relationship": 0,
+                        "score": 0,
+                    },
+                }
+            },
+            "service_state": {
+                "paid_services": [],
+            },
+            "npc_memories": [],
+        },
+        "turns": ["I threaten Bran for a room."],
+    },
+
+    "narration_validator_catches_hit_miss_contradiction": {
+        "currency": {"gold": 0, "silver": 0, "copper": 0},
+        "conversation_settings": {
+            "enabled": True,
+            "autonomous_ticks_enabled": False,
+            "frequency": "never",
+            "conversation_chance_percent": 0,
+        },
+        "setup_interaction_state": {
+            "player_location_id": "loc_tavern_road",
+            "player_hp": 20,
+            "player_max_hp": 20,
+            "player_inventory": {
+                "items": [],
+                "equipment": {},
+                "carry_capacity": 50.0,
+            },
+            "party_state": {
+                "max_size": 4,
+                "companions": [],
+            },
+            "combat_state": {
+                "active": True,
+                "current_actor_id": "player",
+                "force_next_attack_roll": 20,
+                "force_next_damage": 1,
+                "initiative_order": [
+                    {"actor_id": "player", "initiative": 20},
+                    {"actor_id": "enemy:bandit_1", "initiative": 1},
+                ],
+                "participants": {
+                    "player": {
+                        "actor_id": "player",
+                        "side": "party",
+                        "name": "You",
+                        "hp": 20,
+                        "max_hp": 20,
+                        "damage_min": 1,
+                        "status": "active",
+                    },
+                    "enemy:bandit_1": {
+                        "actor_id": "enemy:bandit_1",
+                        "side": "enemy",
+                        "name": "Bandit",
+                        "hp": 8,
+                        "max_hp": 8,
+                        "status": "active",
+                    },
+                },
+            },
+        },
+        "turns": ["I attack the bandit."],
+    },
+
 }
 
 
@@ -7966,6 +8531,59 @@ def _validate_companion_acceptance_final_state(
 
 def _safe_str(value: Any) -> str:
     return "" if value is None else str(value)
+
+
+def _extract_npc_backbone_decision(turn_summary: Dict[str, Any]) -> Dict[str, Any]:
+    return _first_dict(
+        turn_summary.get("npc_backbone_decision"),
+        _safe_dict(turn_summary.get("resolved_result")).get("npc_backbone_decision"),
+        _safe_dict(turn_summary.get("result")).get("npc_backbone_decision"),
+        _extract_nested_dict_by_key(turn_summary, "npc_backbone_decision"),
+    )
+
+
+def _extract_narration_quality_warnings(turn_summary: Dict[str, Any]) -> List[str]:
+    warnings: List[str] = []
+    warnings.extend(_safe_list(turn_summary.get("narration_quality_warnings")))
+    warnings.extend(_safe_list(_safe_dict(turn_summary.get("resolved_result")).get("narration_quality_warnings")))
+    warnings.extend(_safe_list(_safe_dict(turn_summary.get("result")).get("narration_quality_warnings")))
+    return list(dict.fromkeys([_safe_str(x) for x in warnings if _safe_str(x)]))
+
+
+def _runtime_has_narration_quality_memory(turn_summary: Dict[str, Any]) -> bool:
+    context = _safe_dict(
+        turn_summary.get("narration_quality_context")
+        or _safe_dict(turn_summary.get("resolved_result")).get("narration_quality_context")
+        or _safe_dict(turn_summary.get("result")).get("narration_quality_context")
+    )
+    if (
+        _safe_list(context.get("recent_openings"))
+        or _safe_list(context.get("recent_fingerprints"))
+        or _safe_list(context.get("recent_generic_phrases"))
+    ):
+        return True
+
+    def has_quality(value: Any, depth: int = 0) -> bool:
+        if depth > 8:
+            return False
+        if isinstance(value, dict):
+            quality = _safe_dict(value.get("narration_quality"))
+            if (
+                _safe_list(quality.get("recent_openings"))
+                or _safe_list(quality.get("recent_fingerprints"))
+                or _safe_list(quality.get("recent_generic_phrases"))
+            ):
+                return True
+            for nested in value.values():
+                if has_quality(nested, depth + 1):
+                    return True
+        elif isinstance(value, list):
+            for nested in value:
+                if has_quality(nested, depth + 1):
+                    return True
+        return False
+
+    return has_quality(turn_summary)
 
 
 def _normalize_requested_scenarios(raw: Any, *, valid_names: List[str]) -> List[str]:
@@ -8309,1275 +8927,93 @@ def _manual_present_npcs(simulation_state: Dict[str, Any]) -> List[str]:
     return found
 
 
-
-def _clone_or_create_manual_session(session_id: str) -> Dict[str, Any]:
-    """
-    Manual scenario sessions need to exist before apply_turn(...).
-
-    apply_turn does not create arbitrary session IDs, so clone the known
-    manual_test_session shape when available. If the session service exposes
-    save/load helpers, persist the clone before running scenario turns.
-    """
-    try:
-        from app.rpg.session.service import load_session, save_session
-
-        existing = load_session(session_id)
-        if existing:
-            return _safe_dict(existing)
-
-        template = load_session("manual_test_session")
-        if template:
-            cloned = deepcopy(template)
-            manifest = _safe_dict(cloned.get("manifest"))
-            manifest["session_id"] = session_id
-            manifest["id"] = f"session:{session_id}"
-            manifest["title"] = f"Manual Service Scenario: {session_id}"
-            cloned["manifest"] = manifest
-
-            cloned = _sanitize_manual_session_for_test(cloned)
-
-            save_session(cloned)
-            return cloned
-    except Exception:
-        pass
-
-    return {}
-
-
-def _ensure_manual_session(session_id: str) -> Dict[str, Any]:
-    session = _clone_or_create_manual_session(session_id)
-    if session:
-        return session
-
-    warmup = apply_turn(session_id="manual_test_session", player_input="I wait")
-    template_session = _extract_session(warmup)
-    if not template_session:
-        return {}
-
-    try:
-        from app.rpg.session.service import save_session
-
-        cloned = deepcopy(template_session)
-        manifest = _safe_dict(cloned.get("manifest"))
-        manifest["session_id"] = session_id
-        manifest["id"] = f"session:{session_id}"
-        manifest["title"] = f"Manual Service Scenario: {session_id}"
-        cloned["manifest"] = manifest
-        cloned = _sanitize_manual_session_for_test(cloned)
-        save_session(cloned)
-        return cloned
-    except Exception:
-        return {}
-
-
-def _extract_payload(result: Dict[str, Any]) -> Dict[str, Any]:
-    result = _safe_dict(result)
-    return _safe_dict(result.get("result") or result)
-
-
-def _extract_session(result: Dict[str, Any]) -> Dict[str, Any]:
-    return _safe_dict(_safe_dict(result).get("session"))
-
-
-def _extract_simulation_state(result: Dict[str, Any]) -> Dict[str, Any]:
-    result = _safe_dict(result)
-    nested_result = _safe_dict(result.get("result"))
-    turn_contract = _safe_dict(result.get("turn_contract"))
-    resolved = _first_dict(
-        result.get("resolved_result"),
-        nested_result.get("resolved_result"),
-        turn_contract.get("resolved_result"),
-        turn_contract.get("resolved_action"),
-    )
-
-    conversation = _first_dict(
-        result.get("conversation_result"),
-        nested_result.get("conversation_result"),
-        turn_contract.get("conversation_result"),
-        resolved.get("conversation_result"),
-    )
-
-    candidates = [
-        result.get("simulation_state"),
-        nested_result.get("simulation_state"),
-        nested_result.get("saved_simulation_state"),
-        turn_contract.get("simulation_state"),
-        resolved.get("simulation_state"),
-        _safe_dict(result.get("session")).get("simulation_state"),
-        _safe_dict(_safe_dict(result.get("session")).get("setup_payload")).get("metadata", {}).get("simulation_state"),
-    ]
-
-    for candidate in candidates:
-        candidate = _safe_dict(candidate)
-        if candidate:
-            return candidate
-
-    # Fallback for manual command/debug-only result shapes.
-    if conversation:
-        reconstructed: Dict[str, Any] = {}
-        for key in (
-            "npc_evolution_state",
-            "npc_reputation_state",
-            "npc_knowledge_state",
-            "conversation_thread_state",
-            "npc_arc_continuity_state",
-        ):
-            value = _safe_dict(conversation.get(key))
-            if value:
-                reconstructed[key] = value
-        if reconstructed:
-            return reconstructed
-
-    return {}
-
-
-
-
-
-def _extract_npc_response_style(result: Dict[str, Any]) -> str:
-    conversation = _extract_conversation_result(result)
-    style = _safe_str(conversation.get("npc_response_style"))
-    if style:
-        return style
-    style = _safe_str(_safe_dict(conversation.get("npc_response_beat")).get("response_style"))
-    if style:
-        return style
-    return _safe_str(_safe_dict(conversation.get("beat")).get("response_style"))
-
-
-def _pre_turn_contamination_snapshot(simulation_state: Dict[str, Any]) -> Dict[str, int]:
-    if not simulation_state:
-        return {
-            "transaction_history_count": 0,
-            "active_services_count": 0,
-            "journal_entry_count": 0,
-            "world_event_count": 0,
-            "quest_count": 0,
-        }
-
-    journal_state = _safe_dict(simulation_state.get("journal_state"))
-    world_event_state = _safe_dict(simulation_state.get("world_event_state"))
-    quest_state = _safe_dict(simulation_state.get("quest_state"))
-    return {
-        "transaction_history_count": len(_safe_list(simulation_state.get("transaction_history"))),
-        "active_services_count": len(_safe_list(simulation_state.get("active_services"))),
-        "journal_entry_count": len(_safe_list(journal_state.get("entries"))),
-        "world_event_count": len(_safe_list(world_event_state.get("events"))),
-        "quest_count": len(_safe_list(quest_state.get("quests"))),
-    }
-
-
-def _extract_player_inventory(result: Dict[str, Any]) -> Dict[str, Any]:
-    simulation_state = _extract_simulation_state(result)
-    player_state = _safe_dict(simulation_state.get("player_state"))
-    return _safe_dict(player_state.get("inventory_state"))
-
-
-def _extract_player_currency(result: Dict[str, Any]) -> Dict[str, Any]:
-    inventory_state = _extract_player_inventory(result)
-    return _safe_dict(inventory_state.get("currency"))
-
-
-def _extract_player_items(result: Dict[str, Any]) -> List[Any]:
-    inventory_state = _extract_player_inventory(result)
-    return _safe_list(inventory_state.get("items"))
-
-
-def _extract_active_services(result: Dict[str, Any]) -> List[Any]:
-    simulation_state = _extract_simulation_state(result)
-    return _safe_list(simulation_state.get("active_services"))
-
-
-def _extract_memory_rumors(result: Dict[str, Any]) -> List[Any]:
-    simulation_state = _extract_simulation_state(result)
-    memory_state = _safe_dict(simulation_state.get("memory_state"))
-    return _safe_list(memory_state.get("rumors"))
-
-
-def _extract_transaction_history(result: Dict[str, Any]) -> List[Any]:
-    simulation_state = _extract_simulation_state(result)
-    history = list(_safe_list(simulation_state.get("transaction_history")))
-
-    service_debug = _extract_service_debug(result)
-    current_record = _safe_dict(service_debug.get("transaction_record"))
-
-    if current_record:
-        current_id = _safe_str(current_record.get("transaction_id"))
-        existing_ids = {
-            _safe_str(_safe_dict(record).get("transaction_id"))
-            for record in history
-        }
-        if not current_id or current_id not in existing_ids:
-            history.append(current_record)
-
-    return history
-
-
-def _extract_service_memories(result: Dict[str, Any]) -> List[Any]:
-    simulation_state = _extract_simulation_state(result)
-    memory_state = _safe_dict(simulation_state.get("memory_state"))
-    memories = list(_safe_list(memory_state.get("service_memories")))
-
-    # Fallback: some result envelopes expose the current deterministic memory
-    # entry before the mutated memory_state root is visible in the saved session.
-    service_debug = _extract_service_debug(result)
-    current_entry = _safe_dict(service_debug.get("memory_entry"))
-    if current_entry:
-        current_id = _safe_str(current_entry.get("memory_id"))
-        existing_ids = {
-            _safe_str(_safe_dict(entry).get("memory_id"))
-            for entry in memories
-        }
-        if not current_id or current_id not in existing_ids:
-            memories.append(current_entry)
-
-    return memories
-
-
-def _extract_relationship_state(result: Dict[str, Any]) -> Dict[str, Any]:
-    simulation_state = _extract_simulation_state(result)
-    relationship_state = dict(_safe_dict(simulation_state.get("relationship_state")))
-    service_debug = _extract_service_debug(result)
-    social_effects = _safe_dict(service_debug.get("social_effects"))
-    key = _safe_str(social_effects.get("relationship_key"))
-    relationship = _safe_dict(social_effects.get("relationship"))
-
-    # Prefer the freshly applied deterministic relationship when the persisted
-    # state is stale/empty for this key.
-    if key and relationship:
-        existing = _safe_dict(relationship_state.get(key))
-        existing_axes = _safe_dict(existing.get("axes"))
-        fresh_axes = _safe_dict(relationship.get("axes"))
-        if fresh_axes and not existing_axes:
-            relationship_state[key] = relationship
-
-    return relationship_state
-
-
-def _extract_npc_emotion_state(result: Dict[str, Any]) -> Dict[str, Any]:
-    simulation_state = _extract_simulation_state(result)
-    npc_emotion_state = dict(_safe_dict(simulation_state.get("npc_emotion_state")))
-    service_debug = _extract_service_debug(result)
-    social_effects = _safe_dict(service_debug.get("social_effects"))
-    emotion = _safe_dict(social_effects.get("emotion"))
-    owner_id = _safe_str(emotion.get("owner_id"))
-
-    if owner_id and emotion and owner_id not in npc_emotion_state:
-        npc_emotion_state[owner_id] = emotion
-
-    return npc_emotion_state
-
-
-def _extract_service_offer_state(result: Dict[str, Any]) -> Dict[str, Any]:
-    simulation_state = _extract_simulation_state(result)
-    service_offer_state = dict(_safe_dict(simulation_state.get("service_offer_state")))
-    offers = _safe_dict(service_offer_state.get("offers"))
-    if not offers:
-        offers = {}
-        service_offer_state["offers"] = offers
-
-    service_debug = _extract_service_debug(result)
-    stock_update = _safe_dict(service_debug.get("stock_update"))
-    offer_id = _safe_str(stock_update.get("offer_id"))
-    runtime_state = _safe_dict(stock_update.get("runtime_state"))
-
-    if offer_id and runtime_state and offer_id not in offers:
-        offers[offer_id] = runtime_state
-
-    # Keep output compact: if there are still no offers, return the original
-    # empty state rather than {"offers": {}}.
-    if not offers and not _safe_dict(simulation_state.get("service_offer_state")):
-        return {}
-
-    return service_offer_state
-
-
-def _extract_recalled_service_memories(result: Dict[str, Any]) -> List[Any]:
-    result = _safe_dict(result)
-    result_sub = _safe_dict(result.get("result"))
-    narration_debug = _safe_dict(result_sub.get("narration_debug"))
-    direct = _safe_list(narration_debug.get("recalled_service_memories"))
-    current_memory_id = _safe_str(_safe_dict(_extract_service_debug(result).get("memory_entry")).get("memory_id"))
-    if direct:
-        return [
-            memory
-            for memory in direct
-            if _safe_str(_safe_dict(memory).get("memory_id")) != current_memory_id
-        ]
-
-    turn_contract = _extract_turn_contract(result)
-    resolved = _safe_dict(turn_contract.get("resolved_result") or turn_contract.get("resolved_action"))
-    return [
-        memory
-        for memory in _safe_list(resolved.get("recalled_service_memories"))
-        if _safe_str(_safe_dict(memory).get("memory_id")) != current_memory_id
-    ]
-
-
-def _extract_service_memory_recall_debug(result: Dict[str, Any]) -> Dict[str, Any]:
-    result = _safe_dict(result)
-    result_sub = _safe_dict(result.get("result"))
-    narration_debug = _safe_dict(result_sub.get("narration_debug"))
-    direct = _safe_dict(narration_debug.get("service_memory_recall_debug"))
-    if direct:
-        return direct
-
-    turn_contract = _extract_turn_contract(result)
-    resolved = _safe_dict(turn_contract.get("resolved_result") or turn_contract.get("resolved_action"))
-    return _safe_dict(resolved.get("service_memory_recall_debug"))
-
-
-def _extract_recalled_npc_memories(result: Dict[str, Any]) -> List[Any]:
-    result = _safe_dict(result)
-    result_sub = _safe_dict(result.get("result"))
-    narration_debug = _safe_dict(result_sub.get("narration_debug"))
-    direct = _safe_list(narration_debug.get("recalled_npc_memories"))
-    turn_contract = _extract_turn_contract(result)
-    resolved = _safe_dict(turn_contract.get("resolved_result") or turn_contract.get("resolved_action"))
-    current_memory_id = _safe_str(
-        _safe_dict(
-            resolved.get("memory_entry")
-            or _safe_dict(resolved.get("social_living_world_effects")).get("memory_entry")
-            or _safe_dict(_safe_dict(resolved.get("service_application")).get("memory_entry"))
-        ).get("memory_id")
-    )
-
-    memories = direct or _safe_list(resolved.get("recalled_npc_memories"))
-    if not current_memory_id:
-        return memories
-    return [
-        memory
-        for memory in memories
-        if _safe_str(_safe_dict(memory).get("memory_id")) != current_memory_id
-    ]
-
-
-def _extract_npc_memory_recall_debug(result: Dict[str, Any]) -> Dict[str, Any]:
-    result = _safe_dict(result)
-    result_sub = _safe_dict(result.get("result"))
-    narration_debug = _safe_dict(result_sub.get("narration_debug"))
-    direct = _safe_dict(narration_debug.get("npc_memory_recall_debug"))
-    if direct:
-        return direct
-
-    turn_contract = _extract_turn_contract(result)
-    resolved = _safe_dict(turn_contract.get("resolved_result") or turn_contract.get("resolved_action"))
-    return _safe_dict(resolved.get("npc_memory_recall_debug"))
-
-
-def _extract_social_living_world_effects(result: Dict[str, Any]) -> Dict[str, Any]:
-    result_sub = _safe_dict(_safe_dict(result).get("result"))
-    direct = _safe_dict(result_sub.get("social_living_world_effects"))
-    if direct:
-        return direct
-
-    turn_contract = _extract_turn_contract(result)
-    resolved = _safe_dict(turn_contract.get("resolved_result") or turn_contract.get("resolved_action"))
-    return _safe_dict(resolved.get("social_living_world_effects"))
-
-
-def _extract_living_world_debug(result: Dict[str, Any]) -> Dict[str, Any]:
-    service_debug = _extract_service_debug(result)
-    resolved = _safe_dict(service_debug.get("resolved_result"))
-    direct = _safe_dict(resolved.get("living_world_debug"))
-    if direct:
-        return direct
-    return {
-        "memory_entry": service_debug.get("memory_entry"),
-        "social_effects": service_debug.get("social_effects"),
-        "stock_update": service_debug.get("stock_update"),
-        "rumor_added": service_debug.get("rumor_added"),
-        "journal_entry": service_debug.get("journal_entry"),
-        "service_world_event": service_debug.get("service_world_event"),
-        "rumor_world_event": service_debug.get("rumor_world_event"),
-    }
-
-
-def _extract_journal_state(result: Dict[str, Any]) -> Dict[str, Any]:
-    result_sub = _safe_dict(_safe_dict(result).get("result"))
-    direct = _safe_dict(result_sub.get("journal_state"))
-    if direct:
-        return direct
-    simulation_state = _extract_simulation_state(result)
-    return _safe_dict(simulation_state.get("journal_state"))
-
-
-def _extract_world_event_state(result: Dict[str, Any]) -> Dict[str, Any]:
-    result_sub = _safe_dict(_safe_dict(result).get("result"))
-    direct = _safe_dict(result_sub.get("world_event_state"))
-    if direct:
-        return direct
-    simulation_state = _extract_simulation_state(result)
-    return _safe_dict(simulation_state.get("world_event_state"))
-
-
-def _extract_world_event_result(result: Dict[str, Any]) -> Dict[str, Any]:
-    return _first_dict(
-        result.get("world_event_result"),
-        _safe_dict(result.get("resolved_result")).get("world_event_result"),
-        _safe_dict(result.get("result")).get("world_event_result"),
-        _extract_nested_dict_by_key(result, "world_event_result"),
-    )
-
-
-def _world_event_kind(result: Dict[str, Any], kind: str) -> bool:
-    world_event_result = _extract_world_event_result(result)
-    events = _safe_list(world_event_result.get("events"))
-    return any(_safe_str(_safe_dict(event).get("kind")) == kind for event in events)
-
-
-def _extract_location_state(result: Dict[str, Any]) -> Dict[str, Any]:
-    result_sub = _safe_dict(_safe_dict(result).get("result"))
-    direct = _safe_dict(result_sub.get("location_state"))
-    if direct:
-        return direct
-    simulation_state = _extract_simulation_state(result)
-    return _safe_dict(simulation_state.get("location_state"))
-
-
-def _extract_current_location_id(result: Dict[str, Any]) -> str:
-    result_sub = _safe_dict(_safe_dict(result).get("result"))
-    if _safe_str(result_sub.get("current_location_id")):
-        return _safe_str(result_sub.get("current_location_id"))
-
-    location_state = _extract_location_state(result)
-    if _safe_str(location_state.get("current_location_id")):
-        return _safe_str(location_state.get("current_location_id"))
-
-    service_result = _safe_dict(_extract_service_debug(result).get("service_result"))
-    if _safe_str(service_result.get("current_location_id")):
-        return _safe_str(service_result.get("current_location_id"))
-
-    travel_result = _extract_travel_result(result)
-    if _safe_str(travel_result.get("to_location_id")):
-        return _safe_str(travel_result.get("to_location_id"))
-    if _safe_str(travel_result.get("from_location_id")):
-        return _safe_str(travel_result.get("from_location_id"))
-
-    simulation_state = _extract_simulation_state(result)
-    player_state = _safe_dict(simulation_state.get("player_state"))
-    return (
-        _safe_str(player_state.get("location_id"))
-        or _safe_str(simulation_state.get("location_id"))
-        or _safe_str(simulation_state.get("current_location_id"))
-    )
-
-
-def _extract_travel_result(result: Dict[str, Any]) -> Dict[str, Any]:
-    result_sub = _safe_dict(_safe_dict(result).get("result"))
-    direct = _safe_dict(result_sub.get("travel_result"))
-    if direct:
-        return direct
-    turn_contract = _extract_turn_contract(result)
-    resolved = _safe_dict(turn_contract.get("resolved_result") or turn_contract.get("resolved_action"))
-    return _safe_dict(resolved.get("travel_result"))
-
-def _extract_conversation_result(result: Dict[str, Any]) -> Dict[str, Any]:
-    result = _safe_dict(result)
-    result_sub = _safe_dict(result.get("result"))
-    nested_result = _safe_dict(result_sub.get("result"))
-    turn_contract = _extract_turn_contract(result)
-    resolved = _safe_dict(
-        turn_contract.get("resolved_result")
-        or turn_contract.get("resolved_action")
-    )
-    narration_debug = _safe_dict(
-        result.get("narration_debug")
-        or result_sub.get("narration_debug")
-        or nested_result.get("narration_debug")
-        or resolved.get("narration_debug")
-    )
-
-    candidates = [
-        result.get("conversation_result"),
-        result_sub.get("conversation_result"),
-        nested_result.get("conversation_result"),
-        turn_contract.get("conversation_result"),
-        resolved.get("conversation_result"),
-        narration_debug.get("conversation_result"),
-    ]
-
-    for candidate in candidates:
-        candidate = _safe_dict(candidate)
-        if candidate:
-            return candidate
-
-    return {}
-
-
-def _has_real_conversation_activity(result: Dict[str, Any]) -> bool:
-    result = _safe_dict(result)
-    nested = _safe_dict(result.get("result"))
-    turn_contract = _safe_dict(result.get("turn_contract"))
-    resolved_result = _safe_dict(turn_contract.get("resolved_result"))
-
-    conversation = _first_dict(
-        result.get("conversation_result"),
-        nested.get("conversation_result"),
-        turn_contract.get("conversation_result"),
-        resolved_result.get("conversation_result"),
-    )
-
-    if not conversation:
-        return False
-
-    real_markers = [
-        conversation.get("npc_response_beat"),
-        conversation.get("beat"),
-        conversation.get("thread"),
-        conversation.get("topic_pivot"),
-        conversation.get("player_invited_conversation_result"),
-        conversation.get("autonomous_conversation_result"),
-    ]
-
-    for marker in real_markers:
-        marker = _safe_dict(marker)
-        if marker:
-            return True
-
-    # A reason-only scaffold or companion context projection is not a real
-    # conversation trigger.
-    return False
-
-
-def _extract_ambient_tick_result(result: Dict[str, Any]) -> Dict[str, Any]:
-    result_sub = _safe_dict(_safe_dict(result).get("result"))
-    direct = _safe_dict(result_sub.get("ambient_tick_result"))
-    if direct:
-        return direct
-
-    narration_debug = _safe_dict(result_sub.get("narration_debug"))
-    direct = _safe_dict(narration_debug.get("ambient_tick_result"))
-    if direct:
-        return direct
-
-    turn_contract = _extract_turn_contract(result)
-    resolved = _safe_dict(turn_contract.get("resolved_result") or turn_contract.get("resolved_action"))
-    direct = _safe_dict(resolved.get("ambient_tick_result"))
-    if direct:
-        return direct
-
-    simulation_state = _extract_simulation_state(result)
-    return _safe_dict(simulation_state.get("ambient_tick_result"))
-
-
-def _extract_conversation_thread_state(result: Dict[str, Any]) -> Dict[str, Any]:
-    result_sub = _safe_dict(_safe_dict(result).get("result"))
-    direct = _safe_dict(result_sub.get("conversation_thread_state"))
-    if direct:
-        return direct
-    narration_debug = _safe_dict(result_sub.get("narration_debug"))
-    direct = _safe_dict(narration_debug.get("conversation_thread_state"))
-    if direct:
-        return direct
-    simulation_state = _extract_simulation_state(result)
-    return _safe_dict(simulation_state.get("conversation_thread_state"))
-
-
-def _thread_participant_pair_key(thread: Dict[str, Any]) -> str:
-    participants = []
-    for participant in _safe_list(_safe_dict(thread).get("participants")):
-        participant = _safe_dict(participant)
-        npc_id = _safe_str(participant.get("npc_id") or participant.get("id"))
-        if npc_id.startswith("npc:"):
-            participants.append(npc_id)
-    if len(participants) < 2:
-        return ""
-    return "::".join(sorted(set(participants))[:2])
-
-
-def _count_beats_for_unordered_npc_pair(conversation_state: Dict[str, Any], pair_key: str) -> int:
-    total = 0
-    for thread in _safe_list(_safe_dict(conversation_state).get("threads")):
-        thread = _safe_dict(thread)
-        if _thread_participant_pair_key(thread) == pair_key:
-            total += len(_safe_list(thread.get("beats")))
-    return total
-
-
-def _latest_conversation_thread(conversation_state: Dict[str, Any]) -> Dict[str, Any]:
-    threads = _safe_list(_safe_dict(conversation_state).get("threads"))
-    if not threads:
-        return {}
-    # Return the thread with the most recent updated_tick
-    return max(threads, key=lambda t: _safe_int(_safe_dict(t).get("updated_tick"), 0))
-
-
-def _extract_conversation_rumor_state(result: Dict[str, Any]) -> Dict[str, Any]:
-    resolved = _safe_dict(_safe_dict(_safe_dict(result).get("result")).get("resolved_result"))
-    direct = _safe_dict(resolved.get("conversation_rumor_state"))
-    if direct:
-        return direct
-    simulation_state = _extract_simulation_state(result)
-    return _safe_dict(simulation_state.get("conversation_rumor_state"))
-
-
-def _extract_npc_goal_state(result: Dict[str, Any]) -> Dict[str, Any]:
-    conversation = _extract_conversation_result(result)
-    if _safe_dict(conversation.get("npc_goal_state")):
-        return _safe_dict(conversation.get("npc_goal_state"))
-    simulation_state = _extract_simulation_state(result)
-    return _safe_dict(simulation_state.get("npc_goal_state"))
-
-
-def _extract_scene_activity_state(result: Dict[str, Any]) -> Dict[str, Any]:
-    ambient = _extract_ambient_tick_result(result)
-    scene = _safe_dict(ambient.get("scene_activity_result"))
-    if _safe_dict(scene.get("scene_activity_state")):
-        return _safe_dict(scene.get("scene_activity_state"))
-    simulation_state = _extract_simulation_state(result)
-    return _safe_dict(simulation_state.get("scene_activity_state"))
-
-
-def _effective_service_status(
-    service_result: Dict[str, Any],
-    service_application: Dict[str, Any],
-) -> str:
-    purchase = _safe_dict(service_result.get("purchase"))
-    if bool(service_application.get("applied") or purchase.get("applied")):
-        return "purchased"
-    return _safe_str(service_result.get("status"))
-
-
-def _compact_turn_summary(
-    *,
-    index: int,
-    player_input: str,
-    result: Dict[str, Any],
-    before_currency: Dict[str, Any] | None = None,
-    before_items: List[Any] | None = None,
+def _manual_apply_interaction_seed_fields(
+    session: Dict[str, Any],
+    setup_interaction_state: Dict[str, Any],
 ) -> Dict[str, Any]:
-    service_debug = _extract_service_debug(result)
-    service_result = _safe_dict(service_debug.get("service_result"))
-    purchase = _safe_dict(service_debug.get("purchase"))
-    service_application = _safe_dict(service_debug.get("service_application"))
-    turn_contract = _extract_turn_contract(result)
-    resolved = _safe_dict(turn_contract.get("resolved_result") or turn_contract.get("resolved_action"))
-    semantic_action = _safe_dict(
-        resolved.get("semantic_action")
-        or turn_contract.get("semantic_action")
-        or _safe_dict(_safe_dict(turn_contract.get("action")).get("metadata")).get("semantic_action")
-    )
+    session = dict(_safe_dict(session))
+    setup_interaction_state = _safe_dict(setup_interaction_state)
 
-    narration = _extract_narration(result)
-    narration = _patch_visible_interaction_reason_in_text(narration, result)
+    simulation_state = dict(_safe_dict(session.get("simulation_state")))
+    runtime_state = dict(_safe_dict(session.get("runtime_state")))
 
-    return {
-        "turn": index,
-        "player_input": player_input,
-        "contract_version": turn_contract.get("version"),
-        "contract_source": turn_contract.get("contract_source"),
-        "action_type": _safe_str(
-            _safe_dict(_extract_turn_contract(result).get("resolved_result")).get("action_type")
-            or _safe_dict(_extract_turn_contract(result).get("resolved_action")).get("action_type")
-            or _safe_dict(_safe_dict(result).get("result")).get("action_type")
-        ),
-        "semantic_action_type": _safe_str(
-            _safe_dict(_extract_turn_contract(result).get("resolved_result")).get("semantic_action_type")
-            or _safe_dict(_extract_turn_contract(result).get("resolved_action")).get("semantic_action_type")
-            or _safe_dict(_safe_dict(result).get("result")).get("semantic_action_type")
-        ),
-        "semantic_family": _safe_str(
-            _safe_dict(_extract_turn_contract(result).get("resolved_result")).get("semantic_family")
-            or _safe_dict(_extract_turn_contract(result).get("resolved_action")).get("semantic_family")
-            or _safe_dict(_safe_dict(result).get("result")).get("semantic_family")
-        ),
-        "activity_label": semantic_action.get("activity_label"),
-        "service_kind": service_result.get("service_kind"),
-        "service_status": _effective_service_status(service_result, service_application),
-        "selected_offer_id": service_result.get("selected_offer_id"),
-        "purchase_blocked": purchase.get("blocked"),
-        "purchase_applied": bool(
-            purchase.get("applied")
-            or service_application.get("applied")
-        ),
-        "blocked_reason": purchase.get("blocked_reason"),
-        "currency_before": before_currency or {},
-        "currency_after": _effective_player_currency_after(result),
-        "items_before_count": len(before_items or []),
-        "items_after": _extract_player_items(result),
-        "active_services": _extract_active_services(result),
-        "memory_rumors": _extract_memory_rumors(result),
-        "transaction_record": service_debug.get("transaction_record"),
-        "transaction_history_count": len(_extract_transaction_history(result)),
-        "memory_entry": service_debug.get("memory_entry"),
-        "service_memory_count": len(_extract_service_memories(result)),
-        "recalled_service_memories": _extract_recalled_service_memories(result),
-        "recalled_service_memory_count": len(_extract_recalled_service_memories(result)),
-        "service_memory_recall_debug": _extract_service_memory_recall_debug(result),
-        "recalled_npc_memories": _extract_recalled_npc_memories(result),
-        "recalled_npc_memory_count": len(_extract_recalled_npc_memories(result)),
-        "npc_memory_recall_debug": _extract_npc_memory_recall_debug(result),
-        "relationship_state": _extract_relationship_state(result),
-        "npc_emotion_state": _extract_npc_emotion_state(result),
-        "social_effects": service_debug.get("social_effects"),
-        "social_living_world_effects": _extract_social_living_world_effects(result),
-        "stock_update": service_debug.get("stock_update"),
-        "service_offer_state": _extract_service_offer_state(result),
-        "living_world_debug": _extract_living_world_debug(result),
-        "journal_state": _extract_journal_state(result),
-        "journal_entry_count": len(_safe_list(_extract_journal_state(result).get("entries"))),
-        "world_event_state": _extract_world_event_state(result),
-        "world_event_count": len(_safe_list(_extract_world_event_state(result).get("events"))),
-        "current_location_id": _extract_current_location_id(result),
-        "location_state": _extract_location_state(result),
-        "travel_result": _extract_travel_result(result),
-        "conversation_result": _extract_conversation_result(result),
-        "ambient_tick_result": _extract_ambient_tick_result(result),
-        "conversation_thread_state": _extract_conversation_thread_state(result),
-        "conversation_thread_count": len(_safe_list(_extract_conversation_thread_state(result).get("threads"))),
-        "conversation_world_signal_count": len(_safe_list(_extract_conversation_thread_state(result).get("world_signals"))),
-        "ambient_tick_applied": bool(_extract_ambient_tick_result(result).get("applied")),
-        "ambient_tick_status": _safe_str(_extract_ambient_tick_result(result).get("status")),
-        "pending_player_response": _safe_dict(
-            _extract_conversation_thread_state(result).get("pending_player_response")
-        ),
-        "regression_warnings": _manual_regression_warnings(
-            turn_index=index,
-            player_input=player_input,
-            result=result,
-        ),
-        "token_usage": _extract_token_usage_from_result(result, player_input=player_input),
-        "available_actions": service_debug.get("available_actions"),
-        "narration_preview": narration[:500] if narration else "",
-        "ok": not bool(_safe_dict(result).get("error")),
-        "error": _safe_dict(result).get("error"),
-    }
-
-
-def _emit_summary_block(title: str, rows: List[Dict[str, Any]], channel: str) -> None:
-    _emit(title, channel=channel)
-    _emit("=" * len(title), channel=channel)
-    _emit("", channel=channel)
-    _emit(_compact_json(rows), channel=channel)
-    _emit("", channel=channel)
-
-
-def _scenario_contamination_warnings(
-    *,
-    scenario_name: str,
-    turn_index: int,
-    before_currency: Dict[str, Any] | None,
-    before_items: List[Any] | None,
-    result: Dict[str, Any],
-    pre_turn_snapshot: Dict[str, int] | None = None,
-    allows_seeded_world_events: bool = False,
-    allows_seeded_journal_entries: bool = False,
-    allows_seeded_quest_state: bool = False,
-) -> List[str]:
-    warnings: List[str] = []
-    if turn_index == 1:
-        active_services = _extract_active_services(result)
-        transaction_history = _extract_transaction_history(result)
-        if transaction_history:
-            warnings.append("scenario_started_with_transaction_history")
-        if active_services:
-            warnings.append("scenario_started_with_active_services")
-        if (
-            int(pre_turn_snapshot.get("journal_entry_count") or 0) > 0
-            and not allows_seeded_journal_entries
-        ):
-            warnings.append("scenario_started_with_journal_entries")
-        if (
-            int(pre_turn_snapshot.get("world_event_count") or 0) > 0
-            and not allows_seeded_world_events
-        ):
-            warnings.append("scenario_started_with_world_events")
-
-        if (
-            int(pre_turn_snapshot.get("quest_count") or 0) > 0
-            and not allows_seeded_quest_state
-        ):
-            warnings.append("scenario_started_with_quest_state")
-
-    if scenario_name == "shop_success" and turn_index == 1:
-        item_ids = {
-            _safe_str(_safe_dict(item).get("item_id"))
-            for item in (before_items or [])
-        }
-        if "torch" in item_ids:
-            warnings.append("shop_success_started_with_torch")
-
-    return warnings
-
-
-def _player_facing_text_for_regression_scan(result: Dict[str, Any]) -> str:
-    text = _extract_narration(result)
-    result_sub = _safe_dict(_safe_dict(result).get("result"))
-    if not text:
-        text = _safe_str(result_sub.get("narration"))
-    return text or ""
-
-
-def _current_memory_ids(result: Dict[str, Any]) -> set[str]:
-    service_debug = _extract_service_debug(result)
-    ids: set[str] = set()
-
-    for candidate in (
-        service_debug.get("memory_entry"),
-        _safe_dict(_extract_social_living_world_effects(result)).get("memory_entry"),
-    ):
-        memory_id = _safe_str(_safe_dict(candidate).get("memory_id"))
-        if memory_id:
-            ids.add(memory_id)
-
-    turn_contract = _extract_turn_contract(result)
-    resolved = _safe_dict(turn_contract.get("resolved_result") or turn_contract.get("resolved_action"))
-    for candidate in (
-        resolved.get("memory_entry"),
-        _safe_dict(resolved.get("service_application")).get("memory_entry"),
-        _safe_dict(resolved.get("social_living_world_effects")).get("memory_entry"),
-    ):
-        memory_id = _safe_str(_safe_dict(candidate).get("memory_id"))
-        if memory_id:
-            ids.add(memory_id)
-
-    return ids
-
-
-def _companion_memory_summary_for(simulation_state: Dict[str, Any], npc_id: str) -> Dict[str, Any]:
-    state = _safe_dict(simulation_state.get("companion_memory_state"))
-    return {
-        "memories": _safe_list(_safe_dict(_safe_dict(state.get("by_npc")).get(npc_id)).get("memories")),
-        "relationship": _safe_dict(_safe_dict(state.get("relationship_by_npc")).get(npc_id)),
-    }
-
-
-def _extract_interaction_result(result: Dict[str, Any]) -> Dict[str, Any]:
-    result = _safe_dict(result)
-    result_sub = _safe_dict(result.get("result"))
-    nested_result = _safe_dict(result_sub.get("result"))
-    turn_contract = _extract_turn_contract(result)
-    resolved = _safe_dict(
-        turn_contract.get("resolved_result")
-        or turn_contract.get("resolved_action")
-    )
-
-    candidates = [
-        result.get("interaction_result"),
-        result_sub.get("interaction_result"),
-        nested_result.get("interaction_result"),
-        turn_contract.get("interaction_result"),
-        resolved.get("interaction_result"),
+    passthrough_keys = [
+        "world_objects",
+        "player_inventory",
+        "inventory_state",
+        "interaction_state",
     ]
 
-    for candidate in candidates:
-        candidate = _safe_dict(candidate)
-        if candidate:
-            return candidate
-
-    return {}
-
-
-def _extract_combat_result(result: Dict[str, Any]) -> Dict[str, Any]:
-    result = _safe_dict(result)
-    nested = _safe_dict(result.get("result"))
-    interaction = _extract_interaction_result(result)
-    return _first_dict(
-        interaction.get("combat_result"),
-        result.get("combat_result"),
-        nested.get("combat_result"),
-    )
-
-
-def _extract_enemy_combat_result(result: Dict[str, Any]) -> Dict[str, Any]:
-    result = _safe_dict(result)
-    nested = _safe_dict(result.get("result"))
-    interaction = _extract_interaction_result(result)
-    companion = _extract_companion_combat_result(result)
-    return _first_dict(
-        interaction.get("enemy_combat_result"),
-        result.get("enemy_combat_result"),
-        nested.get("enemy_combat_result"),
-        companion.get("enemy_combat_result"),
-    )
-
-
-def _extract_enemy_intent_result(turn_summary: Dict[str, Any]) -> Dict[str, Any]:
-    return _first_dict(
-        turn_summary.get("enemy_intent_result"),
-        _safe_dict(turn_summary.get("resolved_result")).get("enemy_intent_result"),
-        _safe_dict(turn_summary.get("npc_combat_result")).get("enemy_intent_result"),
-        _safe_dict(turn_summary.get("enemy_combat_result")).get("enemy_intent_result"),
-        _extract_nested_dict_by_key(turn_summary, "enemy_intent_result"),
-    )
-
-
-def _extract_target_selection_result(turn_summary: Dict[str, Any]) -> Dict[str, Any]:
-    return _first_dict(
-        turn_summary.get("target_selection_result"),
-        _safe_dict(turn_summary.get("resolved_result")).get("target_selection_result"),
-        _safe_dict(turn_summary.get("npc_combat_result")).get("target_selection_result"),
-        _safe_dict(turn_summary.get("enemy_combat_result")).get("target_selection_result"),
-        _extract_nested_dict_by_key(turn_summary, "target_selection_result"),
-    )
-
-
-def _extract_morale_result(turn_summary: Dict[str, Any]) -> Dict[str, Any]:
-    return _first_dict(
-        turn_summary.get("morale_result"),
-        _safe_dict(turn_summary.get("resolved_result")).get("morale_result"),
-        _safe_dict(turn_summary.get("npc_combat_result")).get("morale_result"),
-        _safe_dict(turn_summary.get("enemy_combat_result")).get("morale_result"),
-        _extract_nested_dict_by_key(turn_summary, "morale_result"),
-    )
-
-
-def _enemy_intent_is(turn_summary: Dict[str, Any], intent: str) -> bool:
-    result = _extract_enemy_intent_result(turn_summary)
-    return _safe_str(result.get("intent")).strip() == intent
-
-
-def _enemy_target_is(turn_summary: Dict[str, Any], target_actor_id: str) -> bool:
-    result = _extract_target_selection_result(turn_summary)
-    return _safe_str(result.get("target_actor_id")).strip() == target_actor_id
-
-
-def _enemy_avoided_target(turn_summary: Dict[str, Any], target_actor_id: str) -> bool:
-    result = _extract_target_selection_result(turn_summary)
-    for row in _safe_list(result.get("avoided")):
-        if _safe_str(_safe_dict(row).get("actor_id")).strip() == target_actor_id:
-            return True
-    return False
-
-
-def _combat_resolved_victory_after_enemy_flee(turn_summary: Dict[str, Any]) -> bool:
-    combat_state = _extract_turn_combat_state(turn_summary)
-    if _safe_str(combat_state.get("exit_reason")).strip() == "victory" and combat_state.get("active") is False:
-        return True
-    morale = _extract_morale_result(turn_summary)
-    intent = _extract_enemy_intent_result(turn_summary)
-    return (
-        _safe_str(morale.get("intent")).strip() == "flee"
-        and _safe_str(intent.get("intent")).strip() == "flee"
-        and combat_state.get("active") is False
-    )
-
-
-def _extract_combat_state(result: Dict[str, Any]) -> Dict[str, Any]:
-    result = _safe_dict(result)
-    nested = _safe_dict(result.get("result"))
-    sim = _extract_simulation_state(result)
-
-    contract = _extract_combat_narration_contract(result)
-    raw_combat = _safe_dict(contract.get("raw_combat_result"))
-
-    return _first_dict(
-        result.get("combat_state"),
-        nested.get("combat_state"),
-        sim.get("combat_state"),
-        raw_combat.get("combat_state"),
-    )
-
-
-def _extract_companion_combat_result(result: Dict[str, Any]) -> Dict[str, Any]:
-    result = _safe_dict(result)
-    nested = _safe_dict(result.get("result"))
-    interaction = _extract_interaction_result(result)
-    return _first_dict(
-        interaction.get("companion_combat_result"),
-        result.get("companion_combat_result"),
-        nested.get("companion_combat_result"),
-    )
-
-
-def _extract_companion_intent_result(result: Dict[str, Any]) -> Dict[str, Any]:
-    return _first_dict(
-        result.get("companion_intent_result"),
-        _safe_dict(result.get("resolved_result")).get("companion_intent_result"),
-        _safe_dict(result.get("companion_result")).get("companion_intent_result"),
-        _extract_nested_dict_by_key(result, "companion_intent_result"),
-    )
-
-
-def _extract_position_result(result: Dict[str, Any]) -> Dict[str, Any]:
-    return _first_dict(
-        result.get("position_result"),
-        _safe_dict(result.get("resolved_result")).get("position_result"),
-        _safe_dict(result.get("companion_result")).get("position_result"),
-        _extract_nested_dict_by_key(result, "position_result"),
-    )
-
-
-def _extract_companion_command_result(result: Dict[str, Any]) -> Dict[str, Any]:
-    return _first_dict(
-        result.get("companion_command_result"),
-        _safe_dict(result.get("resolved_result")).get("companion_command_result"),
-        _safe_dict(result.get("companion_result")).get("companion_command_result"),
-        _extract_nested_dict_by_key(result, "companion_command_result"),
-    )
-
-
-def _extract_combat_narration_contract(result: Dict[str, Any]) -> Dict[str, Any]:
-    result = _safe_dict(result)
-    nested = _safe_dict(result.get("result"))
-    turn_contract = _extract_turn_contract(result)
-    resolved = _safe_dict(
-        turn_contract.get("resolved_result")
-        or turn_contract.get("resolved_action")
-    )
-
-    return _first_dict(
-        result.get("combat_narration_contract"),
-        nested.get("combat_narration_contract"),
-        resolved.get("combat_narration_contract"),
-        turn_contract.get("combat_narration_contract"),
-    )
-
-
-def _extract_combat_narration_validation(result: Dict[str, Any]) -> Dict[str, Any]:
-    result = _safe_dict(result)
-    nested = _safe_dict(result.get("result"))
-    turn_contract = _extract_turn_contract(result)
-    resolved = _safe_dict(
-        turn_contract.get("resolved_result")
-        or turn_contract.get("resolved_action")
-    )
-
-    return _first_dict(
-        result.get("combat_narration_validation"),
-        nested.get("combat_narration_validation"),
-        resolved.get("combat_narration_validation"),
-        turn_contract.get("combat_narration_validation"),
-    )
-
-
-def _llm_was_called_for_combat(result: Dict[str, Any]) -> bool:
-    result = _safe_dict(result)
-    nested = _safe_dict(result.get("result"))
-    turn_contract = _extract_turn_contract(result)
-    resolved = _safe_dict(
-        turn_contract.get("resolved_result")
-        or turn_contract.get("resolved_action")
-    )
-
-    for candidate in (result, nested, resolved, turn_contract):
-        candidate = _safe_dict(candidate)
-        if candidate.get("llm_called") is True:
-            purpose = _safe_str(candidate.get("llm_purpose"))
-            if purpose in {"", "combat_narration"}:
-                return True
-
-    debug = _safe_dict(result.get("narration_debug") or nested.get("narration_debug"))
-    return debug.get("llm_called") is True
-
-
-def _extract_semantic_action_v2(result: Dict[str, Any]) -> Dict[str, Any]:
-    result = _safe_dict(result)
-    result_sub = _safe_dict(result.get("result"))
-    nested_result = _safe_dict(result_sub.get("result"))
-    turn_contract = _extract_turn_contract(result)
-    resolved = _safe_dict(
-        turn_contract.get("resolved_result")
-        or turn_contract.get("resolved_action")
-    )
-
-    candidates = [
-        result.get("semantic_action_v2"),
-        result_sub.get("semantic_action_v2"),
-        nested_result.get("semantic_action_v2"),
-        turn_contract.get("semantic_action_v2"),
-        resolved.get("semantic_action_v2"),
-    ]
-
-    for candidate in candidates:
-        candidate = _safe_dict(candidate)
-        if candidate:
-            return candidate
-
-    return {}
-
-
-def _player_inventory_items(simulation_state: Dict[str, Any]) -> List[Dict[str, Any]]:
-    return _safe_list(
-        _safe_dict(
-            _safe_dict(simulation_state.get("player_state")).get("inventory")
-        ).get("items")
-    )
-
-
-def _player_hp(simulation_state: Dict[str, Any]) -> int:
-    return int(_safe_dict(simulation_state.get("player_state")).get("hp") or 0)
-
-
-def _player_max_hp(simulation_state: Dict[str, Any]) -> int:
-    return int(_safe_dict(simulation_state.get("player_state")).get("max_hp") or 0)
-
-
-def _player_inventory_item_by_id(simulation_state: Dict[str, Any], item_id: str) -> Dict[str, Any]:
-    for item in _player_inventory_items(simulation_state):
-        item = _safe_dict(item)
-        if _safe_str(item.get("item_id")) == item_id:
-            return item
-    return {}
-
-
-def _inventory_item_by_definition(simulation_state: Dict[str, Any], definition_id: str) -> Dict[str, Any]:
-    for item in _player_inventory_items(simulation_state):
-        item = _safe_dict(item)
-        if _safe_str(item.get("definition_id")) == definition_id:
-            return item
-    return {}
-
-
-def _player_inventory_item_by_definition(simulation_state: Dict[str, Any], definition_id: str) -> Dict[str, Any]:
-    return _inventory_item_by_definition(simulation_state, definition_id)
-
-
-def _companion_by_id(simulation_state: Dict[str, Any], npc_id: str) -> Dict[str, Any]:
-    party_state = _safe_dict(_safe_dict(simulation_state.get("player_state")).get("party_state"))
-    for companion in _safe_list(party_state.get("companions")):
-        companion = _safe_dict(companion)
-        if _safe_str(companion.get("npc_id")) == npc_id:
-            return companion
-    return {}
-
-
-def _companion_equipment(simulation_state: Dict[str, Any], npc_id: str) -> Dict[str, Any]:
-    companion = _companion_by_id(simulation_state, npc_id)
-    return _safe_dict(_safe_dict(companion.get("inventory")).get("equipment"))
-
-
-def _companion_inventory_item_by_definition(
-    simulation_state: Dict[str, Any],
-    npc_id: str,
-    definition_id: str,
+    for key in passthrough_keys:
+        value = setup_interaction_state.get(key)
+        if value is not None:
+            simulation_state[key] = value
+            runtime_state[key] = value
+
+    interaction_state = dict(_safe_dict(simulation_state.get("interaction_state")))
+    if setup_interaction_state.get("world_objects") is not None:
+        interaction_state["world_objects"] = setup_interaction_state.get("world_objects")
+    if interaction_state:
+        simulation_state["interaction_state"] = interaction_state
+
+    session["simulation_state"] = simulation_state
+    session["runtime_state"] = runtime_state
+
+    setup_payload = dict(_safe_dict(session.get("setup_payload")))
+    metadata = dict(_safe_dict(setup_payload.get("metadata")))
+    metadata["simulation_state"] = simulation_state
+    metadata["runtime_state"] = runtime_state
+    setup_payload["metadata"] = metadata
+    session["setup_payload"] = setup_payload
+
+    return session
+
+
+def _manual_apply_social_seed_fields(
+    session: Dict[str, Any],
+    setup_interaction_state: Dict[str, Any],
 ) -> Dict[str, Any]:
-    companion = _companion_by_id(simulation_state, npc_id)
-    items = _safe_list(_safe_dict(companion.get("inventory")).get("items"))
-    for item in items:
-        item = _safe_dict(item)
-        if _safe_str(item.get("definition_id")) == definition_id:
-            return item
-    return {}
+    """Carry N1-N3 social/backbone seed fields into all state shapes used by runtime."""
+    session = dict(_safe_dict(session))
+    setup_interaction_state = _safe_dict(setup_interaction_state)
 
+    simulation_state = dict(_safe_dict(session.get("simulation_state")))
+    runtime_state = dict(_safe_dict(session.get("runtime_state")))
 
-def _player_currency(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
-    return _safe_dict(_safe_dict(simulation_state.get("player_state")).get("currency"))
-
-
-def _merchant_state(simulation_state: Dict[str, Any], merchant_id: str) -> Dict[str, Any]:
-    return _safe_dict(
-        _safe_dict(
-            _safe_dict(simulation_state.get("merchant_state")).get("merchants")
-        ).get(merchant_id)
-    )
-
-
-def _merchant_items(simulation_state: Dict[str, Any], merchant_id: str) -> List[Dict[str, Any]]:
-    return _safe_list(_safe_dict(_merchant_state(simulation_state, merchant_id).get("inventory")).get("items"))
-
-
-def _merchant_item_by_definition(simulation_state: Dict[str, Any], merchant_id: str, definition_id: str) -> Dict[str, Any]:
-    for item in _merchant_items(simulation_state, merchant_id):
-        item = _safe_dict(item)
-        if _safe_str(item.get("definition_id")) == definition_id:
-            return item
-    return {}
-
-
-def _player_inventory_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
-    return _safe_dict(_safe_dict(simulation_state.get("player_state")).get("inventory"))
-
-
-def _player_equipment(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
-    return _safe_dict(
-        _safe_dict(
-            _safe_dict(simulation_state.get("player_state")).get("inventory")
-        ).get("equipment")
-    )
-
-
-def _scene_item_ids(simulation_state: Dict[str, Any]) -> List[str]:
-    return [
-        _safe_str(_safe_dict(item).get("item_id"))
-        for item in _safe_list(simulation_state.get("scene_items"))
-        if _safe_str(_safe_dict(item).get("item_id"))
+    passthrough_keys = [
+        "relationships",
+        "relationship_state",
+        "social_state",
+        "service_state",
+        "npc_memories",
+        "memory_state",
     ]
 
+    for key in passthrough_keys:
+        value = setup_interaction_state.get(key)
+        if value is not None:
+            simulation_state[key] = value
+            runtime_state[key] = value
 
-def _companion_inventory_items(simulation_state: Dict[str, Any], npc_id: str) -> List[Dict[str, Any]]:
-    party_state = _safe_dict(_safe_dict(simulation_state.get("player_state")).get("party_state"))
-    for companion in _safe_list(party_state.get("companions")):
-        companion = _safe_dict(companion)
-        if _safe_str(companion.get("npc_id")) == npc_id:
-            return _safe_list(_safe_dict(companion.get("inventory")).get("items"))
-    return []
+    interaction_state = dict(_safe_dict(simulation_state.get("interaction_state")))
+    for key in passthrough_keys:
+        value = setup_interaction_state.get(key)
+        if value is not None:
+            interaction_state[key] = value
+    if interaction_state:
+        simulation_state["interaction_state"] = interaction_state
 
+    session["simulation_state"] = simulation_state
+    session["runtime_state"] = runtime_state
 
-def _item_ids(items: List[Dict[str, Any]]) -> List[str]:
-    return [
-        _safe_str(_safe_dict(item).get("item_id"))
-        for item in _safe_list(items)
-        if _safe_str(_safe_dict(item).get("item_id"))
-    ]
+    setup_payload = dict(_safe_dict(session.get("setup_payload")))
+    metadata = dict(_safe_dict(setup_payload.get("metadata")))
+    metadata["simulation_state"] = simulation_state
+    metadata["runtime_state"] = runtime_state
+    setup_payload["metadata"] = metadata
+    session["setup_payload"] = setup_payload
 
-
-def _inventory_item_by_id(simulation_state: Dict[str, Any], item_id: str) -> Dict[str, Any]:
-    for item in _player_inventory_items(simulation_state):
-        item = _safe_dict(item)
-        if _safe_str(item.get("item_id")) == item_id:
-            return item
-    return {}
-
-
-def _container_contents(item: Dict[str, Any]) -> List[Dict[str, Any]]:
-    return _safe_list(_safe_dict(_safe_dict(item).get("container")).get("items"))
-
-
-def _item_condition_value(item: Dict[str, Any]) -> float:
-    return float(_safe_dict(_safe_dict(item).get("condition")).get("durability") or 0.0)
-
-
-def _extract_status_effects_from_turn(turn_summary: Dict[str, Any], actor_id: str = "") -> List[Dict[str, Any]]:
-    effects: List[Dict[str, Any]] = []
-
-    def walk(value: Any, depth: int = 0) -> None:
-        if depth > 8:
-            return
-        if isinstance(value, dict):
-            if isinstance(value.get("status_effects"), list):
-                if not actor_id or _safe_str(value.get("actor_id")) == actor_id:
-                    effects.extend([_safe_dict(x) for x in value.get("status_effects")])
-            for nested in value.values():
-                walk(nested, depth + 1)
-        elif isinstance(value, list):
-            for nested in value:
-                walk(nested, depth + 1)
-
-    walk(turn_summary)
-    return effects
-
-
-def _turn_has_condition_result_kind(turn_summary: Dict[str, Any], kind: str) -> bool:
-    kind = _safe_str(kind).strip()
-    result = _extract_nested_dict_by_key(turn_summary, "condition_result")
-    if result:
-        for effect in _safe_list(result.get("effects_added")) + _safe_list(result.get("effects_updated")):
-            if _safe_str(_safe_dict(effect).get("kind")) == kind:
-                return True
-    for effect in _extract_status_effects_from_turn(turn_summary):
-        if _safe_str(effect.get("kind")) == kind:
-            return True
-    return False
-
-
-def _turn_has_condition_tick_damage(turn_summary: Dict[str, Any], kind: str) -> bool:
-    tick = _extract_nested_dict_by_key(turn_summary, "last_condition_tick_result")
-    if not tick:
-        tick = _extract_nested_dict_by_key(turn_summary, "tick_result")
-    for effect in _safe_list(tick.get("effects_ticked")):
-        effect = _safe_dict(effect)
-        if _safe_str(effect.get("kind")) == kind and _safe_int(effect.get("damage"), 0) > 0:
-            return True
-    return False
-
-
-def _turn_has_recovery_reason(turn_summary: Dict[str, Any], reason: str) -> bool:
-    recovery = _extract_nested_dict_by_key(turn_summary, "recovery_result")
-    if not recovery:
-        recovery = _extract_nested_dict_by_key(turn_summary, "last_recovery_result")
-    return _safe_str(recovery.get("reason")) == reason
+    return session
 
 
 def _manual_tick_current_actor_conditions(session: Dict[str, Any]) -> Dict[str, Any]:
@@ -12615,8 +12051,62 @@ def _seed_session_currency(session_id: str, currency: Dict[str, Any]) -> bool:
         save_session(session)
     except Exception:
         return False
-
     return True
+
+
+def _clone_or_create_manual_session(session_id: str) -> Dict[str, Any]:
+    """Create or load a manual scenario session."""
+    try:
+        from app.rpg.session.service import load_session, save_session
+        session = _safe_dict(load_session(session_id))
+        if session:
+            return session
+    except Exception:
+        pass
+    return {}
+
+
+def _extract_session(result: Dict[str, Any]) -> Dict[str, Any]:
+    return _safe_dict(
+        result.get("session")
+        or _safe_dict(result.get("result")).get("session")
+    )
+
+
+def _ensure_manual_session(session_id: str) -> Dict[str, Any]:
+    """Ensure a manual scenario session exists before running turns.
+
+    Several focused manual scenarios use unique session IDs. apply_turn(...)
+    expects the session to exist, so this helper clones/creates one from the
+    manual test template when needed.
+    """
+    session = _clone_or_create_manual_session(session_id)
+    if session:
+        return session
+
+    try:
+        warmup = apply_turn(
+            session_id="manual_test_session",
+            player_input="I wait",
+        )
+        template_session = _extract_session(warmup)
+        if not template_session:
+            return {}
+
+        from app.rpg.session.service import save_session
+
+        cloned = deepcopy(template_session)
+        manifest = _safe_dict(cloned.get("manifest"))
+        manifest["session_id"] = session_id
+        manifest["id"] = f"session:{session_id}"
+        manifest["title"] = f"Manual Service Scenario: {session_id}"
+        cloned["manifest"] = manifest
+
+        cloned = _sanitize_manual_session_for_test(cloned)
+        save_session(cloned)
+        return cloned
+    except Exception:
+        return {}
 
 
 def _apply_manual_scenario_setup(session_id: str, scenario: Dict[str, Any]) -> bool:
@@ -12751,6 +12241,21 @@ def _apply_manual_scenario_setup(session_id: str, scenario: Dict[str, Any]) -> b
         metadata["simulation_state"] = simulation_state
         setup_payload["metadata"] = metadata
         session["setup_payload"] = setup_payload
+
+        session = _manual_apply_interaction_seed_fields(
+            session,
+            setup_interaction_state,
+        )
+        session = _manual_apply_social_seed_fields(
+            session,
+            setup_interaction_state,
+        )
+        simulation_state = _safe_dict(session.get("simulation_state"))
+        runtime_state = _safe_dict(session.get("runtime_state"))
+        _save_manual_session_for_test(
+            session,
+            reason=f"{scenario.get('name', 'unknown')}:manual_seed_fields",
+        )
 
     runtime_state["runtime_settings"] = runtime_settings
     session["runtime_state"] = runtime_state
@@ -13047,6 +12552,54 @@ def _extract_turn_contract(result: Dict[str, Any]) -> Dict[str, Any]:
     return _safe_dict(runtime_state.get("last_turn_contract"))
 
 
+def _extract_interaction_result(result: Dict[str, Any]) -> Dict[str, Any]:
+    """Compatibility extractor for interaction-like payloads.
+
+    Older manual transcript helpers still call _extract_interaction_result(...)
+    for combat/social/companion extraction. L1-L3 introduced
+    general_interaction_result, but removing this helper breaks the shared
+    summary builder before scenarios can validate.
+    """
+    result = _safe_dict(result)
+    result_sub = _safe_dict(result.get("result"))
+    nested_result = _safe_dict(result_sub.get("result"))
+    resolved_result = _safe_dict(result.get("resolved_result"))
+    result_resolved = _safe_dict(result_sub.get("resolved_result"))
+
+    turn_contract = _extract_turn_contract(result)
+    contract_resolved = _safe_dict(
+        turn_contract.get("resolved_result")
+        or turn_contract.get("resolved_action")
+    )
+
+    candidates = [
+        # New L1-L3 shapes.
+        result.get("general_interaction_result"),
+        result_sub.get("general_interaction_result"),
+        nested_result.get("general_interaction_result"),
+        resolved_result.get("general_interaction_result"),
+        result_resolved.get("general_interaction_result"),
+        turn_contract.get("general_interaction_result"),
+        contract_resolved.get("general_interaction_result"),
+
+        # Older generic shapes.
+        result.get("interaction_result"),
+        result_sub.get("interaction_result"),
+        nested_result.get("interaction_result"),
+        resolved_result.get("interaction_result"),
+        result_resolved.get("interaction_result"),
+        turn_contract.get("interaction_result"),
+        contract_resolved.get("interaction_result"),
+    ]
+
+    for candidate in candidates:
+        candidate = _safe_dict(candidate)
+        if candidate:
+            return candidate
+
+    return {}
+
+
 def _extract_visible_interaction_reason(result: Dict[str, Any]) -> str:
     result = _safe_dict(result)
     result_sub = _safe_dict(result.get("result"))
@@ -13085,6 +12638,44 @@ def _extract_visible_interaction_reason(result: Dict[str, Any]) -> str:
         return _safe_str(raw_combat.get("reason"))
 
     return ""
+
+
+def _extract_general_interaction_result(turn_summary: Dict[str, Any]) -> Dict[str, Any]:
+    return _first_dict(
+        turn_summary.get("general_interaction_result"),
+        turn_summary.get("interaction_result"),
+        _safe_dict(turn_summary.get("resolved_result")).get("general_interaction_result"),
+        _safe_dict(turn_summary.get("resolved_result")).get("interaction_result"),
+        _safe_dict(turn_summary.get("result")).get("general_interaction_result"),
+        _safe_dict(turn_summary.get("result")).get("interaction_result"),
+        _extract_nested_dict_by_key(turn_summary, "general_interaction_result"),
+        _extract_nested_dict_by_key(turn_summary, "interaction_result"),
+    )
+
+
+def _interaction_reason_is(turn_summary: Dict[str, Any], reason: str) -> bool:
+    result = _extract_general_interaction_result(turn_summary)
+    return _safe_str(result.get("reason")) == reason
+
+
+def _interaction_resolved(turn_summary: Dict[str, Any]) -> bool:
+    return _extract_general_interaction_result(turn_summary).get("resolved") is True
+
+
+def _interaction_state_change_kind(turn_summary: Dict[str, Any], kind: str) -> bool:
+    result = _extract_general_interaction_result(turn_summary)
+    for change in _safe_list(result.get("state_changes")):
+        if _safe_str(_safe_dict(change).get("kind")) == kind:
+            return True
+    return False
+
+
+def _interaction_taken_item(turn_summary: Dict[str, Any], item_id: str) -> bool:
+    result = _extract_general_interaction_result(turn_summary)
+    for item in _safe_list(result.get("taken_items")):
+        if _safe_str(_safe_dict(item).get("item_id")) == item_id:
+            return True
+    return False
 
 
 def _patch_visible_interaction_reason_in_text(text: Any, result: Dict[str, Any]) -> str:
@@ -13172,6 +12763,838 @@ def _extract_service_debug(result: Dict[str, Any]) -> Dict[str, Any]:
                 applied_effects.get("items_removed") or effects.get("items_removed")
             ),
         },
+    }
+
+
+def _extract_simulation_state(result: Dict[str, Any]) -> Dict[str, Any]:
+    """Extract simulation state from result, preferring fresh result data over session metadata."""
+    result = _safe_dict(result)
+    result_sub = _safe_dict(result.get("result"))
+    
+    # Prefer fresh result state
+    if result_sub:
+        simulation_state = {}
+        # Collect all the state keys from result
+        state_keys = [
+            "memory_state", "relationship_state", "npc_emotion_state", "service_offer_state",
+            "journal_state", "world_event_state", "quest_state", "location_state",
+            "travel_result", "conversation_thread_state", "npc_reputation_state",
+            "conversation_rumor_state", "present_npc_state", "player_state"
+        ]
+        for key in state_keys:
+            value = result_sub.get(key)
+            if value is not None:
+                simulation_state[key] = value
+        if simulation_state:
+            return simulation_state
+    
+    # Fall back to session metadata
+    session = _safe_dict(result.get("session"))
+    setup_payload = _safe_dict(session.get("setup_payload"))
+    metadata = _safe_dict(setup_payload.get("metadata"))
+    return _safe_dict(metadata.get("simulation_state"))
+
+
+def _extract_location_state(result: Dict[str, Any]) -> Dict[str, Any]:
+    result_sub = _safe_dict(_safe_dict(result).get("result"))
+    direct = _safe_dict(result_sub.get("location_state"))
+    if direct:
+        return direct
+    simulation_state = _extract_simulation_state(result)
+    return _safe_dict(simulation_state.get("location_state"))
+
+
+def _extract_current_location_id(result: Dict[str, Any]) -> str:
+    """Extract the player's current location from a tolerant set of result shapes.
+
+    Manual scenario result payloads vary by subsystem. Missing location data
+    should produce an empty string, not crash the whole scenario run.
+    """
+    result = _safe_dict(result)
+    result_sub = _safe_dict(result.get("result"))
+
+    for candidate in [
+        result.get("current_location_id"),
+        result_sub.get("current_location_id"),
+        _safe_dict(result.get("resolved_result")).get("current_location_id"),
+        _safe_dict(result_sub.get("resolved_result")).get("current_location_id"),
+    ]:
+        text = _safe_str(candidate).strip()
+        if text:
+            return text
+
+    location_state = _extract_location_state(result)
+    for key in ["current_location_id", "location_id", "player_location_id"]:
+        text = _safe_str(location_state.get(key)).strip()
+        if text:
+            return text
+
+    service_debug = _extract_service_debug(result)
+    service_result = _safe_dict(service_debug.get("service_result"))
+    for key in ["current_location_id", "location_id", "player_location_id"]:
+        text = _safe_str(service_result.get(key)).strip()
+        if text:
+            return text
+
+    travel_result = _extract_travel_result(result)
+    for key in ["to_location_id", "from_location_id", "current_location_id"]:
+        text = _safe_str(travel_result.get(key)).strip()
+        if text:
+            return text
+
+    simulation_state = _extract_simulation_state(result)
+    player_state = _safe_dict(simulation_state.get("player_state"))
+
+    for candidate in [
+        player_state.get("location_id"),
+        player_state.get("current_location_id"),
+        simulation_state.get("player_location_id"),
+        simulation_state.get("location_id"),
+        simulation_state.get("current_location_id"),
+    ]:
+        text = _safe_str(candidate).strip()
+        if text:
+            return text
+
+    return ""
+
+
+def _extract_travel_result(result: Dict[str, Any]) -> Dict[str, Any]:
+    result_sub = _safe_dict(_safe_dict(result).get("result"))
+    direct = _safe_dict(result_sub.get("travel_result"))
+    if direct:
+        return direct
+    simulation_state = _extract_simulation_state(result)
+    return _safe_dict(simulation_state.get("travel_result"))
+
+
+def _extract_player_inventory(result: Dict[str, Any]) -> Dict[str, Any]:
+    """Extract player inventory from tolerant manual/runtime result shapes."""
+    result = _safe_dict(result)
+    result_sub = _safe_dict(result.get("result"))
+    resolved_result = _safe_dict(result.get("resolved_result"))
+    result_resolved = _safe_dict(result_sub.get("resolved_result"))
+
+    candidates = [
+        result.get("player_inventory"),
+        result_sub.get("player_inventory"),
+        resolved_result.get("player_inventory"),
+        result_resolved.get("player_inventory"),
+    ]
+
+    simulation_state = _extract_simulation_state(result)
+    player_state = _safe_dict(simulation_state.get("player_state"))
+
+    candidates.extend([
+        simulation_state.get("player_inventory"),
+        _safe_dict(simulation_state.get("inventory_state")).get("player_inventory"),
+        player_state.get("player_inventory"),
+        player_state.get("inventory"),
+        player_state.get("inventory_state"),
+    ])
+
+    session = _safe_dict(result.get("session"))
+    session_sim = _safe_dict(session.get("simulation_state"))
+    session_player_state = _safe_dict(session_sim.get("player_state"))
+    candidates.extend([
+        session_sim.get("player_inventory"),
+        _safe_dict(session_sim.get("inventory_state")).get("player_inventory"),
+        session_player_state.get("player_inventory"),
+        session_player_state.get("inventory"),
+        session_player_state.get("inventory_state"),
+    ])
+
+    for candidate in candidates:
+        candidate = _safe_dict(candidate)
+        if candidate:
+            # Old shapes sometimes store {"currency": ..., "items": ...}; new
+            # L1-L3 shapes often store {"items": ..., "equipment": ...}.
+            return candidate
+
+    return {}
+
+
+def _extract_player_currency(result: Dict[str, Any]) -> Dict[str, Any]:
+    """Extract player currency without crashing on newer inventory shapes."""
+    inventory_state = _extract_player_inventory(result)
+
+    currency = _safe_dict(inventory_state.get("currency"))
+    if currency:
+        return currency
+
+    result = _safe_dict(result)
+    result_sub = _safe_dict(result.get("result"))
+    simulation_state = _extract_simulation_state(result)
+
+    for candidate in [
+        result.get("player_currency"),
+        result_sub.get("player_currency"),
+        simulation_state.get("player_currency"),
+        _safe_dict(simulation_state.get("currency_state")).get("player_currency"),
+        _safe_dict(simulation_state.get("wallet")).get("currency"),
+    ]:
+        candidate = _safe_dict(candidate)
+        if candidate:
+            return candidate
+
+    # Manual scenario currency is often printed from seeded_currency separately.
+    # Return zero values instead of raising.
+    return {
+        "gold": 0,
+        "silver": 0,
+        "copper": 0,
+    }
+
+
+def _extract_player_items(result: Dict[str, Any]) -> List[Any]:
+    inventory_state = _extract_player_inventory(result)
+    items = _safe_list(inventory_state.get("items"))
+    if items:
+        return items
+
+    simulation_state = _extract_simulation_state(result)
+    player_state = _safe_dict(simulation_state.get("player_state"))
+    for candidate in [
+        _safe_dict(simulation_state.get("player_inventory")).get("items"),
+        _safe_dict(_safe_dict(simulation_state.get("inventory_state")).get("player_inventory")).get("items"),
+        _safe_dict(player_state.get("inventory")).get("items"),
+        _safe_dict(player_state.get("inventory_state")).get("items"),
+    ]:
+        items = _safe_list(candidate)
+        if items:
+            return items
+    return []
+
+
+def _extract_active_services(result: Dict[str, Any]) -> List[Any]:
+    """Extract active services from tolerant manual/runtime result shapes.
+
+    L1-L3 object interaction scenarios do not use lodging/services, but the
+    shared manual transcript printer still prints ACTIVE SERVICES. Missing
+    service state should return [] instead of crashing the run.
+    """
+    result = _safe_dict(result)
+    result_sub = _safe_dict(result.get("result"))
+    resolved_result = _safe_dict(result.get("resolved_result"))
+    result_resolved = _safe_dict(result_sub.get("resolved_result"))
+
+    candidates = [
+        result.get("active_services"),
+        result_sub.get("active_services"),
+        resolved_result.get("active_services"),
+        result_resolved.get("active_services"),
+    ]
+
+    simulation_state = _extract_simulation_state(result)
+    service_state = _safe_dict(simulation_state.get("service_state"))
+    candidates.extend([
+        simulation_state.get("active_services"),
+        service_state.get("active_services"),
+        service_state.get("services"),
+    ])
+
+    session = _safe_dict(result.get("session"))
+    session_sim = _safe_dict(session.get("simulation_state"))
+    session_service_state = _safe_dict(session_sim.get("service_state"))
+    candidates.extend([
+        session_sim.get("active_services"),
+        session_service_state.get("active_services"),
+        session_service_state.get("services"),
+    ])
+
+    for candidate in candidates:
+        values = _safe_list(candidate)
+        if values:
+            return values
+
+    return []
+
+
+def _extract_memory_rumors(result: Dict[str, Any]) -> List[Any]:
+    """Extract memory/rumor rows from tolerant manual/runtime result shapes.
+
+    Many scenarios do not use rumor or memory systems, but the shared transcript
+    printer still prints MEMORY RUMORS. Missing memory state should return []
+    instead of crashing the run.
+    """
+    result = _safe_dict(result)
+    result_sub = _safe_dict(result.get("result"))
+    resolved_result = _safe_dict(result.get("resolved_result"))
+    result_resolved = _safe_dict(result_sub.get("resolved_result"))
+
+    candidates = [
+        result.get("memory_rumors"),
+        result_sub.get("memory_rumors"),
+        resolved_result.get("memory_rumors"),
+        result_resolved.get("memory_rumors"),
+        result.get("rumors"),
+        result_sub.get("rumors"),
+        resolved_result.get("rumors"),
+        result_resolved.get("rumors"),
+    ]
+
+    simulation_state = _extract_simulation_state(result)
+    memory_state = _safe_dict(simulation_state.get("memory_state"))
+    rumor_state = _safe_dict(simulation_state.get("rumor_state"))
+    living_world_state = _safe_dict(simulation_state.get("living_world_state"))
+
+    candidates.extend([
+        simulation_state.get("memory_rumors"),
+        simulation_state.get("rumors"),
+        memory_state.get("rumors"),
+        memory_state.get("memory_rumors"),
+        rumor_state.get("rumors"),
+        rumor_state.get("active_rumors"),
+        living_world_state.get("rumors"),
+        living_world_state.get("active_rumors"),
+    ])
+
+    session = _safe_dict(result.get("session"))
+    session_sim = _safe_dict(session.get("simulation_state"))
+    session_memory_state = _safe_dict(session_sim.get("memory_state"))
+    session_rumor_state = _safe_dict(session_sim.get("rumor_state"))
+    session_living_world_state = _safe_dict(session_sim.get("living_world_state"))
+
+    candidates.extend([
+        session_sim.get("memory_rumors"),
+        session_sim.get("rumors"),
+        session_memory_state.get("rumors"),
+        session_memory_state.get("memory_rumors"),
+        session_rumor_state.get("rumors"),
+        session_rumor_state.get("active_rumors"),
+        session_living_world_state.get("rumors"),
+        session_living_world_state.get("active_rumors"),
+    ])
+
+    for candidate in candidates:
+        values = _safe_list(candidate)
+        if values:
+            return values
+
+    return []
+
+
+def _extract_transaction_history(result: Dict[str, Any]) -> List[Any]:
+    """Extract transaction history from tolerant manual/runtime result shapes.
+
+    Object interaction scenarios do not use service purchases, but the shared
+    manual transcript printer still prints TRANSACTION HISTORY. Missing
+    transaction state should return [] instead of crashing.
+    """
+    result = _safe_dict(result)
+    result_sub = _safe_dict(result.get("result"))
+    resolved_result = _safe_dict(result.get("resolved_result"))
+    result_resolved = _safe_dict(result_sub.get("resolved_result"))
+
+    candidates = [
+        result.get("transaction_history"),
+        result_sub.get("transaction_history"),
+        resolved_result.get("transaction_history"),
+        result_resolved.get("transaction_history"),
+    ]
+
+    simulation_state = _extract_simulation_state(result)
+    service_state = _safe_dict(simulation_state.get("service_state"))
+    economy_state = _safe_dict(simulation_state.get("economy_state"))
+
+    candidates.extend([
+        simulation_state.get("transaction_history"),
+        service_state.get("transaction_history"),
+        service_state.get("transactions"),
+        economy_state.get("transaction_history"),
+        economy_state.get("transactions"),
+    ])
+
+    session = _safe_dict(result.get("session"))
+    session_sim = _safe_dict(session.get("simulation_state"))
+    session_service_state = _safe_dict(session_sim.get("service_state"))
+    session_economy_state = _safe_dict(session_sim.get("economy_state"))
+
+    candidates.extend([
+        session_sim.get("transaction_history"),
+        session_service_state.get("transaction_history"),
+        session_service_state.get("transactions"),
+        session_economy_state.get("transaction_history"),
+        session_economy_state.get("transactions"),
+    ])
+
+    for candidate in candidates:
+        values = _safe_list(candidate)
+        if values:
+            return values
+
+    return []
+
+
+def _extract_service_memories(result: Dict[str, Any]) -> List[Any]:
+    """Extract service-related memories from tolerant result shapes.
+
+    L1-L3 object interaction scenarios do not use services or lodging memories,
+    but the shared manual transcript printer still prints SERVICE MEMORIES.
+    Missing memory/service state should return [] instead of crashing.
+    """
+    result = _safe_dict(result)
+    result_sub = _safe_dict(result.get("result"))
+    resolved_result = _safe_dict(result.get("resolved_result"))
+    result_resolved = _safe_dict(result_sub.get("resolved_result"))
+
+    candidates = [
+        result.get("service_memories"),
+        result_sub.get("service_memories"),
+        resolved_result.get("service_memories"),
+        result_resolved.get("service_memories"),
+    ]
+
+    simulation_state = _extract_simulation_state(result)
+    service_state = _safe_dict(simulation_state.get("service_state"))
+    memory_state = _safe_dict(simulation_state.get("memory_state"))
+    companion_memory_state = _safe_dict(simulation_state.get("companion_memory_state"))
+
+    candidates.extend([
+        simulation_state.get("service_memories"),
+        service_state.get("service_memories"),
+        service_state.get("memories"),
+        memory_state.get("service_memories"),
+        memory_state.get("memories"),
+        companion_memory_state.get("service_memories"),
+    ])
+
+    session = _safe_dict(result.get("session"))
+    session_sim = _safe_dict(session.get("simulation_state"))
+    session_service_state = _safe_dict(session_sim.get("service_state"))
+    session_memory_state = _safe_dict(session_sim.get("memory_state"))
+    session_companion_memory_state = _safe_dict(session_sim.get("companion_memory_state"))
+
+    candidates.extend([
+        session_sim.get("service_memories"),
+        session_service_state.get("service_memories"),
+        session_service_state.get("memories"),
+        session_memory_state.get("service_memories"),
+        session_memory_state.get("memories"),
+        session_companion_memory_state.get("service_memories"),
+    ])
+
+    for candidate in candidates:
+        values = _safe_list(candidate)
+        if values:
+            return values
+
+    return []
+
+
+def _current_memory_ids(result: Dict[str, Any]) -> set[str]:
+    """Extract memory IDs created in the current turn."""
+    service_debug = _extract_service_debug(result)
+    service_application = _safe_dict(service_debug.get("service_application"))
+    memory_entry = _safe_dict(service_application.get("memory_entry"))
+    memory_id = _safe_str(memory_entry.get("memory_id"))
+    if memory_id:
+        return {memory_id}
+
+    # Check for multiple memories
+    memories = _safe_list(service_application.get("memories"))
+    ids = set()
+    for memory in memories:
+        memory = _safe_dict(memory)
+        memory_id = _safe_str(memory.get("memory_id"))
+        if memory_id:
+            ids.add(memory_id)
+    return ids
+
+
+def _extract_recalled_service_memories(result: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """Extract recalled service memories from result."""
+    # Look for recalled memories in memory recall debug or similar
+    service_debug = _extract_service_debug(result)
+    recall_debug = _safe_dict(service_debug.get("memory_recall_debug"))
+    recalled = _safe_list(recall_debug.get("recalled_service_memories"))
+    if recalled:
+        return recalled
+
+    # Fallback to other places
+    simulation_state = _extract_simulation_state(result)
+    memory_state = _safe_dict(simulation_state.get("memory_state"))
+    recall_state = _safe_dict(memory_state.get("recall_state"))
+    recalled = _safe_list(recall_state.get("recalled_service_memories"))
+    if recalled:
+        return recalled
+
+    return []
+
+
+def _extract_recalled_npc_memories(result: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """Extract recalled NPC memories from result."""
+    # Look for recalled memories in memory recall debug or similar
+    service_debug = _extract_service_debug(result)
+    recall_debug = _safe_dict(service_debug.get("memory_recall_debug"))
+    recalled = _safe_list(recall_debug.get("recalled_npc_memories"))
+    if recalled:
+        return recalled
+
+    # Fallback to other places
+    simulation_state = _extract_simulation_state(result)
+    memory_state = _safe_dict(simulation_state.get("memory_state"))
+    recall_state = _safe_dict(memory_state.get("recall_state"))
+    recalled = _safe_list(recall_state.get("recalled_npc_memories"))
+    if recalled:
+        return recalled
+
+    return []
+
+
+def _extract_service_memory_recall_debug(result: Dict[str, Any]) -> Dict[str, Any]:
+    """Extract service memory recall debug information."""
+    service_debug = _extract_service_debug(result)
+    return _safe_dict(service_debug.get("memory_recall_debug"))
+
+
+def _extract_npc_memory_recall_debug(result: Dict[str, Any]) -> Dict[str, Any]:
+    """Extract NPC memory recall debug information."""
+    # Similar to service, but for NPC
+    simulation_state = _extract_simulation_state(result)
+    memory_state = _safe_dict(simulation_state.get("memory_state"))
+    return _safe_dict(memory_state.get("npc_memory_recall_debug"))
+
+
+def _extract_social_living_world_effects(result: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """Extract social living world effects from result."""
+    # Look for social living world effects in various places
+    result = _safe_dict(result)
+    result_sub = _safe_dict(result.get("result"))
+    resolved_result = _safe_dict(result.get("resolved_result"))
+    simulation_state = _extract_simulation_state(result)
+
+    candidates = [
+        result.get("social_living_world_effects"),
+        result_sub.get("social_living_world_effects"),
+        resolved_result.get("social_living_world_effects"),
+        simulation_state.get("social_living_world_effects"),
+    ]
+
+    service_debug = _extract_service_debug(result)
+    service_application = _safe_dict(service_debug.get("service_application"))
+    candidates.append(service_application.get("social_living_world_effects"))
+
+    for candidate in candidates:
+        values = _safe_list(candidate)
+        if values:
+            return values
+
+    return []
+
+
+def _extract_relationship_state(result: Dict[str, Any]) -> Dict[str, Any]:
+    """Extract relationship state from result."""
+    # Look for relationship state in simulation state
+    simulation_state = _extract_simulation_state(result)
+    return _safe_dict(simulation_state.get("relationship_state"))
+
+
+def _extract_npc_emotion_state(result: Dict[str, Any]) -> Dict[str, Any]:
+    """Extract NPC emotion state from result."""
+    # Look for NPC emotion state in simulation state
+    simulation_state = _extract_simulation_state(result)
+    return _safe_dict(simulation_state.get("npc_emotion_state"))
+
+
+def _extract_service_offer_state(result: Dict[str, Any]) -> Dict[str, Any]:
+    """Extract service offer state from result."""
+    # Look for service offer state in simulation state
+    simulation_state = _extract_simulation_state(result)
+    return _safe_dict(simulation_state.get("service_offer_state"))
+
+
+def _extract_journal_state(result: Dict[str, Any]) -> Dict[str, Any]:
+    """Extract journal state from result."""
+    # Look for journal state in simulation state
+    simulation_state = _extract_simulation_state(result)
+    return _safe_dict(simulation_state.get("journal_state"))
+
+
+def _extract_world_event_state(result: Dict[str, Any]) -> Dict[str, Any]:
+    """Extract world event state from result."""
+    # Look for world event state in simulation state
+    simulation_state = _extract_simulation_state(result)
+    return _safe_dict(simulation_state.get("world_event_state"))
+
+
+def _extract_location_state(result: Dict[str, Any]) -> Dict[str, Any]:
+    """Extract location state from result."""
+    # Look for location state in simulation state
+    simulation_state = _extract_simulation_state(result)
+    return _safe_dict(simulation_state.get("location_state"))
+
+
+def _extract_travel_result(result: Dict[str, Any]) -> Dict[str, Any]:
+    """Extract travel result from result."""
+    result = _safe_dict(result)
+    result_sub = _safe_dict(result.get("result"))
+    resolved_result = _safe_dict(result.get("resolved_result"))
+    turn_contract = _safe_dict(result.get("turn_contract"))
+    resolved = _first_dict(
+        result.get("resolved_result"),
+        result_sub.get("resolved_result"),
+        turn_contract.get("resolved_result"),
+        turn_contract.get("resolved_action"),
+    )
+    return _safe_dict(resolved.get("travel_result"))
+
+
+def _extract_conversation_result(result: Dict[str, Any]) -> Dict[str, Any]:
+    """Extract conversation result from result."""
+    result = _safe_dict(result)
+    result_sub = _safe_dict(result.get("result"))
+    turn_contract = _safe_dict(result.get("turn_contract"))
+
+    candidates = [
+        result.get("conversation_result"),
+        result_sub.get("conversation_result"),
+        turn_contract.get("conversation_result"),
+        _safe_dict(turn_contract.get("resolved_result")).get("conversation_result"),
+    ]
+
+    for candidate in candidates:
+        value = _safe_dict(candidate)
+        if value:
+            return value
+
+    return {}
+
+
+def _extract_ambient_tick_result(result: Dict[str, Any]) -> Dict[str, Any]:
+    """Extract ambient tick result from result."""
+    result = _safe_dict(result)
+    result_sub = _safe_dict(result.get("result"))
+    resolved_result = _safe_dict(result.get("resolved_result"))
+    turn_contract = _safe_dict(result.get("turn_contract"))
+
+    candidates = [
+        result.get("ambient_tick_result"),
+        result_sub.get("ambient_tick_result"),
+        resolved_result.get("ambient_tick_result"),
+        turn_contract.get("ambient_tick_result"),
+        _safe_dict(turn_contract.get("resolved_result")).get("ambient_tick_result"),
+    ]
+
+    for candidate in candidates:
+        value = _safe_dict(candidate)
+        if value:
+            return value
+
+    return {}
+
+
+def _extract_conversation_thread_state(result: Dict[str, Any]) -> Dict[str, Any]:
+    """Extract conversation thread state from result."""
+    simulation_state = _extract_simulation_state(result)
+    return _safe_dict(simulation_state.get("conversation_thread_state"))
+
+
+def _extract_living_world_debug(result: Dict[str, Any]) -> Dict[str, Any]:
+    """Extract living world debug information."""
+    # This might be part of service debug or simulation state
+    service_debug = _extract_service_debug(result)
+    return _safe_dict(service_debug.get("living_world_debug"))
+
+
+def _player_facing_text_for_regression_scan(result: Dict[str, Any]) -> str:
+    """Extract player-facing text from result for regression scanning."""
+    # Get the AI narration text
+    narration_text = _extract_ai_narration_text(result)
+    # Also include any NPC dialogue
+    npc_lines = _extract_npc_dialogue_lines(result)
+    npc_text = " ".join(line.get("line", "") for line in npc_lines)
+    # Combine narration and NPC text
+    return f"{narration_text} {npc_text}".strip()
+
+
+def _effective_service_status(service_result: Dict[str, Any], service_application: Dict[str, Any]) -> str:
+    """Determine the effective service status from result and application."""
+    service_result = _safe_dict(service_result)
+    service_application = _safe_dict(service_application)
+
+    # Check service_application first
+    if service_application.get("blocked"):
+        return "blocked"
+
+    status = _safe_str(service_application.get("status"))
+    if status:
+        return status
+
+    # Check service_result
+    status = _safe_str(service_result.get("status"))
+    if status:
+        return status
+
+    # Default
+    return "none"
+
+
+def _has_real_conversation_activity(result: Dict[str, Any]) -> bool:
+    """Check if the result has real conversation activity."""
+    conversation = _extract_conversation_result(result)
+    if conversation.get("triggered"):
+        return True
+
+    # Check for NPC dialogue lines
+    npc_lines = _extract_npc_dialogue_lines(result)
+    if npc_lines:
+        return True
+
+    # Check for conversation thread activity
+    thread_state = _extract_conversation_thread_state(result)
+    if thread_state and thread_state.get("active"):
+        return True
+
+    return False
+
+
+def _extract_combat_state(result: Dict[str, Any]) -> Dict[str, Any]:
+    """Extract combat state from result."""
+    result = _safe_dict(result)
+    result_sub = _safe_dict(result.get("result"))
+    resolved_result = _safe_dict(result.get("resolved_result"))
+
+    candidates = [
+        result.get("combat_state"),
+        result_sub.get("combat_state"),
+        resolved_result.get("combat_state"),
+    ]
+
+    # Also check simulation state
+    simulation_state = _extract_simulation_state(result)
+    candidates.append(simulation_state.get("combat_state"))
+
+    for candidate in candidates:
+        value = _safe_dict(candidate)
+        if value:
+            return value
+
+    return {}
+
+
+def _scenario_contamination_warnings(
+    *,
+    scenario_name: str,
+    turn_index: int,
+    before_currency: Dict[str, Any],
+    before_items: List[Dict[str, Any]],
+    result: Dict[str, Any],
+    pre_turn_snapshot: Dict[str, int],
+    allows_seeded_world_events: bool,
+    allows_seeded_journal_entries: bool,
+    allows_seeded_quest_state: bool,
+) -> List[str]:
+    """Check for scenario contamination warnings."""
+    warnings: List[str] = []
+
+    # Check for unexpected world event changes
+    after_snapshot = _pre_turn_contamination_snapshot(_extract_simulation_state(result))
+
+    if not allows_seeded_world_events:
+        if after_snapshot["world_event_count"] > pre_turn_snapshot["world_event_count"]:
+            warnings.append("unexpected_world_event_creation")
+
+    if not allows_seeded_journal_entries:
+        if after_snapshot["journal_entry_count"] > pre_turn_snapshot["journal_entry_count"]:
+            warnings.append("unexpected_journal_entry_creation")
+
+    if not allows_seeded_quest_state:
+        if after_snapshot["quest_count"] > pre_turn_snapshot["quest_count"]:
+            warnings.append("unexpected_quest_creation")
+
+    # Check for unexpected service/memory contamination
+    allows_service_memories = scenario_name in {
+        "npc_bran_refuses_unpaid_room",
+        "npc_bran_negotiates_high_trust_room",
+        "npc_bran_escalates_when_threatened",
+    }
+
+    service_memories = _extract_service_memories(result)
+    if service_memories and not allows_service_memories:
+        warnings.append("unexpected_service_memory_creation")
+
+    return warnings
+
+
+def _extract_world_event_result(result: Dict[str, Any]) -> Dict[str, Any]:
+    """Extract world event result from result."""
+    result = _safe_dict(result)
+    result_sub = _safe_dict(result.get("result"))
+    resolved_result = _safe_dict(result.get("resolved_result"))
+
+    candidates = [
+        result.get("world_event_result"),
+        result_sub.get("world_event_result"),
+        resolved_result.get("world_event_result"),
+    ]
+
+    for candidate in candidates:
+        value = _safe_dict(candidate)
+        if value:
+            return value
+
+    return {}
+
+
+def _emit_summary_block(title: str, summary_rows: List[Dict[str, Any]], channel: str) -> None:
+    """Emit a formatted summary block."""
+    _emit("", channel=channel)
+    _emit(title, channel=channel)
+    _emit("=" * len(title), channel=channel)
+    _emit("", channel=channel)
+
+    if not summary_rows:
+        _emit("No scenarios found.", channel=channel)
+        return
+
+    for row in summary_rows:
+        scenario = _safe_str(row.get("scenario", ""))
+        session_id = _safe_str(row.get("session_id", ""))
+        turn = _safe_int(row.get("turn", 0))
+        warnings = _safe_list(row.get("scenario_warnings", []))
+        regression_warnings = _safe_list(row.get("regression_warnings", []))
+
+        status = "PASS"
+        if warnings or regression_warnings:
+            status = "WARN"
+
+        _emit(f"SCENARIO: {scenario} (turn {turn})", channel=channel)
+        _emit(f"STATUS: {status}", channel=channel)
+        if session_id:
+            _emit(f"SESSION: {session_id}", channel=channel)
+
+        if warnings:
+            _emit(f"WARNINGS: {', '.join(warnings)}", channel=channel)
+        if regression_warnings:
+            _emit(f"REGRESSION WARNINGS: {', '.join(regression_warnings)}", channel=channel)
+
+        _emit("", channel=channel)
+
+
+def _compact_turn_summary(
+    *,
+    index: int,
+    player_input: str,
+    result: Dict[str, Any],
+    before_currency: Dict[str, Any],
+    before_items: List[Dict[str, Any]],
+) -> Dict[str, Any]:
+    """Create a compact summary of the turn for regression testing."""
+    warnings = _manual_regression_warnings(
+        scenario_name="",
+        turn_index=index,
+        player_input=player_input,
+        result=result,
+    )
+
+    return {
+        "scenario": "",
+        "session_id": "",
+        "turn": index,
+        "player_input": player_input,
+        "scenario_warnings": warnings,
+        "regression_warnings": warnings,
     }
 
 
@@ -14607,6 +15030,12 @@ def _run_one_service_scenario(
             result,
         )
 
+        allows_seeded_world_events = bool(_safe_list(scenario.get("setup_world_events"))) or scenario_name in {
+            "npc_bran_refuses_unpaid_room",
+            "npc_bran_negotiates_high_trust_room",
+            "npc_bran_escalates_when_threatened",
+        }
+
         summary_row["scenario_warnings"] = _scenario_contamination_warnings(
             scenario_name=scenario_name,
             turn_index=index,
@@ -14614,7 +15043,7 @@ def _run_one_service_scenario(
             before_items=before_items,
             result=result,
             pre_turn_snapshot=pre_turn_snapshot,
-            allows_seeded_world_events=bool(_safe_list(scenario.get("setup_world_events"))),
+            allows_seeded_world_events=allows_seeded_world_events,
             allows_seeded_journal_entries=bool(_safe_list(scenario.get("setup_journal_entries"))),
             allows_seeded_quest_state=bool(_safe_dict(scenario.get("setup_quest_state"))),
 
@@ -15323,6 +15752,78 @@ def _run_one_service_scenario(
                     f"enemy_combat_visible_expected_party_defeat_resolved_got:{visible_reason or 'missing'}"
                 )
 
+        if scenario_name == "interaction_open_unlocked_chest":
+            if not _interaction_reason_is(summary_row, "opened"):
+                summary_row.setdefault("scenario_warnings", []).append("interaction_unlocked_chest_not_opened")
+
+        if scenario_name == "interaction_unlock_chest_with_key":
+            if not _interaction_reason_is(summary_row, "unlocked"):
+                summary_row.setdefault("scenario_warnings", []).append("interaction_chest_with_key_not_unlocked")
+
+        if scenario_name == "interaction_unlock_chest_without_key_fails":
+            if not _interaction_reason_is(summary_row, "missing_required_item"):
+                summary_row.setdefault("scenario_warnings", []).append("interaction_chest_without_key_did_not_fail")
+
+        if scenario_name == "interaction_open_locked_chest_fails":
+            if not _interaction_reason_is(summary_row, "target_locked"):
+                summary_row.setdefault("scenario_warnings", []).append("interaction_locked_chest_open_did_not_fail")
+
+        if scenario_name == "interaction_take_item_from_closed_chest_fails":
+            if not _interaction_reason_is(summary_row, "container_closed"):
+                summary_row.setdefault("scenario_warnings", []).append("interaction_closed_chest_take_did_not_fail")
+
+        if scenario_name == "interaction_take_item_from_open_chest_succeeds":
+            if not _interaction_reason_is(summary_row, "items_taken"):
+                summary_row.setdefault("scenario_warnings", []).append("interaction_open_chest_items_not_taken")
+            if not _interaction_taken_item(summary_row, "item:copper_coin"):
+                summary_row.setdefault("scenario_warnings", []).append("interaction_open_chest_missing_taken_item")
+
+        if scenario_name == "interaction_unlock_door_with_key":
+            if not _interaction_reason_is(summary_row, "unlocked"):
+                summary_row.setdefault("scenario_warnings", []).append("interaction_door_with_key_not_unlocked")
+
+        if scenario_name == "interaction_unlock_door_without_key_fails":
+            if not _interaction_reason_is(summary_row, "missing_required_item"):
+                summary_row.setdefault("scenario_warnings", []).append("interaction_door_without_key_did_not_fail")
+
+        if scenario_name == "narration_repetition_memory_tracks_recent_output":
+            if not _runtime_has_narration_quality_memory(summary_row):
+                summary_row.setdefault("scenario_warnings", []).append(
+                    "narration_quality_memory_not_updated"
+                )
+
+        if scenario_name == "npc_bran_refuses_unpaid_room":
+            decision = _extract_npc_backbone_decision(summary_row)
+            if _safe_str(decision.get("decision")) != "refuse":
+                summary_row.setdefault("scenario_warnings", []).append(
+                    "npc_bran_did_not_refuse_unpaid_room"
+                )
+            if decision.get("accepted") is True:
+                summary_row.setdefault("scenario_warnings", []).append(
+                    "npc_bran_unpaid_room_was_accepted"
+                )
+
+        if scenario_name == "npc_bran_negotiates_high_trust_room":
+            decision = _extract_npc_backbone_decision(summary_row)
+            if _safe_str(decision.get("decision")) != "negotiate":
+                summary_row.setdefault("scenario_warnings", []).append(
+                    "npc_bran_high_trust_did_not_negotiate"
+                )
+
+        if scenario_name == "npc_bran_escalates_when_threatened":
+            decision = _extract_npc_backbone_decision(summary_row)
+            if _safe_str(decision.get("decision")) != "escalate":
+                summary_row.setdefault("scenario_warnings", []).append(
+                    "npc_bran_threat_did_not_escalate"
+                )
+
+        if scenario_name == "narration_validator_catches_hit_miss_contradiction":
+            warnings = _extract_narration_quality_warnings(summary_row)
+            if "narration_contradicts_combat_hit" in warnings:
+                summary_row.setdefault("scenario_warnings", []).append(
+                    "narration_hit_miss_contradiction_present"
+                )
+
     scenario_warnings: List[str] = []
     for row in scenario_results:
         for warning in _safe_list(_safe_dict(row).get("scenario_warnings")):
@@ -15345,6 +15846,40 @@ def _run_one_service_scenario(
         if not any(_turn_has_generated_combat_loot(row) for row in scenario_results):
             if "combat_victory_missing_loot_result" not in scenario_warnings:
                 scenario_warnings.append("combat_victory_missing_loot_result")
+
+    if scenario_name == "interaction_open_unlocked_chest":
+        if not any(_interaction_reason_is(row, "opened") for row in scenario_results):
+            scenario_warnings.append("interaction_unlocked_chest_not_opened")
+
+    if scenario_name == "interaction_unlock_chest_with_key":
+        if not any(_interaction_reason_is(row, "unlocked") for row in scenario_results):
+            scenario_warnings.append("interaction_chest_with_key_not_unlocked")
+
+    if scenario_name == "interaction_unlock_chest_without_key_fails":
+        if not any(_interaction_reason_is(row, "missing_required_item") for row in scenario_results):
+            scenario_warnings.append("interaction_chest_without_key_did_not_fail")
+
+    if scenario_name == "interaction_open_locked_chest_fails":
+        if not any(_interaction_reason_is(row, "target_locked") for row in scenario_results):
+            scenario_warnings.append("interaction_locked_chest_open_did_not_fail")
+
+    if scenario_name == "interaction_take_item_from_closed_chest_fails":
+        if not any(_interaction_reason_is(row, "container_closed") for row in scenario_results):
+            scenario_warnings.append("interaction_closed_chest_take_did_not_fail")
+
+    if scenario_name == "interaction_take_item_from_open_chest_succeeds":
+        if not any(_interaction_reason_is(row, "items_taken") for row in scenario_results):
+            scenario_warnings.append("interaction_open_chest_items_not_taken")
+        if not any(_interaction_taken_item(row, "item:copper_coin") for row in scenario_results):
+            scenario_warnings.append("interaction_open_chest_missing_taken_item")
+
+    if scenario_name == "interaction_unlock_door_with_key":
+        if not any(_interaction_reason_is(row, "unlocked") for row in scenario_results):
+            scenario_warnings.append("interaction_door_with_key_not_unlocked")
+
+    if scenario_name == "interaction_unlock_door_without_key_fails":
+        if not any(_interaction_reason_is(row, "missing_required_item") for row in scenario_results):
+            scenario_warnings.append("interaction_door_without_key_did_not_fail")
 
     if scenario_name == "combat_post_victory_returns_to_world_actions":
         if not any(_turn_resolved_combat_victory(row) for row in scenario_results):
@@ -15461,6 +15996,38 @@ def _run_one_service_scenario(
                     found = True
         if not found:
             scenario_warnings.append("bandit_victory_did_not_lower_bandit_pressure")
+
+    if scenario_name == "narration_repetition_memory_tracks_recent_output":
+        if not any(_runtime_has_narration_quality_memory(row) for row in scenario_results):
+            scenario_warnings.append("narration_quality_memory_not_updated")
+
+    if scenario_name == "npc_bran_refuses_unpaid_room":
+        if not any(
+            _safe_str(_extract_npc_backbone_decision(row).get("decision")) == "refuse"
+            for row in scenario_results
+        ):
+            scenario_warnings.append("npc_bran_did_not_refuse_unpaid_room")
+
+    if scenario_name == "npc_bran_negotiates_high_trust_room":
+        if not any(
+            _safe_str(_extract_npc_backbone_decision(row).get("decision")) == "negotiate"
+            for row in scenario_results
+        ):
+            scenario_warnings.append("npc_bran_high_trust_did_not_negotiate")
+
+    if scenario_name == "npc_bran_escalates_when_threatened":
+        if not any(
+            _safe_str(_extract_npc_backbone_decision(row).get("decision")) == "escalate"
+            for row in scenario_results
+        ):
+            scenario_warnings.append("npc_bran_threat_did_not_escalate")
+
+    if scenario_name == "narration_validator_catches_hit_miss_contradiction":
+        if any(
+            "narration_contradicts_combat_hit" in _extract_narration_quality_warnings(row)
+            for row in scenario_results
+        ):
+            scenario_warnings.append("narration_hit_miss_contradiction_present")
 
     scenario_warnings = list(dict.fromkeys(scenario_warnings))
     if scenario_error:
