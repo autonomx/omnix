@@ -130,6 +130,39 @@ def _pre_turn_contamination_snapshot(simulation_state: Dict[str, Any]) -> Dict[s
     }
 
 
+def _compact_result_for_summary(result: Dict[str, Any]) -> Dict[str, Any]:
+    """Compact a turn result for summary by removing large state blobs."""
+    if not isinstance(result, dict):
+        return result
+
+    # Deep copy to avoid modifying original
+    import copy
+    compacted = copy.deepcopy(result)
+
+    # Remove full session state which contains huge simulation_state
+    if "session" in compacted:
+        session = compacted["session"]
+        if isinstance(session, dict) and "setup_payload" in session:
+            setup_payload = session["setup_payload"]
+            if isinstance(setup_payload, dict) and "metadata" in setup_payload:
+                metadata = setup_payload["metadata"]
+                if isinstance(metadata, dict) and "simulation_state" in metadata:
+                    sim_state = metadata["simulation_state"]
+                    if isinstance(sim_state, dict):
+                        # Remove large historical arrays
+                        for key in ["history", "events", "consequences", "event_history", "timeline"]:
+                            sim_state.pop(key, None)
+                        # Cap turn_timings if present
+                        if "debug_meta" in sim_state and isinstance(sim_state["debug_meta"], dict):
+                            debug_meta = sim_state["debug_meta"]
+                            if "last_step_tick" in debug_meta:
+                                # Keep only essential debug info
+                                debug_meta.clear()
+                                debug_meta["compacted"] = True
+
+    return compacted
+
+
 def _build_service_summary_row(
     *,
     scenario_name: str,
