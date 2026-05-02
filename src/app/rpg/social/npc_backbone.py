@@ -38,19 +38,13 @@ def _relationship_score(
         _safe_dict(simulation_state.get("relationships")),
         _safe_dict(simulation_state.get("relationship_state")),
         _safe_dict(_safe_dict(simulation_state.get("social_state")).get("relationships")),
-        _safe_dict(_safe_dict(simulation_state.get("npc_state")).get("relationships")),
+        _safe_dict(_safe_dict(simulation_state.get("interaction_state")).get("relationships")),
+        _safe_dict(_safe_dict(simulation_state.get("interaction_state")).get("relationship_state")),
+        _safe_dict(_safe_dict(_safe_dict(simulation_state.get("interaction_state")).get("social_state")).get("relationships")),
         _safe_dict(runtime_state.get("relationships")),
         _safe_dict(runtime_state.get("relationship_state")),
         _safe_dict(_safe_dict(runtime_state.get("social_state")).get("relationships")),
     ]
-
-    # Manual scenarios sometimes seed relationships in interaction/runtime-ish
-    # state that later gets folded under simulation_state["interaction_state"].
-    interaction_state = _safe_dict(simulation_state.get("interaction_state"))
-    candidates.extend([
-        _safe_dict(interaction_state.get("relationships")),
-        _safe_dict(interaction_state.get("relationship_state")),
-    ])
 
     npc_aliases = {
         npc_id,
@@ -60,6 +54,7 @@ def _relationship_score(
         "Bran",
         "bran",
         "npc:Bran",
+        "npc:bran",
     }
 
     best = 0

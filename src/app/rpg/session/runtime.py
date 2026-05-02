@@ -25,6 +25,12 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 logger = logging.getLogger(__name__)
 
 
+from app.rpg.interactions.resolver import (
+    detect_interaction_intent,
+    resolve_general_interaction as resolve_general_interaction_v2,
+)
+
+
 def _has_pending_conversation_response(simulation_state: Dict[str, Any]) -> bool:
     thread_state = _safe_dict(simulation_state.get("conversation_thread_state"))
     pending = _safe_dict(thread_state.get("pending_player_response"))
@@ -772,6 +778,52 @@ def _requested_reposition_values(player_input: str) -> Dict[str, str]:
     if "fall back" in text or "backline" in text or "far" in text:
         return {"zone": "backline", "range_band": "far"}
     return {"zone": "frontline", "range_band": "near"}
+
+
+def _player_input_requests_general_interaction(player_input: str) -> bool:
+    return bool(detect_interaction_intent(player_input))
+
+
+def _fallback_general_interaction_narration(interaction_result: Dict[str, Any]) -> str:
+    interaction_result = _safe_dict(interaction_result)
+    target_name = _safe_str(
+        interaction_result.get("target_name")
+        or interaction_result.get("target_id")
+        or "the object"
+    ).strip()
+
+    reason = _safe_str(interaction_result.get("reason")).strip()
+
+    if interaction_result.get("resolved") is True:
+        if reason == "unlocked":
+            return f"Result: You unlock {target_name}."
+        if reason == "opened":
+            return f"Result: You open {target_name}."
+        if reason == "closed":
+            return f"Result: You close {target_name}."
+        if reason == "items_taken":
+            return f"Result: You take the contents from {target_name}."
+        return f"Result: {reason}"
+
+    if reason == "missing_required_item":
+        required = _safe_str(interaction_result.get("required_item_id") or "the required item")
+        return f"Result: You cannot unlock {target_name}; you do not have {required}."
+    if reason == "target_locked":
+        return f"Result: {target_name} is locked."
+    if reason == "container_closed":
+        return f"Result: {target_name} is closed."
+    if reason == "target_not_found":
+        return "Result: You cannot find that object here."
+    if reason == "target_not_reachable":
+        return f"Result: You cannot reach {target_name}."
+    if reason == "already_unlocked":
+        return f"Result: {target_name} is already unlocked."
+    if reason == "already_open":
+        return f"Result: {target_name} is already open."
+    if reason == "nothing_to_take":
+        return f"Result: There is nothing to take from {target_name}."
+
+    return f"Result: {reason}"
 
 
 def _player_party_state_from_simulation(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
@@ -9573,6 +9625,82 @@ def _reconcile_player_reposition_action(
     return final_result
 
 
+def _reconcile_general_interaction_action(
+    final_result: Dict[str, Any],
+    player_input: str,
+) -> Dict[str, Any]:
+    final_result = dict(_safe_dict(final_result))
+    if not _player_input_requests_general_interaction(player_input):
+        return final_result
+
+    resolved_result = dict(_safe_dict(final_result.get("resolved_result")))
+    visible_reason = _safe_str(
+        resolved_result.get("visible_interaction_reason")
+        or final_result.get("visible_interaction_reason")
+    )
+
+    # Do not override combat.
+    if visible_reason.startswith("combat_"):
+        return final_result
+
+    session = _safe_dict(final_result.get("session"))
+    simulation_state = _safe_dict(session.get("simulation_state") or final_result.get("simulation_state"))
+    runtime_state = _safe_dict(session.get("runtime_state") or final_result.get("runtime_state"))
+
+    simulation_state, interaction_result = resolve_general_interaction_v2(
+        simulation_state,
+        runtime_state,
+        player_input,
+    )
+    narration = _fallback_general_interaction_narration(interaction_result)
+
+    resolved_result["action_type"] = interaction_result.get("action_type", "interact")
+    resolved_result["visible_interaction_reason"] = f"interaction_{interaction_result.get('reason')}"
+    resolved_result["outcome"] = interaction_result.get("reason")
+    resolved_result["interaction_result"] = interaction_result
+    resolved_result["general_interaction_result"] = interaction_result
+    resolved_result["forbidden_narration"] = interaction_result.get("forbidden_narration", [])
+    resolved_result["conversation_result"] = {
+        "triggered": False,
+        "reason": "general_interaction",
+    }
+
+    final_result["resolved_result"] = resolved_result
+    final_result["interaction_result"] = interaction_result
+    final_result["general_interaction_result"] = interaction_result
+    final_result["visible_interaction_reason"] = resolved_result["visible_interaction_reason"]
+    final_result["action_type"] = resolved_result["action_type"]
+    final_result["outcome"] = resolved_result["outcome"]
+    final_result["conversation_result"] = resolved_result["conversation_result"]
+    final_result["narration"] = narration
+    final_result["final_narration"] = narration
+    final_result["summary"] = narration
+    final_result["simulation_state"] = simulation_state
+
+    if session:
+        session["simulation_state"] = simulation_state
+        session["runtime_state"] = runtime_state
+        final_result["session"] = session
+
+    result_obj = dict(
+        _safe_dict(final_result.get("result"))
+        or _safe_parse_mapping_payload(final_result.get("result"))
+    )
+    if result_obj:
+        result_obj["interaction_result"] = interaction_result
+        result_obj["general_interaction_result"] = interaction_result
+        result_obj["visible_interaction_reason"] = resolved_result["visible_interaction_reason"]
+        result_obj["action_type"] = resolved_result["action_type"]
+        result_obj["outcome"] = resolved_result["outcome"]
+        result_obj["conversation_result"] = resolved_result["conversation_result"]
+        result_obj["narration"] = narration
+        result_obj["final_narration"] = narration
+        result_obj["summary"] = narration
+        final_result["result"] = result_obj
+
+    return final_result
+
+
 def _reconcile_position_attack_range_gate(final_result: Dict[str, Any], player_input: str) -> Dict[str, Any]:
     final_result = dict(_safe_dict(final_result))
     text = _safe_str(player_input).strip().lower()
@@ -11628,6 +11756,75 @@ def _apply_turn_authoritative(
     )
     _t_step = _time.monotonic()
 
+    if _player_input_requests_general_interaction(player_input):
+        simulation_state, interaction_result = resolve_general_interaction_v2(
+            simulation_state,
+            runtime_state,
+            player_input,
+        )
+
+        resolved_result = {
+            "action_type": interaction_result.get("action_type", "interact"),
+            "visible_interaction_reason": f"interaction_{interaction_result.get('reason')}",
+            "outcome": interaction_result.get("reason"),
+            "interaction_result": interaction_result,
+            "general_interaction_result": interaction_result,
+            "forbidden_narration": interaction_result.get("forbidden_narration", []),
+            "conversation_result": {
+                "triggered": False,
+                "reason": "general_interaction",
+            },
+        }
+
+        narration = _fallback_general_interaction_narration(interaction_result)
+
+        grounded = _derive_grounded_scene_context(
+            simulation_state,
+            runtime_state,
+            resolved_result,
+        )
+
+        return {
+            "ok": True,
+            "simulation_state": simulation_state,
+            "runtime_state": runtime_state,
+            "session": {
+                "simulation_state": simulation_state,
+                "runtime_state": runtime_state,
+            },
+            "result": resolved_result,
+            "resolved_result": resolved_result,
+            "interaction_result": interaction_result,
+            "general_interaction_result": interaction_result,
+            "visible_interaction_reason": resolved_result["visible_interaction_reason"],
+            "action_type": resolved_result["action_type"],
+            "outcome": resolved_result["outcome"],
+            "conversation_result": resolved_result["conversation_result"],
+            "narration": narration,
+            "final_narration": narration,
+            "summary": narration,
+            "narration_context": {
+                "player_input": player_input,
+                "action_type": resolved_result["action_type"],
+                "resolved_result": resolved_result,
+                "simulation_state": simulation_state,
+                "runtime_state": runtime_state,
+                "combat_result": {},
+                "npc_combat_result": {},
+                "combat_state": {},
+                "grounded": grounded,
+                "xp_result": {},
+                "skill_xp_result": {},
+                "level_up": [],
+                "skill_level_ups": [],
+                "settings": runtime_state.get("runtime_settings", {}),
+                "conversation_threads": [],
+                "forbidden_narration": interaction_result.get("forbidden_narration", []),
+            },
+            "turn_id": _build_turn_id(runtime_state),
+            "tick": current_tick,
+        }
+
     _log_interaction_trace(
         "apply_turn_before_semantic_apply",
         {
@@ -13342,6 +13539,7 @@ def apply_turn(
     final_result = _reconcile_invalid_companion_command(final_result, player_input)
     final_result = _reconcile_player_reposition_action(final_result, player_input)
     final_result = _reconcile_companion_command_conversation_suppression(final_result, player_input)
+    final_result = _reconcile_general_interaction_action(final_result, player_input)
     final_result = _reconcile_npc_backbone_social_decision(final_result, player_input)
     final_result = _attach_narration_quality_and_backbone_context(final_result, player_input)
     final_result = _reconcile_narration_quality_memory_and_warnings(final_result)

@@ -69,7 +69,20 @@ def validate_narration_contradictions(
         or resolved_result.get("outcome")
         or resolved_result.get("reason")
     )
+    interaction_result = _safe_dict(
+        final_result.get("general_interaction_result")
+        or final_result.get("interaction_result")
+        or resolved_result.get("general_interaction_result")
+        or resolved_result.get("interaction_result")
+    )
+    if interaction_result:
+        reason = normalize_text(interaction_result.get("reason") or reason)
+
     if reason == "missing_required_item" and any(token in narration for token in ["opens", "unlocks", "clicks open"]):
         warnings.append("narration_contradicts_missing_required_item")
+    if reason in {"target_locked", "container_closed"} and any(token in narration for token in ["opens", "inside you find", "you take"]):
+        warnings.append("narration_contradicts_locked_or_closed_object")
+    if reason == "container_closed" and any(token in narration for token in ["take", "pocket", "loot"]):
+        warnings.append("narration_contradicts_closed_container_take")
 
     return list(dict.fromkeys(warnings))
