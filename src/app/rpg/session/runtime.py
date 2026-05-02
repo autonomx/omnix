@@ -556,6 +556,12 @@ from app.rpg.narration.combat_contract import (
 from app.rpg.narration.combat_prompt import build_combat_narration_prompt
 from app.rpg.narration.combat_service import generate_combat_narration_sync
 from app.rpg.narration.combat_validator import validate_combat_narration
+from app.rpg.narration.contradictions import validate_narration_contradictions
+from app.rpg.narration.quality import (
+    build_narration_quality_context,
+    update_narration_quality_memory,
+    validate_narration_quality,
+)
 from app.rpg.party.companion_commands import maybe_apply_companion_command
 from app.rpg.party.companion_memory import (
     companion_loyalty_projection,
@@ -687,6 +693,7 @@ from app.rpg.session.turn_contract import (
     apply_state_delta,
     build_turn_contract,
 )
+from app.rpg.social.npc_backbone import resolve_npc_backbone_decision
 from app.rpg.world.companion_acceptance import (
     get_pending_companion_offer_debug,
     hydrate_companion_acceptance_from_pending_offers,
@@ -9308,6 +9315,186 @@ def _reconcile_companion_command_conversation_suppression(
     return final_result
 
 
+def _attach_narration_quality_and_backbone_context(
+    final_result: Dict[str, Any],
+    player_input: str,
+) -> Dict[str, Any]:
+    final_result = dict(_safe_dict(final_result))
+    session = _safe_dict(final_result.get("session"))
+    simulation_state = _safe_dict(session.get("simulation_state") or final_result.get("simulation_state"))
+    runtime_state = _safe_dict(session.get("runtime_state") or final_result.get("runtime_state"))
+    resolved_result = dict(_safe_dict(final_result.get("resolved_result")))
+
+    narration_quality_context = build_narration_quality_context(runtime_state)
+    npc_backbone_decision = resolve_npc_backbone_decision(
+        simulation_state,
+        runtime_state,
+        player_input,
+    )
+
+    resolved_result["narration_quality_context"] = narration_quality_context
+    if npc_backbone_decision.get("detected"):
+        resolved_result["npc_backbone_decision"] = npc_backbone_decision
+
+    final_result["resolved_result"] = resolved_result
+    final_result["narration_quality_context"] = narration_quality_context
+    if npc_backbone_decision.get("detected"):
+        final_result["npc_backbone_decision"] = npc_backbone_decision
+
+    narration_context = dict(_safe_dict(final_result.get("narration_context")))
+    narration_context["narration_quality_context"] = narration_quality_context
+    if npc_backbone_decision.get("detected"):
+        narration_context["npc_backbone_decision"] = npc_backbone_decision
+        narration_context["forbidden_narration"] = list(_safe_list(npc_backbone_decision.get("forbidden_outcomes")))
+    final_result["narration_context"] = narration_context
+
+    result_obj = dict(_safe_dict(final_result.get("result")) or _safe_parse_mapping_payload(final_result.get("result")))
+    if result_obj:
+        result_obj["narration_quality_context"] = narration_quality_context
+        if npc_backbone_decision.get("detected"):
+            result_obj["npc_backbone_decision"] = npc_backbone_decision
+        final_result["result"] = result_obj
+
+    return final_result
+
+
+def _reconcile_narration_quality_memory_and_warnings(
+    final_result: Dict[str, Any],
+) -> Dict[str, Any]:
+    final_result = dict(_safe_dict(final_result))
+    session = _safe_dict(final_result.get("session"))
+    runtime_state = dict(_safe_dict(session.get("runtime_state") or final_result.get("runtime_state")))
+    resolved_result = dict(_safe_dict(final_result.get("resolved_result")))
+
+    narration_text = _safe_str(
+        final_result.get("final_narration")
+        or final_result.get("narration")
+        or final_result.get("summary")
+        or _safe_dict(final_result.get("result")).get("final_narration")
+        or _safe_dict(final_result.get("result")).get("narration")
+    )
+
+    warnings = validate_narration_quality(
+        narration_text,
+        runtime_state,
+        resolved_result,
+    )
+    warnings.extend(validate_narration_contradictions(final_result))
+    warnings = list(dict.fromkeys(warnings))
+
+    if narration_text:
+        runtime_state = update_narration_quality_memory(runtime_state, narration_text)
+        session["runtime_state"] = runtime_state
+        final_result["runtime_state"] = runtime_state
+        final_result["session"] = session
+
+        result_obj = dict(
+            _safe_dict(final_result.get("result"))
+            or _safe_parse_mapping_payload(final_result.get("result"))
+        )
+        if result_obj:
+            result_obj["runtime_state"] = runtime_state
+            final_result["result"] = result_obj
+
+    if warnings:
+        existing = list(_safe_list(final_result.get("narration_quality_warnings")))
+        existing.extend(warnings)
+        final_result["narration_quality_warnings"] = list(dict.fromkeys(existing))
+        resolved_result["narration_quality_warnings"] = final_result["narration_quality_warnings"]
+        final_result["resolved_result"] = resolved_result
+
+        result_obj = dict(_safe_dict(final_result.get("result")) or _safe_parse_mapping_payload(final_result.get("result")))
+        if result_obj:
+            result_obj["narration_quality_warnings"] = final_result["narration_quality_warnings"]
+            final_result["result"] = result_obj
+
+    return final_result
+
+
+def _reconcile_npc_backbone_social_decision(
+    final_result: Dict[str, Any],
+    player_input: str,
+) -> Dict[str, Any]:
+    final_result = dict(_safe_dict(final_result))
+    session = _safe_dict(final_result.get("session"))
+    simulation_state = _safe_dict(session.get("simulation_state") or final_result.get("simulation_state"))
+    runtime_state = _safe_dict(session.get("runtime_state") or final_result.get("runtime_state"))
+
+    decision = resolve_npc_backbone_decision(
+        simulation_state,
+        runtime_state,
+        player_input,
+    )
+    if not decision.get("detected"):
+        return final_result
+
+    resolved_result = dict(_safe_dict(final_result.get("resolved_result")))
+
+    # Do not override already-authoritative combat/service purchases.
+    action_type = _safe_str(resolved_result.get("action_type") or final_result.get("action_type"))
+    visible_reason = _safe_str(resolved_result.get("visible_interaction_reason") or final_result.get("visible_interaction_reason"))
+    if visible_reason.startswith("combat_"):
+        return final_result
+
+    result_reason = f"npc_{decision.get('decision')}"
+    narration = _fallback_npc_backbone_narration(decision)
+
+    resolved_result["action_type"] = "npc_social_decision"
+    resolved_result["visible_interaction_reason"] = result_reason
+    resolved_result["outcome"] = decision.get("reason")
+    resolved_result["npc_backbone_decision"] = decision
+    resolved_result["conversation_result"] = {
+        "triggered": False,
+        "reason": "npc_backbone_social_decision",
+    }
+
+    final_result["resolved_result"] = resolved_result
+    final_result["npc_backbone_decision"] = decision
+    final_result["visible_interaction_reason"] = result_reason
+    final_result["action_type"] = "npc_social_decision"
+    final_result["outcome"] = decision.get("reason")
+    final_result["conversation_result"] = resolved_result["conversation_result"]
+    final_result["narration"] = narration
+    final_result["final_narration"] = narration
+    final_result["summary"] = narration
+
+    result_obj = dict(_safe_dict(final_result.get("result")) or _safe_parse_mapping_payload(final_result.get("result")))
+    if result_obj:
+        result_obj["npc_backbone_decision"] = decision
+        result_obj["visible_interaction_reason"] = result_reason
+        result_obj["action_type"] = "npc_social_decision"
+        result_obj["outcome"] = decision.get("reason")
+        result_obj["conversation_result"] = resolved_result["conversation_result"]
+        result_obj["narration"] = narration
+        result_obj["final_narration"] = narration
+        result_obj["summary"] = narration
+        final_result["result"] = result_obj
+
+    return final_result
+
+
+def _fallback_npc_backbone_narration(decision: Dict[str, Any]) -> str:
+    npc_id = _safe_str(decision.get("npc_id") or "npc")
+    decision_kind = _safe_str(decision.get("decision"))
+    reason = _safe_str(decision.get("reason"))
+    tone = _safe_str(decision.get("tone") or "firm")
+
+    if npc_id == "npc:bran":
+        name = "Bran"
+    else:
+        name = npc_id
+
+    if decision_kind == "accept":
+        return f"Result: {name} agrees, his tone {tone}, because {reason}."
+    if decision_kind == "negotiate":
+        alt = _safe_str(decision.get("may_offer_alternative") or "offers a limited alternative")
+        return f"Result: {name} does not fully agree; he {alt.replace('_', ' ')}."
+    if decision_kind == "escalate":
+        escalation = _safe_str(decision.get("escalation") or "warns you to stop")
+        return f"Result: {name} refuses and escalates: {escalation.replace('_', ' ')}."
+    return f"Result: {name} refuses. Reason: {reason.replace('_', ' ')}."
+
+
 def _reconcile_player_reposition_action(
     final_result: Dict[str, Any],
     player_input: str,
@@ -13155,6 +13342,9 @@ def apply_turn(
     final_result = _reconcile_invalid_companion_command(final_result, player_input)
     final_result = _reconcile_player_reposition_action(final_result, player_input)
     final_result = _reconcile_companion_command_conversation_suppression(final_result, player_input)
+    final_result = _reconcile_npc_backbone_social_decision(final_result, player_input)
+    final_result = _attach_narration_quality_and_backbone_context(final_result, player_input)
+    final_result = _reconcile_narration_quality_memory_and_warnings(final_result)
     return final_result
 
 
