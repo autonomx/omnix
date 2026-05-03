@@ -78,6 +78,11 @@ try:
 except Exception:
     QUEST_PUZZLE_L13_L15_SCENARIOS = {}
 
+try:
+    from tests.rpg.manual.scenarios.story_m1_m3 import STORY_M1_M3_SCENARIOS
+except Exception:
+    STORY_M1_M3_SCENARIOS = {}
+
 
 def build_service_scenarios(
     legacy_scenarios: Dict[str, Dict[str, Any]] | None = None,
@@ -97,6 +102,7 @@ def build_service_scenarios(
         CONVERSATION_CORE_SCENARIOS,
         NPC_SOCIAL_MEMORY_SCENARIOS,
         NPC_EVOLUTION_COMPANIONS_SCENARIOS,
+        STORY_M1_M3_SCENARIOS,
         INVENTORY_M2_M8_SCENARIOS,
         SCENE_ACTIVITY_SCENARIOS,
         SOCIAL_L10_L12_SCENARIOS,

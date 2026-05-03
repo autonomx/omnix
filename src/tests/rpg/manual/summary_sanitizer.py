@@ -497,68 +497,27 @@ def sanitize_turn_for_summary(
             if isinstance(item, dict)
         ]
 
-    # Ensure narration preview
-    if "narration_preview" not in sanitized:
-        sanitized["narration_preview"] = _extract_narration_preview(result, limits["max_text"])
-
-    # Combat summary
-    combat_summary = _extract_combat_summary(result)
-    if combat_summary:
-        sanitized["combat_result"] = combat_summary
-
-    # Combat narration summary
-    combat_narration = _extract_combat_narration_summary(result)
-    for k, v in combat_narration.items():
-        if v is not None and v != "":
-            sanitized[f"combat_narration_{k}"] = v
-
-    # LLM status
-    if "llm_called" not in sanitized:
-        sanitized["llm_called"] = result.get("used_llm") or result.get("llm_called")
-
-    # Visible interaction reason
-    if "visible_interaction_reason" not in sanitized:
-        interaction_result = _safe_dict(_safe_dict(result.get("result"))).get("interaction_result")
-        if interaction_result:
-            reason = _safe_str(interaction_result.get("reason"))
-            if reason and reason not in ("", "unknown"):
-                sanitized["visible_interaction_reason"] = reason
-
-    # Raw result keys (for debugging)
-    if result:
-        sanitized["raw_result_keys"] = sorted(result.keys())[:limits["max_dict_keys"]]
-
-    # Detail-specific fields
-    if limits["include_debug_fields"]:
-        # Narration debug info
-        sanitized["narration_debug"] = _extract_narration_debug(result, limits)
-
-        # Deterministic contract
-        sanitized.update(_extract_deterministic_contract(result, limits))
-
-        # Combat narration payload
-        combat_payload = result.get("combat_narration_payload")
-        if combat_payload:
-            sanitized["combat_narration_payload"] = _preview(_safe_str(combat_payload), limits["max_text"])
-
-    if limits["include_extracted"]:
-        sanitized["extracted"] = _extract_extracted_fields(result)
-
-    if limits["include_full_state"]:
-        sanitized["full_state"] = _cap_dict_keys(result, limits["max_dict_keys"])
-
-    # Compact result (stripped version)
-    if result and detail != "full":
-        sanitized["result_compact"] = compact_result_for_summary(result, detail)
-
-    # Preserve error if present
-    if turn.get("error"):
-        sanitized["error"] = _preview(_safe_str(turn["error"]), limits["max_text"])
-
-    # Preserve warnings
-    for warning_key in ("regression_warnings", "scenario_warnings"):
-        if warning_key in turn:
-            sanitized[warning_key] = _safe_list(turn[warning_key])[:limits["max_list"]]
+    story_m1_m3_check_results = turn.get("story_m1_m3_check_results")
+    if isinstance(story_m1_m3_check_results, list):
+        sanitized["story_m1_m3_check_results"] = [
+            {
+                "check_type": item.get("check_type"),
+                "ok": item.get("ok"),
+                "lore_id": item.get("lore_id"),
+                "arc_id": item.get("arc_id"),
+                "entry": item.get("entry"),
+                "arc": item.get("arc"),
+                "expected_ok": item.get("expected_ok"),
+                "actual_ok": item.get("actual_ok"),
+                "condition_result": item.get("condition_result"),
+                "failures": item.get("failures"),
+                "link_count": item.get("link_count"),
+                "max_link_count": item.get("max_link_count"),
+                "error": item.get("error"),
+            }
+            for item in story_m1_m3_check_results[:50]
+            if isinstance(item, dict)
+        ]
 
     return sanitized
 

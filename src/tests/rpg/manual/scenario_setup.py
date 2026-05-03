@@ -7,7 +7,9 @@ from app.rpg.memory.observation import (
     record_event_observations,
     record_told_memory,
 )
+from app.rpg.lore.transitions import apply_lore_transition
 from app.rpg.puzzles.transitions import apply_puzzle_transition
+from app.rpg.story_arcs.transitions import apply_story_arc_transition
 from app.rpg.quests.transitions import apply_quest_transition
 from app.rpg.social.leverage import add_social_leverage
 from app.rpg.social.reputation import (
@@ -176,6 +178,18 @@ def _apply_manual_scenario_setup(session: Dict[str, Any], scenario: Dict[str, An
         # authoritative simulation_state before session save/sync.
         simulation_state["social_state"] = social_state
 
+    for transition in scenario.get("setup_lore_transitions") or []:
+        if isinstance(transition, dict):
+            apply_lore_transition(
+                simulation_state,
+                transition,
+                turn_index=int(
+                    transition.get("turn_index")
+                    or scenario.get("setup_turn_index")
+                    or 1
+                ),
+            )
+
     for item_id in scenario.get("setup_manual_inventory_items") or []:
         simulation_state.setdefault("manual_inventory_items", [])
         if item_id not in simulation_state["manual_inventory_items"]:
@@ -201,6 +215,18 @@ def _apply_manual_scenario_setup(session: Dict[str, Any], scenario: Dict[str, An
     for transition in scenario.get("setup_quest_transitions") or []:
         if isinstance(transition, dict):
             apply_quest_transition(
+                simulation_state,
+                transition,
+                turn_index=int(
+                    transition.get("turn_index")
+                    or scenario.get("setup_turn_index")
+                    or 1
+                ),
+            )
+
+    for transition in scenario.get("setup_story_arc_transitions") or []:
+        if isinstance(transition, dict):
+            apply_story_arc_transition(
                 simulation_state,
                 transition,
                 turn_index=int(

@@ -1,7 +1,7 @@
 from app.rpg.memory.observation import record_told_memory
+from app.rpg.puzzles.state import set_puzzle_flag, start_puzzle
 from app.rpg.quests.conditions import evaluate_quest_condition
 from app.rpg.quests.state import start_quest
-from app.rpg.puzzles.state import set_puzzle_flag, start_puzzle
 from app.rpg.social.reputation import set_relationship_values
 from tests.rpg.spatial.fixtures import tavern_spatial_fixture
 
