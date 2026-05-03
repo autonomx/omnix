@@ -28,6 +28,9 @@ from tests.rpg.manual.scenarios.expected_story_m1_m3_names import (
 from tests.rpg.manual.scenarios.expected_story_pack_m13_m15_names import (
     EXPECTED_STORY_PACK_M13_M15_SCENARIO_NAMES,
 )
+from tests.rpg.manual.scenarios.expected_campaign_director_m22_m24_names import (
+    EXPECTED_CAMPAIGN_DIRECTOR_M22_M24_SCENARIO_NAMES,
+)
 
 
 def test_manual_scenario_migration_audit():
@@ -214,3 +217,10 @@ def test_manual_scenario_registry_includes_dialogue_m16_m18_names():
     missing = EXPECTED_DIALOGUE_M16_M18_SCENARIO_NAMES - names
 
     assert not missing, f"Missing M16-M18 dialogue scenarios: {sorted(missing)}"
+
+
+def test_manual_scenario_registry_includes_campaign_director_m22_m24_names():
+    names = set(build_service_scenarios().keys())
+    missing = EXPECTED_CAMPAIGN_DIRECTOR_M22_M24_SCENARIO_NAMES - names
+
+    assert not missing, f"Missing M22-M24 campaign director scenarios: {sorted(missing)}"

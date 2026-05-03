@@ -671,6 +671,31 @@ def sanitize_turn_for_summary(
             if isinstance(item, dict)
         ]
 
+    campaign_director_m22_m24_check_results = turn.get("campaign_director_m22_m24_check_results")
+    if isinstance(campaign_director_m22_m24_check_results, list):
+        sanitized["campaign_director_m22_m24_check_results"] = [
+            {
+                "check_type": item.get("check_type"),
+                "ok": item.get("ok"),
+                "evaluation": item.get("evaluation"),
+                "applied": item.get("applied"),
+                "snapshot": item.get("snapshot"),
+                "arc_id": item.get("arc_id"),
+                "arc": item.get("arc"),
+                "event_id": item.get("event_id"),
+                "npc_id": item.get("npc_id"),
+                "evolution": item.get("evolution"),
+                "expected_eligible_count": item.get("expected_eligible_count"),
+                "expected_first_event_id": item.get("expected_first_event_id"),
+                "expected_applied_count": item.get("expected_applied_count"),
+                "expected_reason": item.get("expected_reason"),
+                "failures": item.get("failures"),
+                "error": item.get("error"),
+            }
+            for item in campaign_director_m22_m24_check_results[:50]
+            if isinstance(item, dict)
+        ]
+
     return sanitized
 
 
