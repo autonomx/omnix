@@ -5,6 +5,7 @@ from typing import Any, Dict, List
 from tests.rpg.manual import output_artifacts
 from tests.rpg.manual.spatial_checks import run_spatial_checks
 from tests.rpg.manual.memory_checks import run_memory_checks
+from tests.rpg.manual.social_checks import run_social_checks
 from tests.rpg.manual.output_state import (
     _REGRESSION_WARNING_LOCK,
     _REGRESSION_WARNING_ROWS,
@@ -271,6 +272,38 @@ def _run_one_service_scenario(
                 if not check_result.get("ok"):
                     turn_summary.setdefault("scenario_warnings", []).append(
                         "memory_check_failed:"
+                        + str(scenario_name)
+                        + ":turn_"
+                        + str(turn_index)
+                        + ":"
+                        + str(check_result.get("check_type"))
+                        + ":"
+                        + str(check_result.get("error") or "")
+                    )
+
+        social_checks = [
+            check
+            for check in checks
+            if isinstance(check, dict)
+            and str(check.get("type") or "").startswith("social_")
+        ]
+        if social_checks:
+            current_session = {}
+            try:
+                current_session = _ensure_manual_session(session_id)
+            except Exception:
+                current_session = session
+
+            social_check_results = run_social_checks(
+                checks=social_checks,
+                result=turn_summary.get("result") or turn_summary,
+                session=current_session,
+            )
+            turn_summary["social_check_results"] = social_check_results
+            for check_result in social_check_results:
+                if not check_result.get("ok"):
+                    turn_summary.setdefault("scenario_warnings", []).append(
+                        "social_check_failed:"
                         + str(scenario_name)
                         + ":turn_"
                         + str(turn_index)

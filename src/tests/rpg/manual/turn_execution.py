@@ -1,13 +1,33 @@
 from __future__ import annotations
 
 import json
-from typing import Any, Dict
+from typing import Any, Callable, Dict
 
 from tests.rpg.manual import output_artifacts
 from tests.rpg.manual.safe import _safe_dict, _safe_str
 from tests.rpg.manual.scenario_summary import _compact_result_for_summary
 from tests.rpg.manual.summary_sanitizer import sanitize_turn_for_summary
 from tests.rpg.manual.token_usage import _record_token_usage
+
+
+def _get_apply_turn() -> Callable:
+    """Robustly locate apply_turn from the actual module path."""
+    candidates = [
+        ("app.rpg.session.runtime", "apply_turn"),
+        ("app.rpg.session.service", "apply_turn"),
+        ("app.rpg.session.turn_runtime", "apply_turn"),
+        ("app.rpg.session.runtime_service", "apply_turn"),
+    ]
+    errors = []
+    for module_name, attr in candidates:
+        try:
+            module = __import__(module_name, fromlist=[attr])
+            fn = getattr(module, attr)
+            if callable(fn):
+                return fn
+        except Exception as exc:
+            errors.append(f"{module_name}.{attr}:{type(exc).__name__}:{exc}")
+    raise ImportError("manual_apply_turn_not_found:" + " | ".join(errors))
 
 
 def _extract_player_input_from_turn(turn: Any) -> str:
@@ -45,7 +65,7 @@ def _run_one_manual_turn(
         }
 
     try:
-        from app.rpg.session.runtime import apply_turn
+        apply_turn = _get_apply_turn()
 
         result = apply_turn(
             session_id=session_id,

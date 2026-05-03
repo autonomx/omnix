@@ -31,6 +31,28 @@ from tests.rpg.manual.token_usage import _reset_token_usage
 SERVICE_SCENARIOS = build_service_scenarios()
 
 
+def run_single_scenario(scenario_name: str) -> Dict[str, Any] | None:
+    """Run a single scenario by name and return its summary."""
+    if scenario_name not in SERVICE_SCENARIOS:
+        return None
+    scenario = SERVICE_SCENARIOS[scenario_name]
+    run_id = _new_manual_run_id()
+    return _run_one_service_scenario(
+        scenario_name=scenario_name,
+        scenario=scenario,
+        run_id=run_id,
+        split_files=True,
+        legacy_channel="service_legacy",
+        stable_session_ids=False,
+        reset_session_state=True,
+        console_llm=True,
+        console_llm_raw=False,
+        console_llm_max_chars=10_000,
+        fail_on_regression_warnings=False,
+        artifact_detail="summary",
+    )
+
+
 def _new_manual_run_id() -> str:
     """Create a run id without depending on the old monolith wrapper.
 
