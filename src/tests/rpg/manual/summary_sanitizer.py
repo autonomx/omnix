@@ -549,6 +549,34 @@ def sanitize_turn_for_summary(
             if isinstance(item, dict)
         ]
 
+    escalation_m7_m9_check_results = turn.get("escalation_m7_m9_check_results")
+    if isinstance(escalation_m7_m9_check_results, list):
+        sanitized["escalation_m7_m9_check_results"] = [
+            {
+                "check_type": item.get("check_type"),
+                "ok": item.get("ok"),
+                "rule_id": item.get("rule_id"),
+                "arc_id": item.get("arc_id"),
+                "event_id": item.get("event_id"),
+                "expected_eligible": item.get("expected_eligible"),
+                "actual_eligible": item.get("actual_eligible"),
+                "expected_eligible_count": item.get("expected_eligible_count"),
+                "expected_first_rule_id": item.get("expected_first_rule_id"),
+                "expected_count": item.get("expected_count"),
+                "actual_count": item.get("actual_count"),
+                "expected_first_event_id": item.get("expected_first_event_id"),
+                "evaluation": item.get("evaluation"),
+                "pressure": item.get("pressure"),
+                "application": item.get("application"),
+                "arc": item.get("arc"),
+                "applied": item.get("applied"),
+                "failures": item.get("failures"),
+                "error": item.get("error"),
+            }
+            for item in escalation_m7_m9_check_results[:50]
+            if isinstance(item, dict)
+        ]
+
     return sanitized
 
 

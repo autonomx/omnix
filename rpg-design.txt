@@ -1,52 +1,55 @@
-Bundle M4-M6 — Story Event Schema + Deterministic Event Effects v1
+Bundle M7-M9 — Escalation Engine + Director Pressure v1
 GOAL:
-Add deterministic story events and bounded event effects.
+Add deterministic story escalation rules and director pressure.
 
-A story event is structured, validated, applied once, and may update:
-- story arc pressure/stage/flags
-- lore reveal/truth/known-by/tags
-- causal memories
-- social deltas
-- quest transitions
-- puzzle transitions
-- bounded world event rows
+Story arcs should be able to escalate when deterministic conditions are met:
+- pressure thresholds
+- arc stages
+- quest incomplete/completed status
+- cooldowns
+- max applications
+- resolved/failed arc status
 
-LLM may narrate story events later, but cannot invent or directly apply story event effects.
-Patch 1 — Add story events package
-1. Add src/app/rpg/story_events/__init__.py
+Director pressure should be advisory:
+- it lists eligible/high-priority pressure signals
+- it does not apply events by itself
+- explicit escalation application applies story events
+
+Simulation is authoritative.
+LLM may narrate director pressure later, but cannot decide escalation eligibility or apply escalation effects.
+Patch 1 — Add escalation package
+1. Add src/app/rpg/escalation/__init__.py
 *** Begin Patch
-*** Add File: src/app/rpg/story_events/__init__.py
-+"""Deterministic RPG story event helpers."""
+*** Add File: src/app/rpg/escalation/__init__.py
++"""Deterministic RPG story escalation and director pressure helpers."""
 +
-+from app.rpg.story_events.effects import apply_story_event_effect
-+from app.rpg.story_events.state import (
-+    ensure_story_event_state,
-+    get_applied_story_event,
-+    has_story_event_been_applied,
-+    mark_story_event_applied,
-+    normalize_story_event_state,
++from app.rpg.escalation.director import build_director_pressure
++from app.rpg.escalation.rules import (
++    apply_escalation_rule,
++    evaluate_escalation_rule,
++    evaluate_escalation_rules,
 +)
-+from app.rpg.story_events.validation import (
-+    validate_story_event,
-+    validate_story_event_effect,
++from app.rpg.escalation.state import (
++    ensure_escalation_state,
++    get_escalation_rule_application,
++    mark_escalation_rule_applied,
++    normalize_escalation_state,
 +)
-+from app.rpg.story_events.application import apply_story_event
 +
 +__all__ = [
-+    "apply_story_event",
-+    "apply_story_event_effect",
-+    "ensure_story_event_state",
-+    "get_applied_story_event",
-+    "has_story_event_been_applied",
-+    "mark_story_event_applied",
-+    "normalize_story_event_state",
-+    "validate_story_event",
-+    "validate_story_event_effect",
++    "apply_escalation_rule",
++    "build_director_pressure",
++    "ensure_escalation_state",
++    "evaluate_escalation_rule",
++    "evaluate_escalation_rules",
++    "get_escalation_rule_application",
++    "mark_escalation_rule_applied",
++    "normalize_escalation_state",
 +]
 *** End Patch
-2. Add src/app/rpg/story_events/model.py
+2. Add src/app/rpg/escalation/model.py
 *** Begin Patch
-*** Add File: src/app/rpg/story_events/model.py
+*** Add File: src/app/rpg/escalation/model.py
 +from __future__ import annotations
 +
 +from dataclasses import asdict, dataclass, field
@@ -54,39 +57,42 @@ Patch 1 — Add story events package
 +
 +
 +@dataclass
-+class StoryEventEffect:
-+    type: str
-+    data: Dict[str, Any] = field(default_factory=dict)
++class EscalationRule:
++    rule_id: str
++    arc_id: str
++    priority: int = 50
++    event: Dict[str, Any] = field(default_factory=dict)
++    conditions: List[Dict[str, Any]] = field(default_factory=list)
++    cooldown_turns: int = 0
++    max_applications: int = 1
++    pressure_type: str = "story"
++    reason: str = ""
++    tags: List[str] = field(default_factory=list)
 +
 +    def to_dict(self) -> Dict[str, Any]:
 +        return asdict(self)
 +
 +
 +@dataclass
-+class StoryEventRecord:
-+    event_id: str
-+    arc_id: str = ""
-+    kind: str = "event"
-+    location_id: str = ""
-+    participants: List[str] = field(default_factory=list)
-+    summary: str = ""
-+    preconditions: List[Dict[str, Any]] = field(default_factory=list)
-+    effects: List[Dict[str, Any]] = field(default_factory=list)
-+    tags: List[str] = field(default_factory=list)
-+    metadata: Dict[str, Any] = field(default_factory=dict)
++class EscalationRuleApplication:
++    rule_id: str
++    arc_id: str
++    application_count: int = 0
++    last_applied_turn: int | None = None
++    applied_event_ids: List[str] = field(default_factory=list)
 +
 +    def to_dict(self) -> Dict[str, Any]:
 +        return asdict(self)
 *** End Patch
-3. Add src/app/rpg/story_events/state.py
+3. Add src/app/rpg/escalation/state.py
 *** Begin Patch
-*** Add File: src/app/rpg/story_events/state.py
+*** Add File: src/app/rpg/escalation/state.py
 +from __future__ import annotations
 +
 +from typing import Any, Dict, List
 +
 +
-+MAX_APPLIED_STORY_EVENTS = 500
++MAX_ESCALATION_RULE_APPLICATIONS = 500
 +
 +
 +def _safe_dict(value: Any) -> Dict[str, Any]:
@@ -108,128 +114,118 @@ Patch 1 — Add story events package
 +        return default
 +
 +
-+def normalize_applied_story_event(value: Dict[str, Any]) -> Dict[str, Any]:
++def _safe_int_or_none(value: Any) -> int | None:
++    if value is None:
++        return None
++    try:
++        return int(value)
++    except Exception:
++        return None
++
++
++def normalize_escalation_application(value: Dict[str, Any], *, rule_id: str = "") -> Dict[str, Any]:
 +    value = _safe_dict(value)
++    normalized_rule_id = _safe_str(value.get("rule_id")) or rule_id
 +    return {
-+        "event_id": _safe_str(value.get("event_id")),
++        "rule_id": normalized_rule_id,
 +        "arc_id": _safe_str(value.get("arc_id")),
-+        "kind": _safe_str(value.get("kind")) or "event",
-+        "summary": _safe_str(value.get("summary")),
-+        "turn_index": _safe_int(value.get("turn_index"), 0),
-+        "effect_results": [
-+            dict(row)
-+            for row in _safe_list(value.get("effect_results"))
-+            if isinstance(row, dict)
-+        ][:50],
-+        "metadata": dict(_safe_dict(value.get("metadata"))),
++        "application_count": max(0, _safe_int(value.get("application_count"), 0)),
++        "last_applied_turn": _safe_int_or_none(value.get("last_applied_turn")),
++        "applied_event_ids": [
++            str(item)
++            for item in _safe_list(value.get("applied_event_ids"))
++            if str(item)
++        ][-50:],
 +    }
 +
 +
-+def normalize_story_event_state(value: Dict[str, Any] | None) -> Dict[str, Any]:
++def normalize_escalation_state(value: Dict[str, Any] | None) -> Dict[str, Any]:
 +    value = _safe_dict(value)
-+    applied_events: Dict[str, Dict[str, Any]] = {}
-+    for event_id, row in _safe_dict(value.get("applied_events")).items():
-+        event_id = str(event_id or "")
-+        if not event_id:
++    applications: Dict[str, Dict[str, Any]] = {}
++    for rule_id, row in _safe_dict(value.get("rule_applications")).items():
++        rule_id = str(rule_id or "")
++        if not rule_id:
 +            continue
-+        applied_events[event_id] = normalize_applied_story_event(
-+            dict(row, event_id=event_id)
-+        )
++        applications[rule_id] = normalize_escalation_application(row, rule_id=rule_id)
 +    ordered_ids = sorted(
-+        applied_events,
-+        key=lambda eid: (
-+            int(applied_events[eid].get("turn_index") or 0),
-+            eid,
++        applications,
++        key=lambda rid: (
++            int(applications[rid].get("last_applied_turn") or 0),
++            rid,
 +        ),
-+    )[-MAX_APPLIED_STORY_EVENTS:]
++    )[-MAX_ESCALATION_RULE_APPLICATIONS:]
 +    return {
 +        "version": 1,
-+        "applied_events": {event_id: applied_events[event_id] for event_id in ordered_ids},
-+        "max_applied_events": MAX_APPLIED_STORY_EVENTS,
++        "rule_applications": {
++            rule_id: applications[rule_id]
++            for rule_id in ordered_ids
++        },
++        "max_rule_applications": MAX_ESCALATION_RULE_APPLICATIONS,
 +    }
 +
 +
-+def ensure_story_event_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
++def ensure_escalation_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
 +    if not isinstance(simulation_state, dict):
 +        raise TypeError("simulation_state_must_be_dict")
-+    state = normalize_story_event_state(simulation_state.get("story_event_state"))
-+    simulation_state["story_event_state"] = state
++    state = normalize_escalation_state(simulation_state.get("escalation_state"))
++    simulation_state["escalation_state"] = state
 +    return state
 +
 +
-+def has_story_event_been_applied(simulation_state: Dict[str, Any], event_id: str) -> bool:
-+    state = ensure_story_event_state(simulation_state)
-+    return event_id in state.get("applied_events", {})
-+
-+
-+def get_applied_story_event(
++def get_escalation_rule_application(
 +    simulation_state: Dict[str, Any],
-+    event_id: str,
++    rule_id: str,
 +) -> Dict[str, Any] | None:
-+    state = ensure_story_event_state(simulation_state)
-+    return state.get("applied_events", {}).get(event_id)
++    state = ensure_escalation_state(simulation_state)
++    return state.get("rule_applications", {}).get(rule_id)
 +
 +
-+def mark_story_event_applied(
++def mark_escalation_rule_applied(
 +    simulation_state: Dict[str, Any],
-+    event: Dict[str, Any],
 +    *,
-+    effect_results: List[Dict[str, Any]],
++    rule_id: str,
++    arc_id: str,
++    event_id: str,
 +    turn_index: int = 0,
 +) -> Dict[str, Any]:
-+    state = ensure_story_event_state(simulation_state)
-+    event_id = str(event.get("event_id") or "")
-+    if not event_id:
-+        return {"ok": False, "reason": "missing_event_id"}
-+    applied = normalize_applied_story_event(
-+        {
-+            "event_id": event_id,
-+            "arc_id": event.get("arc_id") or "",
-+            "kind": event.get("kind") or "event",
-+            "summary": event.get("summary") or "",
-+            "turn_index": turn_index,
-+            "effect_results": effect_results,
-+            "metadata": {"participants": list(event.get("participants") or [])[:20]},
-+        }
++    state = ensure_escalation_state(simulation_state)
++    applications = state.setdefault("rule_applications", {})
++    current = normalize_escalation_application(
++        applications.get(rule_id) or {"rule_id": rule_id, "arc_id": arc_id},
++        rule_id=rule_id,
 +    )
-+    state.setdefault("applied_events", {})[event_id] = applied
-+    # Re-normalize to enforce bounds.
-+    simulation_state["story_event_state"] = normalize_story_event_state(state)
++    current["arc_id"] = arc_id
++    current["application_count"] = int(current.get("application_count") or 0) + 1
++    current["last_applied_turn"] = int(turn_index or 0)
++    event_ids = list(current.get("applied_event_ids") or [])
++    if event_id and event_id not in event_ids:
++        event_ids.append(event_id)
++    current["applied_event_ids"] = event_ids[-50:]
++    applications[rule_id] = current
++    simulation_state["escalation_state"] = normalize_escalation_state(state)
 +    return {
 +        "ok": True,
-+        "reason": "applied_marked",
++        "reason": "rule_application_marked",
++        "rule_id": rule_id,
++        "arc_id": arc_id,
 +        "event_id": event_id,
-+        "applied": simulation_state["story_event_state"]["applied_events"][event_id],
++        "application": simulation_state["escalation_state"]["rule_applications"][rule_id],
 +    }
 *** End Patch
-4. Add src/app/rpg/story_events/validation.py
+4. Add src/app/rpg/escalation/rules.py
 *** Begin Patch
-*** Add File: src/app/rpg/story_events/validation.py
+*** Add File: src/app/rpg/escalation/rules.py
 +from __future__ import annotations
 +
 +from typing import Any, Dict, List
 +
-+from app.rpg.lore.state import get_lore_entry
-+from app.rpg.puzzles.state import get_puzzle
-+from app.rpg.quests.state import get_quest
-+from app.rpg.story_arcs.conditions import evaluate_story_arc_condition
++from app.rpg.escalation.state import (
++    get_escalation_rule_application,
++    mark_escalation_rule_applied,
++)
++from app.rpg.story_arcs.conditions import evaluate_all_story_arc_conditions
 +from app.rpg.story_arcs.state import get_story_arc
-+
-+
-+ALLOWED_STORY_EVENT_EFFECT_TYPES = {
-+    "arc_pressure_delta",
-+    "arc_stage_set",
-+    "arc_flag_set",
-+    "lore_reveal",
-+    "lore_truth_status_set",
-+    "lore_known_by_add",
-+    "lore_tag_add",
-+    "quest_transition",
-+    "puzzle_transition",
-+    "memory_event",
-+    "social_delta",
-+    "world_event_emit",
-+}
++from app.rpg.story_events.application import apply_story_event
 +
 +
 +def _safe_dict(value: Any) -> Dict[str, Any]:
@@ -240,777 +236,624 @@ Patch 1 — Add story events package
 +    return value if isinstance(value, list) else []
 +
 +
-+def _safe_str(value: Any) -> str:
-+    return value if isinstance(value, str) else ""
++def _safe_int(value: Any, default: int = 0) -> int:
++    try:
++        return int(value)
++    except Exception:
++        return default
 +
 +
-+def validate_story_event_effect(
++def normalize_escalation_rule(rule: Dict[str, Any]) -> Dict[str, Any]:
++    rule = _safe_dict(rule)
++    return {
++        "rule_id": str(rule.get("rule_id") or ""),
++        "arc_id": str(rule.get("arc_id") or ""),
++        "priority": max(0, min(100, _safe_int(rule.get("priority"), 50))),
++        "event": dict(_safe_dict(rule.get("event"))),
++        "conditions": [
++            dict(row)
++            for row in _safe_list(rule.get("conditions"))
++            if isinstance(row, dict)
++        ][:25],
++        "cooldown_turns": max(0, _safe_int(rule.get("cooldown_turns"), 0)),
++        "max_applications": max(0, _safe_int(rule.get("max_applications"), 1)),
++        "pressure_type": str(rule.get("pressure_type") or "story"),
++        "reason": str(rule.get("reason") or ""),
++        "tags": [
++            str(tag)
++            for tag in _safe_list(rule.get("tags"))
++            if str(tag)
++        ][:20],
++    }
++
++
++def _cooldown_remaining(
++    application: Dict[str, Any] | None,
++    *,
++    cooldown_turns: int,
++    turn_index: int,
++) -> int:
++    if not application:
++        return 0
++    last = application.get("last_applied_turn")
++    if last is None:
++        return 0
++    elapsed = int(turn_index or 0) - int(last or 0)
++    return max(0, int(cooldown_turns or 0) - elapsed)
++
++
++def evaluate_escalation_rule(
 +    simulation_state: Dict[str, Any],
-+    effect: Dict[str, Any],
++    rule: Dict[str, Any],
++    *,
++    turn_index: int = 0,
 +) -> Dict[str, Any]:
-+    effect = _safe_dict(effect)
-+    effect_type = str(effect.get("type") or "")
-+    if effect_type not in ALLOWED_STORY_EVENT_EFFECT_TYPES:
++    rule = normalize_escalation_rule(rule)
++    rule_id = rule["rule_id"]
++    arc_id = rule["arc_id"]
++
++    if not rule_id:
 +        return {
 +            "ok": False,
-+            "reason": "unknown_effect_type",
-+            "effect_type": effect_type,
-+            "allowed_effect_types": sorted(ALLOWED_STORY_EVENT_EFFECT_TYPES),
++            "eligible": False,
++            "reason": "missing_rule_id",
++            "rule": rule,
 +        }
 +
-+    if effect_type in {"arc_pressure_delta", "arc_stage_set", "arc_flag_set"}:
-+        arc_id = str(effect.get("arc_id") or "")
-+        if not get_story_arc(simulation_state, arc_id):
-+            return {
-+                "ok": False,
-+                "reason": "arc_missing",
-+                "effect_type": effect_type,
-+                "arc_id": arc_id,
-+            }
-+        if effect_type == "arc_pressure_delta":
-+            delta = int(effect.get("delta") or 0)
-+            if delta < -100 or delta > 100:
-+                return {
-+                    "ok": False,
-+                    "reason": "pressure_delta_out_of_bounds",
-+                    "effect_type": effect_type,
-+                    "arc_id": arc_id,
-+                    "delta": delta,
-+                }
++    if not arc_id:
++        return {
++            "ok": False,
++            "eligible": False,
++            "reason": "missing_arc_id",
++            "rule": rule,
++        }
 +
-+    if effect_type in {"lore_reveal", "lore_truth_status_set", "lore_known_by_add", "lore_tag_add"}:
-+        lore_id = str(effect.get("lore_id") or "")
-+        if not get_lore_entry(simulation_state, lore_id):
-+            return {
-+                "ok": False,
-+                "reason": "lore_missing",
-+                "effect_type": effect_type,
-+                "lore_id": lore_id,
-+            }
++    arc = get_story_arc(simulation_state, arc_id)
++    if not arc:
++        return {
++            "ok": False,
++            "eligible": False,
++            "reason": "arc_missing",
++            "rule": rule,
++        }
 +
-+    if effect_type == "quest_transition":
-+        transition = _safe_dict(effect.get("transition"))
-+        quest_id = str(transition.get("quest_id") or effect.get("quest_id") or "")
-+        # Starting a quest may create it; other actions should reference existing quest.
-+        if transition.get("action") != "start" and quest_id and not get_quest(simulation_state, quest_id):
-+            return {
-+                "ok": False,
-+                "reason": "quest_missing",
-+                "effect_type": effect_type,
-+                "quest_id": quest_id,
-+            }
++    if arc.get("status") in {"resolved", "failed"}:
++        return {
++            "ok": True,
++            "eligible": False,
++            "reason": "arc_not_active",
++            "rule": rule,
++            "arc_status": arc.get("status"),
++        }
 +
-+    if effect_type == "puzzle_transition":
-+        transition = _safe_dict(effect.get("transition"))
-+        puzzle_id = str(transition.get("puzzle_id") or effect.get("puzzle_id") or "")
-+        if transition.get("action") != "start" and puzzle_id and not get_puzzle(simulation_state, puzzle_id):
-+            return {
-+                "ok": False,
-+                "reason": "puzzle_missing",
-+                "effect_type": effect_type,
-+                "puzzle_id": puzzle_id,
-+            }
++    if arc.get("status") != "active":
++        return {
++            "ok": True,
++            "eligible": False,
++            "reason": "arc_inactive",
++            "rule": rule,
++            "arc_status": arc.get("status"),
++        }
 +
-+    if effect_type == "social_delta":
-+        npc_id = str(effect.get("npc_id") or "")
-+        if not npc_id:
-+            return {
-+                "ok": False,
-+                "reason": "missing_npc_id",
-+                "effect_type": effect_type,
-+            }
-+        for key in ("trust", "fear", "respect", "hostility", "reputation"):
-+            if key in effect:
-+                value = int(effect.get(key) or 0)
-+                if value < -100 or value > 100:
-+                    return {
-+                        "ok": False,
-+                        "reason": "social_delta_out_of_bounds",
-+                        "effect_type": effect_type,
-+                        "npc_id": npc_id,
-+                        "field": key,
-+                        "value": value,
-+                    }
++    application = get_escalation_rule_application(simulation_state, rule_id)
++    application_count = int((application or {}).get("application_count") or 0)
++    max_applications = int(rule.get("max_applications") or 0)
++    if max_applications and application_count >= max_applications:
++        return {
++            "ok": True,
++            "eligible": False,
++            "reason": "max_applications_reached",
++            "rule": rule,
++            "application": application,
++        }
++
++    cooldown = _cooldown_remaining(
++        application,
++        cooldown_turns=int(rule.get("cooldown_turns") or 0),
++        turn_index=turn_index,
++    )
++    if cooldown > 0:
++        return {
++            "ok": True,
++            "eligible": False,
++            "reason": "cooldown_active",
++            "rule": rule,
++            "application": application,
++            "cooldown_remaining": cooldown,
++        }
++
++    condition_result = evaluate_all_story_arc_conditions(
++        simulation_state,
++        rule.get("conditions") or [],
++    )
++    if not condition_result.get("ok"):
++        return {
++            "ok": True,
++            "eligible": False,
++            "reason": "conditions_failed",
++            "rule": rule,
++            "conditions": condition_result,
++        }
++
++    event = dict(rule.get("event") or {})
++    if not event.get("event_id"):
++        return {
++            "ok": False,
++            "eligible": False,
++            "reason": "event_missing_event_id",
++            "rule": rule,
++        }
++    event.setdefault("arc_id", arc_id)
 +
 +    return {
 +        "ok": True,
-+        "reason": "valid_effect",
-+        "effect_type": effect_type,
++        "eligible": True,
++        "reason": rule.get("reason") or "eligible",
++        "rule": rule,
++        "event": event,
++        "priority": int(rule.get("priority") or 0),
++        "pressure_type": rule.get("pressure_type") or "story",
++        "conditions": condition_result,
++        "application": application,
 +    }
 +
 +
-+def validate_story_event(
++def evaluate_escalation_rules(
 +    simulation_state: Dict[str, Any],
-+    event: Dict[str, Any],
-+) -> Dict[str, Any]:
-+    event = _safe_dict(event)
-+    errors: List[Dict[str, Any]] = []
-+
-+    event_id = _safe_str(event.get("event_id"))
-+    if not event_id:
-+        errors.append({"reason": "missing_event_id"})
-+
-+    arc_id = _safe_str(event.get("arc_id"))
-+    if arc_id and not get_story_arc(simulation_state, arc_id):
-+        errors.append({"reason": "arc_missing", "arc_id": arc_id})
-+
-+    location_id = _safe_str(event.get("location_id"))
-+    if event.get("require_location", False) and not location_id:
-+        errors.append({"reason": "location_missing"})
-+
-+    effects = _safe_list(event.get("effects"))
-+    if len(effects) > 25:
-+        errors.append({"reason": "too_many_effects", "count": len(effects), "max": 25})
-+
-+    preconditions = _safe_list(event.get("preconditions"))
-+    precondition_results = [
-+        evaluate_story_arc_condition(simulation_state, condition)
-+        for condition in preconditions
-+        if isinstance(condition, dict)
-+    ]
-+    for result in precondition_results:
-+        if not result.get("ok"):
-+            errors.append(
-+                {
-+                    "reason": "precondition_failed",
-+                    "condition_result": result,
-+                }
-+            )
-+
-+    effect_results = [
-+        validate_story_event_effect(simulation_state, effect)
-+        for effect in effects
-+        if isinstance(effect, dict)
-+    ]
-+    for result in effect_results:
-+        if not result.get("ok"):
-+            errors.append(
-+                {
-+                    "reason": "effect_invalid",
-+                    "effect_result": result,
-+                }
-+            )
-+
-+    return {
-+        "ok": not errors,
-+        "event_id": event_id,
-+        "arc_id": arc_id,
-+        "errors": errors,
-+        "precondition_results": precondition_results,
-+        "effect_validation_results": effect_results,
-+    }
-*** End Patch
-5. Add src/app/rpg/story_events/effects.py
-*** Begin Patch
-*** Add File: src/app/rpg/story_events/effects.py
-+from __future__ import annotations
-+
-+from typing import Any, Dict
-+
-+from app.rpg.lore.transitions import apply_lore_transition
-+from app.rpg.memory.observation import record_event_observations
-+from app.rpg.puzzles.transitions import apply_puzzle_transition
-+from app.rpg.quests.transitions import apply_quest_transition
-+from app.rpg.social.reputation import apply_social_deltas
-+from app.rpg.story_arcs.state import (
-+    apply_story_arc_pressure_delta,
-+    set_story_arc_flag,
-+    set_story_arc_stage,
-+)
-+
-+
-+def _safe_dict(value: Any) -> Dict[str, Any]:
-+    return value if isinstance(value, dict) else {}
-+
-+
-+def _ensure_world_event_log(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
-+    state = simulation_state.setdefault("world_event_state", {})
-+    if not isinstance(state, dict):
-+        state = {}
-+        simulation_state["world_event_state"] = state
-+    state.setdefault("version", 1)
-+    state.setdefault("events", [])
-+    return state
-+
-+
-+def _emit_world_event(
-+    simulation_state: Dict[str, Any],
-+    effect: Dict[str, Any],
-+    *,
-+    source_event: Dict[str, Any],
-+    turn_index: int,
-+) -> Dict[str, Any]:
-+    state = _ensure_world_event_log(simulation_state)
-+    row = {
-+        "event_id": str(effect.get("world_event_id") or f"world:{source_event.get('event_id')}"),
-+        "source_story_event_id": source_event.get("event_id"),
-+        "kind": str(effect.get("kind") or source_event.get("kind") or "story_event"),
-+        "summary": str(effect.get("summary") or source_event.get("summary") or ""),
-+        "location_id": str(effect.get("location_id") or source_event.get("location_id") or ""),
-+        "turn_index": int(turn_index or 0),
-+        "tags": list(effect.get("tags") or source_event.get("tags") or [])[:20],
-+    }
-+    if not any(existing.get("event_id") == row["event_id"] for existing in state["events"] if isinstance(existing, dict)):
-+        state["events"].append(row)
-+    state["events"] = state["events"][-200:]
-+    return {"ok": True, "kind": "world_event_emit", "world_event": row}
-+
-+
-+def apply_story_event_effect(
-+    simulation_state: Dict[str, Any],
-+    effect: Dict[str, Any],
-+    *,
-+    source_event: Dict[str, Any],
-+    turn_index: int = 0,
-+) -> Dict[str, Any]:
-+    effect = _safe_dict(effect)
-+    effect_type = str(effect.get("type") or "")
-+
-+    if effect_type == "arc_pressure_delta":
-+        return dict(
-+            apply_story_arc_pressure_delta(
-+                simulation_state,
-+                str(effect.get("arc_id") or source_event.get("arc_id") or ""),
-+                int(effect.get("delta") or 0),
-+                turn_index=turn_index,
-+            ),
-+            effect_type=effect_type,
-+        )
-+
-+    if effect_type == "arc_stage_set":
-+        return dict(
-+            set_story_arc_stage(
-+                simulation_state,
-+                str(effect.get("arc_id") or source_event.get("arc_id") or ""),
-+                str(effect.get("stage") or ""),
-+                status=effect.get("status"),
-+                turn_index=turn_index,
-+            ),
-+            effect_type=effect_type,
-+        )
-+
-+    if effect_type == "arc_flag_set":
-+        return dict(
-+            set_story_arc_flag(
-+                simulation_state,
-+                str(effect.get("arc_id") or source_event.get("arc_id") or ""),
-+                str(effect.get("flag") or ""),
-+                effect.get("value", True),
-+            ),
-+            effect_type=effect_type,
-+        )
-+
-+    if effect_type == "lore_reveal":
-+        return dict(
-+            apply_lore_transition(
-+                simulation_state,
-+                {
-+                    "action": "reveal_to_player",
-+                    "lore_id": str(effect.get("lore_id") or ""),
-+                },
-+                turn_index=turn_index,
-+            ),
-+            effect_type=effect_type,
-+        )
-+
-+    if effect_type == "lore_truth_status_set":
-+        return dict(
-+            apply_lore_transition(
-+                simulation_state,
-+                {
-+                    "action": "set_truth_status",
-+                    "lore_id": str(effect.get("lore_id") or ""),
-+                    "truth_status": str(effect.get("truth_status") or ""),
-+                },
-+                turn_index=turn_index,
-+            ),
-+            effect_type=effect_type,
-+        )
-+
-+    if effect_type == "lore_known_by_add":
-+        return dict(
-+            apply_lore_transition(
-+                simulation_state,
-+                {
-+                    "action": "add_known_by",
-+                    "lore_id": str(effect.get("lore_id") or ""),
-+                    "entity_id": str(effect.get("entity_id") or ""),
-+                },
-+                turn_index=turn_index,
-+            ),
-+            effect_type=effect_type,
-+        )
-+
-+    if effect_type == "lore_tag_add":
-+        return dict(
-+            apply_lore_transition(
-+                simulation_state,
-+                {
-+                    "action": "add_tag",
-+                    "lore_id": str(effect.get("lore_id") or ""),
-+                    "tag": str(effect.get("tag") or ""),
-+                },
-+                turn_index=turn_index,
-+            ),
-+            effect_type=effect_type,
-+        )
-+
-+    if effect_type == "quest_transition":
-+        return dict(
-+            apply_quest_transition(
-+                simulation_state,
-+                _safe_dict(effect.get("transition")),
-+                turn_index=turn_index,
-+            ),
-+            effect_type=effect_type,
-+        )
-+
-+    if effect_type == "puzzle_transition":
-+        return dict(
-+            apply_puzzle_transition(
-+                simulation_state,
-+                _safe_dict(effect.get("transition")),
-+                turn_index=turn_index,
-+            ),
-+            effect_type=effect_type,
-+        )
-+
-+    if effect_type == "memory_event":
-+        event = dict(source_event)
-+        event.update(_safe_dict(effect.get("event")))
-+        return dict(
-+            record_event_observations(
-+                simulation_state,
-+                event,
-+                observer_entity_ids=effect.get("observer_entity_ids"),
-+                turn_index=turn_index,
-+            ),
-+            effect_type=effect_type,
-+        )
-+
-+    if effect_type == "social_delta":
-+        deltas = {
-+            key: int(effect.get(key) or 0)
-+            for key in ("trust", "fear", "respect", "hostility", "reputation")
-+            if key in effect
-+        }
-+        if effect.get("last_stance"):
-+            deltas["last_stance"] = effect.get("last_stance")
-+        return dict(
-+            apply_social_deltas(
-+                simulation_state,
-+                str(effect.get("npc_id") or ""),
-+                deltas,
-+                actor_id=str(effect.get("actor_id") or "player"),
-+            ),
-+            effect_type=effect_type,
-+        )
-+
-+    if effect_type == "world_event_emit":
-+        return dict(
-+            _emit_world_event(
-+                simulation_state,
-+                effect,
-+                source_event=source_event,
-+                turn_index=turn_index,
-+            ),
-+            effect_type=effect_type,
-+        )
-+
-+    return {
-+        "ok": False,
-+        "effect_type": effect_type,
-+        "reason": f"unknown_effect_type:{effect_type}",
-+    }
-*** End Patch
-6. Add src/app/rpg/story_events/application.py
-*** Begin Patch
-*** Add File: src/app/rpg/story_events/application.py
-+from __future__ import annotations
-+
-+from typing import Any, Dict, List
-+
-+from app.rpg.story_events.effects import apply_story_event_effect
-+from app.rpg.story_events.state import (
-+    has_story_event_been_applied,
-+    mark_story_event_applied,
-+)
-+from app.rpg.story_events.validation import validate_story_event
-+
-+
-+def _safe_dict(value: Any) -> Dict[str, Any]:
-+    return value if isinstance(value, dict) else {}
-+
-+
-+def apply_story_event(
-+    simulation_state: Dict[str, Any],
-+    event: Dict[str, Any],
++    rules: List[Dict[str, Any]],
 +    *,
 +    turn_index: int = 0,
 +) -> Dict[str, Any]:
-+    event = _safe_dict(event)
-+    event_id = str(event.get("event_id") or "")
-+    if not event_id:
++    results = [
++        evaluate_escalation_rule(simulation_state, rule, turn_index=turn_index)
++        for rule in rules
++        if isinstance(rule, dict)
++    ]
++    eligible = [row for row in results if row.get("eligible")]
++    eligible.sort(
++        key=lambda row: (
++            int(row.get("priority") or 0),
++            str(row.get("rule", {}).get("rule_id") or ""),
++        ),
++        reverse=True,
++    )
++    return {
++        "ok": True,
++        "results": results,
++        "eligible": eligible,
++        "eligible_count": len(eligible),
++    }
++
++
++def apply_escalation_rule(
++    simulation_state: Dict[str, Any],
++    rule: Dict[str, Any],
++    *,
++    turn_index: int = 0,
++) -> Dict[str, Any]:
++    evaluation = evaluate_escalation_rule(
++        simulation_state,
++        rule,
++        turn_index=turn_index,
++    )
++    if not evaluation.get("eligible"):
 +        return {
 +            "ok": False,
-+            "reason": "missing_event_id",
-+            "event_id": "",
++            "reason": "not_eligible",
++            "evaluation": evaluation,
 +        }
 +
-+    if has_story_event_been_applied(simulation_state, event_id):
-+        return {
-+            "ok": True,
-+            "reason": "already_applied",
-+            "event_id": event_id,
-+            "effect_results": [],
-+            "applied_once": True,
-+        }
-+
-+    validation = validate_story_event(simulation_state, event)
-+    if not validation.get("ok"):
-+        return {
-+            "ok": False,
-+            "reason": "validation_failed",
-+            "event_id": event_id,
-+            "validation": validation,
-+            "effect_results": [],
-+        }
-+
-+    effect_results: List[Dict[str, Any]] = []
-+    for effect in event.get("effects") or []:
-+        if not isinstance(effect, dict):
-+            continue
-+        result = apply_story_event_effect(
-+            simulation_state,
-+            effect,
-+            source_event=event,
-+            turn_index=turn_index,
-+        )
-+        effect_results.append(result)
-+        if not result.get("ok"):
-+            return {
-+                "ok": False,
-+                "reason": "effect_apply_failed",
-+                "event_id": event_id,
-+                "failed_effect": effect,
-+                "effect_results": effect_results,
-+            }
-+
-+    applied = mark_story_event_applied(
++    normalized_rule = evaluation["rule"]
++    event = dict(evaluation["event"])
++    event_result = apply_story_event(
 +        simulation_state,
 +        event,
-+        effect_results=effect_results,
++        turn_index=turn_index,
++    )
++    if not event_result.get("ok"):
++        return {
++            "ok": False,
++            "reason": "story_event_apply_failed",
++            "evaluation": evaluation,
++            "event_result": event_result,
++        }
++
++    mark_result = mark_escalation_rule_applied(
++        simulation_state,
++        rule_id=normalized_rule["rule_id"],
++        arc_id=normalized_rule["arc_id"],
++        event_id=event.get("event_id") or "",
 +        turn_index=turn_index,
 +    )
 +    return {
 +        "ok": True,
 +        "reason": "applied",
-+        "event_id": event_id,
-+        "arc_id": event.get("arc_id") or "",
-+        "kind": event.get("kind") or "event",
-+        "summary": event.get("summary") or "",
-+        "effect_results": effect_results,
-+        "applied": applied,
-+        "applied_once": True,
++        "rule_id": normalized_rule["rule_id"],
++        "arc_id": normalized_rule["arc_id"],
++        "event_id": event.get("event_id"),
++        "evaluation": evaluation,
++        "event_result": event_result,
++        "mark_result": mark_result,
++    }
+*** End Patch
+5. Add src/app/rpg/escalation/director.py
+*** Begin Patch
+*** Add File: src/app/rpg/escalation/director.py
++from __future__ import annotations
++
++from typing import Any, Dict, List
++
++from app.rpg.escalation.rules import evaluate_escalation_rules
++
++
++def _safe_dict(value: Any) -> Dict[str, Any]:
++    return value if isinstance(value, dict) else {}
++
++
++def _bounded_event_summary(event: Dict[str, Any]) -> Dict[str, Any]:
++    event = _safe_dict(event)
++    return {
++        "event_id": event.get("event_id"),
++        "arc_id": event.get("arc_id"),
++        "kind": event.get("kind"),
++        "location_id": event.get("location_id"),
++        "summary": event.get("summary"),
++        "tags": list(event.get("tags") or [])[:10],
++        "effect_count": len(event.get("effects") or []),
++    }
++
++
++def build_director_pressure(
++    simulation_state: Dict[str, Any],
++    rules: List[Dict[str, Any]],
++    *,
++    turn_index: int = 0,
++    max_items: int = 10,
++) -> Dict[str, Any]:
++    evaluation = evaluate_escalation_rules(
++        simulation_state,
++        rules,
++        turn_index=turn_index,
++    )
++    rows = []
++    for item in evaluation.get("eligible") or []:
++        rule = _safe_dict(item.get("rule"))
++        event = _safe_dict(item.get("event"))
++        rows.append(
++            {
++                "rule_id": rule.get("rule_id"),
++                "arc_id": rule.get("arc_id"),
++                "pressure_type": item.get("pressure_type") or rule.get("pressure_type"),
++                "priority": item.get("priority"),
++                "eligible_event_id": event.get("event_id"),
++                "event": _bounded_event_summary(event),
++                "reason": item.get("reason") or rule.get("reason"),
++                "tags": list(rule.get("tags") or [])[:10],
++            }
++        )
++    rows = rows[: max(0, int(max_items or 0))]
++    return {
++        "ok": True,
++        "turn_index": int(turn_index or 0),
++        "director_pressure": rows,
++        "eligible_count": len(evaluation.get("eligible") or []),
++        "applied_events": [],
++        "advisory_only": True,
 +    }
 *** End Patch
 Patch 2 — Unit tests
-7. Add src/tests/rpg/story_events/test_story_event_validation.py
+6. Add src/tests/rpg/escalation/test_escalation_state.py
 *** Begin Patch
-*** Add File: src/tests/rpg/story_events/test_story_event_validation.py
-+from app.rpg.lore.state import upsert_lore_entry
-+from app.rpg.story_arcs.state import start_story_arc
-+from app.rpg.story_events.validation import validate_story_event, validate_story_event_effect
+*** Add File: src/tests/rpg/escalation/test_escalation_state.py
++from app.rpg.escalation.state import (
++    get_escalation_rule_application,
++    mark_escalation_rule_applied,
++    normalize_escalation_state,
++)
 +
 +
-+def test_story_event_rejects_unknown_effect_type():
++def test_mark_escalation_rule_applied_tracks_count_and_turn():
 +    simulation_state = {}
-+    start_story_arc(simulation_state, "arc:bandit_pressure")
-+
-+    result = validate_story_event_effect(
++    first = mark_escalation_rule_applied(
 +        simulation_state,
-+        {"type": "invent_gold", "amount": 999},
++        rule_id="rule:bandit_warning",
++        arc_id="arc:bandit_pressure",
++        event_id="event:bandit_warning",
++        turn_index=5,
++    )
++    second = mark_escalation_rule_applied(
++        simulation_state,
++        rule_id="rule:bandit_warning",
++        arc_id="arc:bandit_pressure",
++        event_id="event:bandit_warning_2",
++        turn_index=8,
 +    )
 +
-+    assert result["ok"] is False
-+    assert result["reason"] == "unknown_effect_type"
++    application = get_escalation_rule_application(simulation_state, "rule:bandit_warning")
++    assert first["ok"] is True
++    assert second["ok"] is True
++    assert application["application_count"] == 2
++    assert application["last_applied_turn"] == 8
++    assert application["applied_event_ids"] == ["event:bandit_warning", "event:bandit_warning_2"]
 +
 +
-+def test_story_event_rejects_missing_arc():
-+    simulation_state = {}
-+    result = validate_story_event(
-+        simulation_state,
++def test_escalation_state_normalizes_json_shape():
++    state = normalize_escalation_state(
 +        {
-+            "event_id": "event:bad",
-+            "arc_id": "arc:missing",
-+            "effects": [],
-+        },
++            "rule_applications": {
++                "rule:x": {
++                    "application_count": "2",
++                    "last_applied_turn": "9",
++                    "applied_event_ids": ["event:a"],
++                }
++            }
++        }
 +    )
 +
-+    assert result["ok"] is False
-+    assert any(row["reason"] == "arc_missing" for row in result["errors"])
++    assert state["version"] == 1
++    assert state["rule_applications"]["rule:x"]["application_count"] == 2
++    assert state["rule_applications"]["rule:x"]["last_applied_turn"] == 9
+*** End Patch
+7. Add src/tests/rpg/escalation/test_escalation_rules.py
+*** Begin Patch
+*** Add File: src/tests/rpg/escalation/test_escalation_rules.py
++from app.rpg.escalation.rules import (
++    apply_escalation_rule,
++    evaluate_escalation_rule,
++    evaluate_escalation_rules,
++)
++from app.rpg.escalation.state import mark_escalation_rule_applied
++from app.rpg.quests.state import start_quest, set_quest_stage
++from app.rpg.story_arcs.state import get_story_arc, set_story_arc_stage, start_story_arc
 +
 +
-+def test_story_event_rejects_missing_lore_for_reveal():
-+    simulation_state = {}
-+    start_story_arc(simulation_state, "arc:bandit_pressure")
-+
-+    result = validate_story_event(
-+        simulation_state,
-+        {
-+            "event_id": "event:bad_lore",
-+            "arc_id": "arc:bandit_pressure",
++def _warning_rule():
++    return {
++        "rule_id": "rule:bandit_warning",
++        "arc_id": "arc:bandit_pressure",
++        "priority": 70,
++        "pressure_type": "threat",
++        "reason": "bandit pressure reached warning threshold",
++        "conditions": [
++            {
++                "type": "arc_pressure_at_least",
++                "arc_id": "arc:bandit_pressure",
++                "minimum": 50,
++            },
++            {
++                "type": "arc_stage",
++                "arc_id": "arc:bandit_pressure",
++                "stage": "rumors",
++            },
++        ],
++        "event": {
++            "event_id": "event:bandits_warn_bran",
++            "kind": "warning",
++            "summary": "Bandits warned Bran to pay protection money.",
 +            "effects": [
-+                {"type": "lore_reveal", "lore_id": "lore:missing"},
++                {"type": "arc_stage_set", "arc_id": "arc:bandit_pressure", "stage": "threat"},
++                {"type": "world_event_emit"},
 +            ],
 +        },
-+    )
++        "cooldown_turns": 3,
++        "max_applications": 1,
++    }
 +
-+    assert result["ok"] is False
-+    assert result["errors"][0]["reason"] == "effect_invalid"
++
++def test_escalation_rule_ineligible_below_pressure():
++    simulation_state = {}
++    start_story_arc(simulation_state, "arc:bandit_pressure", stage="rumors", pressure=20)
++
++    result = evaluate_escalation_rule(simulation_state, _warning_rule(), turn_index=1)
++
++    assert result["ok"] is True
++    assert result["eligible"] is False
++    assert result["reason"] == "conditions_failed"
 +
 +
-+def test_story_event_validates_preconditions():
++def test_escalation_rule_eligible_at_threshold():
 +    simulation_state = {}
 +    start_story_arc(simulation_state, "arc:bandit_pressure", stage="rumors", pressure=60)
-+    upsert_lore_entry(simulation_state, {"lore_id": "lore:red_sashes", "title": "The Red Sashes"})
 +
-+    result = validate_story_event(
++    result = evaluate_escalation_rule(simulation_state, _warning_rule(), turn_index=1)
++
++    assert result["ok"] is True
++    assert result["eligible"] is True
++    assert result["event"]["event_id"] == "event:bandits_warn_bran"
++
++
++def test_escalation_rule_applies_event_once():
++    simulation_state = {}
++    start_story_arc(simulation_state, "arc:bandit_pressure", stage="rumors", pressure=60)
++
++    first = apply_escalation_rule(simulation_state, _warning_rule(), turn_index=1)
++    second = apply_escalation_rule(simulation_state, _warning_rule(), turn_index=2)
++
++    arc = get_story_arc(simulation_state, "arc:bandit_pressure")
++    assert first["ok"] is True
++    assert second["ok"] is False
++    assert second["evaluation"]["reason"] in {"max_applications_reached", "cooldown_active", "conditions_failed"}
++    assert arc["stage"] == "threat"
++
++
++def test_escalation_rule_respects_cooldown():
++    simulation_state = {}
++    start_story_arc(simulation_state, "arc:bandit_pressure", stage="rumors", pressure=60)
++    rule = _warning_rule()
++    rule["max_applications"] = 2
++    mark_escalation_rule_applied(
 +        simulation_state,
++        rule_id=rule["rule_id"],
++        arc_id=rule["arc_id"],
++        event_id="event:previous",
++        turn_index=5,
++    )
++
++    result = evaluate_escalation_rule(simulation_state, rule, turn_index=6)
++
++    assert result["eligible"] is False
++    assert result["reason"] == "cooldown_active"
++    assert result["cooldown_remaining"] == 2
++
++
++def test_resolved_arc_stops_escalating():
++    simulation_state = {}
++    start_story_arc(simulation_state, "arc:bandit_pressure", stage="rumors", pressure=60)
++    set_story_arc_stage(simulation_state, "arc:bandit_pressure", "resolved", status="resolved")
++
++    result = evaluate_escalation_rule(simulation_state, _warning_rule(), turn_index=10)
++
++    assert result["eligible"] is False
++    assert result["reason"] == "arc_not_active"
++
++
++def test_escalation_rule_blocked_by_completed_quest():
++    simulation_state = {}
++    start_story_arc(simulation_state, "arc:bandit_pressure", stage="rumors", pressure=60)
++    start_quest(simulation_state, "quest:stop_red_sashes", stage="investigate")
++    set_quest_stage(simulation_state, "quest:stop_red_sashes", "completed", status="completed")
++    rule = _warning_rule()
++    rule["conditions"].append(
 +        {
-+            "event_id": "event:bandit_warning",
++            "type": "quest_status",
++            "quest_id": "quest:stop_red_sashes",
++            "status": "active",
++        }
++    )
++
++    result = evaluate_escalation_rule(simulation_state, rule, turn_index=10)
++
++    assert result["eligible"] is False
++    assert result["reason"] == "conditions_failed"
++
++
++def test_evaluate_rules_orders_by_priority():
++    simulation_state = {}
++    start_story_arc(simulation_state, "arc:bandit_pressure", stage="rumors", pressure=80)
++    low = _warning_rule()
++    low["rule_id"] = "rule:low"
++    low["priority"] = 10
++    low["event"] = dict(low["event"], event_id="event:low")
++    high = _warning_rule()
++    high["rule_id"] = "rule:high"
++    high["priority"] = 90
++    high["event"] = dict(high["event"], event_id="event:high")
++
++    result = evaluate_escalation_rules(simulation_state, [low, high], turn_index=1)
++
++    assert [row["rule"]["rule_id"] for row in result["eligible"]] == ["rule:high", "rule:low"]
+*** End Patch
+8. Add src/tests/rpg/escalation/test_director_pressure.py
+*** Begin Patch
+*** Add File: src/tests/rpg/escalation/test_director_pressure.py
++from app.rpg.escalation.director import build_director_pressure
++from app.rpg.story_arcs.state import get_story_arc, start_story_arc
++
++
++def test_director_pressure_lists_high_priority_arc_without_applying():
++    simulation_state = {}
++    start_story_arc(simulation_state, "arc:bandit_pressure", stage="rumors", pressure=80)
++    rules = [
++        {
++            "rule_id": "rule:bandit_warning",
 +            "arc_id": "arc:bandit_pressure",
-+            "preconditions": [
++            "priority": 70,
++            "pressure_type": "threat",
++            "reason": "bandit pressure high",
++            "conditions": [
 +                {
 +                    "type": "arc_pressure_at_least",
 +                    "arc_id": "arc:bandit_pressure",
 +                    "minimum": 50,
 +                }
 +            ],
-+            "effects": [
-+                {"type": "lore_reveal", "lore_id": "lore:red_sashes"},
-+            ],
-+        },
-+    )
++            "event": {
++                "event_id": "event:bandits_warn_bran",
++                "kind": "warning",
++                "summary": "Bandits warned Bran.",
++                "effects": [
++                    {"type": "arc_stage_set", "arc_id": "arc:bandit_pressure", "stage": "threat"}
++                ],
++            },
++        }
++    ]
 +
++    result = build_director_pressure(simulation_state, rules, turn_index=3)
++
++    arc = get_story_arc(simulation_state, "arc:bandit_pressure")
 +    assert result["ok"] is True
++    assert result["advisory_only"] is True
++    assert result["director_pressure"][0]["eligible_event_id"] == "event:bandits_warn_bran"
++    assert result["applied_events"] == []
++    assert arc["stage"] == "rumors"
++
++
++def test_director_pressure_is_bounded():
++    simulation_state = {}
++    start_story_arc(simulation_state, "arc:bandit_pressure", stage="rumors", pressure=80)
++    rules = []
++    for i in range(20):
++        rules.append(
++            {
++                "rule_id": f"rule:{i}",
++                "arc_id": "arc:bandit_pressure",
++                "priority": i,
++                "conditions": [
++                    {
++                        "type": "arc_pressure_at_least",
++                        "arc_id": "arc:bandit_pressure",
++                        "minimum": 50,
++                    }
++                ],
++                "event": {"event_id": f"event:{i}", "effects": []},
++            }
++        )
++
++    result = build_director_pressure(simulation_state, rules, max_items=5)
++
++    assert len(result["director_pressure"]) == 5
++    assert result["eligible_count"] == 20
 *** End Patch
-8. Add src/tests/rpg/story_events/test_story_event_effects.py
+9. Add src/tests/rpg/escalation/test_escalation_save_load.py
 *** Begin Patch
-*** Add File: src/tests/rpg/story_events/test_story_event_effects.py
-+from app.rpg.lore.state import get_lore_entry, upsert_lore_entry
-+from app.rpg.quests.state import get_quest
-+from app.rpg.social.reputation import get_relationship
-+from app.rpg.story_arcs.state import get_story_arc, start_story_arc
-+from app.rpg.story_events.application import apply_story_event
+*** Add File: src/tests/rpg/escalation/test_escalation_save_load.py
++import json
++
++from app.rpg.escalation.state import mark_escalation_rule_applied, normalize_escalation_state
 +
 +
-+def test_story_event_applies_arc_pressure_delta():
++def test_escalation_state_json_roundtrip():
 +    simulation_state = {}
-+    start_story_arc(simulation_state, "arc:bandit_pressure", pressure=20)
-+
-+    result = apply_story_event(
++    mark_escalation_rule_applied(
 +        simulation_state,
-+        {
-+            "event_id": "event:pressure",
-+            "arc_id": "arc:bandit_pressure",
-+            "effects": [
-+                {"type": "arc_pressure_delta", "arc_id": "arc:bandit_pressure", "delta": 25},
-+            ],
-+        },
-+        turn_index=2,
-+    )
-+
-+    assert result["ok"] is True
-+    assert get_story_arc(simulation_state, "arc:bandit_pressure")["pressure"] == 45
-+
-+
-+def test_story_event_reveals_lore():
-+    simulation_state = {}
-+    start_story_arc(simulation_state, "arc:bandit_pressure")
-+    upsert_lore_entry(simulation_state, {"lore_id": "lore:red_sashes", "title": "The Red Sashes"})
-+
-+    result = apply_story_event(
-+        simulation_state,
-+        {
-+            "event_id": "event:reveal_lore",
-+            "arc_id": "arc:bandit_pressure",
-+            "effects": [
-+                {"type": "lore_reveal", "lore_id": "lore:red_sashes"},
-+            ],
-+        },
-+    )
-+
-+    assert result["ok"] is True
-+    assert get_lore_entry(simulation_state, "lore:red_sashes")["revealed_to_player"] is True
-+
-+
-+def test_story_event_applies_social_delta():
-+    simulation_state = {}
-+    start_story_arc(simulation_state, "arc:bandit_pressure")
-+
-+    result = apply_story_event(
-+        simulation_state,
-+        {
-+            "event_id": "event:social",
-+            "arc_id": "arc:bandit_pressure",
-+            "effects": [
-+                {"type": "social_delta", "npc_id": "bran", "fear": 10, "trust": -2},
-+            ],
-+        },
-+    )
-+
-+    relationship = get_relationship(simulation_state, "bran")
-+    assert result["ok"] is True
-+    assert relationship["fear"] == 10
-+    assert relationship["trust"] == -2
-+
-+
-+def test_story_event_can_trigger_quest_transition():
-+    simulation_state = {}
-+    start_story_arc(simulation_state, "arc:bandit_pressure")
-+
-+    result = apply_story_event(
-+        simulation_state,
-+        {
-+            "event_id": "event:start_quest",
-+            "arc_id": "arc:bandit_pressure",
-+            "effects": [
-+                {
-+                    "type": "quest_transition",
-+                    "transition": {
-+                        "action": "start",
-+                        "quest_id": "quest:stop_red_sashes",
-+                        "stage": "investigate",
-+                    },
-+                },
-+            ],
-+        },
-+    )
-+
-+    quest = get_quest(simulation_state, "quest:stop_red_sashes")
-+    assert result["ok"] is True
-+    assert quest["stage"] == "investigate"
-+
-+
-+def test_story_event_emits_world_event():
-+    simulation_state = {}
-+    start_story_arc(simulation_state, "arc:bandit_pressure")
-+
-+    result = apply_story_event(
-+        simulation_state,
-+        {
-+            "event_id": "event:world_row",
-+            "arc_id": "arc:bandit_pressure",
-+            "kind": "warning",
-+            "summary": "Bandits warned Bran.",
-+            "location_id": "tavern_common_room",
-+            "effects": [
-+                {"type": "world_event_emit"},
-+            ],
-+        },
-+        turn_index=3,
-+    )
-+
-+    rows = simulation_state["world_event_state"]["events"]
-+    assert result["ok"] is True
-+    assert len(rows) == 1
-+    assert rows[0]["source_story_event_id"] == "event:world_row"
-*** End Patch
-9. Add src/tests/rpg/story_events/test_story_event_memory_and_idempotency.py
-*** Begin Patch
-*** Add File: src/tests/rpg/story_events/test_story_event_memory_and_idempotency.py
-+from app.rpg.memory.causal_retrieval import retrieve_causal_memories
-+from app.rpg.story_arcs.state import get_story_arc, start_story_arc
-+from app.rpg.story_events.application import apply_story_event
-+from tests.rpg.spatial.fixtures import tavern_spatial_fixture
-+
-+
-+def test_story_event_records_causal_memory():
-+    simulation_state = {"spatial_graph": tavern_spatial_fixture()}
-+    start_story_arc(simulation_state, "arc:bandit_pressure")
-+
-+    result = apply_story_event(
-+        simulation_state,
-+        {
-+            "event_id": "event:bandits_warn_bran",
-+            "arc_id": "arc:bandit_pressure",
-+            "kind": "warning",
-+            "location_id": "tavern_common_room",
-+            "participants": ["player", "bran"],
-+            "summary": "The player warned Bran about bandits.",
-+            "tags": ["bandit", "warning"],
-+            "actor_id": "player",
-+            "target_id": "bran",
-+            "effects": [
-+                {"type": "memory_event"},
-+            ],
-+        },
++        rule_id="rule:bandit_warning",
++        arc_id="arc:bandit_pressure",
++        event_id="event:bandits_warn_bran",
 +        turn_index=4,
 +    )
 +
-+    rows = retrieve_causal_memories(simulation_state, "bran", tags=["warning"])
-+    assert result["ok"] is True
-+    assert rows
-+    assert rows[0]["event_id"] == "event:bandits_warn_bran"
-+
-+
-+def test_story_event_idempotency_prevents_double_apply():
-+    simulation_state = {}
-+    start_story_arc(simulation_state, "arc:bandit_pressure", pressure=10)
-+    event = {
-+        "event_id": "event:pressure_once",
-+        "arc_id": "arc:bandit_pressure",
-+        "effects": [
-+            {"type": "arc_pressure_delta", "arc_id": "arc:bandit_pressure", "delta": 20},
-+        ],
-+    }
-+
-+    first = apply_story_event(simulation_state, event, turn_index=1)
-+    second = apply_story_event(simulation_state, event, turn_index=2)
-+
-+    arc = get_story_arc(simulation_state, "arc:bandit_pressure")
-+    assert first["ok"] is True
-+    assert second["ok"] is True
-+    assert second["reason"] == "already_applied"
-+    assert arc["pressure"] == 30
-+
-+
-+def test_applied_story_event_state_is_bounded_and_save_safe():
-+    import json
-+
-+    simulation_state = {}
-+    start_story_arc(simulation_state, "arc:bandit_pressure")
-+    apply_story_event(
-+        simulation_state,
-+        {
-+            "event_id": "event:save_safe",
-+            "arc_id": "arc:bandit_pressure",
-+            "summary": "Save safe event.",
-+            "effects": [],
-+        },
-+    )
-+
-+    encoded = json.dumps(simulation_state["story_event_state"], sort_keys=True)
++    encoded = json.dumps(simulation_state["escalation_state"], sort_keys=True)
 +    decoded = json.loads(encoded)
++    normalized = normalize_escalation_state(decoded)
 +
-+    assert "event:save_safe" in decoded["applied_events"]
++    row = normalized["rule_applications"]["rule:bandit_warning"]
++    assert row["application_count"] == 1
++    assert row["last_applied_turn"] == 4
++    assert row["applied_event_ids"] == ["event:bandits_warn_bran"]
 *** End Patch
-Patch 3 — Manual story event setup/checks
-10. Add src/tests/rpg/manual/story_event_m4_m6_checks.py
+Patch 3 — Manual escalation checks/setup
+10. Add src/tests/rpg/manual/escalation_m7_m9_checks.py
 *** Begin Patch
-*** Add File: src/tests/rpg/manual/story_event_m4_m6_checks.py
+*** Add File: src/tests/rpg/manual/escalation_m7_m9_checks.py
 +from __future__ import annotations
 +
 +from typing import Any, Dict, List
 +
-+from app.rpg.lore.state import get_lore_entry
-+from app.rpg.memory.causal_retrieval import retrieve_causal_memories
-+from app.rpg.quests.state import get_quest
-+from app.rpg.social.reputation import get_relationship
++from app.rpg.escalation.director import build_director_pressure
++from app.rpg.escalation.rules import evaluate_escalation_rule, evaluate_escalation_rules
++from app.rpg.escalation.state import get_escalation_rule_application
 +from app.rpg.story_arcs.state import get_story_arc
 +from app.rpg.story_events.state import get_applied_story_event
-+from app.rpg.story_events.validation import validate_story_event
 +
 +
 +def _safe_dict(value: Any) -> Dict[str, Any]:
@@ -1042,12 +885,15 @@ Patch 3 — Manual story event setup/checks
 +        candidate = _safe_dict(candidate)
 +        if candidate and not first_non_empty:
 +            first_non_empty = candidate
-+        if isinstance(candidate.get("story_event_state"), dict):
++        if (
++            isinstance(candidate.get("escalation_state"), dict)
++            or isinstance(candidate.get("story_arc_state"), dict)
++        ):
 +            return candidate
 +    return first_non_empty
 +
 +
-+def run_story_event_m4_m6_check(
++def run_escalation_m7_m9_check(
 +    *,
 +    check: Dict[str, Any],
 +    result: Dict[str, Any],
@@ -1056,32 +902,89 @@ Patch 3 — Manual story event setup/checks
 +    simulation_state = _extract_simulation_state(result=result, session=session)
 +    check_type = str(check.get("type") or "")
 +
-+    if check_type == "story_event_applied":
-+        event_id = str(check.get("event_id") or "")
-+        applied = get_applied_story_event(simulation_state, event_id)
++    if check_type == "escalation_rule":
++        rule = _safe_dict(check.get("rule"))
++        expected_eligible = bool(check.get("expected_eligible"))
++        turn_index = int(check.get("turn_index") or 1)
++        evaluation = evaluate_escalation_rule(simulation_state, rule, turn_index=turn_index)
 +        return {
 +            "check_type": check_type,
-+            "ok": bool(applied),
-+            "event_id": event_id,
-+            "applied": applied,
++            "ok": bool(evaluation.get("eligible")) is expected_eligible,
++            "expected_eligible": expected_eligible,
++            "actual_eligible": bool(evaluation.get("eligible")),
++            "evaluation": evaluation,
 +        }
 +
-+    if check_type == "story_event_validation":
-+        event = _safe_dict(check.get("event"))
-+        expected_ok = bool(check.get("expected_ok"))
-+        validation = validate_story_event(simulation_state, event)
++    if check_type == "escalation_rules":
++        rules = [row for row in check.get("rules") or [] if isinstance(row, dict)]
++        turn_index = int(check.get("turn_index") or 1)
++        expected_eligible_count = check.get("expected_eligible_count")
++        expected_first_rule_id = check.get("expected_first_rule_id")
++        evaluation = evaluate_escalation_rules(simulation_state, rules, turn_index=turn_index)
++        ok = True
++        if expected_eligible_count is not None:
++            ok = ok and int(evaluation.get("eligible_count") or 0) == int(expected_eligible_count)
++        if expected_first_rule_id:
++            first = ((evaluation.get("eligible") or [{}])[0]).get("rule", {}).get("rule_id")
++            ok = ok and first == expected_first_rule_id
 +        return {
 +            "check_type": check_type,
-+            "ok": bool(validation.get("ok")) is expected_ok,
-+            "expected_ok": expected_ok,
-+            "actual_ok": bool(validation.get("ok")),
-+            "validation": validation,
++            "ok": ok,
++            "expected_eligible_count": expected_eligible_count,
++            "expected_first_rule_id": expected_first_rule_id,
++            "evaluation": evaluation,
 +        }
 +
-+    if check_type == "story_event_arc":
++    if check_type == "director_pressure":
++        rules = [row for row in check.get("rules") or [] if isinstance(row, dict)]
++        turn_index = int(check.get("turn_index") or 1)
++        max_items = int(check.get("max_items") or 10)
++        expected_count = check.get("expected_count")
++        expected_first_event_id = check.get("expected_first_event_id")
++        pressure = build_director_pressure(
++            simulation_state,
++            rules,
++            turn_index=turn_index,
++            max_items=max_items,
++        )
++        rows = pressure.get("director_pressure") or []
++        ok = True
++        if expected_count is not None:
++            ok = ok and len(rows) == int(expected_count)
++        if expected_first_event_id:
++            first_event_id = (rows[0] if rows else {}).get("eligible_event_id")
++            ok = ok and first_event_id == expected_first_event_id
++        if check.get("expected_advisory_only") is not None:
++            ok = ok and pressure.get("advisory_only") is bool(check.get("expected_advisory_only"))
++        return {
++            "check_type": check_type,
++            "ok": ok,
++            "pressure": pressure,
++            "expected_count": expected_count,
++            "expected_first_event_id": expected_first_event_id,
++        }
++
++    if check_type == "escalation_application":
++        rule_id = str(check.get("rule_id") or "")
++        expected_count = check.get("expected_count")
++        application = get_escalation_rule_application(simulation_state, rule_id)
++        actual_count = int((application or {}).get("application_count") or 0)
++        ok = bool(application)
++        if expected_count is not None:
++            ok = ok and actual_count == int(expected_count)
++        return {
++            "check_type": check_type,
++            "ok": ok,
++            "rule_id": rule_id,
++            "expected_count": expected_count,
++            "actual_count": actual_count,
++            "application": application,
++        }
++
++    if check_type == "escalation_arc":
 +        arc_id = str(check.get("arc_id") or "")
-+        arc = get_story_arc(simulation_state, arc_id)
 +        expected = _safe_dict(check.get("expected"))
++        arc = get_story_arc(simulation_state, arc_id)
 +        failures = {}
 +        for key, expected_value in expected.items():
 +            actual = _safe_dict(arc).get(key)
@@ -1095,146 +998,83 @@ Patch 3 — Manual story event setup/checks
 +            "failures": failures,
 +        }
 +
-+    if check_type == "story_event_lore":
-+        lore_id = str(check.get("lore_id") or "")
-+        entry = get_lore_entry(simulation_state, lore_id)
-+        expected = _safe_dict(check.get("expected"))
-+        failures = {}
-+        for key, expected_value in expected.items():
-+            actual = _safe_dict(entry).get(key)
-+            if actual != expected_value:
-+                failures[key] = {"expected": expected_value, "actual": actual}
++    if check_type == "escalation_event_applied":
++        event_id = str(check.get("event_id") or "")
++        applied = get_applied_story_event(simulation_state, event_id)
 +        return {
 +            "check_type": check_type,
-+            "ok": bool(entry) and not failures,
-+            "lore_id": lore_id,
-+            "entry": entry,
-+            "failures": failures,
-+        }
-+
-+    if check_type == "story_event_memory":
-+        subject_id = str(check.get("subject_id") or "")
-+        expected_event_id = str(check.get("expected_event_id") or "")
-+        rows = retrieve_causal_memories(
-+            simulation_state,
-+            subject_id,
-+            actor_id=check.get("actor_id"),
-+            target_id=check.get("target_id"),
-+            tags=check.get("tags") or [],
-+            max_items=10,
-+        )
-+        event_ids = [row.get("event_id") for row in rows]
-+        return {
-+            "check_type": check_type,
-+            "ok": expected_event_id in event_ids,
-+            "subject_id": subject_id,
-+            "expected_event_id": expected_event_id,
-+            "actual_event_ids": event_ids,
-+            "retrieved": rows,
-+        }
-+
-+    if check_type == "story_event_social":
-+        npc_id = str(check.get("npc_id") or "")
-+        relationship = get_relationship(simulation_state, npc_id)
-+        expected = _safe_dict(check.get("expected"))
-+        failures = {}
-+        for key, expected_value in expected.items():
-+            actual = relationship.get(key)
-+            if actual != expected_value:
-+                failures[key] = {"expected": expected_value, "actual": actual}
-+        return {
-+            "check_type": check_type,
-+            "ok": not failures,
-+            "npc_id": npc_id,
-+            "relationship": relationship,
-+            "failures": failures,
-+        }
-+
-+    if check_type == "story_event_quest":
-+        quest_id = str(check.get("quest_id") or "")
-+        quest = get_quest(simulation_state, quest_id)
-+        expected = _safe_dict(check.get("expected"))
-+        failures = {}
-+        for key, expected_value in expected.items():
-+            actual = _safe_dict(quest).get(key)
-+            if actual != expected_value:
-+                failures[key] = {"expected": expected_value, "actual": actual}
-+        return {
-+            "check_type": check_type,
-+            "ok": bool(quest) and not failures,
-+            "quest_id": quest_id,
-+            "quest": quest,
-+            "failures": failures,
-+        }
-+
-+    if check_type == "story_event_world_event":
-+        source_story_event_id = str(check.get("source_story_event_id") or "")
-+        world_state = _safe_dict(simulation_state.get("world_event_state"))
-+        rows = [
-+            row
-+            for row in world_state.get("events") or []
-+            if isinstance(row, dict)
-+            and row.get("source_story_event_id") == source_story_event_id
-+        ]
-+        return {
-+            "check_type": check_type,
-+            "ok": bool(rows),
-+            "source_story_event_id": source_story_event_id,
-+            "rows": rows[:10],
++            "ok": bool(applied),
++            "event_id": event_id,
++            "applied": applied,
 +        }
 +
 +    return {
 +        "check_type": check_type,
 +        "ok": False,
-+        "error": f"unknown_story_event_m4_m6_check_type:{check_type}",
++        "error": f"unknown_escalation_m7_m9_check_type:{check_type}",
 +    }
 +
 +
-+def run_story_event_m4_m6_checks(
++def run_escalation_m7_m9_checks(
 +    *,
 +    checks: List[Dict[str, Any]],
 +    result: Dict[str, Any],
 +    session: Dict[str, Any] | None = None,
 +) -> List[Dict[str, Any]]:
 +    return [
-+        run_story_event_m4_m6_check(check=check, result=result, session=session)
++        run_escalation_m7_m9_check(check=check, result=result, session=session)
 +        for check in checks
 +    ]
 *** End Patch
 11. Patch src/tests/rpg/manual/scenario_setup.py
 
-Add import:
+Add imports:
 
 *** Begin Patch
 *** Update File: src/tests/rpg/manual/scenario_setup.py
 @@
- from app.rpg.story_arcs.transitions import apply_story_arc_transition
-+from app.rpg.story_events.application import apply_story_event
+ from app.rpg.story_events.application import apply_story_event
++from app.rpg.escalation.rules import apply_escalation_rule
++from app.rpg.escalation.state import mark_escalation_rule_applied
  from tests.rpg.manual.memory_fixtures import build_manual_memory_event
 *** End Patch
 
-Add this block after setup_story_arc_transitions, and before setup_manual_inventory_items is fine. Story events can depend on lore/arcs and may emit quest/puzzle transitions, so this should run after lore/story arc setup and before final explicit puzzle/quest setup if scenarios need both.
+Add setup blocks after setup_story_events:
 
 *** Begin Patch
 *** Update File: src/tests/rpg/manual/scenario_setup.py
 @@
-     for transition in scenario.get("setup_story_arc_transitions") or []:
-         if isinstance(transition, dict):
-             apply_story_arc_transition(
+     for event in scenario.get("setup_story_events") or []:
+         if isinstance(event, dict):
+             apply_story_event(
                  simulation_state,
-                 transition,
+                 event,
 @@
                      or 1
                  ),
              )
 +
-+    for event in scenario.get("setup_story_events") or []:
-+        if isinstance(event, dict):
-+            apply_story_event(
++    for application in scenario.get("setup_escalation_applications") or []:
++        if isinstance(application, dict):
++            mark_escalation_rule_applied(
 +                simulation_state,
-+                event,
++                rule_id=str(application.get("rule_id") or ""),
++                arc_id=str(application.get("arc_id") or ""),
++                event_id=str(application.get("event_id") or ""),
 +                turn_index=int(
-+                    event.get("turn_index")
++                    application.get("turn_index")
++                    or scenario.get("setup_turn_index")
++                    or 1
++                ),
++            )
++
++    for rule in scenario.get("setup_apply_escalation_rules") or []:
++        if isinstance(rule, dict):
++            apply_escalation_rule(
++                simulation_state,
++                rule,
++                turn_index=int(
++                    rule.get("turn_index")
 +                    or scenario.get("setup_turn_index")
 +                    or 1
 +                ),
@@ -1252,16 +1092,16 @@ Add import:
 *** Begin Patch
 *** Update File: src/tests/rpg/manual/scenario_execution.py
 @@
- from tests.rpg.manual.story_m1_m3_checks import run_story_m1_m3_checks
-+from tests.rpg.manual.story_event_m4_m6_checks import run_story_event_m4_m6_checks
+ from tests.rpg.manual.story_event_m4_m6_checks import run_story_event_m4_m6_checks
++from tests.rpg.manual.escalation_m7_m9_checks import run_escalation_m7_m9_checks
 *** End Patch
 
-Add check block after story M1-M3 checks:
+Add check block after story event checks:
 
 *** Begin Patch
 *** Update File: src/tests/rpg/manual/scenario_execution.py
 @@
-         if story_m1_m3_checks:
+         if story_event_m4_m6_checks:
              current_session = {}
              try:
                  current_session = _ensure_manual_session(session_id)
@@ -1270,29 +1110,29 @@ Add check block after story M1-M3 checks:
                          + str(check_result.get("error") or "")
                      )
 +
-+        story_event_m4_m6_checks = [
++        escalation_m7_m9_checks = [
 +            check
 +            for check in checks
 +            if isinstance(check, dict)
-+            and str(check.get("type") or "").startswith("story_event_")
++            and str(check.get("type") or "").startswith("escalation_")
 +        ]
-+        if story_event_m4_m6_checks:
++        if escalation_m7_m9_checks:
 +            current_session = {}
 +            try:
 +                current_session = _ensure_manual_session(session_id)
 +            except Exception:
 +                current_session = session
 +
-+            story_event_m4_m6_check_results = run_story_event_m4_m6_checks(
-+                checks=story_event_m4_m6_checks,
++            escalation_m7_m9_check_results = run_escalation_m7_m9_checks(
++                checks=escalation_m7_m9_checks,
 +                result=turn_record.get("result") or turn_record,
 +                session=current_session,
 +            )
-+            turn_record["story_event_m4_m6_check_results"] = story_event_m4_m6_check_results
-+            for check_result in story_event_m4_m6_check_results:
++            turn_record["escalation_m7_m9_check_results"] = escalation_m7_m9_check_results
++            for check_result in escalation_m7_m9_check_results:
 +                if not check_result.get("ok"):
 +                    turn_record.setdefault("scenario_warnings", []).append(
-+                        "story_event_m4_m6_check_failed:"
++                        "escalation_m7_m9_check_failed:"
 +                        + str(scenario_name)
 +                        + ":turn_"
 +                        + str(turn_index)
@@ -1311,322 +1151,283 @@ Add sanitizer block:
 *** Begin Patch
 *** Update File: src/tests/rpg/manual/summary_sanitizer.py
 @@
-     story_m1_m3_check_results = turn.get("story_m1_m3_check_results")
-     if isinstance(story_m1_m3_check_results, list):
-         sanitized["story_m1_m3_check_results"] = [
+     story_event_m4_m6_check_results = turn.get("story_event_m4_m6_check_results")
+     if isinstance(story_event_m4_m6_check_results, list):
+         sanitized["story_event_m4_m6_check_results"] = [
 @@
              if isinstance(item, dict)
          ]
 +
-+    story_event_m4_m6_check_results = turn.get("story_event_m4_m6_check_results")
-+    if isinstance(story_event_m4_m6_check_results, list):
-+        sanitized["story_event_m4_m6_check_results"] = [
++    escalation_m7_m9_check_results = turn.get("escalation_m7_m9_check_results")
++    if isinstance(escalation_m7_m9_check_results, list):
++        sanitized["escalation_m7_m9_check_results"] = [
 +            {
 +                "check_type": item.get("check_type"),
 +                "ok": item.get("ok"),
-+                "event_id": item.get("event_id"),
++                "rule_id": item.get("rule_id"),
 +                "arc_id": item.get("arc_id"),
-+                "lore_id": item.get("lore_id"),
-+                "quest_id": item.get("quest_id"),
-+                "npc_id": item.get("npc_id"),
-+                "subject_id": item.get("subject_id"),
-+                "source_story_event_id": item.get("source_story_event_id"),
-+                "expected_event_id": item.get("expected_event_id"),
-+                "actual_event_ids": item.get("actual_event_ids"),
-+                "applied": item.get("applied"),
-+                "validation": item.get("validation"),
++                "event_id": item.get("event_id"),
++                "expected_eligible": item.get("expected_eligible"),
++                "actual_eligible": item.get("actual_eligible"),
++                "expected_eligible_count": item.get("expected_eligible_count"),
++                "expected_first_rule_id": item.get("expected_first_rule_id"),
++                "expected_count": item.get("expected_count"),
++                "actual_count": item.get("actual_count"),
++                "expected_first_event_id": item.get("expected_first_event_id"),
++                "evaluation": item.get("evaluation"),
++                "pressure": item.get("pressure"),
++                "application": item.get("application"),
 +                "arc": item.get("arc"),
-+                "entry": item.get("entry"),
-+                "quest": item.get("quest"),
-+                "relationship": item.get("relationship"),
-+                "rows": item.get("rows"),
-+                "retrieved": item.get("retrieved"),
++                "applied": item.get("applied"),
 +                "failures": item.get("failures"),
 +                "error": item.get("error"),
 +            }
-+            for item in story_event_m4_m6_check_results[:50]
++            for item in escalation_m7_m9_check_results[:50]
 +            if isinstance(item, dict)
 +        ]
  
      return sanitized
 *** End Patch
 Patch 4 — Manual scenarios
-14. Add src/tests/rpg/manual/scenarios/story_event_m4_m6.py
+14. Add src/tests/rpg/manual/scenarios/escalation_m7_m9.py
 *** Begin Patch
-*** Add File: src/tests/rpg/manual/scenarios/story_event_m4_m6.py
+*** Add File: src/tests/rpg/manual/scenarios/escalation_m7_m9.py
 +from __future__ import annotations
 +
 +from typing import Any, Dict
 +
 +
-+STORY_EVENT_M4_M6_SCENARIOS: Dict[str, Dict[str, Any]] = {
-+    "story_event_applies_arc_pressure_delta": {
++def _bandit_warning_rule(
++    *,
++    pressure_min: int = 50,
++    stage: str = "rumors",
++    event_id: str = "event:bandits_warn_bran",
++    priority: int = 70,
++    cooldown_turns: int = 3,
++    max_applications: int = 1,
++) -> Dict[str, Any]:
++    return {
++        "rule_id": "rule:bandit_warning",
++        "arc_id": "arc:bandit_pressure",
++        "priority": priority,
++        "pressure_type": "threat",
++        "reason": "bandit pressure reached warning threshold",
++        "conditions": [
++            {
++                "type": "arc_pressure_at_least",
++                "arc_id": "arc:bandit_pressure",
++                "minimum": pressure_min,
++            },
++            {
++                "type": "arc_stage",
++                "arc_id": "arc:bandit_pressure",
++                "stage": stage,
++            },
++        ],
++        "event": {
++            "event_id": event_id,
++            "arc_id": "arc:bandit_pressure",
++            "kind": "warning",
++            "location_id": "tavern_common_room",
++            "summary": "Bandits warned Bran to pay protection money.",
++            "tags": ["bandit", "warning"],
++            "effects": [
++                {
++                    "type": "arc_stage_set",
++                    "arc_id": "arc:bandit_pressure",
++                    "stage": "threat",
++                },
++                {"type": "world_event_emit"},
++            ],
++        },
++        "cooldown_turns": cooldown_turns,
++        "max_applications": max_applications,
++        "tags": ["bandit", "warning"],
++    }
++
++
++ESCALATION_M7_M9_SCENARIOS: Dict[str, Dict[str, Any]] = {
++    "escalation_rule_ineligible_below_pressure": {
 +        "setup_story_arc_transitions": [
 +            {"action": "start", "arc_id": "arc:bandit_pressure", "stage": "rumors", "pressure": 20}
 +        ],
-+        "setup_story_events": [
++        "turns": ["I ignore minor bandit rumors."],
++        "checks": [
 +            {
-+                "event_id": "event:bandit_pressure_rises",
-+                "arc_id": "arc:bandit_pressure",
-+                "kind": "pressure",
-+                "summary": "Bandit activity worsened on the road.",
-+                "effects": [
-+                    {"type": "arc_pressure_delta", "arc_id": "arc:bandit_pressure", "delta": 25}
-+                ],
++                "type": "escalation_rule",
++                "rule": _bandit_warning_rule(),
++                "expected_eligible": False,
 +            }
 +        ],
-+        "turns": ["I ignore the worsening bandit pressure."],
++    },
++    "escalation_rule_eligible_at_threshold": {
++        "setup_story_arc_transitions": [
++            {"action": "start", "arc_id": "arc:bandit_pressure", "stage": "rumors", "pressure": 60}
++        ],
++        "turns": ["I ignore serious bandit pressure."],
 +        "checks": [
-+            {"type": "story_event_applied", "event_id": "event:bandit_pressure_rises"},
 +            {
-+                "type": "story_event_arc",
++                "type": "escalation_rule",
++                "rule": _bandit_warning_rule(),
++                "expected_eligible": True,
++            }
++        ],
++    },
++    "escalation_rule_applies_event_once": {
++        "setup_story_arc_transitions": [
++            {"action": "start", "arc_id": "arc:bandit_pressure", "stage": "rumors", "pressure": 60}
++        ],
++        "setup_apply_escalation_rules": [_bandit_warning_rule()],
++        "turns": ["I let the bandit warning happen."],
++        "checks": [
++            {
++                "type": "escalation_application",
++                "rule_id": "rule:bandit_warning",
++                "expected_count": 1,
++            },
++            {
++                "type": "escalation_event_applied",
++                "event_id": "event:bandits_warn_bran",
++            },
++            {
++                "type": "escalation_arc",
 +                "arc_id": "arc:bandit_pressure",
-+                "expected": {"pressure": 45},
++                "expected": {"stage": "threat"},
 +            },
 +        ],
 +    },
-+    "story_event_reveals_lore": {
-+        "setup_lore_transitions": [
-+            {"action": "upsert", "lore_id": "lore:red_sashes", "title": "The Red Sashes", "truth_status": "true"}
-+        ],
++    "escalation_rule_respects_cooldown": {
 +        "setup_story_arc_transitions": [
-+            {"action": "start", "arc_id": "arc:bandit_pressure", "stage": "rumors"}
++            {"action": "start", "arc_id": "arc:bandit_pressure", "stage": "rumors", "pressure": 60}
 +        ],
-+        "setup_story_events": [
++        "setup_escalation_applications": [
 +            {
-+                "event_id": "event:reveal_red_sashes",
++                "rule_id": "rule:bandit_warning",
 +                "arc_id": "arc:bandit_pressure",
-+                "kind": "discovery",
-+                "summary": "The Red Sashes were identified.",
-+                "effects": [
-+                    {"type": "lore_reveal", "lore_id": "lore:red_sashes"}
-+                ],
++                "event_id": "event:previous_warning",
++                "turn_index": 5,
 +            }
 +        ],
-+        "turns": ["I learn who the bandits are."],
-+        "checks": [
-+            {"type": "story_event_applied", "event_id": "event:reveal_red_sashes"},
-+            {
-+                "type": "story_event_lore",
-+                "lore_id": "lore:red_sashes",
-+                "expected": {"revealed_to_player": True, "truth_status": "true"},
-+            },
-+        ],
-+    },
-+    "story_event_records_causal_memory": {
-+        "setup_spatial_graph": "tavern_fixture",
-+        "setup_story_arc_transitions": [
-+            {"action": "start", "arc_id": "arc:bandit_pressure", "stage": "rumors"}
-+        ],
-+        "setup_story_events": [
-+            {
-+                "event_id": "event:player_warns_bran_bandits",
-+                "arc_id": "arc:bandit_pressure",
-+                "kind": "warning",
-+                "location_id": "tavern_common_room",
-+                "actor_id": "player",
-+                "target_id": "bran",
-+                "participants": ["player", "bran"],
-+                "summary": "The player warned Bran about bandits.",
-+                "tags": ["bandit", "warning"],
-+                "effects": [
-+                    {"type": "memory_event"}
-+                ],
-+            }
-+        ],
-+        "turns": ["I remind Bran that I warned him."],
++        "turns": ["I check if the warning can repeat immediately."],
 +        "checks": [
 +            {
-+                "type": "story_event_memory",
-+                "subject_id": "bran",
-+                "expected_event_id": "event:player_warns_bran_bandits",
-+                "tags": ["warning"],
++                "type": "escalation_rule",
++                "rule": dict(_bandit_warning_rule(max_applications=2), turn_index=6),
++                "turn_index": 6,
++                "expected_eligible": False,
 +            }
 +        ],
 +    },
-+    "story_event_applies_social_delta": {
++    "escalation_rule_blocked_by_completed_quest": {
 +        "setup_story_arc_transitions": [
-+            {"action": "start", "arc_id": "arc:bandit_pressure", "stage": "rumors"}
++            {"action": "start", "arc_id": "arc:bandit_pressure", "stage": "rumors", "pressure": 60}
 +        ],
-+        "setup_story_events": [
-+            {
-+                "event_id": "event:bandits_threaten_bran",
-+                "arc_id": "arc:bandit_pressure",
-+                "kind": "threat",
-+                "summary": "Bandits threatened Bran.",
-+                "effects": [
-+                    {"type": "social_delta", "npc_id": "bran", "fear": 10, "trust": -2}
-+                ],
-+            }
++        "setup_quest_transitions": [
++            {"action": "start", "quest_id": "quest:stop_red_sashes", "stage": "investigate"},
++            {"action": "set_stage", "quest_id": "quest:stop_red_sashes", "stage": "completed", "status": "completed"},
 +        ],
-+        "turns": ["I see Bran react to the threat."],
++        "turns": ["I check whether solved bandit quest blocks escalation."],
 +        "checks": [
 +            {
-+                "type": "story_event_social",
-+                "npc_id": "bran",
-+                "expected": {"fear": 10, "trust": -2},
-+            }
-+        ],
-+    },
-+    "story_event_can_trigger_quest_transition": {
-+        "setup_story_arc_transitions": [
-+            {"action": "start", "arc_id": "arc:bandit_pressure", "stage": "rumors"}
-+        ],
-+        "setup_story_events": [
-+            {
-+                "event_id": "event:start_stop_red_sashes",
-+                "arc_id": "arc:bandit_pressure",
-+                "kind": "quest_seed",
-+                "summary": "The bandit problem became a quest.",
-+                "effects": [
-+                    {
-+                        "type": "quest_transition",
-+                        "transition": {
-+                            "action": "start",
++                "type": "escalation_rule",
++                "rule": dict(
++                    _bandit_warning_rule(),
++                    conditions=[
++                        *_bandit_warning_rule()["conditions"],
++                        {
++                            "type": "quest_status",
 +                            "quest_id": "quest:stop_red_sashes",
-+                            "stage": "investigate",
++                            "status": "active",
 +                        },
-+                    }
++                    ],
++                ),
++                "expected_eligible": False,
++            }
++        ],
++    },
++    "director_pressure_lists_high_priority_arc": {
++        "setup_story_arc_transitions": [
++            {"action": "start", "arc_id": "arc:bandit_pressure", "stage": "rumors", "pressure": 80}
++        ],
++        "turns": ["I inspect director pressure."],
++        "checks": [
++            {
++                "type": "director_pressure",
++                "rules": [_bandit_warning_rule(priority=90)],
++                "expected_count": 1,
++                "expected_first_event_id": "event:bandits_warn_bran",
++                "expected_advisory_only": True,
++            }
++        ],
++    },
++    "director_pressure_is_bounded": {
++        "setup_story_arc_transitions": [
++            {"action": "start", "arc_id": "arc:bandit_pressure", "stage": "rumors", "pressure": 90}
++        ],
++        "turns": ["I inspect a bounded director pressure list."],
++        "checks": [
++            {
++                "type": "director_pressure",
++                "max_items": 3,
++                "expected_count": 3,
++                "rules": [
++                    dict(_bandit_warning_rule(event_id=f"event:warning_{i}", priority=50 + i), rule_id=f"rule:warning_{i}")
++                    for i in range(8)
 +                ],
-+            }
-+        ],
-+        "turns": ["I accept the need to investigate the Red Sashes."],
-+        "checks": [
-+            {
-+                "type": "story_event_quest",
-+                "quest_id": "quest:stop_red_sashes",
-+                "expected": {"stage": "investigate", "status": "active"},
++                "expected_advisory_only": True,
 +            }
 +        ],
 +    },
-+    "story_event_rejects_unknown_effect_type": {
++    "director_pressure_does_not_apply_events_directly": {
 +        "setup_story_arc_transitions": [
-+            {"action": "start", "arc_id": "arc:bandit_pressure", "stage": "rumors"}
++            {"action": "start", "arc_id": "arc:bandit_pressure", "stage": "rumors", "pressure": 80}
 +        ],
-+        "turns": ["I test an invalid story effect."],
++        "turns": ["I inspect director pressure without applying it."],
 +        "checks": [
 +            {
-+                "type": "story_event_validation",
-+                "expected_ok": False,
-+                "event": {
-+                    "event_id": "event:invalid_effect",
-+                    "arc_id": "arc:bandit_pressure",
-+                    "effects": [{"type": "invent_gold", "amount": 999}],
-+                },
-+            }
-+        ],
-+    },
-+    "story_event_rejects_missing_arc": {
-+        "turns": ["I test an event with a missing arc."],
-+        "checks": [
-+            {
-+                "type": "story_event_validation",
-+                "expected_ok": False,
-+                "event": {
-+                    "event_id": "event:missing_arc",
-+                    "arc_id": "arc:missing",
-+                    "effects": [],
-+                },
-+            }
-+        ],
-+    },
-+    "story_event_rejects_missing_location": {
-+        "setup_story_arc_transitions": [
-+            {"action": "start", "arc_id": "arc:bandit_pressure", "stage": "rumors"}
-+        ],
-+        "turns": ["I test a location-required event without a location."],
-+        "checks": [
-+            {
-+                "type": "story_event_validation",
-+                "expected_ok": False,
-+                "event": {
-+                    "event_id": "event:missing_location",
-+                    "arc_id": "arc:bandit_pressure",
-+                    "require_location": True,
-+                    "effects": [],
-+                },
-+            }
-+        ],
-+    },
-+    "story_event_save_load_records_applied_event_once": {
-+        "setup_story_arc_transitions": [
-+            {"action": "start", "arc_id": "arc:bandit_pressure", "stage": "rumors", "pressure": 10}
-+        ],
-+        "setup_story_events": [
-+            {
-+                "event_id": "event:save_load_once",
-+                "arc_id": "arc:bandit_pressure",
-+                "effects": [
-+                    {"type": "arc_pressure_delta", "arc_id": "arc:bandit_pressure", "delta": 20}
-+                ],
++                "type": "director_pressure",
++                "rules": [_bandit_warning_rule()],
++                "expected_count": 1,
++                "expected_first_event_id": "event:bandits_warn_bran",
++                "expected_advisory_only": True,
 +            },
 +            {
-+                "event_id": "event:save_load_once",
++                "type": "escalation_arc",
 +                "arc_id": "arc:bandit_pressure",
-+                "effects": [
-+                    {"type": "arc_pressure_delta", "arc_id": "arc:bandit_pressure", "delta": 20}
-+                ],
-+            },
-+        ],
-+        "turns": ["I check that the event applied only once."],
-+        "checks": [
-+            {"type": "story_event_applied", "event_id": "event:save_load_once"},
-+            {
-+                "type": "story_event_arc",
-+                "arc_id": "arc:bandit_pressure",
-+                "expected": {"pressure": 30},
++                "expected": {"stage": "rumors"},
 +            },
 +        ],
 +    },
-+    "story_event_idempotency_prevents_double_apply": {
++    "ignored_arc_pressure_escalates_over_idle_ticks": {
 +        "setup_story_arc_transitions": [
-+            {"action": "start", "arc_id": "arc:bandit_pressure", "stage": "rumors", "pressure": 15}
++            {"action": "start", "arc_id": "arc:bandit_pressure", "stage": "rumors", "pressure": 45},
++            {"action": "pressure_delta", "arc_id": "arc:bandit_pressure", "delta": 10},
 +        ],
-+        "setup_story_events": [
-+            {
-+                "event_id": "event:idempotent_pressure",
-+                "arc_id": "arc:bandit_pressure",
-+                "effects": [
-+                    {"type": "arc_pressure_delta", "arc_id": "arc:bandit_pressure", "delta": 10}
-+                ],
-+            },
-+            {
-+                "event_id": "event:idempotent_pressure",
-+                "arc_id": "arc:bandit_pressure",
-+                "effects": [
-+                    {"type": "arc_pressure_delta", "arc_id": "arc:bandit_pressure", "delta": 10}
-+                ],
-+            },
-+        ],
-+        "turns": ["I check idempotency again."],
++        "turns": ["I wait and do nothing about the bandits."],
 +        "checks": [
 +            {
-+                "type": "story_event_arc",
++                "type": "escalation_rule",
++                "rule": _bandit_warning_rule(),
++                "expected_eligible": True,
++            },
++            {
++                "type": "escalation_arc",
 +                "arc_id": "arc:bandit_pressure",
-+                "expected": {"pressure": 25},
-+            }
++                "expected": {"pressure": 55},
++            },
 +        ],
 +    },
-+    "story_event_emits_bounded_world_event": {
++    "resolved_arc_stops_escalating": {
 +        "setup_story_arc_transitions": [
-+            {"action": "start", "arc_id": "arc:bandit_pressure", "stage": "rumors"}
++            {"action": "start", "arc_id": "arc:bandit_pressure", "stage": "rumors", "pressure": 80},
++            {"action": "resolve", "arc_id": "arc:bandit_pressure", "stage": "resolved"},
 +        ],
-+        "setup_story_events": [
-+            {
-+                "event_id": "event:world_warning",
-+                "arc_id": "arc:bandit_pressure",
-+                "kind": "warning",
-+                "location_id": "tavern_common_room",
-+                "summary": "Bandits warned Bran.",
-+                "tags": ["bandit", "warning"],
-+                "effects": [{"type": "world_event_emit"}],
-+            }
-+        ],
-+        "turns": ["I check the world event log."],
++        "turns": ["I check whether resolved arcs stop escalating."],
 +        "checks": [
 +            {
-+                "type": "story_event_world_event",
-+                "source_story_event_id": "event:world_warning",
++                "type": "escalation_rule",
++                "rule": _bandit_warning_rule(),
++                "expected_eligible": False,
 +            }
 +        ],
 +    },
@@ -1634,103 +1435,97 @@ Patch 4 — Manual scenarios
 *** End Patch
 15. Add expected names file
 *** Begin Patch
-*** Add File: src/tests/rpg/manual/scenarios/expected_story_event_m4_m6_names.py
-+EXPECTED_STORY_EVENT_M4_M6_SCENARIO_NAMES = {
-+    "story_event_applies_arc_pressure_delta",
-+    "story_event_reveals_lore",
-+    "story_event_records_causal_memory",
-+    "story_event_applies_social_delta",
-+    "story_event_can_trigger_quest_transition",
-+    "story_event_rejects_unknown_effect_type",
-+    "story_event_rejects_missing_arc",
-+    "story_event_rejects_missing_location",
-+    "story_event_save_load_records_applied_event_once",
-+    "story_event_idempotency_prevents_double_apply",
-+    "story_event_emits_bounded_world_event",
+*** Add File: src/tests/rpg/manual/scenarios/expected_escalation_m7_m9_names.py
++EXPECTED_ESCALATION_M7_M9_SCENARIO_NAMES = {
++    "escalation_rule_ineligible_below_pressure",
++    "escalation_rule_eligible_at_threshold",
++    "escalation_rule_applies_event_once",
++    "escalation_rule_respects_cooldown",
++    "escalation_rule_blocked_by_completed_quest",
++    "director_pressure_lists_high_priority_arc",
++    "director_pressure_is_bounded",
++    "director_pressure_does_not_apply_events_directly",
++    "ignored_arc_pressure_escalates_over_idle_ticks",
++    "resolved_arc_stops_escalating",
 +}
 *** End Patch
 16. Patch src/tests/rpg/manual/scenarios/registry.py
 *** Begin Patch
 *** Update File: src/tests/rpg/manual/scenarios/registry.py
 @@
- from tests.rpg.manual.scenarios.story_m1_m3 import STORY_M1_M3_SCENARIOS
-+from tests.rpg.manual.scenarios.story_event_m4_m6 import (
-+    STORY_EVENT_M4_M6_SCENARIOS,
+ from tests.rpg.manual.scenarios.story_event_m4_m6 import (
+     STORY_EVENT_M4_M6_SCENARIOS,
+ )
++from tests.rpg.manual.scenarios.escalation_m7_m9 import (
++    ESCALATION_M7_M9_SCENARIOS,
 +)
 @@
-     scenarios.update(STORY_M1_M3_SCENARIOS)
-+    scenarios.update(STORY_EVENT_M4_M6_SCENARIOS)
+     scenarios.update(STORY_EVENT_M4_M6_SCENARIOS)
++    scenarios.update(ESCALATION_M7_M9_SCENARIOS)
      return scenarios
 *** End Patch
 17. Patch src/tests/rpg/manual/test_manual_scenario_migration.py
 *** Begin Patch
 *** Update File: src/tests/rpg/manual/test_manual_scenario_migration.py
 @@
- from tests.rpg.manual.scenarios.expected_story_m1_m3_names import (
-     EXPECTED_STORY_M1_M3_SCENARIO_NAMES,
+ from tests.rpg.manual.scenarios.expected_story_event_m4_m6_names import (
+     EXPECTED_STORY_EVENT_M4_M6_SCENARIO_NAMES,
  )
-+from tests.rpg.manual.scenarios.expected_story_event_m4_m6_names import (
-+    EXPECTED_STORY_EVENT_M4_M6_SCENARIO_NAMES,
++from tests.rpg.manual.scenarios.expected_escalation_m7_m9_names import (
++    EXPECTED_ESCALATION_M7_M9_SCENARIO_NAMES,
 +)
 @@
- def test_manual_scenario_registry_includes_story_m1_m3_names():
+ def test_manual_scenario_registry_includes_story_event_m4_m6_names():
      names = set(build_service_scenarios().keys())
-     missing = EXPECTED_STORY_M1_M3_SCENARIO_NAMES - names
+     missing = EXPECTED_STORY_EVENT_M4_M6_SCENARIO_NAMES - names
  
-     assert not missing, f"Missing M1-M3 story scenarios: {sorted(missing)}"
+     assert not missing, f"Missing M4-M6 story event scenarios: {sorted(missing)}"
 +
 +
-+def test_manual_scenario_registry_includes_story_event_m4_m6_names():
++def test_manual_scenario_registry_includes_escalation_m7_m9_names():
 +    names = set(build_service_scenarios().keys())
-+    missing = EXPECTED_STORY_EVENT_M4_M6_SCENARIO_NAMES - names
++    missing = EXPECTED_ESCALATION_M7_M9_SCENARIO_NAMES - names
 +
-+    assert not missing, f"Missing M4-M6 story event scenarios: {sorted(missing)}"
++    assert not missing, f"Missing M7-M9 escalation scenarios: {sorted(missing)}"
 *** End Patch
-18. Add manual check test
+18. Add manual check tests
 *** Begin Patch
-*** Add File: src/tests/rpg/manual/test_manual_story_event_m4_m6_checks.py
+*** Add File: src/tests/rpg/manual/test_manual_escalation_m7_m9_checks.py
++from app.rpg.escalation.rules import apply_escalation_rule
 +from app.rpg.story_arcs.state import start_story_arc
-+from app.rpg.story_events.application import apply_story_event
-+from tests.rpg.manual.story_event_m4_m6_checks import run_story_event_m4_m6_checks
++from tests.rpg.manual.escalation_m7_m9_checks import run_escalation_m7_m9_checks
 +
 +
-+def test_manual_story_event_check_reads_applied_event_from_session():
-+    session = {"simulation_state": {}}
-+    start_story_arc(session["simulation_state"], "arc:bandit_pressure")
-+    apply_story_event(
-+        session["simulation_state"],
-+        {
-+            "event_id": "event:test_applied",
++def _rule():
++    return {
++        "rule_id": "rule:bandit_warning",
++        "arc_id": "arc:bandit_pressure",
++        "priority": 70,
++        "conditions": [
++            {
++                "type": "arc_pressure_at_least",
++                "arc_id": "arc:bandit_pressure",
++                "minimum": 50,
++            }
++        ],
++        "event": {
++            "event_id": "event:bandit_warning",
 +            "arc_id": "arc:bandit_pressure",
 +            "effects": [],
 +        },
-+    )
-+
-+    result = run_story_event_m4_m6_checks(
-+        checks=[
-+            {"type": "story_event_applied", "event_id": "event:test_applied"}
-+        ],
-+        result={},
-+        session=session,
-+    )[0]
-+
-+    assert result["ok"] is True
++    }
 +
 +
-+def test_manual_story_event_validation_check():
++def test_manual_escalation_rule_check_reads_session_state():
 +    session = {"simulation_state": {}}
-+    start_story_arc(session["simulation_state"], "arc:bandit_pressure")
++    start_story_arc(session["simulation_state"], "arc:bandit_pressure", pressure=60)
 +
-+    result = run_story_event_m4_m6_checks(
++    result = run_escalation_m7_m9_checks(
 +        checks=[
 +            {
-+                "type": "story_event_validation",
-+                "expected_ok": False,
-+                "event": {
-+                    "event_id": "event:invalid",
-+                    "arc_id": "arc:bandit_pressure",
-+                    "effects": [{"type": "invent_gold"}],
-+                },
++                "type": "escalation_rule",
++                "rule": _rule(),
++                "expected_eligible": True,
 +            }
 +        ],
 +        result={},
@@ -1738,16 +1533,34 @@ Patch 4 — Manual scenarios
 +    )[0]
 +
 +    assert result["ok"] is True
-+    assert result["validation"]["ok"] is False
++
++
++def test_manual_escalation_application_check_reads_session_state():
++    session = {"simulation_state": {}}
++    start_story_arc(session["simulation_state"], "arc:bandit_pressure", pressure=60)
++    apply_escalation_rule(session["simulation_state"], _rule(), turn_index=1)
++
++    result = run_escalation_m7_m9_checks(
++        checks=[
++            {
++                "type": "escalation_application",
++                "rule_id": "rule:bandit_warning",
++                "expected_count": 1,
++            }
++        ],
++        result={},
++        session=session,
++    )[0]
++
++    assert result["ok"] is True
 *** End Patch
 Validation commands
 Compile
-python -m py_compile src/app/rpg/story_events/model.py
-python -m py_compile src/app/rpg/story_events/state.py
-python -m py_compile src/app/rpg/story_events/validation.py
-python -m py_compile src/app/rpg/story_events/effects.py
-python -m py_compile src/app/rpg/story_events/application.py
-python -m py_compile src/tests/rpg/manual/story_event_m4_m6_checks.py
-python -m py_compile src/tests/rpg/manual/scenarios/story_event_m4_m6.py
+python -m py_compile src/app/rpg/escalation/model.py
+python -m py_compile src/app/rpg/escalation/state.py
+python -m py_compile src/app/rpg/escalation/rules.py
+python -m py_compile src/app/rpg/escalation/director.py
+python -m py_compile src/tests/rpg/manual/escalation_m7_m9_checks.py
+python -m py_compile src/tests/rpg/manual/scenarios/escalation_m7_m9.py
 Unit tests
-python -m pytest src/tests/rpg/story_events src/tests/rpg/lore src/tests/rpg/story_arcs -q
+python -m pytest src/tests/rpg/escalation src/tests/rpg/story_events src/tests/rpg/story_arcs -q

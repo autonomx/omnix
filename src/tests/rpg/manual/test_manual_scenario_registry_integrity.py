@@ -14,6 +14,9 @@ from tests.rpg.manual.scenarios.expected_memory_l7_l9_names import (
 from tests.rpg.manual.scenarios.expected_social_l10_l12_names import (
     EXPECTED_SOCIAL_L10_L12_SCENARIO_NAMES,
 )
+from tests.rpg.manual.scenarios.expected_escalation_m7_m9_names import (
+    EXPECTED_ESCALATION_M7_M9_SCENARIO_NAMES,
+)
 
 
 def test_manual_scenario_registry_integrity():
@@ -25,14 +28,14 @@ def test_manual_scenario_registry_integrity():
 
     # Combine legacy + memory L7-L9 + social L10-L12 + spatial L4-L6 (already in legacy)
     from tests.rpg.manual.scenarios.spatial_l4_l6 import SPATIAL_L4_L6_SCENARIOS
-    all_expected = set(EXPECTED_LEGACY_SCENARIO_NAMES) | set(EXPECTED_MEMORY_L7_L9_SCENARIO_NAMES) | set(EXPECTED_SOCIAL_L10_L12_SCENARIO_NAMES) | set(SPATIAL_L4_L6_SCENARIOS.keys())
+    all_expected = set(EXPECTED_LEGACY_SCENARIO_NAMES) | set(EXPECTED_MEMORY_L7_L9_SCENARIO_NAMES) | set(EXPECTED_SOCIAL_L10_L12_SCENARIO_NAMES) | set(EXPECTED_ESCALATION_M7_M9_SCENARIO_NAMES) | set(SPATIAL_L4_L6_SCENARIOS.keys())
 
     missing = all_expected - names
     extra = names - all_expected
 
     assert not missing, f"Missing scenario names: {sorted(missing)}"
     assert not extra, f"Extra scenario names: {sorted(extra)}"
-    assert len(names) == 177, f"Expected 177 scenario names, got {len(names)}"
+    assert len(names) == 187, f"Expected 187 scenario names, got {len(names)}"
 
     # Test source files for duplicate literal keys in scenario dictionaries
     scenario_files = [
