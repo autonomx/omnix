@@ -1,20 +1,42 @@
 """
 Summary sanitizer for manual RPG test artifacts.
 
-Reduces artifact bloat by stripping or capping large fields while preserving
-essential diagnostic information.
+Supports three detail levels:
+- summary: Smallest, CI-friendly output
+- debug: (default) Per-scenario debug JSON with bounded useful fields
+- full: Deeper raw details but still bounded (strips pathological fields)
 """
 
 from __future__ import annotations
 
 import copy
+import json
 from typing import Any, Dict, Optional
 
 from tests.rpg.manual.safe import _safe_dict, _safe_list, _safe_str
 
+# ---------------------------------------------------------------------------
+# Detail level constants
+# ---------------------------------------------------------------------------
+
+# Max text lengths by detail level
+MAX_SUMMARY_TEXT_CHARS = 4_000
+MAX_DEBUG_TEXT_CHARS = 40_000
+MAX_FULL_TEXT_CHARS = 200_000
+
+# Max list items by detail level
+MAX_LIST_ITEMS_SUMMARY = 5
+MAX_LIST_ITEMS_DEBUG = 25
+MAX_LIST_ITEMS_FULL = 100
+
+# Max dict keys by detail level
+MAX_DICT_KEYS_SUMMARY = 20
+MAX_DICT_KEYS_DEBUG = 80
+MAX_DICT_KEYS_FULL = 200
+
 
 # ---------------------------------------------------------------------------
-# Constants
+# Constants for fields to always strip
 # ---------------------------------------------------------------------------
 
 # Fields to always strip from turn results in summary output
@@ -35,36 +57,95 @@ CAP_KEYS_IN_SESSION = {
     "thread",
 }
 
-# Keys to always preserve in sanitized turn output
-PRESERVE_TURN_KEYS = {
+# Keys to always preserve in sanitized turn output (summary level)
+PRESERVE_TURN_KEYS_SUMMARY = {
     "turn_index",
     "player_input",
     "ok",
     "error",
     "llm_called",
     "llm_purpose",
+    "action_type",
+    "semantic_action_type",
+    "visible_interaction_reason",
     "combat_narration_attempted",
     "combat_narration_accepted",
     "combat_narration_error",
     "combat_narration_validation",
     "combat_result",
-    "visible_interaction_reason",
     "regression_warnings",
     "scenario_warnings",
     "raw_result_keys",
     "narration_preview",
 }
 
-# Max length for text previews
-MAX_PREVIEW_LENGTH = 500
-MAX_JSON_PREVIEW_LENGTH = 2000
+# Additional keys for debug level
+PRESERVE_TURN_KEYS_DEBUG = PRESERVE_TURN_KEYS_SUMMARY | {
+    "extracted",
+    "narration_debug",
+    "raw_llm_narration_capped",
+    "narration_validation",
+    "narration_contract",
+    "combat_narration_payload",
+    "turn_contract_compact",
+    "resolved_result_compact",
+    "action_type",
+    "semantic_action_type",
+    "compact_state_deltas",
+}
+
+# Additional keys for full level
+PRESERVE_TURN_KEYS_FULL = PRESERVE_TURN_KEYS_DEBUG | {
+    "result_compact",
+    "full_state",
+}
 
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _preview(text: Optional[str], max_len: int = MAX_PREVIEW_LENGTH) -> str:
+def _get_limits(detail: str) -> Dict[str, Any]:
+    """Get limits based on detail level."""
+    if detail == "summary":
+        return {
+            "max_text": MAX_SUMMARY_TEXT_CHARS,
+            "max_list": MAX_LIST_ITEMS_SUMMARY,
+            "max_dict_keys": MAX_DICT_KEYS_SUMMARY,
+            "strip_session": True,
+            "strip_runtime_state": True,
+            "strip_simulation_state": True,
+            "include_extracted": False,
+            "include_debug_fields": False,
+            "include_full_state": False,
+        }
+    elif detail == "full":
+        return {
+            "max_text": MAX_FULL_TEXT_CHARS,
+            "max_list": MAX_LIST_ITEMS_FULL,
+            "max_dict_keys": MAX_DICT_KEYS_FULL,
+            "strip_session": True,  # Still strip session blob
+            "strip_runtime_state": False,  # Keep but cap
+            "strip_simulation_state": False,  # Keep but cap
+            "include_extracted": True,
+            "include_debug_fields": True,
+            "include_full_state": True,
+        }
+    else:  # debug (default)
+        return {
+            "max_text": MAX_DEBUG_TEXT_CHARS,
+            "max_list": MAX_LIST_ITEMS_DEBUG,
+            "max_dict_keys": MAX_DICT_KEYS_DEBUG,
+            "strip_session": True,
+            "strip_runtime_state": True,
+            "strip_simulation_state": False,  # Keep compact version
+            "include_extracted": True,
+            "include_debug_fields": True,
+            "include_full_state": False,
+        }
+
+
+def _preview(text: Optional[str], max_len: int) -> str:
     """Return a truncated preview of text."""
     if text is None:
         return ""
@@ -74,17 +155,7 @@ def _preview(text: Optional[str], max_len: int = MAX_PREVIEW_LENGTH) -> str:
     return s[:max_len] + f"... [truncated, {len(s)} chars total]"
 
 
-def _compact_json_preview(value: Any, max_len: int = MAX_JSON_PREVIEW_LENGTH) -> str:
-    """Return a compact JSON preview of a value."""
-    import json
-    try:
-        text = json.dumps(value, indent=2, ensure_ascii=False, default=str)
-    except Exception:
-        text = str(value)
-    return _preview(text, max_len)
-
-
-def _cap_list(value: Any, max_items: int = 10) -> Any:
+def _cap_list(value: Any, max_items: int) -> Any:
     """Cap list length for summary output."""
     if isinstance(value, list):
         if len(value) <= max_items:
@@ -93,11 +164,24 @@ def _cap_list(value: Any, max_items: int = 10) -> Any:
     return value
 
 
-def _strip_large_state(state: Optional[Dict[str, Any]]) -> Dict[str, Any]:
-    """Strip large fields from a state dict (session, runtime_state, etc.)."""
+def _cap_dict_keys(value: Dict[str, Any], max_keys: int) -> Dict[str, Any]:
+    """Cap dict to first N keys."""
+    if isinstance(value, dict):
+        if len(value) <= max_keys:
+            return value
+        keys = list(value.keys())[:max_keys]
+        capped = {k: value[k] for k in keys}
+        capped["_truncated"] = f"... {len(value) - max_keys} more keys"
+        return capped
+    return value
+
+
+def _strip_large_state(state: Optional[Dict[str, Any]], limits: Dict[str, Any]) -> Dict[str, Any]:
+    """Strip large fields from a state dict."""
     if not isinstance(state, dict):
         return {}
     stripped = copy.deepcopy(state)
+    max_keys = limits["max_dict_keys"]
 
     # Remove or cap large fields
     for key in list(stripped.keys()):
@@ -106,29 +190,32 @@ def _strip_large_state(state: Optional[Dict[str, Any]]) -> Dict[str, Any]:
             if isinstance(value, (list, dict)):
                 stripped[key] = f"[stripped: {type(value).__name__} with {len(value)} items]"
         elif key in {"inventory", "world_state", "journal", "quests", "npcs"}:
-            stripped[key] = _cap_list(value, max_items=5)
-        elif isinstance(value, dict) and len(value) > 20:
+            stripped[key] = _cap_list(value, max_items=limits["max_list"])
+        elif isinstance(value, dict) and len(value) > max_keys:
             stripped[key] = f"[stripped: dict with {len(value)} keys]"
-        elif isinstance(value, list) and len(value) > 50:
+        elif isinstance(value, list) and len(value) > limits["max_list"]:
             stripped[key] = f"[stripped: list with {len(value)} items]"
 
     return stripped
 
 
 # ---------------------------------------------------------------------------
-# Result compaction
+# Result compaction based on detail level
 # ---------------------------------------------------------------------------
 
-def compact_result_for_summary(result: Dict[str, Any]) -> Dict[str, Any]:
+def compact_result_for_summary(
+    result: Dict[str, Any],
+    detail: str = "summary",
+) -> Dict[str, Any]:
     """
-    Compact a turn result for summary output.
+    Compact a turn result for summary output based on detail level.
 
     Removes large state blobs while preserving essential diagnostic fields.
     """
     if not isinstance(result, dict):
         return result
 
-    # Shallow copy to avoid modifying original in caller
+    limits = _get_limits(detail)
     compacted: Dict[str, Any] = {}
 
     for key, value in result.items():
@@ -144,10 +231,16 @@ def compact_result_for_summary(result: Dict[str, Any]) -> Dict[str, Any]:
                 compacted[key] = f"[stripped: {key}]"
         elif key == "result" and isinstance(value, dict):
             # Recursively compact nested result
-            compacted[key] = compact_result_for_summary(value)
-        elif key in {"authoritative", "raw_llm_narrative"}:
+            compacted[key] = compact_result_for_summary(value, detail)
+        elif key in {"authoritative", "raw_llm_narration"}:
             # Keep these but strip their large sub-fields
-            compacted[key] = _strip_large_state(_safe_dict(value))
+            compacted[key] = _strip_large_state(_safe_dict(value), limits)
+        elif detail in ("debug", "full") and key == "turn_contract":
+            # Keep compact version for debug/full
+            compacted[f"{key}_compact"] = _cap_dict_keys(_safe_dict(value), limits["max_dict_keys"])
+        elif detail == "full" and key == "simulation_state":
+            # Keep capped version for full
+            compacted[key] = _strip_large_state(_safe_dict(value), limits)
         else:
             compacted[key] = value
 
@@ -155,23 +248,21 @@ def compact_result_for_summary(result: Dict[str, Any]) -> Dict[str, Any]:
 
 
 # ---------------------------------------------------------------------------
-# Turn sanitization
+# Extract useful fields for debug artifacts
 # ---------------------------------------------------------------------------
 
-def _extract_narration_preview(result: Dict[str, Any]) -> str:
+def _extract_narration_preview(result: Dict[str, Any], max_len: int) -> str:
     """Extract a short narration preview from a turn result."""
-    # Check direct narration fields
     for key in ("narration", "narrative", "text", "rendered_narration"):
         value = result.get(key)
         if isinstance(value, str) and value.strip():
-            return _preview(value.strip())
+            return _preview(value.strip(), max_len)
 
-    # Check nested result
     result_sub = _safe_dict(result.get("result"))
     for key in ("narration", "narrative", "text", "rendered_narration"):
         value = result_sub.get(key)
         if isinstance(value, str) and value.strip():
-            return _preview(value.strip())
+            return _preview(value.strip(), max_len)
 
     return ""
 
@@ -204,29 +295,112 @@ def _extract_combat_narration_summary(result: Dict[str, Any]) -> Dict[str, Any]:
         "accepted": result_sub.get("combat_narration_accepted"),
         "error": _preview(_safe_str(result_sub.get("combat_narration_error")), 300),
         "validation": _preview(_safe_str(result_sub.get("combat_narration_validation")), 500),
+        "payload": _preview(_safe_str(result_sub.get("combat_narration_payload")), 1000),
     }
 
 
-def sanitize_turn_for_summary(turn: Dict[str, Any]) -> Dict[str, Any]:
+def _extract_narration_debug(result: Dict[str, Any], limits: Dict[str, Any]) -> Dict[str, Any]:
+    """Extract LLM/narration debug info."""
+    result_sub = _safe_dict(result.get("result"))
+    raw_payload = _safe_dict(result_sub.get("raw_llm_narration"))
+
+    narration_json = _safe_dict(raw_payload.get("narration_json"))
+    npc = _safe_dict(narration_json.get("npc"))
+
+    # Cap raw LLM text
+    raw_text = raw_payload.get("raw_llm_narration") or raw_payload.get("raw_llm_text")
+    raw_request = raw_payload.get("raw_llm_request")
+
+    return {
+        "llm_called": result_sub.get("llm_called") or result_sub.get("used_llm"),
+        "llm_purpose": result_sub.get("llm_purpose"),
+        "narration_status": result_sub.get("narration_status"),
+        "final_narration": _preview(_extract_narration_preview(result, limits["max_text"]), limits["max_text"]),
+        "json_narration": _preview(_safe_str(narration_json.get("narration")), limits["max_text"]),
+        "json_action": _preview(_safe_str(narration_json.get("action")), limits["max_text"]),
+        "npc_speaker": _safe_str(npc.get("speaker")),
+        "npc_line": _preview(_safe_str(npc.get("line")), limits["max_text"]),
+        "raw_llm_narration_capped": _preview(_safe_str(raw_text), limits["max_text"]),
+        "raw_llm_request_capped": _preview(_safe_str(raw_request), limits["max_text"]),
+    }
+
+
+def _extract_extracted_fields(result: Dict[str, Any]) -> Dict[str, Any]:
+    """Extract narration, action, npc fields."""
+    result_sub = _safe_dict(result.get("result"))
+    raw_payload = _safe_dict(result_sub.get("raw_llm_narration"))
+    narration_json = _safe_dict(raw_payload.get("narration_json"))
+    npc = _safe_dict(narration_json.get("npc"))
+
+    return {
+        "narration": _safe_str(narration_json.get("narration")),
+        "action": _safe_str(narration_json.get("action")),
+        "npc_speaker": _safe_str(npc.get("speaker")),
+        "npc_line": _safe_str(npc.get("line")),
+        "reward": _safe_str(narration_json.get("reward")),
+        "followup_hooks": _safe_list(narration_json.get("followup_hooks")),
+    }
+
+
+def _extract_deterministic_contract(result: Dict[str, Any], limits: Dict[str, Any]) -> Dict[str, Any]:
+    """Extract compact turn_contract and resolved_result."""
+    result_sub = _safe_dict(result.get("result"))
+
+    turn_contract = _safe_dict(result.get("turn_contract"))
+    resolved_result = _safe_dict(result_sub.get("resolved_result"))
+
+    return {
+        "action_type": _safe_str(turn_contract.get("action_type")),
+        "semantic_action_type": _safe_str(turn_contract.get("semantic_action_type")),
+        "visible_interaction_reason": _safe_str(result.get("visible_interaction_reason")),
+        "turn_contract_compact": _cap_dict_keys(turn_contract, limits["max_dict_keys"]),
+        "resolved_result_compact": _cap_dict_keys(resolved_result, limits["max_dict_keys"]),
+    }
+
+
+def _extract_compact_state_deltas(result: Dict[str, Any]) -> Dict[str, Any]:
+    """Extract compact state changes (currency, inventory, etc.)."""
+    # This is a placeholder - actual implementation would extract deltas
+    return {
+        "note": "State delta extraction not yet implemented",
+    }
+
+
+# ---------------------------------------------------------------------------
+# Turn sanitization based on detail level
+# ---------------------------------------------------------------------------
+
+def sanitize_turn_for_summary(
+    turn: Dict[str, Any],
+    detail: str = "summary",
+) -> Dict[str, Any]:
     """
-    Sanitize a single turn summary for global summary output.
+    Sanitize a single turn for global summary output.
 
     Keeps only essential diagnostic fields and strips large state blobs.
     """
     if not isinstance(turn, dict):
         return turn
 
+    limits = _get_limits(detail)
+    preserve_keys = PRESERVE_TURN_KEYS_SUMMARY.copy()
+
+    if detail in ("debug", "full"):
+        preserve_keys = PRESERVE_TURN_KEYS_DEBUG.copy()
+    if detail == "full":
+        preserve_keys = PRESERVE_TURN_KEYS_FULL.copy()
+
     sanitized = {}
     result = _safe_dict(turn.get("result"))
 
     # Always-preserved fields
-    for key in PRESERVE_TURN_KEYS:
+    for key in preserve_keys:
         if key in turn:
             sanitized[key] = turn[key]
 
     # Ensure narration preview
     if "narration_preview" not in sanitized:
-        sanitized["narration_preview"] = _extract_narration_preview(result)
+        sanitized["narration_preview"] = _extract_narration_preview(result, limits["max_text"])
 
     # Combat summary
     combat_summary = _extract_combat_summary(result)
@@ -245,7 +419,7 @@ def sanitize_turn_for_summary(turn: Dict[str, Any]) -> Dict[str, Any]:
 
     # Visible interaction reason
     if "visible_interaction_reason" not in sanitized:
-        interaction_result = _safe_dict(_safe_dict(result.get("result")).get("interaction_result"))
+        interaction_result = _safe_dict(_safe_dict(result.get("result"))).get("interaction_result")
         if interaction_result:
             reason = _safe_str(interaction_result.get("reason"))
             if reason and reason not in ("", "unknown"):
@@ -253,20 +427,39 @@ def sanitize_turn_for_summary(turn: Dict[str, Any]) -> Dict[str, Any]:
 
     # Raw result keys (for debugging)
     if result:
-        sanitized["raw_result_keys"] = sorted(result.keys())
+        sanitized["raw_result_keys"] = sorted(result.keys())[:limits["max_dict_keys"]]
+
+    # Detail-specific fields
+    if limits["include_debug_fields"]:
+        # Narration debug info
+        sanitized["narration_debug"] = _extract_narration_debug(result, limits)
+
+        # Deterministic contract
+        sanitized.update(_extract_deterministic_contract(result, limits))
+
+        # Combat narration payload
+        combat_payload = result.get("combat_narration_payload")
+        if combat_payload:
+            sanitized["combat_narration_payload"] = _preview(_safe_str(combat_payload), limits["max_text"])
+
+    if limits["include_extracted"]:
+        sanitized["extracted"] = _extract_extracted_fields(result)
+
+    if limits["include_full_state"]:
+        sanitized["full_state"] = _cap_dict_keys(result, limits["max_dict_keys"])
 
     # Compact result (stripped version)
-    if result:
-        sanitized["result_compact"] = compact_result_for_summary(result)
+    if result and detail != "full":
+        sanitized["result_compact"] = compact_result_for_summary(result, detail)
 
     # Preserve error if present
     if turn.get("error"):
-        sanitized["error"] = _preview(_safe_str(turn["error"]), 500)
+        sanitized["error"] = _preview(_safe_str(turn["error"]), limits["max_text"])
 
     # Preserve warnings
     for warning_key in ("regression_warnings", "scenario_warnings"):
         if warning_key in turn:
-            sanitized[warning_key] = _safe_list(turn[warning_key])
+            sanitized[warning_key] = _safe_list(turn[warning_key])[:limits["max_list"]]
 
     return sanitized
 
@@ -275,7 +468,10 @@ def sanitize_turn_for_summary(turn: Dict[str, Any]) -> Dict[str, Any]:
 # Scenario summary sanitization
 # ---------------------------------------------------------------------------
 
-def sanitize_scenario_summary(summary: Dict[str, Any]) -> Dict[str, Any]:
+def sanitize_scenario_summary(
+    summary: Dict[str, Any],
+    detail: str = "summary",
+) -> Dict[str, Any]:
     """
     Sanitize a full scenario summary row for global summary output.
 
@@ -283,6 +479,8 @@ def sanitize_scenario_summary(summary: Dict[str, Any]) -> Dict[str, Any]:
     """
     if not isinstance(summary, dict):
         return summary
+
+    limits = _get_limits(detail)
 
     sanitized = {
         "scenario": _safe_str(summary.get("scenario")),
@@ -292,7 +490,7 @@ def sanitize_scenario_summary(summary: Dict[str, Any]) -> Dict[str, Any]:
 
     # Sanitize each turn
     turns = _safe_list(summary.get("turns"))
-    sanitized["turns"] = [sanitize_turn_for_summary(t) for t in turns]
+    sanitized["turns"] = [sanitize_turn_for_summary(t, detail) for t in turns]
 
     # Aggregate warnings
     for warning_key in ("regression_warnings", "scenario_warnings"):
@@ -300,11 +498,11 @@ def sanitize_scenario_summary(summary: Dict[str, Any]) -> Dict[str, Any]:
         for turn in turns:
             warnings.extend(_safe_list(turn.get(warning_key)))
         if warnings:
-            sanitized[warning_key] = warnings
+            sanitized[warning_key] = warnings[:limits["max_list"]]
 
     # Preserve error if present
     if summary.get("error"):
-        sanitized["error"] = _preview(_safe_str(summary["error"]), 500)
+        sanitized["error"] = _preview(_safe_str(summary["error"]), limits["max_text"])
 
     # Add turn count and summary stats
     sanitized["_stats"] = {
@@ -315,3 +513,36 @@ def sanitize_scenario_summary(summary: Dict[str, Any]) -> Dict[str, Any]:
     }
 
     return sanitized
+
+
+# ---------------------------------------------------------------------------
+# Write per-scenario debug artifact
+# ---------------------------------------------------------------------------
+
+def write_scenario_debug_artifact(
+    scenario_name: str,
+    scenario_summary: Dict[str, Any],
+    output_dir: str,
+    detail: str = "debug",
+) -> str:
+    """
+    Write per-scenario debug JSON artifact with bounded detail.
+
+    Returns the path to the written file.
+    """
+    from pathlib import Path
+
+    output_path = Path(output_dir)
+    scenarios_dir = output_path / "scenarios"
+    scenarios_dir.mkdir(parents=True, exist_ok=True)
+
+    # Sanitize with debug/full detail
+    sanitized = sanitize_scenario_summary(scenario_summary, detail)
+
+    filename = f"{scenario_name}.{detail}.json"
+    filepath = scenarios_dir / filename
+
+    with open(filepath, "w", encoding="utf-8") as f:
+        json.dump(sanitized, f, indent=2, ensure_ascii=False, default=str)
+
+    return str(filepath)

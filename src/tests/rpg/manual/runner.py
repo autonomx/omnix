@@ -45,15 +45,15 @@ def _emit_summary_block(
     title: str,
     rows: List[Dict[str, Any]],
     channel: str = "service_summary",
-    sanitize: bool = True,
+    artifact_detail: str = "summary",
 ) -> None:
     output_artifacts._emit("", channel=channel)
     output_artifacts._emit(title, channel=channel)
     output_artifacts._emit("=" * 80, channel=channel)
 
-    # Sanitize rows before writing to output
-    if sanitize:
-        sanitized_rows = [sanitize_scenario_summary(row) for row in rows]
+    # Sanitize rows based on artifact detail level
+    if artifact_detail in ("summary", "debug", "full"):
+        sanitized_rows = [sanitize_scenario_summary(row, artifact_detail) for row in rows]
     else:
         sanitized_rows = rows
 
@@ -74,6 +74,7 @@ def run_service_scenarios(
     console_llm: bool = True,
     console_llm_raw: bool = False,
     console_llm_max_chars: int = 10_000,
+    artifact_detail: str = "debug",
 ) -> List[Dict[str, Any]]:
     scenario_summaries: List[Dict[str, Any]] = []
     scenario_names_to_run = list(scenario_names_to_run or [])
@@ -127,6 +128,7 @@ def run_service_scenarios(
             console_llm_raw=console_llm_raw,
             console_llm_max_chars=console_llm_max_chars,
             fail_on_regression_warnings=fail_on_regression_warnings,
+            artifact_detail=artifact_detail,
         )
 
     if use_parallel:
@@ -173,10 +175,13 @@ def run_service_scenarios(
 
     scenario_summaries.sort(key=lambda row: _safe_str(row.get("scenario") or row.get("scenario_name")))
 
+    # Always use "summary" for global summary to keep it compact,
+    # regardless of --artifact-detail flag (which controls per-scenario files only)
     _emit_summary_block(
         title="Manual RPG Service Scenario Summary",
         rows=scenario_summaries,
         channel="service_summary",
+        artifact_detail="summary",
     )
 
     if not no_html_report:
@@ -221,6 +226,7 @@ def run_requested_transcripts(args: argparse.Namespace) -> None:
             console_llm=not bool(getattr(args, "no_console_llm", False)),
             console_llm_raw=bool(getattr(args, "console_llm_raw", False)),
             console_llm_max_chars=int(getattr(args, "console_llm_max_chars", 10_000) or 10_000),
+            artifact_detail=getattr(args, "artifact_detail", "debug"),
         )
         return
 
