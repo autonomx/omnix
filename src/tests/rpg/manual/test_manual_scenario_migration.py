@@ -7,13 +7,16 @@ from tests.rpg.manual.scenarios.expected_legacy_names import (
 from tests.rpg.manual.scenarios.expected_memory_l7_l9_names import (
     EXPECTED_MEMORY_L7_L9_SCENARIO_NAMES,
 )
+from tests.rpg.manual.scenarios.expected_social_l10_l12_names import (
+    EXPECTED_SOCIAL_L10_L12_SCENARIO_NAMES,
+)
 
 
 def test_manual_scenario_migration_audit():
     """Audit migration by comparing expected legacy names vs new modular registry.
 
     This test ensures we don't silently drop or add scenarios during refactoring.
-    It compares against the exact 145 old scenario names from manual_llm_transcript_old.py.
+    It compares against the current modular registry scenario count.
     """
 
     # Load expected legacy names (exact 145 from old monolith)
@@ -24,8 +27,8 @@ def test_manual_scenario_migration_audit():
     new_scenarios = build_service_scenarios()
     new_names = set(new_scenarios.keys())
 
-    # All 145 scenarios should be present
-    assert len(new_names) == 145, f"Expected 145 scenarios, found {len(new_names)}"
+    # All scenarios should be present (updated count after social mechanics integration)
+    assert len(new_names) == 177, f"Expected 177 scenarios, found {len(new_names)}"
 
     # Check that Bundle A scenarios have been successfully ported
     bundle_a_scenarios = {"lodging_success", "shop_success", "blocked_purchase", "paid_info"}
@@ -136,7 +139,7 @@ def test_manual_scenario_migration_audit():
     missing_names = all_old_names - new_names
     assert not missing_names, f"Missing scenarios: {missing_names}"
 
-    print("Migration audit passed: All 136 scenarios present in modular registry.")
+    print(f"Migration audit passed: All {len(new_names)} scenarios present in modular registry.")
 
 
 def test_manual_scenario_registry_includes_memory_l7_l9_names():
@@ -144,3 +147,10 @@ def test_manual_scenario_registry_includes_memory_l7_l9_names():
     missing = EXPECTED_MEMORY_L7_L9_SCENARIO_NAMES - names
 
     assert not missing, f"Missing L7-L9 memory scenarios: {sorted(missing)}"
+
+
+def test_manual_scenario_registry_includes_social_l10_l12_names():
+    names = set(build_service_scenarios().keys())
+    missing = EXPECTED_SOCIAL_L10_L12_SCENARIO_NAMES - names
+
+    assert not missing, f"Missing L10-L12 social scenarios: {sorted(missing)}"

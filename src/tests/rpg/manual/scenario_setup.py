@@ -8,6 +8,16 @@ from app.rpg.memory.observation import (
     record_event_observations,
     record_told_memory,
 )
+from app.rpg.social.leverage import add_social_leverage
+from app.rpg.social.reputation import (
+    set_global_reputation,
+    set_relationship_values,
+)
+from app.rpg.social.resolution import (
+    resolve_intimidation,
+    resolve_persuasion,
+)
+from app.rpg.social.state import ensure_social_state, normalize_social_profile
 from tests.rpg.manual.spatial_fixtures import build_manual_spatial_fixture
 from tests.rpg.manual.memory_fixtures import build_manual_memory_event
 from tests.rpg.manual.safe import _safe_dict, _safe_list
@@ -96,6 +106,73 @@ def _apply_manual_scenario_setup(session: Dict[str, Any], scenario: Dict[str, An
             tags=list(told.get("tags") or []),
             verified=bool(told.get("verified")),
         )
+
+    setup_social_state = scenario.get("setup_social_state") or {}
+    if isinstance(setup_social_state, dict) and setup_social_state:
+        ensure_social_state(simulation_state)
+        for npc_id, values in (setup_social_state.get("relationships") or {}).items():
+            if isinstance(values, dict):
+                set_relationship_values(simulation_state, str(npc_id), values)
+        for actor_id, value in (setup_social_state.get("global_reputation") or {}).items():
+            set_global_reputation(simulation_state, str(actor_id), value)
+
+    setup_social_profiles = scenario.get("setup_social_profiles") or {}
+    if isinstance(setup_social_profiles, dict) and setup_social_profiles:
+        social_state = ensure_social_state(simulation_state)
+        profiles = social_state.setdefault("profiles", {})
+        for npc_id, profile in setup_social_profiles.items():
+            profiles[str(npc_id)] = normalize_social_profile(
+                profile if isinstance(profile, dict) else {},
+                npc_id=str(npc_id),
+            )
+
+    for leverage in scenario.get("setup_social_leverage") or []:
+        if isinstance(leverage, dict):
+            add_social_leverage(simulation_state, leverage)
+
+    social_actions = scenario.get("setup_social_actions") or []
+    if social_actions:
+        social_state = ensure_social_state(simulation_state)
+        manual_results = social_state.setdefault("manual_results", {})
+        for index, action in enumerate(social_actions, start=1):
+            if not isinstance(action, dict):
+                continue
+            action_type = str(action.get("type") or "")
+            result_key = str(action.get("result_key") or f"social_action_{index}")
+            if action_type == "persuasion":
+                result = resolve_persuasion(
+                    simulation_state,
+                    str(action.get("npc_id") or ""),
+                    actor_id=str(action.get("actor_id") or "player"),
+                    request=str(action.get("request") or ""),
+                    difficulty=int(action.get("difficulty") or 50),
+                    approach=str(action.get("approach") or "polite"),
+                    leverage_id=action.get("leverage_id"),
+                    current_turn=int(action.get("turn_index") or 1),
+                )
+                social_state = ensure_social_state(simulation_state)
+                manual_results = social_state.setdefault("manual_results", {})
+                manual_results[result_key] = result
+                manual_results["last_persuasion"] = manual_results[result_key]
+            elif action_type == "intimidation":
+                result = resolve_intimidation(
+                    simulation_state,
+                    str(action.get("npc_id") or ""),
+                    actor_id=str(action.get("actor_id") or "player"),
+                    threat=str(action.get("threat") or ""),
+                    severity=int(action.get("severity") or 50),
+                    leverage_id=action.get("leverage_id"),
+                    witnesses=list(action.get("witnesses") or []),
+                    current_turn=int(action.get("turn_index") or 1),
+                )
+                social_state = ensure_social_state(simulation_state)
+                manual_results = social_state.setdefault("manual_results", {})
+                manual_results[result_key] = result
+                manual_results["last_intimidation"] = manual_results[result_key]
+
+        # Make the normalized social state with manual_results explicit on the
+        # authoritative simulation_state before session save/sync.
+        simulation_state["social_state"] = social_state
 
     runtime_state = _safe_dict(session.get("runtime_state"))
     runtime_settings = _safe_dict(runtime_state.get("runtime_settings"))

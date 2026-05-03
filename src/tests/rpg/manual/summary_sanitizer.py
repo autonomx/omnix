@@ -446,6 +446,30 @@ def sanitize_turn_for_summary(
             if isinstance(item, dict)
         ]
 
+    social_check_results = turn.get("social_check_results")
+    if isinstance(social_check_results, list):
+        sanitized["social_check_results"] = [
+            {
+                "check_type": item.get("check_type"),
+                "ok": item.get("ok"),
+                "npc_id": item.get("npc_id"),
+                "actor_id": item.get("actor_id"),
+                "result_key": item.get("result_key"),
+                "expected_ok": item.get("expected_ok"),
+                "expected_stance": item.get("expected_stance"),
+                "expected_escalation": item.get("expected_escalation"),
+                "actual_stance": item.get("actual_stance"),
+                "relationship": item.get("relationship"),
+                "actual": item.get("actual"),
+                "validation": item.get("validation"),
+                "failures": item.get("failures"),
+                "available_result_keys": item.get("available_result_keys"),
+                "error": item.get("error"),
+            }
+            for item in social_check_results[:50]
+            if isinstance(item, dict)
+        ]
+
     # Ensure narration preview
     if "narration_preview" not in sanitized:
         sanitized["narration_preview"] = _extract_narration_preview(result, limits["max_text"])
