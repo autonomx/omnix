@@ -1,49 +1,55 @@
-Bundle M13-M15 — Story Pack Importer + Campaign Seed Generation v1
+Bundle M16-M18 — Arc-Aware NPC Dialogue + Rumor Propagation v1
 GOAL:
-Take validated story_proposal_v1 data and import it into deterministic RPG state as a reusable story pack.
+Add deterministic arc/lore dialogue context and rumor propagation.
 
-This bundle converts accepted proposal data into:
-- lore_state entries
-- story_arc_state arcs
-- story_event_registry definitions
-- escalation_rule_registry definitions
-- optional starter quest seeds
+NPCs may discuss:
+- lore they explicitly know
+- story arcs linked to lore/memory/social/spatial context
+- rumors they heard through causal memory or audibility
 
-Important:
-- LLM/proposal data still does not directly mutate state.
-- Import happens only after validate_story_proposal() passes.
-- Import is deterministic and idempotent.
-- Existing true lore is protected.
-- Story events and escalation rules are stored as definitions, not automatically applied.
-Patch 1 — Add story pack package
-1. Add src/app/rpg/story_packs/__init__.py
+NPCs must NOT discuss:
+- secret lore they do not know
+- unrevealed/unknown true facts without causal access
+- arc details not backed by deterministic state
+- rumors as truth
+
+Rumor propagation:
+- uses spatial audibility
+- creates causal memory for hearers
+- does not promote rumor lore to truth
+- is deterministic and bounded
+
+LLM may later phrase dialogue, but it only receives bounded, validated dialogue context.
+Patch 1 — Add arc dialogue package
+1. Add src/app/rpg/dialogue_context/__init__.py
 *** Begin Patch
-*** Add File: src/app/rpg/story_packs/__init__.py
-+"""Deterministic story pack import helpers."""
+*** Add File: src/app/rpg/dialogue_context/__init__.py
++"""Deterministic story/lore dialogue context helpers."""
 +
-+from app.rpg.story_packs.importer import import_story_pack
-+from app.rpg.story_packs.registry import (
-+    ensure_story_pack_state,
-+    get_imported_story_pack,
-+    normalize_story_pack_state,
-+)
++from app.rpg.dialogue_context.arc_context import build_arc_dialogue_context
++from app.rpg.dialogue_context.rumors import propagate_rumor
 +
 +__all__ = [
-+    "ensure_story_pack_state",
-+    "get_imported_story_pack",
-+    "import_story_pack",
-+    "normalize_story_pack_state",
++    "build_arc_dialogue_context",
++    "propagate_rumor",
 +]
 *** End Patch
-2. Add src/app/rpg/story_packs/registry.py
+2. Add src/app/rpg/dialogue_context/arc_context.py
 *** Begin Patch
-*** Add File: src/app/rpg/story_packs/registry.py
+*** Add File: src/app/rpg/dialogue_context/arc_context.py
 +from __future__ import annotations
 +
-+from typing import Any, Dict, List
++from typing import Any, Dict, List, Set
++
++from app.rpg.lore.state import get_lore_entry, is_lore_known_by
++from app.rpg.memory.causal_retrieval import retrieve_causal_memories
++from app.rpg.social.reputation import get_relationship
++from app.rpg.story_arcs.state import get_story_arc
 +
 +
-+MAX_IMPORTED_STORY_PACKS = 200
++MAX_DIALOGUE_LORE = 10
++MAX_DIALOGUE_ARCS = 10
++MAX_DIALOGUE_MEMORIES = 10
 +
 +
 +def _safe_dict(value: Any) -> Dict[str, Any]:
@@ -58,312 +64,238 @@ Patch 1 — Add story pack package
 +    return value if isinstance(value, str) else ""
 +
 +
-+def _safe_bool(value: Any, default: bool = False) -> bool:
-+    if isinstance(value, bool):
-+        return value
-+    return default
-+
-+
-+def _safe_int(value: Any, default: int = 0) -> int:
-+    try:
-+        return int(value)
-+    except Exception:
-+        return default
-+
-+
-+def normalize_imported_story_pack(value: Dict[str, Any], *, pack_id: str = "") -> Dict[str, Any]:
-+    value = _safe_dict(value)
-+    normalized_pack_id = _safe_str(value.get("pack_id")) or pack_id
-+    return {
-+        "pack_id": normalized_pack_id,
-+        "proposal_id": _safe_str(value.get("proposal_id")),
-+        "title": _safe_str(value.get("title")) or normalized_pack_id,
-+        "imported_turn": _safe_int(value.get("imported_turn"), 0),
-+        "lore_ids": [
-+            str(item)
-+            for item in _safe_list(value.get("lore_ids"))
-+            if str(item)
-+        ][:200],
-+        "arc_ids": [
-+            str(item)
-+            for item in _safe_list(value.get("arc_ids"))
-+            if str(item)
-+        ][:200],
-+        "event_ids": [
-+            str(item)
-+            for item in _safe_list(value.get("event_ids"))
-+            if str(item)
-+        ][:200],
-+        "rule_ids": [
-+            str(item)
-+            for item in _safe_list(value.get("rule_ids"))
-+            if str(item)
-+        ][:200],
-+        "quest_ids": [
-+            str(item)
-+            for item in _safe_list(value.get("quest_ids"))
-+            if str(item)
-+        ][:200],
-+        "idempotent": _safe_bool(value.get("idempotent"), True),
-+        "metadata": dict(_safe_dict(value.get("metadata"))),
-+    }
-+
-+
-+def normalize_story_pack_state(value: Dict[str, Any] | None) -> Dict[str, Any]:
-+    value = _safe_dict(value)
-+    packs: Dict[str, Dict[str, Any]] = {}
-+    for pack_id, row in _safe_dict(value.get("imported_packs")).items():
-+        pack_id = str(pack_id or "")
-+        if not pack_id:
-+            continue
-+        packs[pack_id] = normalize_imported_story_pack(row, pack_id=pack_id)
-+
-+    ordered_ids = sorted(
-+        packs,
-+        key=lambda pid: (
-+            int(packs[pid].get("imported_turn") or 0),
-+            pid,
-+        ),
-+    )[-MAX_IMPORTED_STORY_PACKS:]
-+
-+    return {
-+        "version": 1,
-+        "imported_packs": {
-+            pack_id: packs[pack_id]
-+            for pack_id in ordered_ids
-+        },
-+        "max_imported_packs": MAX_IMPORTED_STORY_PACKS,
-+    }
-+
-+
-+def ensure_story_pack_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
-+    if not isinstance(simulation_state, dict):
-+        raise TypeError("simulation_state_must_be_dict")
-+    state = normalize_story_pack_state(simulation_state.get("story_pack_state"))
-+    simulation_state["story_pack_state"] = state
-+    return state
-+
-+
-+def get_imported_story_pack(
++def _known_lore_ids_from_memory(
 +    simulation_state: Dict[str, Any],
-+    pack_id: str,
-+) -> Dict[str, Any] | None:
-+    state = ensure_story_pack_state(simulation_state)
-+    return state.get("imported_packs", {}).get(pack_id)
-+
-+
-+def mark_story_pack_imported(
-+    simulation_state: Dict[str, Any],
-+    *,
-+    pack_id: str,
-+    proposal_id: str = "",
-+    title: str = "",
-+    lore_ids: List[str] | None = None,
-+    arc_ids: List[str] | None = None,
-+    event_ids: List[str] | None = None,
-+    rule_ids: List[str] | None = None,
-+    quest_ids: List[str] | None = None,
-+    turn_index: int = 0,
-+    metadata: Dict[str, Any] | None = None,
-+) -> Dict[str, Any]:
-+    state = ensure_story_pack_state(simulation_state)
-+    if not pack_id:
-+        return {"ok": False, "reason": "missing_pack_id"}
-+
-+    row = normalize_imported_story_pack(
-+        {
-+            "pack_id": pack_id,
-+            "proposal_id": proposal_id,
-+            "title": title or pack_id,
-+            "imported_turn": int(turn_index or 0),
-+            "lore_ids": lore_ids or [],
-+            "arc_ids": arc_ids or [],
-+            "event_ids": event_ids or [],
-+            "rule_ids": rule_ids or [],
-+            "quest_ids": quest_ids or [],
-+            "idempotent": True,
-+            "metadata": metadata or {},
-+        },
-+        pack_id=pack_id,
++    npc_id: str,
++) -> Set[str]:
++    rows = retrieve_causal_memories(
++        simulation_state,
++        npc_id,
++        tags=["lore", "rumor", "story"],
++        max_items=MAX_DIALOGUE_MEMORIES,
 +    )
-+    state.setdefault("imported_packs", {})[pack_id] = row
-+    simulation_state["story_pack_state"] = normalize_story_pack_state(state)
-+    return {
-+        "ok": True,
-+        "reason": "story_pack_import_marked",
-+        "pack_id": pack_id,
-+        "imported": simulation_state["story_pack_state"]["imported_packs"][pack_id],
-+    }
-*** End Patch
-3. Add src/app/rpg/story_packs/definition_registries.py
-*** Begin Patch
-*** Add File: src/app/rpg/story_packs/definition_registries.py
-+from __future__ import annotations
-+
-+from typing import Any, Dict, List
-+
-+from app.rpg.escalation.rules import normalize_escalation_rule
-+from app.rpg.story_proposals.normalization import normalize_proposal_story_event
++    lore_ids: Set[str] = set()
++    for row in rows:
++        facts = _safe_dict(row.get("facts"))
++        lore_id = _safe_str(facts.get("lore_id"))
++        if lore_id:
++            lore_ids.add(lore_id)
++    return lore_ids
 +
 +
-+MAX_STORY_EVENT_DEFINITIONS = 500
-+MAX_ESCALATION_RULE_DEFINITIONS = 500
-+
-+
-+def _safe_dict(value: Any) -> Dict[str, Any]:
-+    return value if isinstance(value, dict) else {}
-+
-+
-+def _safe_str(value: Any) -> str:
-+    return value if isinstance(value, str) else ""
-+
-+
-+def _safe_list(value: Any) -> List[Any]:
-+    return value if isinstance(value, list) else []
-+
-+
-+def normalize_story_event_registry(value: Dict[str, Any] | None) -> Dict[str, Any]:
-+    value = _safe_dict(value)
-+    events = {}
-+    for event_id, row in _safe_dict(value.get("events")).items():
-+        event_id = str(event_id or "")
-+        if not event_id:
-+            continue
-+        normalized = normalize_proposal_story_event(dict(_safe_dict(row), event_id=event_id))
-+        events[event_id] = normalized
-+    ordered = sorted(events)[-MAX_STORY_EVENT_DEFINITIONS:]
-+    return {
-+        "version": 1,
-+        "events": {event_id: events[event_id] for event_id in ordered},
-+        "max_events": MAX_STORY_EVENT_DEFINITIONS,
-+    }
-+
-+
-+def ensure_story_event_registry(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
-+    state = normalize_story_event_registry(simulation_state.get("story_event_registry"))
-+    simulation_state["story_event_registry"] = state
-+    return state
-+
-+
-+def register_story_event_definition(
++def _memory_event_ids(
 +    simulation_state: Dict[str, Any],
-+    event: Dict[str, Any],
++    npc_id: str,
 +    *,
-+    pack_id: str = "",
++    tags: List[str] | None = None,
++) -> List[str]:
++    rows = retrieve_causal_memories(
++        simulation_state,
++        npc_id,
++        tags=tags or [],
++        max_items=MAX_DIALOGUE_MEMORIES,
++    )
++    return [
++        str(row.get("event_id"))
++        for row in rows
++        if row.get("event_id")
++    ][:MAX_DIALOGUE_MEMORIES]
++
++
++def _can_discuss_lore(
++    simulation_state: Dict[str, Any],
++    npc_id: str,
++    lore_id: str,
 +) -> Dict[str, Any]:
-+    state = ensure_story_event_registry(simulation_state)
-+    event = normalize_proposal_story_event(event)
-+    event_id = _safe_str(event.get("event_id"))
-+    if not event_id:
-+        return {"ok": False, "reason": "missing_event_id"}
-+    event.setdefault("metadata", {})
-+    event["metadata"] = dict(_safe_dict(event.get("metadata")))
-+    if pack_id:
-+        event["metadata"]["pack_id"] = pack_id
-+    state.setdefault("events", {})[event_id] = event
-+    simulation_state["story_event_registry"] = normalize_story_event_registry(state)
++    entry = get_lore_entry(simulation_state, lore_id)
++    if not entry:
++        return {
++            "ok": False,
++            "reason": "lore_missing",
++            "lore_id": lore_id,
++        }
++
++    known_by = is_lore_known_by(simulation_state, lore_id, npc_id)
++    remembered_lore = lore_id in _known_lore_ids_from_memory(simulation_state, npc_id)
++    revealed = bool(entry.get("revealed_to_player"))
++    truth_status = str(entry.get("truth_status") or "unknown")
++
++    if truth_status == "secret" and not known_by and not remembered_lore:
++        return {
++            "ok": False,
++            "reason": "secret_not_known",
++            "lore_id": lore_id,
++            "truth_status": truth_status,
++        }
++
++    if not known_by and not remembered_lore and not revealed:
++        return {
++            "ok": False,
++            "reason": "not_known_or_revealed",
++            "lore_id": lore_id,
++            "truth_status": truth_status,
++        }
++
++    must_mark_as_rumor = truth_status in {"rumor", "myth", "unknown"} or remembered_lore
 +    return {
 +        "ok": True,
-+        "reason": "story_event_definition_registered",
-+        "event_id": event_id,
-+        "event": simulation_state["story_event_registry"]["events"][event_id],
++        "reason": "available",
++        "lore_id": lore_id,
++        "truth_status": truth_status,
++        "known_by": known_by,
++        "remembered_lore": remembered_lore,
++        "revealed_to_player": revealed,
++        "must_mark_as_rumor": must_mark_as_rumor,
 +    }
 +
 +
-+def get_story_event_definition(
++def build_arc_dialogue_context(
 +    simulation_state: Dict[str, Any],
-+    event_id: str,
-+) -> Dict[str, Any] | None:
-+    state = ensure_story_event_registry(simulation_state)
-+    return state.get("events", {}).get(event_id)
-+
-+
-+def normalize_escalation_rule_registry(value: Dict[str, Any] | None) -> Dict[str, Any]:
-+    value = _safe_dict(value)
-+    rules = {}
-+    for rule_id, row in _safe_dict(value.get("rules")).items():
-+        rule_id = str(rule_id or "")
-+        if not rule_id:
-+            continue
-+        normalized = normalize_escalation_rule(dict(_safe_dict(row), rule_id=rule_id))
-+        rules[rule_id] = normalized
-+    ordered = sorted(rules)[-MAX_ESCALATION_RULE_DEFINITIONS:]
-+    return {
-+        "version": 1,
-+        "rules": {rule_id: rules[rule_id] for rule_id in ordered},
-+        "max_rules": MAX_ESCALATION_RULE_DEFINITIONS,
-+    }
-+
-+
-+def ensure_escalation_rule_registry(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
-+    state = normalize_escalation_rule_registry(simulation_state.get("escalation_rule_registry"))
-+    simulation_state["escalation_rule_registry"] = state
-+    return state
-+
-+
-+def register_escalation_rule_definition(
-+    simulation_state: Dict[str, Any],
-+    rule: Dict[str, Any],
-+    *,
-+    pack_id: str = "",
-+) -> Dict[str, Any]:
-+    state = ensure_escalation_rule_registry(simulation_state)
-+    rule = normalize_escalation_rule(rule)
-+    rule_id = _safe_str(rule.get("rule_id"))
-+    if not rule_id:
-+        return {"ok": False, "reason": "missing_rule_id"}
-+    rule.setdefault("metadata", {})
-+    rule["metadata"] = dict(_safe_dict(rule.get("metadata")))
-+    if pack_id:
-+        rule["metadata"]["pack_id"] = pack_id
-+    state.setdefault("rules", {})[rule_id] = rule
-+    simulation_state["escalation_rule_registry"] = normalize_escalation_rule_registry(state)
-+    return {
-+        "ok": True,
-+        "reason": "escalation_rule_definition_registered",
-+        "rule_id": rule_id,
-+        "rule": simulation_state["escalation_rule_registry"]["rules"][rule_id],
-+    }
-+
-+
-+def get_escalation_rule_definition(
-+    simulation_state: Dict[str, Any],
-+    rule_id: str,
-+) -> Dict[str, Any] | None:
-+    state = ensure_escalation_rule_registry(simulation_state)
-+    return state.get("rules", {}).get(rule_id)
-+
-+
-+def list_escalation_rule_definitions(
-+    simulation_state: Dict[str, Any],
++    npc_id: str,
 +    *,
 +    arc_id: str = "",
-+) -> List[Dict[str, Any]]:
-+    state = ensure_escalation_rule_registry(simulation_state)
-+    rows = list(state.get("rules", {}).values())
++    topic_lore_id: str = "",
++) -> Dict[str, Any]:
++    npc_id = str(npc_id or "")
++    relationship = get_relationship(simulation_state, npc_id) if npc_id else {}
++    social_stance = str(relationship.get("last_stance") or "")
++    if not social_stance:
++        if int(relationship.get("fear") or 0) >= 50:
++            social_stance = "fearful"
++        elif int(relationship.get("hostility") or 0) >= 50:
++            social_stance = "hostile"
++        elif int(relationship.get("trust") or 0) >= 40:
++            social_stance = "trusting"
++        else:
++            social_stance = "neutral"
++
++    lore_state = _safe_dict(simulation_state.get("lore_state"))
++    entries = _safe_dict(lore_state.get("entries"))
++    arc_state = _safe_dict(simulation_state.get("story_arc_state"))
++    arcs = _safe_dict(arc_state.get("arcs"))
++
++    candidate_lore_ids: List[str] = []
++    if topic_lore_id:
++        candidate_lore_ids.append(topic_lore_id)
 +    if arc_id:
-+        rows = [row for row in rows if row.get("arc_id") == arc_id]
-+    rows.sort(key=lambda row: (int(row.get("priority") or 0), str(row.get("rule_id") or "")), reverse=True)
-+    return rows
++        arc = get_story_arc(simulation_state, arc_id) or {}
++        candidate_lore_ids.extend(_safe_list(arc.get("linked_lore")))
++    candidate_lore_ids.extend(
++        lore_id
++        for lore_id, entry in entries.items()
++        if npc_id in set(_safe_list(_safe_dict(entry).get("known_by")))
++    )
++    candidate_lore_ids.extend(sorted(_known_lore_ids_from_memory(simulation_state, npc_id)))
++
++    seen_lore: Set[str] = set()
++    known_lore = []
++    rejected_lore = []
++    for lore_id in candidate_lore_ids:
++        lore_id = str(lore_id or "")
++        if not lore_id or lore_id in seen_lore:
++            continue
++        seen_lore.add(lore_id)
++        decision = _can_discuss_lore(simulation_state, npc_id, lore_id)
++        entry = get_lore_entry(simulation_state, lore_id) or {}
++        if decision.get("ok"):
++            known_lore.append(
++                {
++                    "lore_id": lore_id,
++                    "title": entry.get("title"),
++                    "kind": entry.get("kind"),
++                    "truth_status": entry.get("truth_status"),
++                    "summary": entry.get("summary"),
++                    "tags": list(entry.get("tags") or [])[:10],
++                    "must_mark_as_rumor": bool(decision.get("must_mark_as_rumor")),
++                    "source_reason": decision.get("reason"),
++                }
++            )
++        else:
++            rejected_lore.append(decision)
++        if len(known_lore) >= MAX_DIALOGUE_LORE:
++            break
++
++    candidate_arc_ids: List[str] = []
++    if arc_id:
++        candidate_arc_ids.append(arc_id)
++    for current_arc_id, arc in arcs.items():
++        arc = _safe_dict(arc)
++        if npc_id in set(_safe_list(arc.get("linked_entities"))):
++            candidate_arc_ids.append(str(current_arc_id))
++        if any(lore.get("lore_id") in set(_safe_list(arc.get("linked_lore"))) for lore in known_lore):
++            candidate_arc_ids.append(str(current_arc_id))
++
++    known_arcs = []
++    seen_arcs: Set[str] = set()
++    memory_event_ids = _memory_event_ids(simulation_state, npc_id, tags=["story", "rumor", "warning", "bandit"])
++    for current_arc_id in candidate_arc_ids:
++        current_arc_id = str(current_arc_id or "")
++        if not current_arc_id or current_arc_id in seen_arcs:
++            continue
++        seen_arcs.add(current_arc_id)
++        arc = get_story_arc(simulation_state, current_arc_id)
++        if not arc:
++            continue
++        has_known_lore_link = any(lore.get("lore_id") in set(_safe_list(arc.get("linked_lore"))) for lore in known_lore)
++        linked_entity = npc_id in set(_safe_list(arc.get("linked_entities")))
++        if not has_known_lore_link and not linked_entity and current_arc_id != arc_id:
++            continue
++        known_arcs.append(
++            {
++                "arc_id": current_arc_id,
++                "title": arc.get("title"),
++                "status": arc.get("status"),
++                "stage": arc.get("stage"),
++                "pressure": arc.get("pressure"),
++                "linked_lore": list(arc.get("linked_lore") or [])[:10],
++                "linked_entities": list(arc.get("linked_entities") or [])[:10],
++                "source": "linked_entity" if linked_entity else "known_lore",
++            }
++        )
++        if len(known_arcs) >= MAX_DIALOGUE_ARCS:
++            break
++
++    can_discuss = bool(known_lore or known_arcs or memory_event_ids)
++    if social_stance == "hostile" and int(relationship.get("trust") or 0) < 0:
++        can_discuss = False
++
++    return {
++        "ok": True,
++        "npc_id": npc_id,
++        "arc_id": arc_id,
++        "topic_lore_id": topic_lore_id,
++        "can_discuss": can_discuss,
++        "social_stance": social_stance,
++        "known_lore": known_lore,
++        "known_story_arcs": known_arcs,
++        "relevant_memory_event_ids": memory_event_ids,
++        "rejected_lore": rejected_lore[:10],
++        "rumor_permissions": {
++            "can_discuss": can_discuss,
++            "must_mark_as_rumor": any(row.get("must_mark_as_rumor") for row in known_lore),
++        },
++        "bounded": {
++            "max_lore": MAX_DIALOGUE_LORE,
++            "max_arcs": MAX_DIALOGUE_ARCS,
++            "max_memories": MAX_DIALOGUE_MEMORIES,
++        },
++    }
 *** End Patch
-4. Add src/app/rpg/story_packs/importer.py
+3. Add src/app/rpg/dialogue_context/rumors.py
 *** Begin Patch
-*** Add File: src/app/rpg/story_packs/importer.py
+*** Add File: src/app/rpg/dialogue_context/rumors.py
 +from __future__ import annotations
 +
 +import hashlib
 +import json
 +from typing import Any, Dict, List
 +
-+from app.rpg.lore.state import get_lore_entry, upsert_lore_entry
-+from app.rpg.quests.transitions import apply_quest_transition
-+from app.rpg.story_arcs.state import get_story_arc, start_story_arc
-+from app.rpg.story_packs.definition_registries import (
-+    register_escalation_rule_definition,
-+    register_story_event_definition,
-+)
-+from app.rpg.story_packs.registry import get_imported_story_pack, mark_story_pack_imported
-+from app.rpg.story_proposals.validation import validate_story_proposal
++from app.rpg.lore.state import get_lore_entry
++from app.rpg.memory.observation import record_told_memory
++from app.rpg.spatial.audibility import audible_entities_from
++
++
++MAX_RUMOR_HEARERS = 12
 +
 +
 +def _safe_dict(value: Any) -> Dict[str, Any]:
@@ -374,512 +306,370 @@ Patch 1 — Add story pack package
 +    return value if isinstance(value, list) else []
 +
 +
-+def _stable_pack_id(proposal: Dict[str, Any]) -> str:
-+    proposal_id = str(proposal.get("proposal_id") or "").strip()
-+    if proposal_id:
-+        return f"storypack:{proposal_id}"
-+    title = str(proposal.get("title") or "").strip()
-+    payload = json.dumps(proposal, sort_keys=True, ensure_ascii=False, default=str)
-+    digest = hashlib.sha1(payload.encode("utf-8")).hexdigest()[:16]
-+    if title:
-+        slug = "".join(ch.lower() if ch.isalnum() else "_" for ch in title).strip("_")[:40]
-+        return f"storypack:{slug}:{digest}"
-+    return f"storypack:{digest}"
-+
-+
-+def _import_lore_entries(
-+    simulation_state: Dict[str, Any],
-+    lore_entries: List[Dict[str, Any]],
-+) -> Dict[str, Any]:
-+    results = []
-+    lore_ids = []
-+    for entry in lore_entries:
-+        lore_id = str(entry.get("lore_id") or "")
-+        if not lore_id:
-+            results.append({"ok": False, "reason": "missing_lore_id", "entry": entry})
-+            continue
-+
-+        existing = get_lore_entry(simulation_state, lore_id)
-+        if existing and existing.get("truth_status") == "true" and entry.get("truth_status") in {"false", "myth"}:
-+            results.append(
-+                {
-+                    "ok": False,
-+                    "reason": "protected_true_lore_not_overwritten",
-+                    "lore_id": lore_id,
-+                    "existing_truth_status": existing.get("truth_status"),
-+                    "proposed_truth_status": entry.get("truth_status"),
-+                }
-+            )
-+            continue
-+
-+        result = upsert_lore_entry(simulation_state, entry)
-+        results.append(result)
-+        if result.get("ok"):
-+            lore_ids.append(lore_id)
-+    return {"ok": all(row.get("ok") for row in results), "results": results, "lore_ids": lore_ids}
-+
-+
-+def _import_story_arcs(
-+    simulation_state: Dict[str, Any],
-+    story_arcs: List[Dict[str, Any]],
-+) -> Dict[str, Any]:
-+    results = []
-+    arc_ids = []
-+    for arc in story_arcs:
-+        arc_id = str(arc.get("arc_id") or "")
-+        if not arc_id:
-+            results.append({"ok": False, "reason": "missing_arc_id", "arc": arc})
-+            continue
-+        existing = get_story_arc(simulation_state, arc_id)
-+        if existing:
-+            # Preserve active/resolved runtime state. Only merge links/metadata by starting
-+            # would be too destructive, so leave existing arc alone for v1 importer.
-+            results.append({"ok": True, "reason": "arc_already_exists", "arc_id": arc_id, "arc": existing})
-+            arc_ids.append(arc_id)
-+            continue
-+        result = start_story_arc(
-+            simulation_state,
-+            arc_id,
-+            title=str(arc.get("title") or arc_id),
-+            stage=str(arc.get("stage") or "started"),
-+            pressure=int(arc.get("pressure") or 0),
-+            links={
-+                "lore": list(arc.get("linked_lore") or []),
-+                "quest": list(arc.get("linked_quests") or []),
-+                "puzzle": list(arc.get("linked_puzzles") or []),
-+                "location": list(arc.get("linked_locations") or []),
-+                "entity": list(arc.get("linked_entities") or []),
-+            },
-+            turn_index=int(arc.get("started_turn") or 0),
-+        )
-+        result["arc"]["status"] = arc.get("status") or result["arc"].get("status")
-+        result["arc"]["flags"] = dict(arc.get("flags") or {})
-+        result["arc"]["metadata"] = dict(arc.get("metadata") or {})
-+        results.append(result)
-+        if result.get("ok"):
-+            arc_ids.append(arc_id)
-+    return {"ok": all(row.get("ok") for row in results), "results": results, "arc_ids": arc_ids}
-+
-+
-+def _import_story_events(
-+    simulation_state: Dict[str, Any],
-+    story_events: List[Dict[str, Any]],
++def _stable_rumor_event_id(
 +    *,
-+    pack_id: str,
-+) -> Dict[str, Any]:
-+    results = []
-+    event_ids = []
-+    for event in story_events:
-+        result = register_story_event_definition(simulation_state, event, pack_id=pack_id)
-+        results.append(result)
-+        if result.get("ok"):
-+            event_ids.append(str(event.get("event_id") or ""))
-+    return {"ok": all(row.get("ok") for row in results), "results": results, "event_ids": event_ids}
-+
-+
-+def _import_escalation_rules(
-+    simulation_state: Dict[str, Any],
-+    escalation_rules: List[Dict[str, Any]],
-+    *,
-+    pack_id: str,
-+) -> Dict[str, Any]:
-+    results = []
-+    rule_ids = []
-+    for rule in escalation_rules:
-+        result = register_escalation_rule_definition(simulation_state, rule, pack_id=pack_id)
-+        results.append(result)
-+        if result.get("ok"):
-+            rule_ids.append(str(rule.get("rule_id") or ""))
-+    return {"ok": all(row.get("ok") for row in results), "results": results, "rule_ids": rule_ids}
-+
-+
-+def _import_starter_quests(
-+    simulation_state: Dict[str, Any],
-+    starter_quests: List[Dict[str, Any]],
-+    *,
++    speaker_id: str,
++    lore_id: str,
++    summary: str,
 +    turn_index: int,
-+) -> Dict[str, Any]:
-+    results = []
-+    quest_ids = []
-+    for transition in starter_quests:
-+        transition = dict(_safe_dict(transition))
-+        transition.setdefault("action", "start")
-+        result = apply_quest_transition(simulation_state, transition, turn_index=turn_index)
-+        results.append(result)
-+        if result.get("ok") and result.get("quest_id"):
-+            quest_ids.append(str(result.get("quest_id")))
-+    return {"ok": all(row.get("ok") for row in results), "results": results, "quest_ids": quest_ids}
++) -> str:
++    payload = json.dumps(
++        {
++            "speaker_id": speaker_id,
++            "lore_id": lore_id,
++            "summary": summary,
++            "turn_index": int(turn_index or 0),
++        },
++        sort_keys=True,
++        ensure_ascii=False,
++    )
++    digest = hashlib.sha1(payload.encode("utf-8")).hexdigest()[:16]
++    return f"rumor:{digest}"
 +
 +
-+def import_story_pack(
++def _resolve_hearers(
 +    simulation_state: Dict[str, Any],
-+    proposal: Dict[str, Any],
++    speaker_id: str,
++    explicit_hearers: List[str] | None = None,
++) -> List[str]:
++    if explicit_hearers is not None:
++        return [
++            str(item)
++            for item in explicit_hearers
++            if str(item) and str(item) != speaker_id
++        ][:MAX_RUMOR_HEARERS]
++
++    graph = _safe_dict(simulation_state.get("spatial_graph"))
++    try:
++        rows = audible_entities_from(graph, speaker_id)
++    except Exception:
++        rows = []
++
++    hearers: List[str] = []
++    for row in rows:
++        if isinstance(row, dict):
++            entity_id = str(row.get("entity_id") or row.get("id") or "")
++        else:
++            entity_id = str(row or "")
++        if entity_id and entity_id != speaker_id and entity_id not in hearers:
++            hearers.append(entity_id)
++        if len(hearers) >= MAX_RUMOR_HEARERS:
++            break
++    return hearers
++
++
++def propagate_rumor(
++    simulation_state: Dict[str, Any],
 +    *,
++    speaker_id: str,
++    lore_id: str,
++    summary: str,
 +    turn_index: int = 0,
-+    starter_quests: List[Dict[str, Any]] | None = None,
++    explicit_hearers: List[str] | None = None,
 +) -> Dict[str, Any]:
-+    validation = validate_story_proposal(simulation_state, proposal)
-+    if not validation.get("ok"):
-+        return {
-+            "ok": False,
-+            "reason": "validation_failed",
-+            "validation": validation,
-+            "pack_id": "",
-+            "imported": {},
-+        }
++    speaker_id = str(speaker_id or "")
++    lore_id = str(lore_id or "")
++    summary = str(summary or "")
++    if not speaker_id:
++        return {"ok": False, "reason": "missing_speaker_id"}
++    if not lore_id:
++        return {"ok": False, "reason": "missing_lore_id"}
++    if not summary:
++        return {"ok": False, "reason": "missing_summary"}
 +
-+    normalized = validation["normalized"]
-+    pack_id = _stable_pack_id(normalized)
-+    existing = get_imported_story_pack(simulation_state, pack_id)
-+    if existing:
-+        return {
-+            "ok": True,
-+            "reason": "already_imported",
-+            "pack_id": pack_id,
-+            "idempotent": True,
-+            "imported": existing,
-+            "validation": validation,
-+            "results": {},
-+        }
++    lore = get_lore_entry(simulation_state, lore_id)
++    if not lore:
++        return {"ok": False, "reason": "lore_missing", "lore_id": lore_id}
 +
-+    lore_result = _import_lore_entries(simulation_state, normalized.get("lore_entries") or [])
-+    if not lore_result.get("ok"):
-+        return {
-+            "ok": False,
-+            "reason": "lore_import_failed",
-+            "pack_id": pack_id,
-+            "validation": validation,
-+            "results": {"lore": lore_result},
-+        }
-+
-+    arc_result = _import_story_arcs(simulation_state, normalized.get("story_arcs") or [])
-+    if not arc_result.get("ok"):
-+        return {
-+            "ok": False,
-+            "reason": "arc_import_failed",
-+            "pack_id": pack_id,
-+            "validation": validation,
-+            "results": {"lore": lore_result, "story_arcs": arc_result},
-+        }
-+
-+    event_result = _import_story_events(
-+        simulation_state,
-+        normalized.get("story_events") or [],
-+        pack_id=pack_id,
-+    )
-+    if not event_result.get("ok"):
-+        return {
-+            "ok": False,
-+            "reason": "event_definition_import_failed",
-+            "pack_id": pack_id,
-+            "validation": validation,
-+            "results": {
-+                "lore": lore_result,
-+                "story_arcs": arc_result,
-+                "story_events": event_result,
-+            },
-+        }
-+
-+    rule_result = _import_escalation_rules(
-+        simulation_state,
-+        normalized.get("escalation_rules") or [],
-+        pack_id=pack_id,
-+    )
-+    if not rule_result.get("ok"):
-+        return {
-+            "ok": False,
-+            "reason": "escalation_rule_import_failed",
-+            "pack_id": pack_id,
-+            "validation": validation,
-+            "results": {
-+                "lore": lore_result,
-+                "story_arcs": arc_result,
-+                "story_events": event_result,
-+                "escalation_rules": rule_result,
-+            },
-+        }
-+
-+    quest_result = _import_starter_quests(
-+        simulation_state,
-+        starter_quests or _safe_list(_safe_dict(proposal).get("starter_quests")),
++    truth_status_before = lore.get("truth_status")
++    event_id = _stable_rumor_event_id(
++        speaker_id=speaker_id,
++        lore_id=lore_id,
++        summary=summary,
 +        turn_index=turn_index,
 +    )
-+    if not quest_result.get("ok"):
-+        return {
-+            "ok": False,
-+            "reason": "starter_quest_import_failed",
-+            "pack_id": pack_id,
-+            "validation": validation,
-+            "results": {
-+                "lore": lore_result,
-+                "story_arcs": arc_result,
-+                "story_events": event_result,
-+                "escalation_rules": rule_result,
-+                "starter_quests": quest_result,
-+            },
-+        }
-+
-+    mark_result = mark_story_pack_imported(
++    hearers = _resolve_hearers(
 +        simulation_state,
-+        pack_id=pack_id,
-+        proposal_id=str(normalized.get("proposal_id") or ""),
-+        title=str(normalized.get("title") or pack_id),
-+        lore_ids=lore_result.get("lore_ids") or [],
-+        arc_ids=arc_result.get("arc_ids") or [],
-+        event_ids=event_result.get("event_ids") or [],
-+        rule_ids=rule_result.get("rule_ids") or [],
-+        quest_ids=quest_result.get("quest_ids") or [],
-+        turn_index=turn_index,
-+        metadata={"source": "story_pack_importer_v1"},
++        speaker_id,
++        explicit_hearers=explicit_hearers,
 +    )
++
++    memory_results = []
++    for hearer_id in hearers:
++        result = record_told_memory(
++            simulation_state,
++            hearer_id,
++            speaker_id=speaker_id,
++            event_id=event_id,
++            summary=summary,
++            facts={
++                "lore_id": lore_id,
++                "truth_status": truth_status_before,
++                "rumor": True,
++            },
++            tags=["rumor", "lore", "story"],
++            verified=False,
++            turn_index=turn_index,
++        )
++        memory_results.append(result)
++
++    truth_status_after = (get_lore_entry(simulation_state, lore_id) or {}).get("truth_status")
 +    return {
 +        "ok": True,
-+        "reason": "imported",
-+        "pack_id": pack_id,
-+        "idempotent": True,
-+        "validation": validation,
-+        "results": {
-+            "lore": lore_result,
-+            "story_arcs": arc_result,
-+            "story_events": event_result,
-+            "escalation_rules": rule_result,
-+            "starter_quests": quest_result,
-+            "mark": mark_result,
-+        },
-+        "imported": mark_result.get("imported"),
++        "reason": "rumor_propagated",
++        "event_id": event_id,
++        "speaker_id": speaker_id,
++        "lore_id": lore_id,
++        "summary": summary,
++        "hearers": hearers,
++        "memory_results": memory_results,
++        "truth_status_before": truth_status_before,
++        "truth_status_after": truth_status_after,
++        "truth_promoted": truth_status_before != truth_status_after,
++        "bounded": {"max_hearers": MAX_RUMOR_HEARERS},
 +    }
 *** End Patch
 Patch 2 — Unit tests
-5. Add src/tests/rpg/story_packs/test_story_pack_importer.py
+4. Add src/tests/rpg/dialogue_context/test_arc_dialogue_context.py
 *** Begin Patch
-*** Add File: src/tests/rpg/story_packs/test_story_pack_importer.py
-+from app.rpg.lore.state import get_lore_entry, upsert_lore_entry
-+from app.rpg.story_arcs.state import get_story_arc
-+from app.rpg.story_packs.definition_registries import (
-+    get_escalation_rule_definition,
-+    get_story_event_definition,
-+)
-+from app.rpg.story_packs.importer import import_story_pack
-+from app.rpg.story_packs.registry import get_imported_story_pack
+*** Add File: src/tests/rpg/dialogue_context/test_arc_dialogue_context.py
++from app.rpg.dialogue_context.arc_context import build_arc_dialogue_context
++from app.rpg.lore.state import upsert_lore_entry
++from app.rpg.memory.observation import record_told_memory
++from app.rpg.social.reputation import set_relationship_values
++from app.rpg.story_arcs.state import start_story_arc
 +
 +
-+def _valid_pack():
-+    return {
-+        "proposal_version": "story_proposal_v1",
-+        "proposal_type": "story_pack",
-+        "proposal_id": "red_sashes_intro",
-+        "title": "Red Sashes Intro",
-+        "lore_entries": [
-+            {
-+                "lore_id": "lore:red_sashes",
-+                "title": "The Red Sashes",
-+                "truth_status": "rumor",
-+                "tags": ["bandit"],
-+            }
-+        ],
-+        "story_arcs": [
-+            {
-+                "arc_id": "arc:bandit_pressure",
-+                "title": "Bandit Pressure",
-+                "status": "active",
-+                "stage": "rumors",
-+                "pressure": 20,
-+                "linked_lore": ["lore:red_sashes"],
-+            }
-+        ],
-+        "story_events": [
-+            {
-+                "event_id": "event:bandit_rumor_spreads",
-+                "arc_id": "arc:bandit_pressure",
-+                "kind": "rumor",
-+                "summary": "Rumors of bandits spread.",
-+                "effects": [
-+                    {"type": "arc_pressure_delta", "arc_id": "arc:bandit_pressure", "delta": 10}
-+                ],
-+            }
-+        ],
-+        "escalation_rules": [
-+            {
-+                "rule_id": "rule:bandit_warning",
-+                "arc_id": "arc:bandit_pressure",
-+                "priority": 70,
-+                "conditions": [
-+                    {
-+                        "type": "arc_pressure_at_least",
-+                        "arc_id": "arc:bandit_pressure",
-+                        "minimum": 50,
-+                    }
-+                ],
-+                "event": {
-+                    "event_id": "event:bandits_warn_bran",
-+                    "arc_id": "arc:bandit_pressure",
-+                    "effects": [
-+                        {"type": "arc_stage_set", "arc_id": "arc:bandit_pressure", "stage": "threat"}
-+                    ],
-+                },
-+            }
-+        ],
-+    }
-+
-+
-+def test_story_pack_import_adds_lore_arcs_events_rules():
-+    simulation_state = {}
-+    result = import_story_pack(simulation_state, _valid_pack(), turn_index=3)
-+
-+    assert result["ok"] is True
-+    assert get_lore_entry(simulation_state, "lore:red_sashes")["truth_status"] == "rumor"
-+    assert get_story_arc(simulation_state, "arc:bandit_pressure")["stage"] == "rumors"
-+    assert get_story_event_definition(simulation_state, "event:bandit_rumor_spreads") is not None
-+    assert get_escalation_rule_definition(simulation_state, "rule:bandit_warning") is not None
-+    assert get_imported_story_pack(simulation_state, result["pack_id"]) is not None
-+
-+
-+def test_story_pack_import_is_idempotent():
-+    simulation_state = {}
-+    first = import_story_pack(simulation_state, _valid_pack(), turn_index=3)
-+    second = import_story_pack(simulation_state, _valid_pack(), turn_index=4)
-+
-+    assert first["ok"] is True
-+    assert second["ok"] is True
-+    assert second["reason"] == "already_imported"
-+    assert len(simulation_state["story_pack_state"]["imported_packs"]) == 1
-+
-+
-+def test_story_pack_import_does_not_overwrite_existing_true_lore():
++def test_npc_can_discuss_lore_they_know():
 +    simulation_state = {}
 +    upsert_lore_entry(
 +        simulation_state,
 +        {
 +            "lore_id": "lore:red_sashes",
 +            "title": "The Red Sashes",
-+            "truth_status": "true",
++            "truth_status": "rumor",
++            "known_by": ["bran"],
 +        },
 +    )
-+    pack = _valid_pack()
-+    pack["lore_entries"][0]["truth_status"] = "false"
 +
-+    result = import_story_pack(simulation_state, pack)
++    result = build_arc_dialogue_context(
++        simulation_state,
++        "bran",
++        topic_lore_id="lore:red_sashes",
++    )
++
++    assert result["can_discuss"] is True
++    assert result["known_lore"][0]["lore_id"] == "lore:red_sashes"
++    assert result["known_lore"][0]["must_mark_as_rumor"] is True
++
++
++def test_npc_cannot_discuss_secret_lore_they_do_not_know():
++    simulation_state = {}
++    upsert_lore_entry(
++        simulation_state,
++        {
++            "lore_id": "lore:bran_debt",
++            "title": "Bran's Debt",
++            "truth_status": "secret",
++            "known_by": ["bran"],
++        },
++    )
++
++    result = build_arc_dialogue_context(
++        simulation_state,
++        "mira",
++        topic_lore_id="lore:bran_debt",
++    )
++
++    assert result["can_discuss"] is False
++    assert result["known_lore"] == []
++    assert result["rejected_lore"][0]["reason"] == "secret_not_known"
++
++
++def test_npc_discusses_arc_if_linked_to_known_lore():
++    simulation_state = {}
++    upsert_lore_entry(
++        simulation_state,
++        {
++            "lore_id": "lore:red_sashes",
++            "title": "The Red Sashes",
++            "truth_status": "rumor",
++            "known_by": ["bran"],
++        },
++    )
++    start_story_arc(
++        simulation_state,
++        "arc:bandit_pressure",
++        title="Bandit Pressure",
++        stage="rumors",
++        pressure=20,
++        links={"lore": ["lore:red_sashes"]},
++    )
++
++    result = build_arc_dialogue_context(
++        simulation_state,
++        "bran",
++        arc_id="arc:bandit_pressure",
++    )
++
++    assert result["can_discuss"] is True
++    assert result["known_story_arcs"][0]["arc_id"] == "arc:bandit_pressure"
++
++
++def test_npc_refuses_arc_topic_if_social_hostile():
++    simulation_state = {}
++    upsert_lore_entry(
++        simulation_state,
++        {
++            "lore_id": "lore:red_sashes",
++            "title": "The Red Sashes",
++            "truth_status": "rumor",
++            "known_by": ["bran"],
++        },
++    )
++    set_relationship_values(simulation_state, "bran", {"trust": -20, "hostility": 60})
++
++    result = build_arc_dialogue_context(
++        simulation_state,
++        "bran",
++        topic_lore_id="lore:red_sashes",
++    )
++
++    assert result["social_stance"] == "hostile"
++    assert result["can_discuss"] is False
++
++
++def test_npc_memory_makes_lore_available_as_rumor():
++    simulation_state = {}
++    upsert_lore_entry(
++        simulation_state,
++        {
++            "lore_id": "lore:red_sashes",
++            "title": "The Red Sashes",
++            "truth_status": "rumor",
++        },
++    )
++    record_told_memory(
++        simulation_state,
++        "mira",
++        speaker_id="bran",
++        event_id="rumor:redsashes",
++        summary="Bran said the Red Sashes are active.",
++        facts={"lore_id": "lore:red_sashes", "rumor": True},
++        tags=["rumor", "lore", "story"],
++        verified=False,
++    )
++
++    result = build_arc_dialogue_context(
++        simulation_state,
++        "mira",
++        topic_lore_id="lore:red_sashes",
++    )
++
++    assert result["can_discuss"] is True
++    assert result["known_lore"][0]["must_mark_as_rumor"] is True
+*** End Patch
+5. Add src/tests/rpg/dialogue_context/test_rumor_propagation.py
+*** Begin Patch
+*** Add File: src/tests/rpg/dialogue_context/test_rumor_propagation.py
++from app.rpg.dialogue_context.rumors import propagate_rumor
++from app.rpg.lore.state import get_lore_entry, upsert_lore_entry
++from app.rpg.memory.causal_retrieval import retrieve_causal_memories
++from tests.rpg.spatial.fixtures import tavern_spatial_fixture
++
++
++def test_rumor_spreads_to_explicit_hearer_without_promoting_truth():
++    simulation_state = {}
++    upsert_lore_entry(
++        simulation_state,
++        {
++            "lore_id": "lore:red_sashes",
++            "title": "The Red Sashes",
++            "truth_status": "rumor",
++        },
++    )
++
++    result = propagate_rumor(
++        simulation_state,
++        speaker_id="bran",
++        lore_id="lore:red_sashes",
++        summary="The Red Sashes are active again.",
++        explicit_hearers=["mira"],
++        turn_index=1,
++    )
++
++    memories = retrieve_causal_memories(simulation_state, "mira", tags=["rumor"])
++    assert result["ok"] is True
++    assert result["hearers"] == ["mira"]
++    assert memories
++    assert memories[0]["event_id"] == result["event_id"]
++    assert get_lore_entry(simulation_state, "lore:red_sashes")["truth_status"] == "rumor"
++    assert result["truth_promoted"] is False
++
++
++def test_rumor_does_not_spread_to_speaker():
++    simulation_state = {}
++    upsert_lore_entry(simulation_state, {"lore_id": "lore:x", "title": "X", "truth_status": "rumor"})
++
++    result = propagate_rumor(
++        simulation_state,
++        speaker_id="bran",
++        lore_id="lore:x",
++        summary="X is happening.",
++        explicit_hearers=["bran", "mira"],
++    )
++
++    assert result["hearers"] == ["mira"]
++
++
++def test_rumor_missing_lore_rejected():
++    result = propagate_rumor(
++        {},
++        speaker_id="bran",
++        lore_id="lore:missing",
++        summary="Missing lore rumor.",
++        explicit_hearers=["mira"],
++    )
 +
 +    assert result["ok"] is False
-+    assert result["reason"] == "validation_failed"
-+    assert get_lore_entry(simulation_state, "lore:red_sashes")["truth_status"] == "true"
++    assert result["reason"] == "lore_missing"
 +
 +
-+def test_story_pack_can_seed_starter_quest():
-+    simulation_state = {}
-+    pack = _valid_pack()
-+    pack["starter_quests"] = [
-+        {
-+            "action": "start",
-+            "quest_id": "quest:stop_red_sashes",
-+            "stage": "investigate",
-+        }
-+    ]
-+
-+    result = import_story_pack(simulation_state, pack, turn_index=5)
-+
-+    assert result["ok"] is True
-+    imported = get_imported_story_pack(simulation_state, result["pack_id"])
-+    assert "quest:stop_red_sashes" in imported["quest_ids"]
-+    assert simulation_state["quest_state"]["quests"]["quest:stop_red_sashes"]["stage"] == "investigate"
-*** End Patch
-6. Add src/tests/rpg/story_packs/test_story_pack_registries.py
-*** Begin Patch
-*** Add File: src/tests/rpg/story_packs/test_story_pack_registries.py
-+from app.rpg.story_packs.definition_registries import (
-+    get_escalation_rule_definition,
-+    get_story_event_definition,
-+    list_escalation_rule_definitions,
-+    register_escalation_rule_definition,
-+    register_story_event_definition,
-+)
-+
-+
-+def test_story_event_definition_registry_registers_event():
-+    simulation_state = {}
-+    result = register_story_event_definition(
++def test_rumor_uses_spatial_audibility_when_no_explicit_hearers():
++    simulation_state = {"spatial_graph": tavern_spatial_fixture()}
++    upsert_lore_entry(
 +        simulation_state,
 +        {
-+            "event_id": "event:x",
-+            "arc_id": "arc:x",
-+            "effects": [],
-+        },
-+        pack_id="storypack:test",
-+    )
-+
-+    assert result["ok"] is True
-+    event = get_story_event_definition(simulation_state, "event:x")
-+    assert event["metadata"]["pack_id"] == "storypack:test"
-+
-+
-+def test_escalation_rule_registry_registers_and_lists_rule():
-+    simulation_state = {}
-+    result = register_escalation_rule_definition(
-+        simulation_state,
-+        {
-+            "rule_id": "rule:x",
-+            "arc_id": "arc:x",
-+            "priority": 80,
-+            "event": {"event_id": "event:x", "effects": []},
-+        },
-+        pack_id="storypack:test",
-+    )
-+
-+    assert result["ok"] is True
-+    rule = get_escalation_rule_definition(simulation_state, "rule:x")
-+    rows = list_escalation_rule_definitions(simulation_state, arc_id="arc:x")
-+    assert rule["metadata"]["pack_id"] == "storypack:test"
-+    assert rows[0]["rule_id"] == "rule:x"
-*** End Patch
-7. Add src/tests/rpg/story_packs/test_story_pack_save_load.py
-*** Begin Patch
-*** Add File: src/tests/rpg/story_packs/test_story_pack_save_load.py
-+import json
-+
-+from app.rpg.story_packs.importer import import_story_pack
-+from app.rpg.story_packs.registry import normalize_story_pack_state
-+
-+
-+def test_story_pack_state_json_roundtrip():
-+    simulation_state = {}
-+    result = import_story_pack(
-+        simulation_state,
-+        {
-+            "proposal_version": "story_proposal_v1",
-+            "proposal_type": "story_pack",
-+            "proposal_id": "tiny",
-+            "title": "Tiny Pack",
-+            "lore_entries": [{"lore_id": "lore:x", "title": "X"}],
-+            "story_arcs": [{"arc_id": "arc:x", "title": "X", "linked_lore": ["lore:x"]}],
-+            "story_events": [],
-+            "escalation_rules": [],
++            "lore_id": "lore:red_sashes",
++            "title": "The Red Sashes",
++            "truth_status": "rumor",
 +        },
 +    )
 +
-+    encoded = json.dumps(simulation_state["story_pack_state"], sort_keys=True)
-+    decoded = json.loads(encoded)
-+    normalized = normalize_story_pack_state(decoded)
++    result = propagate_rumor(
++        simulation_state,
++        speaker_id="bran",
++        lore_id="lore:red_sashes",
++        summary="The Red Sashes are active again.",
++        turn_index=1,
++    )
 +
 +    assert result["ok"] is True
-+    assert result["pack_id"] in normalized["imported_packs"]
++    assert "bran" not in result["hearers"]
++    assert len(result["hearers"]) <= result["bounded"]["max_hearers"]
 *** End Patch
-Patch 3 — Manual story pack checks/setup
-8. Add src/tests/rpg/manual/story_pack_m13_m15_checks.py
+Patch 3 — Manual checks/setup
+6. Add src/tests/rpg/manual/dialogue_m16_m18_checks.py
 *** Begin Patch
-*** Add File: src/tests/rpg/manual/story_pack_m13_m15_checks.py
+*** Add File: src/tests/rpg/manual/dialogue_m16_m18_checks.py
 +from __future__ import annotations
 +
 +from typing import Any, Dict, List
 +
++from app.rpg.dialogue_context.arc_context import build_arc_dialogue_context
++from app.rpg.dialogue_context.rumors import propagate_rumor
 +from app.rpg.lore.state import get_lore_entry
-+from app.rpg.quests.state import get_quest
-+from app.rpg.story_arcs.state import get_story_arc
-+from app.rpg.story_packs.definition_registries import (
-+    get_escalation_rule_definition,
-+    get_story_event_definition,
-+)
-+from app.rpg.story_packs.importer import import_story_pack
-+from app.rpg.story_packs.registry import get_imported_story_pack
++from app.rpg.memory.causal_retrieval import retrieve_causal_memories
 +
 +
 +def _safe_dict(value: Any) -> Dict[str, Any]:
@@ -911,12 +701,17 @@ Patch 3 — Manual story pack checks/setup
 +        candidate = _safe_dict(candidate)
 +        if candidate and not first_non_empty:
 +            first_non_empty = candidate
-+        if isinstance(candidate.get("story_pack_state"), dict):
++        if (
++            isinstance(candidate.get("lore_state"), dict)
++            or isinstance(candidate.get("story_arc_state"), dict)
++            or isinstance(candidate.get("causal_memory_state"), dict)
++            or isinstance(candidate.get("memory_state"), dict)
++        ):
 +            return candidate
 +    return first_non_empty
 +
 +
-+def run_story_pack_m13_m15_check(
++def run_dialogue_m16_m18_check(
 +    *,
 +    check: Dict[str, Any],
 +    result: Dict[str, Any],
@@ -925,184 +720,162 @@ Patch 3 — Manual story pack checks/setup
 +    simulation_state = _extract_simulation_state(result=result, session=session)
 +    check_type = str(check.get("type") or "")
 +
-+    if check_type == "story_pack_import":
-+        proposal = _safe_dict(check.get("proposal"))
-+        expected_ok = bool(check.get("expected_ok"))
-+        import_result = import_story_pack(
++    if check_type == "dialogue_context":
++        npc_id = str(check.get("npc_id") or "")
++        context = build_arc_dialogue_context(
 +            simulation_state,
-+            proposal,
-+            turn_index=int(check.get("turn_index") or 1),
-+            starter_quests=check.get("starter_quests"),
++            npc_id,
++            arc_id=str(check.get("arc_id") or ""),
++            topic_lore_id=str(check.get("topic_lore_id") or ""),
 +        )
-+        required_reason = check.get("required_reason")
-+        ok = bool(import_result.get("ok")) is expected_ok
-+        if required_reason:
-+            ok = ok and import_result.get("reason") == required_reason
++        expected_can_discuss = check.get("expected_can_discuss")
++        expected_lore_id = check.get("expected_lore_id")
++        expected_arc_id = check.get("expected_arc_id")
++        expected_must_mark_as_rumor = check.get("expected_must_mark_as_rumor")
++
++        ok = True
++        if expected_can_discuss is not None:
++            ok = ok and context.get("can_discuss") is bool(expected_can_discuss)
++        if expected_lore_id:
++            ok = ok and expected_lore_id in [row.get("lore_id") for row in context.get("known_lore") or []]
++        if expected_arc_id:
++            ok = ok and expected_arc_id in [row.get("arc_id") for row in context.get("known_story_arcs") or []]
++        if expected_must_mark_as_rumor is not None:
++            ok = ok and context.get("rumor_permissions", {}).get("must_mark_as_rumor") is bool(expected_must_mark_as_rumor)
++
 +        return {
 +            "check_type": check_type,
 +            "ok": ok,
++            "npc_id": npc_id,
++            "context": context,
++            "expected_can_discuss": expected_can_discuss,
++            "expected_lore_id": expected_lore_id,
++            "expected_arc_id": expected_arc_id,
++            "expected_must_mark_as_rumor": expected_must_mark_as_rumor,
++        }
++
++    if check_type == "rumor_propagation":
++        propagation = propagate_rumor(
++            simulation_state,
++            speaker_id=str(check.get("speaker_id") or ""),
++            lore_id=str(check.get("lore_id") or ""),
++            summary=str(check.get("summary") or ""),
++            explicit_hearers=check.get("explicit_hearers"),
++            turn_index=int(check.get("turn_index") or 1),
++        )
++        expected_ok = check.get("expected_ok")
++        expected_hearer = check.get("expected_hearer")
++        expected_truth_promoted = check.get("expected_truth_promoted")
++        ok = True
++        if expected_ok is not None:
++            ok = ok and propagation.get("ok") is bool(expected_ok)
++        if expected_hearer:
++            ok = ok and expected_hearer in propagation.get("hearers", [])
++        if expected_truth_promoted is not None:
++            ok = ok and propagation.get("truth_promoted") is bool(expected_truth_promoted)
++        return {
++            "check_type": check_type,
++            "ok": ok,
++            "propagation": propagation,
 +            "expected_ok": expected_ok,
-+            "actual_ok": bool(import_result.get("ok")),
-+            "required_reason": required_reason,
-+            "import_result": import_result,
++            "expected_hearer": expected_hearer,
++            "expected_truth_promoted": expected_truth_promoted,
 +        }
 +
-+    if check_type == "story_pack_imported":
-+        pack_id = str(check.get("pack_id") or "")
-+        imported = get_imported_story_pack(simulation_state, pack_id)
++    if check_type == "rumor_memory":
++        subject_id = str(check.get("subject_id") or "")
++        expected_lore_id = str(check.get("expected_lore_id") or "")
++        rows = retrieve_causal_memories(
++            simulation_state,
++            subject_id,
++            tags=check.get("tags") or ["rumor"],
++            max_items=10,
++        )
++        matched = []
++        for row in rows:
++            facts = _safe_dict(row.get("facts"))
++            if facts.get("lore_id") == expected_lore_id:
++                matched.append(row)
 +        return {
 +            "check_type": check_type,
-+            "ok": bool(imported),
-+            "pack_id": pack_id,
-+            "imported": imported,
++            "ok": bool(matched),
++            "subject_id": subject_id,
++            "expected_lore_id": expected_lore_id,
++            "matched": matched,
++            "retrieved": rows,
 +        }
 +
-+    if check_type == "story_pack_lore":
++    if check_type == "rumor_truth_status":
 +        lore_id = str(check.get("lore_id") or "")
++        expected_truth_status = str(check.get("expected_truth_status") or "")
 +        entry = get_lore_entry(simulation_state, lore_id)
-+        expected = _safe_dict(check.get("expected"))
-+        failures = {}
-+        for key, expected_value in expected.items():
-+            actual = _safe_dict(entry).get(key)
-+            if actual != expected_value:
-+                failures[key] = {"expected": expected_value, "actual": actual}
++        actual = str((_safe_dict(entry)).get("truth_status") or "")
 +        return {
 +            "check_type": check_type,
-+            "ok": bool(entry) and not failures,
++            "ok": actual == expected_truth_status,
 +            "lore_id": lore_id,
++            "expected_truth_status": expected_truth_status,
++            "actual_truth_status": actual,
 +            "entry": entry,
-+            "failures": failures,
-+        }
-+
-+    if check_type == "story_pack_arc":
-+        arc_id = str(check.get("arc_id") or "")
-+        arc = get_story_arc(simulation_state, arc_id)
-+        expected = _safe_dict(check.get("expected"))
-+        failures = {}
-+        for key, expected_value in expected.items():
-+            actual = _safe_dict(arc).get(key)
-+            if actual != expected_value:
-+                failures[key] = {"expected": expected_value, "actual": actual}
-+        return {
-+            "check_type": check_type,
-+            "ok": bool(arc) and not failures,
-+            "arc_id": arc_id,
-+            "arc": arc,
-+            "failures": failures,
-+        }
-+
-+    if check_type == "story_pack_event_definition":
-+        event_id = str(check.get("event_id") or "")
-+        event = get_story_event_definition(simulation_state, event_id)
-+        return {
-+            "check_type": check_type,
-+            "ok": bool(event),
-+            "event_id": event_id,
-+            "event": event,
-+        }
-+
-+    if check_type == "story_pack_rule_definition":
-+        rule_id = str(check.get("rule_id") or "")
-+        rule = get_escalation_rule_definition(simulation_state, rule_id)
-+        return {
-+            "check_type": check_type,
-+            "ok": bool(rule),
-+            "rule_id": rule_id,
-+            "rule": rule,
-+        }
-+
-+    if check_type == "story_pack_quest":
-+        quest_id = str(check.get("quest_id") or "")
-+        quest = get_quest(simulation_state, quest_id)
-+        expected = _safe_dict(check.get("expected"))
-+        failures = {}
-+        for key, expected_value in expected.items():
-+            actual = _safe_dict(quest).get(key)
-+            if actual != expected_value:
-+                failures[key] = {"expected": expected_value, "actual": actual}
-+        return {
-+            "check_type": check_type,
-+            "ok": bool(quest) and not failures,
-+            "quest_id": quest_id,
-+            "quest": quest,
-+            "failures": failures,
-+        }
-+
-+    if check_type == "story_pack_debug_bounded":
-+        pack_state = _safe_dict(simulation_state.get("story_pack_state"))
-+        imported_packs = _safe_dict(pack_state.get("imported_packs"))
-+        event_registry = _safe_dict(simulation_state.get("story_event_registry"))
-+        rule_registry = _safe_dict(simulation_state.get("escalation_rule_registry"))
-+        max_packs = int(check.get("max_packs") or 20)
-+        ok = len(imported_packs) <= max_packs
-+        return {
-+            "check_type": check_type,
-+            "ok": ok,
-+            "imported_pack_count": len(imported_packs),
-+            "max_packs": max_packs,
-+            "event_definition_count": len(_safe_dict(event_registry.get("events"))),
-+            "rule_definition_count": len(_safe_dict(rule_registry.get("rules"))),
 +        }
 +
 +    return {
 +        "check_type": check_type,
 +        "ok": False,
-+        "error": f"unknown_story_pack_m13_m15_check_type:{check_type}",
++        "error": f"unknown_dialogue_m16_m18_check_type:{check_type}",
 +    }
 +
 +
-+def run_story_pack_m13_m15_checks(
++def run_dialogue_m16_m18_checks(
 +    *,
 +    checks: List[Dict[str, Any]],
 +    result: Dict[str, Any],
 +    session: Dict[str, Any] | None = None,
 +) -> List[Dict[str, Any]]:
 +    return [
-+        run_story_pack_m13_m15_check(check=check, result=result, session=session)
++        run_dialogue_m16_m18_check(check=check, result=result, session=session)
 +        for check in checks
 +    ]
 *** End Patch
-9. Patch src/tests/rpg/manual/scenario_setup.py
+7. Patch src/tests/rpg/manual/scenario_setup.py
 
 Add import:
 
 *** Begin Patch
 *** Update File: src/tests/rpg/manual/scenario_setup.py
 @@
- from app.rpg.escalation.rules import apply_escalation_rule
- from app.rpg.escalation.state import mark_escalation_rule_applied
-+from app.rpg.story_packs.importer import import_story_pack
+ from app.rpg.story_packs.importer import import_story_pack
++from app.rpg.dialogue_context.rumors import propagate_rumor
  from tests.rpg.manual.memory_fixtures import build_manual_memory_event
 *** End Patch
 
-Add setup block after setup_story_events or after escalation setup is also fine. Prefer after story/lore/arcs and before manual inventory/quest/puzzle setup:
+Add setup block after lore/story arc setup and after story packs is fine:
 
 *** Begin Patch
 *** Update File: src/tests/rpg/manual/scenario_setup.py
 @@
-     for rule in scenario.get("setup_apply_escalation_rules") or []:
-         if isinstance(rule, dict):
-             apply_escalation_rule(
-                 simulation_state,
-                 rule,
+     for story_pack in scenario.get("setup_story_packs") or []:
+         if isinstance(story_pack, dict):
+             proposal = story_pack.get("proposal") or story_pack
+             starter_quests = story_pack.get("starter_quests")
 @@
-                     or 1
                  ),
+                 starter_quests=starter_quests,
              )
 +
-+    for story_pack in scenario.get("setup_story_packs") or []:
-+        if isinstance(story_pack, dict):
-+            proposal = story_pack.get("proposal") or story_pack
-+            starter_quests = story_pack.get("starter_quests")
-+            import_story_pack(
++    for rumor in scenario.get("setup_rumor_propagations") or []:
++        if isinstance(rumor, dict):
++            propagate_rumor(
 +                simulation_state,
-+                proposal,
++                speaker_id=str(rumor.get("speaker_id") or ""),
++                lore_id=str(rumor.get("lore_id") or ""),
++                summary=str(rumor.get("summary") or ""),
++                explicit_hearers=rumor.get("explicit_hearers"),
 +                turn_index=int(
-+                    story_pack.get("turn_index")
++                    rumor.get("turn_index")
 +                    or scenario.get("setup_turn_index")
 +                    or 1
 +                ),
-+                starter_quests=starter_quests,
 +            )
  
      for item_id in scenario.get("setup_manual_inventory_items") or []:
@@ -1110,25 +883,23 @@ Add setup block after setup_story_events or after escalation setup is also fine.
          if item_id not in simulation_state["manual_inventory_items"]:
              simulation_state["manual_inventory_items"].append(item_id)
 *** End Patch
-10. Patch src/tests/rpg/manual/scenario_execution.py
+8. Patch src/tests/rpg/manual/scenario_execution.py
 
 Add import:
 
 *** Begin Patch
 *** Update File: src/tests/rpg/manual/scenario_execution.py
 @@
- from tests.rpg.manual.story_proposal_m10_m12_checks import (
-     run_story_proposal_m10_m12_checks,
- )
-+from tests.rpg.manual.story_pack_m13_m15_checks import run_story_pack_m13_m15_checks
+ from tests.rpg.manual.story_pack_m13_m15_checks import run_story_pack_m13_m15_checks
++from tests.rpg.manual.dialogue_m16_m18_checks import run_dialogue_m16_m18_checks
 *** End Patch
 
-Add check block after story proposal checks:
+Add check block after story pack checks:
 
 *** Begin Patch
 *** Update File: src/tests/rpg/manual/scenario_execution.py
 @@
-         if story_proposal_m10_m12_checks:
+         if story_pack_m13_m15_checks:
              current_session = {}
              try:
                  current_session = _ensure_manual_session(session_id)
@@ -1137,29 +908,32 @@ Add check block after story proposal checks:
                          + str(check_result.get("error") or "")
                      )
 +
-+        story_pack_m13_m15_checks = [
++        dialogue_m16_m18_checks = [
 +            check
 +            for check in checks
 +            if isinstance(check, dict)
-+            and str(check.get("type") or "").startswith("story_pack_")
++            and (
++                str(check.get("type") or "").startswith("dialogue_")
++                or str(check.get("type") or "").startswith("rumor_")
++            )
 +        ]
-+        if story_pack_m13_m15_checks:
++        if dialogue_m16_m18_checks:
 +            current_session = {}
 +            try:
 +                current_session = _ensure_manual_session(session_id)
 +            except Exception:
 +                current_session = session
 +
-+            story_pack_m13_m15_check_results = run_story_pack_m13_m15_checks(
-+                checks=story_pack_m13_m15_checks,
++            dialogue_m16_m18_check_results = run_dialogue_m16_m18_checks(
++                checks=dialogue_m16_m18_checks,
 +                result=turn_record.get("result") or turn_record,
 +                session=current_session,
 +            )
-+            turn_record["story_pack_m13_m15_check_results"] = story_pack_m13_m15_check_results
-+            for check_result in story_pack_m13_m15_check_results:
++            turn_record["dialogue_m16_m18_check_results"] = dialogue_m16_m18_check_results
++            for check_result in dialogue_m16_m18_check_results:
 +                if not check_result.get("ok"):
 +                    turn_record.setdefault("scenario_warnings", []).append(
-+                        "story_pack_m13_m15_check_failed:"
++                        "dialogue_m16_m18_check_failed:"
 +                        + str(scenario_name)
 +                        + ":turn_"
 +                        + str(turn_index)
@@ -1171,375 +945,364 @@ Add check block after story proposal checks:
  
          turns.append(turn_record)
 *** End Patch
-11. Patch src/tests/rpg/manual/summary_sanitizer.py
+9. Patch src/tests/rpg/manual/summary_sanitizer.py
 
 Add sanitizer block:
 
 *** Begin Patch
 *** Update File: src/tests/rpg/manual/summary_sanitizer.py
 @@
-     story_proposal_m10_m12_check_results = turn.get("story_proposal_m10_m12_check_results")
-     if isinstance(story_proposal_m10_m12_check_results, list):
-         sanitized["story_proposal_m10_m12_check_results"] = [
+     story_pack_m13_m15_check_results = turn.get("story_pack_m13_m15_check_results")
+     if isinstance(story_pack_m13_m15_check_results, list):
+         sanitized["story_pack_m13_m15_check_results"] = [
 @@
              if isinstance(item, dict)
          ]
 +
-+    story_pack_m13_m15_check_results = turn.get("story_pack_m13_m15_check_results")
-+    if isinstance(story_pack_m13_m15_check_results, list):
-+        sanitized["story_pack_m13_m15_check_results"] = [
++    dialogue_m16_m18_check_results = turn.get("dialogue_m16_m18_check_results")
++    if isinstance(dialogue_m16_m18_check_results, list):
++        sanitized["dialogue_m16_m18_check_results"] = [
 +            {
 +                "check_type": item.get("check_type"),
 +                "ok": item.get("ok"),
-+                "expected_ok": item.get("expected_ok"),
-+                "actual_ok": item.get("actual_ok"),
-+                "required_reason": item.get("required_reason"),
-+                "pack_id": item.get("pack_id"),
++                "npc_id": item.get("npc_id"),
++                "context": item.get("context"),
++                "propagation": item.get("propagation"),
++                "subject_id": item.get("subject_id"),
++                "expected_lore_id": item.get("expected_lore_id"),
++                "matched": item.get("matched"),
++                "retrieved": item.get("retrieved"),
 +                "lore_id": item.get("lore_id"),
-+                "arc_id": item.get("arc_id"),
-+                "event_id": item.get("event_id"),
-+                "rule_id": item.get("rule_id"),
-+                "quest_id": item.get("quest_id"),
-+                "import_result": item.get("import_result"),
-+                "imported": item.get("imported"),
++                "expected_truth_status": item.get("expected_truth_status"),
++                "actual_truth_status": item.get("actual_truth_status"),
 +                "entry": item.get("entry"),
-+                "arc": item.get("arc"),
-+                "event": item.get("event"),
-+                "rule": item.get("rule"),
-+                "quest": item.get("quest"),
-+                "failures": item.get("failures"),
-+                "imported_pack_count": item.get("imported_pack_count"),
-+                "event_definition_count": item.get("event_definition_count"),
-+                "rule_definition_count": item.get("rule_definition_count"),
 +                "error": item.get("error"),
 +            }
-+            for item in story_pack_m13_m15_check_results[:50]
++            for item in dialogue_m16_m18_check_results[:50]
 +            if isinstance(item, dict)
 +        ]
  
      return sanitized
 *** End Patch
 Patch 4 — Manual scenarios
-12. Add src/tests/rpg/manual/scenarios/story_pack_m13_m15.py
+10. Add src/tests/rpg/manual/scenarios/dialogue_m16_m18.py
 *** Begin Patch
-*** Add File: src/tests/rpg/manual/scenarios/story_pack_m13_m15.py
+*** Add File: src/tests/rpg/manual/scenarios/dialogue_m16_m18.py
 +from __future__ import annotations
 +
 +from typing import Any, Dict
 +
 +
-+def _valid_pack() -> Dict[str, Any]:
-+    return {
-+        "proposal_version": "story_proposal_v1",
-+        "proposal_type": "story_pack",
-+        "proposal_id": "red_sashes_intro",
-+        "title": "Red Sashes Intro",
-+        "lore_entries": [
-+            {
-+                "lore_id": "lore:red_sashes",
-+                "title": "The Red Sashes",
-+                "kind": "faction",
-+                "truth_status": "rumor",
-+                "tags": ["bandit", "local-threat"],
-+                "summary": "A road gang known for red cloth tied around their arms.",
-+            }
-+        ],
-+        "story_arcs": [
-+            {
-+                "arc_id": "arc:bandit_pressure",
-+                "title": "Bandit Pressure",
-+                "status": "active",
-+                "stage": "rumors",
-+                "pressure": 20,
-+                "linked_lore": ["lore:red_sashes"],
-+                "linked_entities": ["bran"],
-+                "linked_locations": ["tavern_common_room"],
-+            }
-+        ],
-+        "story_events": [
-+            {
-+                "event_id": "event:bandit_rumor_spreads",
-+                "arc_id": "arc:bandit_pressure",
-+                "kind": "rumor",
-+                "summary": "Rumors of Red Sashes activity spread.",
-+                "effects": [
-+                    {"type": "arc_pressure_delta", "arc_id": "arc:bandit_pressure", "delta": 10},
-+                    {"type": "world_event_emit"},
-+                ],
-+            }
-+        ],
-+        "escalation_rules": [
-+            {
-+                "rule_id": "rule:bandit_warning",
-+                "arc_id": "arc:bandit_pressure",
-+                "priority": 70,
-+                "cooldown_turns": 3,
-+                "max_applications": 1,
-+                "conditions": [
-+                    {
-+                        "type": "arc_pressure_at_least",
-+                        "arc_id": "arc:bandit_pressure",
-+                        "minimum": 50,
-+                    }
-+                ],
-+                "event": {
-+                    "event_id": "event:bandits_warn_bran",
-+                    "arc_id": "arc:bandit_pressure",
-+                    "kind": "warning",
-+                    "summary": "Bandits warned Bran to pay protection money.",
-+                    "effects": [
-+                        {"type": "arc_stage_set", "arc_id": "arc:bandit_pressure", "stage": "threat"}
-+                    ],
-+                },
-+            }
-+        ],
-+    }
-+
-+
-+STORY_PACK_M13_M15_SCENARIOS: Dict[str, Dict[str, Any]] = {
-+    "story_pack_import_adds_lore_arcs_events_rules": {
-+        "setup_story_packs": [{"proposal": _valid_pack(), "turn_index": 1}],
-+        "turns": ["I inspect the imported Red Sashes story pack."],
-+        "checks": [
-+            {
-+                "type": "story_pack_lore",
-+                "lore_id": "lore:red_sashes",
-+                "expected": {"truth_status": "rumor"},
-+            },
-+            {
-+                "type": "story_pack_arc",
-+                "arc_id": "arc:bandit_pressure",
-+                "expected": {"stage": "rumors", "pressure": 20},
-+            },
-+            {"type": "story_pack_event_definition", "event_id": "event:bandit_rumor_spreads"},
-+            {"type": "story_pack_rule_definition", "rule_id": "rule:bandit_warning"},
-+            {"type": "story_pack_imported", "pack_id": "storypack:red_sashes_intro"},
-+        ],
-+    },
-+    "story_pack_import_is_idempotent": {
-+        "setup_story_packs": [
-+            {"proposal": _valid_pack(), "turn_index": 1},
-+            {"proposal": _valid_pack(), "turn_index": 2},
-+        ],
-+        "turns": ["I import the same story pack twice."],
-+        "checks": [
-+            {"type": "story_pack_imported", "pack_id": "storypack:red_sashes_intro"},
-+            {"type": "story_pack_debug_bounded", "max_packs": 1},
-+        ],
-+    },
-+    "story_pack_import_does_not_overwrite_existing_true_lore": {
++DIALOGUE_M16_M18_SCENARIOS: Dict[str, Dict[str, Any]] = {
++    "npc_can_discuss_lore_they_know": {
 +        "setup_lore_transitions": [
 +            {
 +                "action": "upsert",
 +                "lore_id": "lore:red_sashes",
 +                "title": "The Red Sashes",
-+                "truth_status": "true",
++                "truth_status": "rumor",
++                "known_by": ["bran"],
++                "tags": ["bandit"],
 +            }
 +        ],
-+        "turns": ["I try to import a pack that contradicts true lore."],
++        "turns": ["I ask Bran what he knows about the Red Sashes."],
 +        "checks": [
 +            {
-+                "type": "story_pack_import",
-+                "proposal": dict(
-+                    _valid_pack(),
-+                    lore_entries=[
-+                        {
-+                            "lore_id": "lore:red_sashes",
-+                            "title": "The Red Sashes",
-+                            "truth_status": "false",
-+                        }
-+                    ],
-+                ),
-+                "expected_ok": False,
-+                "required_reason": "validation_failed",
-+            },
++                "type": "dialogue_context",
++                "npc_id": "bran",
++                "topic_lore_id": "lore:red_sashes",
++                "expected_can_discuss": True,
++                "expected_lore_id": "lore:red_sashes",
++                "expected_must_mark_as_rumor": True,
++            }
++        ],
++    },
++    "npc_cannot_discuss_secret_lore_they_do_not_know": {
++        "setup_lore_transitions": [
 +            {
-+                "type": "story_pack_lore",
++                "action": "upsert",
++                "lore_id": "lore:bran_debt",
++                "title": "Bran's Hidden Debt",
++                "truth_status": "secret",
++                "known_by": ["bran"],
++            }
++        ],
++        "turns": ["I ask Mira about Bran's hidden debt."],
++        "checks": [
++            {
++                "type": "dialogue_context",
++                "npc_id": "mira",
++                "topic_lore_id": "lore:bran_debt",
++                "expected_can_discuss": False,
++            }
++        ],
++    },
++    "npc_marks_unverified_lore_as_rumor": {
++        "setup_lore_transitions": [
++            {
++                "action": "upsert",
 +                "lore_id": "lore:red_sashes",
-+                "expected": {"truth_status": "true"},
++                "title": "The Red Sashes",
++                "truth_status": "rumor",
++                "known_by": ["bran"],
++            }
++        ],
++        "turns": ["I ask Bran if the Red Sashes rumor is confirmed."],
++        "checks": [
++            {
++                "type": "dialogue_context",
++                "npc_id": "bran",
++                "topic_lore_id": "lore:red_sashes",
++                "expected_can_discuss": True,
++                "expected_must_mark_as_rumor": True,
++            }
++        ],
++    },
++    "npc_discusses_arc_if_memory_links_them": {
++        "setup_lore_transitions": [
++            {
++                "action": "upsert",
++                "lore_id": "lore:red_sashes",
++                "title": "The Red Sashes",
++                "truth_status": "rumor",
++                "known_by": ["bran"],
++            }
++        ],
++        "setup_story_arc_transitions": [
++            {
++                "action": "start",
++                "arc_id": "arc:bandit_pressure",
++                "title": "Bandit Pressure",
++                "stage": "rumors",
++                "pressure": 20,
++                "links": {"lore": ["lore:red_sashes"], "entities": ["bran"]},
++            }
++        ],
++        "turns": ["I ask Bran about the bandit pressure."],
++        "checks": [
++            {
++                "type": "dialogue_context",
++                "npc_id": "bran",
++                "arc_id": "arc:bandit_pressure",
++                "expected_can_discuss": True,
++                "expected_arc_id": "arc:bandit_pressure",
++            }
++        ],
++    },
++    "npc_refuses_arc_topic_if_social_hostile": {
++        "setup_social_state": {"relationships": {"bran": {"trust": -20, "hostility": 60}}},
++        "setup_lore_transitions": [
++            {
++                "action": "upsert",
++                "lore_id": "lore:red_sashes",
++                "title": "The Red Sashes",
++                "truth_status": "rumor",
++                "known_by": ["bran"],
++            }
++        ],
++        "turns": ["I demand Bran tell me about the Red Sashes."],
++        "checks": [
++            {
++                "type": "dialogue_context",
++                "npc_id": "bran",
++                "topic_lore_id": "lore:red_sashes",
++                "expected_can_discuss": False,
++            }
++        ],
++    },
++    "rumor_spreads_to_audible_npc": {
++        "setup_lore_transitions": [
++            {
++                "action": "upsert",
++                "lore_id": "lore:red_sashes",
++                "title": "The Red Sashes",
++                "truth_status": "rumor",
++            }
++        ],
++        "setup_rumor_propagations": [
++            {
++                "speaker_id": "bran",
++                "lore_id": "lore:red_sashes",
++                "summary": "The Red Sashes are active again.",
++                "explicit_hearers": ["mira"],
++            }
++        ],
++        "turns": ["I check whether Mira heard Bran's rumor."],
++        "checks": [
++            {
++                "type": "rumor_memory",
++                "subject_id": "mira",
++                "expected_lore_id": "lore:red_sashes",
++                "tags": ["rumor"],
++            }
++        ],
++    },
++    "rumor_does_not_spread_through_blocked_wall": {
++        "setup_lore_transitions": [
++            {
++                "action": "upsert",
++                "lore_id": "lore:red_sashes",
++                "title": "The Red Sashes",
++                "truth_status": "rumor",
++            }
++        ],
++        "turns": ["I test rumor propagation without hearers."],
++        "checks": [
++            {
++                "type": "rumor_propagation",
++                "speaker_id": "bran",
++                "lore_id": "lore:red_sashes",
++                "summary": "The Red Sashes are active again.",
++                "explicit_hearers": [],
++                "expected_ok": True,
++                "expected_truth_promoted": False,
++            },
++            {
++                "type": "rumor_truth_status",
++                "lore_id": "lore:red_sashes",
++                "expected_truth_status": "rumor",
 +            },
 +        ],
 +    },
-+    "story_pack_can_seed_starter_quest": {
-+        "setup_story_packs": [
++    "rumor_does_not_promote_to_truth": {
++        "setup_lore_transitions": [
 +            {
-+                "proposal": _valid_pack(),
-+                "starter_quests": [
-+                    {
-+                        "action": "start",
-+                        "quest_id": "quest:stop_red_sashes",
-+                        "stage": "investigate",
-+                    }
-+                ],
++                "action": "upsert",
++                "lore_id": "lore:red_sashes",
++                "title": "The Red Sashes",
++                "truth_status": "rumor",
 +            }
 +        ],
-+        "turns": ["I inspect the starter quest seeded by the story pack."],
++        "setup_rumor_propagations": [
++            {
++                "speaker_id": "bran",
++                "lore_id": "lore:red_sashes",
++                "summary": "The Red Sashes are active again.",
++                "explicit_hearers": ["mira"],
++            }
++        ],
++        "turns": ["I check whether the rumor became truth."],
 +        "checks": [
 +            {
-+                "type": "story_pack_quest",
-+                "quest_id": "quest:stop_red_sashes",
-+                "expected": {"stage": "investigate", "status": "active"},
++                "type": "rumor_truth_status",
++                "lore_id": "lore:red_sashes",
++                "expected_truth_status": "rumor",
 +            }
 +        ],
 +    },
-+    "story_pack_can_seed_arc_pressure": {
-+        "setup_story_packs": [{"proposal": dict(_valid_pack(), story_arcs=[dict(_valid_pack()["story_arcs"][0], pressure=55)])}],
-+        "turns": ["I inspect seeded arc pressure."],
-+        "checks": [
++    "rumor_hearer_can_discuss_as_rumor": {
++        "setup_lore_transitions": [
 +            {
-+                "type": "story_pack_arc",
-+                "arc_id": "arc:bandit_pressure",
-+                "expected": {"pressure": 55},
++                "action": "upsert",
++                "lore_id": "lore:red_sashes",
++                "title": "The Red Sashes",
++                "truth_status": "rumor",
 +            }
 +        ],
-+    },
-+    "story_pack_can_link_npcs_locations_quests": {
-+        "setup_story_packs": [
++        "setup_rumor_propagations": [
 +            {
-+                "proposal": dict(
-+                    _valid_pack(),
-+                    story_arcs=[
-+                        dict(
-+                            _valid_pack()["story_arcs"][0],
-+                            linked_entities=["bran", "mira"],
-+                            linked_locations=["tavern_common_room", "street"],
-+                            linked_quests=["quest:stop_red_sashes"],
-+                        )
-+                    ],
-+                )
++                "speaker_id": "bran",
++                "lore_id": "lore:red_sashes",
++                "summary": "The Red Sashes are active again.",
++                "explicit_hearers": ["mira"],
 +            }
 +        ],
-+        "turns": ["I inspect story arc links from the imported pack."],
++        "turns": ["I ask Mira what she heard about the Red Sashes."],
 +        "checks": [
 +            {
-+                "type": "story_pack_arc",
-+                "arc_id": "arc:bandit_pressure",
-+                "expected": {
-+                    "linked_entities": ["bran", "mira"],
-+                    "linked_locations": ["tavern_common_room", "street"],
-+                    "linked_quests": ["quest:stop_red_sashes"],
-+                },
-+            }
-+        ],
-+    },
-+    "story_pack_invalid_reference_rejected": {
-+        "turns": ["I attempt to import a story pack with an invalid reference."],
-+        "checks": [
-+            {
-+                "type": "story_pack_import",
-+                "proposal": dict(
-+                    _valid_pack(),
-+                    story_events=[
-+                        {
-+                            "event_id": "event:bad",
-+                            "arc_id": "arc:missing",
-+                            "effects": [],
-+                        }
-+                    ],
-+                ),
-+                "expected_ok": False,
-+                "required_reason": "validation_failed",
-+            }
-+        ],
-+    },
-+    "story_pack_debug_summary_is_bounded": {
-+        "setup_story_packs": [{"proposal": _valid_pack()}],
-+        "turns": ["I inspect the bounded story pack debug summary."],
-+        "checks": [
-+            {
-+                "type": "story_pack_debug_bounded",
-+                "max_packs": 5,
++                "type": "dialogue_context",
++                "npc_id": "mira",
++                "topic_lore_id": "lore:red_sashes",
++                "expected_can_discuss": True,
++                "expected_lore_id": "lore:red_sashes",
++                "expected_must_mark_as_rumor": True,
 +            }
 +        ],
 +    },
 +}
 *** End Patch
-13. Add expected names file
+11. Add expected names file
 *** Begin Patch
-*** Add File: src/tests/rpg/manual/scenarios/expected_story_pack_m13_m15_names.py
-+EXPECTED_STORY_PACK_M13_M15_SCENARIO_NAMES = {
-+    "story_pack_import_adds_lore_arcs_events_rules",
-+    "story_pack_import_is_idempotent",
-+    "story_pack_import_does_not_overwrite_existing_true_lore",
-+    "story_pack_can_seed_starter_quest",
-+    "story_pack_can_seed_arc_pressure",
-+    "story_pack_can_link_npcs_locations_quests",
-+    "story_pack_invalid_reference_rejected",
-+    "story_pack_debug_summary_is_bounded",
+*** Add File: src/tests/rpg/manual/scenarios/expected_dialogue_m16_m18_names.py
++EXPECTED_DIALOGUE_M16_M18_SCENARIO_NAMES = {
++    "npc_can_discuss_lore_they_know",
++    "npc_cannot_discuss_secret_lore_they_do_not_know",
++    "npc_marks_unverified_lore_as_rumor",
++    "npc_discusses_arc_if_memory_links_them",
++    "npc_refuses_arc_topic_if_social_hostile",
++    "rumor_spreads_to_audible_npc",
++    "rumor_does_not_spread_through_blocked_wall",
++    "rumor_does_not_promote_to_truth",
++    "rumor_hearer_can_discuss_as_rumor",
 +}
 *** End Patch
-14. Patch src/tests/rpg/manual/scenarios/registry.py
+12. Patch src/tests/rpg/manual/scenarios/registry.py
 *** Begin Patch
 *** Update File: src/tests/rpg/manual/scenarios/registry.py
 @@
- from tests.rpg.manual.scenarios.story_proposal_m10_m12 import (
-     STORY_PROPOSAL_M10_M12_SCENARIOS,
+ from tests.rpg.manual.scenarios.story_pack_m13_m15 import (
+     STORY_PACK_M13_M15_SCENARIOS,
  )
-+from tests.rpg.manual.scenarios.story_pack_m13_m15 import (
-+    STORY_PACK_M13_M15_SCENARIOS,
++from tests.rpg.manual.scenarios.dialogue_m16_m18 import (
++    DIALOGUE_M16_M18_SCENARIOS,
 +)
 @@
-     scenarios.update(STORY_PROPOSAL_M10_M12_SCENARIOS)
-+    scenarios.update(STORY_PACK_M13_M15_SCENARIOS)
+     scenarios.update(STORY_PACK_M13_M15_SCENARIOS)
++    scenarios.update(DIALOGUE_M16_M18_SCENARIOS)
      return scenarios
 *** End Patch
-15. Patch src/tests/rpg/manual/test_manual_scenario_migration.py
+13. Patch src/tests/rpg/manual/test_manual_scenario_migration.py
 *** Begin Patch
 *** Update File: src/tests/rpg/manual/test_manual_scenario_migration.py
 @@
- from tests.rpg.manual.scenarios.expected_story_proposal_m10_m12_names import (
-     EXPECTED_STORY_PROPOSAL_M10_M12_SCENARIO_NAMES,
+ from tests.rpg.manual.scenarios.expected_story_pack_m13_m15_names import (
+     EXPECTED_STORY_PACK_M13_M15_SCENARIO_NAMES,
  )
-+from tests.rpg.manual.scenarios.expected_story_pack_m13_m15_names import (
-+    EXPECTED_STORY_PACK_M13_M15_SCENARIO_NAMES,
++from tests.rpg.manual.scenarios.expected_dialogue_m16_m18_names import (
++    EXPECTED_DIALOGUE_M16_M18_SCENARIO_NAMES,
 +)
 @@
- def test_manual_scenario_registry_includes_story_proposal_m10_m12_names():
+ def test_manual_scenario_registry_includes_story_pack_m13_m15_names():
      names = set(build_service_scenarios().keys())
-     missing = EXPECTED_STORY_PROPOSAL_M10_M12_SCENARIO_NAMES - names
+     missing = EXPECTED_STORY_PACK_M13_M15_SCENARIO_NAMES - names
  
-     assert not missing, f"Missing M10-M12 story proposal scenarios: {sorted(missing)}"
+     assert not missing, f"Missing M13-M15 story pack scenarios: {sorted(missing)}"
 +
 +
-+def test_manual_scenario_registry_includes_story_pack_m13_m15_names():
++def test_manual_scenario_registry_includes_dialogue_m16_m18_names():
 +    names = set(build_service_scenarios().keys())
-+    missing = EXPECTED_STORY_PACK_M13_M15_SCENARIO_NAMES - names
++    missing = EXPECTED_DIALOGUE_M16_M18_SCENARIO_NAMES - names
 +
-+    assert not missing, f"Missing M13-M15 story pack scenarios: {sorted(missing)}"
++    assert not missing, f"Missing M16-M18 dialogue scenarios: {sorted(missing)}"
 *** End Patch
-16. Add manual check tests
+14. Add manual check tests
 *** Begin Patch
-*** Add File: src/tests/rpg/manual/test_manual_story_pack_m13_m15_checks.py
-+from tests.rpg.manual.story_pack_m13_m15_checks import run_story_pack_m13_m15_checks
+*** Add File: src/tests/rpg/manual/test_manual_dialogue_m16_m18_checks.py
++from app.rpg.lore.state import upsert_lore_entry
++from tests.rpg.manual.dialogue_m16_m18_checks import run_dialogue_m16_m18_checks
 +
 +
-+def _pack():
-+    return {
-+        "proposal_version": "story_proposal_v1",
-+        "proposal_type": "story_pack",
-+        "proposal_id": "tiny",
-+        "title": "Tiny",
-+        "lore_entries": [{"lore_id": "lore:x", "title": "X"}],
-+        "story_arcs": [{"arc_id": "arc:x", "title": "X", "linked_lore": ["lore:x"]}],
-+        "story_events": [{"event_id": "event:x", "arc_id": "arc:x", "effects": []}],
-+        "escalation_rules": [
-+            {
-+                "rule_id": "rule:x",
-+                "arc_id": "arc:x",
-+                "event": {"event_id": "event:y", "arc_id": "arc:x", "effects": []},
-+            }
-+        ],
-+    }
-+
-+
-+def test_manual_story_pack_import_check_imports_pack():
++def test_manual_dialogue_context_check_reads_session_state():
 +    session = {"simulation_state": {}}
-+    result = run_story_pack_m13_m15_checks(
++    upsert_lore_entry(
++        session["simulation_state"],
++        {
++            "lore_id": "lore:red_sashes",
++            "title": "The Red Sashes",
++            "truth_status": "rumor",
++            "known_by": ["bran"],
++        },
++    )
++
++    result = run_dialogue_m16_m18_checks(
 +        checks=[
 +            {
-+                "type": "story_pack_import",
-+                "proposal": _pack(),
-+                "expected_ok": True,
++                "type": "dialogue_context",
++                "npc_id": "bran",
++                "topic_lore_id": "lore:red_sashes",
++                "expected_can_discuss": True,
++                "expected_lore_id": "lore:red_sashes",
++                "expected_must_mark_as_rumor": True,
 +            }
 +        ],
 +        result={},
@@ -1547,29 +1310,43 @@ Patch 4 — Manual scenarios
 +    )[0]
 +
 +    assert result["ok"] is True
-+    assert result["import_result"]["ok"] is True
 +
 +
-+def test_manual_story_pack_lore_check_reads_imported_state():
++def test_manual_rumor_propagation_check_records_memory():
 +    session = {"simulation_state": {}}
-+    run_story_pack_m13_m15_checks(
++    upsert_lore_entry(
++        session["simulation_state"],
++        {
++            "lore_id": "lore:red_sashes",
++            "title": "The Red Sashes",
++            "truth_status": "rumor",
++        },
++    )
++
++    run_dialogue_m16_m18_checks(
 +        checks=[
 +            {
-+                "type": "story_pack_import",
-+                "proposal": _pack(),
++                "type": "rumor_propagation",
++                "speaker_id": "bran",
++                "lore_id": "lore:red_sashes",
++                "summary": "The Red Sashes are active.",
++                "explicit_hearers": ["mira"],
 +                "expected_ok": True,
++                "expected_hearer": "mira",
++                "expected_truth_promoted": False,
 +            }
 +        ],
 +        result={},
 +        session=session,
 +    )
 +
-+    result = run_story_pack_m13_m15_checks(
++    result = run_dialogue_m16_m18_checks(
 +        checks=[
 +            {
-+                "type": "story_pack_lore",
-+                "lore_id": "lore:x",
-+                "expected": {"title": "X"},
++                "type": "rumor_memory",
++                "subject_id": "mira",
++                "expected_lore_id": "lore:red_sashes",
++                "tags": ["rumor"],
 +            }
 +        ],
 +        result={},
@@ -1580,10 +1357,9 @@ Patch 4 — Manual scenarios
 *** End Patch
 Validation commands
 Compile
-python -m py_compile src/app/rpg/story_packs/registry.py
-python -m py_compile src/app/rpg/story_packs/definition_registries.py
-python -m py_compile src/app/rpg/story_packs/importer.py
-python -m py_compile src/tests/rpg/manual/story_pack_m13_m15_checks.py
-python -m py_compile src/tests/rpg/manual/scenarios/story_pack_m13_m15.py
+python -m py_compile src/app/rpg/dialogue_context/arc_context.py
+python -m py_compile src/app/rpg/dialogue_context/rumors.py
+python -m py_compile src/tests/rpg/manual/dialogue_m16_m18_checks.py
+python -m py_compile src/tests/rpg/manual/scenarios/dialogue_m16_m18.py
 Unit tests
-python -m pytest src/tests/rpg/story_packs src/tests/rpg/story_proposals src/tests/rpg/escalation src/tests/rpg/story_events src/tests/rpg/story_arcs src/tests/rpg/lore -q
+python -m pytest src/tests/rpg/dialogue_context src/tests/rpg/story_packs src/tests/rpg/story_proposals src/tests/rpg/escalatio

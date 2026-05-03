@@ -6,6 +6,7 @@ from typing import Any, Dict
 from app.rpg.escalation.rules import apply_escalation_rule
 from app.rpg.escalation.state import mark_escalation_rule_applied
 from app.rpg.story_packs.importer import import_story_pack
+from app.rpg.dialogue_context.rumors import propagate_rumor
 from app.rpg.lore.transitions import apply_lore_transition
 from app.rpg.memory.observation import (
     record_event_observations,
@@ -120,7 +121,7 @@ def _apply_manual_scenario_setup(session: Dict[str, Any], scenario: Dict[str, An
         ensure_social_state(simulation_state)
         for npc_id, values in (setup_social_state.get("relationships") or {}).items():
             if isinstance(values, dict):
-                set_relationship_values(simulation_state, str(npc_id), values)
+                simulation_state.setdefault("social_state", {}).setdefault("relationships", {})[str(npc_id)] = values
         for actor_id, value in (setup_social_state.get("global_reputation") or {}).items():
             set_global_reputation(simulation_state, str(actor_id), value)
 
@@ -291,6 +292,21 @@ def _apply_manual_scenario_setup(session: Dict[str, Any], scenario: Dict[str, An
                     or 1
                 ),
                 starter_quests=starter_quests,
+            )
+
+    for rumor in scenario.get("setup_rumor_propagations") or []:
+        if isinstance(rumor, dict):
+            propagate_rumor(
+                simulation_state,
+                speaker_id=str(rumor.get("speaker_id") or ""),
+                lore_id=str(rumor.get("lore_id") or ""),
+                summary=str(rumor.get("summary") or ""),
+                explicit_hearers=rumor.get("explicit_hearers"),
+                turn_index=int(
+                    rumor.get("turn_index")
+                    or scenario.get("setup_turn_index")
+                    or 1
+                ),
             )
 
     runtime_state = _safe_dict(session.get("runtime_state"))
