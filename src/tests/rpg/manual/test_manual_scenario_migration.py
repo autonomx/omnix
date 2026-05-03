@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 from tests.rpg.manual.runner import build_service_scenarios
+from tests.rpg.manual.scenarios.expected_dialogue_m16_m18_names import (
+    EXPECTED_DIALOGUE_M16_M18_SCENARIO_NAMES,
+)
 from tests.rpg.manual.scenarios.expected_escalation_m7_m9_names import (
     EXPECTED_ESCALATION_M7_M9_SCENARIO_NAMES,
 )
@@ -24,9 +27,6 @@ from tests.rpg.manual.scenarios.expected_story_m1_m3_names import (
 )
 from tests.rpg.manual.scenarios.expected_story_pack_m13_m15_names import (
     EXPECTED_STORY_PACK_M13_M15_SCENARIO_NAMES,
-)
-from tests.rpg.manual.scenarios.expected_dialogue_m16_m18_names import (
-    EXPECTED_DIALOGUE_M16_M18_SCENARIO_NAMES,
 )
 
 

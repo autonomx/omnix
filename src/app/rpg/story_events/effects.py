@@ -4,6 +4,7 @@ from typing import Any, Dict
 
 from app.rpg.lore.transitions import apply_lore_transition
 from app.rpg.memory.observation import record_event_observations
+from app.rpg.npc_evolution.state import apply_npc_evolution_delta, start_npc_arc
 from app.rpg.puzzles.transitions import apply_puzzle_transition
 from app.rpg.quests.transitions import apply_quest_transition
 from app.rpg.social.reputation import apply_social_deltas
@@ -200,6 +201,40 @@ def apply_story_event_effect(
             ),
             effect_type=effect_type,
         )
+
+    if effect_type == "npc_evolution":
+        npc_id = str(effect.get("npc_id") or "")
+        arc_id = str(effect.get("npc_arc_id") or "")
+        start_result = None
+        if arc_id:
+            start_result = start_npc_arc(
+                simulation_state,
+                npc_id,
+                arc_id,
+                motivation=str(effect.get("motivation") or ""),
+                role=str(effect.get("role") or ""),
+                profession=str(effect.get("profession") or ""),
+                turn_index=turn_index,
+            )
+        evolution_result = apply_npc_evolution_delta(
+            simulation_state,
+            npc_id,
+            profession=str(effect.get("profession") or ""),
+            role=str(effect.get("role") or ""),
+            motivation=str(effect.get("motivation") or ""),
+            personality_deltas=_safe_dict(effect.get("personality_deltas")),
+            companion_eligible=effect.get("companion_eligible") if "companion_eligible" in effect else None,
+            companion_offered=effect.get("companion_offered") if "companion_offered" in effect else None,
+            flags=_safe_dict(effect.get("flags")),
+            source_event_id=str(source_event.get("event_id") or ""),
+            turn_index=turn_index,
+        )
+        return {
+            "ok": bool(evolution_result.get("ok")),
+            "effect_type": effect_type,
+            "start_result": start_result,
+            "evolution_result": evolution_result,
+        }
 
     if effect_type == "world_event_emit":
         return dict(

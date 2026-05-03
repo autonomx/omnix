@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from typing import Any, Dict
 
-
 DIALOGUE_M16_M18_SCENARIOS: Dict[str, Dict[str, Any]] = {
     "npc_can_discuss_lore_they_know": {
         "setup_lore_transitions": [

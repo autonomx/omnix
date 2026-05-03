@@ -1,55 +1,88 @@
-Bundle M16-M18 — Arc-Aware NPC Dialogue + Rumor Propagation v1
+Bundle M19-M21 — Consequence Events + NPC Arc Evolution v1
 GOAL:
-Add deterministic arc/lore dialogue context and rumor propagation.
+Add deterministic long-term NPC evolution from story consequences.
 
-NPCs may discuss:
-- lore they explicitly know
-- story arcs linked to lore/memory/social/spatial context
-- rumors they heard through causal memory or audibility
+Story events/consequences can now reshape NPCs through bounded evolution records:
+- NPC arc state
+- motivation changes
+- role/profession changes
+- personality deltas
+- companion eligibility/offers
+- revenge/fear/grief/protective arcs
+- save/load-stable evolution history
 
-NPCs must NOT discuss:
-- secret lore they do not know
-- unrevealed/unknown true facts without causal access
-- arc details not backed by deterministic state
-- rumors as truth
-
-Rumor propagation:
-- uses spatial audibility
-- creates causal memory for hearers
-- does not promote rumor lore to truth
-- is deterministic and bounded
-
-LLM may later phrase dialogue, but it only receives bounded, validated dialogue context.
-Patch 1 — Add arc dialogue package
-1. Add src/app/rpg/dialogue_context/__init__.py
+Important:
+- LLM cannot directly mutate NPC evolution.
+- Consequences are applied by deterministic functions only.
+- Evolution requires explicit conditions and bounded deltas.
+- Existing NPC profile data is not overwritten destructively.
+- Evolution history is capped.
+Patch 1 — Add NPC evolution package
+1. Add src/app/rpg/npc_evolution/__init__.py
 *** Begin Patch
-*** Add File: src/app/rpg/dialogue_context/__init__.py
-+"""Deterministic story/lore dialogue context helpers."""
+*** Add File: src/app/rpg/npc_evolution/__init__.py
++"""Deterministic NPC arc/evolution helpers."""
 +
-+from app.rpg.dialogue_context.arc_context import build_arc_dialogue_context
-+from app.rpg.dialogue_context.rumors import propagate_rumor
++from app.rpg.npc_evolution.state import (
++    apply_npc_evolution_delta,
++    ensure_npc_evolution_state,
++    get_npc_evolution,
++    normalize_npc_evolution_state,
++    set_npc_arc_flag,
++    start_npc_arc,
++)
++from app.rpg.npc_evolution.conditions import evaluate_npc_evolution_condition
++from app.rpg.npc_evolution.transitions import apply_npc_evolution_transition
 +
 +__all__ = [
-+    "build_arc_dialogue_context",
-+    "propagate_rumor",
++    "apply_npc_evolution_delta",
++    "apply_npc_evolution_transition",
++    "ensure_npc_evolution_state",
++    "evaluate_npc_evolution_condition",
++    "get_npc_evolution",
++    "normalize_npc_evolution_state",
++    "set_npc_arc_flag",
++    "start_npc_arc",
 +]
 *** End Patch
-2. Add src/app/rpg/dialogue_context/arc_context.py
+2. Add src/app/rpg/npc_evolution/model.py
 *** Begin Patch
-*** Add File: src/app/rpg/dialogue_context/arc_context.py
+*** Add File: src/app/rpg/npc_evolution/model.py
 +from __future__ import annotations
 +
-+from typing import Any, Dict, List, Set
-+
-+from app.rpg.lore.state import get_lore_entry, is_lore_known_by
-+from app.rpg.memory.causal_retrieval import retrieve_causal_memories
-+from app.rpg.social.reputation import get_relationship
-+from app.rpg.story_arcs.state import get_story_arc
++from dataclasses import asdict, dataclass, field
++from typing import Any, Dict, List
 +
 +
-+MAX_DIALOGUE_LORE = 10
-+MAX_DIALOGUE_ARCS = 10
-+MAX_DIALOGUE_MEMORIES = 10
++@dataclass
++class NPCEvolutionRecord:
++    npc_id: str
++    active_arcs: List[str] = field(default_factory=list)
++    completed_arcs: List[str] = field(default_factory=list)
++    profession: str = ""
++    role: str = ""
++    motivation: str = ""
++    companion_eligible: bool = False
++    companion_offered: bool = False
++    personality: Dict[str, int] = field(default_factory=dict)
++    flags: Dict[str, Any] = field(default_factory=dict)
++    history: List[Dict[str, Any]] = field(default_factory=list)
++    metadata: Dict[str, Any] = field(default_factory=dict)
++
++    def to_dict(self) -> Dict[str, Any]:
++        return asdict(self)
+*** End Patch
+3. Add src/app/rpg/npc_evolution/state.py
+*** Begin Patch
+*** Add File: src/app/rpg/npc_evolution/state.py
++from __future__ import annotations
++
++from typing import Any, Dict, List
++
++
++MAX_NPC_EVOLUTION_HISTORY = 50
++MAX_PERSONALITY_VALUE = 100
++MIN_PERSONALITY_VALUE = -100
 +
 +
 +def _safe_dict(value: Any) -> Dict[str, Any]:
@@ -64,612 +97,922 @@ Patch 1 — Add arc dialogue package
 +    return value if isinstance(value, str) else ""
 +
 +
-+def _known_lore_ids_from_memory(
-+    simulation_state: Dict[str, Any],
-+    npc_id: str,
-+) -> Set[str]:
-+    rows = retrieve_causal_memories(
-+        simulation_state,
-+        npc_id,
-+        tags=["lore", "rumor", "story"],
-+        max_items=MAX_DIALOGUE_MEMORIES,
-+    )
-+    lore_ids: Set[str] = set()
-+    for row in rows:
-+        facts = _safe_dict(row.get("facts"))
-+        lore_id = _safe_str(facts.get("lore_id"))
-+        if lore_id:
-+            lore_ids.add(lore_id)
-+    return lore_ids
++def _safe_bool(value: Any, default: bool = False) -> bool:
++    if isinstance(value, bool):
++        return value
++    return default
 +
 +
-+def _memory_event_ids(
-+    simulation_state: Dict[str, Any],
-+    npc_id: str,
-+    *,
-+    tags: List[str] | None = None,
-+) -> List[str]:
-+    rows = retrieve_causal_memories(
-+        simulation_state,
-+        npc_id,
-+        tags=tags or [],
-+        max_items=MAX_DIALOGUE_MEMORIES,
-+    )
-+    return [
-+        str(row.get("event_id"))
-+        for row in rows
-+        if row.get("event_id")
-+    ][:MAX_DIALOGUE_MEMORIES]
++def _safe_int(value: Any, default: int = 0) -> int:
++    try:
++        return int(value)
++    except Exception:
++        return default
 +
 +
-+def _can_discuss_lore(
-+    simulation_state: Dict[str, Any],
-+    npc_id: str,
-+    lore_id: str,
-+) -> Dict[str, Any]:
-+    entry = get_lore_entry(simulation_state, lore_id)
-+    if not entry:
-+        return {
-+            "ok": False,
-+            "reason": "lore_missing",
-+            "lore_id": lore_id,
-+        }
++def _clamp_personality(value: Any) -> int:
++    return max(MIN_PERSONALITY_VALUE, min(MAX_PERSONALITY_VALUE, _safe_int(value, 0)))
 +
-+    known_by = is_lore_known_by(simulation_state, lore_id, npc_id)
-+    remembered_lore = lore_id in _known_lore_ids_from_memory(simulation_state, npc_id)
-+    revealed = bool(entry.get("revealed_to_player"))
-+    truth_status = str(entry.get("truth_status") or "unknown")
 +
-+    if truth_status == "secret" and not known_by and not remembered_lore:
-+        return {
-+            "ok": False,
-+            "reason": "secret_not_known",
-+            "lore_id": lore_id,
-+            "truth_status": truth_status,
-+        }
++def _unique_strs(values: Any, *, limit: int = 50) -> List[str]:
++    seen = set()
++    out: List[str] = []
++    for value in _safe_list(values):
++        text = str(value or "").strip()
++        if text and text not in seen:
++            seen.add(text)
++            out.append(text)
++        if len(out) >= limit:
++            break
++    return out
 +
-+    if not known_by and not remembered_lore and not revealed:
-+        return {
-+            "ok": False,
-+            "reason": "not_known_or_revealed",
-+            "lore_id": lore_id,
-+            "truth_status": truth_status,
-+        }
 +
-+    must_mark_as_rumor = truth_status in {"rumor", "myth", "unknown"} or remembered_lore
++def normalize_npc_evolution(value: Dict[str, Any], *, npc_id: str = "") -> Dict[str, Any]:
++    value = _safe_dict(value)
++    normalized_npc_id = _safe_str(value.get("npc_id")) or npc_id
++    personality = {
++        str(key): _clamp_personality(val)
++        for key, val in _safe_dict(value.get("personality")).items()
++        if str(key)
++    }
++    history = [
++        dict(row)
++        for row in _safe_list(value.get("history"))
++        if isinstance(row, dict)
++    ][-MAX_NPC_EVOLUTION_HISTORY:]
 +    return {
-+        "ok": True,
-+        "reason": "available",
-+        "lore_id": lore_id,
-+        "truth_status": truth_status,
-+        "known_by": known_by,
-+        "remembered_lore": remembered_lore,
-+        "revealed_to_player": revealed,
-+        "must_mark_as_rumor": must_mark_as_rumor,
++        "npc_id": normalized_npc_id,
++        "active_arcs": _unique_strs(value.get("active_arcs")),
++        "completed_arcs": _unique_strs(value.get("completed_arcs")),
++        "profession": _safe_str(value.get("profession")),
++        "role": _safe_str(value.get("role")),
++        "motivation": _safe_str(value.get("motivation")),
++        "companion_eligible": _safe_bool(value.get("companion_eligible"), False),
++        "companion_offered": _safe_bool(value.get("companion_offered"), False),
++        "personality": personality,
++        "flags": dict(_safe_dict(value.get("flags"))),
++        "history": history,
++        "metadata": dict(_safe_dict(value.get("metadata"))),
 +    }
 +
 +
-+def build_arc_dialogue_context(
++def normalize_npc_evolution_state(value: Dict[str, Any] | None) -> Dict[str, Any]:
++    value = _safe_dict(value)
++    npcs: Dict[str, Dict[str, Any]] = {}
++    for npc_id, row in _safe_dict(value.get("npcs")).items():
++        npc_id = str(npc_id or "")
++        if not npc_id:
++            continue
++        npcs[npc_id] = normalize_npc_evolution(row, npc_id=npc_id)
++    return {
++        "version": 1,
++        "npcs": npcs,
++        "max_history_per_npc": MAX_NPC_EVOLUTION_HISTORY,
++    }
++
++
++def ensure_npc_evolution_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
++    if not isinstance(simulation_state, dict):
++        raise TypeError("simulation_state_must_be_dict")
++    state = normalize_npc_evolution_state(simulation_state.get("npc_evolution_state"))
++    simulation_state["npc_evolution_state"] = state
++    return state
++
++
++def get_npc_evolution(
 +    simulation_state: Dict[str, Any],
 +    npc_id: str,
 +    *,
-+    arc_id: str = "",
-+    topic_lore_id: str = "",
-+) -> Dict[str, Any]:
-+    npc_id = str(npc_id or "")
-+    relationship = get_relationship(simulation_state, npc_id) if npc_id else {}
-+    social_stance = str(relationship.get("last_stance") or "")
-+    if not social_stance:
-+        if int(relationship.get("fear") or 0) >= 50:
-+            social_stance = "fearful"
-+        elif int(relationship.get("hostility") or 0) >= 50:
-+            social_stance = "hostile"
-+        elif int(relationship.get("trust") or 0) >= 40:
-+            social_stance = "trusting"
-+        else:
-+            social_stance = "neutral"
++    create: bool = False,
++) -> Dict[str, Any] | None:
++    state = ensure_npc_evolution_state(simulation_state)
++    npcs = state.setdefault("npcs", {})
++    if npc_id not in npcs and create:
++        npcs[npc_id] = normalize_npc_evolution({"npc_id": npc_id}, npc_id=npc_id)
++    return npcs.get(npc_id)
 +
-+    lore_state = _safe_dict(simulation_state.get("lore_state"))
-+    entries = _safe_dict(lore_state.get("entries"))
-+    arc_state = _safe_dict(simulation_state.get("story_arc_state"))
-+    arcs = _safe_dict(arc_state.get("arcs"))
 +
-+    candidate_lore_ids: List[str] = []
-+    if topic_lore_id:
-+        candidate_lore_ids.append(topic_lore_id)
-+    if arc_id:
-+        arc = get_story_arc(simulation_state, arc_id) or {}
-+        candidate_lore_ids.extend(_safe_list(arc.get("linked_lore")))
-+    candidate_lore_ids.extend(
-+        lore_id
-+        for lore_id, entry in entries.items()
-+        if npc_id in set(_safe_list(_safe_dict(entry).get("known_by")))
++def _append_history(
++    evolution: Dict[str, Any],
++    *,
++    kind: str,
++    turn_index: int = 0,
++    details: Dict[str, Any] | None = None,
++) -> None:
++    history = list(evolution.get("history") or [])
++    history.append(
++        {
++            "kind": kind,
++            "turn_index": int(turn_index or 0),
++            "details": dict(details or {}),
++        }
 +    )
-+    candidate_lore_ids.extend(sorted(_known_lore_ids_from_memory(simulation_state, npc_id)))
++    evolution["history"] = history[-MAX_NPC_EVOLUTION_HISTORY:]
 +
-+    seen_lore: Set[str] = set()
-+    known_lore = []
-+    rejected_lore = []
-+    for lore_id in candidate_lore_ids:
-+        lore_id = str(lore_id or "")
-+        if not lore_id or lore_id in seen_lore:
-+            continue
-+        seen_lore.add(lore_id)
-+        decision = _can_discuss_lore(simulation_state, npc_id, lore_id)
-+        entry = get_lore_entry(simulation_state, lore_id) or {}
-+        if decision.get("ok"):
-+            known_lore.append(
-+                {
-+                    "lore_id": lore_id,
-+                    "title": entry.get("title"),
-+                    "kind": entry.get("kind"),
-+                    "truth_status": entry.get("truth_status"),
-+                    "summary": entry.get("summary"),
-+                    "tags": list(entry.get("tags") or [])[:10],
-+                    "must_mark_as_rumor": bool(decision.get("must_mark_as_rumor")),
-+                    "source_reason": decision.get("reason"),
-+                }
-+            )
-+        else:
-+            rejected_lore.append(decision)
-+        if len(known_lore) >= MAX_DIALOGUE_LORE:
-+            break
 +
-+    candidate_arc_ids: List[str] = []
-+    if arc_id:
-+        candidate_arc_ids.append(arc_id)
-+    for current_arc_id, arc in arcs.items():
-+        arc = _safe_dict(arc)
-+        if npc_id in set(_safe_list(arc.get("linked_entities"))):
-+            candidate_arc_ids.append(str(current_arc_id))
-+        if any(lore.get("lore_id") in set(_safe_list(arc.get("linked_lore"))) for lore in known_lore):
-+            candidate_arc_ids.append(str(current_arc_id))
-+
-+    known_arcs = []
-+    seen_arcs: Set[str] = set()
-+    memory_event_ids = _memory_event_ids(simulation_state, npc_id, tags=["story", "rumor", "warning", "bandit"])
-+    for current_arc_id in candidate_arc_ids:
-+        current_arc_id = str(current_arc_id or "")
-+        if not current_arc_id or current_arc_id in seen_arcs:
-+            continue
-+        seen_arcs.add(current_arc_id)
-+        arc = get_story_arc(simulation_state, current_arc_id)
-+        if not arc:
-+            continue
-+        has_known_lore_link = any(lore.get("lore_id") in set(_safe_list(arc.get("linked_lore"))) for lore in known_lore)
-+        linked_entity = npc_id in set(_safe_list(arc.get("linked_entities")))
-+        if not has_known_lore_link and not linked_entity and current_arc_id != arc_id:
-+            continue
-+        known_arcs.append(
-+            {
-+                "arc_id": current_arc_id,
-+                "title": arc.get("title"),
-+                "status": arc.get("status"),
-+                "stage": arc.get("stage"),
-+                "pressure": arc.get("pressure"),
-+                "linked_lore": list(arc.get("linked_lore") or [])[:10],
-+                "linked_entities": list(arc.get("linked_entities") or [])[:10],
-+                "source": "linked_entity" if linked_entity else "known_lore",
-+            }
-+        )
-+        if len(known_arcs) >= MAX_DIALOGUE_ARCS:
-+            break
-+
-+    can_discuss = bool(known_lore or known_arcs or memory_event_ids)
-+    if social_stance == "hostile" and int(relationship.get("trust") or 0) < 0:
-+        can_discuss = False
-+
++def start_npc_arc(
++    simulation_state: Dict[str, Any],
++    npc_id: str,
++    arc_id: str,
++    *,
++    motivation: str = "",
++    role: str = "",
++    profession: str = "",
++    turn_index: int = 0,
++) -> Dict[str, Any]:
++    evolution = get_npc_evolution(simulation_state, npc_id, create=True)
++    assert evolution is not None
++    active = list(evolution.get("active_arcs") or [])
++    completed = set(evolution.get("completed_arcs") or [])
++    if arc_id not in active and arc_id not in completed:
++        active.append(arc_id)
++    evolution["active_arcs"] = _unique_strs(active)
++    if motivation:
++        evolution["motivation"] = motivation
++    if role:
++        evolution["role"] = role
++    if profession:
++        evolution["profession"] = profession
++    _append_history(
++        evolution,
++        kind="npc_arc_started",
++        turn_index=turn_index,
++        details={"arc_id": arc_id, "motivation": motivation, "role": role, "profession": profession},
++    )
 +    return {
 +        "ok": True,
++        "reason": "npc_arc_started",
 +        "npc_id": npc_id,
 +        "arc_id": arc_id,
-+        "topic_lore_id": topic_lore_id,
-+        "can_discuss": can_discuss,
-+        "social_stance": social_stance,
-+        "known_lore": known_lore,
-+        "known_story_arcs": known_arcs,
-+        "relevant_memory_event_ids": memory_event_ids,
-+        "rejected_lore": rejected_lore[:10],
-+        "rumor_permissions": {
-+            "can_discuss": can_discuss,
-+            "must_mark_as_rumor": any(row.get("must_mark_as_rumor") for row in known_lore),
++        "evolution": evolution,
++    }
++
++
++def complete_npc_arc(
++    simulation_state: Dict[str, Any],
++    npc_id: str,
++    arc_id: str,
++    *,
++    turn_index: int = 0,
++) -> Dict[str, Any]:
++    evolution = get_npc_evolution(simulation_state, npc_id, create=True)
++    assert evolution is not None
++    active = [item for item in list(evolution.get("active_arcs") or []) if item != arc_id]
++    completed = list(evolution.get("completed_arcs") or [])
++    if arc_id not in completed:
++        completed.append(arc_id)
++    evolution["active_arcs"] = _unique_strs(active)
++    evolution["completed_arcs"] = _unique_strs(completed)
++    _append_history(evolution, kind="npc_arc_completed", turn_index=turn_index, details={"arc_id": arc_id})
++    return {
++        "ok": True,
++        "reason": "npc_arc_completed",
++        "npc_id": npc_id,
++        "arc_id": arc_id,
++        "evolution": evolution,
++    }
++
++
++def apply_npc_evolution_delta(
++    simulation_state: Dict[str, Any],
++    npc_id: str,
++    *,
++    profession: str = "",
++    role: str = "",
++    motivation: str = "",
++    personality_deltas: Dict[str, Any] | None = None,
++    companion_eligible: bool | None = None,
++    companion_offered: bool | None = None,
++    flags: Dict[str, Any] | None = None,
++    source_event_id: str = "",
++    turn_index: int = 0,
++) -> Dict[str, Any]:
++    evolution = get_npc_evolution(simulation_state, npc_id, create=True)
++    assert evolution is not None
++    before_personality = dict(evolution.get("personality") or {})
++    if profession:
++        evolution["profession"] = profession
++    if role:
++        evolution["role"] = role
++    if motivation:
++        evolution["motivation"] = motivation
++    personality = dict(evolution.get("personality") or {})
++    for key, delta in _safe_dict(personality_deltas).items():
++        key = str(key or "")
++        if not key:
++            continue
++        personality[key] = _clamp_personality(int(personality.get(key) or 0) + int(delta or 0))
++    evolution["personality"] = personality
++    if companion_eligible is not None:
++        evolution["companion_eligible"] = bool(companion_eligible)
++    if companion_offered is not None:
++        evolution["companion_offered"] = bool(companion_offered)
++    if flags:
++        existing_flags = dict(evolution.get("flags") or {})
++        existing_flags.update(dict(flags))
++        evolution["flags"] = existing_flags
++    _append_history(
++        evolution,
++        kind="npc_evolution_delta",
++        turn_index=turn_index,
++        details={
++            "source_event_id": source_event_id,
++            "profession": profession,
++            "role": role,
++            "motivation": motivation,
++            "personality_before": before_personality,
++            "personality_after": personality,
++            "companion_eligible": companion_eligible,
++            "companion_offered": companion_offered,
++            "flags": flags or {},
 +        },
-+        "bounded": {
-+            "max_lore": MAX_DIALOGUE_LORE,
-+            "max_arcs": MAX_DIALOGUE_ARCS,
-+            "max_memories": MAX_DIALOGUE_MEMORIES,
-+        },
++    )
++    return {
++        "ok": True,
++        "reason": "npc_evolution_delta_applied",
++        "npc_id": npc_id,
++        "evolution": evolution,
++    }
++
++
++def set_npc_arc_flag(
++    simulation_state: Dict[str, Any],
++    npc_id: str,
++    flag: str,
++    value: Any,
++    *,
++    turn_index: int = 0,
++) -> Dict[str, Any]:
++    evolution = get_npc_evolution(simulation_state, npc_id, create=True)
++    assert evolution is not None
++    evolution.setdefault("flags", {})[flag] = value
++    _append_history(evolution, kind="npc_flag_set", turn_index=turn_index, details={"flag": flag, "value": value})
++    return {
++        "ok": True,
++        "reason": "npc_flag_set",
++        "npc_id": npc_id,
++        "flag": flag,
++        "value": value,
++        "evolution": evolution,
 +    }
 *** End Patch
-3. Add src/app/rpg/dialogue_context/rumors.py
+4. Add src/app/rpg/npc_evolution/conditions.py
 *** Begin Patch
-*** Add File: src/app/rpg/dialogue_context/rumors.py
+*** Add File: src/app/rpg/npc_evolution/conditions.py
 +from __future__ import annotations
 +
-+import hashlib
-+import json
-+from typing import Any, Dict, List
++from typing import Any, Dict
 +
-+from app.rpg.lore.state import get_lore_entry
-+from app.rpg.memory.observation import record_told_memory
-+from app.rpg.spatial.audibility import audible_entities_from
-+
-+
-+MAX_RUMOR_HEARERS = 12
++from app.rpg.memory.causal_retrieval import retrieve_causal_memories
++from app.rpg.npc_evolution.state import get_npc_evolution
++from app.rpg.social.reputation import get_relationship
++from app.rpg.story_arcs.state import get_story_arc
 +
 +
 +def _safe_dict(value: Any) -> Dict[str, Any]:
 +    return value if isinstance(value, dict) else {}
 +
 +
-+def _safe_list(value: Any) -> List[Any]:
-+    return value if isinstance(value, list) else []
-+
-+
-+def _stable_rumor_event_id(
-+    *,
-+    speaker_id: str,
-+    lore_id: str,
-+    summary: str,
-+    turn_index: int,
-+) -> str:
-+    payload = json.dumps(
-+        {
-+            "speaker_id": speaker_id,
-+            "lore_id": lore_id,
-+            "summary": summary,
-+            "turn_index": int(turn_index or 0),
-+        },
-+        sort_keys=True,
-+        ensure_ascii=False,
-+    )
-+    digest = hashlib.sha1(payload.encode("utf-8")).hexdigest()[:16]
-+    return f"rumor:{digest}"
-+
-+
-+def _resolve_hearers(
++def evaluate_npc_evolution_condition(
 +    simulation_state: Dict[str, Any],
-+    speaker_id: str,
-+    explicit_hearers: List[str] | None = None,
-+) -> List[str]:
-+    if explicit_hearers is not None:
-+        return [
-+            str(item)
-+            for item in explicit_hearers
-+            if str(item) and str(item) != speaker_id
-+        ][:MAX_RUMOR_HEARERS]
-+
-+    graph = _safe_dict(simulation_state.get("spatial_graph"))
-+    try:
-+        rows = audible_entities_from(graph, speaker_id)
-+    except Exception:
-+        rows = []
-+
-+    hearers: List[str] = []
-+    for row in rows:
-+        if isinstance(row, dict):
-+            entity_id = str(row.get("entity_id") or row.get("id") or "")
-+        else:
-+            entity_id = str(row or "")
-+        if entity_id and entity_id != speaker_id and entity_id not in hearers:
-+            hearers.append(entity_id)
-+        if len(hearers) >= MAX_RUMOR_HEARERS:
-+            break
-+    return hearers
-+
-+
-+def propagate_rumor(
-+    simulation_state: Dict[str, Any],
-+    *,
-+    speaker_id: str,
-+    lore_id: str,
-+    summary: str,
-+    turn_index: int = 0,
-+    explicit_hearers: List[str] | None = None,
++    condition: Dict[str, Any],
 +) -> Dict[str, Any]:
-+    speaker_id = str(speaker_id or "")
-+    lore_id = str(lore_id or "")
-+    summary = str(summary or "")
-+    if not speaker_id:
-+        return {"ok": False, "reason": "missing_speaker_id"}
-+    if not lore_id:
-+        return {"ok": False, "reason": "missing_lore_id"}
-+    if not summary:
-+        return {"ok": False, "reason": "missing_summary"}
++    condition = _safe_dict(condition)
++    condition_type = str(condition.get("type") or "")
++    npc_id = str(condition.get("npc_id") or "")
 +
-+    lore = get_lore_entry(simulation_state, lore_id)
-+    if not lore:
-+        return {"ok": False, "reason": "lore_missing", "lore_id": lore_id}
++    if condition_type == "npc_arc_active":
++        arc_id = str(condition.get("arc_id") or "")
++        evolution = get_npc_evolution(simulation_state, npc_id)
++        active = list((evolution or {}).get("active_arcs") or [])
++        return {
++            "ok": arc_id in active,
++            "type": condition_type,
++            "npc_id": npc_id,
++            "arc_id": arc_id,
++            "actual_active_arcs": active,
++            "reason": "npc_arc_active" if arc_id in active else "npc_arc_not_active",
++        }
 +
-+    truth_status_before = lore.get("truth_status")
-+    event_id = _stable_rumor_event_id(
-+        speaker_id=speaker_id,
-+        lore_id=lore_id,
-+        summary=summary,
-+        turn_index=turn_index,
-+    )
-+    hearers = _resolve_hearers(
-+        simulation_state,
-+        speaker_id,
-+        explicit_hearers=explicit_hearers,
-+    )
++    if condition_type == "npc_arc_completed":
++        arc_id = str(condition.get("arc_id") or "")
++        evolution = get_npc_evolution(simulation_state, npc_id)
++        completed = list((evolution or {}).get("completed_arcs") or [])
++        return {
++            "ok": arc_id in completed,
++            "type": condition_type,
++            "npc_id": npc_id,
++            "arc_id": arc_id,
++            "actual_completed_arcs": completed,
++            "reason": "npc_arc_completed" if arc_id in completed else "npc_arc_not_completed",
++        }
 +
-+    memory_results = []
-+    for hearer_id in hearers:
-+        result = record_told_memory(
++    if condition_type == "npc_flag":
++        flag = str(condition.get("flag") or "")
++        expected = condition.get("expected", True)
++        evolution = get_npc_evolution(simulation_state, npc_id)
++        flags = _safe_dict((evolution or {}).get("flags"))
++        actual = flags.get(flag)
++        return {
++            "ok": actual == expected,
++            "type": condition_type,
++            "npc_id": npc_id,
++            "flag": flag,
++            "expected": expected,
++            "actual": actual,
++            "available_flags": sorted(str(key) for key in flags.keys()),
++            "reason": "flag_matches" if actual == expected else "flag_mismatch",
++        }
++
++    if condition_type == "relationship_at_least":
++        field = str(condition.get("field") or "")
++        minimum = int(condition.get("minimum") or 0)
++        relationship = get_relationship(simulation_state, npc_id)
++        actual = int(relationship.get(field) or 0)
++        return {
++            "ok": actual >= minimum,
++            "type": condition_type,
++            "npc_id": npc_id,
++            "field": field,
++            "minimum": minimum,
++            "actual": actual,
++            "reason": "relationship_sufficient" if actual >= minimum else "relationship_too_low",
++        }
++
++    if condition_type == "relationship_below":
++        field = str(condition.get("field") or "")
++        maximum = int(condition.get("maximum") or 0)
++        relationship = get_relationship(simulation_state, npc_id)
++        actual = int(relationship.get(field) or 0)
++        return {
++            "ok": actual < maximum,
++            "type": condition_type,
++            "npc_id": npc_id,
++            "field": field,
++            "maximum": maximum,
++            "actual": actual,
++            "reason": "relationship_below" if actual < maximum else "relationship_too_high",
++        }
++
++    if condition_type == "story_arc_stage":
++        arc_id = str(condition.get("arc_id") or "")
++        expected = str(condition.get("stage") or "")
++        arc = get_story_arc(simulation_state, arc_id)
++        actual = str((arc or {}).get("stage") or "")
++        return {
++            "ok": actual == expected,
++            "type": condition_type,
++            "npc_id": npc_id,
++            "arc_id": arc_id,
++            "expected": expected,
++            "actual": actual,
++            "reason": "stage_matches" if actual == expected else "stage_mismatch",
++        }
++
++    if condition_type == "npc_knows_memory":
++        event_id = str(condition.get("event_id") or "")
++        rows = retrieve_causal_memories(
 +            simulation_state,
-+            hearer_id,
-+            speaker_id=speaker_id,
-+            event_id=event_id,
-+            summary=summary,
-+            facts={
-+                "lore_id": lore_id,
-+                "truth_status": truth_status_before,
-+                "rumor": True,
-+            },
-+            tags=["rumor", "lore", "story"],
-+            verified=False,
-+            turn_index=turn_index,
++            npc_id,
++            tags=condition.get("tags") or [],
++            max_items=20,
 +        )
-+        memory_results.append(result)
++        event_ids = [row.get("event_id") for row in rows]
++        return {
++            "ok": event_id in event_ids,
++            "type": condition_type,
++            "npc_id": npc_id,
++            "event_id": event_id,
++            "actual_event_ids": event_ids,
++            "reason": "memory_known" if event_id in event_ids else "memory_missing",
++        }
 +
-+    truth_status_after = (get_lore_entry(simulation_state, lore_id) or {}).get("truth_status")
 +    return {
-+        "ok": True,
-+        "reason": "rumor_propagated",
-+        "event_id": event_id,
-+        "speaker_id": speaker_id,
-+        "lore_id": lore_id,
-+        "summary": summary,
-+        "hearers": hearers,
-+        "memory_results": memory_results,
-+        "truth_status_before": truth_status_before,
-+        "truth_status_after": truth_status_after,
-+        "truth_promoted": truth_status_before != truth_status_after,
-+        "bounded": {"max_hearers": MAX_RUMOR_HEARERS},
++        "ok": False,
++        "type": condition_type,
++        "npc_id": npc_id,
++        "reason": f"unknown_npc_evolution_condition_type:{condition_type}",
++    }
++
++
++def evaluate_all_npc_evolution_conditions(
++    simulation_state: Dict[str, Any],
++    conditions: list[Dict[str, Any]],
++) -> Dict[str, Any]:
++    results = [
++        evaluate_npc_evolution_condition(simulation_state, condition)
++        for condition in conditions
++    ]
++    ok = all(row.get("ok") for row in results)
++    return {
++        "ok": ok,
++        "results": results,
++        "failed": [row for row in results if not row.get("ok")],
 +    }
 *** End Patch
-Patch 2 — Unit tests
-4. Add src/tests/rpg/dialogue_context/test_arc_dialogue_context.py
+5. Add src/app/rpg/npc_evolution/transitions.py
 *** Begin Patch
-*** Add File: src/tests/rpg/dialogue_context/test_arc_dialogue_context.py
-+from app.rpg.dialogue_context.arc_context import build_arc_dialogue_context
-+from app.rpg.lore.state import upsert_lore_entry
-+from app.rpg.memory.observation import record_told_memory
+*** Add File: src/app/rpg/npc_evolution/transitions.py
++from __future__ import annotations
++
++from typing import Any, Dict
++
++from app.rpg.npc_evolution.conditions import evaluate_all_npc_evolution_conditions
++from app.rpg.npc_evolution.state import (
++    apply_npc_evolution_delta,
++    complete_npc_arc,
++    set_npc_arc_flag,
++    start_npc_arc,
++)
++
++
++def _safe_dict(value: Any) -> Dict[str, Any]:
++    return value if isinstance(value, dict) else {}
++
++
++def apply_npc_evolution_transition(
++    simulation_state: Dict[str, Any],
++    transition: Dict[str, Any],
++    *,
++    turn_index: int = 0,
++) -> Dict[str, Any]:
++    transition = _safe_dict(transition)
++    action = str(transition.get("action") or "")
++    npc_id = str(transition.get("npc_id") or "")
++    conditions = [
++        row
++        for row in transition.get("conditions") or []
++        if isinstance(row, dict)
++    ]
++    condition_result = evaluate_all_npc_evolution_conditions(simulation_state, conditions)
++    if not condition_result.get("ok"):
++        return {
++            "ok": False,
++            "kind": "npc_evolution_transition",
++            "action": action,
++            "npc_id": npc_id,
++            "reason": "conditions_failed",
++            "conditions": condition_result,
++        }
++
++    if action == "start_arc":
++        return dict(
++            start_npc_arc(
++                simulation_state,
++                npc_id,
++                str(transition.get("arc_id") or ""),
++                motivation=str(transition.get("motivation") or ""),
++                role=str(transition.get("role") or ""),
++                profession=str(transition.get("profession") or ""),
++                turn_index=turn_index,
++            ),
++            action=action,
++            conditions=condition_result,
++        )
++
++    if action == "complete_arc":
++        return dict(
++            complete_npc_arc(
++                simulation_state,
++                npc_id,
++                str(transition.get("arc_id") or ""),
++                turn_index=turn_index,
++            ),
++            action=action,
++            conditions=condition_result,
++        )
++
++    if action == "evolve":
++        return dict(
++            apply_npc_evolution_delta(
++                simulation_state,
++                npc_id,
++                profession=str(transition.get("profession") or ""),
++                role=str(transition.get("role") or ""),
++                motivation=str(transition.get("motivation") or ""),
++                personality_deltas=_safe_dict(transition.get("personality_deltas")),
++                companion_eligible=transition.get("companion_eligible") if "companion_eligible" in transition else None,
++                companion_offered=transition.get("companion_offered") if "companion_offered" in transition else None,
++                flags=_safe_dict(transition.get("flags")),
++                source_event_id=str(transition.get("source_event_id") or ""),
++                turn_index=turn_index,
++            ),
++            action=action,
++            conditions=condition_result,
++        )
++
++    if action == "set_flag":
++        return dict(
++            set_npc_arc_flag(
++                simulation_state,
++                npc_id,
++                str(transition.get("flag") or ""),
++                transition.get("value", True),
++                turn_index=turn_index,
++            ),
++            action=action,
++            conditions=condition_result,
++        )
++
++    return {
++        "ok": False,
++        "kind": "npc_evolution_transition",
++        "action": action,
++        "npc_id": npc_id,
++        "reason": f"unknown_npc_evolution_action:{action}",
++        "conditions": condition_result,
++    }
+*** End Patch
+Patch 2 — Add story event effect support
+6. Patch src/app/rpg/story_events/validation.py
+
+Add the effect type:
+
+*** Begin Patch
+*** Update File: src/app/rpg/story_events/validation.py
+@@
+     "social_delta",
++    "npc_evolution",
+     "world_event_emit",
+ }
+@@
+     if effect_type == "social_delta":
+         npc_id = str(effect.get("npc_id") or "")
+         if not npc_id:
+             return {
+                 "ok": False,
+@@
+                         "value": value,
+                     }
++
++    if effect_type == "npc_evolution":
++        npc_id = str(effect.get("npc_id") or "")
++        if not npc_id:
++            return {
++                "ok": False,
++                "reason": "missing_npc_id",
++                "effect_type": effect_type,
++            }
++        personality_deltas = _safe_dict(effect.get("personality_deltas"))
++        for key, value in personality_deltas.items():
++            value = int(value or 0)
++            if value < -100 or value > 100:
++                return {
++                    "ok": False,
++                    "reason": "personality_delta_out_of_bounds",
++                    "effect_type": effect_type,
++                    "npc_id": npc_id,
++                    "field": str(key),
++                    "value": value,
++                }
+ 
+     return {
+         "ok": True,
+*** End Patch
+7. Patch src/app/rpg/story_events/effects.py
+
+Add import:
+
+*** Begin Patch
+*** Update File: src/app/rpg/story_events/effects.py
+@@
+ from app.rpg.social.reputation import apply_social_deltas
++from app.rpg.npc_evolution.state import apply_npc_evolution_delta, start_npc_arc
+ from app.rpg.story_arcs.state import (
+*** End Patch
+
+Add effect handler before world_event_emit:
+
+*** Begin Patch
+*** Update File: src/app/rpg/story_events/effects.py
+@@
+     if effect_type == "social_delta":
+         deltas = {
+             key: int(effect.get(key) or 0)
+             for key in ("trust", "fear", "respect", "hostility", "reputation")
+             if key in effect
+@@
+             ),
+             effect_type=effect_type,
+         )
++
++    if effect_type == "npc_evolution":
++        npc_id = str(effect.get("npc_id") or "")
++        arc_id = str(effect.get("npc_arc_id") or "")
++        start_result = None
++        if arc_id:
++            start_result = start_npc_arc(
++                simulation_state,
++                npc_id,
++                arc_id,
++                motivation=str(effect.get("motivation") or ""),
++                role=str(effect.get("role") or ""),
++                profession=str(effect.get("profession") or ""),
++                turn_index=turn_index,
++            )
++        evolution_result = apply_npc_evolution_delta(
++            simulation_state,
++            npc_id,
++            profession=str(effect.get("profession") or ""),
++            role=str(effect.get("role") or ""),
++            motivation=str(effect.get("motivation") or ""),
++            personality_deltas=_safe_dict(effect.get("personality_deltas")),
++            companion_eligible=effect.get("companion_eligible") if "companion_eligible" in effect else None,
++            companion_offered=effect.get("companion_offered") if "companion_offered" in effect else None,
++            flags=_safe_dict(effect.get("flags")),
++            source_event_id=str(source_event.get("event_id") or ""),
++            turn_index=turn_index,
++        )
++        return {
++            "ok": bool(evolution_result.get("ok")),
++            "effect_type": effect_type,
++            "start_result": start_result,
++            "evolution_result": evolution_result,
++        }
+ 
+     if effect_type == "world_event_emit":
+         return dict(
+*** End Patch
+Patch 3 — Unit tests
+8. Add src/tests/rpg/npc_evolution/test_npc_evolution_state.py
+*** Begin Patch
+*** Add File: src/tests/rpg/npc_evolution/test_npc_evolution_state.py
++from app.rpg.npc_evolution.state import (
++    apply_npc_evolution_delta,
++    get_npc_evolution,
++    set_npc_arc_flag,
++    start_npc_arc,
++)
++
++
++def test_start_npc_arc_sets_motivation_role_profession():
++    simulation_state = {}
++    result = start_npc_arc(
++        simulation_state,
++        "bran",
++        "npc_arc:bran_revenge",
++        motivation="revenge_against_red_sashes",
++        role="companion_candidate",
++        profession="former_innkeeper",
++        turn_index=3,
++    )
++
++    evolution = get_npc_evolution(simulation_state, "bran")
++    assert result["ok"] is True
++    assert "npc_arc:bran_revenge" in evolution["active_arcs"]
++    assert evolution["motivation"] == "revenge_against_red_sashes"
++    assert evolution["profession"] == "former_innkeeper"
++
++
++def test_apply_npc_evolution_delta_clamps_personality():
++    simulation_state = {}
++    apply_npc_evolution_delta(
++        simulation_state,
++        "bran",
++        personality_deltas={"vengeful": 150, "cautious": -150},
++    )
++
++    evolution = get_npc_evolution(simulation_state, "bran")
++    assert evolution["personality"]["vengeful"] == 100
++    assert evolution["personality"]["cautious"] == -100
++
++
++def test_npc_evolution_flags_and_history_bounded():
++    simulation_state = {}
++    for i in range(80):
++        set_npc_arc_flag(simulation_state, "bran", f"flag_{i}", True, turn_index=i)
++
++    evolution = get_npc_evolution(simulation_state, "bran")
++    assert evolution["flags"]["flag_79"] is True
++    assert len(evolution["history"]) == 50
+*** End Patch
+9. Add src/tests/rpg/npc_evolution/test_npc_evolution_conditions.py
+*** Begin Patch
+*** Add File: src/tests/rpg/npc_evolution/test_npc_evolution_conditions.py
++from app.rpg.npc_evolution.conditions import evaluate_npc_evolution_condition
++from app.rpg.npc_evolution.state import set_npc_arc_flag, start_npc_arc
 +from app.rpg.social.reputation import set_relationship_values
 +from app.rpg.story_arcs.state import start_story_arc
 +
 +
-+def test_npc_can_discuss_lore_they_know():
++def test_npc_arc_active_condition():
 +    simulation_state = {}
-+    upsert_lore_entry(
++    start_npc_arc(simulation_state, "bran", "npc_arc:bran_revenge")
++
++    result = evaluate_npc_evolution_condition(
 +        simulation_state,
-+        {
-+            "lore_id": "lore:red_sashes",
-+            "title": "The Red Sashes",
-+            "truth_status": "rumor",
-+            "known_by": ["bran"],
-+        },
++        {"type": "npc_arc_active", "npc_id": "bran", "arc_id": "npc_arc:bran_revenge"},
 +    )
 +
-+    result = build_arc_dialogue_context(
-+        simulation_state,
-+        "bran",
-+        topic_lore_id="lore:red_sashes",
-+    )
-+
-+    assert result["can_discuss"] is True
-+    assert result["known_lore"][0]["lore_id"] == "lore:red_sashes"
-+    assert result["known_lore"][0]["must_mark_as_rumor"] is True
-+
-+
-+def test_npc_cannot_discuss_secret_lore_they_do_not_know():
-+    simulation_state = {}
-+    upsert_lore_entry(
-+        simulation_state,
-+        {
-+            "lore_id": "lore:bran_debt",
-+            "title": "Bran's Debt",
-+            "truth_status": "secret",
-+            "known_by": ["bran"],
-+        },
-+    )
-+
-+    result = build_arc_dialogue_context(
-+        simulation_state,
-+        "mira",
-+        topic_lore_id="lore:bran_debt",
-+    )
-+
-+    assert result["can_discuss"] is False
-+    assert result["known_lore"] == []
-+    assert result["rejected_lore"][0]["reason"] == "secret_not_known"
-+
-+
-+def test_npc_discusses_arc_if_linked_to_known_lore():
-+    simulation_state = {}
-+    upsert_lore_entry(
-+        simulation_state,
-+        {
-+            "lore_id": "lore:red_sashes",
-+            "title": "The Red Sashes",
-+            "truth_status": "rumor",
-+            "known_by": ["bran"],
-+        },
-+    )
-+    start_story_arc(
-+        simulation_state,
-+        "arc:bandit_pressure",
-+        title="Bandit Pressure",
-+        stage="rumors",
-+        pressure=20,
-+        links={"lore": ["lore:red_sashes"]},
-+    )
-+
-+    result = build_arc_dialogue_context(
-+        simulation_state,
-+        "bran",
-+        arc_id="arc:bandit_pressure",
-+    )
-+
-+    assert result["can_discuss"] is True
-+    assert result["known_story_arcs"][0]["arc_id"] == "arc:bandit_pressure"
-+
-+
-+def test_npc_refuses_arc_topic_if_social_hostile():
-+    simulation_state = {}
-+    upsert_lore_entry(
-+        simulation_state,
-+        {
-+            "lore_id": "lore:red_sashes",
-+            "title": "The Red Sashes",
-+            "truth_status": "rumor",
-+            "known_by": ["bran"],
-+        },
-+    )
-+    set_relationship_values(simulation_state, "bran", {"trust": -20, "hostility": 60})
-+
-+    result = build_arc_dialogue_context(
-+        simulation_state,
-+        "bran",
-+        topic_lore_id="lore:red_sashes",
-+    )
-+
-+    assert result["social_stance"] == "hostile"
-+    assert result["can_discuss"] is False
-+
-+
-+def test_npc_memory_makes_lore_available_as_rumor():
-+    simulation_state = {}
-+    upsert_lore_entry(
-+        simulation_state,
-+        {
-+            "lore_id": "lore:red_sashes",
-+            "title": "The Red Sashes",
-+            "truth_status": "rumor",
-+        },
-+    )
-+    record_told_memory(
-+        simulation_state,
-+        "mira",
-+        speaker_id="bran",
-+        event_id="rumor:redsashes",
-+        summary="Bran said the Red Sashes are active.",
-+        facts={"lore_id": "lore:red_sashes", "rumor": True},
-+        tags=["rumor", "lore", "story"],
-+        verified=False,
-+    )
-+
-+    result = build_arc_dialogue_context(
-+        simulation_state,
-+        "mira",
-+        topic_lore_id="lore:red_sashes",
-+    )
-+
-+    assert result["can_discuss"] is True
-+    assert result["known_lore"][0]["must_mark_as_rumor"] is True
-*** End Patch
-5. Add src/tests/rpg/dialogue_context/test_rumor_propagation.py
-*** Begin Patch
-*** Add File: src/tests/rpg/dialogue_context/test_rumor_propagation.py
-+from app.rpg.dialogue_context.rumors import propagate_rumor
-+from app.rpg.lore.state import get_lore_entry, upsert_lore_entry
-+from app.rpg.memory.causal_retrieval import retrieve_causal_memories
-+from tests.rpg.spatial.fixtures import tavern_spatial_fixture
-+
-+
-+def test_rumor_spreads_to_explicit_hearer_without_promoting_truth():
-+    simulation_state = {}
-+    upsert_lore_entry(
-+        simulation_state,
-+        {
-+            "lore_id": "lore:red_sashes",
-+            "title": "The Red Sashes",
-+            "truth_status": "rumor",
-+        },
-+    )
-+
-+    result = propagate_rumor(
-+        simulation_state,
-+        speaker_id="bran",
-+        lore_id="lore:red_sashes",
-+        summary="The Red Sashes are active again.",
-+        explicit_hearers=["mira"],
-+        turn_index=1,
-+    )
-+
-+    memories = retrieve_causal_memories(simulation_state, "mira", tags=["rumor"])
 +    assert result["ok"] is True
-+    assert result["hearers"] == ["mira"]
-+    assert memories
-+    assert memories[0]["event_id"] == result["event_id"]
-+    assert get_lore_entry(simulation_state, "lore:red_sashes")["truth_status"] == "rumor"
-+    assert result["truth_promoted"] is False
 +
 +
-+def test_rumor_does_not_spread_to_speaker():
++def test_relationship_condition():
 +    simulation_state = {}
-+    upsert_lore_entry(simulation_state, {"lore_id": "lore:x", "title": "X", "truth_status": "rumor"})
++    set_relationship_values(simulation_state, "bran", {"trust": 70})
 +
-+    result = propagate_rumor(
++    result = evaluate_npc_evolution_condition(
 +        simulation_state,
-+        speaker_id="bran",
-+        lore_id="lore:x",
-+        summary="X is happening.",
-+        explicit_hearers=["bran", "mira"],
++        {"type": "relationship_at_least", "npc_id": "bran", "field": "trust", "minimum": 50},
 +    )
 +
-+    assert result["hearers"] == ["mira"]
++    assert result["ok"] is True
 +
 +
-+def test_rumor_missing_lore_rejected():
-+    result = propagate_rumor(
-+        {},
-+        speaker_id="bran",
-+        lore_id="lore:missing",
-+        summary="Missing lore rumor.",
-+        explicit_hearers=["mira"],
++def test_story_arc_stage_condition():
++    simulation_state = {}
++    start_story_arc(simulation_state, "arc:bandit_pressure", stage="aftermath")
++
++    result = evaluate_npc_evolution_condition(
++        simulation_state,
++        {"type": "story_arc_stage", "npc_id": "bran", "arc_id": "arc:bandit_pressure", "stage": "aftermath"},
++    )
++
++    assert result["ok"] is True
++
++
++def test_npc_flag_condition():
++    simulation_state = {}
++    set_npc_arc_flag(simulation_state, "bran", "tavern_lost", True)
++
++    result = evaluate_npc_evolution_condition(
++        simulation_state,
++        {"type": "npc_flag", "npc_id": "bran", "flag": "tavern_lost", "expected": True},
++    )
++
++    assert result["ok"] is True
+*** End Patch
+10. Add src/tests/rpg/npc_evolution/test_npc_evolution_transitions.py
+*** Begin Patch
+*** Add File: src/tests/rpg/npc_evolution/test_npc_evolution_transitions.py
++from app.rpg.npc_evolution.state import get_npc_evolution, set_npc_arc_flag
++from app.rpg.npc_evolution.transitions import apply_npc_evolution_transition
++from app.rpg.social.reputation import set_relationship_values
++
++
++def test_npc_evolution_transition_starts_revenge_arc():
++    simulation_state = {}
++    result = apply_npc_evolution_transition(
++        simulation_state,
++        {
++            "action": "start_arc",
++            "npc_id": "bran",
++            "arc_id": "npc_arc:bran_revenge",
++            "motivation": "revenge_against_red_sashes",
++            "profession": "former_innkeeper",
++        },
++    )
++
++    evolution = get_npc_evolution(simulation_state, "bran")
++    assert result["ok"] is True
++    assert "npc_arc:bran_revenge" in evolution["active_arcs"]
++
++
++def test_npc_evolution_transition_gated_by_flag():
++    simulation_state = {}
++    set_npc_arc_flag(simulation_state, "bran", "tavern_lost", True)
++
++    result = apply_npc_evolution_transition(
++        simulation_state,
++        {
++            "action": "evolve",
++            "npc_id": "bran",
++            "motivation": "revenge_against_red_sashes",
++            "conditions": [
++                {"type": "npc_flag", "npc_id": "bran", "flag": "tavern_lost", "expected": True}
++            ],
++        },
++    )
++
++    assert result["ok"] is True
++    assert get_npc_evolution(simulation_state, "bran")["motivation"] == "revenge_against_red_sashes"
++
++
++def test_companion_offer_requires_high_trust():
++    simulation_state = {}
++    set_relationship_values(simulation_state, "bran", {"trust": 80})
++
++    result = apply_npc_evolution_transition(
++        simulation_state,
++        {
++            "action": "evolve",
++            "npc_id": "bran",
++            "companion_eligible": True,
++            "conditions": [
++                {"type": "relationship_at_least", "npc_id": "bran", "field": "trust", "minimum": 70}
++            ],
++        },
++    )
++
++    assert result["ok"] is True
++    assert get_npc_evolution(simulation_state, "bran")["companion_eligible"] is True
++
++
++def test_low_trust_blocks_companion_offer():
++    simulation_state = {}
++    set_relationship_values(simulation_state, "bran", {"trust": 20})
++
++    result = apply_npc_evolution_transition(
++        simulation_state,
++        {
++            "action": "evolve",
++            "npc_id": "bran",
++            "companion_eligible": True,
++            "conditions": [
++                {"type": "relationship_at_least", "npc_id": "bran", "field": "trust", "minimum": 70}
++            ],
++        },
 +    )
 +
 +    assert result["ok"] is False
-+    assert result["reason"] == "lore_missing"
++    assert result["reason"] == "conditions_failed"
+*** End Patch
+11. Add src/tests/rpg/npc_evolution/test_npc_evolution_story_event_effect.py
+*** Begin Patch
+*** Add File: src/tests/rpg/npc_evolution/test_npc_evolution_story_event_effect.py
++from app.rpg.npc_evolution.state import get_npc_evolution
++from app.rpg.story_arcs.state import start_story_arc
++from app.rpg.story_events.application import apply_story_event
 +
 +
-+def test_rumor_uses_spatial_audibility_when_no_explicit_hearers():
-+    simulation_state = {"spatial_graph": tavern_spatial_fixture()}
-+    upsert_lore_entry(
++def test_story_event_applies_npc_evolution_effect():
++    simulation_state = {}
++    start_story_arc(simulation_state, "arc:bandit_pressure", stage="aftermath")
++
++    result = apply_story_event(
 +        simulation_state,
 +        {
-+            "lore_id": "lore:red_sashes",
-+            "title": "The Red Sashes",
-+            "truth_status": "rumor",
++            "event_id": "event:tavern_lost",
++            "arc_id": "arc:bandit_pressure",
++            "effects": [
++                {
++                    "type": "npc_evolution",
++                    "npc_id": "bran",
++                    "npc_arc_id": "npc_arc:bran_revenge",
++                    "profession": "former_innkeeper",
++                    "motivation": "revenge_against_red_sashes",
++                    "personality_deltas": {"vengeful": 20, "cautious": 10},
++                    "flags": {"tavern_lost": True},
++                }
++            ],
 +        },
 +    )
 +
-+    result = propagate_rumor(
++    evolution = get_npc_evolution(simulation_state, "bran")
++    assert result["ok"] is True
++    assert "npc_arc:bran_revenge" in evolution["active_arcs"]
++    assert evolution["profession"] == "former_innkeeper"
++    assert evolution["motivation"] == "revenge_against_red_sashes"
++    assert evolution["personality"]["vengeful"] == 20
++    assert evolution["flags"]["tavern_lost"] is True
+*** End Patch
+12. Add src/tests/rpg/npc_evolution/test_npc_evolution_save_load.py
+*** Begin Patch
+*** Add File: src/tests/rpg/npc_evolution/test_npc_evolution_save_load.py
++import json
++
++from app.rpg.npc_evolution.state import (
++    apply_npc_evolution_delta,
++    normalize_npc_evolution_state,
++    start_npc_arc,
++)
++
++
++def test_npc_evolution_state_json_roundtrip():
++    simulation_state = {}
++    start_npc_arc(
 +        simulation_state,
-+        speaker_id="bran",
-+        lore_id="lore:red_sashes",
-+        summary="The Red Sashes are active again.",
-+        turn_index=1,
++        "bran",
++        "npc_arc:bran_revenge",
++        motivation="revenge_against_red_sashes",
++    )
++    apply_npc_evolution_delta(
++        simulation_state,
++        "bran",
++        personality_deltas={"vengeful": 20},
++        companion_eligible=True,
 +    )
 +
-+    assert result["ok"] is True
-+    assert "bran" not in result["hearers"]
-+    assert len(result["hearers"]) <= result["bounded"]["max_hearers"]
++    encoded = json.dumps(simulation_state["npc_evolution_state"], sort_keys=True)
++    decoded = json.loads(encoded)
++    normalized = normalize_npc_evolution_state(decoded)
++
++    evolution = normalized["npcs"]["bran"]
++    assert evolution["motivation"] == "revenge_against_red_sashes"
++    assert evolution["personality"]["vengeful"] == 20
++    assert evolution["companion_eligible"] is True
 *** End Patch
-Patch 3 — Manual checks/setup
-6. Add src/tests/rpg/manual/dialogue_m16_m18_checks.py
+Patch 4 — Manual checks/setup
+13. Add src/tests/rpg/manual/npc_evolution_m19_m21_checks.py
 *** Begin Patch
-*** Add File: src/tests/rpg/manual/dialogue_m16_m18_checks.py
+*** Add File: src/tests/rpg/manual/npc_evolution_m19_m21_checks.py
 +from __future__ import annotations
 +
 +from typing import Any, Dict, List
 +
-+from app.rpg.dialogue_context.arc_context import build_arc_dialogue_context
-+from app.rpg.dialogue_context.rumors import propagate_rumor
-+from app.rpg.lore.state import get_lore_entry
-+from app.rpg.memory.causal_retrieval import retrieve_causal_memories
++from app.rpg.npc_evolution.conditions import evaluate_npc_evolution_condition
++from app.rpg.npc_evolution.state import get_npc_evolution
++from app.rpg.npc_evolution.transitions import apply_npc_evolution_transition
 +
 +
 +def _safe_dict(value: Any) -> Dict[str, Any]:
@@ -701,17 +1044,12 @@ Patch 3 — Manual checks/setup
 +        candidate = _safe_dict(candidate)
 +        if candidate and not first_non_empty:
 +            first_non_empty = candidate
-+        if (
-+            isinstance(candidate.get("lore_state"), dict)
-+            or isinstance(candidate.get("story_arc_state"), dict)
-+            or isinstance(candidate.get("causal_memory_state"), dict)
-+            or isinstance(candidate.get("memory_state"), dict)
-+        ):
++        if isinstance(candidate.get("npc_evolution_state"), dict):
 +            return candidate
 +    return first_non_empty
 +
 +
-+def run_dialogue_m16_m18_check(
++def run_npc_evolution_m19_m21_check(
 +    *,
 +    check: Dict[str, Any],
 +    result: Dict[str, Any],
@@ -720,159 +1058,116 @@ Patch 3 — Manual checks/setup
 +    simulation_state = _extract_simulation_state(result=result, session=session)
 +    check_type = str(check.get("type") or "")
 +
-+    if check_type == "dialogue_context":
++    if check_type == "npc_evolution":
 +        npc_id = str(check.get("npc_id") or "")
-+        context = build_arc_dialogue_context(
-+            simulation_state,
-+            npc_id,
-+            arc_id=str(check.get("arc_id") or ""),
-+            topic_lore_id=str(check.get("topic_lore_id") or ""),
-+        )
-+        expected_can_discuss = check.get("expected_can_discuss")
-+        expected_lore_id = check.get("expected_lore_id")
-+        expected_arc_id = check.get("expected_arc_id")
-+        expected_must_mark_as_rumor = check.get("expected_must_mark_as_rumor")
-+
-+        ok = True
-+        if expected_can_discuss is not None:
-+            ok = ok and context.get("can_discuss") is bool(expected_can_discuss)
-+        if expected_lore_id:
-+            ok = ok and expected_lore_id in [row.get("lore_id") for row in context.get("known_lore") or []]
-+        if expected_arc_id:
-+            ok = ok and expected_arc_id in [row.get("arc_id") for row in context.get("known_story_arcs") or []]
-+        if expected_must_mark_as_rumor is not None:
-+            ok = ok and context.get("rumor_permissions", {}).get("must_mark_as_rumor") is bool(expected_must_mark_as_rumor)
-+
++        evolution = get_npc_evolution(simulation_state, npc_id)
++        expected = _safe_dict(check.get("expected"))
++        failures = {}
++        for key, expected_value in expected.items():
++            actual = _safe_dict(evolution).get(key)
++            if actual != expected_value:
++                failures[key] = {"expected": expected_value, "actual": actual}
 +        return {
 +            "check_type": check_type,
-+            "ok": ok,
++            "ok": bool(evolution) and not failures,
 +            "npc_id": npc_id,
-+            "context": context,
-+            "expected_can_discuss": expected_can_discuss,
-+            "expected_lore_id": expected_lore_id,
-+            "expected_arc_id": expected_arc_id,
-+            "expected_must_mark_as_rumor": expected_must_mark_as_rumor,
++            "evolution": evolution,
++            "failures": failures,
 +        }
 +
-+    if check_type == "rumor_propagation":
-+        propagation = propagate_rumor(
++    if check_type == "npc_evolution_condition":
++        condition = _safe_dict(check.get("condition"))
++        expected_ok = bool(check.get("expected_ok"))
++        condition_result = evaluate_npc_evolution_condition(simulation_state, condition)
++        return {
++            "check_type": check_type,
++            "ok": bool(condition_result.get("ok")) is expected_ok,
++            "expected_ok": expected_ok,
++            "actual_ok": bool(condition_result.get("ok")),
++            "condition_result": condition_result,
++        }
++
++    if check_type == "npc_evolution_transition":
++        transition = _safe_dict(check.get("transition"))
++        expected_ok = bool(check.get("expected_ok"))
++        transition_result = apply_npc_evolution_transition(
 +            simulation_state,
-+            speaker_id=str(check.get("speaker_id") or ""),
-+            lore_id=str(check.get("lore_id") or ""),
-+            summary=str(check.get("summary") or ""),
-+            explicit_hearers=check.get("explicit_hearers"),
++            transition,
 +            turn_index=int(check.get("turn_index") or 1),
 +        )
-+        expected_ok = check.get("expected_ok")
-+        expected_hearer = check.get("expected_hearer")
-+        expected_truth_promoted = check.get("expected_truth_promoted")
-+        ok = True
-+        if expected_ok is not None:
-+            ok = ok and propagation.get("ok") is bool(expected_ok)
-+        if expected_hearer:
-+            ok = ok and expected_hearer in propagation.get("hearers", [])
-+        if expected_truth_promoted is not None:
-+            ok = ok and propagation.get("truth_promoted") is bool(expected_truth_promoted)
 +        return {
 +            "check_type": check_type,
-+            "ok": ok,
-+            "propagation": propagation,
++            "ok": bool(transition_result.get("ok")) is expected_ok,
 +            "expected_ok": expected_ok,
-+            "expected_hearer": expected_hearer,
-+            "expected_truth_promoted": expected_truth_promoted,
++            "actual_ok": bool(transition_result.get("ok")),
++            "transition_result": transition_result,
 +        }
 +
-+    if check_type == "rumor_memory":
-+        subject_id = str(check.get("subject_id") or "")
-+        expected_lore_id = str(check.get("expected_lore_id") or "")
-+        rows = retrieve_causal_memories(
-+            simulation_state,
-+            subject_id,
-+            tags=check.get("tags") or ["rumor"],
-+            max_items=10,
-+        )
-+        matched = []
-+        for row in rows:
-+            facts = _safe_dict(row.get("facts"))
-+            if facts.get("lore_id") == expected_lore_id:
-+                matched.append(row)
++    if check_type == "npc_evolution_debug_bounded":
++        npc_id = str(check.get("npc_id") or "")
++        evolution = get_npc_evolution(simulation_state, npc_id)
++        max_history = int(check.get("max_history") or 50)
++        history_count = len((_safe_dict(evolution)).get("history") or [])
 +        return {
 +            "check_type": check_type,
-+            "ok": bool(matched),
-+            "subject_id": subject_id,
-+            "expected_lore_id": expected_lore_id,
-+            "matched": matched,
-+            "retrieved": rows,
-+        }
-+
-+    if check_type == "rumor_truth_status":
-+        lore_id = str(check.get("lore_id") or "")
-+        expected_truth_status = str(check.get("expected_truth_status") or "")
-+        entry = get_lore_entry(simulation_state, lore_id)
-+        actual = str((_safe_dict(entry)).get("truth_status") or "")
-+        return {
-+            "check_type": check_type,
-+            "ok": actual == expected_truth_status,
-+            "lore_id": lore_id,
-+            "expected_truth_status": expected_truth_status,
-+            "actual_truth_status": actual,
-+            "entry": entry,
++            "ok": history_count <= max_history,
++            "npc_id": npc_id,
++            "history_count": history_count,
++            "max_history": max_history,
++            "evolution": evolution,
 +        }
 +
 +    return {
 +        "check_type": check_type,
 +        "ok": False,
-+        "error": f"unknown_dialogue_m16_m18_check_type:{check_type}",
++        "error": f"unknown_npc_evolution_m19_m21_check_type:{check_type}",
 +    }
 +
 +
-+def run_dialogue_m16_m18_checks(
++def run_npc_evolution_m19_m21_checks(
 +    *,
 +    checks: List[Dict[str, Any]],
 +    result: Dict[str, Any],
 +    session: Dict[str, Any] | None = None,
 +) -> List[Dict[str, Any]]:
 +    return [
-+        run_dialogue_m16_m18_check(check=check, result=result, session=session)
++        run_npc_evolution_m19_m21_check(check=check, result=result, session=session)
 +        for check in checks
 +    ]
 *** End Patch
-7. Patch src/tests/rpg/manual/scenario_setup.py
+14. Patch src/tests/rpg/manual/scenario_setup.py
 
 Add import:
 
 *** Begin Patch
 *** Update File: src/tests/rpg/manual/scenario_setup.py
 @@
- from app.rpg.story_packs.importer import import_story_pack
-+from app.rpg.dialogue_context.rumors import propagate_rumor
+ from app.rpg.dialogue_context.rumors import propagate_rumor
++from app.rpg.npc_evolution.transitions import apply_npc_evolution_transition
  from tests.rpg.manual.memory_fixtures import build_manual_memory_event
 *** End Patch
 
-Add setup block after lore/story arc setup and after story packs is fine:
+Add setup block after story events/escalation/story packs or before inventory:
 
 *** Begin Patch
 *** Update File: src/tests/rpg/manual/scenario_setup.py
 @@
-     for story_pack in scenario.get("setup_story_packs") or []:
-         if isinstance(story_pack, dict):
-             proposal = story_pack.get("proposal") or story_pack
-             starter_quests = story_pack.get("starter_quests")
+     for rumor in scenario.get("setup_rumor_propagations") or []:
+         if isinstance(rumor, dict):
+             propagate_rumor(
+                 simulation_state,
+                 speaker_id=str(rumor.get("speaker_id") or ""),
 @@
                  ),
-                 starter_quests=starter_quests,
              )
 +
-+    for rumor in scenario.get("setup_rumor_propagations") or []:
-+        if isinstance(rumor, dict):
-+            propagate_rumor(
++    for transition in scenario.get("setup_npc_evolution_transitions") or []:
++        if isinstance(transition, dict):
++            apply_npc_evolution_transition(
 +                simulation_state,
-+                speaker_id=str(rumor.get("speaker_id") or ""),
-+                lore_id=str(rumor.get("lore_id") or ""),
-+                summary=str(rumor.get("summary") or ""),
-+                explicit_hearers=rumor.get("explicit_hearers"),
++                transition,
 +                turn_index=int(
-+                    rumor.get("turn_index")
++                    transition.get("turn_index")
 +                    or scenario.get("setup_turn_index")
 +                    or 1
 +                ),
@@ -883,23 +1178,25 @@ Add setup block after lore/story arc setup and after story packs is fine:
          if item_id not in simulation_state["manual_inventory_items"]:
              simulation_state["manual_inventory_items"].append(item_id)
 *** End Patch
-8. Patch src/tests/rpg/manual/scenario_execution.py
+15. Patch src/tests/rpg/manual/scenario_execution.py
 
 Add import:
 
 *** Begin Patch
 *** Update File: src/tests/rpg/manual/scenario_execution.py
 @@
- from tests.rpg.manual.story_pack_m13_m15_checks import run_story_pack_m13_m15_checks
-+from tests.rpg.manual.dialogue_m16_m18_checks import run_dialogue_m16_m18_checks
+ from tests.rpg.manual.dialogue_m16_m18_checks import run_dialogue_m16_m18_checks
++from tests.rpg.manual.npc_evolution_m19_m21_checks import (
++    run_npc_evolution_m19_m21_checks,
++)
 *** End Patch
 
-Add check block after story pack checks:
+Add check block after dialogue checks:
 
 *** Begin Patch
 *** Update File: src/tests/rpg/manual/scenario_execution.py
 @@
-         if story_pack_m13_m15_checks:
+         if dialogue_m16_m18_checks:
              current_session = {}
              try:
                  current_session = _ensure_manual_session(session_id)
@@ -908,32 +1205,29 @@ Add check block after story pack checks:
                          + str(check_result.get("error") or "")
                      )
 +
-+        dialogue_m16_m18_checks = [
++        npc_evolution_m19_m21_checks = [
 +            check
 +            for check in checks
 +            if isinstance(check, dict)
-+            and (
-+                str(check.get("type") or "").startswith("dialogue_")
-+                or str(check.get("type") or "").startswith("rumor_")
-+            )
++            and str(check.get("type") or "").startswith("npc_evolution")
 +        ]
-+        if dialogue_m16_m18_checks:
++        if npc_evolution_m19_m21_checks:
 +            current_session = {}
 +            try:
 +                current_session = _ensure_manual_session(session_id)
 +            except Exception:
 +                current_session = session
 +
-+            dialogue_m16_m18_check_results = run_dialogue_m16_m18_checks(
-+                checks=dialogue_m16_m18_checks,
++            npc_evolution_m19_m21_check_results = run_npc_evolution_m19_m21_checks(
++                checks=npc_evolution_m19_m21_checks,
 +                result=turn_record.get("result") or turn_record,
 +                session=current_session,
 +            )
-+            turn_record["dialogue_m16_m18_check_results"] = dialogue_m16_m18_check_results
-+            for check_result in dialogue_m16_m18_check_results:
++            turn_record["npc_evolution_m19_m21_check_results"] = npc_evolution_m19_m21_check_results
++            for check_result in npc_evolution_m19_m21_check_results:
 +                if not check_result.get("ok"):
 +                    turn_record.setdefault("scenario_warnings", []).append(
-+                        "dialogue_m16_m18_check_failed:"
++                        "npc_evolution_m19_m21_check_failed:"
 +                        + str(scenario_name)
 +                        + ":turn_"
 +                        + str(turn_index)
@@ -945,364 +1239,306 @@ Add check block after story pack checks:
  
          turns.append(turn_record)
 *** End Patch
-9. Patch src/tests/rpg/manual/summary_sanitizer.py
+16. Patch src/tests/rpg/manual/summary_sanitizer.py
 
 Add sanitizer block:
 
 *** Begin Patch
 *** Update File: src/tests/rpg/manual/summary_sanitizer.py
 @@
-     story_pack_m13_m15_check_results = turn.get("story_pack_m13_m15_check_results")
-     if isinstance(story_pack_m13_m15_check_results, list):
-         sanitized["story_pack_m13_m15_check_results"] = [
+     dialogue_m16_m18_check_results = turn.get("dialogue_m16_m18_check_results")
+     if isinstance(dialogue_m16_m18_check_results, list):
+         sanitized["dialogue_m16_m18_check_results"] = [
 @@
              if isinstance(item, dict)
          ]
 +
-+    dialogue_m16_m18_check_results = turn.get("dialogue_m16_m18_check_results")
-+    if isinstance(dialogue_m16_m18_check_results, list):
-+        sanitized["dialogue_m16_m18_check_results"] = [
++    npc_evolution_m19_m21_check_results = turn.get("npc_evolution_m19_m21_check_results")
++    if isinstance(npc_evolution_m19_m21_check_results, list):
++        sanitized["npc_evolution_m19_m21_check_results"] = [
 +            {
 +                "check_type": item.get("check_type"),
 +                "ok": item.get("ok"),
 +                "npc_id": item.get("npc_id"),
-+                "context": item.get("context"),
-+                "propagation": item.get("propagation"),
-+                "subject_id": item.get("subject_id"),
-+                "expected_lore_id": item.get("expected_lore_id"),
-+                "matched": item.get("matched"),
-+                "retrieved": item.get("retrieved"),
-+                "lore_id": item.get("lore_id"),
-+                "expected_truth_status": item.get("expected_truth_status"),
-+                "actual_truth_status": item.get("actual_truth_status"),
-+                "entry": item.get("entry"),
++                "evolution": item.get("evolution"),
++                "failures": item.get("failures"),
++                "expected_ok": item.get("expected_ok"),
++                "actual_ok": item.get("actual_ok"),
++                "condition_result": item.get("condition_result"),
++                "transition_result": item.get("transition_result"),
++                "history_count": item.get("history_count"),
++                "max_history": item.get("max_history"),
 +                "error": item.get("error"),
 +            }
-+            for item in dialogue_m16_m18_check_results[:50]
++            for item in npc_evolution_m19_m21_check_results[:50]
 +            if isinstance(item, dict)
 +        ]
  
      return sanitized
 *** End Patch
-Patch 4 — Manual scenarios
-10. Add src/tests/rpg/manual/scenarios/dialogue_m16_m18.py
+Patch 5 — Manual scenarios
+17. Add src/tests/rpg/manual/scenarios/npc_evolution_m19_m21.py
 *** Begin Patch
-*** Add File: src/tests/rpg/manual/scenarios/dialogue_m16_m18.py
+*** Add File: src/tests/rpg/manual/scenarios/npc_evolution_m19_m21.py
 +from __future__ import annotations
 +
 +from typing import Any, Dict
 +
 +
-+DIALOGUE_M16_M18_SCENARIOS: Dict[str, Dict[str, Any]] = {
-+    "npc_can_discuss_lore_they_know": {
-+        "setup_lore_transitions": [
-+            {
-+                "action": "upsert",
-+                "lore_id": "lore:red_sashes",
-+                "title": "The Red Sashes",
-+                "truth_status": "rumor",
-+                "known_by": ["bran"],
-+                "tags": ["bandit"],
-+            }
-+        ],
-+        "turns": ["I ask Bran what he knows about the Red Sashes."],
-+        "checks": [
-+            {
-+                "type": "dialogue_context",
-+                "npc_id": "bran",
-+                "topic_lore_id": "lore:red_sashes",
-+                "expected_can_discuss": True,
-+                "expected_lore_id": "lore:red_sashes",
-+                "expected_must_mark_as_rumor": True,
-+            }
-+        ],
-+    },
-+    "npc_cannot_discuss_secret_lore_they_do_not_know": {
-+        "setup_lore_transitions": [
-+            {
-+                "action": "upsert",
-+                "lore_id": "lore:bran_debt",
-+                "title": "Bran's Hidden Debt",
-+                "truth_status": "secret",
-+                "known_by": ["bran"],
-+            }
-+        ],
-+        "turns": ["I ask Mira about Bran's hidden debt."],
-+        "checks": [
-+            {
-+                "type": "dialogue_context",
-+                "npc_id": "mira",
-+                "topic_lore_id": "lore:bran_debt",
-+                "expected_can_discuss": False,
-+            }
-+        ],
-+    },
-+    "npc_marks_unverified_lore_as_rumor": {
-+        "setup_lore_transitions": [
-+            {
-+                "action": "upsert",
-+                "lore_id": "lore:red_sashes",
-+                "title": "The Red Sashes",
-+                "truth_status": "rumor",
-+                "known_by": ["bran"],
-+            }
-+        ],
-+        "turns": ["I ask Bran if the Red Sashes rumor is confirmed."],
-+        "checks": [
-+            {
-+                "type": "dialogue_context",
-+                "npc_id": "bran",
-+                "topic_lore_id": "lore:red_sashes",
-+                "expected_can_discuss": True,
-+                "expected_must_mark_as_rumor": True,
-+            }
-+        ],
-+    },
-+    "npc_discusses_arc_if_memory_links_them": {
-+        "setup_lore_transitions": [
-+            {
-+                "action": "upsert",
-+                "lore_id": "lore:red_sashes",
-+                "title": "The Red Sashes",
-+                "truth_status": "rumor",
-+                "known_by": ["bran"],
-+            }
-+        ],
++NPC_EVOLUTION_M19_M21_SCENARIOS: Dict[str, Dict[str, Any]] = {
++    "consequence_event_updates_npc_arc": {
 +        "setup_story_arc_transitions": [
++            {"action": "start", "arc_id": "arc:bandit_pressure", "stage": "aftermath", "pressure": 90}
++        ],
++        "setup_story_events": [
 +            {
-+                "action": "start",
++                "event_id": "event:tavern_lost",
 +                "arc_id": "arc:bandit_pressure",
-+                "title": "Bandit Pressure",
-+                "stage": "rumors",
-+                "pressure": 20,
-+                "links": {"lore": ["lore:red_sashes"], "entities": ["bran"]},
++                "effects": [
++                    {
++                        "type": "npc_evolution",
++                        "npc_id": "bran",
++                        "npc_arc_id": "npc_arc:bran_revenge",
++                        "profession": "former_innkeeper",
++                        "motivation": "revenge_against_red_sashes",
++                        "personality_deltas": {"vengeful": 20, "cautious": 10},
++                        "flags": {"tavern_lost": True},
++                    }
++                ],
 +            }
 +        ],
-+        "turns": ["I ask Bran about the bandit pressure."],
++        "turns": ["I inspect how Bran changed after losing the tavern."],
 +        "checks": [
 +            {
-+                "type": "dialogue_context",
++                "type": "npc_evolution",
 +                "npc_id": "bran",
-+                "arc_id": "arc:bandit_pressure",
-+                "expected_can_discuss": True,
-+                "expected_arc_id": "arc:bandit_pressure",
++                "expected": {
++                    "active_arcs": ["npc_arc:bran_revenge"],
++                    "profession": "former_innkeeper",
++                    "motivation": "revenge_against_red_sashes",
++                    "personality": {"vengeful": 20, "cautious": 10},
++                    "flags": {"tavern_lost": True},
++                },
 +            }
 +        ],
 +    },
-+    "npc_refuses_arc_topic_if_social_hostile": {
-+        "setup_social_state": {"relationships": {"bran": {"trust": -20, "hostility": 60}}},
-+        "setup_lore_transitions": [
++    "bran_loses_tavern_starts_revenge_arc": {
++        "setup_npc_evolution_transitions": [
 +            {
-+                "action": "upsert",
-+                "lore_id": "lore:red_sashes",
-+                "title": "The Red Sashes",
-+                "truth_status": "rumor",
-+                "known_by": ["bran"],
-+            }
-+        ],
-+        "turns": ["I demand Bran tell me about the Red Sashes."],
-+        "checks": [
-+            {
-+                "type": "dialogue_context",
++                "action": "set_flag",
 +                "npc_id": "bran",
-+                "topic_lore_id": "lore:red_sashes",
-+                "expected_can_discuss": False,
-+            }
-+        ],
-+    },
-+    "rumor_spreads_to_audible_npc": {
-+        "setup_lore_transitions": [
++                "flag": "tavern_lost",
++                "value": True,
++            },
 +            {
-+                "action": "upsert",
-+                "lore_id": "lore:red_sashes",
-+                "title": "The Red Sashes",
-+                "truth_status": "rumor",
-+            }
++                "action": "start_arc",
++                "npc_id": "bran",
++                "arc_id": "npc_arc:bran_revenge",
++                "motivation": "revenge_against_red_sashes",
++                "profession": "former_innkeeper",
++                "conditions": [
++                    {"type": "npc_flag", "npc_id": "bran", "flag": "tavern_lost", "expected": True}
++                ],
++            },
 +        ],
-+        "setup_rumor_propagations": [
-+            {
-+                "speaker_id": "bran",
-+                "lore_id": "lore:red_sashes",
-+                "summary": "The Red Sashes are active again.",
-+                "explicit_hearers": ["mira"],
-+            }
-+        ],
-+        "turns": ["I check whether Mira heard Bran's rumor."],
++        "turns": ["I check that Bran's revenge arc started."],
 +        "checks": [
 +            {
-+                "type": "rumor_memory",
-+                "subject_id": "mira",
-+                "expected_lore_id": "lore:red_sashes",
-+                "tags": ["rumor"],
-+            }
-+        ],
-+    },
-+    "rumor_does_not_spread_through_blocked_wall": {
-+        "setup_lore_transitions": [
-+            {
-+                "action": "upsert",
-+                "lore_id": "lore:red_sashes",
-+                "title": "The Red Sashes",
-+                "truth_status": "rumor",
-+            }
-+        ],
-+        "turns": ["I test rumor propagation without hearers."],
-+        "checks": [
-+            {
-+                "type": "rumor_propagation",
-+                "speaker_id": "bran",
-+                "lore_id": "lore:red_sashes",
-+                "summary": "The Red Sashes are active again.",
-+                "explicit_hearers": [],
++                "type": "npc_evolution_condition",
++                "condition": {
++                    "type": "npc_arc_active",
++                    "npc_id": "bran",
++                    "arc_id": "npc_arc:bran_revenge",
++                },
 +                "expected_ok": True,
-+                "expected_truth_promoted": False,
-+            },
-+            {
-+                "type": "rumor_truth_status",
-+                "lore_id": "lore:red_sashes",
-+                "expected_truth_status": "rumor",
-+            },
-+        ],
-+    },
-+    "rumor_does_not_promote_to_truth": {
-+        "setup_lore_transitions": [
-+            {
-+                "action": "upsert",
-+                "lore_id": "lore:red_sashes",
-+                "title": "The Red Sashes",
-+                "truth_status": "rumor",
-+            }
-+        ],
-+        "setup_rumor_propagations": [
-+            {
-+                "speaker_id": "bran",
-+                "lore_id": "lore:red_sashes",
-+                "summary": "The Red Sashes are active again.",
-+                "explicit_hearers": ["mira"],
-+            }
-+        ],
-+        "turns": ["I check whether the rumor became truth."],
-+        "checks": [
-+            {
-+                "type": "rumor_truth_status",
-+                "lore_id": "lore:red_sashes",
-+                "expected_truth_status": "rumor",
 +            }
 +        ],
 +    },
-+    "rumor_hearer_can_discuss_as_rumor": {
-+        "setup_lore_transitions": [
-+            {
-+                "action": "upsert",
-+                "lore_id": "lore:red_sashes",
-+                "title": "The Red Sashes",
-+                "truth_status": "rumor",
-+            }
-+        ],
-+        "setup_rumor_propagations": [
-+            {
-+                "speaker_id": "bran",
-+                "lore_id": "lore:red_sashes",
-+                "summary": "The Red Sashes are active again.",
-+                "explicit_hearers": ["mira"],
-+            }
-+        ],
-+        "turns": ["I ask Mira what she heard about the Red Sashes."],
++    "bran_revenge_arc_requires_tavern_loss": {
++        "turns": ["I check that Bran cannot start revenge without losing the tavern."],
 +        "checks": [
 +            {
-+                "type": "dialogue_context",
-+                "npc_id": "mira",
-+                "topic_lore_id": "lore:red_sashes",
-+                "expected_can_discuss": True,
-+                "expected_lore_id": "lore:red_sashes",
-+                "expected_must_mark_as_rumor": True,
++                "type": "npc_evolution_transition",
++                "expected_ok": False,
++                "transition": {
++                    "action": "start_arc",
++                    "npc_id": "bran",
++                    "arc_id": "npc_arc:bran_revenge",
++                    "motivation": "revenge_against_red_sashes",
++                    "conditions": [
++                        {"type": "npc_flag", "npc_id": "bran", "flag": "tavern_lost", "expected": True}
++                    ],
++                },
++            }
++        ],
++    },
++    "bran_companion_offer_requires_high_trust": {
++        "setup_social_state": {"relationships": {"bran": {"trust": 80}}},
++        "setup_npc_evolution_transitions": [
++            {
++                "action": "evolve",
++                "npc_id": "bran",
++                "companion_eligible": True,
++                "conditions": [
++                    {"type": "relationship_at_least", "npc_id": "bran", "field": "trust", "minimum": 70}
++                ],
++            }
++        ],
++        "turns": ["I check whether Bran is eligible to become a companion."],
++        "checks": [
++            {
++                "type": "npc_evolution",
++                "npc_id": "bran",
++                "expected": {"companion_eligible": True},
++            }
++        ],
++    },
++    "bran_companion_offer_blocked_by_low_trust": {
++        "setup_social_state": {"relationships": {"bran": {"trust": 20}}},
++        "turns": ["I check whether low trust blocks Bran's companion offer."],
++        "checks": [
++            {
++                "type": "npc_evolution_transition",
++                "expected_ok": False,
++                "transition": {
++                    "action": "evolve",
++                    "npc_id": "bran",
++                    "companion_eligible": True,
++                    "conditions": [
++                        {"type": "relationship_at_least", "npc_id": "bran", "field": "trust", "minimum": 70}
++                    ],
++                },
++            }
++        ],
++    },
++    "npc_evolution_save_load_stable": {
++        "setup_npc_evolution_transitions": [
++            {
++                "action": "start_arc",
++                "npc_id": "bran",
++                "arc_id": "npc_arc:bran_revenge",
++                "motivation": "revenge_against_red_sashes",
++            },
++            {
++                "action": "evolve",
++                "npc_id": "bran",
++                "personality_deltas": {"vengeful": 20},
++                "companion_eligible": True,
++            },
++        ],
++        "turns": ["I inspect Bran's saved evolution state."],
++        "checks": [
++            {
++                "type": "npc_evolution",
++                "npc_id": "bran",
++                "expected": {
++                    "active_arcs": ["npc_arc:bran_revenge"],
++                    "motivation": "revenge_against_red_sashes",
++                    "personality": {"vengeful": 20},
++                    "companion_eligible": True,
++                },
++            }
++        ],
++    },
++    "npc_evolution_bounded_no_unlimited_history": {
++        "setup_npc_evolution_transitions": [
++            {
++                "action": "set_flag",
++                "npc_id": "bran",
++                "flag": f"flag_{i}",
++                "value": True,
++                "turn_index": i,
++            }
++            for i in range(80)
++        ],
++        "turns": ["I inspect bounded NPC evolution history."],
++        "checks": [
++            {
++                "type": "npc_evolution_debug_bounded",
++                "npc_id": "bran",
++                "max_history": 50,
 +            }
 +        ],
 +    },
 +}
 *** End Patch
-11. Add expected names file
+18. Add expected names file
 *** Begin Patch
-*** Add File: src/tests/rpg/manual/scenarios/expected_dialogue_m16_m18_names.py
-+EXPECTED_DIALOGUE_M16_M18_SCENARIO_NAMES = {
-+    "npc_can_discuss_lore_they_know",
-+    "npc_cannot_discuss_secret_lore_they_do_not_know",
-+    "npc_marks_unverified_lore_as_rumor",
-+    "npc_discusses_arc_if_memory_links_them",
-+    "npc_refuses_arc_topic_if_social_hostile",
-+    "rumor_spreads_to_audible_npc",
-+    "rumor_does_not_spread_through_blocked_wall",
-+    "rumor_does_not_promote_to_truth",
-+    "rumor_hearer_can_discuss_as_rumor",
+*** Add File: src/tests/rpg/manual/scenarios/expected_npc_evolution_m19_m21_names.py
++EXPECTED_NPC_EVOLUTION_M19_M21_SCENARIO_NAMES = {
++    "consequence_event_updates_npc_arc",
++    "bran_loses_tavern_starts_revenge_arc",
++    "bran_revenge_arc_requires_tavern_loss",
++    "bran_companion_offer_requires_high_trust",
++    "bran_companion_offer_blocked_by_low_trust",
++    "npc_evolution_save_load_stable",
++    "npc_evolution_bounded_no_unlimited_history",
 +}
 *** End Patch
-12. Patch src/tests/rpg/manual/scenarios/registry.py
+19. Patch src/tests/rpg/manual/scenarios/registry.py
 *** Begin Patch
 *** Update File: src/tests/rpg/manual/scenarios/registry.py
 @@
- from tests.rpg.manual.scenarios.story_pack_m13_m15 import (
-     STORY_PACK_M13_M15_SCENARIOS,
+ from tests.rpg.manual.scenarios.dialogue_m16_m18 import (
+     DIALOGUE_M16_M18_SCENARIOS,
  )
-+from tests.rpg.manual.scenarios.dialogue_m16_m18 import (
-+    DIALOGUE_M16_M18_SCENARIOS,
++from tests.rpg.manual.scenarios.npc_evolution_m19_m21 import (
++    NPC_EVOLUTION_M19_M21_SCENARIOS,
 +)
 @@
-     scenarios.update(STORY_PACK_M13_M15_SCENARIOS)
-+    scenarios.update(DIALOGUE_M16_M18_SCENARIOS)
+     scenarios.update(DIALOGUE_M16_M18_SCENARIOS)
++    scenarios.update(NPC_EVOLUTION_M19_M21_SCENARIOS)
      return scenarios
 *** End Patch
-13. Patch src/tests/rpg/manual/test_manual_scenario_migration.py
+20. Patch src/tests/rpg/manual/test_manual_scenario_migration.py
 *** Begin Patch
 *** Update File: src/tests/rpg/manual/test_manual_scenario_migration.py
 @@
- from tests.rpg.manual.scenarios.expected_story_pack_m13_m15_names import (
-     EXPECTED_STORY_PACK_M13_M15_SCENARIO_NAMES,
+ from tests.rpg.manual.scenarios.expected_dialogue_m16_m18_names import (
+     EXPECTED_DIALOGUE_M16_M18_SCENARIO_NAMES,
  )
-+from tests.rpg.manual.scenarios.expected_dialogue_m16_m18_names import (
-+    EXPECTED_DIALOGUE_M16_M18_SCENARIO_NAMES,
++from tests.rpg.manual.scenarios.expected_npc_evolution_m19_m21_names import (
++    EXPECTED_NPC_EVOLUTION_M19_M21_SCENARIO_NAMES,
 +)
 @@
- def test_manual_scenario_registry_includes_story_pack_m13_m15_names():
+ def test_manual_scenario_registry_includes_dialogue_m16_m18_names():
      names = set(build_service_scenarios().keys())
-     missing = EXPECTED_STORY_PACK_M13_M15_SCENARIO_NAMES - names
+     missing = EXPECTED_DIALOGUE_M16_M18_SCENARIO_NAMES - names
  
-     assert not missing, f"Missing M13-M15 story pack scenarios: {sorted(missing)}"
+     assert not missing, f"Missing M16-M18 dialogue scenarios: {sorted(missing)}"
 +
 +
-+def test_manual_scenario_registry_includes_dialogue_m16_m18_names():
++def test_manual_scenario_registry_includes_npc_evolution_m19_m21_names():
 +    names = set(build_service_scenarios().keys())
-+    missing = EXPECTED_DIALOGUE_M16_M18_SCENARIO_NAMES - names
++    missing = EXPECTED_NPC_EVOLUTION_M19_M21_SCENARIO_NAMES - names
 +
-+    assert not missing, f"Missing M16-M18 dialogue scenarios: {sorted(missing)}"
++    assert not missing, f"Missing M19-M21 NPC evolution scenarios: {sorted(missing)}"
 *** End Patch
-14. Add manual check tests
+21. Add manual check tests
 *** Begin Patch
-*** Add File: src/tests/rpg/manual/test_manual_dialogue_m16_m18_checks.py
-+from app.rpg.lore.state import upsert_lore_entry
-+from tests.rpg.manual.dialogue_m16_m18_checks import run_dialogue_m16_m18_checks
+*** Add File: src/tests/rpg/manual/test_manual_npc_evolution_m19_m21_checks.py
++from app.rpg.npc_evolution.state import start_npc_arc
++from tests.rpg.manual.npc_evolution_m19_m21_checks import run_npc_evolution_m19_m21_checks
 +
 +
-+def test_manual_dialogue_context_check_reads_session_state():
++def test_manual_npc_evolution_check_reads_session_state():
 +    session = {"simulation_state": {}}
-+    upsert_lore_entry(
++    start_npc_arc(
 +        session["simulation_state"],
-+        {
-+            "lore_id": "lore:red_sashes",
-+            "title": "The Red Sashes",
-+            "truth_status": "rumor",
-+            "known_by": ["bran"],
-+        },
++        "bran",
++        "npc_arc:bran_revenge",
++        motivation="revenge_against_red_sashes",
 +    )
 +
-+    result = run_dialogue_m16_m18_checks(
++    result = run_npc_evolution_m19_m21_checks(
 +        checks=[
 +            {
-+                "type": "dialogue_context",
++                "type": "npc_evolution",
 +                "npc_id": "bran",
-+                "topic_lore_id": "lore:red_sashes",
-+                "expected_can_discuss": True,
-+                "expected_lore_id": "lore:red_sashes",
-+                "expected_must_mark_as_rumor": True,
++                "expected": {
++                    "active_arcs": ["npc_arc:bran_revenge"],
++                    "motivation": "revenge_against_red_sashes",
++                },
 +            }
 +        ],
 +        result={},
@@ -1312,41 +1548,19 @@ Patch 4 — Manual scenarios
 +    assert result["ok"] is True
 +
 +
-+def test_manual_rumor_propagation_check_records_memory():
++def test_manual_npc_evolution_transition_check():
 +    session = {"simulation_state": {}}
-+    upsert_lore_entry(
-+        session["simulation_state"],
-+        {
-+            "lore_id": "lore:red_sashes",
-+            "title": "The Red Sashes",
-+            "truth_status": "rumor",
-+        },
-+    )
 +
-+    run_dialogue_m16_m18_checks(
++    result = run_npc_evolution_m19_m21_checks(
 +        checks=[
 +            {
-+                "type": "rumor_propagation",
-+                "speaker_id": "bran",
-+                "lore_id": "lore:red_sashes",
-+                "summary": "The Red Sashes are active.",
-+                "explicit_hearers": ["mira"],
++                "type": "npc_evolution_transition",
 +                "expected_ok": True,
-+                "expected_hearer": "mira",
-+                "expected_truth_promoted": False,
-+            }
-+        ],
-+        result={},
-+        session=session,
-+    )
-+
-+    result = run_dialogue_m16_m18_checks(
-+        checks=[
-+            {
-+                "type": "rumor_memory",
-+                "subject_id": "mira",
-+                "expected_lore_id": "lore:red_sashes",
-+                "tags": ["rumor"],
++                "transition": {
++                    "action": "start_arc",
++                    "npc_id": "bran",
++                    "arc_id": "npc_arc:bran_revenge",
++                },
 +            }
 +        ],
 +        result={},
@@ -1357,9 +1571,13 @@ Patch 4 — Manual scenarios
 *** End Patch
 Validation commands
 Compile
-python -m py_compile src/app/rpg/dialogue_context/arc_context.py
-python -m py_compile src/app/rpg/dialogue_context/rumors.py
-python -m py_compile src/tests/rpg/manual/dialogue_m16_m18_checks.py
-python -m py_compile src/tests/rpg/manual/scenarios/dialogue_m16_m18.py
+python -m py_compile src/app/rpg/npc_evolution/model.py
+python -m py_compile src/app/rpg/npc_evolution/state.py
+python -m py_compile src/app/rpg/npc_evolution/conditions.py
+python -m py_compile src/app/rpg/npc_evolution/transitions.py
+python -m py_compile src/app/rpg/story_events/validation.py
+python -m py_compile src/app/rpg/story_events/effects.py
+python -m py_compile src/tests/rpg/manual/npc_evolution_m19_m21_checks.py
+python -m py_compile src/tests/rpg/manual/scenarios/npc_evolution_m19_m21.py
 Unit tests
-python -m pytest src/tests/rpg/dialogue_context src/tests/rpg/story_packs src/tests/rpg/story_proposals src/tests/rpg/escalatio
+python -m pytest src/tests/rpg/npc_evolution src/tests/rpg/dialogue_context src/tests/rpg/story_packs src/tests/rpg/story_proposals src/tests/rpg/escalation src/tests/rpg/story_events src/tests/rpg/story_arcs src/tests/rpg/lore -q

@@ -77,7 +77,9 @@ def test_manual_rumor_propagation_check_records_memory():
 
 
 def test_manual_setup_social_state_applies_relationships():
-    from tests.rpg.manual.scenario_setup import apply_manual_scenario_setup_by_session_id
+    from tests.rpg.manual.scenario_setup import (
+        apply_manual_scenario_setup_by_session_id,
+    )
     from tests.rpg.manual.scenarios.registry import build_service_scenarios
 
     session_id = "test_social_setup"

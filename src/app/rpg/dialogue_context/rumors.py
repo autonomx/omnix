@@ -8,7 +8,6 @@ from app.rpg.lore.state import get_lore_entry
 from app.rpg.memory.observation import record_told_memory
 from app.rpg.spatial.audibility import audible_entities_from
 
-
 MAX_RUMOR_HEARERS = 12
 
 

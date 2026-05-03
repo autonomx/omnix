@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from typing import Any, Dict, List
 
-
 MAX_IMPORTED_STORY_PACKS = 200
 
 

@@ -11,7 +11,10 @@ from app.rpg.story_packs.definition_registries import (
     register_escalation_rule_definition,
     register_story_event_definition,
 )
-from app.rpg.story_packs.registry import get_imported_story_pack, mark_story_pack_imported
+from app.rpg.story_packs.registry import (
+    get_imported_story_pack,
+    mark_story_pack_imported,
+)
 from app.rpg.story_proposals.validation import validate_story_proposal
 
 
