@@ -8,7 +8,6 @@ from app.rpg.quests.state import get_quest
 from app.rpg.story_arcs.conditions import evaluate_story_arc_condition
 from app.rpg.story_arcs.state import get_story_arc
 
-
 ALLOWED_STORY_EVENT_EFFECT_TYPES = {
     "arc_pressure_delta",
     "arc_stage_set",

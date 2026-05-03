@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from typing import Any, Dict
 
-
 STORY_EVENT_M4_M6_SCENARIOS: Dict[str, Dict[str, Any]] = {
     "story_event_applies_arc_pressure_delta": {
         "setup_story_arc_transitions": [

@@ -97,6 +97,13 @@ try:
 except Exception:
     ESCALATION_M7_M9_SCENARIOS = {}
 
+try:
+    from tests.rpg.manual.scenarios.story_proposal_m10_m12 import (
+        STORY_PROPOSAL_M10_M12_SCENARIOS,
+    )
+except Exception:
+    STORY_PROPOSAL_M10_M12_SCENARIOS = {}
+
 
 def build_service_scenarios(
     legacy_scenarios: Dict[str, Dict[str, Any]] | None = None,
@@ -119,6 +126,7 @@ def build_service_scenarios(
         STORY_M1_M3_SCENARIOS,
         STORY_EVENT_M4_M6_SCENARIOS,
         ESCALATION_M7_M9_SCENARIOS,
+        STORY_PROPOSAL_M10_M12_SCENARIOS,
         INVENTORY_M2_M8_SCENARIOS,
         SCENE_ACTIVITY_SCENARIOS,
         SOCIAL_L10_L12_SCENARIOS,

@@ -1,5 +1,6 @@
 """Deterministic RPG story event helpers."""
 
+from app.rpg.story_events.application import apply_story_event
 from app.rpg.story_events.effects import apply_story_event_effect
 from app.rpg.story_events.state import (
     ensure_story_event_state,
@@ -12,7 +13,6 @@ from app.rpg.story_events.validation import (
     validate_story_event,
     validate_story_event_effect,
 )
-from app.rpg.story_events.application import apply_story_event
 
 __all__ = [
     "apply_story_event",

@@ -1,6 +1,9 @@
 import json
 
-from app.rpg.escalation.state import mark_escalation_rule_applied, normalize_escalation_state
+from app.rpg.escalation.state import (
+    mark_escalation_rule_applied,
+    normalize_escalation_state,
+)
 
 
 def test_escalation_state_json_roundtrip():

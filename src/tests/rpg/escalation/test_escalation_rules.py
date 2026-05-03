@@ -4,7 +4,7 @@ from app.rpg.escalation.rules import (
     evaluate_escalation_rules,
 )
 from app.rpg.escalation.state import mark_escalation_rule_applied
-from app.rpg.quests.state import start_quest, set_quest_stage
+from app.rpg.quests.state import set_quest_stage, start_quest
 from app.rpg.story_arcs.state import get_story_arc, set_story_arc_stage, start_story_arc
 
 

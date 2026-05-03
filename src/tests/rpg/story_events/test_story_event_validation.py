@@ -1,6 +1,9 @@
 from app.rpg.lore.state import upsert_lore_entry
 from app.rpg.story_arcs.state import start_story_arc
-from app.rpg.story_events.validation import validate_story_event, validate_story_event_effect
+from app.rpg.story_events.validation import (
+    validate_story_event,
+    validate_story_event_effect,
+)
 
 
 def test_story_event_rejects_unknown_effect_type():
