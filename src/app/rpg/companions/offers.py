@@ -4,6 +4,7 @@ import hashlib
 import json
 from typing import Any, Dict
 
+from app.rpg.campaign_journal.journal import record_campaign_journal_entry
 from app.rpg.companions.party import (
     add_party_member,
     append_companion_offer_history,
@@ -214,6 +215,19 @@ def accept_companion_offer(
         reason="accepted",
         details={"party_result": party_result, "evolution_result": evolution_result},
     )
+    record_campaign_journal_entry(
+        simulation_state,
+        kind="companion",
+        title="Companion Joined",
+        summary=f"{npc_id} joined the party.",
+        turn_index=turn_index,
+        visibility="player",
+        fact_status="confirmed",
+        npc_ids=[npc_id],
+        tags=["companion", "party"],
+        source_id=offer_id,
+        metadata={"offer_id": offer_id, "action": "accepted"},
+    )
     return {
         "ok": True,
         "reason": "accepted",
@@ -259,6 +273,19 @@ def refuse_companion_offer(
         turn_index=turn_index,
         reason=reason,
         details={"evolution_result": evolution_result},
+    )
+    record_campaign_journal_entry(
+        simulation_state,
+        kind="companion",
+        title="Companion Offer Refused",
+        summary=f"{npc_id}'s companion offer was refused.",
+        turn_index=turn_index,
+        visibility="player",
+        fact_status="confirmed",
+        npc_ids=[npc_id],
+        tags=["companion", "party"],
+        source_id=offer_id,
+        metadata={"offer_id": offer_id, "action": "refused"},
     )
     return {
         "ok": True,

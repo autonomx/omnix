@@ -3,14 +3,18 @@ from __future__ import annotations
 from typing import Any, Dict, List
 
 from tests.rpg.manual import output_artifacts
+from tests.rpg.manual.campaign_director_m22_m24_checks import (
+    run_campaign_director_m22_m24_checks,
+)
+from tests.rpg.manual.campaign_journal_m31_m33_checks import (
+    run_campaign_journal_m31_m33_checks,
+)
+from tests.rpg.manual.companion_m28_m30_checks import run_companion_m28_m30_checks
 from tests.rpg.manual.dialogue_m16_m18_checks import run_dialogue_m16_m18_checks
 from tests.rpg.manual.escalation_m7_m9_checks import run_escalation_m7_m9_checks
 from tests.rpg.manual.memory_checks import run_memory_checks
 from tests.rpg.manual.npc_evolution_m19_m21_checks import (
     run_npc_evolution_m19_m21_checks,
-)
-from tests.rpg.manual.campaign_director_m22_m24_checks import (
-    run_campaign_director_m22_m24_checks,
 )
 from tests.rpg.manual.output_state import (
     _REGRESSION_WARNING_LOCK,
@@ -40,12 +44,11 @@ from tests.rpg.manual.session_helpers import (
 from tests.rpg.manual.social_checks import run_social_checks
 from tests.rpg.manual.spatial_checks import run_spatial_checks
 from tests.rpg.manual.story_event_m4_m6_checks import run_story_event_m4_m6_checks
-from tests.rpg.manual.story_m1_m3_checks import run_story_m1_m3_checks
-from tests.rpg.manual.story_pack_m13_m15_checks import run_story_pack_m13_m15_checks
 from tests.rpg.manual.story_event_queue_m25_m27_checks import (
     run_story_event_queue_m25_m27_checks,
 )
-from tests.rpg.manual.companion_m28_m30_checks import run_companion_m28_m30_checks
+from tests.rpg.manual.story_m1_m3_checks import run_story_m1_m3_checks
+from tests.rpg.manual.story_pack_m13_m15_checks import run_story_pack_m13_m15_checks
 from tests.rpg.manual.story_proposal_m10_m12_checks import (
     run_story_proposal_m10_m12_checks,
 )
@@ -541,6 +544,41 @@ def _run_one_service_scenario(
                 if not check_result.get("ok"):
                     turn_record.setdefault("scenario_warnings", []).append(
                         "companion_m28_m30_check_failed:"
+                        + str(scenario_name)
+                        + ":turn_"
+                        + str(turn_index)
+                        + ":"
+                        + str(check_result.get("check_type"))
+                        + ":"
+                        + str(check_result.get("error") or "")
+                    )
+
+        campaign_journal_m31_m33_checks = [
+            check
+            for check in checks
+            if isinstance(check, dict)
+            and (
+                str(check.get("type") or "").startswith("campaign_journal")
+                or str(check.get("type") or "").startswith("campaign_story_recap")
+            )
+        ]
+        if campaign_journal_m31_m33_checks:
+            current_session = {}
+            try:
+                current_session = _ensure_manual_session(session_id)
+            except Exception:
+                current_session = session
+
+            campaign_journal_m31_m33_check_results = run_campaign_journal_m31_m33_checks(
+                checks=campaign_journal_m31_m33_checks,
+                result=turn_record.get("result") or turn_record,
+                session=current_session,
+            )
+            turn_record["campaign_journal_m31_m33_check_results"] = campaign_journal_m31_m33_check_results
+            for check_result in campaign_journal_m31_m33_check_results:
+                if not check_result.get("ok"):
+                    turn_record.setdefault("scenario_warnings", []).append(
+                        "campaign_journal_m31_m33_check_failed:"
                         + str(scenario_name)
                         + ":turn_"
                         + str(turn_index)

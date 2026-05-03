@@ -29,14 +29,14 @@ from tests.rpg.manual.scenarios.expected_social_l10_l12_names import (
 from tests.rpg.manual.scenarios.expected_story_event_m4_m6_names import (
     EXPECTED_STORY_EVENT_M4_M6_SCENARIO_NAMES,
 )
+from tests.rpg.manual.scenarios.expected_story_event_queue_m25_m27_names import (
+    EXPECTED_STORY_EVENT_QUEUE_M25_M27_SCENARIO_NAMES,
+)
 from tests.rpg.manual.scenarios.expected_story_m1_m3_names import (
     EXPECTED_STORY_M1_M3_SCENARIO_NAMES,
 )
 from tests.rpg.manual.scenarios.expected_story_pack_m13_m15_names import (
     EXPECTED_STORY_PACK_M13_M15_SCENARIO_NAMES,
-)
-from tests.rpg.manual.scenarios.expected_story_event_queue_m25_m27_names import (
-    EXPECTED_STORY_EVENT_QUEUE_M25_M27_SCENARIO_NAMES,
 )
 
 

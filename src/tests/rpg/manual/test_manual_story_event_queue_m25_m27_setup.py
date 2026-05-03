@@ -1,6 +1,5 @@
 from app.rpg.story_packs.importer import import_story_pack
 from app.rpg.story_proposals.validation import validate_story_proposal
-
 from tests.rpg.manual.scenario_setup import apply_manual_scenario_setup_by_session_id
 from tests.rpg.manual.scenarios.registry import build_service_scenarios
 from tests.rpg.manual.scenarios.story_event_queue_m25_m27 import _queue_pack

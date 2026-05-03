@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, List
 
+from app.rpg.campaign_journal.journal import record_campaign_journal_entry
 from app.rpg.story_events.effects import apply_story_event_effect
 from app.rpg.story_events.state import (
     has_story_event_been_applied,
@@ -73,6 +74,19 @@ def apply_story_event(
         event,
         effect_results=effect_results,
         turn_index=turn_index,
+    )
+    record_campaign_journal_entry(
+        simulation_state,
+        kind="story_event",
+        title=str(event.get("title") or event.get("kind") or "Story Event"),
+        summary=str(event.get("summary") or event_id),
+        turn_index=turn_index,
+        visibility="player",
+        arc_ids=[str(event.get("arc_id") or "")] if event.get("arc_id") else [],
+        event_ids=[event_id],
+        npc_ids=[str(npc_id) for npc_id in event.get("participants") or [] if str(npc_id)],
+        source_id=event_id,
+        metadata={"source": "apply_story_event"},
     )
     return {
         "ok": True,

@@ -5,10 +5,10 @@ from typing import Any, Callable, Dict
 
 from tests.rpg.manual import output_artifacts
 from tests.rpg.manual.safe import _safe_dict, _safe_str
+from tests.rpg.manual.scenario_summary import _compact_result_for_summary
 from tests.rpg.manual.story_event_queue_m25_m27_checks import (
     run_story_event_queue_m25_m27_check,
 )
-from tests.rpg.manual.scenario_summary import _compact_result_for_summary
 from tests.rpg.manual.summary_sanitizer import sanitize_turn_for_summary
 from tests.rpg.manual.token_usage import _record_token_usage
 

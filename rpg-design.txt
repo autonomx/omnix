@@ -1,59 +1,64 @@
-Bundle M28-M30 — NPC Arc Runtime Integration + Companion Offer Flow v1
+Bundle M31-M33 — Campaign Journal + Player-Facing Story Recap v1
 GOAL:
-Integrate NPC evolution arcs into runtime-facing dialogue/action flow.
+Add deterministic player-facing campaign journal and story recap.
 
-This bundle makes NPC arc state actionable:
-- companion eligibility can surface as a deterministic offer
-- companion offers are gated by NPC evolution + relationship + story state
-- accepting/refusing companion offers mutates deterministic party/companion state
-- NPC runtime context exposes profession/role/motivation/personality/active arcs
-- companion offers are apply-once / bounded
-- hostile or low-trust NPCs do not offer companionship
-- LLM may narrate the offer, but cannot decide eligibility or mutate party state
+This bundle makes story progression readable without letting narration invent state.
+
+Journal/recap should show:
+- confirmed facts vs rumors vs secrets
+- active story arcs
+- recently applied story events
+- queued/delayed consequences
+- NPC evolution changes
+- party/companion changes
+- “what changed this turn” recap payload
+- bounded narrator-facing story context
 
 Important:
-- Simulation is authoritative.
-- Companion offers are deterministic.
-- Runtime context is bounded.
-- No LLM direct mutation.
-Patch 1 — Add companion runtime package
-1. Add src/app/rpg/companions/__init__.py
+- Journal entries are deterministic state.
+- Journal can summarize existing authoritative state only.
+- LLM may phrase presentation from the recap payload, but cannot create journal facts.
+- Secrets are excluded unless revealed/known.
+- Rumors stay marked as rumor.
+- Output is bounded and save/load-safe.
+Patch 1 — Add campaign journal package
+1. Add src/app/rpg/campaign_journal/__init__.py
 *** Begin Patch
-*** Add File: src/app/rpg/companions/__init__.py
-+"""Deterministic companion offer and party helpers."""
+*** Add File: src/app/rpg/campaign_journal/__init__.py
++"""Deterministic campaign journal and story recap helpers."""
 +
-+from app.rpg.companions.offers import (
-+    accept_companion_offer,
-+    build_companion_offer_context,
-+    evaluate_companion_offer,
-+    refuse_companion_offer,
++from app.rpg.campaign_journal.journal import (
++    build_campaign_journal,
++    build_player_story_recap,
++    record_campaign_journal_entry,
 +)
-+from app.rpg.companions.party import (
-+    ensure_party_state,
-+    get_party_member,
-+    normalize_party_state,
++from app.rpg.campaign_journal.state import (
++    ensure_campaign_journal_state,
++    normalize_campaign_journal_state,
 +)
 +
 +__all__ = [
-+    "accept_companion_offer",
-+    "build_companion_offer_context",
-+    "ensure_party_state",
-+    "evaluate_companion_offer",
-+    "get_party_member",
-+    "normalize_party_state",
-+    "refuse_companion_offer",
++    "build_campaign_journal",
++    "build_player_story_recap",
++    "ensure_campaign_journal_state",
++    "normalize_campaign_journal_state",
++    "record_campaign_journal_entry",
 +]
 *** End Patch
-2. Add src/app/rpg/companions/party.py
+2. Add src/app/rpg/campaign_journal/state.py
 *** Begin Patch
-*** Add File: src/app/rpg/companions/party.py
+*** Add File: src/app/rpg/campaign_journal/state.py
 +from __future__ import annotations
 +
 +from typing import Any, Dict, List
 +
 +
-+MAX_PARTY_MEMBERS = 6
-+MAX_COMPANION_HISTORY = 100
++MAX_CAMPAIGN_JOURNAL_ENTRIES = 300
++MAX_CAMPAIGN_RECAP_ITEMS = 25
++
++
++VALID_JOURNAL_VISIBILITY = {"player", "hidden", "debug"}
++VALID_JOURNAL_FACT_STATUS = {"confirmed", "rumor", "unknown", "secret"}
 +
 +
 +def _safe_dict(value: Any) -> Dict[str, Any]:
@@ -68,12 +73,6 @@ Patch 1 — Add companion runtime package
 +    return value if isinstance(value, str) else ""
 +
 +
-+def _safe_bool(value: Any, default: bool = False) -> bool:
-+    if isinstance(value, bool):
-+        return value
-+    return default
-+
-+
 +def _safe_int(value: Any, default: int = 0) -> int:
 +    try:
 +        return int(value)
@@ -81,539 +80,691 @@ Patch 1 — Add companion runtime package
 +        return default
 +
 +
-+def normalize_party_member(value: Dict[str, Any], *, npc_id: str = "") -> Dict[str, Any]:
++def _unique_strs(values: Any, *, limit: int = 50) -> List[str]:
++    seen = set()
++    out: List[str] = []
++    for value in _safe_list(values):
++        text = str(value or "").strip()
++        if text and text not in seen:
++            seen.add(text)
++            out.append(text)
++        if len(out) >= limit:
++            break
++    return out
++
++
++def normalize_campaign_journal_entry(value: Dict[str, Any]) -> Dict[str, Any]:
 +    value = _safe_dict(value)
-+    normalized_npc_id = _safe_str(value.get("npc_id")) or npc_id
++    visibility = _safe_str(value.get("visibility")) or "player"
++    if visibility not in VALID_JOURNAL_VISIBILITY:
++        visibility = "player"
++    fact_status = _safe_str(value.get("fact_status")) or "confirmed"
++    if fact_status not in VALID_JOURNAL_FACT_STATUS:
++        fact_status = "unknown"
 +    return {
-+        "npc_id": normalized_npc_id,
-+        "status": _safe_str(value.get("status")) or "active",
-+        "joined_turn": _safe_int(value.get("joined_turn"), 0),
-+        "role": _safe_str(value.get("role")),
-+        "motivation": _safe_str(value.get("motivation")),
-+        "source_offer_id": _safe_str(value.get("source_offer_id")),
++        "entry_id": _safe_str(value.get("entry_id")),
++        "turn_index": _safe_int(value.get("turn_index"), 0),
++        "kind": _safe_str(value.get("kind")) or "story",
++        "title": _safe_str(value.get("title")),
++        "summary": _safe_str(value.get("summary")),
++        "visibility": visibility,
++        "fact_status": fact_status,
++        "arc_ids": _unique_strs(value.get("arc_ids"), limit=20),
++        "lore_ids": _unique_strs(value.get("lore_ids"), limit=20),
++        "event_ids": _unique_strs(value.get("event_ids"), limit=20),
++        "npc_ids": _unique_strs(value.get("npc_ids"), limit=20),
++        "quest_ids": _unique_strs(value.get("quest_ids"), limit=20),
++        "tags": _unique_strs(value.get("tags"), limit=20),
 +        "metadata": dict(_safe_dict(value.get("metadata"))),
 +    }
 +
 +
-+def normalize_companion_offer_record(value: Dict[str, Any]) -> Dict[str, Any]:
++def normalize_campaign_journal_state(value: Dict[str, Any] | None) -> Dict[str, Any]:
 +    value = _safe_dict(value)
-+    return {
-+        "offer_id": _safe_str(value.get("offer_id")),
-+        "npc_id": _safe_str(value.get("npc_id")),
-+        "status": _safe_str(value.get("status")) or "unknown",
-+        "turn_index": _safe_int(value.get("turn_index"), 0),
-+        "reason": _safe_str(value.get("reason")),
-+        "details": dict(_safe_dict(value.get("details"))),
-+    }
-+
-+
-+def normalize_party_state(value: Dict[str, Any] | None) -> Dict[str, Any]:
-+    value = _safe_dict(value)
-+    members = {}
-+    for npc_id, row in _safe_dict(value.get("members")).items():
-+        npc_id = str(npc_id or "")
-+        if not npc_id:
-+            continue
-+        members[npc_id] = normalize_party_member(row, npc_id=npc_id)
-+    history = [
-+        normalize_companion_offer_record(row)
-+        for row in _safe_list(value.get("companion_offer_history"))
++    entries = [
++        normalize_campaign_journal_entry(row)
++        for row in _safe_list(value.get("entries"))
 +        if isinstance(row, dict)
-+    ][-MAX_COMPANION_HISTORY:]
++    ]
++    entries = [
++        row
++        for row in entries
++        if row.get("entry_id") and row.get("summary")
++    ][-MAX_CAMPAIGN_JOURNAL_ENTRIES:]
++    entries.sort(
++        key=lambda row: (
++            int(row.get("turn_index") or 0),
++            str(row.get("entry_id") or ""),
++        )
++    )
 +    return {
 +        "version": 1,
-+        "members": members,
-+        "companion_offer_history": history,
-+        "max_party_members": MAX_PARTY_MEMBERS,
-+        "max_companion_history": MAX_COMPANION_HISTORY,
++        "entries": entries,
++        "max_entries": MAX_CAMPAIGN_JOURNAL_ENTRIES,
++        "max_recap_items": MAX_CAMPAIGN_RECAP_ITEMS,
 +    }
 +
 +
-+def ensure_party_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
++def ensure_campaign_journal_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
 +    if not isinstance(simulation_state, dict):
 +        raise TypeError("simulation_state_must_be_dict")
-+    state = normalize_party_state(simulation_state.get("party_state"))
-+    simulation_state["party_state"] = state
++    state = normalize_campaign_journal_state(simulation_state.get("campaign_journal_state"))
++    simulation_state["campaign_journal_state"] = state
 +    return state
-+
-+
-+def get_party_member(
-+    simulation_state: Dict[str, Any],
-+    npc_id: str,
-+) -> Dict[str, Any] | None:
-+    state = ensure_party_state(simulation_state)
-+    return state.get("members", {}).get(npc_id)
-+
-+
-+def is_party_member(simulation_state: Dict[str, Any], npc_id: str) -> bool:
-+    member = get_party_member(simulation_state, npc_id)
-+    return bool(member and member.get("status") == "active")
-+
-+
-+def add_party_member(
-+    simulation_state: Dict[str, Any],
-+    *,
-+    npc_id: str,
-+    role: str = "",
-+    motivation: str = "",
-+    source_offer_id: str = "",
-+    turn_index: int = 0,
-+    metadata: Dict[str, Any] | None = None,
-+) -> Dict[str, Any]:
-+    state = ensure_party_state(simulation_state)
-+    members = state.setdefault("members", {})
-+    if npc_id in members and members[npc_id].get("status") == "active":
-+        return {
-+            "ok": True,
-+            "reason": "already_party_member",
-+            "npc_id": npc_id,
-+            "member": members[npc_id],
-+        }
-+    active_count = len([row for row in members.values() if row.get("status") == "active"])
-+    if active_count >= MAX_PARTY_MEMBERS:
-+        return {
-+            "ok": False,
-+            "reason": "party_full",
-+            "npc_id": npc_id,
-+            "active_count": active_count,
-+            "max_party_members": MAX_PARTY_MEMBERS,
-+        }
-+    member = normalize_party_member(
-+        {
-+            "npc_id": npc_id,
-+            "status": "active",
-+            "joined_turn": turn_index,
-+            "role": role,
-+            "motivation": motivation,
-+            "source_offer_id": source_offer_id,
-+            "metadata": metadata or {},
-+        },
-+        npc_id=npc_id,
-+    )
-+    members[npc_id] = member
-+    simulation_state["party_state"] = normalize_party_state(state)
-+    return {
-+        "ok": True,
-+        "reason": "party_member_added",
-+        "npc_id": npc_id,
-+        "member": simulation_state["party_state"]["members"][npc_id],
-+    }
-+
-+
-+def append_companion_offer_history(
-+    simulation_state: Dict[str, Any],
-+    *,
-+    offer_id: str,
-+    npc_id: str,
-+    status: str,
-+    turn_index: int = 0,
-+    reason: str = "",
-+    details: Dict[str, Any] | None = None,
-+) -> Dict[str, Any]:
-+    state = ensure_party_state(simulation_state)
-+    history = list(state.get("companion_offer_history") or [])
-+    row = normalize_companion_offer_record(
-+        {
-+            "offer_id": offer_id,
-+            "npc_id": npc_id,
-+            "status": status,
-+            "turn_index": turn_index,
-+            "reason": reason,
-+            "details": details or {},
-+        }
-+    )
-+    history.append(row)
-+    state["companion_offer_history"] = history[-MAX_COMPANION_HISTORY:]
-+    simulation_state["party_state"] = normalize_party_state(state)
-+    return {
-+        "ok": True,
-+        "reason": "companion_offer_history_recorded",
-+        "record": row,
-+    }
-+
-+
-+def has_companion_offer_status(
-+    simulation_state: Dict[str, Any],
-+    *,
-+    offer_id: str,
-+    status: str,
-+) -> bool:
-+    state = ensure_party_state(simulation_state)
-+    return any(
-+        row.get("offer_id") == offer_id and row.get("status") == status
-+        for row in state.get("companion_offer_history") or []
-+    )
 *** End Patch
-3. Add src/app/rpg/companions/offers.py
+3. Add src/app/rpg/campaign_journal/journal.py
 *** Begin Patch
-*** Add File: src/app/rpg/companions/offers.py
+*** Add File: src/app/rpg/campaign_journal/journal.py
 +from __future__ import annotations
 +
 +import hashlib
 +import json
-+from typing import Any, Dict
++from typing import Any, Dict, List
 +
-+from app.rpg.companions.party import (
-+    add_party_member,
-+    append_companion_offer_history,
-+    ensure_party_state,
-+    has_companion_offer_status,
-+    is_party_member,
++from app.rpg.campaign_journal.state import (
++    MAX_CAMPAIGN_RECAP_ITEMS,
++    ensure_campaign_journal_state,
++    normalize_campaign_journal_state,
 +)
-+from app.rpg.npc_evolution.state import (
-+    apply_npc_evolution_delta,
-+    get_npc_evolution,
-+)
-+from app.rpg.social.reputation import get_relationship
++from app.rpg.companions.party import ensure_party_state
++from app.rpg.lore.state import get_lore_entry
++from app.rpg.npc_evolution.state import ensure_npc_evolution_state
++from app.rpg.story_arcs.state import get_story_arc
 +
 +
 +def _safe_dict(value: Any) -> Dict[str, Any]:
 +    return value if isinstance(value, dict) else {}
++
++
++def _safe_list(value: Any) -> List[Any]:
++    return value if isinstance(value, list) else []
 +
 +
 +def _safe_str(value: Any) -> str:
 +    return value if isinstance(value, str) else ""
 +
 +
-+def _stable_offer_id(npc_id: str, arc_id: str = "", motivation: str = "") -> str:
++def _stable_entry_id(*, kind: str, summary: str, turn_index: int, source_id: str = "") -> str:
 +    payload = json.dumps(
 +        {
-+            "npc_id": npc_id,
-+            "arc_id": arc_id,
-+            "motivation": motivation,
++            "kind": kind,
++            "summary": summary,
++            "turn_index": int(turn_index or 0),
++            "source_id": source_id,
 +        },
 +        sort_keys=True,
 +        ensure_ascii=False,
 +    )
 +    digest = hashlib.sha1(payload.encode("utf-8")).hexdigest()[:16]
-+    return f"companion_offer:{digest}"
++    return f"journal:{digest}"
 +
 +
-+def build_companion_offer_context(
++def _fact_status_from_lore(simulation_state: Dict[str, Any], lore_ids: List[str]) -> str:
++    statuses = []
++    for lore_id in lore_ids:
++        entry = get_lore_entry(simulation_state, lore_id)
++        if entry:
++            statuses.append(str(entry.get("truth_status") or "unknown"))
++    if not statuses:
++        return "confirmed"
++    if any(status == "secret" for status in statuses):
++        return "secret"
++    if any(status in {"rumor", "myth"} for status in statuses):
++        return "rumor"
++    if any(status == "unknown" for status in statuses):
++        return "unknown"
++    return "confirmed"
++
++
++def _should_show_lore_entry(entry: Dict[str, Any]) -> bool:
++    truth_status = str(entry.get("truth_status") or "unknown")
++    if truth_status == "secret" and not bool(entry.get("revealed_to_player")):
++        return False
++    return bool(entry.get("revealed_to_player")) or truth_status in {"true", "rumor", "myth", "unknown"}
++
++
++def record_campaign_journal_entry(
 +    simulation_state: Dict[str, Any],
-+    npc_id: str,
 +    *,
-+    arc_id: str = "",
++    kind: str,
++    summary: str,
++    title: str = "",
++    turn_index: int = 0,
++    visibility: str = "player",
++    fact_status: str = "",
++    arc_ids: List[str] | None = None,
++    lore_ids: List[str] | None = None,
++    event_ids: List[str] | None = None,
++    npc_ids: List[str] | None = None,
++    quest_ids: List[str] | None = None,
++    tags: List[str] | None = None,
++    source_id: str = "",
++    metadata: Dict[str, Any] | None = None,
 +) -> Dict[str, Any]:
-+    npc_id = str(npc_id or "")
-+    evolution = get_npc_evolution(simulation_state, npc_id) or {}
-+    relationship = get_relationship(simulation_state, npc_id)
-+    active_arcs = list(evolution.get("active_arcs") or [])
-+    completed_arcs = list(evolution.get("completed_arcs") or [])
-+    motivation = _safe_str(evolution.get("motivation"))
-+    role = _safe_str(evolution.get("role"))
-+    profession = _safe_str(evolution.get("profession"))
-+    flags = dict(_safe_dict(evolution.get("flags")))
-+    personality = dict(_safe_dict(evolution.get("personality")))
-+    offer_id = _stable_offer_id(npc_id, arc_id or (active_arcs[0] if active_arcs else ""), motivation)
-+    return {
-+        "ok": True,
-+        "npc_id": npc_id,
-+        "offer_id": offer_id,
-+        "arc_id": arc_id,
-+        "active_arcs": active_arcs[:10],
-+        "completed_arcs": completed_arcs[:10],
-+        "profession": profession,
-+        "role": role,
-+        "motivation": motivation,
-+        "personality": personality,
-+        "flags": flags,
-+        "relationship": {
-+            "trust": int(relationship.get("trust") or 0),
-+            "fear": int(relationship.get("fear") or 0),
-+            "respect": int(relationship.get("respect") or 0),
-+            "hostility": int(relationship.get("hostility") or 0),
-+            "reputation": int(relationship.get("reputation") or 0),
-+        },
-+        "companion_eligible": bool(evolution.get("companion_eligible")),
-+        "companion_offered": bool(evolution.get("companion_offered")),
-+        "is_party_member": is_party_member(simulation_state, npc_id),
-+        "bounded": {
-+            "max_active_arcs": 10,
-+            "max_completed_arcs": 10,
-+        },
-+    }
-+
-+
-+def evaluate_companion_offer(
-+    simulation_state: Dict[str, Any],
-+    npc_id: str,
-+    *,
-+    arc_id: str = "",
-+    min_trust: int = 70,
-+    max_hostility: int = 40,
-+) -> Dict[str, Any]:
-+    ensure_party_state(simulation_state)
-+    context = build_companion_offer_context(simulation_state, npc_id, arc_id=arc_id)
-+    offer_id = context["offer_id"]
-+    relationship = context["relationship"]
-+
-+    if not npc_id:
-+        return {"ok": False, "eligible": False, "reason": "missing_npc_id", "context": context}
-+    if context.get("is_party_member"):
-+        return {"ok": True, "eligible": False, "reason": "already_party_member", "context": context}
-+    if has_companion_offer_status(simulation_state, offer_id=offer_id, status="accepted"):
-+        return {"ok": True, "eligible": False, "reason": "offer_already_accepted", "context": context}
-+    if has_companion_offer_status(simulation_state, offer_id=offer_id, status="refused"):
-+        return {"ok": True, "eligible": False, "reason": "offer_previously_refused", "context": context}
-+    if not context.get("companion_eligible"):
-+        return {"ok": True, "eligible": False, "reason": "npc_not_companion_eligible", "context": context}
-+    if relationship["trust"] < int(min_trust or 0):
++    if not summary:
++        return {"ok": False, "reason": "missing_summary"}
++    state = ensure_campaign_journal_state(simulation_state)
++    lore_ids = lore_ids or []
++    if not fact_status:
++        fact_status = _fact_status_from_lore(simulation_state, lore_ids)
++    if fact_status == "secret" and visibility == "player":
++        visibility = "hidden"
++    entry_id = _stable_entry_id(
++        kind=kind,
++        summary=summary,
++        turn_index=turn_index,
++        source_id=source_id,
++    )
++    existing = [
++        row
++        for row in state.get("entries") or []
++        if row.get("entry_id") == entry_id
++    ]
++    if existing:
 +        return {
 +            "ok": True,
-+            "eligible": False,
-+            "reason": "trust_too_low",
-+            "context": context,
-+            "minimum_trust": int(min_trust or 0),
++            "reason": "already_recorded",
++            "entry": existing[0],
 +        }
-+    if relationship["hostility"] > int(max_hostility or 0):
-+        return {
-+            "ok": True,
-+            "eligible": False,
-+            "reason": "hostility_too_high",
-+            "context": context,
-+            "maximum_hostility": int(max_hostility or 0),
-+        }
-+    if not context.get("active_arcs") and not context.get("motivation"):
-+        return {"ok": True, "eligible": False, "reason": "no_active_arc_or_motivation", "context": context}
-+
++    entry = {
++        "entry_id": entry_id,
++        "turn_index": int(turn_index or 0),
++        "kind": kind,
++        "title": title or kind.replace("_", " ").title(),
++        "summary": summary,
++        "visibility": visibility,
++        "fact_status": fact_status,
++        "arc_ids": arc_ids or [],
++        "lore_ids": lore_ids,
++        "event_ids": event_ids or [],
++        "npc_ids": npc_ids or [],
++        "quest_ids": quest_ids or [],
++        "tags": tags or [],
++        "metadata": metadata or {},
++    }
++    state.setdefault("entries", []).append(entry)
++    simulation_state["campaign_journal_state"] = normalize_campaign_journal_state(state)
 +    return {
 +        "ok": True,
-+        "eligible": True,
-+        "reason": "eligible",
-+        "offer_id": offer_id,
-+        "context": context,
++        "reason": "recorded",
++        "entry": entry,
 +    }
 +
 +
-+def accept_companion_offer(
-+    simulation_state: Dict[str, Any],
-+    npc_id: str,
-+    *,
-+    arc_id: str = "",
-+    turn_index: int = 0,
-+    min_trust: int = 70,
-+    max_hostility: int = 40,
-+) -> Dict[str, Any]:
-+    evaluation = evaluate_companion_offer(
-+        simulation_state,
-+        npc_id,
-+        arc_id=arc_id,
-+        min_trust=min_trust,
-+        max_hostility=max_hostility,
-+    )
-+    if not evaluation.get("eligible"):
-+        append_companion_offer_history(
-+            simulation_state,
-+            offer_id=evaluation.get("context", {}).get("offer_id", ""),
-+            npc_id=npc_id,
-+            status="blocked",
-+            turn_index=turn_index,
-+            reason=evaluation.get("reason") or "not_eligible",
-+            details={"evaluation": evaluation},
++def _journal_entries(simulation_state: Dict[str, Any], *, include_hidden: bool = False) -> List[Dict[str, Any]]:
++    state = ensure_campaign_journal_state(simulation_state)
++    entries = list(state.get("entries") or [])
++    if not include_hidden:
++        entries = [row for row in entries if row.get("visibility") == "player"]
++    entries.sort(key=lambda row: (int(row.get("turn_index") or 0), str(row.get("entry_id") or "")))
++    return entries
++
++
++def _known_lore_rows(simulation_state: Dict[str, Any]) -> List[Dict[str, Any]]:
++    lore_state = _safe_dict(simulation_state.get("lore_state"))
++    entries = _safe_dict(lore_state.get("entries"))
++    rows = []
++    for lore_id, entry in entries.items():
++        entry = _safe_dict(entry)
++        if not _should_show_lore_entry(entry):
++            continue
++        rows.append(
++            {
++                "lore_id": str(lore_id),
++                "title": entry.get("title") or str(lore_id),
++                "truth_status": entry.get("truth_status") or "unknown",
++                "summary": entry.get("summary") or "",
++                "tags": list(entry.get("tags") or [])[:10],
++            }
 +        )
-+        return {
-+            "ok": False,
-+            "reason": "not_eligible",
-+            "evaluation": evaluation,
-+        }
++    rows.sort(key=lambda row: (str(row.get("truth_status") or ""), str(row.get("lore_id") or "")))
++    return rows[:MAX_CAMPAIGN_RECAP_ITEMS]
 +
-+    context = evaluation["context"]
-+    offer_id = evaluation["offer_id"]
-+    party_result = add_party_member(
-+        simulation_state,
-+        npc_id=npc_id,
-+        role=context.get("role") or "companion",
-+        motivation=context.get("motivation") or "",
-+        source_offer_id=offer_id,
-+        turn_index=turn_index,
-+        metadata={"arc_id": arc_id, "source": "companion_offer_v1"},
-+    )
-+    if not party_result.get("ok"):
-+        append_companion_offer_history(
-+            simulation_state,
-+            offer_id=offer_id,
-+            npc_id=npc_id,
-+            status="blocked",
-+            turn_index=turn_index,
-+            reason=party_result.get("reason") or "party_add_failed",
-+            details={"party_result": party_result},
++
++def _active_arc_rows(simulation_state: Dict[str, Any]) -> List[Dict[str, Any]]:
++    arc_state = _safe_dict(simulation_state.get("story_arc_state"))
++    arcs = _safe_dict(arc_state.get("arcs"))
++    rows = []
++    for arc_id, arc in arcs.items():
++        arc = _safe_dict(arc)
++        if arc.get("status") in {"resolved", "failed"}:
++            continue
++        rows.append(
++            {
++                "arc_id": str(arc_id),
++                "title": arc.get("title") or str(arc_id),
++                "status": arc.get("status") or "active",
++                "stage": arc.get("stage") or "",
++                "pressure": int(arc.get("pressure") or 0),
++                "linked_lore": list(arc.get("linked_lore") or [])[:10],
++                "linked_entities": list(arc.get("linked_entities") or [])[:10],
++            }
 +        )
-+        return {
-+            "ok": False,
-+            "reason": "party_add_failed",
-+            "evaluation": evaluation,
-+            "party_result": party_result,
-+        }
-+
-+    evolution_result = apply_npc_evolution_delta(
-+        simulation_state,
-+        npc_id,
-+        companion_offered=True,
-+        flags={"joined_party": True},
-+        source_event_id=offer_id,
-+        turn_index=turn_index,
-+    )
-+    history_result = append_companion_offer_history(
-+        simulation_state,
-+        offer_id=offer_id,
-+        npc_id=npc_id,
-+        status="accepted",
-+        turn_index=turn_index,
-+        reason="accepted",
-+        details={"party_result": party_result, "evolution_result": evolution_result},
-+    )
-+    return {
-+        "ok": True,
-+        "reason": "accepted",
-+        "offer_id": offer_id,
-+        "npc_id": npc_id,
-+        "evaluation": evaluation,
-+        "party_result": party_result,
-+        "evolution_result": evolution_result,
-+        "history_result": history_result,
-+    }
++    rows.sort(key=lambda row: (-int(row.get("pressure") or 0), str(row.get("arc_id") or "")))
++    return rows[:MAX_CAMPAIGN_RECAP_ITEMS]
 +
 +
-+def refuse_companion_offer(
++def _recent_applied_event_rows(simulation_state: Dict[str, Any]) -> List[Dict[str, Any]]:
++    state = _safe_dict(simulation_state.get("story_event_state"))
++    applied = _safe_dict(state.get("applied_events"))
++    rows = []
++    for event_id, event in applied.items():
++        event = _safe_dict(event)
++        rows.append(
++            {
++                "event_id": str(event_id),
++                "arc_id": event.get("arc_id") or "",
++                "turn_index": int(event.get("turn_index") or event.get("applied_turn") or 0),
++                "summary": event.get("summary") or event.get("reason") or "",
++                "kind": event.get("kind") or "story_event",
++            }
++        )
++    rows.sort(key=lambda row: (int(row.get("turn_index") or 0), str(row.get("event_id") or "")), reverse=True)
++    return rows[:MAX_CAMPAIGN_RECAP_ITEMS]
++
++
++def _pending_queue_rows(simulation_state: Dict[str, Any]) -> List[Dict[str, Any]]:
++    queue_state = _safe_dict(simulation_state.get("story_event_queue_state"))
++    rows = []
++    for item in _safe_list(queue_state.get("pending")):
++        item = _safe_dict(item)
++        rows.append(
++            {
++                "queue_id": item.get("queue_id"),
++                "event_id": item.get("event_id"),
++                "due_turn": int(item.get("due_turn") or 0),
++                "priority": int(item.get("priority") or 0),
++                "reason": item.get("reason") or "",
++                "source": item.get("source") or "",
++            }
++        )
++    rows.sort(key=lambda row: (int(row.get("due_turn") or 0), -int(row.get("priority") or 0)))
++    return rows[:MAX_CAMPAIGN_RECAP_ITEMS]
++
++
++def _npc_evolution_rows(simulation_state: Dict[str, Any]) -> List[Dict[str, Any]]:
++    state = ensure_npc_evolution_state(simulation_state)
++    rows = []
++    for npc_id, evolution in _safe_dict(state.get("npcs")).items():
++        evolution = _safe_dict(evolution)
++        if not evolution.get("active_arcs") and not evolution.get("motivation") and not evolution.get("companion_eligible"):
++            continue
++        rows.append(
++            {
++                "npc_id": str(npc_id),
++                "active_arcs": list(evolution.get("active_arcs") or [])[:10],
++                "profession": evolution.get("profession") or "",
++                "role": evolution.get("role") or "",
++                "motivation": evolution.get("motivation") or "",
++                "companion_eligible": bool(evolution.get("companion_eligible")),
++                "flags": dict(_safe_dict(evolution.get("flags"))),
++            }
++        )
++    rows.sort(key=lambda row: str(row.get("npc_id") or ""))
++    return rows[:MAX_CAMPAIGN_RECAP_ITEMS]
++
++
++def _party_rows(simulation_state: Dict[str, Any]) -> List[Dict[str, Any]]:
++    state = ensure_party_state(simulation_state)
++    rows = []
++    for npc_id, member in _safe_dict(state.get("members")).items():
++        member = _safe_dict(member)
++        if member.get("status") != "active":
++            continue
++        rows.append(
++            {
++                "npc_id": str(npc_id),
++                "role": member.get("role") or "",
++                "motivation": member.get("motivation") or "",
++                "joined_turn": int(member.get("joined_turn") or 0),
++            }
++        )
++    rows.sort(key=lambda row: (int(row.get("joined_turn") or 0), str(row.get("npc_id") or "")))
++    return rows[:MAX_CAMPAIGN_RECAP_ITEMS]
++
++
++def build_campaign_journal(
 +    simulation_state: Dict[str, Any],
-+    npc_id: str,
 +    *,
-+    arc_id: str = "",
-+    turn_index: int = 0,
-+    reason: str = "player_refused",
++    include_hidden: bool = False,
++    max_entries: int = MAX_CAMPAIGN_RECAP_ITEMS,
 +) -> Dict[str, Any]:
-+    context = build_companion_offer_context(simulation_state, npc_id, arc_id=arc_id)
-+    offer_id = context["offer_id"]
-+    if has_companion_offer_status(simulation_state, offer_id=offer_id, status="accepted"):
-+        return {
-+            "ok": False,
-+            "reason": "offer_already_accepted",
-+            "offer_id": offer_id,
-+            "context": context,
-+        }
-+    evolution_result = apply_npc_evolution_delta(
-+        simulation_state,
-+        npc_id,
-+        companion_offered=True,
-+        flags={"companion_offer_refused": True},
-+        source_event_id=offer_id,
-+        turn_index=turn_index,
-+    )
-+    history_result = append_companion_offer_history(
-+        simulation_state,
-+        offer_id=offer_id,
-+        npc_id=npc_id,
-+        status="refused",
-+        turn_index=turn_index,
-+        reason=reason,
-+        details={"evolution_result": evolution_result},
-+    )
++    entries = _journal_entries(simulation_state, include_hidden=include_hidden)[-max_entries:]
 +    return {
 +        "ok": True,
-+        "reason": "refused",
-+        "offer_id": offer_id,
-+        "npc_id": npc_id,
-+        "context": context,
-+        "evolution_result": evolution_result,
-+        "history_result": history_result,
-+    }
-*** End Patch
-Patch 2 — Add NPC runtime context
-4. Add src/app/rpg/npc_runtime_context/__init__.py
-*** Begin Patch
-*** Add File: src/app/rpg/npc_runtime_context/__init__.py
-+"""Bounded deterministic NPC runtime context."""
-+
-+from app.rpg.npc_runtime_context.context import build_npc_runtime_context
-+
-+__all__ = ["build_npc_runtime_context"]
-*** End Patch
-5. Add src/app/rpg/npc_runtime_context/context.py
-*** Begin Patch
-*** Add File: src/app/rpg/npc_runtime_context/context.py
-+from __future__ import annotations
-+
-+from typing import Any, Dict
-+
-+from app.rpg.companions.offers import evaluate_companion_offer
-+from app.rpg.companions.party import get_party_member
-+from app.rpg.dialogue_context.arc_context import build_arc_dialogue_context
-+from app.rpg.npc_evolution.state import get_npc_evolution
-+from app.rpg.social.reputation import get_relationship
-+
-+
-+def _safe_dict(value: Any) -> Dict[str, Any]:
-+    return value if isinstance(value, dict) else {}
-+
-+
-+def build_npc_runtime_context(
-+    simulation_state: Dict[str, Any],
-+    npc_id: str,
-+    *,
-+    arc_id: str = "",
-+    topic_lore_id: str = "",
-+) -> Dict[str, Any]:
-+    npc_id = str(npc_id or "")
-+    evolution = get_npc_evolution(simulation_state, npc_id) or {}
-+    relationship = get_relationship(simulation_state, npc_id)
-+    dialogue_context = build_arc_dialogue_context(
-+        simulation_state,
-+        npc_id,
-+        arc_id=arc_id,
-+        topic_lore_id=topic_lore_id,
-+    )
-+    companion_offer = evaluate_companion_offer(
-+        simulation_state,
-+        npc_id,
-+        arc_id=arc_id,
-+    )
-+    party_member = get_party_member(simulation_state, npc_id)
-+    return {
-+        "ok": True,
-+        "npc_id": npc_id,
-+        "profession": evolution.get("profession") or "",
-+        "role": evolution.get("role") or "",
-+        "motivation": evolution.get("motivation") or "",
-+        "active_arcs": list(evolution.get("active_arcs") or [])[:10],
-+        "completed_arcs": list(evolution.get("completed_arcs") or [])[:10],
-+        "personality": dict(_safe_dict(evolution.get("personality"))),
-+        "flags": dict(_safe_dict(evolution.get("flags"))),
-+        "relationship": {
-+            "trust": int(relationship.get("trust") or 0),
-+            "fear": int(relationship.get("fear") or 0),
-+            "respect": int(relationship.get("respect") or 0),
-+            "hostility": int(relationship.get("hostility") or 0),
-+            "reputation": int(relationship.get("reputation") or 0),
-+        },
-+        "dialogue_context": dialogue_context,
-+        "companion_offer": {
-+            "eligible": bool(companion_offer.get("eligible")),
-+            "reason": companion_offer.get("reason"),
-+            "offer_id": companion_offer.get("offer_id") or companion_offer.get("context", {}).get("offer_id"),
-+        },
-+        "party_member": party_member,
++        "entries": entries,
++        "known_lore": _known_lore_rows(simulation_state),
++        "active_arcs": _active_arc_rows(simulation_state),
++        "recent_events": _recent_applied_event_rows(simulation_state),
++        "pending_consequences": _pending_queue_rows(simulation_state),
++        "npc_evolution": _npc_evolution_rows(simulation_state),
++        "party": _party_rows(simulation_state),
 +        "bounded": {
-+            "max_active_arcs": 10,
-+            "max_completed_arcs": 10,
++            "max_entries": max_entries,
++            "max_recap_items": MAX_CAMPAIGN_RECAP_ITEMS,
 +        },
 +    }
++
++
++def build_player_story_recap(
++    simulation_state: Dict[str, Any],
++    *,
++    turn_index: int = 0,
++    max_items: int = MAX_CAMPAIGN_RECAP_ITEMS,
++) -> Dict[str, Any]:
++    journal = build_campaign_journal(simulation_state, include_hidden=False, max_entries=max_items)
++    latest_entries = list(journal.get("entries") or [])[-max_items:]
++    recent_events = list(journal.get("recent_events") or [])[:max_items]
++    return {
++        "ok": True,
++        "format_version": "campaign_story_recap_v1",
++        "turn_index": int(turn_index or 0),
++        "latest_journal_entries": latest_entries,
++        "known_lore": list(journal.get("known_lore") or [])[:max_items],
++        "active_arcs": list(journal.get("active_arcs") or [])[:max_items],
++        "recent_events": recent_events,
++        "pending_consequences": list(journal.get("pending_consequences") or [])[:max_items],
++        "npc_evolution": list(journal.get("npc_evolution") or [])[:max_items],
++        "party": list(journal.get("party") or [])[:max_items],
++        "narrator_context": {
++            "rules": [
++                "Use only facts in this recap.",
++                "Mark rumors as rumors.",
++                "Do not reveal hidden or secret lore.",
++                "Do not invent rewards, quests, deaths, or outcomes.",
++            ],
++            "story_so_far": latest_entries,
++            "current_arcs": list(journal.get("active_arcs") or [])[:max_items],
++            "known_rumors": [
++                row
++                for row in list(journal.get("known_lore") or [])
++                if row.get("truth_status") in {"rumor", "myth", "unknown"}
++            ][:max_items],
++        },
++        "bounded": {
++            "max_items": max_items,
++            "max_recap_items": MAX_CAMPAIGN_RECAP_ITEMS,
++        },
++    }
+*** End Patch
+Patch 2 — Integrate journal recording into story events and companion actions
+4. Patch src/app/rpg/story_events/application.py
+
+Add import:
+
+*** Begin Patch
+*** Update File: src/app/rpg/story_events/application.py
+@@
+ from app.rpg.story_events.effects import apply_story_event_effects
+ from app.rpg.story_events.state import mark_story_event_applied
++from app.rpg.campaign_journal.journal import record_campaign_journal_entry
+*** End Patch
+
+After successful mark_story_event_applied(...), record a journal entry. Look for the success return path in apply_story_event(...) and add:
+
+*** Begin Patch
+*** Update File: src/app/rpg/story_events/application.py
+@@
+     applied = mark_story_event_applied(
+         simulation_state,
+         event_id,
+         arc_id=event.get("arc_id") or "",
+         turn_index=turn_index,
+         summary=event.get("summary") or "",
+         metadata={"effects": effect_results},
+     )
++    record_campaign_journal_entry(
++        simulation_state,
++        kind="story_event",
++        title=str(event.get("title") or event.get("kind") or "Story Event"),
++        summary=str(event.get("summary") or event_id),
++        turn_index=turn_index,
++        visibility="player",
++        arc_ids=[str(event.get("arc_id") or "")] if event.get("arc_id") else [],
++        event_ids=[event_id],
++        npc_ids=[str(npc_id) for npc_id in event.get("participants") or [] if str(npc_id)],
++        source_id=event_id,
++        metadata={"source": "apply_story_event"},
++    )
+     return {
+         "ok": True,
+*** End Patch
+
+If the exact mark_story_event_applied(...) block differs, add the journal call immediately before the successful return from apply_story_event, after effects and applied-state marking succeed.
+
+5. Patch src/app/rpg/companions/offers.py
+
+Add import:
+
+*** Begin Patch
+*** Update File: src/app/rpg/companions/offers.py
+@@
+ from app.rpg.social.reputation import get_relationship
++from app.rpg.campaign_journal.journal import record_campaign_journal_entry
+*** End Patch
+
+In accept_companion_offer(...), after history_result = append_companion_offer_history(...), add:
+
+*** Begin Patch
+*** Update File: src/app/rpg/companions/offers.py
+@@
+     history_result = append_companion_offer_history(
+         simulation_state,
+         offer_id=offer_id,
+         npc_id=npc_id,
+         status="accepted",
+@@
+         reason="accepted",
+         details={"party_result": party_result, "evolution_result": evolution_result},
+     )
++    record_campaign_journal_entry(
++        simulation_state,
++        kind="companion",
++        title="Companion Joined",
++        summary=f"{npc_id} joined the party.",
++        turn_index=turn_index,
++        visibility="player",
++        fact_status="confirmed",
++        npc_ids=[npc_id],
++        tags=["companion", "party"],
++        source_id=offer_id,
++        metadata={"offer_id": offer_id, "action": "accepted"},
++    )
+     return {
+         "ok": True,
+*** End Patch
+
+In refuse_companion_offer(...), after history_result = append_companion_offer_history(...), add:
+
+*** Begin Patch
+*** Update File: src/app/rpg/companions/offers.py
+@@
+     history_result = append_companion_offer_history(
+         simulation_state,
+         offer_id=offer_id,
+         npc_id=npc_id,
+         status="refused",
+@@
+         reason=reason,
+         details={"evolution_result": evolution_result},
+     )
++    record_campaign_journal_entry(
++        simulation_state,
++        kind="companion",
++        title="Companion Offer Refused",
++        summary=f"{npc_id}'s companion offer was refused.",
++        turn_index=turn_index,
++        visibility="player",
++        fact_status="confirmed",
++        npc_ids=[npc_id],
++        tags=["companion", "party"],
++        source_id=offer_id,
++        metadata={"offer_id": offer_id, "action": "refused"},
++    )
+     return {
+         "ok": True,
 *** End Patch
 Patch 3 — Unit tests
-6. Add src/tests/rpg/companions/test_companion_offers.py
+6. Add src/tests/rpg/campaign_journal/test_campaign_journal_state.py
 *** Begin Patch
-*** Add File: src/tests/rpg/companions/test_companion_offers.py
-+from app.rpg.companions.offers import (
-+    accept_companion_offer,
-+    evaluate_companion_offer,
-+    refuse_companion_offer,
+*** Add File: src/tests/rpg/campaign_journal/test_campaign_journal_state.py
++import json
++
++from app.rpg.campaign_journal.journal import record_campaign_journal_entry
++from app.rpg.campaign_journal.state import normalize_campaign_journal_state
++
++
++def test_campaign_journal_records_entry():
++    simulation_state = {}
++    result = record_campaign_journal_entry(
++        simulation_state,
++        kind="story_event",
++        title="Bandit Attack",
++        summary="Bandits attacked the road.",
++        turn_index=3,
++        event_ids=["event:bandit_attack"],
++    )
++
++    assert result["ok"] is True
++    assert simulation_state["campaign_journal_state"]["entries"][0]["summary"] == "Bandits attacked the road."
++
++
++def test_campaign_journal_entry_is_idempotent():
++    simulation_state = {}
++    first = record_campaign_journal_entry(
++        simulation_state,
++        kind="story_event",
++        summary="Bandits attacked the road.",
++        turn_index=3,
++        source_id="event:x",
++    )
++    second = record_campaign_journal_entry(
++        simulation_state,
++        kind="story_event",
++        summary="Bandits attacked the road.",
++        turn_index=3,
++        source_id="event:x",
++    )
++
++    assert first["reason"] == "recorded"
++    assert second["reason"] == "already_recorded"
++    assert len(simulation_state["campaign_journal_state"]["entries"]) == 1
++
++
++def test_campaign_journal_state_json_roundtrip():
++    simulation_state = {}
++    record_campaign_journal_entry(
++        simulation_state,
++        kind="story_event",
++        summary="Bandits attacked the road.",
++        turn_index=3,
++        source_id="event:x",
++    )
++
++    encoded = json.dumps(simulation_state["campaign_journal_state"], sort_keys=True)
++    decoded = json.loads(encoded)
++    normalized = normalize_campaign_journal_state(decoded)
++
++    assert normalized["entries"][0]["summary"] == "Bandits attacked the road."
++
++
++def test_campaign_journal_history_bounded():
++    simulation_state = {}
++    for i in range(350):
++        record_campaign_journal_entry(
++            simulation_state,
++            kind="story_event",
++            summary=f"Event {i}",
++            turn_index=i,
++            source_id=f"event:{i}",
++        )
++
++    assert len(simulation_state["campaign_journal_state"]["entries"]) == 300
+*** End Patch
+7. Add src/tests/rpg/campaign_journal/test_campaign_journal_recap.py
+*** Begin Patch
+*** Add File: src/tests/rpg/campaign_journal/test_campaign_journal_recap.py
++from app.rpg.campaign_journal.journal import (
++    build_campaign_journal,
++    build_player_story_recap,
++    record_campaign_journal_entry,
 +)
-+from app.rpg.companions.party import get_party_member
-+from app.rpg.npc_evolution.state import apply_npc_evolution_delta, get_npc_evolution, start_npc_arc
++from app.rpg.companions.offers import accept_companion_offer
++from app.rpg.lore.state import upsert_lore_entry
++from app.rpg.npc_evolution.state import apply_npc_evolution_delta, start_npc_arc
 +from app.rpg.social.reputation import set_relationship_values
++from app.rpg.story_arcs.state import start_story_arc
++from app.rpg.story_event_queue.queue import enqueue_story_event
 +
 +
-+def _eligible_bran_state():
++def test_campaign_journal_excludes_unrevealed_secret_lore():
++    simulation_state = {}
++    upsert_lore_entry(
++        simulation_state,
++        {
++            "lore_id": "lore:secret_debt",
++            "title": "Secret Debt",
++            "truth_status": "secret",
++            "revealed_to_player": False,
++        },
++    )
++
++    journal = build_campaign_journal(simulation_state)
++
++    assert journal["known_lore"] == []
++
++
++def test_campaign_journal_marks_rumors_as_rumors():
++    simulation_state = {}
++    upsert_lore_entry(
++        simulation_state,
++        {
++            "lore_id": "lore:red_sashes",
++            "title": "The Red Sashes",
++            "truth_status": "rumor",
++            "summary": "A gang may be active nearby.",
++        },
++    )
++
++    journal = build_campaign_journal(simulation_state)
++
++    assert journal["known_lore"][0]["lore_id"] == "lore:red_sashes"
++    assert journal["known_lore"][0]["truth_status"] == "rumor"
++
++
++def test_campaign_recap_includes_active_arcs_pending_consequences_and_npc_evolution():
++    simulation_state = {}
++    start_story_arc(
++        simulation_state,
++        "arc:bandit_pressure",
++        title="Bandit Pressure",
++        stage="rumors",
++        pressure=60,
++    )
++    enqueue_story_event(
++        simulation_state,
++        {"event_id": "event:delayed_attack", "arc_id": "arc:bandit_pressure", "effects": []},
++        enqueued_turn=1,
++        due_turn=5,
++    )
++    start_npc_arc(
++        simulation_state,
++        "bran",
++        "npc_arc:bran_revenge",
++        motivation="revenge_against_red_sashes",
++        profession="former_innkeeper",
++    )
++
++    recap = build_player_story_recap(simulation_state, turn_index=2)
++
++    assert recap["format_version"] == "campaign_story_recap_v1"
++    assert recap["active_arcs"][0]["arc_id"] == "arc:bandit_pressure"
++    assert recap["pending_consequences"][0]["event_id"] == "event:delayed_attack"
++    assert recap["npc_evolution"][0]["npc_id"] == "bran"
++    assert "Do not reveal hidden or secret lore." in recap["narrator_context"]["rules"]
++
++
++def test_companion_acceptance_records_journal_entry():
 +    simulation_state = {}
 +    start_npc_arc(
 +        simulation_state,
@@ -623,187 +774,74 @@ Patch 3 — Unit tests
 +        role="companion",
 +    )
 +    apply_npc_evolution_delta(simulation_state, "bran", companion_eligible=True)
-+    set_relationship_values(simulation_state, "bran", {"trust": 80, "hostility": 0})
-+    return simulation_state
-+
-+
-+def test_evaluate_companion_offer_eligible():
-+    simulation_state = _eligible_bran_state()
-+
-+    result = evaluate_companion_offer(simulation_state, "bran")
-+
-+    assert result["ok"] is True
-+    assert result["eligible"] is True
-+    assert result["reason"] == "eligible"
-+
-+
-+def test_evaluate_companion_offer_blocks_low_trust():
-+    simulation_state = _eligible_bran_state()
-+    set_relationship_values(simulation_state, "bran", {"trust": 20})
-+
-+    result = evaluate_companion_offer(simulation_state, "bran")
-+
-+    assert result["eligible"] is False
-+    assert result["reason"] == "trust_too_low"
-+
-+
-+def test_evaluate_companion_offer_blocks_hostility():
-+    simulation_state = _eligible_bran_state()
-+    set_relationship_values(simulation_state, "bran", {"hostility": 80})
-+
-+    result = evaluate_companion_offer(simulation_state, "bran")
-+
-+    assert result["eligible"] is False
-+    assert result["reason"] == "hostility_too_high"
-+
-+
-+def test_accept_companion_offer_adds_party_member_and_marks_evolution():
-+    simulation_state = _eligible_bran_state()
-+
-+    result = accept_companion_offer(simulation_state, "bran", turn_index=5)
-+
-+    member = get_party_member(simulation_state, "bran")
-+    evolution = get_npc_evolution(simulation_state, "bran")
-+    assert result["ok"] is True
-+    assert member["status"] == "active"
-+    assert member["motivation"] == "revenge_against_red_sashes"
-+    assert evolution["companion_offered"] is True
-+    assert evolution["flags"]["joined_party"] is True
-+
-+
-+def test_accept_companion_offer_apply_once():
-+    simulation_state = _eligible_bran_state()
-+
-+    first = accept_companion_offer(simulation_state, "bran", turn_index=5)
-+    second = accept_companion_offer(simulation_state, "bran", turn_index=6)
-+
-+    assert first["ok"] is True
-+    assert second["ok"] is False
-+    assert second["evaluation"]["reason"] == "already_party_member"
-+
-+
-+def test_refuse_companion_offer_blocks_future_offer():
-+    simulation_state = _eligible_bran_state()
-+
-+    refusal = refuse_companion_offer(simulation_state, "bran", turn_index=5)
-+    later = evaluate_companion_offer(simulation_state, "bran")
-+
-+    assert refusal["ok"] is True
-+    assert later["eligible"] is False
-+    assert later["reason"] == "offer_previously_refused"
-+    assert get_npc_evolution(simulation_state, "bran")["flags"]["companion_offer_refused"] is True
-*** End Patch
-7. Add src/tests/rpg/companions/test_party_state.py
-*** Begin Patch
-*** Add File: src/tests/rpg/companions/test_party_state.py
-+import json
-+
-+from app.rpg.companions.party import (
-+    add_party_member,
-+    append_companion_offer_history,
-+    normalize_party_state,
-+)
-+
-+
-+def test_party_state_adds_member():
-+    simulation_state = {}
-+    result = add_party_member(
-+        simulation_state,
-+        npc_id="bran",
-+        role="companion",
-+        motivation="revenge_against_red_sashes",
-+        turn_index=3,
-+    )
-+
-+    assert result["ok"] is True
-+    assert simulation_state["party_state"]["members"]["bran"]["status"] == "active"
-+
-+
-+def test_party_state_offer_history_bounded():
-+    simulation_state = {}
-+    for i in range(130):
-+        append_companion_offer_history(
-+            simulation_state,
-+            offer_id=f"offer:{i}",
-+            npc_id="bran",
-+            status="blocked",
-+            turn_index=i,
-+        )
-+
-+    assert len(simulation_state["party_state"]["companion_offer_history"]) == 100
-+
-+
-+def test_party_state_json_roundtrip():
-+    simulation_state = {}
-+    add_party_member(simulation_state, npc_id="bran", role="companion", turn_index=3)
-+
-+    encoded = json.dumps(simulation_state["party_state"], sort_keys=True)
-+    decoded = json.loads(encoded)
-+    normalized = normalize_party_state(decoded)
-+
-+    assert normalized["members"]["bran"]["role"] == "companion"
-+    assert normalized["members"]["bran"]["joined_turn"] == 3
-*** End Patch
-8. Add src/tests/rpg/npc_runtime_context/test_npc_runtime_context.py
-*** Begin Patch
-*** Add File: src/tests/rpg/npc_runtime_context/test_npc_runtime_context.py
-+from app.rpg.npc_evolution.state import apply_npc_evolution_delta, start_npc_arc
-+from app.rpg.npc_runtime_context.context import build_npc_runtime_context
-+from app.rpg.social.reputation import set_relationship_values
-+
-+
-+def test_npc_runtime_context_exposes_arc_evolution_and_offer():
-+    simulation_state = {}
-+    start_npc_arc(
-+        simulation_state,
-+        "bran",
-+        "npc_arc:bran_revenge",
-+        motivation="revenge_against_red_sashes",
-+        role="companion",
-+        profession="former_innkeeper",
-+    )
-+    apply_npc_evolution_delta(
-+        simulation_state,
-+        "bran",
-+        personality_deltas={"vengeful": 20},
-+        companion_eligible=True,
-+    )
 +    set_relationship_values(simulation_state, "bran", {"trust": 80})
 +
-+    context = build_npc_runtime_context(simulation_state, "bran")
++    result = accept_companion_offer(simulation_state, "bran", turn_index=4)
++    journal = build_campaign_journal(simulation_state)
 +
-+    assert context["ok"] is True
-+    assert context["profession"] == "former_innkeeper"
-+    assert context["motivation"] == "revenge_against_red_sashes"
-+    assert context["personality"]["vengeful"] == 20
-+    assert context["companion_offer"]["eligible"] is True
++    assert result["ok"] is True
++    assert any(row["kind"] == "companion" for row in journal["entries"])
 +
 +
-+def test_npc_runtime_context_bounded():
++def test_player_story_recap_is_bounded():
 +    simulation_state = {}
-+    for i in range(20):
-+        start_npc_arc(simulation_state, "bran", f"npc_arc:{i}")
++    for i in range(80):
++        record_campaign_journal_entry(
++            simulation_state,
++            kind="story_event",
++            summary=f"Story event {i}",
++            turn_index=i,
++            source_id=f"event:{i}",
++        )
 +
-+    context = build_npc_runtime_context(simulation_state, "bran")
++    recap = build_player_story_recap(simulation_state, turn_index=80, max_items=10)
 +
-+    assert len(context["active_arcs"]) <= context["bounded"]["max_active_arcs"]
++    assert len(recap["latest_journal_entries"]) <= 10
++    assert recap["bounded"]["max_items"] == 10
 *** End Patch
-Patch 4 — Manual companion checks/setup
-9. Add src/tests/rpg/manual/companion_m28_m30_checks.py
+8. Add src/tests/rpg/campaign_journal/test_campaign_journal_story_event_integration.py
 *** Begin Patch
-*** Add File: src/tests/rpg/manual/companion_m28_m30_checks.py
+*** Add File: src/tests/rpg/campaign_journal/test_campaign_journal_story_event_integration.py
++from app.rpg.campaign_journal.journal import build_campaign_journal
++from app.rpg.story_arcs.state import start_story_arc
++from app.rpg.story_events.application import apply_story_event
++
++
++def test_apply_story_event_records_campaign_journal_entry():
++    simulation_state = {}
++    start_story_arc(simulation_state, "arc:x", stage="start")
++
++    result = apply_story_event(
++        simulation_state,
++        {
++            "event_id": "event:x",
++            "arc_id": "arc:x",
++            "kind": "consequence",
++            "summary": "The consequence happened.",
++            "effects": [
++                {"type": "arc_stage_set", "arc_id": "arc:x", "stage": "done"}
++            ],
++        },
++        turn_index=4,
++    )
++    journal = build_campaign_journal(simulation_state)
++
++    assert result["ok"] is True
++    assert any(row["event_ids"] == ["event:x"] for row in journal["entries"])
+*** End Patch
+Patch 4 — Manual checks/setup
+9. Add src/tests/rpg/manual/campaign_journal_m31_m33_checks.py
+*** Begin Patch
+*** Add File: src/tests/rpg/manual/campaign_journal_m31_m33_checks.py
 +from __future__ import annotations
 +
 +from typing import Any, Dict, List
 +
-+from app.rpg.companions.offers import (
-+    accept_companion_offer,
-+    build_companion_offer_context,
-+    evaluate_companion_offer,
-+    refuse_companion_offer,
++from app.rpg.campaign_journal.journal import (
++    build_campaign_journal,
++    build_player_story_recap,
++    record_campaign_journal_entry,
 +)
-+from app.rpg.companions.party import get_party_member
-+from app.rpg.npc_runtime_context.context import build_npc_runtime_context
 +
 +
 +def _safe_dict(value: Any) -> Dict[str, Any]:
@@ -836,15 +874,18 @@ Patch 4 — Manual companion checks/setup
 +        if candidate and not first_non_empty:
 +            first_non_empty = candidate
 +        if (
-+            isinstance(candidate.get("npc_evolution_state"), dict)
++            isinstance(candidate.get("campaign_journal_state"), dict)
++            or isinstance(candidate.get("story_arc_state"), dict)
++            or isinstance(candidate.get("lore_state"), dict)
++            or isinstance(candidate.get("story_event_queue_state"), dict)
++            or isinstance(candidate.get("npc_evolution_state"), dict)
 +            or isinstance(candidate.get("party_state"), dict)
-+            or isinstance(candidate.get("social_state"), dict)
 +        ):
 +            return candidate
 +    return first_non_empty
 +
 +
-+def run_companion_m28_m30_check(
++def run_campaign_journal_m31_m33_check(
 +    *,
 +    check: Dict[str, Any],
 +    result: Dict[str, Any],
@@ -853,214 +894,184 @@ Patch 4 — Manual companion checks/setup
 +    simulation_state = _extract_simulation_state(result=result, session=session)
 +    check_type = str(check.get("type") or "")
 +
-+    if check_type == "companion_offer_evaluate":
-+        npc_id = str(check.get("npc_id") or "")
-+        evaluation = evaluate_companion_offer(
++    if check_type == "campaign_journal_record":
++        record_result = record_campaign_journal_entry(
 +            simulation_state,
-+            npc_id,
-+            arc_id=str(check.get("arc_id") or ""),
-+            min_trust=int(check.get("min_trust") or 70),
-+            max_hostility=int(check.get("max_hostility") or 40),
-+        )
-+        expected_eligible = check.get("expected_eligible")
-+        expected_reason = check.get("expected_reason")
-+        ok = True
-+        if expected_eligible is not None:
-+            ok = ok and evaluation.get("eligible") is bool(expected_eligible)
-+        if expected_reason:
-+            ok = ok and evaluation.get("reason") == expected_reason
-+        return {
-+            "check_type": check_type,
-+            "ok": ok,
-+            "npc_id": npc_id,
-+            "evaluation": evaluation,
-+            "expected_eligible": expected_eligible,
-+            "expected_reason": expected_reason,
-+        }
-+
-+    if check_type == "companion_offer_context":
-+        npc_id = str(check.get("npc_id") or "")
-+        context = build_companion_offer_context(
-+            simulation_state,
-+            npc_id,
-+            arc_id=str(check.get("arc_id") or ""),
-+        )
-+        expected = _safe_dict(check.get("expected"))
-+        failures = {}
-+        for key, expected_value in expected.items():
-+            actual = context.get(key)
-+            if actual != expected_value:
-+                failures[key] = {"expected": expected_value, "actual": actual}
-+        return {
-+            "check_type": check_type,
-+            "ok": not failures,
-+            "npc_id": npc_id,
-+            "context": context,
-+            "failures": failures,
-+        }
-+
-+    if check_type == "companion_offer_accept":
-+        npc_id = str(check.get("npc_id") or "")
-+        accept_result = accept_companion_offer(
-+            simulation_state,
-+            npc_id,
-+            arc_id=str(check.get("arc_id") or ""),
++            kind=str(check.get("kind") or "story"),
++            title=str(check.get("title") or ""),
++            summary=str(check.get("summary") or ""),
 +            turn_index=int(check.get("turn_index") or 1),
-+            min_trust=int(check.get("min_trust") or 70),
-+            max_hostility=int(check.get("max_hostility") or 40),
-+        )
-+        expected_ok = check.get("expected_ok")
-+        expected_reason = check.get("expected_reason")
-+        ok = True
-+        if expected_ok is not None:
-+            ok = ok and accept_result.get("ok") is bool(expected_ok)
-+        if expected_reason:
-+            ok = ok and accept_result.get("reason") == expected_reason
-+        return {
-+            "check_type": check_type,
-+            "ok": ok,
-+            "npc_id": npc_id,
-+            "accept_result": accept_result,
-+            "expected_ok": expected_ok,
-+            "expected_reason": expected_reason,
-+        }
-+
-+    if check_type == "companion_offer_refuse":
-+        npc_id = str(check.get("npc_id") or "")
-+        refuse_result = refuse_companion_offer(
-+            simulation_state,
-+            npc_id,
-+            arc_id=str(check.get("arc_id") or ""),
-+            turn_index=int(check.get("turn_index") or 1),
-+            reason=str(check.get("reason") or "player_refused"),
++            visibility=str(check.get("visibility") or "player"),
++            fact_status=str(check.get("fact_status") or ""),
++            arc_ids=check.get("arc_ids") or [],
++            lore_ids=check.get("lore_ids") or [],
++            event_ids=check.get("event_ids") or [],
++            npc_ids=check.get("npc_ids") or [],
++            quest_ids=check.get("quest_ids") or [],
++            tags=check.get("tags") or [],
++            source_id=str(check.get("source_id") or ""),
 +        )
 +        expected_ok = check.get("expected_ok")
 +        ok = True
 +        if expected_ok is not None:
-+            ok = ok and refuse_result.get("ok") is bool(expected_ok)
++            ok = ok and record_result.get("ok") is bool(expected_ok)
 +        return {
 +            "check_type": check_type,
 +            "ok": ok,
-+            "npc_id": npc_id,
-+            "refuse_result": refuse_result,
-+            "expected_ok": expected_ok,
++            "record_result": record_result,
 +        }
 +
-+    if check_type == "party_member":
-+        npc_id = str(check.get("npc_id") or "")
-+        member = get_party_member(simulation_state, npc_id)
-+        expected_present = check.get("expected_present", True)
-+        expected = _safe_dict(check.get("expected"))
-+        failures = {}
-+        for key, expected_value in expected.items():
-+            actual = _safe_dict(member).get(key)
-+            if actual != expected_value:
-+                failures[key] = {"expected": expected_value, "actual": actual}
++    if check_type == "campaign_journal_contains":
++        journal = build_campaign_journal(
++            simulation_state,
++            include_hidden=bool(check.get("include_hidden", False)),
++            max_entries=int(check.get("max_entries") or 25),
++        )
++        expected_summary_contains = str(check.get("expected_summary_contains") or "")
++        expected_kind = check.get("expected_kind")
++        rows = list(journal.get("entries") or [])
++        if expected_kind:
++            rows = [row for row in rows if row.get("kind") == expected_kind]
++        if expected_summary_contains:
++            rows = [row for row in rows if expected_summary_contains in str(row.get("summary") or "")]
 +        return {
 +            "check_type": check_type,
-+            "ok": (bool(member) is bool(expected_present)) and not failures,
-+            "npc_id": npc_id,
-+            "member": member,
++            "ok": bool(rows),
++            "journal": journal,
++            "matched": rows,
++            "expected_summary_contains": expected_summary_contains,
++            "expected_kind": expected_kind,
++        }
++
++    if check_type == "campaign_journal_lore":
++        journal = build_campaign_journal(simulation_state)
++        lore_id = str(check.get("lore_id") or "")
++        expected_present = bool(check.get("expected_present", True))
++        expected_truth_status = check.get("expected_truth_status")
++        rows = [row for row in journal.get("known_lore") or [] if row.get("lore_id") == lore_id]
++        ok = bool(rows) is expected_present
++        if rows and expected_truth_status:
++            ok = ok and rows[0].get("truth_status") == expected_truth_status
++        return {
++            "check_type": check_type,
++            "ok": ok,
++            "lore_id": lore_id,
 +            "expected_present": expected_present,
-+            "failures": failures,
++            "expected_truth_status": expected_truth_status,
++            "matched": rows,
++            "known_lore": journal.get("known_lore"),
 +        }
 +
-+    if check_type == "npc_runtime_context":
-+        npc_id = str(check.get("npc_id") or "")
-+        context = build_npc_runtime_context(
++    if check_type == "campaign_story_recap":
++        recap = build_player_story_recap(
 +            simulation_state,
-+            npc_id,
-+            arc_id=str(check.get("arc_id") or ""),
-+            topic_lore_id=str(check.get("topic_lore_id") or ""),
++            turn_index=int(check.get("turn_index") or 1),
++            max_items=int(check.get("max_items") or 25),
 +        )
-+        expected = _safe_dict(check.get("expected"))
-+        failures = {}
-+        for key, expected_value in expected.items():
-+            actual = context.get(key)
-+            if actual != expected_value:
-+                failures[key] = {"expected": expected_value, "actual": actual}
-+        if "expected_companion_eligible" in check:
-+            actual = context.get("companion_offer", {}).get("eligible")
-+            expected_value = bool(check.get("expected_companion_eligible"))
-+            if actual is not expected_value:
-+                failures["companion_offer.eligible"] = {"expected": expected_value, "actual": actual}
++        expected_arc_id = check.get("expected_arc_id")
++        expected_pending_event_id = check.get("expected_pending_event_id")
++        expected_npc_id = check.get("expected_npc_id")
++        expected_party_npc_id = check.get("expected_party_npc_id")
++        ok = True
++        if expected_arc_id:
++            ok = ok and expected_arc_id in [row.get("arc_id") for row in recap.get("active_arcs") or []]
++        if expected_pending_event_id:
++            ok = ok and expected_pending_event_id in [row.get("event_id") for row in recap.get("pending_consequences") or []]
++        if expected_npc_id:
++            ok = ok and expected_npc_id in [row.get("npc_id") for row in recap.get("npc_evolution") or []]
++        if expected_party_npc_id:
++            ok = ok and expected_party_npc_id in [row.get("npc_id") for row in recap.get("party") or []]
 +        return {
 +            "check_type": check_type,
-+            "ok": not failures,
-+            "npc_id": npc_id,
-+            "context": context,
-+            "failures": failures,
++            "ok": ok,
++            "recap": recap,
++            "expected_arc_id": expected_arc_id,
++            "expected_pending_event_id": expected_pending_event_id,
++            "expected_npc_id": expected_npc_id,
++            "expected_party_npc_id": expected_party_npc_id,
++        }
++
++    if check_type == "campaign_story_recap_bounded":
++        max_items = int(check.get("max_items") or 10)
++        recap = build_player_story_recap(simulation_state, turn_index=int(check.get("turn_index") or 1), max_items=max_items)
++        ok = (
++            len(recap.get("latest_journal_entries") or []) <= max_items
++            and len(recap.get("active_arcs") or []) <= max_items
++            and len(recap.get("known_lore") or []) <= max_items
++            and len(recap.get("pending_consequences") or []) <= max_items
++            and len(recap.get("npc_evolution") or []) <= max_items
++            and len(recap.get("party") or []) <= max_items
++        )
++        return {
++            "check_type": check_type,
++            "ok": ok,
++            "max_items": max_items,
++            "recap": recap,
 +        }
 +
 +    return {
 +        "check_type": check_type,
 +        "ok": False,
-+        "error": f"unknown_companion_m28_m30_check_type:{check_type}",
++        "error": f"unknown_campaign_journal_m31_m33_check_type:{check_type}",
 +    }
 +
 +
-+def run_companion_m28_m30_checks(
++def run_campaign_journal_m31_m33_checks(
 +    *,
 +    checks: List[Dict[str, Any]],
 +    result: Dict[str, Any],
 +    session: Dict[str, Any] | None = None,
 +) -> List[Dict[str, Any]]:
 +    return [
-+        run_companion_m28_m30_check(check=check, result=result, session=session)
++        run_campaign_journal_m31_m33_check(check=check, result=result, session=session)
 +        for check in checks
 +    ]
 *** End Patch
 10. Patch src/tests/rpg/manual/scenario_setup.py
 
-Add imports:
+Add import:
 
 *** Begin Patch
 *** Update File: src/tests/rpg/manual/scenario_setup.py
 @@
- from app.rpg.story_event_queue.queue import (
-     enqueue_story_event,
-     enqueue_story_event_definition,
-     process_story_event_queue,
- )
-+from app.rpg.companions.offers import accept_companion_offer, refuse_companion_offer
+ from app.rpg.companions.offers import accept_companion_offer, refuse_companion_offer
++from app.rpg.campaign_journal.journal import record_campaign_journal_entry
  from tests.rpg.manual.memory_fixtures import build_manual_memory_event
 *** End Patch
 
-Add setup block after setup_npc_evolution_transitions:
+Add setup block after story/event/companion setup and before inventory:
 
 *** Begin Patch
 *** Update File: src/tests/rpg/manual/scenario_setup.py
 @@
-     for transition in scenario.get("setup_npc_evolution_transitions") or []:
-         if isinstance(transition, dict):
-             apply_npc_evolution_transition(
-                 simulation_state,
-                 transition,
+     for offer in scenario.get("setup_companion_offer_actions") or []:
+         if isinstance(offer, dict):
+             action = str(offer.get("action") or "")
+             if action == "accept":
+                 accept_companion_offer(
 @@
-                     or 1
-                 ),
-             )
+                     reason=str(offer.get("reason") or "player_refused"),
+                 )
 +
-+    for offer in scenario.get("setup_companion_offer_actions") or []:
-+        if isinstance(offer, dict):
-+            action = str(offer.get("action") or "")
-+            if action == "accept":
-+                accept_companion_offer(
-+                    simulation_state,
-+                    str(offer.get("npc_id") or ""),
-+                    arc_id=str(offer.get("arc_id") or ""),
-+                    turn_index=int(offer.get("turn_index") or scenario.get("setup_turn_index") or 1),
-+                    min_trust=int(offer.get("min_trust") or 70),
-+                    max_hostility=int(offer.get("max_hostility") or 40),
-+                )
-+            elif action == "refuse":
-+                refuse_companion_offer(
-+                    simulation_state,
-+                    str(offer.get("npc_id") or ""),
-+                    arc_id=str(offer.get("arc_id") or ""),
-+                    turn_index=int(offer.get("turn_index") or scenario.get("setup_turn_index") or 1),
-+                    reason=str(offer.get("reason") or "player_refused"),
-+                )
++    for entry in scenario.get("setup_campaign_journal_entries") or []:
++        if isinstance(entry, dict):
++            record_campaign_journal_entry(
++                simulation_state,
++                kind=str(entry.get("kind") or "story"),
++                title=str(entry.get("title") or ""),
++                summary=str(entry.get("summary") or ""),
++                turn_index=int(entry.get("turn_index") or scenario.get("setup_turn_index") or 1),
++                visibility=str(entry.get("visibility") or "player"),
++                fact_status=str(entry.get("fact_status") or ""),
++                arc_ids=entry.get("arc_ids") or [],
++                lore_ids=entry.get("lore_ids") or [],
++                event_ids=entry.get("event_ids") or [],
++                npc_ids=entry.get("npc_ids") or [],
++                quest_ids=entry.get("quest_ids") or [],
++                tags=entry.get("tags") or [],
++                source_id=str(entry.get("source_id") or ""),
++                metadata=entry.get("metadata") or {},
++            )
  
      for item in scenario.get("setup_story_event_queue") or []:
          if isinstance(item, dict):
@@ -1072,18 +1083,18 @@ Add import:
 *** Begin Patch
 *** Update File: src/tests/rpg/manual/scenario_execution.py
 @@
- from tests.rpg.manual.story_event_queue_m25_m27_checks import (
-     run_story_event_queue_m25_m27_checks,
- )
-+from tests.rpg.manual.companion_m28_m30_checks import run_companion_m28_m30_checks
+ from tests.rpg.manual.companion_m28_m30_checks import run_companion_m28_m30_checks
++from tests.rpg.manual.campaign_journal_m31_m33_checks import (
++    run_campaign_journal_m31_m33_checks,
++)
 *** End Patch
 
-Add check block after M25-M27 queue checks:
+Add check block after companion checks:
 
 *** Begin Patch
 *** Update File: src/tests/rpg/manual/scenario_execution.py
 @@
-         if story_event_queue_m25_m27_checks:
+         if companion_m28_m30_checks:
              current_session = {}
              try:
                  current_session = _ensure_manual_session(session_id)
@@ -1092,33 +1103,32 @@ Add check block after M25-M27 queue checks:
                          + str(check_result.get("error") or "")
                      )
 +
-+        companion_m28_m30_checks = [
++        campaign_journal_m31_m33_checks = [
 +            check
 +            for check in checks
 +            if isinstance(check, dict)
 +            and (
-+                str(check.get("type") or "").startswith("companion_")
-+                or str(check.get("type") or "") == "party_member"
-+                or str(check.get("type") or "") == "npc_runtime_context"
++                str(check.get("type") or "").startswith("campaign_journal")
++                or str(check.get("type") or "").startswith("campaign_story_recap")
 +            )
 +        ]
-+        if companion_m28_m30_checks:
++        if campaign_journal_m31_m33_checks:
 +            current_session = {}
 +            try:
 +                current_session = _ensure_manual_session(session_id)
 +            except Exception:
 +                current_session = session
 +
-+            companion_m28_m30_check_results = run_companion_m28_m30_checks(
-+                checks=companion_m28_m30_checks,
++            campaign_journal_m31_m33_check_results = run_campaign_journal_m31_m33_checks(
++                checks=campaign_journal_m31_m33_checks,
 +                result=turn_record.get("result") or turn_record,
 +                session=current_session,
 +            )
-+            turn_record["companion_m28_m30_check_results"] = companion_m28_m30_check_results
-+            for check_result in companion_m28_m30_check_results:
++            turn_record["campaign_journal_m31_m33_check_results"] = campaign_journal_m31_m33_check_results
++            for check_result in campaign_journal_m31_m33_check_results:
 +                if not check_result.get("ok"):
 +                    turn_record.setdefault("scenario_warnings", []).append(
-+                        "companion_m28_m30_check_failed:"
++                        "campaign_journal_m31_m33_check_failed:"
 +                        + str(scenario_name)
 +                        + ":turn_"
 +                        + str(turn_index)
@@ -1137,212 +1147,234 @@ Add sanitizer block:
 *** Begin Patch
 *** Update File: src/tests/rpg/manual/summary_sanitizer.py
 @@
-     story_event_queue_m25_m27_check_results = turn.get("story_event_queue_m25_m27_check_results")
-     if isinstance(story_event_queue_m25_m27_check_results, list):
-         sanitized["story_event_queue_m25_m27_check_results"] = [
+     companion_m28_m30_check_results = turn.get("companion_m28_m30_check_results")
+     if isinstance(companion_m28_m30_check_results, list):
+         sanitized["companion_m28_m30_check_results"] = [
 @@
              if isinstance(item, dict)
          ]
 +
-+    companion_m28_m30_check_results = turn.get("companion_m28_m30_check_results")
-+    if isinstance(companion_m28_m30_check_results, list):
-+        sanitized["companion_m28_m30_check_results"] = [
++    campaign_journal_m31_m33_check_results = turn.get("campaign_journal_m31_m33_check_results")
++    if isinstance(campaign_journal_m31_m33_check_results, list):
++        sanitized["campaign_journal_m31_m33_check_results"] = [
 +            {
 +                "check_type": item.get("check_type"),
 +                "ok": item.get("ok"),
-+                "npc_id": item.get("npc_id"),
-+                "evaluation": item.get("evaluation"),
-+                "context": item.get("context"),
-+                "accept_result": item.get("accept_result"),
-+                "refuse_result": item.get("refuse_result"),
-+                "member": item.get("member"),
-+                "expected_eligible": item.get("expected_eligible"),
-+                "expected_reason": item.get("expected_reason"),
-+                "expected_ok": item.get("expected_ok"),
++                "record_result": item.get("record_result"),
++                "journal": item.get("journal"),
++                "recap": item.get("recap"),
++                "matched": item.get("matched"),
++                "known_lore": item.get("known_lore"),
++                "expected_summary_contains": item.get("expected_summary_contains"),
++                "expected_kind": item.get("expected_kind"),
++                "expected_arc_id": item.get("expected_arc_id"),
++                "expected_pending_event_id": item.get("expected_pending_event_id"),
++                "expected_npc_id": item.get("expected_npc_id"),
++                "expected_party_npc_id": item.get("expected_party_npc_id"),
++                "expected_truth_status": item.get("expected_truth_status"),
 +                "expected_present": item.get("expected_present"),
-+                "failures": item.get("failures"),
++                "max_items": item.get("max_items"),
 +                "error": item.get("error"),
 +            }
-+            for item in companion_m28_m30_check_results[:50]
++            for item in campaign_journal_m31_m33_check_results[:50]
 +            if isinstance(item, dict)
 +        ]
  
      return sanitized
 *** End Patch
 Patch 5 — Manual scenarios
-13. Add src/tests/rpg/manual/scenarios/companion_m28_m30.py
+13. Add src/tests/rpg/manual/scenarios/campaign_journal_m31_m33.py
 *** Begin Patch
-*** Add File: src/tests/rpg/manual/scenarios/companion_m28_m30.py
+*** Add File: src/tests/rpg/manual/scenarios/campaign_journal_m31_m33.py
 +from __future__ import annotations
 +
 +from typing import Any, Dict
 +
 +
-+def _make_bran_eligible_setup(trust: int = 80, hostility: int = 0) -> Dict[str, Any]:
++def _story_setup() -> Dict[str, Any]:
 +    return {
-+        "setup_social_state": {"relationships": {"bran": {"trust": trust, "hostility": hostility}}},
++        "setup_lore_transitions": [
++            {
++                "action": "upsert",
++                "lore_id": "lore:red_sashes",
++                "title": "The Red Sashes",
++                "truth_status": "rumor",
++                "summary": "A gang may be active near the road.",
++            },
++            {
++                "action": "upsert",
++                "lore_id": "lore:bran_debt",
++                "title": "Bran's Debt",
++                "truth_status": "secret",
++                "revealed_to_player": False,
++                "summary": "Bran owes money to dangerous people.",
++            },
++        ],
++        "setup_story_arc_transitions": [
++            {
++                "action": "start",
++                "arc_id": "arc:bandit_pressure",
++                "title": "Bandit Pressure",
++                "stage": "rumors",
++                "pressure": 60,
++                "links": {"lore": ["lore:red_sashes"], "entities": ["bran"]},
++            }
++        ],
++        "setup_story_event_queue": [
++            {
++                "event": {
++                    "event_id": "event:delayed_bandit_attack",
++                    "arc_id": "arc:bandit_pressure",
++                    "effects": [],
++                },
++                "enqueued_turn": 1,
++                "due_turn": 5,
++                "source": "manual",
++            }
++        ],
 +        "setup_npc_evolution_transitions": [
 +            {
 +                "action": "start_arc",
 +                "npc_id": "bran",
 +                "arc_id": "npc_arc:bran_revenge",
 +                "motivation": "revenge_against_red_sashes",
-+                "role": "companion",
 +                "profession": "former_innkeeper",
 +            },
 +            {
 +                "action": "evolve",
 +                "npc_id": "bran",
 +                "companion_eligible": True,
-+                "personality_deltas": {"vengeful": 20},
 +            },
 +        ],
 +    }
 +
 +
-+COMPANION_M28_M30_SCENARIOS: Dict[str, Dict[str, Any]] = {
-+    "companion_offer_available_when_arc_and_trust_ready": {
-+        **_make_bran_eligible_setup(),
-+        "turns": ["I ask Bran if he wants to travel with me."],
-+        "checks": [
-+            {
-+                "type": "companion_offer_evaluate",
-+                "npc_id": "bran",
-+                "expected_eligible": True,
-+                "expected_reason": "eligible",
-+            },
-+            {
-+                "type": "companion_offer_context",
-+                "npc_id": "bran",
-+                "expected": {
-+                    "profession": "former_innkeeper",
-+                    "motivation": "revenge_against_red_sashes",
-+                    "companion_eligible": True,
-+                },
-+            },
++CAMPAIGN_JOURNAL_M31_M33_SCENARIOS: Dict[str, Dict[str, Any]] = {
++    "campaign_journal_records_story_event_entry": {
++        "setup_story_arc_transitions": [
++            {"action": "start", "arc_id": "arc:bandit_pressure", "stage": "rumors", "pressure": 50}
 +        ],
-+    },
-+    "companion_offer_blocked_by_low_trust": {
-+        **_make_bran_eligible_setup(trust=20),
-+        "turns": ["I ask Bran to join despite low trust."],
++        "setup_story_events": [
++            {
++                "event_id": "event:bandit_warning",
++                "arc_id": "arc:bandit_pressure",
++                "kind": "warning",
++                "summary": "A bandit warning reached the tavern.",
++                "effects": [
++                    {"type": "arc_stage_set", "arc_id": "arc:bandit_pressure", "stage": "warning"}
++                ],
++            }
++        ],
++        "turns": ["I inspect the campaign journal after the warning."],
 +        "checks": [
 +            {
-+                "type": "companion_offer_evaluate",
-+                "npc_id": "bran",
-+                "expected_eligible": False,
-+                "expected_reason": "trust_too_low",
++                "type": "campaign_journal_contains",
++                "expected_kind": "story_event",
++                "expected_summary_contains": "bandit warning",
 +            }
 +        ],
 +    },
-+    "companion_offer_blocked_by_hostility": {
-+        **_make_bran_eligible_setup(trust=80, hostility=80),
-+        "turns": ["I ask hostile Bran to join."],
++    "campaign_journal_separates_rumor_and_secret_lore": {
++        **_story_setup(),
++        "turns": ["I inspect what lore is visible to the player."],
 +        "checks": [
 +            {
-+                "type": "companion_offer_evaluate",
-+                "npc_id": "bran",
-+                "expected_eligible": False,
-+                "expected_reason": "hostility_too_high",
-+            }
-+        ],
-+    },
-+    "accepting_companion_offer_adds_party_member": {
-+        **_make_bran_eligible_setup(),
-+        "setup_companion_offer_actions": [
-+            {"action": "accept", "npc_id": "bran", "turn_index": 3}
-+        ],
-+        "turns": ["I check that Bran joined my party."],
-+        "checks": [
-+            {
-+                "type": "party_member",
-+                "npc_id": "bran",
++                "type": "campaign_journal_lore",
++                "lore_id": "lore:red_sashes",
 +                "expected_present": True,
-+                "expected": {
-+                    "status": "active",
-+                    "role": "companion",
-+                    "motivation": "revenge_against_red_sashes",
-+                },
++                "expected_truth_status": "rumor",
 +            },
 +            {
-+                "type": "companion_offer_evaluate",
-+                "npc_id": "bran",
-+                "expected_eligible": False,
-+                "expected_reason": "already_party_member",
-+            },
-+        ],
-+    },
-+    "accepting_companion_offer_is_apply_once": {
-+        **_make_bran_eligible_setup(),
-+        "setup_companion_offer_actions": [
-+            {"action": "accept", "npc_id": "bran", "turn_index": 3}
-+        ],
-+        "turns": ["I try to accept Bran twice."],
-+        "checks": [
-+            {
-+                "type": "companion_offer_accept",
-+                "npc_id": "bran",
-+                "turn_index": 4,
-+                "expected_ok": False,
-+                "expected_reason": "not_eligible",
-+            },
-+            {
-+                "type": "party_member",
-+                "npc_id": "bran",
-+                "expected_present": True,
-+            },
-+        ],
-+    },
-+    "refusing_companion_offer_blocks_future_offer": {
-+        **_make_bran_eligible_setup(),
-+        "setup_companion_offer_actions": [
-+            {"action": "refuse", "npc_id": "bran", "turn_index": 3}
-+        ],
-+        "turns": ["I check that Bran's refused offer stays refused."],
-+        "checks": [
-+            {
-+                "type": "companion_offer_evaluate",
-+                "npc_id": "bran",
-+                "expected_eligible": False,
-+                "expected_reason": "offer_previously_refused",
-+            },
-+            {
-+                "type": "party_member",
-+                "npc_id": "bran",
++                "type": "campaign_journal_lore",
++                "lore_id": "lore:bran_debt",
 +                "expected_present": False,
 +            },
 +        ],
 +    },
-+    "npc_runtime_context_exposes_evolution_and_offer": {
-+        **_make_bran_eligible_setup(),
-+        "turns": ["I inspect Bran's runtime context."],
++    "campaign_story_recap_lists_active_arcs_and_pending_consequences": {
++        **_story_setup(),
++        "turns": ["I inspect the story recap."],
 +        "checks": [
 +            {
-+                "type": "npc_runtime_context",
-+                "npc_id": "bran",
-+                "expected": {
-+                    "profession": "former_innkeeper",
-+                    "motivation": "revenge_against_red_sashes",
-+                },
-+                "expected_companion_eligible": True,
++                "type": "campaign_story_recap",
++                "turn_index": 2,
++                "expected_arc_id": "arc:bandit_pressure",
++                "expected_pending_event_id": "event:delayed_bandit_attack",
++                "expected_npc_id": "bran",
 +            }
 +        ],
 +    },
-+    "companion_offer_not_available_without_npc_arc": {
-+        "setup_social_state": {"relationships": {"bran": {"trust": 80}}},
-+        "setup_npc_evolution_transitions": [
-+            {
-+                "action": "evolve",
-+                "npc_id": "bran",
-+                "companion_eligible": True,
-+            }
++    "campaign_story_recap_lists_party_member_after_companion_accept": {
++        **_story_setup(),
++        "setup_social_state": {"relationships": {"bran": {"trust": 80, "hostility": 0}}},
++        "setup_companion_offer_actions": [
++            {"action": "accept", "npc_id": "bran", "turn_index": 3}
 +        ],
-+        "turns": ["I ask Bran to join without an active motivation arc."],
++        "turns": ["I inspect the story recap after Bran joins."],
 +        "checks": [
 +            {
-+                "type": "companion_offer_evaluate",
-+                "npc_id": "bran",
-+                "expected_eligible": False,
-+                "expected_reason": "no_active_arc_or_motivation",
++                "type": "campaign_story_recap",
++                "turn_index": 4,
++                "expected_party_npc_id": "bran",
++            },
++            {
++                "type": "campaign_journal_contains",
++                "expected_kind": "companion",
++                "expected_summary_contains": "joined the party",
++            },
++        ],
++    },
++    "campaign_story_recap_narrator_context_has_rules": {
++        **_story_setup(),
++        "turns": ["I inspect the narrator-safe story recap."],
++        "checks": [
++            {
++                "type": "campaign_story_recap",
++                "turn_index": 2,
++                "expected_arc_id": "arc:bandit_pressure",
++            }
++        ],
++    },
++    "campaign_journal_entry_idempotent": {
++        "setup_campaign_journal_entries": [
++            {
++                "kind": "story_event",
++                "summary": "The same event is recorded once.",
++                "turn_index": 1,
++                "source_id": "event:same",
++            },
++            {
++                "kind": "story_event",
++                "summary": "The same event is recorded once.",
++                "turn_index": 1,
++                "source_id": "event:same",
++            },
++        ],
++        "turns": ["I inspect duplicate journal recording."],
++        "checks": [
++            {
++                "type": "campaign_journal_contains",
++                "expected_kind": "story_event",
++                "expected_summary_contains": "recorded once",
++            }
++        ],
++    },
++    "campaign_story_recap_is_bounded": {
++        "setup_campaign_journal_entries": [
++            {
++                "kind": "story_event",
++                "summary": f"Journal event {i}",
++                "turn_index": i,
++                "source_id": f"event:{i}",
++            }
++            for i in range(80)
++        ],
++        "turns": ["I inspect the bounded story recap."],
++        "checks": [
++            {
++                "type": "campaign_story_recap_bounded",
++                "turn_index": 80,
++                "max_items": 10,
 +            }
 +        ],
 +    },
@@ -1350,88 +1382,82 @@ Patch 5 — Manual scenarios
 *** End Patch
 14. Add expected names file
 *** Begin Patch
-*** Add File: src/tests/rpg/manual/scenarios/expected_companion_m28_m30_names.py
-+EXPECTED_COMPANION_M28_M30_SCENARIO_NAMES = {
-+    "companion_offer_available_when_arc_and_trust_ready",
-+    "companion_offer_blocked_by_low_trust",
-+    "companion_offer_blocked_by_hostility",
-+    "accepting_companion_offer_adds_party_member",
-+    "accepting_companion_offer_is_apply_once",
-+    "refusing_companion_offer_blocks_future_offer",
-+    "npc_runtime_context_exposes_evolution_and_offer",
-+    "companion_offer_not_available_without_npc_arc",
+*** Add File: src/tests/rpg/manual/scenarios/expected_campaign_journal_m31_m33_names.py
++EXPECTED_CAMPAIGN_JOURNAL_M31_M33_SCENARIO_NAMES = {
++    "campaign_journal_records_story_event_entry",
++    "campaign_journal_separates_rumor_and_secret_lore",
++    "campaign_story_recap_lists_active_arcs_and_pending_consequences",
++    "campaign_story_recap_lists_party_member_after_companion_accept",
++    "campaign_story_recap_narrator_context_has_rules",
++    "campaign_journal_entry_idempotent",
++    "campaign_story_recap_is_bounded",
 +}
 *** End Patch
 15. Patch src/tests/rpg/manual/scenarios/registry.py
 *** Begin Patch
 *** Update File: src/tests/rpg/manual/scenarios/registry.py
 @@
- from tests.rpg.manual.scenarios.story_event_queue_m25_m27 import (
-     STORY_EVENT_QUEUE_M25_M27_SCENARIOS,
+ from tests.rpg.manual.scenarios.companion_m28_m30 import (
+     COMPANION_M28_M30_SCENARIOS,
  )
-+from tests.rpg.manual.scenarios.companion_m28_m30 import (
-+    COMPANION_M28_M30_SCENARIOS,
++from tests.rpg.manual.scenarios.campaign_journal_m31_m33 import (
++    CAMPAIGN_JOURNAL_M31_M33_SCENARIOS,
 +)
 @@
-     scenarios.update(STORY_EVENT_QUEUE_M25_M27_SCENARIOS)
-+    scenarios.update(COMPANION_M28_M30_SCENARIOS)
+     scenarios.update(COMPANION_M28_M30_SCENARIOS)
++    scenarios.update(CAMPAIGN_JOURNAL_M31_M33_SCENARIOS)
      return scenarios
 *** End Patch
 16. Patch src/tests/rpg/manual/test_manual_scenario_migration.py
 *** Begin Patch
 *** Update File: src/tests/rpg/manual/test_manual_scenario_migration.py
 @@
- from tests.rpg.manual.scenarios.expected_story_event_queue_m25_m27_names import (
-     EXPECTED_STORY_EVENT_QUEUE_M25_M27_SCENARIO_NAMES,
+ from tests.rpg.manual.scenarios.expected_companion_m28_m30_names import (
+     EXPECTED_COMPANION_M28_M30_SCENARIO_NAMES,
  )
-+from tests.rpg.manual.scenarios.expected_companion_m28_m30_names import (
-+    EXPECTED_COMPANION_M28_M30_SCENARIO_NAMES,
++from tests.rpg.manual.scenarios.expected_campaign_journal_m31_m33_names import (
++    EXPECTED_CAMPAIGN_JOURNAL_M31_M33_SCENARIO_NAMES,
 +)
 @@
- def test_manual_scenario_registry_includes_story_event_queue_m25_m27_names():
+ def test_manual_scenario_registry_includes_companion_m28_m30_names():
      names = set(build_service_scenarios().keys())
-     missing = EXPECTED_STORY_EVENT_QUEUE_M25_M27_SCENARIO_NAMES - names
+     missing = EXPECTED_COMPANION_M28_M30_SCENARIO_NAMES - names
  
-     assert not missing, f"Missing M25-M27 story event queue scenarios: {sorted(missing)}"
+     assert not missing, f"Missing M28-M30 companion scenarios: {sorted(missing)}"
 +
 +
-+def test_manual_scenario_registry_includes_companion_m28_m30_names():
++def test_manual_scenario_registry_includes_campaign_journal_m31_m33_names():
 +    names = set(build_service_scenarios().keys())
-+    missing = EXPECTED_COMPANION_M28_M30_SCENARIO_NAMES - names
++    missing = EXPECTED_CAMPAIGN_JOURNAL_M31_M33_SCENARIO_NAMES - names
 +
-+    assert not missing, f"Missing M28-M30 companion scenarios: {sorted(missing)}"
++    assert not missing, f"Missing M31-M33 campaign journal scenarios: {sorted(missing)}"
 *** End Patch
 17. Add manual check tests
 *** Begin Patch
-*** Add File: src/tests/rpg/manual/test_manual_companion_m28_m30_checks.py
-+from app.rpg.npc_evolution.state import apply_npc_evolution_delta, start_npc_arc
-+from app.rpg.social.reputation import set_relationship_values
-+from tests.rpg.manual.companion_m28_m30_checks import run_companion_m28_m30_checks
+*** Add File: src/tests/rpg/manual/test_manual_campaign_journal_m31_m33_checks.py
++from app.rpg.campaign_journal.journal import record_campaign_journal_entry
++from app.rpg.story_arcs.state import start_story_arc
++from tests.rpg.manual.campaign_journal_m31_m33_checks import (
++    run_campaign_journal_m31_m33_checks,
++)
 +
 +
-+def _setup(session):
-+    start_npc_arc(
-+        session["simulation_state"],
-+        "bran",
-+        "npc_arc:bran_revenge",
-+        motivation="revenge_against_red_sashes",
-+        role="companion",
-+    )
-+    apply_npc_evolution_delta(session["simulation_state"], "bran", companion_eligible=True)
-+    set_relationship_values(session["simulation_state"], "bran", {"trust": 80})
-+
-+
-+def test_manual_companion_offer_evaluate_check():
++def test_manual_campaign_journal_contains_check():
 +    session = {"simulation_state": {}}
-+    _setup(session)
++    record_campaign_journal_entry(
++        session["simulation_state"],
++        kind="story_event",
++        summary="Bandits arrived at dusk.",
++        turn_index=1,
++        source_id="event:bandits",
++    )
 +
-+    result = run_companion_m28_m30_checks(
++    result = run_campaign_journal_m31_m33_checks(
 +        checks=[
 +            {
-+                "type": "companion_offer_evaluate",
-+                "npc_id": "bran",
-+                "expected_eligible": True,
-+                "expected_reason": "eligible",
++                "type": "campaign_journal_contains",
++                "expected_kind": "story_event",
++                "expected_summary_contains": "Bandits arrived",
 +            }
 +        ],
 +        result={},
@@ -1441,42 +1467,36 @@ Patch 5 — Manual scenarios
 +    assert result["ok"] is True
 +
 +
-+def test_manual_companion_offer_accept_check_adds_party_member():
++def test_manual_campaign_story_recap_check_reads_arc_state():
 +    session = {"simulation_state": {}}
-+    _setup(session)
++    start_story_arc(
++        session["simulation_state"],
++        "arc:bandit_pressure",
++        title="Bandit Pressure",
++        stage="rumors",
++        pressure=60,
++    )
 +
-+    accept = run_companion_m28_m30_checks(
++    result = run_campaign_journal_m31_m33_checks(
 +        checks=[
 +            {
-+                "type": "companion_offer_accept",
-+                "npc_id": "bran",
-+                "expected_ok": True,
-+            }
-+        ],
-+        result={},
-+        session=session,
-+    )[0]
-+    member = run_companion_m28_m30_checks(
-+        checks=[
-+            {
-+                "type": "party_member",
-+                "npc_id": "bran",
-+                "expected_present": True,
++                "type": "campaign_story_recap",
++                "expected_arc_id": "arc:bandit_pressure",
 +            }
 +        ],
 +        result={},
 +        session=session,
 +    )[0]
 +
-+    assert accept["ok"] is True
-+    assert member["ok"] is True
++    assert result["ok"] is True
 *** End Patch
 Validation commands
 Compile
-python -m py_compile src/app/rpg/companions/party.py
+python -m py_compile src/app/rpg/campaign_journal/state.py
+python -m py_compile src/app/rpg/campaign_journal/journal.py
+python -m py_compile src/app/rpg/story_events/application.py
 python -m py_compile src/app/rpg/companions/offers.py
-python -m py_compile src/app/rpg/npc_runtime_context/context.py
-python -m py_compile src/tests/rpg/manual/companion_m28_m30_checks.py
-python -m py_compile src/tests/rpg/manual/scenarios/companion_m28_m30.py
+python -m py_compile src/tests/rpg/manual/campaign_journal_m31_m33_checks.py
+python -m py_compile src/tests/rpg/manual/scenarios/campaign_journal_m31_m33.py
 Unit tests
-python -m pytest src/tests/rpg/companions src/tests/rpg/npc_runtime_context src/tests/rpg/npc_evolution src/tests/rpg/story_event_queue src/tests/rpg/campaign_director src/tests/rpg/dialogue_context src/tests/rpg/story_packs src/tests/rpg/story_proposals src/tests/rpg/escalation src/tests/rpg/story_events src/tests/rpg/story_arcs src/tests/rpg/lore -q
+python -m pytest src/tests/rpg/campaign_journal src/tests/rpg/companions src/tests/rpg/npc_runtime_context src/tests/rpg/npc_evolution src/tests/rpg/story_event_queue src/tests/rpg/campaign_director src/tests/rpg/dialogue_context src/tests/rpg/story_packs src/tests/rpg/story_proposals src/tests/rpg/escalation src/tests/rpg/story_events src/tests/rpg/story_arcs src/tests/rpg/lore -q
