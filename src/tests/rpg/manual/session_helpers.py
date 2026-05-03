@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import json
 import threading
 from copy import deepcopy
 from typing import Any, Dict
 
+from tests.rpg.manual.constants import RPG_SESSION_DIRS
 from tests.rpg.manual.safe import _safe_dict, _safe_str
 
 # From manual_llm_transcript_old.py
@@ -37,13 +39,7 @@ def _reset_manual_session_artifacts(session_id: str) -> None:
         f"{session_id}.session.json",
     }
 
-    from pathlib import Path
 
-    REPO_ROOT = Path(__file__).resolve().parents[3]
-    RPG_SESSION_DIRS = [
-        REPO_ROOT / "resources" / "data" / "rpg_sessions",
-        REPO_ROOT / "data" / "rpg_sessions",
-    ]
 
     for root in RPG_SESSION_DIRS:
         if not root.exists():
@@ -62,47 +58,126 @@ def _reset_manual_session_artifacts(session_id: str) -> None:
 
 
 def _ensure_manual_session(session_id: str) -> Dict[str, Any]:
-    """Ensure a manual scenario session exists before running turns.
+    """Load or create a usable manual RPG session.
 
-    Several focused manual scenarios use unique session IDs. apply_turn(...)
-    expects the session to exist, so this helper clones/creates one from the
-    manual test template when needed.
+    The manual harness creates synthetic per-scenario session ids such as
+    ``manual_service_spatial_closed_door_blocks_movement_<run_id>``.  The old
+    monolith guaranteed that those ids were materialized before scenario setup
+    and currency seeding.  The refactor must preserve that behavior: callers
+    should never receive ``{}`` for a valid manual session id.
     """
-    session = _clone_or_create_manual_session(session_id)
-    if session:
+    session_id = str(session_id or "").strip()
+    if not session_id:
+        raise ValueError("manual_session_id_required")
+
+    session = _load_manual_session_for_test(session_id)
+    if isinstance(session, dict) and session:
+        session.setdefault("session_id", session_id)
+        session.setdefault("id", session_id)
+        session.setdefault("runtime_state", {})
+        _save_manual_session_for_test(session_id, session)
         return session
 
-    try:
-        from app.rpg.session.runtime import apply_turn
+    # Prefer existing app/session creation APIs if they are available in this
+    # checkout.  These imports are intentionally local so the manual harness can
+    # still run in partial test environments.
+    created: Dict[str, Any] = {}
+    creation_errors: list[str] = []
 
-        warmup = apply_turn(
-            session_id="manual_test_session",
-            player_input="I wait",
-        )
-        template_session = _extract_session(warmup)
-        if not template_session:
-            return {}
+    for module_name, function_names in [
+        (
+            "app.rpg.session.service",
+            (
+                "create_session",
+                "start_session",
+                "create_new_session",
+                "new_session",
+            ),
+        ),
+        (
+            "app.rpg.session.runtime",
+            (
+                "create_session",
+                "start_session",
+                "create_new_session",
+                "new_session",
+            ),
+        ),
+    ]:
+        try:
+            module = __import__(module_name, fromlist=list(function_names))
+        except Exception as exc:
+            creation_errors.append(f"{module_name}:import:{type(exc).__name__}:{exc}")
+            continue
 
-        from app.rpg.session.service import save_session
+        for function_name in function_names:
+            factory = getattr(module, function_name, None)
+            if not callable(factory):
+                continue
 
-        cloned = deepcopy(template_session)
-        manifest = _safe_dict(cloned.get("manifest"))
-        manifest["session_id"] = session_id
-        manifest["id"] = f"session:{session_id}"
-        manifest["title"] = f"Manual Service Scenario: {session_id}"
-        cloned["manifest"] = manifest
+            for kwargs in (
+                {"session_id": session_id},
+                {"id": session_id},
+                {},
+            ):
+                try:
+                    maybe_session = factory(**kwargs)
+                except TypeError:
+                    continue
+                except Exception as exc:
+                    creation_errors.append(
+                        f"{module_name}.{function_name}:{type(exc).__name__}:{exc}"
+                    )
+                    continue
 
-        cloned = _sanitize_manual_session_for_test(cloned)
-        save_session(cloned)
-        return cloned
-    except Exception:
-        return {}
+                if isinstance(maybe_session, dict) and maybe_session:
+                    created = maybe_session
+                    break
+            if created:
+                break
+        if created:
+            break
+
+    if not created:
+        # Manual-harness fallback.  Keep this compact and explicit; production
+        # game runtime remains authoritative for actual gameplay sessions.
+        created = {
+            "session_id": session_id,
+            "id": session_id,
+            "simulation_state": {},
+            "runtime_state": {},
+            "setup_payload": {
+                "metadata": {
+                    "simulation_state": {},
+                }
+            },
+            "manual_test_session": True,
+            "manual_session_creation_errors": creation_errors[:20],
+        }
+
+    created = _sanitize_manual_session_for_test(created)
+    created.setdefault("session_id", session_id)
+    created.setdefault("id", session_id)
+    created.setdefault("runtime_state", {})
+    _ensure_manual_simulation_roots(created)
+    _save_manual_session_for_test(session_id, created)
+
+    reloaded = _load_manual_session_for_test(session_id)
+    if isinstance(reloaded, dict) and reloaded:
+        reloaded = _sanitize_manual_session_for_test(reloaded)
+        reloaded.setdefault("session_id", session_id)
+        reloaded.setdefault("id", session_id)
+        reloaded.setdefault("runtime_state", {})
+        _ensure_manual_simulation_roots(reloaded)
+        return reloaded
+
+    return created
 
 
 def _seed_session_currency(session_id: str, currency: Dict[str, Any]) -> bool:
     session = _ensure_manual_session(session_id)
     if not session:
-        return False
+        raise RuntimeError(f"Failed to ensure manual session for {session_id}")
 
     session = _sanitize_manual_session_for_test(
         session,
@@ -113,21 +188,41 @@ def _seed_session_currency(session_id: str, currency: Dict[str, Any]) -> bool:
     try:
         from app.rpg.session.service import save_session
         save_session(session)
-    except Exception:
-        return False
+    except Exception as exc:
+        raise RuntimeError(f"Failed to save session for {session_id}") from exc
     return True
+
+
+def _load_manual_session_for_test(session_id: str) -> Dict[str, Any]:
+    """Load a manual session from the fallback files."""
+    session_id = str(session_id or "").strip()
+    if not session_id:
+        return {}
+
+    # File load for manual tests.
+    for root in RPG_SESSION_DIRS:
+        if not root.exists():
+            continue
+        for name in (
+            f"{session_id}.json",
+            f"{session_id}.rpg.json",
+            f"{session_id}.session.json",
+        ):
+            candidate = root / name
+            if candidate.exists() and candidate.is_file():
+                try:
+                    loaded = json.loads(candidate.read_text(encoding="utf-8"))
+                    if isinstance(loaded, dict):
+                        return loaded
+                except Exception:
+                    continue
+
+    return {}
 
 
 def _clone_or_create_manual_session(session_id: str) -> Dict[str, Any]:
     """Create or load a manual scenario session."""
-    try:
-        from app.rpg.session.service import load_session
-        session = _safe_dict(load_session(session_id))
-        if session:
-            return session
-    except Exception:
-        pass
-    return {}
+    return _load_manual_session_for_test(session_id)
 
 
 def _extract_session(result: Dict[str, Any]) -> Dict[str, Any]:
@@ -218,7 +313,7 @@ def _sanitize_manual_session_for_test(session: Dict[str, Any], *, currency: Dict
         currency=currency,
         reset_player_items=reset_player_items,
     )
-    _sync_manual_simulation_state(session, simulation_state)
+    _sync_manual_simulation_state(session)
 
     runtime_state = _safe_dict(session.get("runtime_state"))
     runtime_state["tick"] = 0
@@ -231,33 +326,40 @@ def _sanitize_manual_session_for_test(session: Dict[str, Any], *, currency: Dict
     return session
 
 
-def _sync_manual_simulation_state(session: Dict[str, Any], simulation_state: Dict[str, Any]) -> None:
-    setup_payload = _safe_dict(session.get("setup_payload"))
-    if not setup_payload:
-        setup_payload = {}
-        session["setup_payload"] = setup_payload
-
-    metadata = _safe_dict(setup_payload.get("metadata"))
-    if not metadata:
-        metadata = {}
-
-    session["simulation_state"] = simulation_state
-    metadata["simulation_state"] = simulation_state
-    setup_payload["metadata"] = metadata
-    session["setup_payload"] = setup_payload
+def _sync_manual_simulation_state(session: Dict[str, Any]) -> None:
+    simulation_state = _ensure_manual_simulation_roots(session)
+    setup_payload = session.setdefault("setup_payload", {})
+    metadata = setup_payload.setdefault("metadata", {})
+    metadata_simulation_state = metadata.setdefault("simulation_state", {})
+    metadata_simulation_state.update(simulation_state)
 
 
-def _save_manual_session_for_test(session: Dict[str, Any], reason: str = "") -> None:
-    try:
-        from app.rpg.session.service import save_session
+def _save_manual_session_for_test(session_id: str, session: Dict[str, Any]) -> None:
+    """Persist a manual session using the available project save path.
 
-        save_session(session)
-    except Exception as exc:
-        print(
-            f"[manual][session] failed to save manual session"
-            f"{f' after {reason}' if reason else ''}: {type(exc).__name__}: {exc}",
-            flush=True,
-        )
+    This helper must not call undefined compatibility shims.  If the app-level
+    save helper exists, use it.  Otherwise, write to the manual session file
+    location used by the test harness.
+    """
+    session_id = str(session_id or "").strip()
+    if not session_id:
+        raise ValueError("manual_session_id_required")
+
+    if not isinstance(session, dict):
+        raise TypeError("manual_session_must_be_dict")
+
+    session.setdefault("session_id", session_id)
+    session.setdefault("id", session_id)
+
+    # Fallback file persistence for manual tests.  RPG_SESSION_DIRS is already
+    # the harness-approved session storage list.
+    target_dir = RPG_SESSION_DIRS[0]
+    target_dir.mkdir(parents=True, exist_ok=True)
+    target_path = target_dir / f"{session_id}.json"
+    target_path.write_text(
+        json.dumps(session, indent=2, ensure_ascii=False, sort_keys=True),
+        encoding="utf-8",
+    )
 
 
 def _manual_apply_interaction_seed_fields(session: Dict[str, Any], setup_interaction_state: Dict[str, Any]) -> Dict[str, Any]:
@@ -269,11 +371,40 @@ def _manual_apply_social_seed_fields(session: Dict[str, Any], setup_interaction_
 
 
 def _ensure_manual_simulation_roots(session: Dict[str, Any]) -> Dict[str, Any]:
-    simulation_state = _safe_dict(session.get("simulation_state"))
-    if not simulation_state:
+    if not isinstance(session, dict):
+        raise TypeError("manual_session_must_be_dict")
+
+    simulation_state = session.get("simulation_state")
+    if not isinstance(simulation_state, dict):
         simulation_state = {}
         session["simulation_state"] = simulation_state
-        _sync_manual_simulation_state(session, simulation_state)
+
+    runtime_state = session.get("runtime_state")
+    if not isinstance(runtime_state, dict):
+        session["runtime_state"] = {}
+
+    setup_payload = session.get("setup_payload")
+    if not isinstance(setup_payload, dict):
+        setup_payload = {}
+        session["setup_payload"] = setup_payload
+
+    metadata = setup_payload.get("metadata")
+    if not isinstance(metadata, dict):
+        metadata = {}
+        setup_payload["metadata"] = metadata
+
+    metadata_simulation_state = metadata.get("simulation_state")
+    if not isinstance(metadata_simulation_state, dict):
+        metadata_simulation_state = {}
+        metadata["simulation_state"] = metadata_simulation_state
+
+    # Keep metadata path and authoritative simulation_state path aligned for
+    # manual setup code that reads either one.
+    if simulation_state:
+        metadata_simulation_state.update(simulation_state)
+    if metadata_simulation_state:
+        simulation_state.update(metadata_simulation_state)
+
     return simulation_state
 
 

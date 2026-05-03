@@ -3,13 +3,17 @@ from __future__ import annotations
 from typing import Any, Dict, List
 
 from tests.rpg.manual import output_artifacts
+from tests.rpg.manual.spatial_checks import run_spatial_checks
 from tests.rpg.manual.output_state import (
     _REGRESSION_WARNING_LOCK,
     _REGRESSION_WARNING_ROWS,
     _REGRESSION_WARNINGS,
 )
 from tests.rpg.manual.safe import _compact_json, _safe_dict, _safe_list
-from tests.rpg.manual.scenario_setup import _apply_manual_scenario_setup
+from tests.rpg.manual.scenario_setup import (
+    _apply_manual_scenario_setup,
+    apply_manual_scenario_setup_by_session_id,
+)
 from tests.rpg.manual.scenario_summary import (
     _build_service_summary_row,
     _extract_player_inventory,
@@ -157,24 +161,43 @@ def _run_one_service_scenario(
     output_artifacts._emit(_compact_json(currency), channel=target_channel)
     output_artifacts._emit("#" * 80, channel=target_channel)
 
-    seeded = _seed_session_currency(session_id, currency)
-    setup_applied = _apply_manual_scenario_setup(session_id, scenario)
-    if not seeded or not setup_applied:
-        scenario_error = "scenario_session_seed_failed"
-        _record_scenario_error(
+    setup_error_type = None
+    setup_error = None
+    setup_error_repr = None
+    try:
+        seeded = _seed_session_currency(session_id, currency)
+        apply_manual_scenario_setup_by_session_id(
+            session_id,
+            scenario,
             scenario_name=scenario_name,
-            session_id=session_id,
-            error=scenario_error,
         )
-        return {
+        setup_applied = True
+    except Exception as exc:
+        setup_error_type = type(exc).__name__
+        setup_error = str(exc)
+        setup_error_repr = repr(exc)
+        warning = (
+            "scenario_runtime_error:"
+            + str(scenario_name)
+            + ":scenario_session_seed_failed:"
+            + setup_error_type
+            + ":"
+            + setup_error
+        )
+        summary = {
             "scenario": scenario_name,
             "session_id": session_id,
             "seeded_currency": currency,
-            "error": scenario_error,
+            "error": "scenario_session_seed_failed",
+            "setup_error_type": setup_error_type,
+            "setup_error": setup_error,
+            "setup_error_repr": setup_error_repr,
+            "scenario_warnings": [warning],
+            "regression_warnings": [warning],
             "turns": [],
-            "scenario_warnings": [scenario_error],
-            "regression_warnings": [scenario_error],
         }
+        output_artifacts._emit(f"SETUP ERROR: {setup_error_type}: {setup_error}", channel=target_channel)
+        return summary
 
     # Run turns
     turn_summaries = []
@@ -190,6 +213,40 @@ def _run_one_service_scenario(
             console_llm_raw=console_llm_raw,
             console_llm_max_chars=console_llm_max_chars,
         )
+
+        checks = scenario.get("checks") or []
+        spatial_checks = [
+            check
+            for check in checks
+            if isinstance(check, dict)
+            and str(check.get("type") or "").startswith("spatial_")
+        ]
+        if spatial_checks:
+            current_session = {}
+            try:
+                current_session = _ensure_manual_session(session_id)
+            except Exception:
+                current_session = {}
+
+            spatial_check_results = run_spatial_checks(
+                checks=spatial_checks,
+                result=turn_summary.get("result") or turn_summary,
+                session=current_session,
+            )
+            turn_summary["spatial_check_results"] = spatial_check_results
+            for check_result in spatial_check_results:
+                if not check_result.get("ok"):
+                    turn_summary.setdefault("scenario_warnings", []).append(
+                        "spatial_check_failed:"
+                        + str(scenario_name)
+                        + ":turn_"
+                        + str(turn_index)
+                        + ":"
+                        + str(check_result.get("check_type"))
+                        + ":"
+                        + str(check_result.get("actual_reason") or check_result.get("error") or "")
+                    )
+
         turn_summaries.append(turn_summary)
 
         # Check for contamination
