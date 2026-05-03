@@ -1,92 +1,49 @@
-Bundle M10-M12 — LLM Story Proposal Schema + Validator v1
+Bundle M13-M15 — Story Pack Importer + Campaign Seed Generation v1
 GOAL:
-Allow an LLM to propose story content, but never directly mutate authoritative RPG state.
+Take validated story_proposal_v1 data and import it into deterministic RPG state as a reusable story pack.
 
-Pipeline:
-  LLM/story author produces story_proposal_v1 JSON
-  -> deterministic validator checks schema/references/bounds/contradictions/effects
-  -> accepted proposal can be normalized/imported later
-  -> invalid proposal is rejected with clear reasons
+This bundle converts accepted proposal data into:
+- lore_state entries
+- story_arc_state arcs
+- story_event_registry definitions
+- escalation_rule_registry definitions
+- optional starter quest seeds
 
-This bundle does NOT need to call an LLM yet.
-It defines the proposal schema and validator used by future AI story authoring.
-
-Rule:
-  LLM can propose.
-  Validator can accept.
-  Simulation can apply/import later.
-  Narrator can describe.
-Patch 1 — Add story proposal package
-1. Add src/app/rpg/story_proposals/__init__.py
+Important:
+- LLM/proposal data still does not directly mutate state.
+- Import happens only after validate_story_proposal() passes.
+- Import is deterministic and idempotent.
+- Existing true lore is protected.
+- Story events and escalation rules are stored as definitions, not automatically applied.
+Patch 1 — Add story pack package
+1. Add src/app/rpg/story_packs/__init__.py
 *** Begin Patch
-*** Add File: src/app/rpg/story_proposals/__init__.py
-+"""Deterministic validation for LLM-authored story proposals."""
+*** Add File: src/app/rpg/story_packs/__init__.py
++"""Deterministic story pack import helpers."""
 +
-+from app.rpg.story_proposals.normalization import normalize_story_proposal
-+from app.rpg.story_proposals.validation import (
-+    validate_story_proposal,
-+    validate_story_proposal_arc,
-+    validate_story_proposal_escalation_rule,
-+    validate_story_proposal_event,
-+    validate_story_proposal_lore,
++from app.rpg.story_packs.importer import import_story_pack
++from app.rpg.story_packs.registry import (
++    ensure_story_pack_state,
++    get_imported_story_pack,
++    normalize_story_pack_state,
 +)
 +
 +__all__ = [
-+    "normalize_story_proposal",
-+    "validate_story_proposal",
-+    "validate_story_proposal_arc",
-+    "validate_story_proposal_escalation_rule",
-+    "validate_story_proposal_event",
-+    "validate_story_proposal_lore",
++    "ensure_story_pack_state",
++    "get_imported_story_pack",
++    "import_story_pack",
++    "normalize_story_pack_state",
 +]
 *** End Patch
-2. Add src/app/rpg/story_proposals/model.py
+2. Add src/app/rpg/story_packs/registry.py
 *** Begin Patch
-*** Add File: src/app/rpg/story_proposals/model.py
-+from __future__ import annotations
-+
-+from dataclasses import asdict, dataclass, field
-+from typing import Any, Dict, List
-+
-+
-+STORY_PROPOSAL_VERSION = "story_proposal_v1"
-+
-+
-+@dataclass
-+class StoryProposal:
-+    proposal_version: str = STORY_PROPOSAL_VERSION
-+    proposal_type: str = "story_pack"
-+    proposal_id: str = ""
-+    title: str = ""
-+    lore_entries: List[Dict[str, Any]] = field(default_factory=list)
-+    story_arcs: List[Dict[str, Any]] = field(default_factory=list)
-+    story_events: List[Dict[str, Any]] = field(default_factory=list)
-+    escalation_rules: List[Dict[str, Any]] = field(default_factory=list)
-+    metadata: Dict[str, Any] = field(default_factory=dict)
-+
-+    def to_dict(self) -> Dict[str, Any]:
-+        return asdict(self)
-*** End Patch
-3. Add src/app/rpg/story_proposals/normalization.py
-*** Begin Patch
-*** Add File: src/app/rpg/story_proposals/normalization.py
+*** Add File: src/app/rpg/story_packs/registry.py
 +from __future__ import annotations
 +
 +from typing import Any, Dict, List
 +
-+from app.rpg.lore.state import normalize_lore_entry
-+from app.rpg.story_arcs.state import normalize_story_arc
-+from app.rpg.story_events.validation import ALLOWED_STORY_EVENT_EFFECT_TYPES
-+from app.rpg.story_proposals.model import STORY_PROPOSAL_VERSION
 +
-+
-+MAX_PROPOSAL_LORE_ENTRIES = 50
-+MAX_PROPOSAL_ARCS = 20
-+MAX_PROPOSAL_EVENTS = 50
-+MAX_PROPOSAL_ESCALATION_RULES = 50
-+MAX_EVENT_EFFECTS = 25
-+MAX_EVENT_PRECONDITIONS = 25
-+MAX_ARC_LINKS_PER_KIND = 30
++MAX_IMPORTED_STORY_PACKS = 200
 +
 +
 +def _safe_dict(value: Any) -> Dict[str, Any]:
@@ -99,6 +56,12 @@ Patch 1 — Add story proposal package
 +
 +def _safe_str(value: Any) -> str:
 +    return value if isinstance(value, str) else ""
++
++
++def _safe_bool(value: Any, default: bool = False) -> bool:
++    if isinstance(value, bool):
++        return value
++    return default
 +
 +
 +def _safe_int(value: Any, default: int = 0) -> int:
@@ -108,187 +71,299 @@ Patch 1 — Add story proposal package
 +        return default
 +
 +
-+def _unique_strs(values: Any, *, limit: int = 50) -> List[str]:
-+    seen = set()
-+    out: List[str] = []
-+    for value in _safe_list(values):
-+        text = str(value or "").strip()
-+        if text and text not in seen:
-+            seen.add(text)
-+            out.append(text)
-+        if len(out) >= limit:
-+            break
-+    return out
-+
-+
-+def normalize_proposal_lore_entry(entry: Dict[str, Any]) -> Dict[str, Any]:
-+    return normalize_lore_entry(_safe_dict(entry), lore_id=str(_safe_dict(entry).get("lore_id") or ""))
-+
-+
-+def normalize_proposal_story_arc(arc: Dict[str, Any]) -> Dict[str, Any]:
-+    arc = normalize_story_arc(_safe_dict(arc), arc_id=str(_safe_dict(arc).get("arc_id") or ""))
-+    for key in ("linked_lore", "linked_quests", "linked_puzzles", "linked_locations", "linked_entities"):
-+        arc[key] = _unique_strs(arc.get(key), limit=MAX_ARC_LINKS_PER_KIND)
-+    return arc
-+
-+
-+def normalize_proposal_story_event(event: Dict[str, Any]) -> Dict[str, Any]:
-+    event = _safe_dict(event)
++def normalize_imported_story_pack(value: Dict[str, Any], *, pack_id: str = "") -> Dict[str, Any]:
++    value = _safe_dict(value)
++    normalized_pack_id = _safe_str(value.get("pack_id")) or pack_id
 +    return {
-+        "event_id": _safe_str(event.get("event_id")),
-+        "arc_id": _safe_str(event.get("arc_id")),
-+        "kind": _safe_str(event.get("kind")) or "event",
-+        "location_id": _safe_str(event.get("location_id")),
-+        "require_location": bool(event.get("require_location", False)),
-+        "participants": _unique_strs(event.get("participants"), limit=20),
-+        "summary": _safe_str(event.get("summary")),
-+        "preconditions": [
-+            dict(row)
-+            for row in _safe_list(event.get("preconditions"))
-+            if isinstance(row, dict)
-+        ][:MAX_EVENT_PRECONDITIONS],
-+        "effects": [
-+            dict(row)
-+            for row in _safe_list(event.get("effects"))
-+            if isinstance(row, dict)
-+        ][:MAX_EVENT_EFFECTS],
-+        "tags": _unique_strs(event.get("tags"), limit=20),
-+        "metadata": dict(_safe_dict(event.get("metadata"))),
++        "pack_id": normalized_pack_id,
++        "proposal_id": _safe_str(value.get("proposal_id")),
++        "title": _safe_str(value.get("title")) or normalized_pack_id,
++        "imported_turn": _safe_int(value.get("imported_turn"), 0),
++        "lore_ids": [
++            str(item)
++            for item in _safe_list(value.get("lore_ids"))
++            if str(item)
++        ][:200],
++        "arc_ids": [
++            str(item)
++            for item in _safe_list(value.get("arc_ids"))
++            if str(item)
++        ][:200],
++        "event_ids": [
++            str(item)
++            for item in _safe_list(value.get("event_ids"))
++            if str(item)
++        ][:200],
++        "rule_ids": [
++            str(item)
++            for item in _safe_list(value.get("rule_ids"))
++            if str(item)
++        ][:200],
++        "quest_ids": [
++            str(item)
++            for item in _safe_list(value.get("quest_ids"))
++            if str(item)
++        ][:200],
++        "idempotent": _safe_bool(value.get("idempotent"), True),
++        "metadata": dict(_safe_dict(value.get("metadata"))),
 +    }
 +
 +
-+def normalize_proposal_escalation_rule(rule: Dict[str, Any]) -> Dict[str, Any]:
-+    rule = _safe_dict(rule)
-+    return {
-+        "rule_id": _safe_str(rule.get("rule_id")),
-+        "arc_id": _safe_str(rule.get("arc_id")),
-+        "priority": max(0, min(100, _safe_int(rule.get("priority"), 50))),
-+        "event": normalize_proposal_story_event(_safe_dict(rule.get("event"))),
-+        "conditions": [
-+            dict(row)
-+            for row in _safe_list(rule.get("conditions"))
-+            if isinstance(row, dict)
-+        ][:MAX_EVENT_PRECONDITIONS],
-+        "cooldown_turns": max(0, _safe_int(rule.get("cooldown_turns"), 0)),
-+        "max_applications": max(0, _safe_int(rule.get("max_applications"), 1)),
-+        "pressure_type": _safe_str(rule.get("pressure_type")) or "story",
-+        "reason": _safe_str(rule.get("reason")),
-+        "tags": _unique_strs(rule.get("tags"), limit=20),
-+    }
++def normalize_story_pack_state(value: Dict[str, Any] | None) -> Dict[str, Any]:
++    value = _safe_dict(value)
++    packs: Dict[str, Dict[str, Any]] = {}
++    for pack_id, row in _safe_dict(value.get("imported_packs")).items():
++        pack_id = str(pack_id or "")
++        if not pack_id:
++            continue
++        packs[pack_id] = normalize_imported_story_pack(row, pack_id=pack_id)
 +
++    ordered_ids = sorted(
++        packs,
++        key=lambda pid: (
++            int(packs[pid].get("imported_turn") or 0),
++            pid,
++        ),
++    )[-MAX_IMPORTED_STORY_PACKS:]
 +
-+def normalize_story_proposal(proposal: Dict[str, Any]) -> Dict[str, Any]:
-+    proposal = _safe_dict(proposal)
-+    lore_entries = [
-+        normalize_proposal_lore_entry(row)
-+        for row in _safe_list(proposal.get("lore_entries"))
-+        if isinstance(row, dict)
-+    ][:MAX_PROPOSAL_LORE_ENTRIES]
-+    story_arcs = [
-+        normalize_proposal_story_arc(row)
-+        for row in _safe_list(proposal.get("story_arcs"))
-+        if isinstance(row, dict)
-+    ][:MAX_PROPOSAL_ARCS]
-+    story_events = [
-+        normalize_proposal_story_event(row)
-+        for row in _safe_list(proposal.get("story_events"))
-+        if isinstance(row, dict)
-+    ][:MAX_PROPOSAL_EVENTS]
-+    escalation_rules = [
-+        normalize_proposal_escalation_rule(row)
-+        for row in _safe_list(proposal.get("escalation_rules"))
-+        if isinstance(row, dict)
-+    ][:MAX_PROPOSAL_ESCALATION_RULES]
 +    return {
-+        "proposal_version": _safe_str(proposal.get("proposal_version")) or STORY_PROPOSAL_VERSION,
-+        "proposal_type": _safe_str(proposal.get("proposal_type")) or "story_pack",
-+        "proposal_id": _safe_str(proposal.get("proposal_id")),
-+        "title": _safe_str(proposal.get("title")),
-+        "lore_entries": lore_entries,
-+        "story_arcs": story_arcs,
-+        "story_events": story_events,
-+        "escalation_rules": escalation_rules,
-+        "metadata": dict(_safe_dict(proposal.get("metadata"))),
-+        "limits": {
-+            "max_lore_entries": MAX_PROPOSAL_LORE_ENTRIES,
-+            "max_story_arcs": MAX_PROPOSAL_ARCS,
-+            "max_story_events": MAX_PROPOSAL_EVENTS,
-+            "max_escalation_rules": MAX_PROPOSAL_ESCALATION_RULES,
-+            "max_event_effects": MAX_EVENT_EFFECTS,
-+            "allowed_effect_types": sorted(ALLOWED_STORY_EVENT_EFFECT_TYPES),
++        "version": 1,
++        "imported_packs": {
++            pack_id: packs[pack_id]
++            for pack_id in ordered_ids
 +        },
++        "max_imported_packs": MAX_IMPORTED_STORY_PACKS,
++    }
++
++
++def ensure_story_pack_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
++    if not isinstance(simulation_state, dict):
++        raise TypeError("simulation_state_must_be_dict")
++    state = normalize_story_pack_state(simulation_state.get("story_pack_state"))
++    simulation_state["story_pack_state"] = state
++    return state
++
++
++def get_imported_story_pack(
++    simulation_state: Dict[str, Any],
++    pack_id: str,
++) -> Dict[str, Any] | None:
++    state = ensure_story_pack_state(simulation_state)
++    return state.get("imported_packs", {}).get(pack_id)
++
++
++def mark_story_pack_imported(
++    simulation_state: Dict[str, Any],
++    *,
++    pack_id: str,
++    proposal_id: str = "",
++    title: str = "",
++    lore_ids: List[str] | None = None,
++    arc_ids: List[str] | None = None,
++    event_ids: List[str] | None = None,
++    rule_ids: List[str] | None = None,
++    quest_ids: List[str] | None = None,
++    turn_index: int = 0,
++    metadata: Dict[str, Any] | None = None,
++) -> Dict[str, Any]:
++    state = ensure_story_pack_state(simulation_state)
++    if not pack_id:
++        return {"ok": False, "reason": "missing_pack_id"}
++
++    row = normalize_imported_story_pack(
++        {
++            "pack_id": pack_id,
++            "proposal_id": proposal_id,
++            "title": title or pack_id,
++            "imported_turn": int(turn_index or 0),
++            "lore_ids": lore_ids or [],
++            "arc_ids": arc_ids or [],
++            "event_ids": event_ids or [],
++            "rule_ids": rule_ids or [],
++            "quest_ids": quest_ids or [],
++            "idempotent": True,
++            "metadata": metadata or {},
++        },
++        pack_id=pack_id,
++    )
++    state.setdefault("imported_packs", {})[pack_id] = row
++    simulation_state["story_pack_state"] = normalize_story_pack_state(state)
++    return {
++        "ok": True,
++        "reason": "story_pack_import_marked",
++        "pack_id": pack_id,
++        "imported": simulation_state["story_pack_state"]["imported_packs"][pack_id],
 +    }
 *** End Patch
-4. Add src/app/rpg/story_proposals/reference_index.py
+3. Add src/app/rpg/story_packs/definition_registries.py
 *** Begin Patch
-*** Add File: src/app/rpg/story_proposals/reference_index.py
+*** Add File: src/app/rpg/story_packs/definition_registries.py
 +from __future__ import annotations
 +
-+from typing import Any, Dict, Set
++from typing import Any, Dict, List
++
++from app.rpg.escalation.rules import normalize_escalation_rule
++from app.rpg.story_proposals.normalization import normalize_proposal_story_event
++
++
++MAX_STORY_EVENT_DEFINITIONS = 500
++MAX_ESCALATION_RULE_DEFINITIONS = 500
 +
 +
 +def _safe_dict(value: Any) -> Dict[str, Any]:
 +    return value if isinstance(value, dict) else {}
 +
 +
-+def _keys(value: Any) -> Set[str]:
-+    return {str(key) for key in _safe_dict(value).keys() if str(key)}
++def _safe_str(value: Any) -> str:
++    return value if isinstance(value, str) else ""
 +
 +
-+def build_story_reference_index(
-+    simulation_state: Dict[str, Any],
-+    proposal: Dict[str, Any],
-+) -> Dict[str, Set[str]]:
-+    lore_ids = _keys(_safe_dict(simulation_state.get("lore_state")).get("entries"))
-+    arc_ids = _keys(_safe_dict(simulation_state.get("story_arc_state")).get("arcs"))
-+    quest_ids = _keys(_safe_dict(simulation_state.get("quest_state")).get("quests"))
-+    puzzle_ids = _keys(_safe_dict(simulation_state.get("puzzle_state")).get("puzzles"))
++def _safe_list(value: Any) -> List[Any]:
++    return value if isinstance(value, list) else []
 +
-+    for entry in proposal.get("lore_entries") or []:
-+        if isinstance(entry, dict) and entry.get("lore_id"):
-+            lore_ids.add(str(entry["lore_id"]))
-+    for arc in proposal.get("story_arcs") or []:
-+        if isinstance(arc, dict) and arc.get("arc_id"):
-+            arc_ids.add(str(arc["arc_id"]))
 +
-+    # Conservative location/entity discovery from existing spatial graph.
-+    spatial_graph = _safe_dict(simulation_state.get("spatial_graph"))
-+    area_ids = _keys(spatial_graph.get("areas"))
-+    entity_ids = _keys(spatial_graph.get("entities"))
-+
-+    # Manual scenarios and older fixtures sometimes use these shapes.
-+    entity_locations = _safe_dict(spatial_graph.get("entity_locations"))
-+    entity_ids.update(str(key) for key in entity_locations.keys() if str(key))
-+    area_ids.update(str(value) for value in entity_locations.values() if str(value))
-+
++def normalize_story_event_registry(value: Dict[str, Any] | None) -> Dict[str, Any]:
++    value = _safe_dict(value)
++    events = {}
++    for event_id, row in _safe_dict(value.get("events")).items():
++        event_id = str(event_id or "")
++        if not event_id:
++            continue
++        normalized = normalize_proposal_story_event(dict(_safe_dict(row), event_id=event_id))
++        events[event_id] = normalized
++    ordered = sorted(events)[-MAX_STORY_EVENT_DEFINITIONS:]
 +    return {
-+        "lore_ids": lore_ids,
-+        "arc_ids": arc_ids,
-+        "quest_ids": quest_ids,
-+        "puzzle_ids": puzzle_ids,
-+        "location_ids": area_ids,
-+        "entity_ids": entity_ids,
++        "version": 1,
++        "events": {event_id: events[event_id] for event_id in ordered},
++        "max_events": MAX_STORY_EVENT_DEFINITIONS,
 +    }
++
++
++def ensure_story_event_registry(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
++    state = normalize_story_event_registry(simulation_state.get("story_event_registry"))
++    simulation_state["story_event_registry"] = state
++    return state
++
++
++def register_story_event_definition(
++    simulation_state: Dict[str, Any],
++    event: Dict[str, Any],
++    *,
++    pack_id: str = "",
++) -> Dict[str, Any]:
++    state = ensure_story_event_registry(simulation_state)
++    event = normalize_proposal_story_event(event)
++    event_id = _safe_str(event.get("event_id"))
++    if not event_id:
++        return {"ok": False, "reason": "missing_event_id"}
++    event.setdefault("metadata", {})
++    event["metadata"] = dict(_safe_dict(event.get("metadata")))
++    if pack_id:
++        event["metadata"]["pack_id"] = pack_id
++    state.setdefault("events", {})[event_id] = event
++    simulation_state["story_event_registry"] = normalize_story_event_registry(state)
++    return {
++        "ok": True,
++        "reason": "story_event_definition_registered",
++        "event_id": event_id,
++        "event": simulation_state["story_event_registry"]["events"][event_id],
++    }
++
++
++def get_story_event_definition(
++    simulation_state: Dict[str, Any],
++    event_id: str,
++) -> Dict[str, Any] | None:
++    state = ensure_story_event_registry(simulation_state)
++    return state.get("events", {}).get(event_id)
++
++
++def normalize_escalation_rule_registry(value: Dict[str, Any] | None) -> Dict[str, Any]:
++    value = _safe_dict(value)
++    rules = {}
++    for rule_id, row in _safe_dict(value.get("rules")).items():
++        rule_id = str(rule_id or "")
++        if not rule_id:
++            continue
++        normalized = normalize_escalation_rule(dict(_safe_dict(row), rule_id=rule_id))
++        rules[rule_id] = normalized
++    ordered = sorted(rules)[-MAX_ESCALATION_RULE_DEFINITIONS:]
++    return {
++        "version": 1,
++        "rules": {rule_id: rules[rule_id] for rule_id in ordered},
++        "max_rules": MAX_ESCALATION_RULE_DEFINITIONS,
++    }
++
++
++def ensure_escalation_rule_registry(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
++    state = normalize_escalation_rule_registry(simulation_state.get("escalation_rule_registry"))
++    simulation_state["escalation_rule_registry"] = state
++    return state
++
++
++def register_escalation_rule_definition(
++    simulation_state: Dict[str, Any],
++    rule: Dict[str, Any],
++    *,
++    pack_id: str = "",
++) -> Dict[str, Any]:
++    state = ensure_escalation_rule_registry(simulation_state)
++    rule = normalize_escalation_rule(rule)
++    rule_id = _safe_str(rule.get("rule_id"))
++    if not rule_id:
++        return {"ok": False, "reason": "missing_rule_id"}
++    rule.setdefault("metadata", {})
++    rule["metadata"] = dict(_safe_dict(rule.get("metadata")))
++    if pack_id:
++        rule["metadata"]["pack_id"] = pack_id
++    state.setdefault("rules", {})[rule_id] = rule
++    simulation_state["escalation_rule_registry"] = normalize_escalation_rule_registry(state)
++    return {
++        "ok": True,
++        "reason": "escalation_rule_definition_registered",
++        "rule_id": rule_id,
++        "rule": simulation_state["escalation_rule_registry"]["rules"][rule_id],
++    }
++
++
++def get_escalation_rule_definition(
++    simulation_state: Dict[str, Any],
++    rule_id: str,
++) -> Dict[str, Any] | None:
++    state = ensure_escalation_rule_registry(simulation_state)
++    return state.get("rules", {}).get(rule_id)
++
++
++def list_escalation_rule_definitions(
++    simulation_state: Dict[str, Any],
++    *,
++    arc_id: str = "",
++) -> List[Dict[str, Any]]:
++    state = ensure_escalation_rule_registry(simulation_state)
++    rows = list(state.get("rules", {}).values())
++    if arc_id:
++        rows = [row for row in rows if row.get("arc_id") == arc_id]
++    rows.sort(key=lambda row: (int(row.get("priority") or 0), str(row.get("rule_id") or "")), reverse=True)
++    return rows
 *** End Patch
-5. Add src/app/rpg/story_proposals/validation.py
+4. Add src/app/rpg/story_packs/importer.py
 *** Begin Patch
-*** Add File: src/app/rpg/story_proposals/validation.py
+*** Add File: src/app/rpg/story_packs/importer.py
 +from __future__ import annotations
 +
-+from typing import Any, Dict, List, Set
++import hashlib
++import json
++from typing import Any, Dict, List
 +
-+from app.rpg.lore.state import VALID_TRUTH_STATUSES, get_lore_entry
-+from app.rpg.story_events.validation import ALLOWED_STORY_EVENT_EFFECT_TYPES
-+from app.rpg.story_proposals.model import STORY_PROPOSAL_VERSION
-+from app.rpg.story_proposals.normalization import (
-+    MAX_EVENT_EFFECTS,
-+    MAX_PROPOSAL_ARCS,
-+    MAX_PROPOSAL_ESCALATION_RULES,
-+    MAX_PROPOSAL_EVENTS,
-+    MAX_PROPOSAL_LORE_ENTRIES,
-+    normalize_story_proposal,
++from app.rpg.lore.state import get_lore_entry, upsert_lore_entry
++from app.rpg.quests.transitions import apply_quest_transition
++from app.rpg.story_arcs.state import get_story_arc, start_story_arc
++from app.rpg.story_packs.definition_registries import (
++    register_escalation_rule_definition,
++    register_story_event_definition,
 +)
-+from app.rpg.story_proposals.reference_index import build_story_reference_index
++from app.rpg.story_packs.registry import get_imported_story_pack, mark_story_pack_imported
++from app.rpg.story_proposals.validation import validate_story_proposal
 +
 +
 +def _safe_dict(value: Any) -> Dict[str, Any]:
@@ -299,384 +374,300 @@ Patch 1 — Add story proposal package
 +    return value if isinstance(value, list) else []
 +
 +
-+def _safe_str(value: Any) -> str:
-+    return value if isinstance(value, str) else ""
++def _stable_pack_id(proposal: Dict[str, Any]) -> str:
++    proposal_id = str(proposal.get("proposal_id") or "").strip()
++    if proposal_id:
++        return f"storypack:{proposal_id}"
++    title = str(proposal.get("title") or "").strip()
++    payload = json.dumps(proposal, sort_keys=True, ensure_ascii=False, default=str)
++    digest = hashlib.sha1(payload.encode("utf-8")).hexdigest()[:16]
++    if title:
++        slug = "".join(ch.lower() if ch.isalnum() else "_" for ch in title).strip("_")[:40]
++        return f"storypack:{slug}:{digest}"
++    return f"storypack:{digest}"
 +
 +
-+def _err(reason: str, **kwargs: Any) -> Dict[str, Any]:
-+    return {"reason": reason, **kwargs}
-+
-+
-+def _check_duplicate_ids(rows: List[Dict[str, Any]], id_key: str, label: str) -> List[Dict[str, Any]]:
-+    seen: Set[str] = set()
-+    errors = []
-+    for row in rows:
-+        row_id = str(row.get(id_key) or "")
-+        if not row_id:
-+            errors.append(_err("missing_id", label=label, id_key=id_key))
++def _import_lore_entries(
++    simulation_state: Dict[str, Any],
++    lore_entries: List[Dict[str, Any]],
++) -> Dict[str, Any]:
++    results = []
++    lore_ids = []
++    for entry in lore_entries:
++        lore_id = str(entry.get("lore_id") or "")
++        if not lore_id:
++            results.append({"ok": False, "reason": "missing_lore_id", "entry": entry})
 +            continue
-+        if row_id in seen:
-+            errors.append(_err("duplicate_id", label=label, id_key=id_key, value=row_id))
-+        seen.add(row_id)
-+    return errors
 +
-+
-+def validate_story_proposal_lore(
-+    simulation_state: Dict[str, Any],
-+    entry: Dict[str, Any],
-+) -> Dict[str, Any]:
-+    entry = _safe_dict(entry)
-+    errors = []
-+    lore_id = _safe_str(entry.get("lore_id"))
-+    if not lore_id:
-+        errors.append(_err("missing_lore_id"))
-+    truth_status = _safe_str(entry.get("truth_status")) or "unknown"
-+    if truth_status not in VALID_TRUTH_STATUSES:
-+        errors.append(_err("invalid_truth_status", lore_id=lore_id, truth_status=truth_status))
-+
-+    existing = get_lore_entry(simulation_state, lore_id) if lore_id else None
-+    if existing and existing.get("truth_status") == "true" and truth_status in {"false", "myth"}:
-+        errors.append(
-+            _err(
-+                "contradicts_existing_true_lore",
-+                lore_id=lore_id,
-+                existing_truth_status=existing.get("truth_status"),
-+                proposed_truth_status=truth_status,
++        existing = get_lore_entry(simulation_state, lore_id)
++        if existing and existing.get("truth_status") == "true" and entry.get("truth_status") in {"false", "myth"}:
++            results.append(
++                {
++                    "ok": False,
++                    "reason": "protected_true_lore_not_overwritten",
++                    "lore_id": lore_id,
++                    "existing_truth_status": existing.get("truth_status"),
++                    "proposed_truth_status": entry.get("truth_status"),
++                }
 +            )
++            continue
++
++        result = upsert_lore_entry(simulation_state, entry)
++        results.append(result)
++        if result.get("ok"):
++            lore_ids.append(lore_id)
++    return {"ok": all(row.get("ok") for row in results), "results": results, "lore_ids": lore_ids}
++
++
++def _import_story_arcs(
++    simulation_state: Dict[str, Any],
++    story_arcs: List[Dict[str, Any]],
++) -> Dict[str, Any]:
++    results = []
++    arc_ids = []
++    for arc in story_arcs:
++        arc_id = str(arc.get("arc_id") or "")
++        if not arc_id:
++            results.append({"ok": False, "reason": "missing_arc_id", "arc": arc})
++            continue
++        existing = get_story_arc(simulation_state, arc_id)
++        if existing:
++            # Preserve active/resolved runtime state. Only merge links/metadata by starting
++            # would be too destructive, so leave existing arc alone for v1 importer.
++            results.append({"ok": True, "reason": "arc_already_exists", "arc_id": arc_id, "arc": existing})
++            arc_ids.append(arc_id)
++            continue
++        result = start_story_arc(
++            simulation_state,
++            arc_id,
++            title=str(arc.get("title") or arc_id),
++            stage=str(arc.get("stage") or "started"),
++            pressure=int(arc.get("pressure") or 0),
++            links={
++                "lore": list(arc.get("linked_lore") or []),
++                "quest": list(arc.get("linked_quests") or []),
++                "puzzle": list(arc.get("linked_puzzles") or []),
++                "location": list(arc.get("linked_locations") or []),
++                "entity": list(arc.get("linked_entities") or []),
++            },
++            turn_index=int(arc.get("started_turn") or 0),
 +        )
-+
-+    if truth_status == "secret" and entry.get("revealed_to_player") is True:
-+        errors.append(_err("secret_lore_revealed_by_default", lore_id=lore_id))
-+
-+    return {
-+        "ok": not errors,
-+        "kind": "lore",
-+        "lore_id": lore_id,
-+        "errors": errors,
-+    }
++        result["arc"]["status"] = arc.get("status") or result["arc"].get("status")
++        result["arc"]["flags"] = dict(arc.get("flags") or {})
++        result["arc"]["metadata"] = dict(arc.get("metadata") or {})
++        results.append(result)
++        if result.get("ok"):
++            arc_ids.append(arc_id)
++    return {"ok": all(row.get("ok") for row in results), "results": results, "arc_ids": arc_ids}
 +
 +
-+def validate_story_proposal_arc(
++def _import_story_events(
 +    simulation_state: Dict[str, Any],
-+    arc: Dict[str, Any],
++    story_events: List[Dict[str, Any]],
 +    *,
-+    refs: Dict[str, Set[str]] | None = None,
++    pack_id: str,
 +) -> Dict[str, Any]:
-+    arc = _safe_dict(arc)
-+    refs = refs or build_story_reference_index(simulation_state, {"story_arcs": [arc]})
-+    errors = []
-+    arc_id = _safe_str(arc.get("arc_id"))
-+    if not arc_id:
-+        errors.append(_err("missing_arc_id"))
-+
-+    pressure = int(arc.get("pressure") or 0)
-+    if pressure < 0 or pressure > 100:
-+        errors.append(_err("pressure_out_of_bounds", arc_id=arc_id, pressure=pressure))
-+
-+    status = _safe_str(arc.get("status")) or "inactive"
-+    if status not in {"inactive", "active", "resolved", "failed"}:
-+        errors.append(_err("invalid_arc_status", arc_id=arc_id, status=status))
-+
-+    for lore_id in _safe_list(arc.get("linked_lore")):
-+        if str(lore_id) not in refs["lore_ids"]:
-+            errors.append(_err("unknown_lore_reference", arc_id=arc_id, lore_id=str(lore_id)))
-+    for quest_id in _safe_list(arc.get("linked_quests")):
-+        # Quest links may seed future quests later, but must be explicitly namespaced.
-+        if not str(quest_id).startswith("quest:"):
-+            errors.append(_err("invalid_quest_reference", arc_id=arc_id, quest_id=str(quest_id)))
-+    for puzzle_id in _safe_list(arc.get("linked_puzzles")):
-+        if not str(puzzle_id).startswith("puzzle:"):
-+            errors.append(_err("invalid_puzzle_reference", arc_id=arc_id, puzzle_id=str(puzzle_id)))
-+
-+    return {
-+        "ok": not errors,
-+        "kind": "story_arc",
-+        "arc_id": arc_id,
-+        "errors": errors,
-+    }
++    results = []
++    event_ids = []
++    for event in story_events:
++        result = register_story_event_definition(simulation_state, event, pack_id=pack_id)
++        results.append(result)
++        if result.get("ok"):
++            event_ids.append(str(event.get("event_id") or ""))
++    return {"ok": all(row.get("ok") for row in results), "results": results, "event_ids": event_ids}
 +
 +
-+def _validate_effect_references(
-+    effect: Dict[str, Any],
-+    *,
-+    refs: Dict[str, Set[str]],
-+    event_id: str,
-+) -> List[Dict[str, Any]]:
-+    errors = []
-+    effect_type = _safe_str(effect.get("type"))
-+    if effect_type not in ALLOWED_STORY_EVENT_EFFECT_TYPES:
-+        return [_err("unknown_effect_type", event_id=event_id, effect_type=effect_type)]
-+
-+    arc_id = _safe_str(effect.get("arc_id"))
-+    if effect_type in {"arc_pressure_delta", "arc_stage_set", "arc_flag_set"} and arc_id and arc_id not in refs["arc_ids"]:
-+        errors.append(_err("unknown_arc_reference", event_id=event_id, effect_type=effect_type, arc_id=arc_id))
-+
-+    if effect_type == "arc_pressure_delta":
-+        delta = int(effect.get("delta") or 0)
-+        if delta < -100 or delta > 100:
-+            errors.append(_err("pressure_delta_out_of_bounds", event_id=event_id, delta=delta))
-+
-+    lore_id = _safe_str(effect.get("lore_id"))
-+    if effect_type in {"lore_reveal", "lore_truth_status_set", "lore_known_by_add", "lore_tag_add"}:
-+        if lore_id not in refs["lore_ids"]:
-+            errors.append(_err("unknown_lore_reference", event_id=event_id, effect_type=effect_type, lore_id=lore_id))
-+
-+    if effect_type == "lore_truth_status_set":
-+        truth_status = _safe_str(effect.get("truth_status"))
-+        if truth_status not in VALID_TRUTH_STATUSES:
-+            errors.append(_err("invalid_truth_status", event_id=event_id, truth_status=truth_status))
-+
-+    if effect_type == "social_delta":
-+        npc_id = _safe_str(effect.get("npc_id"))
-+        if not npc_id:
-+            errors.append(_err("missing_npc_id", event_id=event_id, effect_type=effect_type))
-+        for key in ("trust", "fear", "respect", "hostility", "reputation"):
-+            if key in effect:
-+                value = int(effect.get(key) or 0)
-+                if value < -100 or value > 100:
-+                    errors.append(_err("social_delta_out_of_bounds", event_id=event_id, field=key, value=value))
-+
-+    if effect_type == "quest_transition":
-+        transition = _safe_dict(effect.get("transition"))
-+        quest_id = _safe_str(transition.get("quest_id") or effect.get("quest_id"))
-+        if quest_id and not quest_id.startswith("quest:"):
-+            errors.append(_err("invalid_quest_reference", event_id=event_id, quest_id=quest_id))
-+
-+    if effect_type == "puzzle_transition":
-+        transition = _safe_dict(effect.get("transition"))
-+        puzzle_id = _safe_str(transition.get("puzzle_id") or effect.get("puzzle_id"))
-+        if puzzle_id and not puzzle_id.startswith("puzzle:"):
-+            errors.append(_err("invalid_puzzle_reference", event_id=event_id, puzzle_id=puzzle_id))
-+
-+    return errors
-+
-+
-+def validate_story_proposal_event(
++def _import_escalation_rules(
 +    simulation_state: Dict[str, Any],
-+    event: Dict[str, Any],
++    escalation_rules: List[Dict[str, Any]],
 +    *,
-+    refs: Dict[str, Set[str]] | None = None,
++    pack_id: str,
 +) -> Dict[str, Any]:
-+    event = _safe_dict(event)
-+    refs = refs or build_story_reference_index(simulation_state, {"story_events": [event]})
-+    errors = []
-+    event_id = _safe_str(event.get("event_id"))
-+    if not event_id:
-+        errors.append(_err("missing_event_id"))
-+
-+    arc_id = _safe_str(event.get("arc_id"))
-+    if arc_id and arc_id not in refs["arc_ids"]:
-+        errors.append(_err("unknown_arc_reference", event_id=event_id, arc_id=arc_id))
-+
-+    location_id = _safe_str(event.get("location_id"))
-+    if event.get("require_location", False) and not location_id:
-+        errors.append(_err("missing_required_location", event_id=event_id))
-+    if location_id and refs["location_ids"] and location_id not in refs["location_ids"]:
-+        errors.append(_err("unknown_location_reference", event_id=event_id, location_id=location_id))
-+
-+    for participant in _safe_list(event.get("participants")):
-+        participant = str(participant)
-+        if refs["entity_ids"] and participant not in refs["entity_ids"]:
-+            errors.append(_err("unknown_entity_reference", event_id=event_id, entity_id=participant))
-+
-+    effects = _safe_list(event.get("effects"))
-+    if len(effects) > MAX_EVENT_EFFECTS:
-+        errors.append(_err("too_many_effects", event_id=event_id, count=len(effects), max=MAX_EVENT_EFFECTS))
-+    for effect in effects:
-+        if isinstance(effect, dict):
-+            errors.extend(_validate_effect_references(effect, refs=refs, event_id=event_id))
-+
-+    return {
-+        "ok": not errors,
-+        "kind": "story_event",
-+        "event_id": event_id,
-+        "errors": errors,
-+    }
++    results = []
++    rule_ids = []
++    for rule in escalation_rules:
++        result = register_escalation_rule_definition(simulation_state, rule, pack_id=pack_id)
++        results.append(result)
++        if result.get("ok"):
++            rule_ids.append(str(rule.get("rule_id") or ""))
++    return {"ok": all(row.get("ok") for row in results), "results": results, "rule_ids": rule_ids}
 +
 +
-+def validate_story_proposal_escalation_rule(
++def _import_starter_quests(
 +    simulation_state: Dict[str, Any],
-+    rule: Dict[str, Any],
++    starter_quests: List[Dict[str, Any]],
 +    *,
-+    refs: Dict[str, Set[str]] | None = None,
++    turn_index: int,
 +) -> Dict[str, Any]:
-+    rule = _safe_dict(rule)
-+    refs = refs or build_story_reference_index(simulation_state, {"escalation_rules": [rule]})
-+    errors = []
-+    rule_id = _safe_str(rule.get("rule_id"))
-+    if not rule_id:
-+        errors.append(_err("missing_rule_id"))
-+
-+    arc_id = _safe_str(rule.get("arc_id"))
-+    if not arc_id:
-+        errors.append(_err("missing_arc_id"))
-+    elif arc_id not in refs["arc_ids"]:
-+        errors.append(_err("unknown_arc_reference", rule_id=rule_id, arc_id=arc_id))
-+
-+    priority = int(rule.get("priority") or 0)
-+    if priority < 0 or priority > 100:
-+        errors.append(_err("priority_out_of_bounds", rule_id=rule_id, priority=priority))
-+
-+    max_applications = int(rule.get("max_applications") or 0)
-+    if max_applications < 0 or max_applications > 20:
-+        errors.append(_err("max_applications_out_of_bounds", rule_id=rule_id, max_applications=max_applications))
-+
-+    cooldown_turns = int(rule.get("cooldown_turns") or 0)
-+    if cooldown_turns < 0 or cooldown_turns > 1000:
-+        errors.append(_err("cooldown_out_of_bounds", rule_id=rule_id, cooldown_turns=cooldown_turns))
-+
-+    event_result = validate_story_proposal_event(
-+        simulation_state,
-+        _safe_dict(rule.get("event")),
-+        refs=refs,
-+    )
-+    if not event_result.get("ok"):
-+        errors.append(_err("event_invalid", rule_id=rule_id, event_result=event_result))
-+
-+    return {
-+        "ok": not errors,
-+        "kind": "escalation_rule",
-+        "rule_id": rule_id,
-+        "errors": errors,
-+    }
++    results = []
++    quest_ids = []
++    for transition in starter_quests:
++        transition = dict(_safe_dict(transition))
++        transition.setdefault("action", "start")
++        result = apply_quest_transition(simulation_state, transition, turn_index=turn_index)
++        results.append(result)
++        if result.get("ok") and result.get("quest_id"):
++            quest_ids.append(str(result.get("quest_id")))
++    return {"ok": all(row.get("ok") for row in results), "results": results, "quest_ids": quest_ids}
 +
 +
-+def validate_story_proposal(
++def import_story_pack(
 +    simulation_state: Dict[str, Any],
 +    proposal: Dict[str, Any],
++    *,
++    turn_index: int = 0,
++    starter_quests: List[Dict[str, Any]] | None = None,
 +) -> Dict[str, Any]:
-+    raw = _safe_dict(proposal)
-+    normalized = normalize_story_proposal(raw)
-+    errors = []
++    validation = validate_story_proposal(simulation_state, proposal)
++    if not validation.get("ok"):
++        return {
++            "ok": False,
++            "reason": "validation_failed",
++            "validation": validation,
++            "pack_id": "",
++            "imported": {},
++        }
 +
-+    if normalized["proposal_version"] != STORY_PROPOSAL_VERSION:
-+        errors.append(
-+            _err(
-+                "unsupported_proposal_version",
-+                expected=STORY_PROPOSAL_VERSION,
-+                actual=normalized["proposal_version"],
-+            )
-+        )
-+    if normalized["proposal_type"] != "story_pack":
-+        errors.append(_err("unsupported_proposal_type", actual=normalized["proposal_type"]))
++    normalized = validation["normalized"]
++    pack_id = _stable_pack_id(normalized)
++    existing = get_imported_story_pack(simulation_state, pack_id)
++    if existing:
++        return {
++            "ok": True,
++            "reason": "already_imported",
++            "pack_id": pack_id,
++            "idempotent": True,
++            "imported": existing,
++            "validation": validation,
++            "results": {},
++        }
 +
-+    if len(_safe_list(raw.get("lore_entries"))) > MAX_PROPOSAL_LORE_ENTRIES:
-+        errors.append(_err("too_many_lore_entries", max=MAX_PROPOSAL_LORE_ENTRIES))
-+    if len(_safe_list(raw.get("story_arcs"))) > MAX_PROPOSAL_ARCS:
-+        errors.append(_err("too_many_story_arcs", max=MAX_PROPOSAL_ARCS))
-+    if len(_safe_list(raw.get("story_events"))) > MAX_PROPOSAL_EVENTS:
-+        errors.append(_err("too_many_story_events", max=MAX_PROPOSAL_EVENTS))
-+    if len(_safe_list(raw.get("escalation_rules"))) > MAX_PROPOSAL_ESCALATION_RULES:
-+        errors.append(_err("too_many_escalation_rules", max=MAX_PROPOSAL_ESCALATION_RULES))
++    lore_result = _import_lore_entries(simulation_state, normalized.get("lore_entries") or [])
++    if not lore_result.get("ok"):
++        return {
++            "ok": False,
++            "reason": "lore_import_failed",
++            "pack_id": pack_id,
++            "validation": validation,
++            "results": {"lore": lore_result},
++        }
 +
-+    errors.extend(_check_duplicate_ids(normalized["lore_entries"], "lore_id", "lore"))
-+    errors.extend(_check_duplicate_ids(normalized["story_arcs"], "arc_id", "story_arc"))
-+    errors.extend(_check_duplicate_ids(normalized["story_events"], "event_id", "story_event"))
-+    errors.extend(_check_duplicate_ids(normalized["escalation_rules"], "rule_id", "escalation_rule"))
++    arc_result = _import_story_arcs(simulation_state, normalized.get("story_arcs") or [])
++    if not arc_result.get("ok"):
++        return {
++            "ok": False,
++            "reason": "arc_import_failed",
++            "pack_id": pack_id,
++            "validation": validation,
++            "results": {"lore": lore_result, "story_arcs": arc_result},
++        }
 +
-+    refs = build_story_reference_index(simulation_state, normalized)
++    event_result = _import_story_events(
++        simulation_state,
++        normalized.get("story_events") or [],
++        pack_id=pack_id,
++    )
++    if not event_result.get("ok"):
++        return {
++            "ok": False,
++            "reason": "event_definition_import_failed",
++            "pack_id": pack_id,
++            "validation": validation,
++            "results": {
++                "lore": lore_result,
++                "story_arcs": arc_result,
++                "story_events": event_result,
++            },
++        }
 +
-+    lore_results = [
-+        validate_story_proposal_lore(simulation_state, entry)
-+        for entry in normalized["lore_entries"]
-+    ]
-+    arc_results = [
-+        validate_story_proposal_arc(simulation_state, arc, refs=refs)
-+        for arc in normalized["story_arcs"]
-+    ]
-+    event_results = [
-+        validate_story_proposal_event(simulation_state, event, refs=refs)
-+        for event in normalized["story_events"]
-+    ]
-+    rule_results = [
-+        validate_story_proposal_escalation_rule(simulation_state, rule, refs=refs)
-+        for rule in normalized["escalation_rules"]
-+    ]
++    rule_result = _import_escalation_rules(
++        simulation_state,
++        normalized.get("escalation_rules") or [],
++        pack_id=pack_id,
++    )
++    if not rule_result.get("ok"):
++        return {
++            "ok": False,
++            "reason": "escalation_rule_import_failed",
++            "pack_id": pack_id,
++            "validation": validation,
++            "results": {
++                "lore": lore_result,
++                "story_arcs": arc_result,
++                "story_events": event_result,
++                "escalation_rules": rule_result,
++            },
++        }
 +
-+    for bucket, results in {
-+        "lore": lore_results,
-+        "story_arc": arc_results,
-+        "story_event": event_results,
-+        "escalation_rule": rule_results,
-+    }.items():
-+        for result in results:
-+            if not result.get("ok"):
-+                errors.append(_err(f"{bucket}_invalid", result=result))
++    quest_result = _import_starter_quests(
++        simulation_state,
++        starter_quests or _safe_list(_safe_dict(proposal).get("starter_quests")),
++        turn_index=turn_index,
++    )
++    if not quest_result.get("ok"):
++        return {
++            "ok": False,
++            "reason": "starter_quest_import_failed",
++            "pack_id": pack_id,
++            "validation": validation,
++            "results": {
++                "lore": lore_result,
++                "story_arcs": arc_result,
++                "story_events": event_result,
++                "escalation_rules": rule_result,
++                "starter_quests": quest_result,
++            },
++        }
 +
++    mark_result = mark_story_pack_imported(
++        simulation_state,
++        pack_id=pack_id,
++        proposal_id=str(normalized.get("proposal_id") or ""),
++        title=str(normalized.get("title") or pack_id),
++        lore_ids=lore_result.get("lore_ids") or [],
++        arc_ids=arc_result.get("arc_ids") or [],
++        event_ids=event_result.get("event_ids") or [],
++        rule_ids=rule_result.get("rule_ids") or [],
++        quest_ids=quest_result.get("quest_ids") or [],
++        turn_index=turn_index,
++        metadata={"source": "story_pack_importer_v1"},
++    )
 +    return {
-+        "ok": not errors,
-+        "proposal_id": normalized.get("proposal_id"),
-+        "proposal_version": normalized.get("proposal_version"),
-+        "proposal_type": normalized.get("proposal_type"),
-+        "errors": errors,
-+        "normalized": normalized,
-+        "result_counts": {
-+            "lore_entries": len(normalized["lore_entries"]),
-+            "story_arcs": len(normalized["story_arcs"]),
-+            "story_events": len(normalized["story_events"]),
-+            "escalation_rules": len(normalized["escalation_rules"]),
++        "ok": True,
++        "reason": "imported",
++        "pack_id": pack_id,
++        "idempotent": True,
++        "validation": validation,
++        "results": {
++            "lore": lore_result,
++            "story_arcs": arc_result,
++            "story_events": event_result,
++            "escalation_rules": rule_result,
++            "starter_quests": quest_result,
++            "mark": mark_result,
 +        },
-+        "validation_results": {
-+            "lore": lore_results,
-+            "story_arcs": arc_results,
-+            "story_events": event_results,
-+            "escalation_rules": rule_results,
-+        },
++        "imported": mark_result.get("imported"),
 +    }
 *** End Patch
 Patch 2 — Unit tests
-6. Add src/tests/rpg/story_proposals/test_story_proposal_normalization.py
+5. Add src/tests/rpg/story_packs/test_story_pack_importer.py
 *** Begin Patch
-*** Add File: src/tests/rpg/story_proposals/test_story_proposal_normalization.py
-+from app.rpg.story_proposals.normalization import normalize_story_proposal
-+
-+
-+def test_story_proposal_normalizes_shape_and_defaults():
-+    proposal = normalize_story_proposal(
-+        {
-+            "proposal_id": "proposal:red_sashes",
-+            "title": "Red Sashes Intro",
-+            "lore_entries": [
-+                {"lore_id": "lore:red_sashes", "title": "The Red Sashes"}
-+            ],
-+            "story_arcs": [
-+                {"arc_id": "arc:bandit_pressure", "title": "Bandit Pressure", "pressure": 20}
-+            ],
-+        }
-+    )
-+
-+    assert proposal["proposal_version"] == "story_proposal_v1"
-+    assert proposal["proposal_type"] == "story_pack"
-+    assert proposal["lore_entries"][0]["truth_status"] == "unknown"
-+    assert proposal["story_arcs"][0]["pressure"] == 20
-+    assert proposal["story_events"] == []
-+    assert proposal["escalation_rules"] == []
-+
-+
-+def test_story_proposal_normalization_bounds_lists():
-+    proposal = normalize_story_proposal(
-+        {
-+            "lore_entries": [
-+                {"lore_id": f"lore:{i}", "title": f"Lore {i}"}
-+                for i in range(100)
-+            ]
-+        }
-+    )
-+
-+    assert len(proposal["lore_entries"]) == proposal["limits"]["max_lore_entries"]
-*** End Patch
-7. Add src/tests/rpg/story_proposals/test_story_proposal_validation.py
-*** Begin Patch
-*** Add File: src/tests/rpg/story_proposals/test_story_proposal_validation.py
-+from app.rpg.lore.state import upsert_lore_entry
-+from app.rpg.story_proposals.validation import validate_story_proposal
+*** Add File: src/tests/rpg/story_packs/test_story_pack_importer.py
++from app.rpg.lore.state import get_lore_entry, upsert_lore_entry
++from app.rpg.story_arcs.state import get_story_arc
++from app.rpg.story_packs.definition_registries import (
++    get_escalation_rule_definition,
++    get_story_event_definition,
++)
++from app.rpg.story_packs.importer import import_story_pack
++from app.rpg.story_packs.registry import get_imported_story_pack
 +
 +
 +def _valid_pack():
 +    return {
 +        "proposal_version": "story_proposal_v1",
 +        "proposal_type": "story_pack",
-+        "proposal_id": "proposal:red_sashes_intro",
++        "proposal_id": "red_sashes_intro",
 +        "title": "Red Sashes Intro",
 +        "lore_entries": [
 +            {
@@ -731,155 +722,164 @@ Patch 2 — Unit tests
 +    }
 +
 +
-+def test_story_proposal_valid_pack_accepts():
-+    result = validate_story_proposal({}, _valid_pack())
++def test_story_pack_import_adds_lore_arcs_events_rules():
++    simulation_state = {}
++    result = import_story_pack(simulation_state, _valid_pack(), turn_index=3)
 +
 +    assert result["ok"] is True
-+    assert result["result_counts"] == {
-+        "lore_entries": 1,
-+        "story_arcs": 1,
-+        "story_events": 1,
-+        "escalation_rules": 1,
-+    }
++    assert get_lore_entry(simulation_state, "lore:red_sashes")["truth_status"] == "rumor"
++    assert get_story_arc(simulation_state, "arc:bandit_pressure")["stage"] == "rumors"
++    assert get_story_event_definition(simulation_state, "event:bandit_rumor_spreads") is not None
++    assert get_escalation_rule_definition(simulation_state, "rule:bandit_warning") is not None
++    assert get_imported_story_pack(simulation_state, result["pack_id"]) is not None
 +
 +
-+def test_story_proposal_invalid_version_rejected():
-+    pack = _valid_pack()
-+    pack["proposal_version"] = "bad"
++def test_story_pack_import_is_idempotent():
++    simulation_state = {}
++    first = import_story_pack(simulation_state, _valid_pack(), turn_index=3)
++    second = import_story_pack(simulation_state, _valid_pack(), turn_index=4)
 +
-+    result = validate_story_proposal({}, pack)
-+
-+    assert result["ok"] is False
-+    assert any(row["reason"] == "unsupported_proposal_version" for row in result["errors"])
-+
-+
-+def test_story_proposal_unknown_effect_rejected():
-+    pack = _valid_pack()
-+    pack["story_events"][0]["effects"] = [{"type": "invent_gold", "amount": 999}]
-+
-+    result = validate_story_proposal({}, pack)
-+
-+    assert result["ok"] is False
-+    assert "unknown_effect_type" in str(result["errors"])
++    assert first["ok"] is True
++    assert second["ok"] is True
++    assert second["reason"] == "already_imported"
++    assert len(simulation_state["story_pack_state"]["imported_packs"]) == 1
 +
 +
-+def test_story_proposal_unbounded_pressure_rejected():
-+    pack = _valid_pack()
-+    pack["story_events"][0]["effects"] = [
-+        {"type": "arc_pressure_delta", "arc_id": "arc:bandit_pressure", "delta": 999}
-+    ]
-+
-+    result = validate_story_proposal({}, pack)
-+
-+    assert result["ok"] is False
-+    assert "pressure_delta_out_of_bounds" in str(result["errors"])
-+
-+
-+def test_story_proposal_contradicts_true_lore_rejected():
++def test_story_pack_import_does_not_overwrite_existing_true_lore():
 +    simulation_state = {}
 +    upsert_lore_entry(
 +        simulation_state,
-+        {"lore_id": "lore:red_sashes", "title": "The Red Sashes", "truth_status": "true"},
++        {
++            "lore_id": "lore:red_sashes",
++            "title": "The Red Sashes",
++            "truth_status": "true",
++        },
 +    )
 +    pack = _valid_pack()
 +    pack["lore_entries"][0]["truth_status"] = "false"
 +
-+    result = validate_story_proposal(simulation_state, pack)
++    result = import_story_pack(simulation_state, pack)
 +
 +    assert result["ok"] is False
-+    assert "contradicts_existing_true_lore" in str(result["errors"])
++    assert result["reason"] == "validation_failed"
++    assert get_lore_entry(simulation_state, "lore:red_sashes")["truth_status"] == "true"
 +
 +
-+def test_story_proposal_secret_not_revealed_by_default():
++def test_story_pack_can_seed_starter_quest():
++    simulation_state = {}
 +    pack = _valid_pack()
-+    pack["lore_entries"][0]["truth_status"] = "secret"
-+    pack["lore_entries"][0]["revealed_to_player"] = True
++    pack["starter_quests"] = [
++        {
++            "action": "start",
++            "quest_id": "quest:stop_red_sashes",
++            "stage": "investigate",
++        }
++    ]
 +
-+    result = validate_story_proposal({}, pack)
++    result = import_story_pack(simulation_state, pack, turn_index=5)
 +
-+    assert result["ok"] is False
-+    assert "secret_lore_revealed_by_default" in str(result["errors"])
-+
-+
-+def test_story_proposal_rumor_kept_as_rumor():
-+    result = validate_story_proposal({}, _valid_pack())
-+
-+    lore = result["normalized"]["lore_entries"][0]
 +    assert result["ok"] is True
-+    assert lore["truth_status"] == "rumor"
++    imported = get_imported_story_pack(simulation_state, result["pack_id"])
++    assert "quest:stop_red_sashes" in imported["quest_ids"]
++    assert simulation_state["quest_state"]["quests"]["quest:stop_red_sashes"]["stage"] == "investigate"
 *** End Patch
-8. Add src/tests/rpg/story_proposals/test_story_proposal_references.py
+6. Add src/tests/rpg/story_packs/test_story_pack_registries.py
 *** Begin Patch
-*** Add File: src/tests/rpg/story_proposals/test_story_proposal_references.py
-+from app.rpg.story_proposals.validation import validate_story_proposal
+*** Add File: src/tests/rpg/story_packs/test_story_pack_registries.py
++from app.rpg.story_packs.definition_registries import (
++    get_escalation_rule_definition,
++    get_story_event_definition,
++    list_escalation_rule_definitions,
++    register_escalation_rule_definition,
++    register_story_event_definition,
++)
 +
 +
-+def test_story_proposal_unknown_arc_reference_rejected():
-+    result = validate_story_proposal(
-+        {},
++def test_story_event_definition_registry_registers_event():
++    simulation_state = {}
++    result = register_story_event_definition(
++        simulation_state,
 +        {
-+            "proposal_version": "story_proposal_v1",
-+            "proposal_type": "story_pack",
-+            "story_events": [
-+                {
-+                    "event_id": "event:x",
-+                    "arc_id": "arc:missing",
-+                    "effects": [],
-+                }
-+            ],
++            "event_id": "event:x",
++            "arc_id": "arc:x",
++            "effects": [],
 +        },
++        pack_id="storypack:test",
 +    )
 +
-+    assert result["ok"] is False
-+    assert "unknown_arc_reference" in str(result["errors"])
++    assert result["ok"] is True
++    event = get_story_event_definition(simulation_state, "event:x")
++    assert event["metadata"]["pack_id"] == "storypack:test"
 +
 +
-+def test_story_proposal_invalid_quest_reference_rejected():
-+    result = validate_story_proposal(
-+        {},
++def test_escalation_rule_registry_registers_and_lists_rule():
++    simulation_state = {}
++    result = register_escalation_rule_definition(
++        simulation_state,
++        {
++            "rule_id": "rule:x",
++            "arc_id": "arc:x",
++            "priority": 80,
++            "event": {"event_id": "event:x", "effects": []},
++        },
++        pack_id="storypack:test",
++    )
++
++    assert result["ok"] is True
++    rule = get_escalation_rule_definition(simulation_state, "rule:x")
++    rows = list_escalation_rule_definitions(simulation_state, arc_id="arc:x")
++    assert rule["metadata"]["pack_id"] == "storypack:test"
++    assert rows[0]["rule_id"] == "rule:x"
+*** End Patch
+7. Add src/tests/rpg/story_packs/test_story_pack_save_load.py
+*** Begin Patch
+*** Add File: src/tests/rpg/story_packs/test_story_pack_save_load.py
++import json
++
++from app.rpg.story_packs.importer import import_story_pack
++from app.rpg.story_packs.registry import normalize_story_pack_state
++
++
++def test_story_pack_state_json_roundtrip():
++    simulation_state = {}
++    result = import_story_pack(
++        simulation_state,
 +        {
 +            "proposal_version": "story_proposal_v1",
 +            "proposal_type": "story_pack",
++            "proposal_id": "tiny",
++            "title": "Tiny Pack",
 +            "lore_entries": [{"lore_id": "lore:x", "title": "X"}],
-+            "story_arcs": [
-+                {
-+                    "arc_id": "arc:x",
-+                    "title": "X",
-+                    "linked_quests": ["bad_quest_id"],
-+                }
-+            ],
++            "story_arcs": [{"arc_id": "arc:x", "title": "X", "linked_lore": ["lore:x"]}],
++            "story_events": [],
++            "escalation_rules": [],
 +        },
 +    )
 +
-+    assert result["ok"] is False
-+    assert "invalid_quest_reference" in str(result["errors"])
++    encoded = json.dumps(simulation_state["story_pack_state"], sort_keys=True)
++    decoded = json.loads(encoded)
++    normalized = normalize_story_pack_state(decoded)
 +
-+
-+def test_story_proposal_duplicate_ids_rejected():
-+    result = validate_story_proposal(
-+        {},
-+        {
-+            "proposal_version": "story_proposal_v1",
-+            "proposal_type": "story_pack",
-+            "lore_entries": [
-+                {"lore_id": "lore:x", "title": "X"},
-+                {"lore_id": "lore:x", "title": "X again"},
-+            ],
-+        },
-+    )
-+
-+    assert result["ok"] is False
-+    assert "duplicate_id" in str(result["errors"])
++    assert result["ok"] is True
++    assert result["pack_id"] in normalized["imported_packs"]
 *** End Patch
-Patch 3 — Manual proposal checks/setup
-9. Add src/tests/rpg/manual/story_proposal_m10_m12_checks.py
+Patch 3 — Manual story pack checks/setup
+8. Add src/tests/rpg/manual/story_pack_m13_m15_checks.py
 *** Begin Patch
-*** Add File: src/tests/rpg/manual/story_proposal_m10_m12_checks.py
+*** Add File: src/tests/rpg/manual/story_pack_m13_m15_checks.py
 +from __future__ import annotations
 +
 +from typing import Any, Dict, List
 +
-+from app.rpg.story_proposals.validation import validate_story_proposal
++from app.rpg.lore.state import get_lore_entry
++from app.rpg.quests.state import get_quest
++from app.rpg.story_arcs.state import get_story_arc
++from app.rpg.story_packs.definition_registries import (
++    get_escalation_rule_definition,
++    get_story_event_definition,
++)
++from app.rpg.story_packs.importer import import_story_pack
++from app.rpg.story_packs.registry import get_imported_story_pack
 +
 +
 +def _safe_dict(value: Any) -> Dict[str, Any]:
@@ -911,17 +911,12 @@ Patch 3 — Manual proposal checks/setup
 +        candidate = _safe_dict(candidate)
 +        if candidate and not first_non_empty:
 +            first_non_empty = candidate
-+        if (
-+            isinstance(candidate.get("lore_state"), dict)
-+            or isinstance(candidate.get("story_arc_state"), dict)
-+            or isinstance(candidate.get("quest_state"), dict)
-+            or isinstance(candidate.get("puzzle_state"), dict)
-+        ):
++        if isinstance(candidate.get("story_pack_state"), dict):
 +            return candidate
 +    return first_non_empty
 +
 +
-+def run_story_proposal_m10_m12_check(
++def run_story_pack_m13_m15_check(
 +    *,
 +    check: Dict[str, Any],
 +    result: Dict[str, Any],
@@ -930,58 +925,190 @@ Patch 3 — Manual proposal checks/setup
 +    simulation_state = _extract_simulation_state(result=result, session=session)
 +    check_type = str(check.get("type") or "")
 +
-+    if check_type == "story_proposal_validation":
++    if check_type == "story_pack_import":
 +        proposal = _safe_dict(check.get("proposal"))
 +        expected_ok = bool(check.get("expected_ok"))
-+        validation = validate_story_proposal(simulation_state, proposal)
-+        required_error = check.get("required_error")
-+        ok = bool(validation.get("ok")) is expected_ok
-+        if required_error:
-+            ok = ok and required_error in str(validation.get("errors"))
++        import_result = import_story_pack(
++            simulation_state,
++            proposal,
++            turn_index=int(check.get("turn_index") or 1),
++            starter_quests=check.get("starter_quests"),
++        )
++        required_reason = check.get("required_reason")
++        ok = bool(import_result.get("ok")) is expected_ok
++        if required_reason:
++            ok = ok and import_result.get("reason") == required_reason
 +        return {
 +            "check_type": check_type,
 +            "ok": ok,
 +            "expected_ok": expected_ok,
-+            "actual_ok": bool(validation.get("ok")),
-+            "required_error": required_error,
-+            "validation": validation,
++            "actual_ok": bool(import_result.get("ok")),
++            "required_reason": required_reason,
++            "import_result": import_result,
 +        }
 +
-+    if check_type == "story_proposal_normalized_counts":
-+        proposal = _safe_dict(check.get("proposal"))
++    if check_type == "story_pack_imported":
++        pack_id = str(check.get("pack_id") or "")
++        imported = get_imported_story_pack(simulation_state, pack_id)
++        return {
++            "check_type": check_type,
++            "ok": bool(imported),
++            "pack_id": pack_id,
++            "imported": imported,
++        }
++
++    if check_type == "story_pack_lore":
++        lore_id = str(check.get("lore_id") or "")
++        entry = get_lore_entry(simulation_state, lore_id)
 +        expected = _safe_dict(check.get("expected"))
-+        validation = validate_story_proposal(simulation_state, proposal)
-+        counts = validation.get("result_counts") or {}
 +        failures = {}
 +        for key, expected_value in expected.items():
-+            actual = counts.get(key)
++            actual = _safe_dict(entry).get(key)
 +            if actual != expected_value:
 +                failures[key] = {"expected": expected_value, "actual": actual}
 +        return {
 +            "check_type": check_type,
-+            "ok": not failures,
-+            "validation_ok": bool(validation.get("ok")),
-+            "counts": counts,
++            "ok": bool(entry) and not failures,
++            "lore_id": lore_id,
++            "entry": entry,
 +            "failures": failures,
++        }
++
++    if check_type == "story_pack_arc":
++        arc_id = str(check.get("arc_id") or "")
++        arc = get_story_arc(simulation_state, arc_id)
++        expected = _safe_dict(check.get("expected"))
++        failures = {}
++        for key, expected_value in expected.items():
++            actual = _safe_dict(arc).get(key)
++            if actual != expected_value:
++                failures[key] = {"expected": expected_value, "actual": actual}
++        return {
++            "check_type": check_type,
++            "ok": bool(arc) and not failures,
++            "arc_id": arc_id,
++            "arc": arc,
++            "failures": failures,
++        }
++
++    if check_type == "story_pack_event_definition":
++        event_id = str(check.get("event_id") or "")
++        event = get_story_event_definition(simulation_state, event_id)
++        return {
++            "check_type": check_type,
++            "ok": bool(event),
++            "event_id": event_id,
++            "event": event,
++        }
++
++    if check_type == "story_pack_rule_definition":
++        rule_id = str(check.get("rule_id") or "")
++        rule = get_escalation_rule_definition(simulation_state, rule_id)
++        return {
++            "check_type": check_type,
++            "ok": bool(rule),
++            "rule_id": rule_id,
++            "rule": rule,
++        }
++
++    if check_type == "story_pack_quest":
++        quest_id = str(check.get("quest_id") or "")
++        quest = get_quest(simulation_state, quest_id)
++        expected = _safe_dict(check.get("expected"))
++        failures = {}
++        for key, expected_value in expected.items():
++            actual = _safe_dict(quest).get(key)
++            if actual != expected_value:
++                failures[key] = {"expected": expected_value, "actual": actual}
++        return {
++            "check_type": check_type,
++            "ok": bool(quest) and not failures,
++            "quest_id": quest_id,
++            "quest": quest,
++            "failures": failures,
++        }
++
++    if check_type == "story_pack_debug_bounded":
++        pack_state = _safe_dict(simulation_state.get("story_pack_state"))
++        imported_packs = _safe_dict(pack_state.get("imported_packs"))
++        event_registry = _safe_dict(simulation_state.get("story_event_registry"))
++        rule_registry = _safe_dict(simulation_state.get("escalation_rule_registry"))
++        max_packs = int(check.get("max_packs") or 20)
++        ok = len(imported_packs) <= max_packs
++        return {
++            "check_type": check_type,
++            "ok": ok,
++            "imported_pack_count": len(imported_packs),
++            "max_packs": max_packs,
++            "event_definition_count": len(_safe_dict(event_registry.get("events"))),
++            "rule_definition_count": len(_safe_dict(rule_registry.get("rules"))),
 +        }
 +
 +    return {
 +        "check_type": check_type,
 +        "ok": False,
-+        "error": f"unknown_story_proposal_m10_m12_check_type:{check_type}",
++        "error": f"unknown_story_pack_m13_m15_check_type:{check_type}",
 +    }
 +
 +
-+def run_story_proposal_m10_m12_checks(
++def run_story_pack_m13_m15_checks(
 +    *,
 +    checks: List[Dict[str, Any]],
 +    result: Dict[str, Any],
 +    session: Dict[str, Any] | None = None,
 +) -> List[Dict[str, Any]]:
 +    return [
-+        run_story_proposal_m10_m12_check(check=check, result=result, session=session)
++        run_story_pack_m13_m15_check(check=check, result=result, session=session)
 +        for check in checks
 +    ]
+*** End Patch
+9. Patch src/tests/rpg/manual/scenario_setup.py
+
+Add import:
+
+*** Begin Patch
+*** Update File: src/tests/rpg/manual/scenario_setup.py
+@@
+ from app.rpg.escalation.rules import apply_escalation_rule
+ from app.rpg.escalation.state import mark_escalation_rule_applied
++from app.rpg.story_packs.importer import import_story_pack
+ from tests.rpg.manual.memory_fixtures import build_manual_memory_event
+*** End Patch
+
+Add setup block after setup_story_events or after escalation setup is also fine. Prefer after story/lore/arcs and before manual inventory/quest/puzzle setup:
+
+*** Begin Patch
+*** Update File: src/tests/rpg/manual/scenario_setup.py
+@@
+     for rule in scenario.get("setup_apply_escalation_rules") or []:
+         if isinstance(rule, dict):
+             apply_escalation_rule(
+                 simulation_state,
+                 rule,
+@@
+                     or 1
+                 ),
+             )
++
++    for story_pack in scenario.get("setup_story_packs") or []:
++        if isinstance(story_pack, dict):
++            proposal = story_pack.get("proposal") or story_pack
++            starter_quests = story_pack.get("starter_quests")
++            import_story_pack(
++                simulation_state,
++                proposal,
++                turn_index=int(
++                    story_pack.get("turn_index")
++                    or scenario.get("setup_turn_index")
++                    or 1
++                ),
++                starter_quests=starter_quests,
++            )
+ 
+     for item_id in scenario.get("setup_manual_inventory_items") or []:
+         simulation_state.setdefault("manual_inventory_items", [])
+         if item_id not in simulation_state["manual_inventory_items"]:
+             simulation_state["manual_inventory_items"].append(item_id)
 *** End Patch
 10. Patch src/tests/rpg/manual/scenario_execution.py
 
@@ -990,18 +1117,18 @@ Add import:
 *** Begin Patch
 *** Update File: src/tests/rpg/manual/scenario_execution.py
 @@
- from tests.rpg.manual.escalation_m7_m9_checks import run_escalation_m7_m9_checks
-+from tests.rpg.manual.story_proposal_m10_m12_checks import (
-+    run_story_proposal_m10_m12_checks,
-+)
+ from tests.rpg.manual.story_proposal_m10_m12_checks import (
+     run_story_proposal_m10_m12_checks,
+ )
++from tests.rpg.manual.story_pack_m13_m15_checks import run_story_pack_m13_m15_checks
 *** End Patch
 
-Add check block after escalation checks:
+Add check block after story proposal checks:
 
 *** Begin Patch
 *** Update File: src/tests/rpg/manual/scenario_execution.py
 @@
-         if escalation_m7_m9_checks:
+         if story_proposal_m10_m12_checks:
              current_session = {}
              try:
                  current_session = _ensure_manual_session(session_id)
@@ -1010,29 +1137,29 @@ Add check block after escalation checks:
                          + str(check_result.get("error") or "")
                      )
 +
-+        story_proposal_m10_m12_checks = [
++        story_pack_m13_m15_checks = [
 +            check
 +            for check in checks
 +            if isinstance(check, dict)
-+            and str(check.get("type") or "").startswith("story_proposal_")
++            and str(check.get("type") or "").startswith("story_pack_")
 +        ]
-+        if story_proposal_m10_m12_checks:
++        if story_pack_m13_m15_checks:
 +            current_session = {}
 +            try:
 +                current_session = _ensure_manual_session(session_id)
 +            except Exception:
 +                current_session = session
 +
-+            story_proposal_m10_m12_check_results = run_story_proposal_m10_m12_checks(
-+                checks=story_proposal_m10_m12_checks,
++            story_pack_m13_m15_check_results = run_story_pack_m13_m15_checks(
++                checks=story_pack_m13_m15_checks,
 +                result=turn_record.get("result") or turn_record,
 +                session=current_session,
 +            )
-+            turn_record["story_proposal_m10_m12_check_results"] = story_proposal_m10_m12_check_results
-+            for check_result in story_proposal_m10_m12_check_results:
++            turn_record["story_pack_m13_m15_check_results"] = story_pack_m13_m15_check_results
++            for check_result in story_pack_m13_m15_check_results:
 +                if not check_result.get("ok"):
 +                    turn_record.setdefault("scenario_warnings", []).append(
-+                        "story_proposal_m10_m12_check_failed:"
++                        "story_pack_m13_m15_check_failed:"
 +                        + str(scenario_name)
 +                        + ":turn_"
 +                        + str(turn_index)
@@ -1051,47 +1178,61 @@ Add sanitizer block:
 *** Begin Patch
 *** Update File: src/tests/rpg/manual/summary_sanitizer.py
 @@
-     escalation_m7_m9_check_results = turn.get("escalation_m7_m9_check_results")
-     if isinstance(escalation_m7_m9_check_results, list):
-         sanitized["escalation_m7_m9_check_results"] = [
+     story_proposal_m10_m12_check_results = turn.get("story_proposal_m10_m12_check_results")
+     if isinstance(story_proposal_m10_m12_check_results, list):
+         sanitized["story_proposal_m10_m12_check_results"] = [
 @@
              if isinstance(item, dict)
          ]
 +
-+    story_proposal_m10_m12_check_results = turn.get("story_proposal_m10_m12_check_results")
-+    if isinstance(story_proposal_m10_m12_check_results, list):
-+        sanitized["story_proposal_m10_m12_check_results"] = [
++    story_pack_m13_m15_check_results = turn.get("story_pack_m13_m15_check_results")
++    if isinstance(story_pack_m13_m15_check_results, list):
++        sanitized["story_pack_m13_m15_check_results"] = [
 +            {
 +                "check_type": item.get("check_type"),
 +                "ok": item.get("ok"),
 +                "expected_ok": item.get("expected_ok"),
 +                "actual_ok": item.get("actual_ok"),
-+                "required_error": item.get("required_error"),
-+                "validation": item.get("validation"),
-+                "counts": item.get("counts"),
++                "required_reason": item.get("required_reason"),
++                "pack_id": item.get("pack_id"),
++                "lore_id": item.get("lore_id"),
++                "arc_id": item.get("arc_id"),
++                "event_id": item.get("event_id"),
++                "rule_id": item.get("rule_id"),
++                "quest_id": item.get("quest_id"),
++                "import_result": item.get("import_result"),
++                "imported": item.get("imported"),
++                "entry": item.get("entry"),
++                "arc": item.get("arc"),
++                "event": item.get("event"),
++                "rule": item.get("rule"),
++                "quest": item.get("quest"),
 +                "failures": item.get("failures"),
++                "imported_pack_count": item.get("imported_pack_count"),
++                "event_definition_count": item.get("event_definition_count"),
++                "rule_definition_count": item.get("rule_definition_count"),
 +                "error": item.get("error"),
 +            }
-+            for item in story_proposal_m10_m12_check_results[:50]
++            for item in story_pack_m13_m15_check_results[:50]
 +            if isinstance(item, dict)
 +        ]
  
      return sanitized
 *** End Patch
 Patch 4 — Manual scenarios
-12. Add src/tests/rpg/manual/scenarios/story_proposal_m10_m12.py
+12. Add src/tests/rpg/manual/scenarios/story_pack_m13_m15.py
 *** Begin Patch
-*** Add File: src/tests/rpg/manual/scenarios/story_proposal_m10_m12.py
+*** Add File: src/tests/rpg/manual/scenarios/story_pack_m13_m15.py
 +from __future__ import annotations
 +
 +from typing import Any, Dict
 +
 +
-+def _valid_story_pack() -> Dict[str, Any]:
++def _valid_pack() -> Dict[str, Any]:
 +    return {
 +        "proposal_version": "story_proposal_v1",
 +        "proposal_type": "story_pack",
-+        "proposal_id": "proposal:red_sashes_intro",
++        "proposal_id": "red_sashes_intro",
 +        "title": "Red Sashes Intro",
 +        "lore_entries": [
 +            {
@@ -1155,124 +1296,38 @@ Patch 4 — Manual scenarios
 +    }
 +
 +
-+STORY_PROPOSAL_M10_M12_SCENARIOS: Dict[str, Dict[str, Any]] = {
-+    "story_proposal_valid_pack_imports": {
-+        "turns": ["I validate a proposed Red Sashes story pack."],
++STORY_PACK_M13_M15_SCENARIOS: Dict[str, Dict[str, Any]] = {
++    "story_pack_import_adds_lore_arcs_events_rules": {
++        "setup_story_packs": [{"proposal": _valid_pack(), "turn_index": 1}],
++        "turns": ["I inspect the imported Red Sashes story pack."],
 +        "checks": [
 +            {
-+                "type": "story_proposal_validation",
-+                "proposal": _valid_story_pack(),
-+                "expected_ok": True,
++                "type": "story_pack_lore",
++                "lore_id": "lore:red_sashes",
++                "expected": {"truth_status": "rumor"},
 +            },
 +            {
-+                "type": "story_proposal_normalized_counts",
-+                "proposal": _valid_story_pack(),
-+                "expected": {
-+                    "lore_entries": 1,
-+                    "story_arcs": 1,
-+                    "story_events": 1,
-+                    "escalation_rules": 1,
-+                },
++                "type": "story_pack_arc",
++                "arc_id": "arc:bandit_pressure",
++                "expected": {"stage": "rumors", "pressure": 20},
 +            },
++            {"type": "story_pack_event_definition", "event_id": "event:bandit_rumor_spreads"},
++            {"type": "story_pack_rule_definition", "rule_id": "rule:bandit_warning"},
++            {"type": "story_pack_imported", "pack_id": "storypack:red_sashes_intro"},
 +        ],
 +    },
-+    "story_proposal_invalid_json_rejected": {
-+        "turns": ["I validate a malformed story proposal."],
++    "story_pack_import_is_idempotent": {
++        "setup_story_packs": [
++            {"proposal": _valid_pack(), "turn_index": 1},
++            {"proposal": _valid_pack(), "turn_index": 2},
++        ],
++        "turns": ["I import the same story pack twice."],
 +        "checks": [
-+            {
-+                "type": "story_proposal_validation",
-+                "proposal": "not a dict",
-+                "expected_ok": False,
-+                "required_error": "unsupported_proposal_version",
-+            }
++            {"type": "story_pack_imported", "pack_id": "storypack:red_sashes_intro"},
++            {"type": "story_pack_debug_bounded", "max_packs": 1},
 +        ],
 +    },
-+    "story_proposal_unknown_arc_rejected": {
-+        "turns": ["I validate an event referencing a missing arc."],
-+        "checks": [
-+            {
-+                "type": "story_proposal_validation",
-+                "proposal": {
-+                    "proposal_version": "story_proposal_v1",
-+                    "proposal_type": "story_pack",
-+                    "story_events": [
-+                        {"event_id": "event:x", "arc_id": "arc:missing", "effects": []}
-+                    ],
-+                },
-+                "expected_ok": False,
-+                "required_error": "unknown_arc_reference",
-+            }
-+        ],
-+    },
-+    "story_proposal_unknown_location_rejected": {
-+        "setup_spatial_graph": "tavern_fixture",
-+        "turns": ["I validate an event referencing an impossible location."],
-+        "checks": [
-+            {
-+                "type": "story_proposal_validation",
-+                "proposal": {
-+                    "proposal_version": "story_proposal_v1",
-+                    "proposal_type": "story_pack",
-+                    "story_arcs": [
-+                        {"arc_id": "arc:bandit_pressure", "title": "Bandit Pressure"}
-+                    ],
-+                    "story_events": [
-+                        {
-+                            "event_id": "event:x",
-+                            "arc_id": "arc:bandit_pressure",
-+                            "location_id": "missing_location",
-+                            "effects": [],
-+                        }
-+                    ],
-+                },
-+                "expected_ok": False,
-+                "required_error": "unknown_location_reference",
-+            }
-+        ],
-+    },
-+    "story_proposal_unbounded_pressure_rejected": {
-+        "turns": ["I validate an unbounded pressure proposal."],
-+        "checks": [
-+            {
-+                "type": "story_proposal_validation",
-+                "proposal": dict(
-+                    _valid_story_pack(),
-+                    story_events=[
-+                        {
-+                            "event_id": "event:bad_pressure",
-+                            "arc_id": "arc:bandit_pressure",
-+                            "effects": [
-+                                {"type": "arc_pressure_delta", "arc_id": "arc:bandit_pressure", "delta": 999}
-+                            ],
-+                        }
-+                    ],
-+                ),
-+                "expected_ok": False,
-+                "required_error": "pressure_delta_out_of_bounds",
-+            }
-+        ],
-+    },
-+    "story_proposal_unknown_effect_rejected": {
-+        "turns": ["I validate an unknown story effect."],
-+        "checks": [
-+            {
-+                "type": "story_proposal_validation",
-+                "proposal": dict(
-+                    _valid_story_pack(),
-+                    story_events=[
-+                        {
-+                            "event_id": "event:bad_effect",
-+                            "arc_id": "arc:bandit_pressure",
-+                            "effects": [{"type": "invent_gold", "amount": 999}],
-+                        }
-+                    ],
-+                ),
-+                "expected_ok": False,
-+                "required_error": "unknown_effect_type",
-+            }
-+        ],
-+    },
-+    "story_proposal_contradicts_true_lore_rejected": {
++    "story_pack_import_does_not_overwrite_existing_true_lore": {
 +        "setup_lore_transitions": [
 +            {
 +                "action": "upsert",
@@ -1281,12 +1336,12 @@ Patch 4 — Manual scenarios
 +                "truth_status": "true",
 +            }
 +        ],
-+        "turns": ["I validate contradictory lore."],
++        "turns": ["I try to import a pack that contradicts true lore."],
 +        "checks": [
 +            {
-+                "type": "story_proposal_validation",
++                "type": "story_pack_import",
 +                "proposal": dict(
-+                    _valid_story_pack(),
++                    _valid_pack(),
 +                    lore_entries=[
 +                        {
 +                            "lore_id": "lore:red_sashes",
@@ -1296,55 +1351,104 @@ Patch 4 — Manual scenarios
 +                    ],
 +                ),
 +                "expected_ok": False,
-+                "required_error": "contradicts_existing_true_lore",
++                "required_reason": "validation_failed",
++            },
++            {
++                "type": "story_pack_lore",
++                "lore_id": "lore:red_sashes",
++                "expected": {"truth_status": "true"},
++            },
++        ],
++    },
++    "story_pack_can_seed_starter_quest": {
++        "setup_story_packs": [
++            {
++                "proposal": _valid_pack(),
++                "starter_quests": [
++                    {
++                        "action": "start",
++                        "quest_id": "quest:stop_red_sashes",
++                        "stage": "investigate",
++                    }
++                ],
++            }
++        ],
++        "turns": ["I inspect the starter quest seeded by the story pack."],
++        "checks": [
++            {
++                "type": "story_pack_quest",
++                "quest_id": "quest:stop_red_sashes",
++                "expected": {"stage": "investigate", "status": "active"},
 +            }
 +        ],
 +    },
-+    "story_proposal_rumor_kept_as_rumor": {
-+        "turns": ["I validate that rumor lore stays a rumor."],
++    "story_pack_can_seed_arc_pressure": {
++        "setup_story_packs": [{"proposal": dict(_valid_pack(), story_arcs=[dict(_valid_pack()["story_arcs"][0], pressure=55)])}],
++        "turns": ["I inspect seeded arc pressure."],
 +        "checks": [
 +            {
-+                "type": "story_proposal_validation",
-+                "proposal": _valid_story_pack(),
-+                "expected_ok": True,
++                "type": "story_pack_arc",
++                "arc_id": "arc:bandit_pressure",
++                "expected": {"pressure": 55},
 +            }
 +        ],
 +    },
-+    "story_proposal_secret_not_revealed_by_default": {
-+        "turns": ["I validate secret lore reveal rules."],
-+        "checks": [
++    "story_pack_can_link_npcs_locations_quests": {
++        "setup_story_packs": [
 +            {
-+                "type": "story_proposal_validation",
 +                "proposal": dict(
-+                    _valid_story_pack(),
-+                    lore_entries=[
++                    _valid_pack(),
++                    story_arcs=[
++                        dict(
++                            _valid_pack()["story_arcs"][0],
++                            linked_entities=["bran", "mira"],
++                            linked_locations=["tavern_common_room", "street"],
++                            linked_quests=["quest:stop_red_sashes"],
++                        )
++                    ],
++                )
++            }
++        ],
++        "turns": ["I inspect story arc links from the imported pack."],
++        "checks": [
++            {
++                "type": "story_pack_arc",
++                "arc_id": "arc:bandit_pressure",
++                "expected": {
++                    "linked_entities": ["bran", "mira"],
++                    "linked_locations": ["tavern_common_room", "street"],
++                    "linked_quests": ["quest:stop_red_sashes"],
++                },
++            }
++        ],
++    },
++    "story_pack_invalid_reference_rejected": {
++        "turns": ["I attempt to import a story pack with an invalid reference."],
++        "checks": [
++            {
++                "type": "story_pack_import",
++                "proposal": dict(
++                    _valid_pack(),
++                    story_events=[
 +                        {
-+                            "lore_id": "lore:bran_debt",
-+                            "title": "Bran's Debt",
-+                            "truth_status": "secret",
-+                            "revealed_to_player": True,
++                            "event_id": "event:bad",
++                            "arc_id": "arc:missing",
++                            "effects": [],
 +                        }
 +                    ],
 +                ),
 +                "expected_ok": False,
-+                "required_error": "secret_lore_revealed_by_default",
++                "required_reason": "validation_failed",
 +            }
 +        ],
 +    },
-+    "story_proposal_duplicate_ids_rejected": {
-+        "turns": ["I validate duplicate proposal IDs."],
++    "story_pack_debug_summary_is_bounded": {
++        "setup_story_packs": [{"proposal": _valid_pack()}],
++        "turns": ["I inspect the bounded story pack debug summary."],
 +        "checks": [
 +            {
-+                "type": "story_proposal_validation",
-+                "proposal": dict(
-+                    _valid_story_pack(),
-+                    lore_entries=[
-+                        {"lore_id": "lore:x", "title": "X"},
-+                        {"lore_id": "lore:x", "title": "X again"},
-+                    ],
-+                ),
-+                "expected_ok": False,
-+                "required_error": "duplicate_id",
++                "type": "story_pack_debug_bounded",
++                "max_packs": 5,
 +            }
 +        ],
 +    },
@@ -1352,136 +1456,134 @@ Patch 4 — Manual scenarios
 *** End Patch
 13. Add expected names file
 *** Begin Patch
-*** Add File: src/tests/rpg/manual/scenarios/expected_story_proposal_m10_m12_names.py
-+EXPECTED_STORY_PROPOSAL_M10_M12_SCENARIO_NAMES = {
-+    "story_proposal_valid_pack_imports",
-+    "story_proposal_invalid_json_rejected",
-+    "story_proposal_unknown_arc_rejected",
-+    "story_proposal_unknown_location_rejected",
-+    "story_proposal_unbounded_pressure_rejected",
-+    "story_proposal_unknown_effect_rejected",
-+    "story_proposal_contradicts_true_lore_rejected",
-+    "story_proposal_rumor_kept_as_rumor",
-+    "story_proposal_secret_not_revealed_by_default",
-+    "story_proposal_duplicate_ids_rejected",
+*** Add File: src/tests/rpg/manual/scenarios/expected_story_pack_m13_m15_names.py
++EXPECTED_STORY_PACK_M13_M15_SCENARIO_NAMES = {
++    "story_pack_import_adds_lore_arcs_events_rules",
++    "story_pack_import_is_idempotent",
++    "story_pack_import_does_not_overwrite_existing_true_lore",
++    "story_pack_can_seed_starter_quest",
++    "story_pack_can_seed_arc_pressure",
++    "story_pack_can_link_npcs_locations_quests",
++    "story_pack_invalid_reference_rejected",
++    "story_pack_debug_summary_is_bounded",
 +}
 *** End Patch
 14. Patch src/tests/rpg/manual/scenarios/registry.py
 *** Begin Patch
 *** Update File: src/tests/rpg/manual/scenarios/registry.py
 @@
- from tests.rpg.manual.scenarios.escalation_m7_m9 import (
-     ESCALATION_M7_M9_SCENARIOS,
+ from tests.rpg.manual.scenarios.story_proposal_m10_m12 import (
+     STORY_PROPOSAL_M10_M12_SCENARIOS,
  )
-+from tests.rpg.manual.scenarios.story_proposal_m10_m12 import (
-+    STORY_PROPOSAL_M10_M12_SCENARIOS,
++from tests.rpg.manual.scenarios.story_pack_m13_m15 import (
++    STORY_PACK_M13_M15_SCENARIOS,
 +)
 @@
-     scenarios.update(ESCALATION_M7_M9_SCENARIOS)
-+    scenarios.update(STORY_PROPOSAL_M10_M12_SCENARIOS)
+     scenarios.update(STORY_PROPOSAL_M10_M12_SCENARIOS)
++    scenarios.update(STORY_PACK_M13_M15_SCENARIOS)
      return scenarios
 *** End Patch
 15. Patch src/tests/rpg/manual/test_manual_scenario_migration.py
 *** Begin Patch
 *** Update File: src/tests/rpg/manual/test_manual_scenario_migration.py
 @@
- from tests.rpg.manual.scenarios.expected_escalation_m7_m9_names import (
-     EXPECTED_ESCALATION_M7_M9_SCENARIO_NAMES,
+ from tests.rpg.manual.scenarios.expected_story_proposal_m10_m12_names import (
+     EXPECTED_STORY_PROPOSAL_M10_M12_SCENARIO_NAMES,
  )
-+from tests.rpg.manual.scenarios.expected_story_proposal_m10_m12_names import (
-+    EXPECTED_STORY_PROPOSAL_M10_M12_SCENARIO_NAMES,
++from tests.rpg.manual.scenarios.expected_story_pack_m13_m15_names import (
++    EXPECTED_STORY_PACK_M13_M15_SCENARIO_NAMES,
 +)
 @@
- def test_manual_scenario_registry_includes_escalation_m7_m9_names():
+ def test_manual_scenario_registry_includes_story_proposal_m10_m12_names():
      names = set(build_service_scenarios().keys())
-     missing = EXPECTED_ESCALATION_M7_M9_SCENARIO_NAMES - names
+     missing = EXPECTED_STORY_PROPOSAL_M10_M12_SCENARIO_NAMES - names
  
-     assert not missing, f"Missing M7-M9 escalation scenarios: {sorted(missing)}"
+     assert not missing, f"Missing M10-M12 story proposal scenarios: {sorted(missing)}"
 +
 +
-+def test_manual_scenario_registry_includes_story_proposal_m10_m12_names():
++def test_manual_scenario_registry_includes_story_pack_m13_m15_names():
 +    names = set(build_service_scenarios().keys())
-+    missing = EXPECTED_STORY_PROPOSAL_M10_M12_SCENARIO_NAMES - names
++    missing = EXPECTED_STORY_PACK_M13_M15_SCENARIO_NAMES - names
 +
-+    assert not missing, f"Missing M10-M12 story proposal scenarios: {sorted(missing)}"
++    assert not missing, f"Missing M13-M15 story pack scenarios: {sorted(missing)}"
 *** End Patch
 16. Add manual check tests
 *** Begin Patch
-*** Add File: src/tests/rpg/manual/test_manual_story_proposal_m10_m12_checks.py
-+from tests.rpg.manual.story_proposal_m10_m12_checks import (
-+    run_story_proposal_m10_m12_checks,
-+)
+*** Add File: src/tests/rpg/manual/test_manual_story_pack_m13_m15_checks.py
++from tests.rpg.manual.story_pack_m13_m15_checks import run_story_pack_m13_m15_checks
 +
 +
-+def test_manual_story_proposal_validation_check_accepts_valid_pack():
-+    result = run_story_proposal_m10_m12_checks(
++def _pack():
++    return {
++        "proposal_version": "story_proposal_v1",
++        "proposal_type": "story_pack",
++        "proposal_id": "tiny",
++        "title": "Tiny",
++        "lore_entries": [{"lore_id": "lore:x", "title": "X"}],
++        "story_arcs": [{"arc_id": "arc:x", "title": "X", "linked_lore": ["lore:x"]}],
++        "story_events": [{"event_id": "event:x", "arc_id": "arc:x", "effects": []}],
++        "escalation_rules": [
++            {
++                "rule_id": "rule:x",
++                "arc_id": "arc:x",
++                "event": {"event_id": "event:y", "arc_id": "arc:x", "effects": []},
++            }
++        ],
++    }
++
++
++def test_manual_story_pack_import_check_imports_pack():
++    session = {"simulation_state": {}}
++    result = run_story_pack_m13_m15_checks(
 +        checks=[
 +            {
-+                "type": "story_proposal_validation",
++                "type": "story_pack_import",
++                "proposal": _pack(),
 +                "expected_ok": True,
-+                "proposal": {
-+                    "proposal_version": "story_proposal_v1",
-+                    "proposal_type": "story_pack",
-+                    "lore_entries": [
-+                        {"lore_id": "lore:x", "title": "X", "truth_status": "rumor"}
-+                    ],
-+                    "story_arcs": [
-+                        {"arc_id": "arc:x", "title": "X", "linked_lore": ["lore:x"]}
-+                    ],
-+                    "story_events": [
-+                        {
-+                            "event_id": "event:x",
-+                            "arc_id": "arc:x",
-+                            "effects": [
-+                                {"type": "arc_pressure_delta", "arc_id": "arc:x", "delta": 5}
-+                            ],
-+                        }
-+                    ],
-+                },
 +            }
 +        ],
 +        result={},
-+        session={"simulation_state": {}},
++        session=session,
 +    )[0]
 +
 +    assert result["ok"] is True
++    assert result["import_result"]["ok"] is True
 +
 +
-+def test_manual_story_proposal_validation_check_requires_error():
-+    result = run_story_proposal_m10_m12_checks(
++def test_manual_story_pack_lore_check_reads_imported_state():
++    session = {"simulation_state": {}}
++    run_story_pack_m13_m15_checks(
 +        checks=[
 +            {
-+                "type": "story_proposal_validation",
-+                "expected_ok": False,
-+                "required_error": "unknown_effect_type",
-+                "proposal": {
-+                    "proposal_version": "story_proposal_v1",
-+                    "proposal_type": "story_pack",
-+                    "story_arcs": [{"arc_id": "arc:x", "title": "X"}],
-+                    "story_events": [
-+                        {
-+                            "event_id": "event:x",
-+                            "arc_id": "arc:x",
-+                            "effects": [{"type": "invent_gold"}],
-+                        }
-+                    ],
-+                },
++                "type": "story_pack_import",
++                "proposal": _pack(),
++                "expected_ok": True,
 +            }
 +        ],
 +        result={},
-+        session={"simulation_state": {}},
++        session=session,
++    )
++
++    result = run_story_pack_m13_m15_checks(
++        checks=[
++            {
++                "type": "story_pack_lore",
++                "lore_id": "lore:x",
++                "expected": {"title": "X"},
++            }
++        ],
++        result={},
++        session=session,
 +    )[0]
 +
 +    assert result["ok"] is True
-+    assert result["validation"]["ok"] is False
 *** End Patch
 Validation commands
 Compile
-python -m py_compile src/app/rpg/story_proposals/model.py
-python -m py_compile src/app/rpg/story_proposals/normalization.py
-python -m py_compile src/app/rpg/story_proposals/reference_index.py
-python -m py_compile src/app/rpg/story_proposals/validation.py
-python -m py_compile src/tests/rpg/manual/story_proposal_m10_m12_checks.py
-python -m py_compile src/tests/rpg/manual/scenarios/story_proposal_m10_m12.py
+python -m py_compile src/app/rpg/story_packs/registry.py
+python -m py_compile src/app/rpg/story_packs/definition_registries.py
+python -m py_compile src/app/rpg/story_packs/importer.py
+python -m py_compile src/tests/rpg/manual/story_pack_m13_m15_checks.py
+python -m py_compile src/tests/rpg/manual/scenarios/story_pack_m13_m15.py
 Unit tests
-python -m pytest src/tests/rpg/story_proposals src/tests/rpg/escalation src/tests/rpg/story_events src/tests/rpg/sto
+python -m pytest src/tests/rpg/story_packs src/tests/rpg/story_proposals src/tests/rpg/escalation src/tests/rpg/story_events src/tests/rpg/story_arcs src/tests/rpg/lore -q
