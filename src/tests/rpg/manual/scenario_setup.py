@@ -12,6 +12,7 @@ from app.rpg.memory.observation import (
     record_told_memory,
 )
 from app.rpg.npc_evolution.transitions import apply_npc_evolution_transition
+from app.rpg.campaign_director.runtime import apply_campaign_director_tick
 from app.rpg.puzzles.transitions import apply_puzzle_transition
 from app.rpg.quests.transitions import apply_quest_transition
 from app.rpg.social.leverage import add_social_leverage
@@ -320,6 +321,20 @@ def _apply_manual_scenario_setup(session: Dict[str, Any], scenario: Dict[str, An
                     or scenario.get("setup_turn_index")
                     or 1
                 ),
+            )
+
+    for tick in scenario.get("setup_campaign_director_ticks") or []:
+        if isinstance(tick, dict):
+            apply_campaign_director_tick(
+                simulation_state,
+                mode=str(tick.get("mode") or "idle"),
+                turn_index=int(
+                    tick.get("turn_index")
+                    or scenario.get("setup_turn_index")
+                    or 1
+                ),
+                arc_id=str(tick.get("arc_id") or ""),
+                max_applications=int(tick.get("max_applications") or 1),
             )
 
     runtime_state = _safe_dict(session.get("runtime_state"))

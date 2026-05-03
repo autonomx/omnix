@@ -125,6 +125,13 @@ try:
 except Exception:
     NPC_EVOLUTION_M19_M21_SCENARIOS = {}
 
+try:
+    from tests.rpg.manual.scenarios.campaign_director_m22_m24 import (
+        CAMPAIGN_DIRECTOR_M22_M24_SCENARIOS,
+    )
+except Exception:
+    CAMPAIGN_DIRECTOR_M22_M24_SCENARIOS = {}
+
 
 def build_service_scenarios(
     legacy_scenarios: Dict[str, Dict[str, Any]] | None = None,
@@ -151,6 +158,7 @@ def build_service_scenarios(
         STORY_PACK_M13_M15_SCENARIOS,
         DIALOGUE_M16_M18_SCENARIOS,
         NPC_EVOLUTION_M19_M21_SCENARIOS,
+        CAMPAIGN_DIRECTOR_M22_M24_SCENARIOS,
         INVENTORY_M2_M8_SCENARIOS,
         SCENE_ACTIVITY_SCENARIOS,
         SOCIAL_L10_L12_SCENARIOS,
