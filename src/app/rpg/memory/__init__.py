@@ -1,216 +1,25 @@
-"""Memory Module - 4-layer memory system with entity indexing.
+"""Deterministic RPG memory helpers."""
 
-Submodules:
-- episodic: Compressed episode-based memories (Layer 3)
-- retrieval: Talemate-style memory scoring and retrieval
-- consolidation: Merges repeated memories, converts to semantic
-- belief_system: Derived truth layer from memories for GOAP/Story
-- relationships: Persistent relationship state between NPCs
-- memory_manager: Unified 4-layer memory manager (entry point)
-
-Memory Layers:
-- Layer 1: Raw Events (short-term, last N events)
-- Layer 2: Narrative Events (compressed summaries)
-- Layer 3: Episodic Memory (chunked episodes with TTL)
-- Layer 4: Semantic Memory (long-term beliefs/facts)
-"""
-
-# Phase 14.1 — Actor Memory Integration
-from app.rpg.memory.actor_memory_state import (
-    append_actor_long_term_memory,
-    append_actor_short_term_memory,
-    ensure_actor_memory_state,
-    get_actor_memory,
+from app.rpg.memory.causal_memory import (
+    add_causal_memory,
+    ensure_npc_memory_state,
+    make_causal_memory,
+    normalize_causal_memory,
+    normalize_npc_memory_state,
 )
-from app.rpg.memory.belief_system import (
-    BeliefSystem,
-    compute_belief_influence,
+from app.rpg.memory.causal_retrieval import retrieve_causal_memories
+from app.rpg.memory.observation import (
+    record_event_observations,
+    record_told_memory,
 )
-from app.rpg.memory.campaign_memory_builder import CampaignMemoryBuilder
-from app.rpg.memory.codex_builder import CodexBuilder
-from app.rpg.memory.consolidation import (
-    consolidate_memories,
-    convert_to_semantic,
-    merge_repeated_events,
-)
-from app.rpg.memory.core import CampaignMemoryCore
-
-# Phase 14.3 — Memory → Dialogue Injection
-from app.rpg.memory.dialogue_memory_context import (
-    build_actor_dialogue_memory_context,
-    build_dialogue_memory_context,
-    build_llm_memory_prompt_block,
-    build_world_dialogue_memory_context,
-)
-from app.rpg.memory.episodic import (
-    Episode,
-    EpisodeBuilder,
-    chunk_events_into_episodes,
-    compute_episode_importance,
-    compute_event_importance,
-)
-from app.rpg.memory.journal_builder import JournalBuilder
-
-# Phase 14.4 — Memory Decay / Reinforcement
-from app.rpg.memory.memory_decay import apply_memory_decay
-from app.rpg.memory.memory_manager import (
-    EPISODE_BUILD_THRESHOLD,
-    MAX_EPISODES,
-    MAX_MEMORY_IN_PROMPT,
-    MAX_RAW_EVENTS,
-    MemoryManager,
-)
-
-# Phase 14.0 — Bounded memory lanes (short-term / long-term / world)
-from app.rpg.memory.memory_state import (
-    append_long_term_memory,
-    append_short_term_memory,
-    append_world_memory,
-    ensure_memory_state,
-)
-
-# Phase 7.7 — Memory / Read-Model Layer
-from app.rpg.memory.models import (
-    CampaignMemorySnapshot,
-    CodexEntry,
-    JournalEntry,
-    RecapSnapshot,
-)
-from app.rpg.memory.npc_memory_recall import (
-    memory_reference_is_backed,
-    recall_npc_memories,
-)
-from app.rpg.memory.presenters import MemoryPresenter
-from app.rpg.memory.recap_builder import RecapBuilder as Phase77RecapBuilder
-from app.rpg.memory.reflection import (
-    reflect,
-    reflect_all,
-    store_reflection,
-)
-from app.rpg.memory.relationships import (
-    get_all_relationship_summaries,
-    get_relationship,
-    get_relationship_goal_override,
-    get_relationship_summary,
-    update_relationship_from_event,
-)
-from app.rpg.memory.retrieval import (
-    MEMORY_TYPES,
-    RETRIEVAL_WEIGHTS,
-    compute_recency_decay,
-    compute_relevance,
-    compute_weighted_importance,
-    retrieve_memories,
-    retrieve_with_filters,
-    score_memory,
-)
-from app.rpg.memory.service_memory_recall import (
-    has_backing_service_memory,
-    recall_service_memories,
-    recall_service_memories_for_narration,
-)
-from app.rpg.memory.social_effects import apply_general_social_effects
-from app.rpg.memory.summarizer import MemorySummarizer
-
-# Phase 14.2 — World Memory / Rumor Propagation
-from app.rpg.memory.world_memory_state import (
-    append_rumor,
-    ensure_world_memory_state,
-)
-
-
-def update_memory(session, events):
-    """Update session memory with new events.
-    
-    This is a compatibility function used by the pipeline.
-    It appends events to the session's recent_events list.
-    
-    Args:
-        session: The game session.
-        events: List of events to record.
-    """
-    if not hasattr(session, 'recent_events'):
-        session.recent_events = []
-    session.recent_events.extend(events or [])
-    session.recent_events = session.recent_events[-100:]
-
 
 __all__ = [
-    # Episodic (Layer 3)
-    "Episode",
-    "EpisodeBuilder",
-    "chunk_events_into_episodes",
-    "compute_event_importance",
-    "compute_episode_importance",
-    # Retrieval
-    "compute_recency_decay",
-    "compute_relevance",
-    "compute_weighted_importance",
-    "score_memory",
-    "retrieve_memories",
-    "retrieve_with_filters",
-    "MEMORY_TYPES",
-    "RETRIEVAL_WEIGHTS",
-    # Reflection
-    "reflect",
-    "store_reflection",
-    "reflect_all",
-    # Consolidation
-    "consolidate_memories",
-    "merge_repeated_events",
-    "convert_to_semantic",
-    # Belief System
-    "BeliefSystem",
-    "compute_belief_influence",
-    # Relationships
-    "get_relationship",
-    "update_relationship_from_event",
-    "get_relationship_summary",
-    "get_all_relationship_summaries",
-    "get_relationship_goal_override",
-    # Memory Manager (main entry point)
-    "MemoryManager",
-    "MemorySummarizer",
-    "MAX_RAW_EVENTS",
-    "MAX_EPISODES",
-    "MAX_MEMORY_IN_PROMPT",
-    "EPISODE_BUILD_THRESHOLD",
-    # Phase 7.7 — Memory / Read-Model Layer
-    "JournalEntry",
-    "RecapSnapshot",
-    "CodexEntry",
-    "CampaignMemorySnapshot",
-    "JournalBuilder",
-    "Phase77RecapBuilder",
-    "CodexBuilder",
-    "CampaignMemoryBuilder",
-    "MemoryPresenter",
-    "CampaignMemoryCore",
-    "recall_service_memories",
-    "recall_service_memories_for_narration",
-    "has_backing_service_memory",
-    "recall_npc_memories",
-    "memory_reference_is_backed",
-    "apply_general_social_effects",
-    "update_memory",
-    # Phase 14.0
-    "append_long_term_memory",
-    "append_short_term_memory",
-    "append_world_memory",
-    "ensure_memory_state",
-    # Phase 14.1
-    "append_actor_long_term_memory",
-    "append_actor_short_term_memory",
-    "ensure_actor_memory_state",
-    "get_actor_memory",
-    # Phase 14.2
-    "append_rumor",
-    "ensure_world_memory_state",
-    # Phase 14.3
-    "build_actor_dialogue_memory_context",
-    "build_dialogue_memory_context",
-    "build_llm_memory_prompt_block",
-    "build_world_dialogue_memory_context",
-    # Phase 14.4
-    "apply_memory_decay",
+    "add_causal_memory",
+    "ensure_npc_memory_state",
+    "make_causal_memory",
+    "normalize_causal_memory",
+    "normalize_npc_memory_state",
+    "record_event_observations",
+    "record_told_memory",
+    "retrieve_causal_memories",
 ]

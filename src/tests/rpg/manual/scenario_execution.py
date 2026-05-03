@@ -4,6 +4,7 @@ from typing import Any, Dict, List
 
 from tests.rpg.manual import output_artifacts
 from tests.rpg.manual.spatial_checks import run_spatial_checks
+from tests.rpg.manual.memory_checks import run_memory_checks
 from tests.rpg.manual.output_state import (
     _REGRESSION_WARNING_LOCK,
     _REGRESSION_WARNING_ROWS,
@@ -245,6 +246,38 @@ def _run_one_service_scenario(
                         + str(check_result.get("check_type"))
                         + ":"
                         + str(check_result.get("actual_reason") or check_result.get("error") or "")
+                    )
+
+        memory_checks = [
+            check
+            for check in checks
+            if isinstance(check, dict)
+            and str(check.get("type") or "").startswith("memory_")
+        ]
+        if memory_checks:
+            current_session = {}
+            try:
+                current_session = _ensure_manual_session(session_id)
+            except Exception:
+                current_session = session
+
+            memory_check_results = run_memory_checks(
+                checks=memory_checks,
+                result=turn_summary.get("result") or turn_summary,
+                session=current_session,
+            )
+            turn_summary["memory_check_results"] = memory_check_results
+            for check_result in memory_check_results:
+                if not check_result.get("ok"):
+                    turn_summary.setdefault("scenario_warnings", []).append(
+                        "memory_check_failed:"
+                        + str(scenario_name)
+                        + ":turn_"
+                        + str(turn_index)
+                        + ":"
+                        + str(check_result.get("check_type"))
+                        + ":"
+                        + str(check_result.get("error") or "")
                     )
 
         turn_summaries.append(turn_summary)

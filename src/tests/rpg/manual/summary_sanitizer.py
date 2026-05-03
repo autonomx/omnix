@@ -430,6 +430,22 @@ def sanitize_turn_for_summary(
                 if isinstance(item, dict)
             ]
 
+    memory_check_results = turn.get("memory_check_results")
+    if isinstance(memory_check_results, list):
+        sanitized["memory_check_results"] = [
+            {
+                "check_type": item.get("check_type"),
+                "ok": item.get("ok"),
+                "subject_id": item.get("subject_id"),
+                "expected_event_ids": item.get("expected_event_ids"),
+                "forbidden_event_ids": item.get("forbidden_event_ids"),
+                "actual_event_ids": item.get("actual_event_ids"),
+                "error": item.get("error"),
+            }
+            for item in memory_check_results[:50]
+            if isinstance(item, dict)
+        ]
+
     # Ensure narration preview
     if "narration_preview" not in sanitized:
         sanitized["narration_preview"] = _extract_narration_preview(result, limits["max_text"])

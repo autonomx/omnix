@@ -4,6 +4,9 @@ from tests.rpg.manual.runner import build_service_scenarios
 from tests.rpg.manual.scenarios.expected_legacy_names import (
     EXPECTED_LEGACY_SCENARIO_NAMES,
 )
+from tests.rpg.manual.scenarios.expected_memory_l7_l9_names import (
+    EXPECTED_MEMORY_L7_L9_SCENARIO_NAMES,
+)
 
 
 def test_manual_scenario_migration_audit():
@@ -134,3 +137,10 @@ def test_manual_scenario_migration_audit():
     assert not missing_names, f"Missing scenarios: {missing_names}"
 
     print("Migration audit passed: All 136 scenarios present in modular registry.")
+
+
+def test_manual_scenario_registry_includes_memory_l7_l9_names():
+    names = set(build_service_scenarios().keys())
+    missing = EXPECTED_MEMORY_L7_L9_SCENARIO_NAMES - names
+
+    assert not missing, f"Missing L7-L9 memory scenarios: {sorted(missing)}"
