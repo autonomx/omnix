@@ -595,6 +595,38 @@ def sanitize_turn_for_summary(
             if isinstance(item, dict)
         ]
 
+    story_pack_m13_m15_check_results = turn.get("story_pack_m13_m15_check_results")
+    if isinstance(story_pack_m13_m15_check_results, list):
+        sanitized["story_pack_m13_m15_check_results"] = [
+            {
+                "check_type": item.get("check_type"),
+                "ok": item.get("ok"),
+                "expected_ok": item.get("expected_ok"),
+                "actual_ok": item.get("actual_ok"),
+                "required_reason": item.get("required_reason"),
+                "pack_id": item.get("pack_id"),
+                "lore_id": item.get("lore_id"),
+                "arc_id": item.get("arc_id"),
+                "event_id": item.get("event_id"),
+                "rule_id": item.get("rule_id"),
+                "quest_id": item.get("quest_id"),
+                "import_result": item.get("import_result"),
+                "imported": item.get("imported"),
+                "entry": item.get("entry"),
+                "arc": item.get("arc"),
+                "event": item.get("event"),
+                "rule": item.get("rule"),
+                "quest": item.get("quest"),
+                "failures": item.get("failures"),
+                "imported_pack_count": item.get("imported_pack_count"),
+                "event_definition_count": item.get("event_definition_count"),
+                "rule_definition_count": item.get("rule_definition_count"),
+                "error": item.get("error"),
+            }
+            for item in story_pack_m13_m15_check_results[:50]
+            if isinstance(item, dict)
+        ]
+
     return sanitized
 
 

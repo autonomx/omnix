@@ -5,6 +5,7 @@ from typing import Any, Dict
 
 from app.rpg.escalation.rules import apply_escalation_rule
 from app.rpg.escalation.state import mark_escalation_rule_applied
+from app.rpg.story_packs.importer import import_story_pack
 from app.rpg.lore.transitions import apply_lore_transition
 from app.rpg.memory.observation import (
     record_event_observations,
@@ -275,6 +276,21 @@ def _apply_manual_scenario_setup(session: Dict[str, Any], scenario: Dict[str, An
                     or scenario.get("setup_turn_index")
                     or 1
                 ),
+            )
+
+    for story_pack in scenario.get("setup_story_packs") or []:
+        if isinstance(story_pack, dict):
+            proposal = story_pack.get("proposal") or story_pack
+            starter_quests = story_pack.get("starter_quests")
+            import_story_pack(
+                simulation_state,
+                proposal,
+                turn_index=int(
+                    story_pack.get("turn_index")
+                    or scenario.get("setup_turn_index")
+                    or 1
+                ),
+                starter_quests=starter_quests,
             )
 
     runtime_state = _safe_dict(session.get("runtime_state"))

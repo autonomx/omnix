@@ -34,6 +34,7 @@ from tests.rpg.manual.social_checks import run_social_checks
 from tests.rpg.manual.spatial_checks import run_spatial_checks
 from tests.rpg.manual.story_event_m4_m6_checks import run_story_event_m4_m6_checks
 from tests.rpg.manual.story_m1_m3_checks import run_story_m1_m3_checks
+from tests.rpg.manual.story_pack_m13_m15_checks import run_story_pack_m13_m15_checks
 from tests.rpg.manual.story_proposal_m10_m12_checks import (
     run_story_proposal_m10_m12_checks,
 )
@@ -477,6 +478,38 @@ def _run_one_service_scenario(
                 if not check_result.get("ok"):
                     turn_summary.setdefault("scenario_warnings", []).append(
                         "story_proposal_m10_m12_check_failed:"
+                        + str(scenario_name)
+                        + ":turn_"
+                        + str(turn_index)
+                        + ":"
+                        + str(check_result.get("check_type"))
+                        + ":"
+                        + str(check_result.get("error") or "")
+                    )
+
+        story_pack_m13_m15_checks = [
+            check
+            for check in checks
+            if isinstance(check, dict)
+            and str(check.get("type") or "").startswith("story_pack_")
+        ]
+        if story_pack_m13_m15_checks:
+            current_session = {}
+            try:
+                current_session = _ensure_manual_session(session_id)
+            except Exception:
+                current_session = session
+
+            story_pack_m13_m15_check_results = run_story_pack_m13_m15_checks(
+                checks=story_pack_m13_m15_checks,
+                result=turn_summary.get("result") or turn_summary,
+                session=current_session,
+            )
+            turn_summary["story_pack_m13_m15_check_results"] = story_pack_m13_m15_check_results
+            for check_result in story_pack_m13_m15_check_results:
+                if not check_result.get("ok"):
+                    turn_summary.setdefault("scenario_warnings", []).append(
+                        "story_pack_m13_m15_check_failed:"
                         + str(scenario_name)
                         + ":turn_"
                         + str(turn_index)

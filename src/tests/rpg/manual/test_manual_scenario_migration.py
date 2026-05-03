@@ -22,6 +22,9 @@ from tests.rpg.manual.scenarios.expected_story_event_m4_m6_names import (
 from tests.rpg.manual.scenarios.expected_story_m1_m3_names import (
     EXPECTED_STORY_M1_M3_SCENARIO_NAMES,
 )
+from tests.rpg.manual.scenarios.expected_story_pack_m13_m15_names import (
+    EXPECTED_STORY_PACK_M13_M15_SCENARIO_NAMES,
+)
 
 
 def test_manual_scenario_migration_audit():
@@ -194,3 +197,10 @@ def test_manual_scenario_registry_includes_escalation_m7_m9_names():
     missing = EXPECTED_ESCALATION_M7_M9_SCENARIO_NAMES - names
 
     assert not missing, f"Missing M7-M9 escalation scenarios: {sorted(missing)}"
+
+
+def test_manual_scenario_registry_includes_story_pack_m13_m15_names():
+    names = set(build_service_scenarios().keys())
+    missing = EXPECTED_STORY_PACK_M13_M15_SCENARIO_NAMES - names
+
+    assert not missing, f"Missing M13-M15 story pack scenarios: {sorted(missing)}"
