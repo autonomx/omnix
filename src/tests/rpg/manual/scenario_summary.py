@@ -148,12 +148,12 @@ def _build_service_summary_row(
     session_id: str,
     seeded_currency: Dict[str, Any],
     turns: List[Dict[str, Any]],
-    sanitize: bool = True,
+    detail: str = "summary",
 ) -> Dict[str, Any]:
     """Build a summary row for a service scenario run.
 
     Args:
-        sanitize: If True, apply summary sanitizer to reduce artifact bloat.
+        detail: Artifact detail level - "summary", "debug", or "full".
     """
     summary = {
         "scenario": scenario_name,
@@ -182,8 +182,8 @@ def _build_service_summary_row(
             summary["error"] = "turn_error"
             break
 
-    # Apply sanitization to reduce artifact bloat
-    if sanitize:
-        return sanitize_scenario_summary(summary)
+    # Apply sanitization based on detail level
+    if detail in ("summary", "debug", "full"):
+        return sanitize_scenario_summary(summary, detail)
 
     return summary

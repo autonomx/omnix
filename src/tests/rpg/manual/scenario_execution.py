@@ -126,6 +126,7 @@ def _run_one_service_scenario(
     console_llm_raw: bool = True,
     console_llm_max_chars: int = 1200,
     fail_on_regression_warnings: bool = False,
+    artifact_detail: str = "debug",
 ) -> Dict[str, Any]:
     scenario_channel = f"service_{scenario_name}"
     target_channel = scenario_channel if split_files else legacy_channel
@@ -218,8 +219,22 @@ def _run_one_service_scenario(
         session_id=session_id,
         seeded_currency=currency,
         turns=turn_summaries,
+        detail=artifact_detail,
     )
     _record_regression_warnings(summary_row)
+
+    # Write per-scenario debug artifact if detail level requires it
+    if artifact_detail in ("debug", "full"):
+        from tests.rpg.manual.summary_sanitizer import write_scenario_debug_artifact
+        from tests.rpg.manual.constants import TEST_RESULTS_ROOT
+
+        debug_file = write_scenario_debug_artifact(
+            scenario_name=scenario_name,
+            scenario_summary=summary_row,
+            output_dir=str(TEST_RESULTS_ROOT),
+            detail=artifact_detail,
+        )
+        print(f"Wrote debug artifact: {debug_file}", flush=True)
 
     output_artifacts._emit("", channel=target_channel)
     output_artifacts._emit("#" * 80, channel=target_channel)

@@ -147,6 +147,12 @@ def build_arg_parser() -> argparse.ArgumentParser:
         default=10_000,
         help="Maximum characters to print for LLM responses in console. Default: 10000.",
     )
+    parser.add_argument(
+        "--artifact-detail",
+        choices=["summary", "debug", "full"],
+        default="debug",
+        help="Artifact detail level: summary (smallest), debug (default, per-scenario JSON), full (deep but bounded).",
+    )
 
     return parser
 
