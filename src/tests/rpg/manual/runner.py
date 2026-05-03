@@ -2,15 +2,11 @@ from __future__ import annotations
 
 import argparse
 import concurrent.futures
-import json
 import uuid
-from pathlib import Path
 from typing import Any, Dict, List
 
 from tests.rpg.manual import html_report, output_artifacts
 from tests.rpg.manual.constants import (
-    CONVERSATION_PATH,
-    MANUAL_HTML_DIR_NAME,
     MANUAL_LOG_MAX_CHUNK_BYTES,
     SERVICE_OUTPUT_PATH,
     TEST_RESULTS_ROOT,
@@ -19,12 +15,13 @@ from tests.rpg.manual.output_state import (
     _REGRESSION_WARNING_LOCK,
     _REGRESSION_WARNING_ROWS,
 )
-from tests.rpg.manual.safe import _compact_json, _safe_dict, _safe_list, _safe_str
+from tests.rpg.manual.safe import _compact_json, _safe_str
 from tests.rpg.manual.scenario_execution import (
     _record_scenario_error,
     _run_one_service_scenario,
 )
 from tests.rpg.manual.scenarios.registry import build_service_scenarios
+from tests.rpg.manual.summary_sanitizer import sanitize_scenario_summary
 from tests.rpg.manual.threading_helpers import (
     _effective_scenario_workers,
     _scenario_workers_source,
@@ -48,11 +45,19 @@ def _emit_summary_block(
     title: str,
     rows: List[Dict[str, Any]],
     channel: str = "service_summary",
+    sanitize: bool = True,
 ) -> None:
     output_artifacts._emit("", channel=channel)
     output_artifacts._emit(title, channel=channel)
     output_artifacts._emit("=" * 80, channel=channel)
-    output_artifacts._emit(_compact_json(rows), channel=channel)
+
+    # Sanitize rows before writing to output
+    if sanitize:
+        sanitized_rows = [sanitize_scenario_summary(row) for row in rows]
+    else:
+        sanitized_rows = rows
+
+    output_artifacts._emit(_compact_json(sanitized_rows), channel=channel)
 
 
 def run_service_scenarios(

@@ -6,6 +6,7 @@ from typing import Any, Dict
 from tests.rpg.manual import output_artifacts
 from tests.rpg.manual.safe import _safe_dict, _safe_str
 from tests.rpg.manual.scenario_summary import _compact_result_for_summary
+from tests.rpg.manual.summary_sanitizer import sanitize_turn_for_summary
 from tests.rpg.manual.token_usage import _record_token_usage
 
 
@@ -75,9 +76,9 @@ def _run_one_manual_turn(
         output_artifacts._emit(f"TURN {turn_index}", channel=target_channel)
         output_artifacts._emit(f"PLAYER: {player_input}", channel=target_channel)
         narration = _extract_narration(result)
-        output_artifacts._emit(f"NARRATION:", channel=target_channel)
+        output_artifacts._emit("NARRATION:", channel=target_channel)
         output_artifacts._emit(narration or "[no narration found]", channel=target_channel)
-        output_artifacts._emit(f"RAW RESULT KEYS:", channel=target_channel)
+        output_artifacts._emit("RAW RESULT KEYS:", channel=target_channel)
         output_artifacts._emit(", ".join(sorted(result.keys())), channel=target_channel)
 
         turn_summary = {
@@ -85,6 +86,9 @@ def _run_one_manual_turn(
             "player_input": player_input,
             "result": _compact_result_for_summary(result),
         }
+
+        # Apply sanitization for summary output
+        turn_summary = sanitize_turn_for_summary(turn_summary)
 
         return turn_summary
 

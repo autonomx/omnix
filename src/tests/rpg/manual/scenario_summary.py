@@ -3,6 +3,10 @@ from __future__ import annotations
 from typing import Any, Dict, List
 
 from tests.rpg.manual.safe import _safe_dict, _safe_list
+from tests.rpg.manual.summary_sanitizer import (
+    compact_result_for_summary as _sanitizer_compact_result,
+    sanitize_scenario_summary,
+)
 
 
 def _extract_simulation_state(result: Dict[str, Any]) -> Dict[str, Any]:
@@ -131,36 +135,11 @@ def _pre_turn_contamination_snapshot(simulation_state: Dict[str, Any]) -> Dict[s
 
 
 def _compact_result_for_summary(result: Dict[str, Any]) -> Dict[str, Any]:
-    """Compact a turn result for summary by removing large state blobs."""
-    if not isinstance(result, dict):
-        return result
+    """Compact a turn result for summary by removing large state blobs.
 
-    # Deep copy to avoid modifying original
-    import copy
-    compacted = copy.deepcopy(result)
-
-    # Remove full session state which contains huge simulation_state
-    if "session" in compacted:
-        session = compacted["session"]
-        if isinstance(session, dict) and "setup_payload" in session:
-            setup_payload = session["setup_payload"]
-            if isinstance(setup_payload, dict) and "metadata" in setup_payload:
-                metadata = setup_payload["metadata"]
-                if isinstance(metadata, dict) and "simulation_state" in metadata:
-                    sim_state = metadata["simulation_state"]
-                    if isinstance(sim_state, dict):
-                        # Remove large historical arrays
-                        for key in ["history", "events", "consequences", "event_history", "timeline"]:
-                            sim_state.pop(key, None)
-                        # Cap turn_timings if present
-                        if "debug_meta" in sim_state and isinstance(sim_state["debug_meta"], dict):
-                            debug_meta = sim_state["debug_meta"]
-                            if "last_step_tick" in debug_meta:
-                                # Keep only essential debug info
-                                debug_meta.clear()
-                                debug_meta["compacted"] = True
-
-    return compacted
+    This is now a thin wrapper around the more comprehensive sanitizer function.
+    """
+    return _sanitizer_compact_result(result)
 
 
 def _build_service_summary_row(
@@ -169,8 +148,13 @@ def _build_service_summary_row(
     session_id: str,
     seeded_currency: Dict[str, Any],
     turns: List[Dict[str, Any]],
+    sanitize: bool = True,
 ) -> Dict[str, Any]:
-    """Build a summary row for a service scenario run."""
+    """Build a summary row for a service scenario run.
+
+    Args:
+        sanitize: If True, apply summary sanitizer to reduce artifact bloat.
+    """
     summary = {
         "scenario": scenario_name,
         "session_id": session_id,
@@ -197,5 +181,9 @@ def _build_service_summary_row(
         if _safe_dict(turn.get("result") or {}).get("error"):
             summary["error"] = "turn_error"
             break
+
+    # Apply sanitization to reduce artifact bloat
+    if sanitize:
+        return sanitize_scenario_summary(summary)
 
     return summary
