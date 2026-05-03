@@ -42,6 +42,9 @@ from tests.rpg.manual.spatial_checks import run_spatial_checks
 from tests.rpg.manual.story_event_m4_m6_checks import run_story_event_m4_m6_checks
 from tests.rpg.manual.story_m1_m3_checks import run_story_m1_m3_checks
 from tests.rpg.manual.story_pack_m13_m15_checks import run_story_pack_m13_m15_checks
+from tests.rpg.manual.story_event_queue_m25_m27_checks import (
+    run_story_event_queue_m25_m27_checks,
+)
 from tests.rpg.manual.story_proposal_m10_m12_checks import (
     run_story_proposal_m10_m12_checks,
 )
@@ -105,7 +108,6 @@ def _scenario_contamination_warnings(
     """Check for scenario contamination warnings."""
     warnings: List[str] = []
 
-    # Check for unexpected world event changes
     after_snapshot = _pre_turn_contamination_snapshot(_extract_simulation_state(result))
 
     if not allows_seeded_world_events:
@@ -120,7 +122,6 @@ def _scenario_contamination_warnings(
         if after_snapshot["quest_count"] > pre_turn_snapshot["quest_count"]:
             warnings.append("unexpected_quest_creation")
 
-    # Check for unexpected service/memory contamination
     allows_service_memories = scenario_name in {
         "npc_bran_refuses_unpaid_room",
         "npc_bran_negotiates_high_trust_room",
@@ -216,10 +217,13 @@ def _run_one_service_scenario(
         output_artifacts._emit(f"SETUP ERROR: {setup_error_type}: {setup_error}", channel=target_channel)
         return summary
 
-    # Run turns
     turn_summaries = []
     pre_turn_snapshot = _pre_turn_contamination_snapshot(_ensure_manual_session(session_id)["simulation_state"])
     for turn_index, turn in enumerate(turns, start=1):
+        story_event_queue_checks_for_turn = []
+        if isinstance(turn, dict):
+            story_event_queue_checks_for_turn = turn.get("story_event_queue_checks") or []
+
         turn_record = _run_one_manual_turn(
             session_id=session_id,
             turn=turn,
@@ -229,14 +233,13 @@ def _run_one_service_scenario(
             console_llm=console_llm,
             console_llm_raw=console_llm_raw,
             console_llm_max_chars=console_llm_max_chars,
+            story_event_queue_checks=story_event_queue_checks_for_turn if story_event_queue_checks_for_turn else None,
         )
 
         checks = scenario.get("checks") or []
         spatial_checks = [
-            check
-            for check in checks
-            if isinstance(check, dict)
-            and str(check.get("type") or "").startswith("spatial_")
+            check for check in checks
+            if isinstance(check, dict) and str(check.get("type") or "").startswith("spatial_")
         ]
         if spatial_checks:
             current_session = {}
@@ -244,32 +247,20 @@ def _run_one_service_scenario(
                 current_session = _ensure_manual_session(session_id)
             except Exception:
                 current_session = session
-
             spatial_check_results = run_spatial_checks(
-                checks=spatial_checks,
-                result=turn_record.get("result") or turn_record,
-                session=current_session,
+                checks=spatial_checks, result=turn_record.get("result") or turn_record, session=current_session,
             )
             turn_record["spatial_check_results"] = spatial_check_results
             for check_result in spatial_check_results:
                 if not check_result.get("ok"):
                     turn_record.setdefault("scenario_warnings", []).append(
-                        "spatial_check_failed:"
-                        + str(scenario_name)
-                        + ":turn_"
-                        + str(turn_index)
-                        + ":"
-                        + str(check_result.get("check_type"))
-                        + ":"
-                        + str(check_result.get("error") or "")
+                        f"spatial_check_failed:{scenario_name}:turn_{turn_index}:"
+                        + str(check_result.get("check_type")) + ":" + str(check_result.get("error") or "")
                     )
 
-
         memory_checks = [
-            check
-            for check in checks
-            if isinstance(check, dict)
-            and str(check.get("type") or "").startswith("memory_")
+            check for check in checks
+            if isinstance(check, dict) and str(check.get("type") or "").startswith("memory_")
         ]
         if memory_checks:
             current_session = {}
@@ -277,31 +268,20 @@ def _run_one_service_scenario(
                 current_session = _ensure_manual_session(session_id)
             except Exception:
                 current_session = session
-
             memory_check_results = run_memory_checks(
-                checks=memory_checks,
-                result=turn_record.get("result") or turn_record,
-                session=current_session,
+                checks=memory_checks, result=turn_record.get("result") or turn_record, session=current_session,
             )
             turn_record["memory_check_results"] = memory_check_results
             for check_result in memory_check_results:
                 if not check_result.get("ok"):
                     turn_record.setdefault("scenario_warnings", []).append(
-                        "memory_check_failed:"
-                        + str(scenario_name)
-                        + ":turn_"
-                        + str(turn_index)
-                        + ":"
-                        + str(check_result.get("check_type"))
-                        + ":"
-                        + str(check_result.get("error") or "")
+                        f"memory_check_failed:{scenario_name}:turn_{turn_index}:"
+                        + str(check_result.get("check_type")) + ":" + str(check_result.get("error") or "")
                     )
 
         social_checks = [
-            check
-            for check in checks
-            if isinstance(check, dict)
-            and str(check.get("type") or "").startswith("social_")
+            check for check in checks
+            if isinstance(check, dict) and str(check.get("type") or "").startswith("social_")
         ]
         if social_checks:
             current_session = {}
@@ -309,34 +289,20 @@ def _run_one_service_scenario(
                 current_session = _ensure_manual_session(session_id)
             except Exception:
                 current_session = session
-
             social_check_results = run_social_checks(
-                checks=social_checks,
-                result=turn_record.get("result") or turn_record,
-                session=current_session,
+                checks=social_checks, result=turn_record.get("result") or turn_record, session=current_session,
             )
             turn_record["social_check_results"] = social_check_results
             for check_result in social_check_results:
                 if not check_result.get("ok"):
                     turn_record.setdefault("scenario_warnings", []).append(
-                        "social_check_failed:"
-                        + str(scenario_name)
-                        + ":turn_"
-                        + str(turn_index)
-                        + ":"
-                        + str(check_result.get("check_type"))
-                        + ":"
-                        + str(check_result.get("error") or "")
+                        f"social_check_failed:{scenario_name}:turn_{turn_index}:"
+                        + str(check_result.get("check_type")) + ":" + str(check_result.get("error") or "")
                     )
 
         quest_puzzle_checks = [
-            check
-            for check in checks
-            if isinstance(check, dict)
-            and (
-                str(check.get("type") or "").startswith("quest_")
-                or str(check.get("type") or "").startswith("puzzle_")
-            )
+            check for check in checks
+            if isinstance(check, dict) and (str(check.get("type") or "").startswith("quest_") or str(check.get("type") or "").startswith("puzzle_"))
         ]
         if quest_puzzle_checks:
             current_session = {}
@@ -344,34 +310,20 @@ def _run_one_service_scenario(
                 current_session = _ensure_manual_session(session_id)
             except Exception:
                 current_session = session
-
             quest_puzzle_check_results = run_quest_puzzle_checks(
-                checks=quest_puzzle_checks,
-                result=turn_record.get("result") or turn_record,
-                session=current_session,
+                checks=quest_puzzle_checks, result=turn_record.get("result") or turn_record, session=current_session,
             )
             turn_record["quest_puzzle_check_results"] = quest_puzzle_check_results
             for check_result in quest_puzzle_check_results:
                 if not check_result.get("ok"):
                     turn_record.setdefault("scenario_warnings", []).append(
-                        "quest_puzzle_check_failed:"
-                        + str(scenario_name)
-                        + ":turn_"
-                        + str(turn_index)
-                        + ":"
-                        + str(check_result.get("check_type"))
-                        + ":"
-                         + str(check_result.get("error") or "")
+                        f"quest_puzzle_check_failed:{scenario_name}:turn_{turn_index}:"
+                        + str(check_result.get("check_type")) + ":" + str(check_result.get("error") or "")
                     )
 
         story_m1_m3_checks = [
-            check
-            for check in checks
-            if isinstance(check, dict)
-            and (
-                str(check.get("type") or "").startswith("lore_")
-                or str(check.get("type") or "").startswith("story_arc")
-            )
+            check for check in checks
+            if isinstance(check, dict) and (str(check.get("type") or "").startswith("lore_") or str(check.get("type") or "").startswith("story_arc"))
         ]
         if story_m1_m3_checks:
             current_session = {}
@@ -379,31 +331,24 @@ def _run_one_service_scenario(
                 current_session = _ensure_manual_session(session_id)
             except Exception:
                 current_session = session
-
             story_m1_m3_check_results = run_story_m1_m3_checks(
-                checks=story_m1_m3_checks,
-                result=turn_record.get("result") or turn_record,
-                session=current_session,
+                checks=story_m1_m3_checks, result=turn_record.get("result") or turn_record, session=current_session,
             )
             turn_record["story_m1_m3_check_results"] = story_m1_m3_check_results
             for check_result in story_m1_m3_check_results:
                 if not check_result.get("ok"):
                     turn_record.setdefault("scenario_warnings", []).append(
-                        "story_m1_m3_check_failed:"
-                        + str(scenario_name)
-                        + ":turn_"
-                        + str(turn_index)
-                        + ":"
-                        + str(check_result.get("check_type"))
-                        + ":"
-                        + str(check_result.get("error") or "")
+                        f"story_m1_m3_check_failed:{scenario_name}:turn_{turn_index}:"
+                        + str(check_result.get("check_type")) + ":" + str(check_result.get("error") or "")
                     )
 
         story_event_m4_m6_checks = [
-            check
-            for check in checks
-            if isinstance(check, dict)
-            and str(check.get("type") or "").startswith("story_event_")
+            check for check in checks
+            if (
+                isinstance(check, dict)
+                and str(check.get("type") or "").startswith("story_event_")
+                and not str(check.get("type") or "").startswith("story_event_queue_")
+            )
         ]
         if story_event_m4_m6_checks:
             current_session = {}
@@ -411,31 +356,20 @@ def _run_one_service_scenario(
                 current_session = _ensure_manual_session(session_id)
             except Exception:
                 current_session = session
-
             story_event_m4_m6_check_results = run_story_event_m4_m6_checks(
-                checks=story_event_m4_m6_checks,
-                result=turn_record.get("result") or turn_record,
-                session=current_session,
+                checks=story_event_m4_m6_checks, result=turn_record.get("result") or turn_record, session=current_session,
             )
             turn_record["story_event_m4_m6_check_results"] = story_event_m4_m6_check_results
             for check_result in story_event_m4_m6_check_results:
                 if not check_result.get("ok"):
                     turn_record.setdefault("scenario_warnings", []).append(
-                        "story_event_m4_m6_check_failed:"
-                        + str(scenario_name)
-                        + ":turn_"
-                        + str(turn_index)
-                        + ":"
-                        + str(check_result.get("check_type"))
-                        + ":"
-                        + str(check_result.get("error") or "")
+                        f"story_event_m4_m6_check_failed:{scenario_name}:turn_{turn_index}:"
+                        + str(check_result.get("check_type")) + ":" + str(check_result.get("error") or "")
                     )
 
         escalation_m7_m9_checks = [
-            check
-            for check in checks
-            if isinstance(check, dict)
-            and str(check.get("type") or "").startswith("escalation_")
+            check for check in checks
+            if isinstance(check, dict) and str(check.get("type") or "").startswith("escalation_")
         ]
         if escalation_m7_m9_checks:
             current_session = {}
@@ -443,31 +377,20 @@ def _run_one_service_scenario(
                 current_session = _ensure_manual_session(session_id)
             except Exception:
                 current_session = session
-
             escalation_m7_m9_check_results = run_escalation_m7_m9_checks(
-                checks=escalation_m7_m9_checks,
-                result=turn_record.get("result") or turn_record,
-                session=current_session,
+                checks=escalation_m7_m9_checks, result=turn_record.get("result") or turn_record, session=current_session,
             )
             turn_record["escalation_m7_m9_check_results"] = escalation_m7_m9_check_results
             for check_result in escalation_m7_m9_check_results:
                 if not check_result.get("ok"):
                     turn_record.setdefault("scenario_warnings", []).append(
-                        "escalation_m7_m9_check_failed:"
-                        + str(scenario_name)
-                        + ":turn_"
-                        + str(turn_index)
-                        + ":"
-                        + str(check_result.get("check_type"))
-                        + ":"
-                        + str(check_result.get("error") or "")
+                        f"escalation_m7_m9_check_failed:{scenario_name}:turn_{turn_index}:"
+                        + str(check_result.get("check_type")) + ":" + str(check_result.get("error") or "")
                     )
 
         story_proposal_m10_m12_checks = [
-            check
-            for check in checks
-            if isinstance(check, dict)
-            and str(check.get("type") or "").startswith("story_proposal_")
+            check for check in checks
+            if isinstance(check, dict) and str(check.get("type") or "").startswith("story_proposal_")
         ]
         if story_proposal_m10_m12_checks:
             current_session = {}
@@ -475,31 +398,20 @@ def _run_one_service_scenario(
                 current_session = _ensure_manual_session(session_id)
             except Exception:
                 current_session = session
-
             story_proposal_m10_m12_check_results = run_story_proposal_m10_m12_checks(
-                checks=story_proposal_m10_m12_checks,
-                result=turn_record.get("result") or turn_record,
-                session=current_session,
+                checks=story_proposal_m10_m12_checks, result=turn_record.get("result") or turn_record, session=current_session,
             )
             turn_record["story_proposal_m10_m12_check_results"] = story_proposal_m10_m12_check_results
             for check_result in story_proposal_m10_m12_check_results:
                 if not check_result.get("ok"):
                     turn_record.setdefault("scenario_warnings", []).append(
-                        "story_proposal_m10_m12_check_failed:"
-                        + str(scenario_name)
-                        + ":turn_"
-                        + str(turn_index)
-                        + ":"
-                        + str(check_result.get("check_type"))
-                        + ":"
-                        + str(check_result.get("error") or "")
+                        f"story_proposal_m10_m12_check_failed:{scenario_name}:turn_{turn_index}:"
+                        + str(check_result.get("check_type")) + ":" + str(check_result.get("error") or "")
                     )
 
         story_pack_m13_m15_checks = [
-            check
-            for check in checks
-            if isinstance(check, dict)
-            and str(check.get("type") or "").startswith("story_pack_")
+            check for check in checks
+            if isinstance(check, dict) and str(check.get("type") or "").startswith("story_pack_")
         ]
         if story_pack_m13_m15_checks:
             current_session = {}
@@ -507,34 +419,20 @@ def _run_one_service_scenario(
                 current_session = _ensure_manual_session(session_id)
             except Exception:
                 current_session = session
-
             story_pack_m13_m15_check_results = run_story_pack_m13_m15_checks(
-                checks=story_pack_m13_m15_checks,
-                result=turn_record.get("result") or turn_record,
-                session=current_session,
+                checks=story_pack_m13_m15_checks, result=turn_record.get("result") or turn_record, session=current_session,
             )
             turn_record["story_pack_m13_m15_check_results"] = story_pack_m13_m15_check_results
             for check_result in story_pack_m13_m15_check_results:
                 if not check_result.get("ok"):
                     turn_record.setdefault("scenario_warnings", []).append(
-                        "story_pack_m13_m15_check_failed:"
-                        + str(scenario_name)
-                        + ":turn_"
-                        + str(turn_index)
-                        + ":"
-                        + str(check_result.get("check_type"))
-                        + ":"
-                        + str(check_result.get("error") or "")
+                        f"story_pack_m13_m15_check_failed:{scenario_name}:turn_{turn_index}:"
+                        + str(check_result.get("check_type")) + ":" + str(check_result.get("error") or "")
                     )
 
         dialogue_m16_m18_checks = [
-            check
-            for check in checks
-            if isinstance(check, dict)
-            and (
-                str(check.get("type") or "").startswith("dialogue_")
-                or str(check.get("type") or "").startswith("rumor_")
-            )
+            check for check in checks
+            if isinstance(check, dict) and (str(check.get("type") or "").startswith("dialogue_") or str(check.get("type") or "").startswith("rumor_"))
         ]
         if dialogue_m16_m18_checks:
             current_session = {}
@@ -542,31 +440,20 @@ def _run_one_service_scenario(
                 current_session = _ensure_manual_session(session_id)
             except Exception:
                 current_session = session
-
             dialogue_m16_m18_check_results = run_dialogue_m16_m18_checks(
-                checks=dialogue_m16_m18_checks,
-                result=turn_record.get("result") or turn_record,
-                session=current_session,
+                checks=dialogue_m16_m18_checks, result=turn_record.get("result") or turn_record, session=current_session,
             )
             turn_record["dialogue_m16_m18_check_results"] = dialogue_m16_m18_check_results
             for check_result in dialogue_m16_m18_check_results:
                 if not check_result.get("ok"):
                     turn_record.setdefault("scenario_warnings", []).append(
-                        "dialogue_m16_m18_check_failed:"
-                        + str(scenario_name)
-                        + ":turn_"
-                        + str(turn_index)
-                        + ":"
-                        + str(check_result.get("check_type"))
-                        + ":"
-                        + str(check_result.get("error") or "")
+                        f"dialogue_m16_m18_check_failed:{scenario_name}:turn_{turn_index}:"
+                        + str(check_result.get("check_type")) + ":" + str(check_result.get("error") or "")
                     )
 
         npc_evolution_m19_m21_checks = [
-            check
-            for check in checks
-            if isinstance(check, dict)
-            and str(check.get("type") or "").startswith("npc_evolution")
+            check for check in checks
+            if isinstance(check, dict) and str(check.get("type") or "").startswith("npc_evolution")
         ]
         if npc_evolution_m19_m21_checks:
             current_session = {}
@@ -574,31 +461,20 @@ def _run_one_service_scenario(
                 current_session = _ensure_manual_session(session_id)
             except Exception:
                 current_session = session
-
             npc_evolution_m19_m21_check_results = run_npc_evolution_m19_m21_checks(
-                checks=npc_evolution_m19_m21_checks,
-                result=turn_record.get("result") or turn_record,
-                session=current_session,
+                checks=npc_evolution_m19_m21_checks, result=turn_record.get("result") or turn_record, session=current_session,
             )
             turn_record["npc_evolution_m19_m21_check_results"] = npc_evolution_m19_m21_check_results
             for check_result in npc_evolution_m19_m21_check_results:
                 if not check_result.get("ok"):
                     turn_record.setdefault("scenario_warnings", []).append(
-                        "npc_evolution_m19_m21_check_failed:"
-                        + str(scenario_name)
-                        + ":turn_"
-                        + str(turn_index)
-                        + ":"
-                        + str(check_result.get("check_type"))
-                        + ":"
-                        + str(check_result.get("error") or "")
+                        f"npc_evolution_m19_m21_check_failed:{scenario_name}:turn_{turn_index}:"
+                        + str(check_result.get("check_type")) + ":" + str(check_result.get("error") or "")
                     )
 
         campaign_director_m22_m24_checks = [
-            check
-            for check in checks
-            if isinstance(check, dict)
-            and str(check.get("type") or "").startswith("campaign_director")
+            check for check in checks
+            if isinstance(check, dict) and str(check.get("type") or "").startswith("campaign_director")
         ]
         if campaign_director_m22_m24_checks:
             current_session = {}
@@ -606,29 +482,37 @@ def _run_one_service_scenario(
                 current_session = _ensure_manual_session(session_id)
             except Exception:
                 current_session = session
-
             campaign_director_m22_m24_check_results = run_campaign_director_m22_m24_checks(
-                checks=campaign_director_m22_m24_checks,
-                result=turn_record.get("result") or turn_record,
-                session=current_session,
+                checks=campaign_director_m22_m24_checks, result=turn_record.get("result") or turn_record, session=current_session,
             )
-            turn_record["campaign_director_m22_m24_check_results"] = campaign_director_m22_m24_check_results
             for check_result in campaign_director_m22_m24_check_results:
                 if not check_result.get("ok"):
                     turn_record.setdefault("scenario_warnings", []).append(
-                        "campaign_director_m22_m24_check_failed:"
-                        + str(scenario_name)
-                        + ":turn_"
-                        + str(turn_index)
-                        + ":"
-                        + str(check_result.get("check_type"))
-                        + ":"
-                        + str(check_result.get("error") or "")
+                        f"campaign_director_m22_m24_check_failed:{scenario_name}:turn_{turn_index}:"
+                        + str(check_result.get("check_type")) + ":" + str(check_result.get("error") or "")
                     )
 
-        turn_summaries.append(turn_record)
+        story_event_queue_m25_m27_checks = [
+            check for check in checks
+            if isinstance(check, dict) and str(check.get("type") or "").startswith("story_event_queue_")
+        ]
+        if story_event_queue_m25_m27_checks:
+            current_session = {}
+            try:
+                current_session = _ensure_manual_session(session_id)
+            except Exception:
+                current_session = session
+            story_event_queue_m25_m27_check_results = run_story_event_queue_m25_m27_checks(
+                checks=story_event_queue_m25_m27_checks, result=turn_record.get("result") or turn_record, session=current_session,
+            )
+            turn_record["story_event_queue_m25_m27_check_results"] = story_event_queue_m25_m27_check_results
+            for check_result in story_event_queue_m25_m27_check_results:
+                if not check_result.get("ok"):
+                    turn_record.setdefault("scenario_warnings", []).append(
+                        f"story_event_queue_m25_m27_check_failed:{scenario_name}:turn_{turn_index}:"
+                        + str(check_result.get("check_type")) + ":" + str(check_result.get("error") or "")
+                    )
 
-        # Check for contamination
         contamination_warnings = _scenario_contamination_warnings(
             scenario_name=scenario_name,
             turn_index=turn_index,
@@ -643,32 +527,25 @@ def _run_one_service_scenario(
         if contamination_warnings:
             for warning in contamination_warnings:
                 _add_regression_warning(
-                    scenario=scenario_name,
-                    turn=turn_index,
-                    warning=warning,
+                    scenario=scenario_name, turn=turn_index, warning=warning,
                 )
             turn_record.setdefault("scenario_warnings", []).extend(contamination_warnings)
 
-    # Build summary
+        turn_summaries.append(turn_record)
+
     summary_row = _build_service_summary_row(
-        scenario_name=scenario_name,
-        session_id=session_id,
-        seeded_currency=currency,
-        turns=turn_summaries,
-        detail=artifact_detail,
+        scenario_name=scenario_name, session_id=session_id, seeded_currency=currency,
+        turns=turn_summaries, detail=artifact_detail,
     )
     _record_regression_warnings(summary_row)
 
-    # Write per-scenario debug artifact if detail level requires it
     if artifact_detail in ("debug", "full"):
         from tests.rpg.manual.constants import TEST_RESULTS_ROOT
         from tests.rpg.manual.summary_sanitizer import write_scenario_debug_artifact
 
         debug_file = write_scenario_debug_artifact(
-            scenario_name=scenario_name,
-            scenario_summary=summary_row,
-            output_dir=str(TEST_RESULTS_ROOT),
-            detail=artifact_detail,
+            scenario_name=scenario_name, scenario_summary=summary_row,
+            output_dir=str(TEST_RESULTS_ROOT), detail=artifact_detail,
         )
         print(f"Wrote debug artifact: {debug_file}", flush=True)
 

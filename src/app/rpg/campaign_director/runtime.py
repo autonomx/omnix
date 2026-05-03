@@ -8,6 +8,7 @@ from app.rpg.story_packs.definition_registries import (
     get_story_event_definition,
     list_escalation_rule_definitions,
 )
+from app.rpg.story_event_queue.queue import process_story_event_queue
 from app.rpg.campaign_director.state import (
     ensure_campaign_director_state,
     record_campaign_director_tick,
@@ -190,6 +191,13 @@ def apply_campaign_director_tick(
                 }
             )
 
+    queue_result = process_story_event_queue(
+        simulation_state,
+        mode=mode,
+        turn_index=turn_index,
+        max_applications=3,
+    )
+
     record = record_campaign_director_tick(
         simulation_state,
         turn_index=turn_index,
@@ -204,6 +212,11 @@ def apply_campaign_director_tick(
             str(row.get("event_id") or "")
             for row in applied
             if row.get("event_id")
+        ]
+        + [
+            str(row.get("event_id") or "")
+            for row in queue_result.get("applied") or []
+            if isinstance(row, dict) and row.get("event_id")
         ],
         skipped_reasons=skipped,
     )
@@ -215,6 +228,7 @@ def apply_campaign_director_tick(
         "applied": applied,
         "applied_count": len(applied),
         "skipped": skipped,
+        "queue_result": queue_result,
         "evaluation": evaluation,
         "record": record,
     }
