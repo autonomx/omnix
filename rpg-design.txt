@@ -1,534 +1,92 @@
-Bundle M1-M3 — Lore Registry + Story Arc State Machine v1
+Bundle M4-M6 — Story Event Schema + Deterministic Event Effects v1
 GOAL:
-Add deterministic, save/load-safe systems for:
-- lore entries
-- lore reveal / knowledge status
-- story arcs
-- arc stages
-- arc pressure
-- arc flags
-- arc links to lore/quests/puzzles/NPCs/locations
+Add deterministic story events and bounded event effects.
 
-Simulation is authoritative.
-LLM may narrate later, but cannot decide lore truth, reveal, arc activation, arc pressure, or arc stage transitions.
-Patch 1 — Add lore package
-1. Add src/app/rpg/lore/__init__.py
+A story event is structured, validated, applied once, and may update:
+- story arc pressure/stage/flags
+- lore reveal/truth/known-by/tags
+- causal memories
+- social deltas
+- quest transitions
+- puzzle transitions
+- bounded world event rows
+
+LLM may narrate story events later, but cannot invent or directly apply story event effects.
+Patch 1 — Add story events package
+1. Add src/app/rpg/story_events/__init__.py
 *** Begin Patch
-*** Add File: src/app/rpg/lore/__init__.py
-+"""Deterministic RPG lore registry helpers."""
+*** Add File: src/app/rpg/story_events/__init__.py
++"""Deterministic RPG story event helpers."""
 +
-+from app.rpg.lore.conditions import evaluate_lore_condition
-+from app.rpg.lore.state import (
-+    add_lore_known_by,
-+    ensure_lore_state,
-+    get_lore_entry,
-+    is_lore_available_to_player,
-+    is_lore_known_by,
-+    normalize_lore_state,
-+    reveal_lore_to_player,
-+    set_lore_truth_status,
-+    upsert_lore_entry,
++from app.rpg.story_events.effects import apply_story_event_effect
++from app.rpg.story_events.state import (
++    ensure_story_event_state,
++    get_applied_story_event,
++    has_story_event_been_applied,
++    mark_story_event_applied,
++    normalize_story_event_state,
 +)
-+from app.rpg.lore.transitions import apply_lore_transition
++from app.rpg.story_events.validation import (
++    validate_story_event,
++    validate_story_event_effect,
++)
++from app.rpg.story_events.application import apply_story_event
 +
 +__all__ = [
-+    "add_lore_known_by",
-+    "apply_lore_transition",
-+    "ensure_lore_state",
-+    "evaluate_lore_condition",
-+    "get_lore_entry",
-+    "is_lore_available_to_player",
-+    "is_lore_known_by",
-+    "normalize_lore_state",
-+    "reveal_lore_to_player",
-+    "set_lore_truth_status",
-+    "upsert_lore_entry",
++    "apply_story_event",
++    "apply_story_event_effect",
++    "ensure_story_event_state",
++    "get_applied_story_event",
++    "has_story_event_been_applied",
++    "mark_story_event_applied",
++    "normalize_story_event_state",
++    "validate_story_event",
++    "validate_story_event_effect",
 +]
 *** End Patch
-2. Add src/app/rpg/lore/model.py
+2. Add src/app/rpg/story_events/model.py
 *** Begin Patch
-*** Add File: src/app/rpg/lore/model.py
+*** Add File: src/app/rpg/story_events/model.py
 +from __future__ import annotations
 +
 +from dataclasses import asdict, dataclass, field
-+from typing import Any, Dict, List, Literal
-+
-+
-+LoreTruthStatus = Literal["true", "rumor", "false", "myth", "unknown", "secret"]
++from typing import Any, Dict, List
 +
 +
 +@dataclass
-+class LoreEntry:
-+    lore_id: str
-+    title: str
-+    kind: str = "fact"
-+    truth_status: LoreTruthStatus = "unknown"
-+    revealed_to_player: bool = False
-+    known_by: List[str] = field(default_factory=list)
-+    tags: List[str] = field(default_factory=list)
++class StoryEventEffect:
++    type: str
++    data: Dict[str, Any] = field(default_factory=dict)
++
++    def to_dict(self) -> Dict[str, Any]:
++        return asdict(self)
++
++
++@dataclass
++class StoryEventRecord:
++    event_id: str
++    arc_id: str = ""
++    kind: str = "event"
++    location_id: str = ""
++    participants: List[str] = field(default_factory=list)
 +    summary: str = ""
-+    source: str = "manual"
++    preconditions: List[Dict[str, Any]] = field(default_factory=list)
++    effects: List[Dict[str, Any]] = field(default_factory=list)
++    tags: List[str] = field(default_factory=list)
 +    metadata: Dict[str, Any] = field(default_factory=dict)
 +
 +    def to_dict(self) -> Dict[str, Any]:
 +        return asdict(self)
 *** End Patch
-3. Add src/app/rpg/lore/state.py
+3. Add src/app/rpg/story_events/state.py
 *** Begin Patch
-*** Add File: src/app/rpg/lore/state.py
+*** Add File: src/app/rpg/story_events/state.py
 +from __future__ import annotations
 +
 +from typing import Any, Dict, List
 +
 +
-+VALID_TRUTH_STATUSES = {"true", "rumor", "false", "myth", "unknown", "secret"}
-+
-+
-+def _safe_dict(value: Any) -> Dict[str, Any]:
-+    return value if isinstance(value, dict) else {}
-+
-+
-+def _safe_list(value: Any) -> List[Any]:
-+    return value if isinstance(value, list) else []
-+
-+
-+def _safe_str(value: Any) -> str:
-+    return value if isinstance(value, str) else ""
-+
-+
-+def _safe_bool(value: Any, default: bool = False) -> bool:
-+    if isinstance(value, bool):
-+        return value
-+    return default
-+
-+
-+def _unique_strs(values: Any) -> List[str]:
-+    seen = set()
-+    out: List[str] = []
-+    for value in _safe_list(values):
-+        text = str(value or "").strip()
-+        if text and text not in seen:
-+            seen.add(text)
-+            out.append(text)
-+    return out
-+
-+
-+def normalize_lore_entry(value: Dict[str, Any], *, lore_id: str = "") -> Dict[str, Any]:
-+    value = _safe_dict(value)
-+    normalized_id = _safe_str(value.get("lore_id")) or lore_id
-+    truth_status = _safe_str(value.get("truth_status")) or "unknown"
-+    if truth_status not in VALID_TRUTH_STATUSES:
-+        truth_status = "unknown"
-+    return {
-+        "lore_id": normalized_id,
-+        "title": _safe_str(value.get("title")) or normalized_id,
-+        "kind": _safe_str(value.get("kind")) or "fact",
-+        "truth_status": truth_status,
-+        "revealed_to_player": _safe_bool(value.get("revealed_to_player"), False),
-+        "known_by": _unique_strs(value.get("known_by")),
-+        "tags": _unique_strs(value.get("tags")),
-+        "summary": _safe_str(value.get("summary")),
-+        "source": _safe_str(value.get("source")) or "manual",
-+        "metadata": dict(_safe_dict(value.get("metadata"))),
-+    }
-+
-+
-+def normalize_lore_state(value: Dict[str, Any] | None) -> Dict[str, Any]:
-+    value = _safe_dict(value)
-+    entries: Dict[str, Dict[str, Any]] = {}
-+    for lore_id, entry in _safe_dict(value.get("entries")).items():
-+        lore_id = str(lore_id or "")
-+        if not lore_id:
-+            continue
-+        entries[lore_id] = normalize_lore_entry(entry, lore_id=lore_id)
-+    return {
-+        "version": 1,
-+        "entries": entries,
-+    }
-+
-+
-+def ensure_lore_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
-+    if not isinstance(simulation_state, dict):
-+        raise TypeError("simulation_state_must_be_dict")
-+    lore_state = normalize_lore_state(simulation_state.get("lore_state"))
-+    simulation_state["lore_state"] = lore_state
-+    return lore_state
-+
-+
-+def get_lore_entry(
-+    simulation_state: Dict[str, Any],
-+    lore_id: str,
-+    *,
-+    create: bool = False,
-+    title: str = "",
-+) -> Dict[str, Any] | None:
-+    lore_state = ensure_lore_state(simulation_state)
-+    entries = lore_state.setdefault("entries", {})
-+    if lore_id not in entries and create:
-+        entries[lore_id] = normalize_lore_entry(
-+            {
-+                "lore_id": lore_id,
-+                "title": title or lore_id,
-+                "truth_status": "unknown",
-+            },
-+            lore_id=lore_id,
-+        )
-+    return entries.get(lore_id)
-+
-+
-+def upsert_lore_entry(
-+    simulation_state: Dict[str, Any],
-+    entry: Dict[str, Any],
-+) -> Dict[str, Any]:
-+    entry = normalize_lore_entry(entry, lore_id=str(entry.get("lore_id") or ""))
-+    lore_id = str(entry.get("lore_id") or "")
-+    if not lore_id:
-+        return {"ok": False, "reason": "missing_lore_id", "entry": entry}
-+    lore_state = ensure_lore_state(simulation_state)
-+    existing = lore_state.setdefault("entries", {}).get(lore_id)
-+    if existing:
-+        merged = dict(existing)
-+        merged.update(entry)
-+        merged["known_by"] = _unique_strs(list(existing.get("known_by") or []) + list(entry.get("known_by") or []))
-+        merged["tags"] = _unique_strs(list(existing.get("tags") or []) + list(entry.get("tags") or []))
-+        lore_state["entries"][lore_id] = normalize_lore_entry(merged, lore_id=lore_id)
-+    else:
-+        lore_state["entries"][lore_id] = entry
-+    return {
-+        "ok": True,
-+        "reason": "upserted",
-+        "lore_id": lore_id,
-+        "entry": lore_state["entries"][lore_id],
-+    }
-+
-+
-+def reveal_lore_to_player(simulation_state: Dict[str, Any], lore_id: str) -> Dict[str, Any]:
-+    entry = get_lore_entry(simulation_state, lore_id)
-+    if not entry:
-+        return {"ok": False, "reason": "lore_missing", "lore_id": lore_id}
-+    entry["revealed_to_player"] = True
-+    return {"ok": True, "reason": "revealed", "lore_id": lore_id, "entry": entry}
-+
-+
-+def set_lore_truth_status(
-+    simulation_state: Dict[str, Any],
-+    lore_id: str,
-+    truth_status: str,
-+) -> Dict[str, Any]:
-+    entry = get_lore_entry(simulation_state, lore_id)
-+    if not entry:
-+        return {"ok": False, "reason": "lore_missing", "lore_id": lore_id}
-+    if truth_status not in VALID_TRUTH_STATUSES:
-+        return {
-+            "ok": False,
-+            "reason": "invalid_truth_status",
-+            "lore_id": lore_id,
-+            "truth_status": truth_status,
-+        }
-+    entry["truth_status"] = truth_status
-+    return {"ok": True, "reason": "truth_status_set", "lore_id": lore_id, "entry": entry}
-+
-+
-+def add_lore_known_by(
-+    simulation_state: Dict[str, Any],
-+    lore_id: str,
-+    entity_id: str,
-+) -> Dict[str, Any]:
-+    entry = get_lore_entry(simulation_state, lore_id)
-+    if not entry:
-+        return {"ok": False, "reason": "lore_missing", "lore_id": lore_id}
-+    known_by = list(entry.get("known_by") or [])
-+    if entity_id not in known_by:
-+        known_by.append(entity_id)
-+    entry["known_by"] = _unique_strs(known_by)
-+    return {"ok": True, "reason": "known_by_added", "lore_id": lore_id, "entry": entry}
-+
-+
-+def add_lore_tag(
-+    simulation_state: Dict[str, Any],
-+    lore_id: str,
-+    tag: str,
-+) -> Dict[str, Any]:
-+    entry = get_lore_entry(simulation_state, lore_id)
-+    if not entry:
-+        return {"ok": False, "reason": "lore_missing", "lore_id": lore_id}
-+    tags = list(entry.get("tags") or [])
-+    if tag not in tags:
-+        tags.append(tag)
-+    entry["tags"] = _unique_strs(tags)
-+    return {"ok": True, "reason": "tag_added", "lore_id": lore_id, "entry": entry}
-+
-+
-+def is_lore_available_to_player(simulation_state: Dict[str, Any], lore_id: str) -> bool:
-+    entry = get_lore_entry(simulation_state, lore_id)
-+    if not entry:
-+        return False
-+    return bool(entry.get("revealed_to_player"))
-+
-+
-+def is_lore_known_by(simulation_state: Dict[str, Any], lore_id: str, entity_id: str) -> bool:
-+    entry = get_lore_entry(simulation_state, lore_id)
-+    if not entry:
-+        return False
-+    return entity_id in set(entry.get("known_by") or [])
-*** End Patch
-4. Add src/app/rpg/lore/conditions.py
-*** Begin Patch
-*** Add File: src/app/rpg/lore/conditions.py
-+from __future__ import annotations
-+
-+from typing import Any, Dict
-+
-+from app.rpg.lore.state import get_lore_entry, is_lore_available_to_player, is_lore_known_by
-+
-+
-+def _safe_dict(value: Any) -> Dict[str, Any]:
-+    return value if isinstance(value, dict) else {}
-+
-+
-+def evaluate_lore_condition(
-+    simulation_state: Dict[str, Any],
-+    condition: Dict[str, Any],
-+) -> Dict[str, Any]:
-+    condition = _safe_dict(condition)
-+    condition_type = str(condition.get("type") or "")
-+    lore_id = str(condition.get("lore_id") or "")
-+
-+    if condition_type == "lore_exists":
-+        entry = get_lore_entry(simulation_state, lore_id)
-+        return {
-+            "ok": bool(entry),
-+            "type": condition_type,
-+            "lore_id": lore_id,
-+            "reason": "lore_exists" if entry else "lore_missing",
-+        }
-+
-+    if condition_type == "lore_revealed_to_player":
-+        ok = is_lore_available_to_player(simulation_state, lore_id)
-+        return {
-+            "ok": ok,
-+            "type": condition_type,
-+            "lore_id": lore_id,
-+            "reason": "revealed" if ok else "not_revealed",
-+        }
-+
-+    if condition_type == "lore_known_by":
-+        entity_id = str(condition.get("entity_id") or "")
-+        ok = is_lore_known_by(simulation_state, lore_id, entity_id)
-+        return {
-+            "ok": ok,
-+            "type": condition_type,
-+            "lore_id": lore_id,
-+            "entity_id": entity_id,
-+            "reason": "known_by_entity" if ok else "not_known_by_entity",
-+        }
-+
-+    if condition_type == "lore_truth_status":
-+        expected = str(condition.get("truth_status") or "")
-+        entry = get_lore_entry(simulation_state, lore_id)
-+        actual = str((entry or {}).get("truth_status") or "")
-+        return {
-+            "ok": actual == expected,
-+            "type": condition_type,
-+            "lore_id": lore_id,
-+            "expected": expected,
-+            "actual": actual,
-+            "reason": "truth_status_matches" if actual == expected else "truth_status_mismatch",
-+        }
-+
-+    if condition_type == "lore_has_tag":
-+        tag = str(condition.get("tag") or "")
-+        entry = get_lore_entry(simulation_state, lore_id)
-+        tags = set((entry or {}).get("tags") or [])
-+        ok = tag in tags
-+        return {
-+            "ok": ok,
-+            "type": condition_type,
-+            "lore_id": lore_id,
-+            "tag": tag,
-+            "actual_tags": sorted(tags),
-+            "reason": "tag_present" if ok else "tag_missing",
-+        }
-+
-+    return {
-+        "ok": False,
-+        "type": condition_type,
-+        "lore_id": lore_id,
-+        "reason": f"unknown_lore_condition_type:{condition_type}",
-+    }
-*** End Patch
-5. Add src/app/rpg/lore/transitions.py
-*** Begin Patch
-*** Add File: src/app/rpg/lore/transitions.py
-+from __future__ import annotations
-+
-+from typing import Any, Dict
-+
-+from app.rpg.lore.state import (
-+    add_lore_known_by,
-+    add_lore_tag,
-+    reveal_lore_to_player,
-+    set_lore_truth_status,
-+    upsert_lore_entry,
-+)
-+
-+
-+def _safe_dict(value: Any) -> Dict[str, Any]:
-+    return value if isinstance(value, dict) else {}
-+
-+
-+def apply_lore_transition(
-+    simulation_state: Dict[str, Any],
-+    transition: Dict[str, Any],
-+    *,
-+    turn_index: int = 0,
-+) -> Dict[str, Any]:
-+    transition = _safe_dict(transition)
-+    action = str(transition.get("action") or "")
-+    lore_id = str(transition.get("lore_id") or "")
-+
-+    if action == "upsert":
-+        entry = dict(transition)
-+        entry.pop("action", None)
-+        entry.setdefault("metadata", {})
-+        entry["metadata"]["updated_turn"] = int(turn_index or 0)
-+        return dict(
-+            upsert_lore_entry(simulation_state, entry),
-+            action=action,
-+        )
-+
-+    if action == "reveal_to_player":
-+        return dict(
-+            reveal_lore_to_player(simulation_state, lore_id),
-+            action=action,
-+        )
-+
-+    if action == "set_truth_status":
-+        return dict(
-+            set_lore_truth_status(
-+                simulation_state,
-+                lore_id,
-+                str(transition.get("truth_status") or ""),
-+            ),
-+            action=action,
-+        )
-+
-+    if action == "add_known_by":
-+        return dict(
-+            add_lore_known_by(
-+                simulation_state,
-+                lore_id,
-+                str(transition.get("entity_id") or ""),
-+            ),
-+            action=action,
-+        )
-+
-+    if action == "add_tag":
-+        return dict(
-+            add_lore_tag(
-+                simulation_state,
-+                lore_id,
-+                str(transition.get("tag") or ""),
-+            ),
-+            action=action,
-+        )
-+
-+    return {
-+        "ok": False,
-+        "action": action,
-+        "lore_id": lore_id,
-+        "reason": f"unknown_lore_action:{action}",
-+    }
-*** End Patch
-Patch 2 — Add story arc package
-6. Add src/app/rpg/story_arcs/__init__.py
-*** Begin Patch
-*** Add File: src/app/rpg/story_arcs/__init__.py
-+"""Deterministic RPG story arc state machine helpers."""
-+
-+from app.rpg.story_arcs.conditions import evaluate_story_arc_condition
-+from app.rpg.story_arcs.state import (
-+    apply_story_arc_pressure_delta,
-+    ensure_story_arc_state,
-+    get_story_arc,
-+    link_story_arc,
-+    normalize_story_arc_state,
-+    set_story_arc_flag,
-+    set_story_arc_stage,
-+    start_story_arc,
-+)
-+from app.rpg.story_arcs.transitions import apply_story_arc_transition
-+
-+__all__ = [
-+    "apply_story_arc_pressure_delta",
-+    "apply_story_arc_transition",
-+    "ensure_story_arc_state",
-+    "evaluate_story_arc_condition",
-+    "get_story_arc",
-+    "link_story_arc",
-+    "normalize_story_arc_state",
-+    "set_story_arc_flag",
-+    "set_story_arc_stage",
-+    "start_story_arc",
-+]
-*** End Patch
-7. Add src/app/rpg/story_arcs/model.py
-*** Begin Patch
-*** Add File: src/app/rpg/story_arcs/model.py
-+from __future__ import annotations
-+
-+from dataclasses import asdict, dataclass, field
-+from typing import Any, Dict, List, Literal
-+
-+
-+StoryArcStatus = Literal["inactive", "active", "resolved", "failed"]
-+
-+
-+@dataclass
-+class StoryArcRecord:
-+    arc_id: str
-+    title: str
-+    status: StoryArcStatus = "inactive"
-+    stage: str = "inactive"
-+    pressure: int = 0
-+    escalation_level: int = 0
-+    linked_lore: List[str] = field(default_factory=list)
-+    linked_quests: List[str] = field(default_factory=list)
-+    linked_puzzles: List[str] = field(default_factory=list)
-+    linked_locations: List[str] = field(default_factory=list)
-+    linked_entities: List[str] = field(default_factory=list)
-+    flags: Dict[str, Any] = field(default_factory=dict)
-+    started_turn: int | None = None
-+    resolved_turn: int | None = None
-+    metadata: Dict[str, Any] = field(default_factory=dict)
-+
-+    def to_dict(self) -> Dict[str, Any]:
-+        return asdict(self)
-*** End Patch
-8. Add src/app/rpg/story_arcs/state.py
-*** Begin Patch
-*** Add File: src/app/rpg/story_arcs/state.py
-+from __future__ import annotations
-+
-+from typing import Any, Dict, List
-+
-+
-+VALID_ARC_STATUSES = {"inactive", "active", "resolved", "failed"}
-+LINK_KINDS = {
-+    "lore": "linked_lore",
-+    "quest": "linked_quests",
-+    "puzzle": "linked_puzzles",
-+    "location": "linked_locations",
-+    "entity": "linked_entities",
-+}
-+
-+
-+def clamp_pressure(value: Any) -> int:
-+    try:
-+        number = int(value)
-+    except Exception:
-+        number = 0
-+    return max(0, min(100, number))
++MAX_APPLIED_STORY_EVENTS = 500
 +
 +
 +def _safe_dict(value: Any) -> Dict[str, Any]:
@@ -550,453 +108,314 @@ Patch 2 — Add story arc package
 +        return default
 +
 +
-+def _safe_int_or_none(value: Any) -> int | None:
-+    if value is None:
-+        return None
-+    try:
-+        return int(value)
-+    except Exception:
-+        return None
-+
-+
-+def _unique_strs(values: Any) -> List[str]:
-+    seen = set()
-+    out: List[str] = []
-+    for value in _safe_list(values):
-+        text = str(value or "").strip()
-+        if text and text not in seen:
-+            seen.add(text)
-+            out.append(text)
-+    return out
-+
-+
-+def normalize_story_arc(value: Dict[str, Any], *, arc_id: str = "") -> Dict[str, Any]:
++def normalize_applied_story_event(value: Dict[str, Any]) -> Dict[str, Any]:
 +    value = _safe_dict(value)
-+    normalized_id = _safe_str(value.get("arc_id")) or arc_id
-+    status = _safe_str(value.get("status")) or "inactive"
-+    if status not in VALID_ARC_STATUSES:
-+        status = "inactive"
 +    return {
-+        "arc_id": normalized_id,
-+        "title": _safe_str(value.get("title")) or normalized_id,
-+        "status": status,
-+        "stage": _safe_str(value.get("stage")) or status,
-+        "pressure": clamp_pressure(value.get("pressure")),
-+        "escalation_level": max(0, _safe_int(value.get("escalation_level"), 0)),
-+        "linked_lore": _unique_strs(value.get("linked_lore")),
-+        "linked_quests": _unique_strs(value.get("linked_quests")),
-+        "linked_puzzles": _unique_strs(value.get("linked_puzzles")),
-+        "linked_locations": _unique_strs(value.get("linked_locations")),
-+        "linked_entities": _unique_strs(value.get("linked_entities")),
-+        "flags": dict(_safe_dict(value.get("flags"))),
-+        "started_turn": _safe_int_or_none(value.get("started_turn")),
-+        "resolved_turn": _safe_int_or_none(value.get("resolved_turn")),
++        "event_id": _safe_str(value.get("event_id")),
++        "arc_id": _safe_str(value.get("arc_id")),
++        "kind": _safe_str(value.get("kind")) or "event",
++        "summary": _safe_str(value.get("summary")),
++        "turn_index": _safe_int(value.get("turn_index"), 0),
++        "effect_results": [
++            dict(row)
++            for row in _safe_list(value.get("effect_results"))
++            if isinstance(row, dict)
++        ][:50],
 +        "metadata": dict(_safe_dict(value.get("metadata"))),
 +    }
 +
 +
-+def normalize_story_arc_state(value: Dict[str, Any] | None) -> Dict[str, Any]:
++def normalize_story_event_state(value: Dict[str, Any] | None) -> Dict[str, Any]:
 +    value = _safe_dict(value)
-+    arcs: Dict[str, Dict[str, Any]] = {}
-+    for arc_id, arc in _safe_dict(value.get("arcs")).items():
-+        arc_id = str(arc_id or "")
-+        if not arc_id:
++    applied_events: Dict[str, Dict[str, Any]] = {}
++    for event_id, row in _safe_dict(value.get("applied_events")).items():
++        event_id = str(event_id or "")
++        if not event_id:
 +            continue
-+        arcs[arc_id] = normalize_story_arc(arc, arc_id=arc_id)
++        applied_events[event_id] = normalize_applied_story_event(
++            dict(row, event_id=event_id)
++        )
++    ordered_ids = sorted(
++        applied_events,
++        key=lambda eid: (
++            int(applied_events[eid].get("turn_index") or 0),
++            eid,
++        ),
++    )[-MAX_APPLIED_STORY_EVENTS:]
 +    return {
 +        "version": 1,
-+        "arcs": arcs,
++        "applied_events": {event_id: applied_events[event_id] for event_id in ordered_ids},
++        "max_applied_events": MAX_APPLIED_STORY_EVENTS,
 +    }
 +
 +
-+def ensure_story_arc_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
++def ensure_story_event_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
 +    if not isinstance(simulation_state, dict):
 +        raise TypeError("simulation_state_must_be_dict")
-+    state = normalize_story_arc_state(simulation_state.get("story_arc_state"))
-+    simulation_state["story_arc_state"] = state
++    state = normalize_story_event_state(simulation_state.get("story_event_state"))
++    simulation_state["story_event_state"] = state
 +    return state
 +
 +
-+def get_story_arc(
++def has_story_event_been_applied(simulation_state: Dict[str, Any], event_id: str) -> bool:
++    state = ensure_story_event_state(simulation_state)
++    return event_id in state.get("applied_events", {})
++
++
++def get_applied_story_event(
 +    simulation_state: Dict[str, Any],
-+    arc_id: str,
-+    *,
-+    create: bool = False,
-+    title: str = "",
++    event_id: str,
 +) -> Dict[str, Any] | None:
-+    state = ensure_story_arc_state(simulation_state)
-+    arcs = state.setdefault("arcs", {})
-+    if arc_id not in arcs and create:
-+        arcs[arc_id] = normalize_story_arc(
-+            {
-+                "arc_id": arc_id,
-+                "title": title or arc_id,
-+                "status": "inactive",
-+                "stage": "inactive",
-+            },
-+            arc_id=arc_id,
-+        )
-+    return arcs.get(arc_id)
++    state = ensure_story_event_state(simulation_state)
++    return state.get("applied_events", {}).get(event_id)
 +
 +
-+def _apply_links(arc: Dict[str, Any], links: Dict[str, Any]) -> None:
-+    links = _safe_dict(links)
-+    for kind, key in LINK_KINDS.items():
-+        values = list(arc.get(key) or [])
-+        values.extend(_safe_list(links.get(kind)))
-+        values.extend(_safe_list(links.get(key)))
-+        arc[key] = _unique_strs(values)
-+
-+
-+def start_story_arc(
++def mark_story_event_applied(
 +    simulation_state: Dict[str, Any],
-+    arc_id: str,
++    event: Dict[str, Any],
 +    *,
-+    title: str = "",
-+    stage: str = "started",
-+    pressure: int = 0,
-+    links: Dict[str, Any] | None = None,
++    effect_results: List[Dict[str, Any]],
 +    turn_index: int = 0,
 +) -> Dict[str, Any]:
-+    arc = get_story_arc(simulation_state, arc_id, create=True, title=title)
-+    assert arc is not None
-+    arc["status"] = "active"
-+    arc["stage"] = stage
-+    arc["pressure"] = clamp_pressure(pressure)
-+    if arc.get("started_turn") is None:
-+        arc["started_turn"] = int(turn_index or 0)
-+    _apply_links(arc, links or {})
-+    return {
-+        "ok": True,
-+        "kind": "story_arc_start",
-+        "arc_id": arc_id,
-+        "stage": arc["stage"],
-+        "status": arc["status"],
-+        "pressure": arc["pressure"],
-+        "arc": arc,
-+    }
-+
-+
-+def set_story_arc_stage(
-+    simulation_state: Dict[str, Any],
-+    arc_id: str,
-+    stage: str,
-+    *,
-+    status: str | None = None,
-+    turn_index: int = 0,
-+) -> Dict[str, Any]:
-+    arc = get_story_arc(simulation_state, arc_id, create=True)
-+    assert arc is not None
-+    arc["stage"] = stage
-+    if status:
-+        arc["status"] = status
-+    if status in {"resolved", "failed"} and arc.get("resolved_turn") is None:
-+        arc["resolved_turn"] = int(turn_index or 0)
-+    return {
-+        "ok": True,
-+        "kind": "story_arc_stage",
-+        "arc_id": arc_id,
-+        "stage": arc["stage"],
-+        "status": arc["status"],
-+        "arc": arc,
-+    }
-+
-+
-+def apply_story_arc_pressure_delta(
-+    simulation_state: Dict[str, Any],
-+    arc_id: str,
-+    delta: int,
-+    *,
-+    turn_index: int = 0,
-+) -> Dict[str, Any]:
-+    arc = get_story_arc(simulation_state, arc_id, create=True)
-+    assert arc is not None
-+    before = int(arc.get("pressure") or 0)
-+    after = clamp_pressure(before + int(delta or 0))
-+    arc["pressure"] = after
-+    arc.setdefault("metadata", {})["last_pressure_turn"] = int(turn_index or 0)
-+    return {
-+        "ok": True,
-+        "kind": "story_arc_pressure_delta",
-+        "arc_id": arc_id,
-+        "before": before,
-+        "delta": int(delta or 0),
-+        "after": after,
-+        "arc": arc,
-+    }
-+
-+
-+def set_story_arc_flag(
-+    simulation_state: Dict[str, Any],
-+    arc_id: str,
-+    flag: str,
-+    value: Any,
-+) -> Dict[str, Any]:
-+    arc = get_story_arc(simulation_state, arc_id, create=True)
-+    assert arc is not None
-+    arc.setdefault("flags", {})[flag] = value
-+    return {
-+        "ok": True,
-+        "kind": "story_arc_flag",
-+        "arc_id": arc_id,
-+        "flag": flag,
-+        "value": value,
-+        "arc": arc,
-+    }
-+
-+
-+def link_story_arc(
-+    simulation_state: Dict[str, Any],
-+    arc_id: str,
-+    kind: str,
-+    target_id: str,
-+) -> Dict[str, Any]:
-+    arc = get_story_arc(simulation_state, arc_id, create=True)
-+    assert arc is not None
-+    key = LINK_KINDS.get(kind)
-+    if not key:
-+        return {
-+            "ok": False,
-+            "reason": f"unknown_link_kind:{kind}",
-+            "arc_id": arc_id,
-+            "kind": kind,
-+            "target_id": target_id,
++    state = ensure_story_event_state(simulation_state)
++    event_id = str(event.get("event_id") or "")
++    if not event_id:
++        return {"ok": False, "reason": "missing_event_id"}
++    applied = normalize_applied_story_event(
++        {
++            "event_id": event_id,
++            "arc_id": event.get("arc_id") or "",
++            "kind": event.get("kind") or "event",
++            "summary": event.get("summary") or "",
++            "turn_index": turn_index,
++            "effect_results": effect_results,
++            "metadata": {"participants": list(event.get("participants") or [])[:20]},
 +        }
-+    values = list(arc.get(key) or [])
-+    if target_id not in values:
-+        values.append(target_id)
-+    arc[key] = _unique_strs(values)
++    )
++    state.setdefault("applied_events", {})[event_id] = applied
++    # Re-normalize to enforce bounds.
++    simulation_state["story_event_state"] = normalize_story_event_state(state)
 +    return {
 +        "ok": True,
-+        "reason": "linked",
-+        "arc_id": arc_id,
-+        "kind": kind,
-+        "target_id": target_id,
-+        "arc": arc,
++        "reason": "applied_marked",
++        "event_id": event_id,
++        "applied": simulation_state["story_event_state"]["applied_events"][event_id],
 +    }
 *** End Patch
-9. Add src/app/rpg/story_arcs/conditions.py
+4. Add src/app/rpg/story_events/validation.py
 *** Begin Patch
-*** Add File: src/app/rpg/story_arcs/conditions.py
+*** Add File: src/app/rpg/story_events/validation.py
 +from __future__ import annotations
 +
-+from typing import Any, Dict
++from typing import Any, Dict, List
 +
-+from app.rpg.lore.conditions import evaluate_lore_condition
-+from app.rpg.memory.causal_retrieval import retrieve_causal_memories
++from app.rpg.lore.state import get_lore_entry
 +from app.rpg.puzzles.state import get_puzzle
 +from app.rpg.quests.state import get_quest
++from app.rpg.story_arcs.conditions import evaluate_story_arc_condition
 +from app.rpg.story_arcs.state import get_story_arc
++
++
++ALLOWED_STORY_EVENT_EFFECT_TYPES = {
++    "arc_pressure_delta",
++    "arc_stage_set",
++    "arc_flag_set",
++    "lore_reveal",
++    "lore_truth_status_set",
++    "lore_known_by_add",
++    "lore_tag_add",
++    "quest_transition",
++    "puzzle_transition",
++    "memory_event",
++    "social_delta",
++    "world_event_emit",
++}
 +
 +
 +def _safe_dict(value: Any) -> Dict[str, Any]:
 +    return value if isinstance(value, dict) else {}
 +
 +
-+def evaluate_story_arc_condition(
++def _safe_list(value: Any) -> List[Any]:
++    return value if isinstance(value, list) else []
++
++
++def _safe_str(value: Any) -> str:
++    return value if isinstance(value, str) else ""
++
++
++def validate_story_event_effect(
 +    simulation_state: Dict[str, Any],
-+    condition: Dict[str, Any],
++    effect: Dict[str, Any],
 +) -> Dict[str, Any]:
-+    condition = _safe_dict(condition)
-+    condition_type = str(condition.get("type") or "")
-+    arc_id = str(condition.get("arc_id") or "")
-+
-+    if condition_type == "arc_exists":
-+        arc = get_story_arc(simulation_state, arc_id)
++    effect = _safe_dict(effect)
++    effect_type = str(effect.get("type") or "")
++    if effect_type not in ALLOWED_STORY_EVENT_EFFECT_TYPES:
 +        return {
-+            "ok": bool(arc),
-+            "type": condition_type,
-+            "arc_id": arc_id,
-+            "reason": "arc_exists" if arc else "arc_missing",
++            "ok": False,
++            "reason": "unknown_effect_type",
++            "effect_type": effect_type,
++            "allowed_effect_types": sorted(ALLOWED_STORY_EVENT_EFFECT_TYPES),
 +        }
 +
-+    if condition_type == "arc_status":
-+        expected = str(condition.get("status") or "")
-+        arc = get_story_arc(simulation_state, arc_id)
-+        actual = str((arc or {}).get("status") or "")
-+        return {
-+            "ok": actual == expected,
-+            "type": condition_type,
-+            "arc_id": arc_id,
-+            "expected": expected,
-+            "actual": actual,
-+            "reason": "status_matches" if actual == expected else "status_mismatch",
-+        }
++    if effect_type in {"arc_pressure_delta", "arc_stage_set", "arc_flag_set"}:
++        arc_id = str(effect.get("arc_id") or "")
++        if not get_story_arc(simulation_state, arc_id):
++            return {
++                "ok": False,
++                "reason": "arc_missing",
++                "effect_type": effect_type,
++                "arc_id": arc_id,
++            }
++        if effect_type == "arc_pressure_delta":
++            delta = int(effect.get("delta") or 0)
++            if delta < -100 or delta > 100:
++                return {
++                    "ok": False,
++                    "reason": "pressure_delta_out_of_bounds",
++                    "effect_type": effect_type,
++                    "arc_id": arc_id,
++                    "delta": delta,
++                }
 +
-+    if condition_type == "arc_stage":
-+        expected = str(condition.get("stage") or "")
-+        arc = get_story_arc(simulation_state, arc_id)
-+        actual = str((arc or {}).get("stage") or "")
-+        return {
-+            "ok": actual == expected,
-+            "type": condition_type,
-+            "arc_id": arc_id,
-+            "expected": expected,
-+            "actual": actual,
-+            "reason": "stage_matches" if actual == expected else "stage_mismatch",
-+        }
++    if effect_type in {"lore_reveal", "lore_truth_status_set", "lore_known_by_add", "lore_tag_add"}:
++        lore_id = str(effect.get("lore_id") or "")
++        if not get_lore_entry(simulation_state, lore_id):
++            return {
++                "ok": False,
++                "reason": "lore_missing",
++                "effect_type": effect_type,
++                "lore_id": lore_id,
++            }
 +
-+    if condition_type == "arc_pressure_at_least":
-+        minimum = int(condition.get("minimum") or 0)
-+        arc = get_story_arc(simulation_state, arc_id)
-+        actual = int((arc or {}).get("pressure") or 0)
-+        return {
-+            "ok": actual >= minimum,
-+            "type": condition_type,
-+            "arc_id": arc_id,
-+            "minimum": minimum,
-+            "actual": actual,
-+            "reason": "pressure_sufficient" if actual >= minimum else "pressure_too_low",
-+        }
++    if effect_type == "quest_transition":
++        transition = _safe_dict(effect.get("transition"))
++        quest_id = str(transition.get("quest_id") or effect.get("quest_id") or "")
++        # Starting a quest may create it; other actions should reference existing quest.
++        if transition.get("action") != "start" and quest_id and not get_quest(simulation_state, quest_id):
++            return {
++                "ok": False,
++                "reason": "quest_missing",
++                "effect_type": effect_type,
++                "quest_id": quest_id,
++            }
 +
-+    if condition_type == "arc_pressure_below":
-+        maximum = int(condition.get("maximum") or 0)
-+        arc = get_story_arc(simulation_state, arc_id)
-+        actual = int((arc or {}).get("pressure") or 0)
-+        return {
-+            "ok": actual < maximum,
-+            "type": condition_type,
-+            "arc_id": arc_id,
-+            "maximum": maximum,
-+            "actual": actual,
-+            "reason": "pressure_below" if actual < maximum else "pressure_too_high",
-+        }
++    if effect_type == "puzzle_transition":
++        transition = _safe_dict(effect.get("transition"))
++        puzzle_id = str(transition.get("puzzle_id") or effect.get("puzzle_id") or "")
++        if transition.get("action") != "start" and puzzle_id and not get_puzzle(simulation_state, puzzle_id):
++            return {
++                "ok": False,
++                "reason": "puzzle_missing",
++                "effect_type": effect_type,
++                "puzzle_id": puzzle_id,
++            }
 +
-+    if condition_type == "arc_flag":
-+        flag = str(condition.get("flag") or "")
-+        expected = condition.get("expected", True)
-+        arc = get_story_arc(simulation_state, arc_id)
-+        flags = _safe_dict((arc or {}).get("flags"))
-+        actual = flags.get(flag)
-+        return {
-+            "ok": actual == expected,
-+            "type": condition_type,
-+            "arc_id": arc_id,
-+            "flag": flag,
-+            "expected": expected,
-+            "actual": actual,
-+            "available_flags": sorted(str(key) for key in flags.keys()),
-+            "reason": "flag_matches" if actual == expected else "flag_mismatch",
-+        }
-+
-+    if condition_type in {
-+        "lore_revealed_to_player",
-+        "lore_known_by",
-+        "lore_truth_status",
-+        "lore_has_tag",
-+        "lore_exists",
-+    }:
-+        return dict(
-+            evaluate_lore_condition(simulation_state, condition),
-+            delegated_from="story_arc_condition",
-+        )
-+
-+    if condition_type == "quest_stage":
-+        quest_id = str(condition.get("quest_id") or "")
-+        expected = str(condition.get("stage") or "")
-+        quest = get_quest(simulation_state, quest_id)
-+        actual = str((quest or {}).get("stage") or "")
-+        return {
-+            "ok": actual == expected,
-+            "type": condition_type,
-+            "quest_id": quest_id,
-+            "expected": expected,
-+            "actual": actual,
-+            "reason": "quest_stage_matches" if actual == expected else "quest_stage_mismatch",
-+        }
-+
-+    if condition_type == "quest_status":
-+        quest_id = str(condition.get("quest_id") or "")
-+        expected = str(condition.get("status") or "")
-+        quest = get_quest(simulation_state, quest_id)
-+        actual = str((quest or {}).get("status") or "")
-+        return {
-+            "ok": actual == expected,
-+            "type": condition_type,
-+            "quest_id": quest_id,
-+            "expected": expected,
-+            "actual": actual,
-+            "reason": "quest_status_matches" if actual == expected else "quest_status_mismatch",
-+        }
-+
-+    if condition_type == "puzzle_flag":
-+        puzzle_id = str(condition.get("puzzle_id") or "")
-+        flag = str(condition.get("flag") or "")
-+        expected = condition.get("expected", True)
-+        puzzle = get_puzzle(simulation_state, puzzle_id)
-+        flags = _safe_dict((puzzle or {}).get("flags"))
-+        actual = flags.get(flag)
-+        return {
-+            "ok": actual == expected,
-+            "type": condition_type,
-+            "puzzle_id": puzzle_id,
-+            "flag": flag,
-+            "expected": expected,
-+            "actual": actual,
-+            "available_flags": sorted(str(key) for key in flags.keys()),
-+            "reason": "puzzle_flag_matches" if actual == expected else "puzzle_flag_mismatch",
-+        }
-+
-+    if condition_type == "npc_knows_memory":
-+        npc_id = str(condition.get("npc_id") or "")
-+        event_id = str(condition.get("event_id") or "")
-+        rows = retrieve_causal_memories(
-+            simulation_state,
-+            npc_id,
-+            actor_id=condition.get("actor_id"),
-+            target_id=condition.get("target_id"),
-+            tags=condition.get("tags") or [],
-+            max_items=20,
-+        )
-+        actual_event_ids = [row.get("event_id") for row in rows]
-+        ok = event_id in actual_event_ids
-+        return {
-+            "ok": ok,
-+            "type": condition_type,
-+            "npc_id": npc_id,
-+            "event_id": event_id,
-+            "actual_event_ids": actual_event_ids,
-+            "reason": "memory_known" if ok else "memory_missing",
-+        }
++    if effect_type == "social_delta":
++        npc_id = str(effect.get("npc_id") or "")
++        if not npc_id:
++            return {
++                "ok": False,
++                "reason": "missing_npc_id",
++                "effect_type": effect_type,
++            }
++        for key in ("trust", "fear", "respect", "hostility", "reputation"):
++            if key in effect:
++                value = int(effect.get(key) or 0)
++                if value < -100 or value > 100:
++                    return {
++                        "ok": False,
++                        "reason": "social_delta_out_of_bounds",
++                        "effect_type": effect_type,
++                        "npc_id": npc_id,
++                        "field": key,
++                        "value": value,
++                    }
 +
 +    return {
-+        "ok": False,
-+        "type": condition_type,
-+        "arc_id": arc_id,
-+        "reason": f"unknown_story_arc_condition_type:{condition_type}",
++        "ok": True,
++        "reason": "valid_effect",
++        "effect_type": effect_type,
 +    }
 +
 +
-+def evaluate_all_story_arc_conditions(
++def validate_story_event(
 +    simulation_state: Dict[str, Any],
-+    conditions: list[Dict[str, Any]],
++    event: Dict[str, Any],
 +) -> Dict[str, Any]:
-+    results = [
++    event = _safe_dict(event)
++    errors: List[Dict[str, Any]] = []
++
++    event_id = _safe_str(event.get("event_id"))
++    if not event_id:
++        errors.append({"reason": "missing_event_id"})
++
++    arc_id = _safe_str(event.get("arc_id"))
++    if arc_id and not get_story_arc(simulation_state, arc_id):
++        errors.append({"reason": "arc_missing", "arc_id": arc_id})
++
++    location_id = _safe_str(event.get("location_id"))
++    if event.get("require_location", False) and not location_id:
++        errors.append({"reason": "location_missing"})
++
++    effects = _safe_list(event.get("effects"))
++    if len(effects) > 25:
++        errors.append({"reason": "too_many_effects", "count": len(effects), "max": 25})
++
++    preconditions = _safe_list(event.get("preconditions"))
++    precondition_results = [
 +        evaluate_story_arc_condition(simulation_state, condition)
-+        for condition in conditions
++        for condition in preconditions
++        if isinstance(condition, dict)
 +    ]
-+    ok = all(row.get("ok") for row in results)
++    for result in precondition_results:
++        if not result.get("ok"):
++            errors.append(
++                {
++                    "reason": "precondition_failed",
++                    "condition_result": result,
++                }
++            )
++
++    effect_results = [
++        validate_story_event_effect(simulation_state, effect)
++        for effect in effects
++        if isinstance(effect, dict)
++    ]
++    for result in effect_results:
++        if not result.get("ok"):
++            errors.append(
++                {
++                    "reason": "effect_invalid",
++                    "effect_result": result,
++                }
++            )
++
 +    return {
-+        "ok": ok,
-+        "results": results,
-+        "failed": [row for row in results if not row.get("ok")],
++        "ok": not errors,
++        "event_id": event_id,
++        "arc_id": arc_id,
++        "errors": errors,
++        "precondition_results": precondition_results,
++        "effect_validation_results": effect_results,
 +    }
 *** End Patch
-10. Add src/app/rpg/story_arcs/transitions.py
+5. Add src/app/rpg/story_events/effects.py
 *** Begin Patch
-*** Add File: src/app/rpg/story_arcs/transitions.py
+*** Add File: src/app/rpg/story_events/effects.py
 +from __future__ import annotations
 +
 +from typing import Any, Dict
 +
 +from app.rpg.lore.transitions import apply_lore_transition
-+from app.rpg.story_arcs.conditions import evaluate_all_story_arc_conditions
++from app.rpg.memory.observation import record_event_observations
++from app.rpg.puzzles.transitions import apply_puzzle_transition
++from app.rpg.quests.transitions import apply_quest_transition
++from app.rpg.social.reputation import apply_social_deltas
 +from app.rpg.story_arcs.state import (
 +    apply_story_arc_pressure_delta,
-+    link_story_arc,
 +    set_story_arc_flag,
 +    set_story_arc_stage,
-+    start_story_arc,
 +)
 +
 +
@@ -1004,591 +423,594 @@ Patch 2 — Add story arc package
 +    return value if isinstance(value, dict) else {}
 +
 +
-+def apply_story_arc_transition(
++def _ensure_world_event_log(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
++    state = simulation_state.setdefault("world_event_state", {})
++    if not isinstance(state, dict):
++        state = {}
++        simulation_state["world_event_state"] = state
++    state.setdefault("version", 1)
++    state.setdefault("events", [])
++    return state
++
++
++def _emit_world_event(
 +    simulation_state: Dict[str, Any],
-+    transition: Dict[str, Any],
++    effect: Dict[str, Any],
 +    *,
++    source_event: Dict[str, Any],
++    turn_index: int,
++) -> Dict[str, Any]:
++    state = _ensure_world_event_log(simulation_state)
++    row = {
++        "event_id": str(effect.get("world_event_id") or f"world:{source_event.get('event_id')}"),
++        "source_story_event_id": source_event.get("event_id"),
++        "kind": str(effect.get("kind") or source_event.get("kind") or "story_event"),
++        "summary": str(effect.get("summary") or source_event.get("summary") or ""),
++        "location_id": str(effect.get("location_id") or source_event.get("location_id") or ""),
++        "turn_index": int(turn_index or 0),
++        "tags": list(effect.get("tags") or source_event.get("tags") or [])[:20],
++    }
++    if not any(existing.get("event_id") == row["event_id"] for existing in state["events"] if isinstance(existing, dict)):
++        state["events"].append(row)
++    state["events"] = state["events"][-200:]
++    return {"ok": True, "kind": "world_event_emit", "world_event": row}
++
++
++def apply_story_event_effect(
++    simulation_state: Dict[str, Any],
++    effect: Dict[str, Any],
++    *,
++    source_event: Dict[str, Any],
 +    turn_index: int = 0,
 +) -> Dict[str, Any]:
-+    transition = _safe_dict(transition)
-+    action = str(transition.get("action") or "")
-+    arc_id = str(transition.get("arc_id") or "")
++    effect = _safe_dict(effect)
++    effect_type = str(effect.get("type") or "")
 +
-+    conditions = transition.get("conditions") or []
-+    condition_result = evaluate_all_story_arc_conditions(simulation_state, conditions)
-+    if not condition_result.get("ok"):
-+        return {
-+            "ok": False,
-+            "kind": "story_arc_transition",
-+            "action": action,
-+            "arc_id": arc_id,
-+            "reason": "conditions_failed",
-+            "conditions": condition_result,
-+        }
-+
-+    if action == "start":
-+        return dict(
-+            start_story_arc(
-+                simulation_state,
-+                arc_id,
-+                title=str(transition.get("title") or arc_id),
-+                stage=str(transition.get("stage") or "started"),
-+                pressure=int(transition.get("pressure") or 0),
-+                links=transition.get("links") or {},
-+                turn_index=turn_index,
-+            ),
-+            action=action,
-+            conditions=condition_result,
-+        )
-+
-+    if action == "set_stage":
-+        return dict(
-+            set_story_arc_stage(
-+                simulation_state,
-+                arc_id,
-+                str(transition.get("stage") or ""),
-+                status=transition.get("status"),
-+                turn_index=turn_index,
-+            ),
-+            action=action,
-+            conditions=condition_result,
-+        )
-+
-+    if action == "pressure_delta":
++    if effect_type == "arc_pressure_delta":
 +        return dict(
 +            apply_story_arc_pressure_delta(
 +                simulation_state,
-+                arc_id,
-+                int(transition.get("delta") or 0),
++                str(effect.get("arc_id") or source_event.get("arc_id") or ""),
++                int(effect.get("delta") or 0),
 +                turn_index=turn_index,
 +            ),
-+            action=action,
-+            conditions=condition_result,
++            effect_type=effect_type,
 +        )
 +
-+    if action == "set_flag":
++    if effect_type == "arc_stage_set":
++        return dict(
++            set_story_arc_stage(
++                simulation_state,
++                str(effect.get("arc_id") or source_event.get("arc_id") or ""),
++                str(effect.get("stage") or ""),
++                status=effect.get("status"),
++                turn_index=turn_index,
++            ),
++            effect_type=effect_type,
++        )
++
++    if effect_type == "arc_flag_set":
 +        return dict(
 +            set_story_arc_flag(
 +                simulation_state,
-+                arc_id,
-+                str(transition.get("flag") or ""),
-+                transition.get("value", True),
++                str(effect.get("arc_id") or source_event.get("arc_id") or ""),
++                str(effect.get("flag") or ""),
++                effect.get("value", True),
 +            ),
-+            action=action,
-+            conditions=condition_result,
++            effect_type=effect_type,
 +        )
 +
-+    if action.startswith("link_"):
-+        kind = action.replace("link_", "", 1)
-+        return dict(
-+            link_story_arc(
-+                simulation_state,
-+                arc_id,
-+                kind,
-+                str(transition.get("target_id") or ""),
-+            ),
-+            action=action,
-+            conditions=condition_result,
-+        )
-+
-+    if action == "reveal_lore":
++    if effect_type == "lore_reveal":
 +        return dict(
 +            apply_lore_transition(
 +                simulation_state,
 +                {
 +                    "action": "reveal_to_player",
-+                    "lore_id": str(transition.get("lore_id") or ""),
++                    "lore_id": str(effect.get("lore_id") or ""),
 +                },
 +                turn_index=turn_index,
 +            ),
-+            kind="story_arc_lore_reveal",
-+            action=action,
-+            arc_id=arc_id,
-+            conditions=condition_result,
++            effect_type=effect_type,
 +        )
 +
-+    if action == "resolve":
++    if effect_type == "lore_truth_status_set":
 +        return dict(
-+            set_story_arc_stage(
++            apply_lore_transition(
 +                simulation_state,
-+                arc_id,
-+                str(transition.get("stage") or "resolved"),
-+                status="resolved",
++                {
++                    "action": "set_truth_status",
++                    "lore_id": str(effect.get("lore_id") or ""),
++                    "truth_status": str(effect.get("truth_status") or ""),
++                },
 +                turn_index=turn_index,
 +            ),
-+            action=action,
-+            conditions=condition_result,
++            effect_type=effect_type,
 +        )
 +
-+    if action == "fail":
++    if effect_type == "lore_known_by_add":
 +        return dict(
-+            set_story_arc_stage(
++            apply_lore_transition(
 +                simulation_state,
-+                arc_id,
-+                str(transition.get("stage") or "failed"),
-+                status="failed",
++                {
++                    "action": "add_known_by",
++                    "lore_id": str(effect.get("lore_id") or ""),
++                    "entity_id": str(effect.get("entity_id") or ""),
++                },
 +                turn_index=turn_index,
 +            ),
-+            action=action,
-+            conditions=condition_result,
++            effect_type=effect_type,
++        )
++
++    if effect_type == "lore_tag_add":
++        return dict(
++            apply_lore_transition(
++                simulation_state,
++                {
++                    "action": "add_tag",
++                    "lore_id": str(effect.get("lore_id") or ""),
++                    "tag": str(effect.get("tag") or ""),
++                },
++                turn_index=turn_index,
++            ),
++            effect_type=effect_type,
++        )
++
++    if effect_type == "quest_transition":
++        return dict(
++            apply_quest_transition(
++                simulation_state,
++                _safe_dict(effect.get("transition")),
++                turn_index=turn_index,
++            ),
++            effect_type=effect_type,
++        )
++
++    if effect_type == "puzzle_transition":
++        return dict(
++            apply_puzzle_transition(
++                simulation_state,
++                _safe_dict(effect.get("transition")),
++                turn_index=turn_index,
++            ),
++            effect_type=effect_type,
++        )
++
++    if effect_type == "memory_event":
++        event = dict(source_event)
++        event.update(_safe_dict(effect.get("event")))
++        return dict(
++            record_event_observations(
++                simulation_state,
++                event,
++                observer_entity_ids=effect.get("observer_entity_ids"),
++                turn_index=turn_index,
++            ),
++            effect_type=effect_type,
++        )
++
++    if effect_type == "social_delta":
++        deltas = {
++            key: int(effect.get(key) or 0)
++            for key in ("trust", "fear", "respect", "hostility", "reputation")
++            if key in effect
++        }
++        if effect.get("last_stance"):
++            deltas["last_stance"] = effect.get("last_stance")
++        return dict(
++            apply_social_deltas(
++                simulation_state,
++                str(effect.get("npc_id") or ""),
++                deltas,
++                actor_id=str(effect.get("actor_id") or "player"),
++            ),
++            effect_type=effect_type,
++        )
++
++    if effect_type == "world_event_emit":
++        return dict(
++            _emit_world_event(
++                simulation_state,
++                effect,
++                source_event=source_event,
++                turn_index=turn_index,
++            ),
++            effect_type=effect_type,
 +        )
 +
 +    return {
 +        "ok": False,
-+        "kind": "story_arc_transition",
-+        "action": action,
-+        "arc_id": arc_id,
-+        "reason": f"unknown_story_arc_action:{action}",
-+        "conditions": condition_result,
++        "effect_type": effect_type,
++        "reason": f"unknown_effect_type:{effect_type}",
 +    }
 *** End Patch
-Patch 3 — Unit tests
-11. Add lore tests
+6. Add src/app/rpg/story_events/application.py
 *** Begin Patch
-*** Add File: src/tests/rpg/lore/test_lore_state.py
-+from app.rpg.lore.state import (
-+    add_lore_known_by,
-+    get_lore_entry,
-+    is_lore_available_to_player,
-+    is_lore_known_by,
-+    reveal_lore_to_player,
-+    set_lore_truth_status,
-+    upsert_lore_entry,
+*** Add File: src/app/rpg/story_events/application.py
++from __future__ import annotations
++
++from typing import Any, Dict, List
++
++from app.rpg.story_events.effects import apply_story_event_effect
++from app.rpg.story_events.state import (
++    has_story_event_been_applied,
++    mark_story_event_applied,
 +)
++from app.rpg.story_events.validation import validate_story_event
 +
 +
-+def test_lore_entry_upsert_and_reveal():
-+    simulation_state = {}
-+    upsert_lore_entry(
++def _safe_dict(value: Any) -> Dict[str, Any]:
++    return value if isinstance(value, dict) else {}
++
++
++def apply_story_event(
++    simulation_state: Dict[str, Any],
++    event: Dict[str, Any],
++    *,
++    turn_index: int = 0,
++) -> Dict[str, Any]:
++    event = _safe_dict(event)
++    event_id = str(event.get("event_id") or "")
++    if not event_id:
++        return {
++            "ok": False,
++            "reason": "missing_event_id",
++            "event_id": "",
++        }
++
++    if has_story_event_been_applied(simulation_state, event_id):
++        return {
++            "ok": True,
++            "reason": "already_applied",
++            "event_id": event_id,
++            "effect_results": [],
++            "applied_once": True,
++        }
++
++    validation = validate_story_event(simulation_state, event)
++    if not validation.get("ok"):
++        return {
++            "ok": False,
++            "reason": "validation_failed",
++            "event_id": event_id,
++            "validation": validation,
++            "effect_results": [],
++        }
++
++    effect_results: List[Dict[str, Any]] = []
++    for effect in event.get("effects") or []:
++        if not isinstance(effect, dict):
++            continue
++        result = apply_story_event_effect(
++            simulation_state,
++            effect,
++            source_event=event,
++            turn_index=turn_index,
++        )
++        effect_results.append(result)
++        if not result.get("ok"):
++            return {
++                "ok": False,
++                "reason": "effect_apply_failed",
++                "event_id": event_id,
++                "failed_effect": effect,
++                "effect_results": effect_results,
++            }
++
++    applied = mark_story_event_applied(
 +        simulation_state,
-+        {
-+            "lore_id": "lore:red_sashes",
-+            "title": "The Red Sashes",
-+            "kind": "faction",
-+            "truth_status": "true",
-+            "known_by": ["bran"],
-+            "tags": ["bandits"],
-+        },
++        event,
++        effect_results=effect_results,
++        turn_index=turn_index,
 +    )
-+
-+    assert get_lore_entry(simulation_state, "lore:red_sashes")["title"] == "The Red Sashes"
-+    assert is_lore_available_to_player(simulation_state, "lore:red_sashes") is False
-+
-+    reveal_lore_to_player(simulation_state, "lore:red_sashes")
-+    assert is_lore_available_to_player(simulation_state, "lore:red_sashes") is True
-+
-+
-+def test_lore_known_by_and_truth_status():
-+    simulation_state = {}
-+    upsert_lore_entry(simulation_state, {"lore_id": "lore:secret", "title": "Secret", "truth_status": "secret"})
-+    add_lore_known_by(simulation_state, "lore:secret", "bran")
-+    set_lore_truth_status(simulation_state, "lore:secret", "rumor")
-+
-+    entry = get_lore_entry(simulation_state, "lore:secret")
-+    assert is_lore_known_by(simulation_state, "lore:secret", "bran") is True
-+    assert entry["truth_status"] == "rumor"
-+
-+
-+def test_rumor_not_promoted_to_truth_by_reveal():
-+    simulation_state = {}
-+    upsert_lore_entry(simulation_state, {"lore_id": "lore:rumor", "title": "Rumor", "truth_status": "rumor"})
-+    reveal_lore_to_player(simulation_state, "lore:rumor")
-+
-+    assert get_lore_entry(simulation_state, "lore:rumor")["truth_status"] == "rumor"
++    return {
++        "ok": True,
++        "reason": "applied",
++        "event_id": event_id,
++        "arc_id": event.get("arc_id") or "",
++        "kind": event.get("kind") or "event",
++        "summary": event.get("summary") or "",
++        "effect_results": effect_results,
++        "applied": applied,
++        "applied_once": True,
++    }
 *** End Patch
+Patch 2 — Unit tests
+7. Add src/tests/rpg/story_events/test_story_event_validation.py
 *** Begin Patch
-*** Add File: src/tests/rpg/lore/test_lore_conditions.py
-+from app.rpg.lore.conditions import evaluate_lore_condition
-+from app.rpg.lore.state import reveal_lore_to_player, upsert_lore_entry
+*** Add File: src/tests/rpg/story_events/test_story_event_validation.py
++from app.rpg.lore.state import upsert_lore_entry
++from app.rpg.story_arcs.state import start_story_arc
++from app.rpg.story_events.validation import validate_story_event, validate_story_event_effect
 +
 +
-+def test_lore_revealed_condition():
-+    simulation_state = {}
-+    upsert_lore_entry(simulation_state, {"lore_id": "lore:red_sashes", "title": "The Red Sashes"})
-+    reveal_lore_to_player(simulation_state, "lore:red_sashes")
-+
-+    result = evaluate_lore_condition(
-+        simulation_state,
-+        {"type": "lore_revealed_to_player", "lore_id": "lore:red_sashes"},
-+    )
-+
-+    assert result["ok"] is True
-+
-+
-+def test_lore_known_by_condition():
-+    simulation_state = {}
-+    upsert_lore_entry(
-+        simulation_state,
-+        {
-+            "lore_id": "lore:red_sashes",
-+            "title": "The Red Sashes",
-+            "known_by": ["bran"],
-+        },
-+    )
-+
-+    result = evaluate_lore_condition(
-+        simulation_state,
-+        {"type": "lore_known_by", "lore_id": "lore:red_sashes", "entity_id": "bran"},
-+    )
-+
-+    assert result["ok"] is True
-+
-+
-+def test_lore_truth_status_condition():
-+    simulation_state = {}
-+    upsert_lore_entry(simulation_state, {"lore_id": "lore:rumor", "title": "Rumor", "truth_status": "rumor"})
-+
-+    result = evaluate_lore_condition(
-+        simulation_state,
-+        {"type": "lore_truth_status", "lore_id": "lore:rumor", "truth_status": "rumor"},
-+    )
-+
-+    assert result["ok"] is True
-*** End Patch
-*** Begin Patch
-*** Add File: src/tests/rpg/lore/test_lore_transitions.py
-+from app.rpg.lore.state import get_lore_entry, is_lore_available_to_player
-+from app.rpg.lore.transitions import apply_lore_transition
-+
-+
-+def test_lore_transition_upsert_and_reveal():
-+    simulation_state = {}
-+    apply_lore_transition(
-+        simulation_state,
-+        {
-+            "action": "upsert",
-+            "lore_id": "lore:red_sashes",
-+            "title": "The Red Sashes",
-+            "truth_status": "true",
-+        },
-+    )
-+    apply_lore_transition(
-+        simulation_state,
-+        {"action": "reveal_to_player", "lore_id": "lore:red_sashes"},
-+    )
-+
-+    assert get_lore_entry(simulation_state, "lore:red_sashes")["truth_status"] == "true"
-+    assert is_lore_available_to_player(simulation_state, "lore:red_sashes") is True
-+
-+
-+def test_lore_transition_add_known_by():
-+    simulation_state = {}
-+    apply_lore_transition(simulation_state, {"action": "upsert", "lore_id": "lore:secret", "title": "Secret"})
-+    result = apply_lore_transition(
-+        simulation_state,
-+        {"action": "add_known_by", "lore_id": "lore:secret", "entity_id": "bran"},
-+    )
-+
-+    assert result["ok"] is True
-+    assert "bran" in get_lore_entry(simulation_state, "lore:secret")["known_by"]
-*** End Patch
-*** Begin Patch
-*** Add File: src/tests/rpg/lore/test_lore_save_load.py
-+import json
-+
-+from app.rpg.lore.state import normalize_lore_state, reveal_lore_to_player, upsert_lore_entry
-+
-+
-+def test_lore_state_json_roundtrip():
-+    simulation_state = {}
-+    upsert_lore_entry(
-+        simulation_state,
-+        {
-+            "lore_id": "lore:red_sashes",
-+            "title": "The Red Sashes",
-+            "truth_status": "rumor",
-+            "known_by": ["bran"],
-+            "tags": ["bandits"],
-+        },
-+    )
-+    reveal_lore_to_player(simulation_state, "lore:red_sashes")
-+
-+    encoded = json.dumps(simulation_state["lore_state"], sort_keys=True)
-+    decoded = json.loads(encoded)
-+    normalized = normalize_lore_state(decoded)
-+
-+    entry = normalized["entries"]["lore:red_sashes"]
-+    assert entry["revealed_to_player"] is True
-+    assert entry["truth_status"] == "rumor"
-+    assert entry["known_by"] == ["bran"]
-*** End Patch
-12. Add story arc tests
-*** Begin Patch
-*** Add File: src/tests/rpg/story_arcs/test_story_arc_state.py
-+from app.rpg.story_arcs.state import (
-+    apply_story_arc_pressure_delta,
-+    get_story_arc,
-+    link_story_arc,
-+    set_story_arc_flag,
-+    set_story_arc_stage,
-+    start_story_arc,
-+)
-+
-+
-+def test_start_story_arc_sets_active_stage_pressure_and_links():
-+    simulation_state = {}
-+    result = start_story_arc(
-+        simulation_state,
-+        "arc:bandit_pressure",
-+        title="Bandit Pressure",
-+        stage="rumors",
-+        pressure=20,
-+        links={"lore": ["lore:red_sashes"], "entities": ["bran"]},
-+        turn_index=1,
-+    )
-+
-+    arc = get_story_arc(simulation_state, "arc:bandit_pressure")
-+    assert result["ok"] is True
-+    assert arc["status"] == "active"
-+    assert arc["stage"] == "rumors"
-+    assert arc["pressure"] == 20
-+    assert "lore:red_sashes" in arc["linked_lore"]
-+    assert "bran" in arc["linked_entities"]
-+
-+
-+def test_pressure_delta_clamps():
-+    simulation_state = {}
-+    start_story_arc(simulation_state, "arc:bandit_pressure", pressure=90)
-+    result = apply_story_arc_pressure_delta(simulation_state, "arc:bandit_pressure", 30)
-+
-+    assert result["after"] == 100
-+
-+
-+def test_stage_flag_and_link_updates():
++def test_story_event_rejects_unknown_effect_type():
 +    simulation_state = {}
 +    start_story_arc(simulation_state, "arc:bandit_pressure")
-+    set_story_arc_stage(simulation_state, "arc:bandit_pressure", "threat")
-+    set_story_arc_flag(simulation_state, "arc:bandit_pressure", "bran_warned", True)
-+    link_story_arc(simulation_state, "arc:bandit_pressure", "quest", "quest:stop_red_sashes")
 +
-+    arc = get_story_arc(simulation_state, "arc:bandit_pressure")
-+    assert arc["stage"] == "threat"
-+    assert arc["flags"]["bran_warned"] is True
-+    assert "quest:stop_red_sashes" in arc["linked_quests"]
-*** End Patch
-*** Begin Patch
-*** Add File: src/tests/rpg/story_arcs/test_story_arc_conditions.py
-+from app.rpg.lore.state import reveal_lore_to_player, upsert_lore_entry
-+from app.rpg.memory.observation import record_told_memory
-+from app.rpg.puzzles.state import set_puzzle_flag, start_puzzle
-+from app.rpg.quests.state import start_quest
-+from app.rpg.story_arcs.conditions import evaluate_story_arc_condition
-+from app.rpg.story_arcs.state import set_story_arc_flag, start_story_arc
-+
-+
-+def test_arc_pressure_condition():
-+    simulation_state = {}
-+    start_story_arc(simulation_state, "arc:bandit_pressure", pressure=60)
-+
-+    result = evaluate_story_arc_condition(
++    result = validate_story_event_effect(
 +        simulation_state,
-+        {"type": "arc_pressure_at_least", "arc_id": "arc:bandit_pressure", "minimum": 50},
++        {"type": "invent_gold", "amount": 999},
 +    )
 +
-+    assert result["ok"] is True
++    assert result["ok"] is False
++    assert result["reason"] == "unknown_effect_type"
 +
 +
-+def test_arc_flag_condition():
++def test_story_event_rejects_missing_arc():
++    simulation_state = {}
++    result = validate_story_event(
++        simulation_state,
++        {
++            "event_id": "event:bad",
++            "arc_id": "arc:missing",
++            "effects": [],
++        },
++    )
++
++    assert result["ok"] is False
++    assert any(row["reason"] == "arc_missing" for row in result["errors"])
++
++
++def test_story_event_rejects_missing_lore_for_reveal():
 +    simulation_state = {}
 +    start_story_arc(simulation_state, "arc:bandit_pressure")
-+    set_story_arc_flag(simulation_state, "arc:bandit_pressure", "bran_warned", True)
 +
-+    result = evaluate_story_arc_condition(
-+        simulation_state,
-+        {"type": "arc_flag", "arc_id": "arc:bandit_pressure", "flag": "bran_warned", "expected": True},
-+    )
-+
-+    assert result["ok"] is True
-+
-+
-+def test_lore_condition_delegation():
-+    simulation_state = {}
-+    upsert_lore_entry(simulation_state, {"lore_id": "lore:red_sashes", "title": "The Red Sashes"})
-+    reveal_lore_to_player(simulation_state, "lore:red_sashes")
-+
-+    result = evaluate_story_arc_condition(
-+        simulation_state,
-+        {"type": "lore_revealed_to_player", "lore_id": "lore:red_sashes"},
-+    )
-+
-+    assert result["ok"] is True
-+
-+
-+def test_quest_and_puzzle_conditions():
-+    simulation_state = {}
-+    start_quest(simulation_state, "quest:stop_red_sashes", stage="investigate")
-+    start_puzzle(simulation_state, "puzzle:cellar_runes")
-+    set_puzzle_flag(simulation_state, "puzzle:cellar_runes", "rune_unlocked", True)
-+
-+    quest_result = evaluate_story_arc_condition(
-+        simulation_state,
-+        {"type": "quest_stage", "quest_id": "quest:stop_red_sashes", "stage": "investigate"},
-+    )
-+    puzzle_result = evaluate_story_arc_condition(
-+        simulation_state,
-+        {"type": "puzzle_flag", "puzzle_id": "puzzle:cellar_runes", "flag": "rune_unlocked", "expected": True},
-+    )
-+
-+    assert quest_result["ok"] is True
-+    assert puzzle_result["ok"] is True
-+
-+
-+def test_npc_memory_condition():
-+    simulation_state = {}
-+    record_told_memory(
-+        simulation_state,
-+        "bran",
-+        speaker_id="player",
-+        event_id="evt:bandits",
-+        summary="The player told Bran about bandits.",
-+        facts={"actor_id": "bandits"},
-+        tags=["bandit"],
-+        verified=True,
-+    )
-+
-+    result = evaluate_story_arc_condition(
++    result = validate_story_event(
 +        simulation_state,
 +        {
-+            "type": "npc_knows_memory",
-+            "npc_id": "bran",
-+            "event_id": "evt:bandits",
-+            "tags": ["bandit"],
-+        },
-+    )
-+
-+    assert result["ok"] is True
-*** End Patch
-*** Begin Patch
-*** Add File: src/tests/rpg/story_arcs/test_story_arc_transitions.py
-+from app.rpg.lore.state import get_lore_entry, upsert_lore_entry
-+from app.rpg.story_arcs.state import get_story_arc, start_story_arc
-+from app.rpg.story_arcs.transitions import apply_story_arc_transition
-+
-+
-+def test_story_arc_start_transition():
-+    simulation_state = {}
-+    result = apply_story_arc_transition(
-+        simulation_state,
-+        {
-+            "action": "start",
++            "event_id": "event:bad_lore",
 +            "arc_id": "arc:bandit_pressure",
-+            "title": "Bandit Pressure",
-+            "stage": "rumors",
-+            "pressure": 20,
-+            "links": {"lore": ["lore:red_sashes"]},
-+        },
-+        turn_index=1,
-+    )
-+
-+    arc = get_story_arc(simulation_state, "arc:bandit_pressure")
-+    assert result["ok"] is True
-+    assert arc["stage"] == "rumors"
-+    assert arc["pressure"] == 20
-+    assert "lore:red_sashes" in arc["linked_lore"]
-+
-+
-+def test_story_arc_stage_advances_when_pressure_threshold_met():
-+    simulation_state = {}
-+    start_story_arc(simulation_state, "arc:bandit_pressure", stage="rumors", pressure=60)
-+    result = apply_story_arc_transition(
-+        simulation_state,
-+        {
-+            "action": "set_stage",
-+            "arc_id": "arc:bandit_pressure",
-+            "stage": "threat",
-+            "conditions": [
-+                {"type": "arc_pressure_at_least", "arc_id": "arc:bandit_pressure", "minimum": 50}
-+            ],
-+        },
-+    )
-+
-+    assert result["ok"] is True
-+    assert get_story_arc(simulation_state, "arc:bandit_pressure")["stage"] == "threat"
-+
-+
-+def test_story_arc_transition_blocked_by_condition():
-+    simulation_state = {}
-+    start_story_arc(simulation_state, "arc:bandit_pressure", stage="rumors", pressure=20)
-+    result = apply_story_arc_transition(
-+        simulation_state,
-+        {
-+            "action": "set_stage",
-+            "arc_id": "arc:bandit_pressure",
-+            "stage": "threat",
-+            "conditions": [
-+                {"type": "arc_pressure_at_least", "arc_id": "arc:bandit_pressure", "minimum": 50}
++            "effects": [
++                {"type": "lore_reveal", "lore_id": "lore:missing"},
 +            ],
 +        },
 +    )
 +
 +    assert result["ok"] is False
-+    assert result["reason"] == "conditions_failed"
-+    assert get_story_arc(simulation_state, "arc:bandit_pressure")["stage"] == "rumors"
++    assert result["errors"][0]["reason"] == "effect_invalid"
 +
 +
-+def test_story_arc_reveal_lore_transition():
++def test_story_event_validates_preconditions():
 +    simulation_state = {}
++    start_story_arc(simulation_state, "arc:bandit_pressure", stage="rumors", pressure=60)
 +    upsert_lore_entry(simulation_state, {"lore_id": "lore:red_sashes", "title": "The Red Sashes"})
-+    start_story_arc(simulation_state, "arc:bandit_pressure")
 +
-+    result = apply_story_arc_transition(
++    result = validate_story_event(
 +        simulation_state,
 +        {
-+            "action": "reveal_lore",
++            "event_id": "event:bandit_warning",
 +            "arc_id": "arc:bandit_pressure",
-+            "lore_id": "lore:red_sashes",
++            "preconditions": [
++                {
++                    "type": "arc_pressure_at_least",
++                    "arc_id": "arc:bandit_pressure",
++                    "minimum": 50,
++                }
++            ],
++            "effects": [
++                {"type": "lore_reveal", "lore_id": "lore:red_sashes"},
++            ],
++        },
++    )
++
++    assert result["ok"] is True
+*** End Patch
+8. Add src/tests/rpg/story_events/test_story_event_effects.py
+*** Begin Patch
+*** Add File: src/tests/rpg/story_events/test_story_event_effects.py
++from app.rpg.lore.state import get_lore_entry, upsert_lore_entry
++from app.rpg.quests.state import get_quest
++from app.rpg.social.reputation import get_relationship
++from app.rpg.story_arcs.state import get_story_arc, start_story_arc
++from app.rpg.story_events.application import apply_story_event
++
++
++def test_story_event_applies_arc_pressure_delta():
++    simulation_state = {}
++    start_story_arc(simulation_state, "arc:bandit_pressure", pressure=20)
++
++    result = apply_story_event(
++        simulation_state,
++        {
++            "event_id": "event:pressure",
++            "arc_id": "arc:bandit_pressure",
++            "effects": [
++                {"type": "arc_pressure_delta", "arc_id": "arc:bandit_pressure", "delta": 25},
++            ],
++        },
++        turn_index=2,
++    )
++
++    assert result["ok"] is True
++    assert get_story_arc(simulation_state, "arc:bandit_pressure")["pressure"] == 45
++
++
++def test_story_event_reveals_lore():
++    simulation_state = {}
++    start_story_arc(simulation_state, "arc:bandit_pressure")
++    upsert_lore_entry(simulation_state, {"lore_id": "lore:red_sashes", "title": "The Red Sashes"})
++
++    result = apply_story_event(
++        simulation_state,
++        {
++            "event_id": "event:reveal_lore",
++            "arc_id": "arc:bandit_pressure",
++            "effects": [
++                {"type": "lore_reveal", "lore_id": "lore:red_sashes"},
++            ],
 +        },
 +    )
 +
 +    assert result["ok"] is True
 +    assert get_lore_entry(simulation_state, "lore:red_sashes")["revealed_to_player"] is True
-*** End Patch
-*** Begin Patch
-*** Add File: src/tests/rpg/story_arcs/test_story_arc_save_load.py
-+import json
-+
-+from app.rpg.story_arcs.state import (
-+    apply_story_arc_pressure_delta,
-+    normalize_story_arc_state,
-+    set_story_arc_flag,
-+    start_story_arc,
-+)
 +
 +
-+def test_story_arc_state_json_roundtrip():
++def test_story_event_applies_social_delta():
 +    simulation_state = {}
-+    start_story_arc(
++    start_story_arc(simulation_state, "arc:bandit_pressure")
++
++    result = apply_story_event(
 +        simulation_state,
-+        "arc:bandit_pressure",
-+        stage="rumors",
-+        pressure=20,
-+        links={"lore": ["lore:red_sashes"], "entities": ["bran"]},
++        {
++            "event_id": "event:social",
++            "arc_id": "arc:bandit_pressure",
++            "effects": [
++                {"type": "social_delta", "npc_id": "bran", "fear": 10, "trust": -2},
++            ],
++        },
 +    )
-+    apply_story_arc_pressure_delta(simulation_state, "arc:bandit_pressure", 15)
-+    set_story_arc_flag(simulation_state, "arc:bandit_pressure", "bran_warned", True)
 +
-+    encoded = json.dumps(simulation_state["story_arc_state"], sort_keys=True)
-+    decoded = json.loads(encoded)
-+    normalized = normalize_story_arc_state(decoded)
++    relationship = get_relationship(simulation_state, "bran")
++    assert result["ok"] is True
++    assert relationship["fear"] == 10
++    assert relationship["trust"] == -2
 +
-+    arc = normalized["arcs"]["arc:bandit_pressure"]
-+    assert arc["pressure"] == 35
-+    assert arc["flags"]["bran_warned"] is True
-+    assert "lore:red_sashes" in arc["linked_lore"]
-+    assert "bran" in arc["linked_entities"]
++
++def test_story_event_can_trigger_quest_transition():
++    simulation_state = {}
++    start_story_arc(simulation_state, "arc:bandit_pressure")
++
++    result = apply_story_event(
++        simulation_state,
++        {
++            "event_id": "event:start_quest",
++            "arc_id": "arc:bandit_pressure",
++            "effects": [
++                {
++                    "type": "quest_transition",
++                    "transition": {
++                        "action": "start",
++                        "quest_id": "quest:stop_red_sashes",
++                        "stage": "investigate",
++                    },
++                },
++            ],
++        },
++    )
++
++    quest = get_quest(simulation_state, "quest:stop_red_sashes")
++    assert result["ok"] is True
++    assert quest["stage"] == "investigate"
++
++
++def test_story_event_emits_world_event():
++    simulation_state = {}
++    start_story_arc(simulation_state, "arc:bandit_pressure")
++
++    result = apply_story_event(
++        simulation_state,
++        {
++            "event_id": "event:world_row",
++            "arc_id": "arc:bandit_pressure",
++            "kind": "warning",
++            "summary": "Bandits warned Bran.",
++            "location_id": "tavern_common_room",
++            "effects": [
++                {"type": "world_event_emit"},
++            ],
++        },
++        turn_index=3,
++    )
++
++    rows = simulation_state["world_event_state"]["events"]
++    assert result["ok"] is True
++    assert len(rows) == 1
++    assert rows[0]["source_story_event_id"] == "event:world_row"
 *** End Patch
-Patch 4 — Manual setup and checks
-13. Add src/tests/rpg/manual/story_m1_m3_checks.py
+9. Add src/tests/rpg/story_events/test_story_event_memory_and_idempotency.py
 *** Begin Patch
-*** Add File: src/tests/rpg/manual/story_m1_m3_checks.py
+*** Add File: src/tests/rpg/story_events/test_story_event_memory_and_idempotency.py
++from app.rpg.memory.causal_retrieval import retrieve_causal_memories
++from app.rpg.story_arcs.state import get_story_arc, start_story_arc
++from app.rpg.story_events.application import apply_story_event
++from tests.rpg.spatial.fixtures import tavern_spatial_fixture
++
++
++def test_story_event_records_causal_memory():
++    simulation_state = {"spatial_graph": tavern_spatial_fixture()}
++    start_story_arc(simulation_state, "arc:bandit_pressure")
++
++    result = apply_story_event(
++        simulation_state,
++        {
++            "event_id": "event:bandits_warn_bran",
++            "arc_id": "arc:bandit_pressure",
++            "kind": "warning",
++            "location_id": "tavern_common_room",
++            "participants": ["player", "bran"],
++            "summary": "The player warned Bran about bandits.",
++            "tags": ["bandit", "warning"],
++            "actor_id": "player",
++            "target_id": "bran",
++            "effects": [
++                {"type": "memory_event"},
++            ],
++        },
++        turn_index=4,
++    )
++
++    rows = retrieve_causal_memories(simulation_state, "bran", tags=["warning"])
++    assert result["ok"] is True
++    assert rows
++    assert rows[0]["event_id"] == "event:bandits_warn_bran"
++
++
++def test_story_event_idempotency_prevents_double_apply():
++    simulation_state = {}
++    start_story_arc(simulation_state, "arc:bandit_pressure", pressure=10)
++    event = {
++        "event_id": "event:pressure_once",
++        "arc_id": "arc:bandit_pressure",
++        "effects": [
++            {"type": "arc_pressure_delta", "arc_id": "arc:bandit_pressure", "delta": 20},
++        ],
++    }
++
++    first = apply_story_event(simulation_state, event, turn_index=1)
++    second = apply_story_event(simulation_state, event, turn_index=2)
++
++    arc = get_story_arc(simulation_state, "arc:bandit_pressure")
++    assert first["ok"] is True
++    assert second["ok"] is True
++    assert second["reason"] == "already_applied"
++    assert arc["pressure"] == 30
++
++
++def test_applied_story_event_state_is_bounded_and_save_safe():
++    import json
++
++    simulation_state = {}
++    start_story_arc(simulation_state, "arc:bandit_pressure")
++    apply_story_event(
++        simulation_state,
++        {
++            "event_id": "event:save_safe",
++            "arc_id": "arc:bandit_pressure",
++            "summary": "Save safe event.",
++            "effects": [],
++        },
++    )
++
++    encoded = json.dumps(simulation_state["story_event_state"], sort_keys=True)
++    decoded = json.loads(encoded)
++
++    assert "event:save_safe" in decoded["applied_events"]
+*** End Patch
+Patch 3 — Manual story event setup/checks
+10. Add src/tests/rpg/manual/story_event_m4_m6_checks.py
+*** Begin Patch
+*** Add File: src/tests/rpg/manual/story_event_m4_m6_checks.py
 +from __future__ import annotations
 +
 +from typing import Any, Dict, List
 +
-+from app.rpg.lore.conditions import evaluate_lore_condition
 +from app.rpg.lore.state import get_lore_entry
-+from app.rpg.story_arcs.conditions import evaluate_story_arc_condition
++from app.rpg.memory.causal_retrieval import retrieve_causal_memories
++from app.rpg.quests.state import get_quest
++from app.rpg.social.reputation import get_relationship
 +from app.rpg.story_arcs.state import get_story_arc
++from app.rpg.story_events.state import get_applied_story_event
++from app.rpg.story_events.validation import validate_story_event
 +
 +
 +def _safe_dict(value: Any) -> Dict[str, Any]:
@@ -1620,12 +1042,12 @@ Patch 4 — Manual setup and checks
 +        candidate = _safe_dict(candidate)
 +        if candidate and not first_non_empty:
 +            first_non_empty = candidate
-+        if isinstance(candidate.get("lore_state"), dict) or isinstance(candidate.get("story_arc_state"), dict):
++        if isinstance(candidate.get("story_event_state"), dict):
 +            return candidate
 +    return first_non_empty
 +
 +
-+def run_story_m1_m3_check(
++def run_story_event_m4_m6_check(
 +    *,
 +    check: Dict[str, Any],
 +    result: Dict[str, Any],
@@ -1634,7 +1056,46 @@ Patch 4 — Manual setup and checks
 +    simulation_state = _extract_simulation_state(result=result, session=session)
 +    check_type = str(check.get("type") or "")
 +
-+    if check_type == "lore_entry":
++    if check_type == "story_event_applied":
++        event_id = str(check.get("event_id") or "")
++        applied = get_applied_story_event(simulation_state, event_id)
++        return {
++            "check_type": check_type,
++            "ok": bool(applied),
++            "event_id": event_id,
++            "applied": applied,
++        }
++
++    if check_type == "story_event_validation":
++        event = _safe_dict(check.get("event"))
++        expected_ok = bool(check.get("expected_ok"))
++        validation = validate_story_event(simulation_state, event)
++        return {
++            "check_type": check_type,
++            "ok": bool(validation.get("ok")) is expected_ok,
++            "expected_ok": expected_ok,
++            "actual_ok": bool(validation.get("ok")),
++            "validation": validation,
++        }
++
++    if check_type == "story_event_arc":
++        arc_id = str(check.get("arc_id") or "")
++        arc = get_story_arc(simulation_state, arc_id)
++        expected = _safe_dict(check.get("expected"))
++        failures = {}
++        for key, expected_value in expected.items():
++            actual = _safe_dict(arc).get(key)
++            if actual != expected_value:
++                failures[key] = {"expected": expected_value, "actual": actual}
++        return {
++            "check_type": check_type,
++            "ok": bool(arc) and not failures,
++            "arc_id": arc_id,
++            "arc": arc,
++            "failures": failures,
++        }
++
++    if check_type == "story_event_lore":
 +        lore_id = str(check.get("lore_id") or "")
 +        entry = get_lore_entry(simulation_state, lore_id)
 +        expected = _safe_dict(check.get("expected"))
@@ -1651,159 +1112,129 @@ Patch 4 — Manual setup and checks
 +            "failures": failures,
 +        }
 +
-+    if check_type == "lore_condition":
-+        condition = _safe_dict(check.get("condition"))
-+        expected_ok = bool(check.get("expected_ok"))
-+        condition_result = evaluate_lore_condition(simulation_state, condition)
++    if check_type == "story_event_memory":
++        subject_id = str(check.get("subject_id") or "")
++        expected_event_id = str(check.get("expected_event_id") or "")
++        rows = retrieve_causal_memories(
++            simulation_state,
++            subject_id,
++            actor_id=check.get("actor_id"),
++            target_id=check.get("target_id"),
++            tags=check.get("tags") or [],
++            max_items=10,
++        )
++        event_ids = [row.get("event_id") for row in rows]
 +        return {
 +            "check_type": check_type,
-+            "ok": bool(condition_result.get("ok")) is expected_ok,
-+            "expected_ok": expected_ok,
-+            "actual_ok": bool(condition_result.get("ok")),
-+            "condition_result": condition_result,
++            "ok": expected_event_id in event_ids,
++            "subject_id": subject_id,
++            "expected_event_id": expected_event_id,
++            "actual_event_ids": event_ids,
++            "retrieved": rows,
 +        }
 +
-+    if check_type == "story_arc":
-+        arc_id = str(check.get("arc_id") or "")
-+        arc = get_story_arc(simulation_state, arc_id)
++    if check_type == "story_event_social":
++        npc_id = str(check.get("npc_id") or "")
++        relationship = get_relationship(simulation_state, npc_id)
 +        expected = _safe_dict(check.get("expected"))
 +        failures = {}
 +        for key, expected_value in expected.items():
-+            actual = _safe_dict(arc).get(key)
++            actual = relationship.get(key)
 +            if actual != expected_value:
 +                failures[key] = {"expected": expected_value, "actual": actual}
 +        return {
 +            "check_type": check_type,
-+            "ok": bool(arc) and not failures,
-+            "arc_id": arc_id,
-+            "arc": _bounded_arc(arc),
++            "ok": not failures,
++            "npc_id": npc_id,
++            "relationship": relationship,
 +            "failures": failures,
 +        }
 +
-+    if check_type == "story_arc_condition":
-+        condition = _safe_dict(check.get("condition"))
-+        expected_ok = bool(check.get("expected_ok"))
-+        condition_result = evaluate_story_arc_condition(simulation_state, condition)
++    if check_type == "story_event_quest":
++        quest_id = str(check.get("quest_id") or "")
++        quest = get_quest(simulation_state, quest_id)
++        expected = _safe_dict(check.get("expected"))
++        failures = {}
++        for key, expected_value in expected.items():
++            actual = _safe_dict(quest).get(key)
++            if actual != expected_value:
++                failures[key] = {"expected": expected_value, "actual": actual}
 +        return {
 +            "check_type": check_type,
-+            "ok": bool(condition_result.get("ok")) is expected_ok,
-+            "expected_ok": expected_ok,
-+            "actual_ok": bool(condition_result.get("ok")),
-+            "condition_result": condition_result,
++            "ok": bool(quest) and not failures,
++            "quest_id": quest_id,
++            "quest": quest,
++            "failures": failures,
 +        }
 +
-+    if check_type == "story_arc_debug_bounded":
-+        arc_id = str(check.get("arc_id") or "")
-+        arc = _bounded_arc(get_story_arc(simulation_state, arc_id))
-+        max_link_count = int(check.get("max_link_count") or 20)
-+        link_count = (
-+            len(arc.get("linked_lore") or [])
-+            + len(arc.get("linked_quests") or [])
-+            + len(arc.get("linked_puzzles") or [])
-+            + len(arc.get("linked_locations") or [])
-+            + len(arc.get("linked_entities") or [])
-+        )
++    if check_type == "story_event_world_event":
++        source_story_event_id = str(check.get("source_story_event_id") or "")
++        world_state = _safe_dict(simulation_state.get("world_event_state"))
++        rows = [
++            row
++            for row in world_state.get("events") or []
++            if isinstance(row, dict)
++            and row.get("source_story_event_id") == source_story_event_id
++        ]
 +        return {
 +            "check_type": check_type,
-+            "ok": link_count <= max_link_count,
-+            "arc_id": arc_id,
-+            "link_count": link_count,
-+            "max_link_count": max_link_count,
-+            "arc": arc,
++            "ok": bool(rows),
++            "source_story_event_id": source_story_event_id,
++            "rows": rows[:10],
 +        }
 +
 +    return {
 +        "check_type": check_type,
 +        "ok": False,
-+        "error": f"unknown_story_m1_m3_check_type:{check_type}",
++        "error": f"unknown_story_event_m4_m6_check_type:{check_type}",
 +    }
 +
 +
-+def _bounded_arc(arc: Dict[str, Any] | None) -> Dict[str, Any]:
-+    arc = _safe_dict(arc)
-+    if not arc:
-+        return {}
-+    return {
-+        "arc_id": arc.get("arc_id"),
-+        "title": arc.get("title"),
-+        "status": arc.get("status"),
-+        "stage": arc.get("stage"),
-+        "pressure": arc.get("pressure"),
-+        "escalation_level": arc.get("escalation_level"),
-+        "linked_lore": list(arc.get("linked_lore") or [])[:20],
-+        "linked_quests": list(arc.get("linked_quests") or [])[:20],
-+        "linked_puzzles": list(arc.get("linked_puzzles") or [])[:20],
-+        "linked_locations": list(arc.get("linked_locations") or [])[:20],
-+        "linked_entities": list(arc.get("linked_entities") or [])[:20],
-+        "flags": dict(arc.get("flags") or {}),
-+        "started_turn": arc.get("started_turn"),
-+        "resolved_turn": arc.get("resolved_turn"),
-+    }
-+
-+
-+def run_story_m1_m3_checks(
++def run_story_event_m4_m6_checks(
 +    *,
 +    checks: List[Dict[str, Any]],
 +    result: Dict[str, Any],
 +    session: Dict[str, Any] | None = None,
 +) -> List[Dict[str, Any]]:
 +    return [
-+        run_story_m1_m3_check(check=check, result=result, session=session)
++        run_story_event_m4_m6_check(check=check, result=result, session=session)
 +        for check in checks
 +    ]
 *** End Patch
-14. Patch src/tests/rpg/manual/scenario_setup.py
+11. Patch src/tests/rpg/manual/scenario_setup.py
 
-Add imports:
+Add import:
 
 *** Begin Patch
 *** Update File: src/tests/rpg/manual/scenario_setup.py
 @@
- from app.rpg.puzzles.transitions import apply_puzzle_transition
-+from app.rpg.lore.transitions import apply_lore_transition
-+from app.rpg.story_arcs.transitions import apply_story_arc_transition
+ from app.rpg.story_arcs.transitions import apply_story_arc_transition
++from app.rpg.story_events.application import apply_story_event
  from tests.rpg.manual.memory_fixtures import build_manual_memory_event
 *** End Patch
 
-Add setup blocks after memory/social setup and before quest/puzzle/quest transitions is fine. Recommended order:
-
-1. spatial
-2. memory/told
-3. social
-4. lore transitions
-5. story arc transitions
-6. manual inventory
-7. puzzle transitions
-8. quest transitions
-
-Apply this block before setup_manual_inventory_items:
+Add this block after setup_story_arc_transitions, and before setup_manual_inventory_items is fine. Story events can depend on lore/arcs and may emit quest/puzzle transitions, so this should run after lore/story arc setup and before final explicit puzzle/quest setup if scenarios need both.
 
 *** Begin Patch
 *** Update File: src/tests/rpg/manual/scenario_setup.py
 @@
-         # Make the normalized social state with manual_results explicit on the
-         # authoritative simulation_state before session save/sync.
-         simulation_state["social_state"] = social_state
+     for transition in scenario.get("setup_story_arc_transitions") or []:
+         if isinstance(transition, dict):
+             apply_story_arc_transition(
+                 simulation_state,
+                 transition,
+@@
+                     or 1
+                 ),
+             )
 +
-+    for transition in scenario.get("setup_lore_transitions") or []:
-+        if isinstance(transition, dict):
-+            apply_lore_transition(
++    for event in scenario.get("setup_story_events") or []:
++        if isinstance(event, dict):
++            apply_story_event(
 +                simulation_state,
-+                transition,
++                event,
 +                turn_index=int(
-+                    transition.get("turn_index")
-+                    or scenario.get("setup_turn_index")
-+                    or 1
-+                ),
-+            )
-+
-+    for transition in scenario.get("setup_story_arc_transitions") or []:
-+        if isinstance(transition, dict):
-+            apply_story_arc_transition(
-+                simulation_state,
-+                transition,
-+                turn_index=int(
-+                    transition.get("turn_index")
++                    event.get("turn_index")
 +                    or scenario.get("setup_turn_index")
 +                    or 1
 +                ),
@@ -1814,23 +1245,23 @@ Apply this block before setup_manual_inventory_items:
          if item_id not in simulation_state["manual_inventory_items"]:
              simulation_state["manual_inventory_items"].append(item_id)
 *** End Patch
-15. Patch src/tests/rpg/manual/scenario_execution.py
+12. Patch src/tests/rpg/manual/scenario_execution.py
 
 Add import:
 
 *** Begin Patch
 *** Update File: src/tests/rpg/manual/scenario_execution.py
 @@
- from tests.rpg.manual.quest_puzzle_checks import run_quest_puzzle_checks
-+from tests.rpg.manual.story_m1_m3_checks import run_story_m1_m3_checks
+ from tests.rpg.manual.story_m1_m3_checks import run_story_m1_m3_checks
++from tests.rpg.manual.story_event_m4_m6_checks import run_story_event_m4_m6_checks
 *** End Patch
 
-Add check block after quest/puzzle checks:
+Add check block after story M1-M3 checks:
 
 *** Begin Patch
 *** Update File: src/tests/rpg/manual/scenario_execution.py
 @@
-         if quest_puzzle_checks:
+         if story_m1_m3_checks:
              current_session = {}
              try:
                  current_session = _ensure_manual_session(session_id)
@@ -1839,32 +1270,29 @@ Add check block after quest/puzzle checks:
                          + str(check_result.get("error") or "")
                      )
 +
-+        story_m1_m3_checks = [
++        story_event_m4_m6_checks = [
 +            check
 +            for check in checks
 +            if isinstance(check, dict)
-+            and (
-+                str(check.get("type") or "").startswith("lore_")
-+                or str(check.get("type") or "").startswith("story_arc")
-+            )
++            and str(check.get("type") or "").startswith("story_event_")
 +        ]
-+        if story_m1_m3_checks:
++        if story_event_m4_m6_checks:
 +            current_session = {}
 +            try:
 +                current_session = _ensure_manual_session(session_id)
 +            except Exception:
 +                current_session = session
 +
-+            story_m1_m3_check_results = run_story_m1_m3_checks(
-+                checks=story_m1_m3_checks,
++            story_event_m4_m6_check_results = run_story_event_m4_m6_checks(
++                checks=story_event_m4_m6_checks,
 +                result=turn_record.get("result") or turn_record,
 +                session=current_session,
 +            )
-+            turn_record["story_m1_m3_check_results"] = story_m1_m3_check_results
-+            for check_result in story_m1_m3_check_results:
++            turn_record["story_event_m4_m6_check_results"] = story_event_m4_m6_check_results
++            for check_result in story_event_m4_m6_check_results:
 +                if not check_result.get("ok"):
 +                    turn_record.setdefault("scenario_warnings", []).append(
-+                        "story_m1_m3_check_failed:"
++                        "story_event_m4_m6_check_failed:"
 +                        + str(scenario_name)
 +                        + ":turn_"
 +                        + str(turn_index)
@@ -1876,493 +1304,433 @@ Add check block after quest/puzzle checks:
  
          turns.append(turn_record)
 *** End Patch
-16. Patch src/tests/rpg/manual/summary_sanitizer.py
+13. Patch src/tests/rpg/manual/summary_sanitizer.py
 
-Add story check results beside the other check result sanitizers:
+Add sanitizer block:
 
 *** Begin Patch
 *** Update File: src/tests/rpg/manual/summary_sanitizer.py
 @@
-     quest_puzzle_check_results = turn.get("quest_puzzle_check_results")
-     if isinstance(quest_puzzle_check_results, list):
-         sanitized["quest_puzzle_check_results"] = [
+     story_m1_m3_check_results = turn.get("story_m1_m3_check_results")
+     if isinstance(story_m1_m3_check_results, list):
+         sanitized["story_m1_m3_check_results"] = [
 @@
              if isinstance(item, dict)
          ]
 +
-+    story_m1_m3_check_results = turn.get("story_m1_m3_check_results")
-+    if isinstance(story_m1_m3_check_results, list):
-+        sanitized["story_m1_m3_check_results"] = [
++    story_event_m4_m6_check_results = turn.get("story_event_m4_m6_check_results")
++    if isinstance(story_event_m4_m6_check_results, list):
++        sanitized["story_event_m4_m6_check_results"] = [
 +            {
 +                "check_type": item.get("check_type"),
 +                "ok": item.get("ok"),
-+                "lore_id": item.get("lore_id"),
++                "event_id": item.get("event_id"),
 +                "arc_id": item.get("arc_id"),
-+                "entry": item.get("entry"),
++                "lore_id": item.get("lore_id"),
++                "quest_id": item.get("quest_id"),
++                "npc_id": item.get("npc_id"),
++                "subject_id": item.get("subject_id"),
++                "source_story_event_id": item.get("source_story_event_id"),
++                "expected_event_id": item.get("expected_event_id"),
++                "actual_event_ids": item.get("actual_event_ids"),
++                "applied": item.get("applied"),
++                "validation": item.get("validation"),
 +                "arc": item.get("arc"),
-+                "expected_ok": item.get("expected_ok"),
-+                "actual_ok": item.get("actual_ok"),
-+                "condition_result": item.get("condition_result"),
++                "entry": item.get("entry"),
++                "quest": item.get("quest"),
++                "relationship": item.get("relationship"),
++                "rows": item.get("rows"),
++                "retrieved": item.get("retrieved"),
 +                "failures": item.get("failures"),
-+                "link_count": item.get("link_count"),
-+                "max_link_count": item.get("max_link_count"),
 +                "error": item.get("error"),
 +            }
-+            for item in story_m1_m3_check_results[:50]
++            for item in story_event_m4_m6_check_results[:50]
 +            if isinstance(item, dict)
 +        ]
  
      return sanitized
 *** End Patch
-Patch 5 — Manual scenarios
-17. Add src/tests/rpg/manual/scenarios/story_m1_m3.py
+Patch 4 — Manual scenarios
+14. Add src/tests/rpg/manual/scenarios/story_event_m4_m6.py
 *** Begin Patch
-*** Add File: src/tests/rpg/manual/scenarios/story_m1_m3.py
+*** Add File: src/tests/rpg/manual/scenarios/story_event_m4_m6.py
 +from __future__ import annotations
 +
 +from typing import Any, Dict
 +
 +
-+STORY_M1_M3_SCENARIOS: Dict[str, Dict[str, Any]] = {
-+    "lore_entry_can_be_revealed_to_player": {
-+        "setup_lore_transitions": [
-+            {
-+                "action": "upsert",
-+                "lore_id": "lore:red_sashes",
-+                "title": "The Red Sashes",
-+                "kind": "faction",
-+                "truth_status": "true",
-+                "known_by": ["bran"],
-+                "tags": ["bandits", "local-threat"],
-+                "summary": "A road gang known for red cloth tied around their arms.",
-+            },
-+            {"action": "reveal_to_player", "lore_id": "lore:red_sashes"},
-+        ],
-+        "turns": ["I ask Bran about the Red Sashes."],
-+        "checks": [
-+            {
-+                "type": "lore_entry",
-+                "lore_id": "lore:red_sashes",
-+                "expected": {
-+                    "revealed_to_player": True,
-+                    "truth_status": "true",
-+                },
-+            }
-+        ],
-+    },
-+    "lore_secret_not_available_until_revealed": {
-+        "setup_lore_transitions": [
-+            {
-+                "action": "upsert",
-+                "lore_id": "lore:bran_hidden_debt",
-+                "title": "Bran's Hidden Debt",
-+                "kind": "secret",
-+                "truth_status": "secret",
-+                "known_by": ["bran"],
-+                "tags": ["secret", "debt"],
-+            }
-+        ],
-+        "turns": ["I ask about Bran's hidden debt."],
-+        "checks": [
-+            {
-+                "type": "lore_condition",
-+                "condition": {
-+                    "type": "lore_revealed_to_player",
-+                    "lore_id": "lore:bran_hidden_debt",
-+                },
-+                "expected_ok": False,
-+            }
-+        ],
-+    },
-+    "lore_npc_knows_role_based_lore": {
-+        "setup_lore_transitions": [
-+            {
-+                "action": "upsert",
-+                "lore_id": "lore:tavern_cellar",
-+                "title": "The Tavern Cellar",
-+                "kind": "place",
-+                "truth_status": "true",
-+                "known_by": ["bran"],
-+                "tags": ["tavern", "cellar"],
-+            }
-+        ],
-+        "turns": ["I ask Bran about the cellar."],
-+        "checks": [
-+            {
-+                "type": "lore_condition",
-+                "condition": {
-+                    "type": "lore_known_by",
-+                    "lore_id": "lore:tavern_cellar",
-+                    "entity_id": "bran",
-+                },
-+                "expected_ok": True,
-+            }
-+        ],
-+    },
-+    "lore_rumor_not_promoted_to_truth": {
-+        "setup_lore_transitions": [
-+            {
-+                "action": "upsert",
-+                "lore_id": "lore:dragon_owns_tavern",
-+                "title": "Dragon Owns the Tavern",
-+                "kind": "rumor",
-+                "truth_status": "rumor",
-+                "tags": ["rumor", "dragon"],
-+            },
-+            {"action": "reveal_to_player", "lore_id": "lore:dragon_owns_tavern"},
-+        ],
-+        "turns": ["I ask whether a dragon owns the tavern."],
-+        "checks": [
-+            {
-+                "type": "lore_entry",
-+                "lore_id": "lore:dragon_owns_tavern",
-+                "expected": {
-+                    "truth_status": "rumor",
-+                    "revealed_to_player": True,
-+                },
-+            }
-+        ],
-+    },
-+    "story_arc_start_sets_active_stage": {
++STORY_EVENT_M4_M6_SCENARIOS: Dict[str, Dict[str, Any]] = {
++    "story_event_applies_arc_pressure_delta": {
 +        "setup_story_arc_transitions": [
++            {"action": "start", "arc_id": "arc:bandit_pressure", "stage": "rumors", "pressure": 20}
++        ],
++        "setup_story_events": [
 +            {
-+                "action": "start",
++                "event_id": "event:bandit_pressure_rises",
 +                "arc_id": "arc:bandit_pressure",
-+                "title": "Bandit Pressure",
-+                "stage": "rumors",
-+                "pressure": 20,
-+                "links": {
-+                    "entities": ["bran", "mira"],
-+                    "locations": ["tavern_common_room", "street"],
-+                },
++                "kind": "pressure",
++                "summary": "Bandit activity worsened on the road.",
++                "effects": [
++                    {"type": "arc_pressure_delta", "arc_id": "arc:bandit_pressure", "delta": 25}
++                ],
 +            }
 +        ],
-+        "turns": ["I listen for rumors about bandits."],
++        "turns": ["I ignore the worsening bandit pressure."],
 +        "checks": [
++            {"type": "story_event_applied", "event_id": "event:bandit_pressure_rises"},
 +            {
-+                "type": "story_arc",
-+                "arc_id": "arc:bandit_pressure",
-+                "expected": {
-+                    "status": "active",
-+                    "stage": "rumors",
-+                    "pressure": 20,
-+                },
-+            }
-+        ],
-+    },
-+    "story_arc_pressure_increases_from_event": {
-+        "setup_story_arc_transitions": [
-+            {
-+                "action": "start",
-+                "arc_id": "arc:bandit_pressure",
-+                "title": "Bandit Pressure",
-+                "stage": "rumors",
-+                "pressure": 20,
-+            },
-+            {
-+                "action": "pressure_delta",
-+                "arc_id": "arc:bandit_pressure",
-+                "delta": 25,
-+            },
-+        ],
-+        "turns": ["I ignore the growing bandit rumors."],
-+        "checks": [
-+            {
-+                "type": "story_arc",
++                "type": "story_event_arc",
 +                "arc_id": "arc:bandit_pressure",
 +                "expected": {"pressure": 45},
-+            }
++            },
 +        ],
 +    },
-+    "story_arc_stage_advances_when_pressure_threshold_met": {
-+        "setup_story_arc_transitions": [
-+            {
-+                "action": "start",
-+                "arc_id": "arc:bandit_pressure",
-+                "stage": "rumors",
-+                "pressure": 60,
-+            },
-+            {
-+                "action": "set_stage",
-+                "arc_id": "arc:bandit_pressure",
-+                "stage": "threat",
-+                "conditions": [
-+                    {
-+                        "type": "arc_pressure_at_least",
-+                        "arc_id": "arc:bandit_pressure",
-+                        "minimum": 50,
-+                    }
-+                ],
-+            },
-+        ],
-+        "turns": ["The bandit rumors become threats."],
-+        "checks": [
-+            {
-+                "type": "story_arc",
-+                "arc_id": "arc:bandit_pressure",
-+                "expected": {"stage": "threat"},
-+            }
-+        ],
-+    },
-+    "story_arc_links_to_quest_state": {
-+        "setup_quest_transitions": [
-+            {
-+                "action": "start",
-+                "quest_id": "quest:stop_red_sashes",
-+                "stage": "investigate",
-+            }
-+        ],
-+        "setup_story_arc_transitions": [
-+            {
-+                "action": "start",
-+                "arc_id": "arc:bandit_pressure",
-+                "stage": "rumors",
-+                "links": {"quest": ["quest:stop_red_sashes"]},
-+            },
-+            {
-+                "action": "set_flag",
-+                "arc_id": "arc:bandit_pressure",
-+                "flag": "quest_linked",
-+                "value": True,
-+                "conditions": [
-+                    {
-+                        "type": "quest_stage",
-+                        "quest_id": "quest:stop_red_sashes",
-+                        "stage": "investigate",
-+                    }
-+                ],
-+            },
-+        ],
-+        "turns": ["I check whether the bandit arc is linked to the quest."],
-+        "checks": [
-+            {
-+                "type": "story_arc",
-+                "arc_id": "arc:bandit_pressure",
-+                "expected": {"flags": {"quest_linked": True}},
-+            }
-+        ],
-+    },
-+    "story_arc_links_to_lore_reveal": {
++    "story_event_reveals_lore": {
 +        "setup_lore_transitions": [
-+            {
-+                "action": "upsert",
-+                "lore_id": "lore:red_sashes",
-+                "title": "The Red Sashes",
-+                "truth_status": "true",
-+            }
++            {"action": "upsert", "lore_id": "lore:red_sashes", "title": "The Red Sashes", "truth_status": "true"}
 +        ],
 +        "setup_story_arc_transitions": [
-+            {
-+                "action": "start",
-+                "arc_id": "arc:bandit_pressure",
-+                "stage": "rumors",
-+                "links": {"lore": ["lore:red_sashes"]},
-+            },
-+            {
-+                "action": "reveal_lore",
-+                "arc_id": "arc:bandit_pressure",
-+                "lore_id": "lore:red_sashes",
-+            },
++            {"action": "start", "arc_id": "arc:bandit_pressure", "stage": "rumors"}
 +        ],
-+        "turns": ["The bandit arc reveals the Red Sashes lore."],
-+        "checks": [
++        "setup_story_events": [
 +            {
-+                "type": "lore_condition",
-+                "condition": {
-+                    "type": "lore_revealed_to_player",
-+                    "lore_id": "lore:red_sashes",
-+                },
-+                "expected_ok": True,
++                "event_id": "event:reveal_red_sashes",
++                "arc_id": "arc:bandit_pressure",
++                "kind": "discovery",
++                "summary": "The Red Sashes were identified.",
++                "effects": [
++                    {"type": "lore_reveal", "lore_id": "lore:red_sashes"}
++                ],
 +            }
 +        ],
-+    },
-+    "story_arc_condition_requires_npc_memory": {
-+        "setup_told_memories": [
++        "turns": ["I learn who the bandits are."],
++        "checks": [
++            {"type": "story_event_applied", "event_id": "event:reveal_red_sashes"},
 +            {
++                "type": "story_event_lore",
++                "lore_id": "lore:red_sashes",
++                "expected": {"revealed_to_player": True, "truth_status": "true"},
++            },
++        ],
++    },
++    "story_event_records_causal_memory": {
++        "setup_spatial_graph": "tavern_fixture",
++        "setup_story_arc_transitions": [
++            {"action": "start", "arc_id": "arc:bandit_pressure", "stage": "rumors"}
++        ],
++        "setup_story_events": [
++            {
++                "event_id": "event:player_warns_bran_bandits",
++                "arc_id": "arc:bandit_pressure",
++                "kind": "warning",
++                "location_id": "tavern_common_room",
++                "actor_id": "player",
++                "target_id": "bran",
++                "participants": ["player", "bran"],
++                "summary": "The player warned Bran about bandits.",
++                "tags": ["bandit", "warning"],
++                "effects": [
++                    {"type": "memory_event"}
++                ],
++            }
++        ],
++        "turns": ["I remind Bran that I warned him."],
++        "checks": [
++            {
++                "type": "story_event_memory",
 +                "subject_id": "bran",
-+                "speaker_id": "player",
-+                "event_id": "evt:bandits",
-+                "summary": "The player told Bran about bandits.",
-+                "facts": {"actor_id": "bandits"},
-+                "tags": ["bandit"],
-+                "verified": True,
-+            }
-+        ],
-+        "setup_story_arc_transitions": [
-+            {
-+                "action": "start",
-+                "arc_id": "arc:bandit_pressure",
-+                "stage": "rumors",
-+            },
-+            {
-+                "action": "set_flag",
-+                "arc_id": "arc:bandit_pressure",
-+                "flag": "bran_warned",
-+                "value": True,
-+                "conditions": [
-+                    {
-+                        "type": "npc_knows_memory",
-+                        "npc_id": "bran",
-+                        "event_id": "evt:bandits",
-+                        "tags": ["bandit"],
-+                    }
-+                ],
-+            },
-+        ],
-+        "turns": ["I check whether Bran remembers my warning."],
-+        "checks": [
-+            {
-+                "type": "story_arc",
-+                "arc_id": "arc:bandit_pressure",
-+                "expected": {"flags": {"bran_warned": True}},
++                "expected_event_id": "event:player_warns_bran_bandits",
++                "tags": ["warning"],
 +            }
 +        ],
 +    },
-+    "story_arc_save_load_preserves_pressure_and_stage": {
++    "story_event_applies_social_delta": {
 +        "setup_story_arc_transitions": [
-+            {
-+                "action": "start",
-+                "arc_id": "arc:bandit_pressure",
-+                "stage": "rumors",
-+                "pressure": 20,
-+            },
-+            {
-+                "action": "pressure_delta",
-+                "arc_id": "arc:bandit_pressure",
-+                "delta": 30,
-+            },
-+            {
-+                "action": "set_stage",
-+                "arc_id": "arc:bandit_pressure",
-+                "stage": "threat",
-+                "conditions": [
-+                    {
-+                        "type": "arc_pressure_at_least",
-+                        "arc_id": "arc:bandit_pressure",
-+                        "minimum": 50,
-+                    }
-+                ],
-+            },
++            {"action": "start", "arc_id": "arc:bandit_pressure", "stage": "rumors"}
 +        ],
-+        "turns": ["I check the current bandit arc state."],
++        "setup_story_events": [
++            {
++                "event_id": "event:bandits_threaten_bran",
++                "arc_id": "arc:bandit_pressure",
++                "kind": "threat",
++                "summary": "Bandits threatened Bran.",
++                "effects": [
++                    {"type": "social_delta", "npc_id": "bran", "fear": 10, "trust": -2}
++                ],
++            }
++        ],
++        "turns": ["I see Bran react to the threat."],
 +        "checks": [
 +            {
-+                "type": "story_arc",
++                "type": "story_event_social",
++                "npc_id": "bran",
++                "expected": {"fear": 10, "trust": -2},
++            }
++        ],
++    },
++    "story_event_can_trigger_quest_transition": {
++        "setup_story_arc_transitions": [
++            {"action": "start", "arc_id": "arc:bandit_pressure", "stage": "rumors"}
++        ],
++        "setup_story_events": [
++            {
++                "event_id": "event:start_stop_red_sashes",
 +                "arc_id": "arc:bandit_pressure",
-+                "expected": {
-+                    "stage": "threat",
-+                    "pressure": 50,
++                "kind": "quest_seed",
++                "summary": "The bandit problem became a quest.",
++                "effects": [
++                    {
++                        "type": "quest_transition",
++                        "transition": {
++                            "action": "start",
++                            "quest_id": "quest:stop_red_sashes",
++                            "stage": "investigate",
++                        },
++                    }
++                ],
++            }
++        ],
++        "turns": ["I accept the need to investigate the Red Sashes."],
++        "checks": [
++            {
++                "type": "story_event_quest",
++                "quest_id": "quest:stop_red_sashes",
++                "expected": {"stage": "investigate", "status": "active"},
++            }
++        ],
++    },
++    "story_event_rejects_unknown_effect_type": {
++        "setup_story_arc_transitions": [
++            {"action": "start", "arc_id": "arc:bandit_pressure", "stage": "rumors"}
++        ],
++        "turns": ["I test an invalid story effect."],
++        "checks": [
++            {
++                "type": "story_event_validation",
++                "expected_ok": False,
++                "event": {
++                    "event_id": "event:invalid_effect",
++                    "arc_id": "arc:bandit_pressure",
++                    "effects": [{"type": "invent_gold", "amount": 999}],
 +                },
 +            }
 +        ],
 +    },
-+    "story_arc_debug_payload_is_bounded": {
-+        "setup_story_arc_transitions": [
++    "story_event_rejects_missing_arc": {
++        "turns": ["I test an event with a missing arc."],
++        "checks": [
 +            {
-+                "action": "start",
-+                "arc_id": "arc:bandit_pressure",
-+                "stage": "rumors",
-+                "pressure": 20,
-+                "links": {
-+                    "lore": ["lore:red_sashes"],
-+                    "entities": ["bran", "mira", "bandit"],
-+                    "locations": ["tavern_common_room", "street"],
-+                    "quest": ["quest:stop_red_sashes"],
-+                    "puzzle": ["puzzle:cellar_runes"],
++                "type": "story_event_validation",
++                "expected_ok": False,
++                "event": {
++                    "event_id": "event:missing_arc",
++                    "arc_id": "arc:missing",
++                    "effects": [],
 +                },
 +            }
 +        ],
-+        "turns": ["I inspect the story arc debug payload."],
++    },
++    "story_event_rejects_missing_location": {
++        "setup_story_arc_transitions": [
++            {"action": "start", "arc_id": "arc:bandit_pressure", "stage": "rumors"}
++        ],
++        "turns": ["I test a location-required event without a location."],
 +        "checks": [
 +            {
-+                "type": "story_arc_debug_bounded",
++                "type": "story_event_validation",
++                "expected_ok": False,
++                "event": {
++                    "event_id": "event:missing_location",
++                    "arc_id": "arc:bandit_pressure",
++                    "require_location": True,
++                    "effects": [],
++                },
++            }
++        ],
++    },
++    "story_event_save_load_records_applied_event_once": {
++        "setup_story_arc_transitions": [
++            {"action": "start", "arc_id": "arc:bandit_pressure", "stage": "rumors", "pressure": 10}
++        ],
++        "setup_story_events": [
++            {
++                "event_id": "event:save_load_once",
 +                "arc_id": "arc:bandit_pressure",
-+                "max_link_count": 20,
++                "effects": [
++                    {"type": "arc_pressure_delta", "arc_id": "arc:bandit_pressure", "delta": 20}
++                ],
++            },
++            {
++                "event_id": "event:save_load_once",
++                "arc_id": "arc:bandit_pressure",
++                "effects": [
++                    {"type": "arc_pressure_delta", "arc_id": "arc:bandit_pressure", "delta": 20}
++                ],
++            },
++        ],
++        "turns": ["I check that the event applied only once."],
++        "checks": [
++            {"type": "story_event_applied", "event_id": "event:save_load_once"},
++            {
++                "type": "story_event_arc",
++                "arc_id": "arc:bandit_pressure",
++                "expected": {"pressure": 30},
++            },
++        ],
++    },
++    "story_event_idempotency_prevents_double_apply": {
++        "setup_story_arc_transitions": [
++            {"action": "start", "arc_id": "arc:bandit_pressure", "stage": "rumors", "pressure": 15}
++        ],
++        "setup_story_events": [
++            {
++                "event_id": "event:idempotent_pressure",
++                "arc_id": "arc:bandit_pressure",
++                "effects": [
++                    {"type": "arc_pressure_delta", "arc_id": "arc:bandit_pressure", "delta": 10}
++                ],
++            },
++            {
++                "event_id": "event:idempotent_pressure",
++                "arc_id": "arc:bandit_pressure",
++                "effects": [
++                    {"type": "arc_pressure_delta", "arc_id": "arc:bandit_pressure", "delta": 10}
++                ],
++            },
++        ],
++        "turns": ["I check idempotency again."],
++        "checks": [
++            {
++                "type": "story_event_arc",
++                "arc_id": "arc:bandit_pressure",
++                "expected": {"pressure": 25},
++            }
++        ],
++    },
++    "story_event_emits_bounded_world_event": {
++        "setup_story_arc_transitions": [
++            {"action": "start", "arc_id": "arc:bandit_pressure", "stage": "rumors"}
++        ],
++        "setup_story_events": [
++            {
++                "event_id": "event:world_warning",
++                "arc_id": "arc:bandit_pressure",
++                "kind": "warning",
++                "location_id": "tavern_common_room",
++                "summary": "Bandits warned Bran.",
++                "tags": ["bandit", "warning"],
++                "effects": [{"type": "world_event_emit"}],
++            }
++        ],
++        "turns": ["I check the world event log."],
++        "checks": [
++            {
++                "type": "story_event_world_event",
++                "source_story_event_id": "event:world_warning",
 +            }
 +        ],
 +    },
 +}
 *** End Patch
-18. Add expected names file
+15. Add expected names file
 *** Begin Patch
-*** Add File: src/tests/rpg/manual/scenarios/expected_story_m1_m3_names.py
-+EXPECTED_STORY_M1_M3_SCENARIO_NAMES = {
-+    "lore_entry_can_be_revealed_to_player",
-+    "lore_secret_not_available_until_revealed",
-+    "lore_npc_knows_role_based_lore",
-+    "lore_rumor_not_promoted_to_truth",
-+    "story_arc_start_sets_active_stage",
-+    "story_arc_pressure_increases_from_event",
-+    "story_arc_stage_advances_when_pressure_threshold_met",
-+    "story_arc_links_to_quest_state",
-+    "story_arc_links_to_lore_reveal",
-+    "story_arc_condition_requires_npc_memory",
-+    "story_arc_save_load_preserves_pressure_and_stage",
-+    "story_arc_debug_payload_is_bounded",
+*** Add File: src/tests/rpg/manual/scenarios/expected_story_event_m4_m6_names.py
++EXPECTED_STORY_EVENT_M4_M6_SCENARIO_NAMES = {
++    "story_event_applies_arc_pressure_delta",
++    "story_event_reveals_lore",
++    "story_event_records_causal_memory",
++    "story_event_applies_social_delta",
++    "story_event_can_trigger_quest_transition",
++    "story_event_rejects_unknown_effect_type",
++    "story_event_rejects_missing_arc",
++    "story_event_rejects_missing_location",
++    "story_event_save_load_records_applied_event_once",
++    "story_event_idempotency_prevents_double_apply",
++    "story_event_emits_bounded_world_event",
 +}
 *** End Patch
-19. Patch src/tests/rpg/manual/scenarios/registry.py
+16. Patch src/tests/rpg/manual/scenarios/registry.py
 *** Begin Patch
 *** Update File: src/tests/rpg/manual/scenarios/registry.py
 @@
- from tests.rpg.manual.scenarios.quest_puzzle_l13_l15 import (
-     QUEST_PUZZLE_L13_L15_SCENARIOS,
- )
-+from tests.rpg.manual.scenarios.story_m1_m3 import STORY_M1_M3_SCENARIOS
+ from tests.rpg.manual.scenarios.story_m1_m3 import STORY_M1_M3_SCENARIOS
++from tests.rpg.manual.scenarios.story_event_m4_m6 import (
++    STORY_EVENT_M4_M6_SCENARIOS,
++)
 @@
-     scenarios.update(QUEST_PUZZLE_L13_L15_SCENARIOS)
-+    scenarios.update(STORY_M1_M3_SCENARIOS)
+     scenarios.update(STORY_M1_M3_SCENARIOS)
++    scenarios.update(STORY_EVENT_M4_M6_SCENARIOS)
      return scenarios
 *** End Patch
-20. Patch src/tests/rpg/manual/test_manual_scenario_migration.py
+17. Patch src/tests/rpg/manual/test_manual_scenario_migration.py
 *** Begin Patch
 *** Update File: src/tests/rpg/manual/test_manual_scenario_migration.py
 @@
- from tests.rpg.manual.scenarios.expected_quest_puzzle_l13_l15_names import (
-     EXPECTED_QUEST_PUZZLE_L13_L15_SCENARIO_NAMES,
+ from tests.rpg.manual.scenarios.expected_story_m1_m3_names import (
+     EXPECTED_STORY_M1_M3_SCENARIO_NAMES,
  )
-+from tests.rpg.manual.scenarios.expected_story_m1_m3_names import (
-+    EXPECTED_STORY_M1_M3_SCENARIO_NAMES,
++from tests.rpg.manual.scenarios.expected_story_event_m4_m6_names import (
++    EXPECTED_STORY_EVENT_M4_M6_SCENARIO_NAMES,
 +)
 @@
- def test_manual_scenario_registry_includes_quest_puzzle_l13_l15_names():
+ def test_manual_scenario_registry_includes_story_m1_m3_names():
      names = set(build_service_scenarios().keys())
-     missing = EXPECTED_QUEST_PUZZLE_L13_L15_SCENARIO_NAMES - names
+     missing = EXPECTED_STORY_M1_M3_SCENARIO_NAMES - names
  
-     assert not missing, f"Missing L13-L15 quest/puzzle scenarios: {sorted(missing)}"
+     assert not missing, f"Missing M1-M3 story scenarios: {sorted(missing)}"
 +
 +
-+def test_manual_scenario_registry_includes_story_m1_m3_names():
++def test_manual_scenario_registry_includes_story_event_m4_m6_names():
 +    names = set(build_service_scenarios().keys())
-+    missing = EXPECTED_STORY_M1_M3_SCENARIO_NAMES - names
++    missing = EXPECTED_STORY_EVENT_M4_M6_SCENARIO_NAMES - names
 +
-+    assert not missing, f"Missing M1-M3 story scenarios: {sorted(missing)}"
++    assert not missing, f"Missing M4-M6 story event scenarios: {sorted(missing)}"
 *** End Patch
-21. Add manual check test
+18. Add manual check test
 *** Begin Patch
-*** Add File: src/tests/rpg/manual/test_manual_story_m1_m3_checks.py
-+from app.rpg.lore.state import reveal_lore_to_player, upsert_lore_entry
+*** Add File: src/tests/rpg/manual/test_manual_story_event_m4_m6_checks.py
 +from app.rpg.story_arcs.state import start_story_arc
-+from tests.rpg.manual.story_m1_m3_checks import run_story_m1_m3_checks
++from app.rpg.story_events.application import apply_story_event
++from tests.rpg.manual.story_event_m4_m6_checks import run_story_event_m4_m6_checks
 +
 +
-+def test_manual_lore_check_reads_session_state():
++def test_manual_story_event_check_reads_applied_event_from_session():
 +    session = {"simulation_state": {}}
-+    upsert_lore_entry(
++    start_story_arc(session["simulation_state"], "arc:bandit_pressure")
++    apply_story_event(
 +        session["simulation_state"],
-+        {"lore_id": "lore:red_sashes", "title": "The Red Sashes"},
++        {
++            "event_id": "event:test_applied",
++            "arc_id": "arc:bandit_pressure",
++            "effects": [],
++        },
 +    )
-+    reveal_lore_to_player(session["simulation_state"], "lore:red_sashes")
 +
-+    result = run_story_m1_m3_checks(
++    result = run_story_event_m4_m6_checks(
++        checks=[
++            {"type": "story_event_applied", "event_id": "event:test_applied"}
++        ],
++        result={},
++        session=session,
++    )[0]
++
++    assert result["ok"] is True
++
++
++def test_manual_story_event_validation_check():
++    session = {"simulation_state": {}}
++    start_story_arc(session["simulation_state"], "arc:bandit_pressure")
++
++    result = run_story_event_m4_m6_checks(
 +        checks=[
 +            {
-+                "type": "lore_condition",
-+                "condition": {
-+                    "type": "lore_revealed_to_player",
-+                    "lore_id": "lore:red_sashes",
++                "type": "story_event_validation",
++                "expected_ok": False,
++                "event": {
++                    "event_id": "event:invalid",
++                    "arc_id": "arc:bandit_pressure",
++                    "effects": [{"type": "invent_gold"}],
 +                },
-+                "expected_ok": True,
 +            }
 +        ],
 +        result={},
@@ -2370,42 +1738,16 @@ Patch 5 — Manual scenarios
 +    )[0]
 +
 +    assert result["ok"] is True
-+
-+
-+def test_manual_story_arc_check_reads_session_state():
-+    session = {"simulation_state": {}}
-+    start_story_arc(
-+        session["simulation_state"],
-+        "arc:bandit_pressure",
-+        stage="rumors",
-+        pressure=20,
-+    )
-+
-+    result = run_story_m1_m3_checks(
-+        checks=[
-+            {
-+                "type": "story_arc",
-+                "arc_id": "arc:bandit_pressure",
-+                "expected": {"stage": "rumors", "pressure": 20},
-+            }
-+        ],
-+        result={},
-+        session=session,
-+    )[0]
-+
-+    assert result["ok"] is True
++    assert result["validation"]["ok"] is False
 *** End Patch
 Validation commands
 Compile
-python -m py_compile src/app/rpg/lore/model.py
-python -m py_compile src/app/rpg/lore/state.py
-python -m py_compile src/app/rpg/lore/conditions.py
-python -m py_compile src/app/rpg/lore/transitions.py
-python -m py_compile src/app/rpg/story_arcs/model.py
-python -m py_compile src/app/rpg/story_arcs/state.py
-python -m py_compile src/app/rpg/story_arcs/conditions.py
-python -m py_compile src/app/rpg/story_arcs/transitions.py
-python -m py_compile src/tests/rpg/manual/story_m1_m3_checks.py
-python -m py_compile src/tests/rpg/manual/scenarios/story_m1_m3.py
+python -m py_compile src/app/rpg/story_events/model.py
+python -m py_compile src/app/rpg/story_events/state.py
+python -m py_compile src/app/rpg/story_events/validation.py
+python -m py_compile src/app/rpg/story_events/effects.py
+python -m py_compile src/app/rpg/story_events/application.py
+python -m py_compile src/tests/rpg/manual/story_event_m4_m6_checks.py
+python -m py_compile src/tests/rpg/manual/scenarios/story_event_m4_m6.py
 Unit tests
-python -m pytest src/tests/rpg/lore src/tests/rpg/story_arcs -q
+python -m pytest src/tests/rpg/story_events src/tests/rpg/lore src/tests/rpg/story_arcs -q
