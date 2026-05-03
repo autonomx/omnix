@@ -1,118 +1,87 @@
-Below is a literal apply-this-patch diff spec for:
-
-Bundle L13-L15 — Quest and Puzzle State Machine v1
-
-All manual scenario commands include:
-
---artifact-detail full
-Bundle L13-L15 — Quest and Puzzle State Machine v1
+Bundle M1-M3 — Lore Registry + Story Arc State Machine v1
 GOAL:
-Add deterministic quest and puzzle state machines.
+Add deterministic, save/load-safe systems for:
+- lore entries
+- lore reveal / knowledge status
+- story arcs
+- arc stages
+- arc pressure
+- arc flags
+- arc links to lore/quests/puzzles/NPCs/locations
 
-Simulation decides:
-- quest start
-- quest stage
-- objective completion
-- condition/gate checks
-- puzzle transitions
-- puzzle completion
-- reward payload generation
-
-LLM may narrate these results, but must not invent quest/puzzle advancement or rewards.
-Patch 1 — Add quest package
-1. Add src/app/rpg/quests/__init__.py
+Simulation is authoritative.
+LLM may narrate later, but cannot decide lore truth, reveal, arc activation, arc pressure, or arc stage transitions.
+Patch 1 — Add lore package
+1. Add src/app/rpg/lore/__init__.py
 *** Begin Patch
-*** Add File: src/app/rpg/quests/__init__.py
-+"""Deterministic RPG quest state machine helpers."""
+*** Add File: src/app/rpg/lore/__init__.py
++"""Deterministic RPG lore registry helpers."""
 +
-+from app.rpg.quests.conditions import evaluate_quest_condition
-+from app.rpg.quests.rewards import build_reward_payload, mark_reward_claimed
-+from app.rpg.quests.state import (
-+    complete_objective,
-+    ensure_quest_state,
-+    get_quest,
-+    normalize_quest_state,
-+    set_quest_stage,
-+    start_quest,
++from app.rpg.lore.conditions import evaluate_lore_condition
++from app.rpg.lore.state import (
++    add_lore_known_by,
++    ensure_lore_state,
++    get_lore_entry,
++    is_lore_available_to_player,
++    is_lore_known_by,
++    normalize_lore_state,
++    reveal_lore_to_player,
++    set_lore_truth_status,
++    upsert_lore_entry,
 +)
-+from app.rpg.quests.transitions import apply_quest_transition
++from app.rpg.lore.transitions import apply_lore_transition
 +
 +__all__ = [
-+    "apply_quest_transition",
-+    "build_reward_payload",
-+    "complete_objective",
-+    "ensure_quest_state",
-+    "evaluate_quest_condition",
-+    "get_quest",
-+    "mark_reward_claimed",
-+    "normalize_quest_state",
-+    "set_quest_stage",
-+    "start_quest",
++    "add_lore_known_by",
++    "apply_lore_transition",
++    "ensure_lore_state",
++    "evaluate_lore_condition",
++    "get_lore_entry",
++    "is_lore_available_to_player",
++    "is_lore_known_by",
++    "normalize_lore_state",
++    "reveal_lore_to_player",
++    "set_lore_truth_status",
++    "upsert_lore_entry",
 +]
 *** End Patch
-2. Add src/app/rpg/quests/model.py
+2. Add src/app/rpg/lore/model.py
 *** Begin Patch
-*** Add File: src/app/rpg/quests/model.py
+*** Add File: src/app/rpg/lore/model.py
 +from __future__ import annotations
 +
 +from dataclasses import asdict, dataclass, field
 +from typing import Any, Dict, List, Literal
 +
 +
-+QuestStatus = Literal["inactive", "active", "completed", "failed"]
-+ObjectiveStatus = Literal["open", "completed", "failed"]
++LoreTruthStatus = Literal["true", "rumor", "false", "myth", "unknown", "secret"]
 +
 +
 +@dataclass
-+class QuestObjective:
-+    objective_id: str
-+    description: str
-+    status: ObjectiveStatus = "open"
-+    completed_turn: int | None = None
++class LoreEntry:
++    lore_id: str
++    title: str
++    kind: str = "fact"
++    truth_status: LoreTruthStatus = "unknown"
++    revealed_to_player: bool = False
++    known_by: List[str] = field(default_factory=list)
++    tags: List[str] = field(default_factory=list)
++    summary: str = ""
++    source: str = "manual"
 +    metadata: Dict[str, Any] = field(default_factory=dict)
 +
 +    def to_dict(self) -> Dict[str, Any]:
 +        return asdict(self)
-+
-+
-+@dataclass
-+class QuestRecord:
-+    quest_id: str
-+    title: str
-+    status: QuestStatus = "inactive"
-+    stage: str = "inactive"
-+    objectives: Dict[str, QuestObjective] = field(default_factory=dict)
-+    flags: Dict[str, Any] = field(default_factory=dict)
-+    rewards: List[Dict[str, Any]] = field(default_factory=list)
-+    reward_claimed: bool = False
-+    started_turn: int | None = None
-+    completed_turn: int | None = None
-+    metadata: Dict[str, Any] = field(default_factory=dict)
-+
-+    def to_dict(self) -> Dict[str, Any]:
-+        return {
-+            "quest_id": self.quest_id,
-+            "title": self.title,
-+            "status": self.status,
-+            "stage": self.stage,
-+            "objectives": {
-+                key: objective.to_dict()
-+                for key, objective in self.objectives.items()
-+            },
-+            "flags": dict(self.flags),
-+            "rewards": list(self.rewards),
-+            "reward_claimed": bool(self.reward_claimed),
-+            "started_turn": self.started_turn,
-+            "completed_turn": self.completed_turn,
-+            "metadata": dict(self.metadata),
-+        }
 *** End Patch
-3. Add src/app/rpg/quests/state.py
+3. Add src/app/rpg/lore/state.py
 *** Begin Patch
-*** Add File: src/app/rpg/quests/state.py
+*** Add File: src/app/rpg/lore/state.py
 +from __future__ import annotations
 +
 +from typing import Any, Dict, List
++
++
++VALID_TRUTH_STATUSES = {"true", "rumor", "false", "myth", "unknown", "secret"}
 +
 +
 +def _safe_dict(value: Any) -> Dict[str, Any]:
@@ -133,374 +102,433 @@ Patch 1 — Add quest package
 +    return default
 +
 +
-+def _safe_int_or_none(value: Any) -> int | None:
-+    if value is None:
-+        return None
-+    try:
-+        return int(value)
-+    except Exception:
-+        return None
++def _unique_strs(values: Any) -> List[str]:
++    seen = set()
++    out: List[str] = []
++    for value in _safe_list(values):
++        text = str(value or "").strip()
++        if text and text not in seen:
++            seen.add(text)
++            out.append(text)
++    return out
 +
 +
-+def normalize_objective(value: Dict[str, Any], *, objective_id: str = "") -> Dict[str, Any]:
++def normalize_lore_entry(value: Dict[str, Any], *, lore_id: str = "") -> Dict[str, Any]:
 +    value = _safe_dict(value)
-+    normalized_id = _safe_str(value.get("objective_id")) or objective_id
-+    status = _safe_str(value.get("status")) or "open"
-+    if status not in {"open", "completed", "failed"}:
-+        status = "open"
++    normalized_id = _safe_str(value.get("lore_id")) or lore_id
++    truth_status = _safe_str(value.get("truth_status")) or "unknown"
++    if truth_status not in VALID_TRUTH_STATUSES:
++        truth_status = "unknown"
 +    return {
-+        "objective_id": normalized_id,
-+        "description": _safe_str(value.get("description")) or normalized_id,
-+        "status": status,
-+        "completed_turn": _safe_int_or_none(value.get("completed_turn")),
-+        "metadata": dict(_safe_dict(value.get("metadata"))),
-+    }
-+
-+
-+def normalize_quest(value: Dict[str, Any], *, quest_id: str = "") -> Dict[str, Any]:
-+    value = _safe_dict(value)
-+    normalized_id = _safe_str(value.get("quest_id")) or quest_id
-+    status = _safe_str(value.get("status")) or "inactive"
-+    if status not in {"inactive", "active", "completed", "failed"}:
-+        status = "inactive"
-+
-+    objectives = {}
-+    for objective_id, objective in _safe_dict(value.get("objectives")).items():
-+        objective_id = str(objective_id or "")
-+        if not objective_id:
-+            continue
-+        objectives[objective_id] = normalize_objective(
-+            objective,
-+            objective_id=objective_id,
-+        )
-+
-+    return {
-+        "quest_id": normalized_id,
++        "lore_id": normalized_id,
 +        "title": _safe_str(value.get("title")) or normalized_id,
-+        "status": status,
-+        "stage": _safe_str(value.get("stage")) or status,
-+        "objectives": objectives,
-+        "flags": dict(_safe_dict(value.get("flags"))),
-+        "rewards": [
-+            dict(row)
-+            for row in _safe_list(value.get("rewards"))
-+            if isinstance(row, dict)
-+        ],
-+        "reward_claimed": _safe_bool(value.get("reward_claimed"), False),
-+        "started_turn": _safe_int_or_none(value.get("started_turn")),
-+        "completed_turn": _safe_int_or_none(value.get("completed_turn")),
++        "kind": _safe_str(value.get("kind")) or "fact",
++        "truth_status": truth_status,
++        "revealed_to_player": _safe_bool(value.get("revealed_to_player"), False),
++        "known_by": _unique_strs(value.get("known_by")),
++        "tags": _unique_strs(value.get("tags")),
++        "summary": _safe_str(value.get("summary")),
++        "source": _safe_str(value.get("source")) or "manual",
 +        "metadata": dict(_safe_dict(value.get("metadata"))),
 +    }
 +
 +
-+def normalize_quest_state(value: Dict[str, Any] | None) -> Dict[str, Any]:
++def normalize_lore_state(value: Dict[str, Any] | None) -> Dict[str, Any]:
 +    value = _safe_dict(value)
-+    quests = {}
-+    for quest_id, quest in _safe_dict(value.get("quests")).items():
-+        quest_id = str(quest_id or "")
-+        if not quest_id:
++    entries: Dict[str, Dict[str, Any]] = {}
++    for lore_id, entry in _safe_dict(value.get("entries")).items():
++        lore_id = str(lore_id or "")
++        if not lore_id:
 +            continue
-+        quests[quest_id] = normalize_quest(quest, quest_id=quest_id)
++        entries[lore_id] = normalize_lore_entry(entry, lore_id=lore_id)
 +    return {
 +        "version": 1,
-+        "quests": quests,
++        "entries": entries,
 +    }
 +
 +
-+def ensure_quest_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
++def ensure_lore_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
 +    if not isinstance(simulation_state, dict):
 +        raise TypeError("simulation_state_must_be_dict")
-+    quest_state = normalize_quest_state(simulation_state.get("quest_state"))
-+    simulation_state["quest_state"] = quest_state
-+    return quest_state
++    lore_state = normalize_lore_state(simulation_state.get("lore_state"))
++    simulation_state["lore_state"] = lore_state
++    return lore_state
 +
 +
-+def get_quest(
++def get_lore_entry(
 +    simulation_state: Dict[str, Any],
-+    quest_id: str,
++    lore_id: str,
 +    *,
 +    create: bool = False,
 +    title: str = "",
 +) -> Dict[str, Any] | None:
-+    quest_state = ensure_quest_state(simulation_state)
-+    quests = quest_state.setdefault("quests", {})
-+    if quest_id not in quests and create:
-+        quests[quest_id] = normalize_quest(
++    lore_state = ensure_lore_state(simulation_state)
++    entries = lore_state.setdefault("entries", {})
++    if lore_id not in entries and create:
++        entries[lore_id] = normalize_lore_entry(
 +            {
-+                "quest_id": quest_id,
-+                "title": title or quest_id,
-+                "status": "inactive",
-+                "stage": "inactive",
++                "lore_id": lore_id,
++                "title": title or lore_id,
++                "truth_status": "unknown",
 +            },
-+            quest_id=quest_id,
++            lore_id=lore_id,
 +        )
-+    return quests.get(quest_id)
++    return entries.get(lore_id)
 +
 +
-+def start_quest(
++def upsert_lore_entry(
 +    simulation_state: Dict[str, Any],
-+    quest_id: str,
-+    *,
-+    title: str = "",
-+    stage: str = "started",
-+    objectives: Dict[str, Dict[str, Any]] | None = None,
-+    turn_index: int = 0,
++    entry: Dict[str, Any],
 +) -> Dict[str, Any]:
-+    quest = get_quest(simulation_state, quest_id, create=True, title=title)
-+    assert quest is not None
-+    quest["status"] = "active"
-+    quest["stage"] = stage
-+    if quest.get("started_turn") is None:
-+        quest["started_turn"] = int(turn_index or 0)
-+    for objective_id, objective in (objectives or {}).items():
-+        quest.setdefault("objectives", {})[objective_id] = normalize_objective(
-+            dict(objective or {}, objective_id=objective_id),
-+            objective_id=objective_id,
-+        )
++    entry = normalize_lore_entry(entry, lore_id=str(entry.get("lore_id") or ""))
++    lore_id = str(entry.get("lore_id") or "")
++    if not lore_id:
++        return {"ok": False, "reason": "missing_lore_id", "entry": entry}
++    lore_state = ensure_lore_state(simulation_state)
++    existing = lore_state.setdefault("entries", {}).get(lore_id)
++    if existing:
++        merged = dict(existing)
++        merged.update(entry)
++        merged["known_by"] = _unique_strs(list(existing.get("known_by") or []) + list(entry.get("known_by") or []))
++        merged["tags"] = _unique_strs(list(existing.get("tags") or []) + list(entry.get("tags") or []))
++        lore_state["entries"][lore_id] = normalize_lore_entry(merged, lore_id=lore_id)
++    else:
++        lore_state["entries"][lore_id] = entry
 +    return {
 +        "ok": True,
-+        "kind": "quest_start",
-+        "quest_id": quest_id,
-+        "stage": quest["stage"],
-+        "status": quest["status"],
-+        "quest": quest,
++        "reason": "upserted",
++        "lore_id": lore_id,
++        "entry": lore_state["entries"][lore_id],
 +    }
 +
 +
-+def set_quest_stage(
-+    simulation_state: Dict[str, Any],
-+    quest_id: str,
-+    stage: str,
-+    *,
-+    status: str | None = None,
-+    turn_index: int = 0,
-+) -> Dict[str, Any]:
-+    quest = get_quest(simulation_state, quest_id, create=True)
-+    assert quest is not None
-+    quest["stage"] = stage
-+    if status:
-+        quest["status"] = status
-+    if status == "completed" and quest.get("completed_turn") is None:
-+        quest["completed_turn"] = int(turn_index or 0)
-+    return {
-+        "ok": True,
-+        "kind": "quest_stage",
-+        "quest_id": quest_id,
-+        "stage": quest["stage"],
-+        "status": quest["status"],
-+        "quest": quest,
-+    }
++def reveal_lore_to_player(simulation_state: Dict[str, Any], lore_id: str) -> Dict[str, Any]:
++    entry = get_lore_entry(simulation_state, lore_id)
++    if not entry:
++        return {"ok": False, "reason": "lore_missing", "lore_id": lore_id}
++    entry["revealed_to_player"] = True
++    return {"ok": True, "reason": "revealed", "lore_id": lore_id, "entry": entry}
 +
 +
-+def complete_objective(
++def set_lore_truth_status(
 +    simulation_state: Dict[str, Any],
-+    quest_id: str,
-+    objective_id: str,
-+    *,
-+    turn_index: int = 0,
++    lore_id: str,
++    truth_status: str,
 +) -> Dict[str, Any]:
-+    quest = get_quest(simulation_state, quest_id, create=False)
-+    if not quest:
++    entry = get_lore_entry(simulation_state, lore_id)
++    if not entry:
++        return {"ok": False, "reason": "lore_missing", "lore_id": lore_id}
++    if truth_status not in VALID_TRUTH_STATUSES:
 +        return {
 +            "ok": False,
-+            "reason": "quest_missing",
-+            "quest_id": quest_id,
-+            "objective_id": objective_id,
++            "reason": "invalid_truth_status",
++            "lore_id": lore_id,
++            "truth_status": truth_status,
 +        }
-+    objective = quest.setdefault("objectives", {}).get(objective_id)
-+    if not objective:
-+        return {
-+            "ok": False,
-+            "reason": "objective_missing",
-+            "quest_id": quest_id,
-+            "objective_id": objective_id,
-+        }
-+    if objective.get("status") == "completed":
-+        return {
-+            "ok": True,
-+            "reason": "already_completed",
-+            "quest_id": quest_id,
-+            "objective_id": objective_id,
-+            "objective": objective,
-+        }
-+    objective["status"] = "completed"
-+    objective["completed_turn"] = int(turn_index or 0)
-+    return {
-+        "ok": True,
-+        "reason": "completed",
-+        "quest_id": quest_id,
-+        "objective_id": objective_id,
-+        "objective": objective,
-+    }
++    entry["truth_status"] = truth_status
++    return {"ok": True, "reason": "truth_status_set", "lore_id": lore_id, "entry": entry}
++
++
++def add_lore_known_by(
++    simulation_state: Dict[str, Any],
++    lore_id: str,
++    entity_id: str,
++) -> Dict[str, Any]:
++    entry = get_lore_entry(simulation_state, lore_id)
++    if not entry:
++        return {"ok": False, "reason": "lore_missing", "lore_id": lore_id}
++    known_by = list(entry.get("known_by") or [])
++    if entity_id not in known_by:
++        known_by.append(entity_id)
++    entry["known_by"] = _unique_strs(known_by)
++    return {"ok": True, "reason": "known_by_added", "lore_id": lore_id, "entry": entry}
++
++
++def add_lore_tag(
++    simulation_state: Dict[str, Any],
++    lore_id: str,
++    tag: str,
++) -> Dict[str, Any]:
++    entry = get_lore_entry(simulation_state, lore_id)
++    if not entry:
++        return {"ok": False, "reason": "lore_missing", "lore_id": lore_id}
++    tags = list(entry.get("tags") or [])
++    if tag not in tags:
++        tags.append(tag)
++    entry["tags"] = _unique_strs(tags)
++    return {"ok": True, "reason": "tag_added", "lore_id": lore_id, "entry": entry}
++
++
++def is_lore_available_to_player(simulation_state: Dict[str, Any], lore_id: str) -> bool:
++    entry = get_lore_entry(simulation_state, lore_id)
++    if not entry:
++        return False
++    return bool(entry.get("revealed_to_player"))
++
++
++def is_lore_known_by(simulation_state: Dict[str, Any], lore_id: str, entity_id: str) -> bool:
++    entry = get_lore_entry(simulation_state, lore_id)
++    if not entry:
++        return False
++    return entity_id in set(entry.get("known_by") or [])
 *** End Patch
-4. Add src/app/rpg/quests/conditions.py
+4. Add src/app/rpg/lore/conditions.py
 *** Begin Patch
-*** Add File: src/app/rpg/quests/conditions.py
+*** Add File: src/app/rpg/lore/conditions.py
 +from __future__ import annotations
 +
 +from typing import Any, Dict
 +
-+from app.rpg.memory.causal_retrieval import retrieve_causal_memories
-+from app.rpg.quests.state import get_quest
-+from app.rpg.social.reputation import get_relationship
-+from app.rpg.spatial.graph import get_entity_area
++from app.rpg.lore.state import get_lore_entry, is_lore_available_to_player, is_lore_known_by
 +
 +
 +def _safe_dict(value: Any) -> Dict[str, Any]:
 +    return value if isinstance(value, dict) else {}
 +
 +
-+def _inventory_has_item(simulation_state: Dict[str, Any], item_id: str) -> bool:
-+    inventory = _safe_dict(simulation_state.get("inventory"))
-+    items = inventory.get("items")
-+    if isinstance(items, dict):
-+        return item_id in items and bool(items[item_id])
-+    if isinstance(items, list):
-+        for row in items:
-+            if isinstance(row, dict) and row.get("item_id") == item_id:
-+                return True
-+            if row == item_id:
-+                return True
-+    # Manual/test convenience path.
-+    manual_items = simulation_state.get("manual_inventory_items")
-+    if isinstance(manual_items, list):
-+        return item_id in manual_items
-+    return False
-+
-+
-+def evaluate_quest_condition(
++def evaluate_lore_condition(
 +    simulation_state: Dict[str, Any],
 +    condition: Dict[str, Any],
 +) -> Dict[str, Any]:
 +    condition = _safe_dict(condition)
 +    condition_type = str(condition.get("type") or "")
++    lore_id = str(condition.get("lore_id") or "")
 +
-+    if condition_type == "always":
-+        return {"ok": True, "type": condition_type, "reason": "always"}
++    if condition_type == "lore_exists":
++        entry = get_lore_entry(simulation_state, lore_id)
++        return {
++            "ok": bool(entry),
++            "type": condition_type,
++            "lore_id": lore_id,
++            "reason": "lore_exists" if entry else "lore_missing",
++        }
 +
-+    if condition_type == "has_item":
-+        item_id = str(condition.get("item_id") or "")
-+        ok = _inventory_has_item(simulation_state, item_id)
++    if condition_type == "lore_revealed_to_player":
++        ok = is_lore_available_to_player(simulation_state, lore_id)
 +        return {
 +            "ok": ok,
 +            "type": condition_type,
-+            "item_id": item_id,
-+            "reason": "item_present" if ok else "item_missing",
++            "lore_id": lore_id,
++            "reason": "revealed" if ok else "not_revealed",
 +        }
 +
-+    if condition_type == "social_trust_at_least":
-+        npc_id = str(condition.get("npc_id") or "")
-+        minimum = int(condition.get("minimum") or 0)
-+        relationship = get_relationship(simulation_state, npc_id)
-+        actual = int(relationship.get("trust") or 0)
-+        return {
-+            "ok": actual >= minimum,
-+            "type": condition_type,
-+            "npc_id": npc_id,
-+            "minimum": minimum,
-+            "actual": actual,
-+            "reason": "trust_sufficient" if actual >= minimum else "trust_too_low",
-+        }
-+
-+    if condition_type == "npc_knows_memory":
-+        npc_id = str(condition.get("npc_id") or "")
-+        event_id = str(condition.get("event_id") or "")
-+        rows = retrieve_causal_memories(
-+            simulation_state,
-+            npc_id,
-+            actor_id=condition.get("actor_id"),
-+            target_id=condition.get("target_id"),
-+            tags=condition.get("tags") or [],
-+            max_items=20,
-+        )
-+        ok = any(row.get("event_id") == event_id for row in rows)
++    if condition_type == "lore_known_by":
++        entity_id = str(condition.get("entity_id") or "")
++        ok = is_lore_known_by(simulation_state, lore_id, entity_id)
 +        return {
 +            "ok": ok,
 +            "type": condition_type,
-+            "npc_id": npc_id,
-+            "event_id": event_id,
-+            "actual_event_ids": [row.get("event_id") for row in rows],
-+            "reason": "memory_known" if ok else "memory_missing",
-+        }
-+
-+    if condition_type == "entity_in_area":
-+        graph = _safe_dict(simulation_state.get("spatial_graph"))
-+        entity_id = str(condition.get("entity_id") or "player")
-+        area_id = str(condition.get("area_id") or "")
-+        actual = get_entity_area(graph, entity_id)
-+        return {
-+            "ok": actual == area_id,
-+            "type": condition_type,
++            "lore_id": lore_id,
 +            "entity_id": entity_id,
-+            "area_id": area_id,
-+            "actual_area_id": actual,
-+            "reason": "entity_in_area" if actual == area_id else "entity_elsewhere",
++            "reason": "known_by_entity" if ok else "not_known_by_entity",
 +        }
 +
-+    if condition_type == "quest_stage":
-+        quest_id = str(condition.get("quest_id") or "")
-+        expected_stage = str(condition.get("stage") or "")
-+        quest = get_quest(simulation_state, quest_id)
-+        actual_stage = str((quest or {}).get("stage") or "")
-+        return {
-+            "ok": actual_stage == expected_stage,
-+            "type": condition_type,
-+            "quest_id": quest_id,
-+            "stage": expected_stage,
-+            "actual_stage": actual_stage,
-+            "reason": "stage_matches" if actual_stage == expected_stage else "stage_mismatch",
-+        }
-+
-+    if condition_type == "puzzle_flag":
-+        puzzle_id = str(condition.get("puzzle_id") or "")
-+        flag = str(condition.get("flag") or "")
-+        expected = condition.get("expected", True)
-+        puzzle_state = _safe_dict(simulation_state.get("puzzle_state"))
-+        puzzle = _safe_dict(_safe_dict(puzzle_state.get("puzzles")).get(puzzle_id))
-+        flags = _safe_dict(puzzle.get("flags"))
-+        actual = flags.get(flag)
++    if condition_type == "lore_truth_status":
++        expected = str(condition.get("truth_status") or "")
++        entry = get_lore_entry(simulation_state, lore_id)
++        actual = str((entry or {}).get("truth_status") or "")
 +        return {
 +            "ok": actual == expected,
 +            "type": condition_type,
-+            "puzzle_id": puzzle_id,
-+            "flag": flag,
++            "lore_id": lore_id,
 +            "expected": expected,
 +            "actual": actual,
-+            "reason": "flag_matches" if actual == expected else "flag_mismatch",
++            "reason": "truth_status_matches" if actual == expected else "truth_status_mismatch",
++        }
++
++    if condition_type == "lore_has_tag":
++        tag = str(condition.get("tag") or "")
++        entry = get_lore_entry(simulation_state, lore_id)
++        tags = set((entry or {}).get("tags") or [])
++        ok = tag in tags
++        return {
++            "ok": ok,
++            "type": condition_type,
++            "lore_id": lore_id,
++            "tag": tag,
++            "actual_tags": sorted(tags),
++            "reason": "tag_present" if ok else "tag_missing",
 +        }
 +
 +    return {
 +        "ok": False,
 +        "type": condition_type,
-+        "reason": f"unknown_condition_type:{condition_type}",
-+    }
-+
-+
-+def evaluate_all_quest_conditions(
-+    simulation_state: Dict[str, Any],
-+    conditions: list[Dict[str, Any]],
-+) -> Dict[str, Any]:
-+    results = [
-+        evaluate_quest_condition(simulation_state, condition)
-+        for condition in conditions
-+    ]
-+    ok = all(row.get("ok") for row in results)
-+    return {
-+        "ok": ok,
-+        "results": results,
-+        "failed": [row for row in results if not row.get("ok")],
++        "lore_id": lore_id,
++        "reason": f"unknown_lore_condition_type:{condition_type}",
 +    }
 *** End Patch
-5. Add src/app/rpg/quests/rewards.py
+5. Add src/app/rpg/lore/transitions.py
 *** Begin Patch
-*** Add File: src/app/rpg/quests/rewards.py
+*** Add File: src/app/rpg/lore/transitions.py
 +from __future__ import annotations
 +
-+import hashlib
-+import json
++from typing import Any, Dict
++
++from app.rpg.lore.state import (
++    add_lore_known_by,
++    add_lore_tag,
++    reveal_lore_to_player,
++    set_lore_truth_status,
++    upsert_lore_entry,
++)
++
++
++def _safe_dict(value: Any) -> Dict[str, Any]:
++    return value if isinstance(value, dict) else {}
++
++
++def apply_lore_transition(
++    simulation_state: Dict[str, Any],
++    transition: Dict[str, Any],
++    *,
++    turn_index: int = 0,
++) -> Dict[str, Any]:
++    transition = _safe_dict(transition)
++    action = str(transition.get("action") or "")
++    lore_id = str(transition.get("lore_id") or "")
++
++    if action == "upsert":
++        entry = dict(transition)
++        entry.pop("action", None)
++        entry.setdefault("metadata", {})
++        entry["metadata"]["updated_turn"] = int(turn_index or 0)
++        return dict(
++            upsert_lore_entry(simulation_state, entry),
++            action=action,
++        )
++
++    if action == "reveal_to_player":
++        return dict(
++            reveal_lore_to_player(simulation_state, lore_id),
++            action=action,
++        )
++
++    if action == "set_truth_status":
++        return dict(
++            set_lore_truth_status(
++                simulation_state,
++                lore_id,
++                str(transition.get("truth_status") or ""),
++            ),
++            action=action,
++        )
++
++    if action == "add_known_by":
++        return dict(
++            add_lore_known_by(
++                simulation_state,
++                lore_id,
++                str(transition.get("entity_id") or ""),
++            ),
++            action=action,
++        )
++
++    if action == "add_tag":
++        return dict(
++            add_lore_tag(
++                simulation_state,
++                lore_id,
++                str(transition.get("tag") or ""),
++            ),
++            action=action,
++        )
++
++    return {
++        "ok": False,
++        "action": action,
++        "lore_id": lore_id,
++        "reason": f"unknown_lore_action:{action}",
++    }
+*** End Patch
+Patch 2 — Add story arc package
+6. Add src/app/rpg/story_arcs/__init__.py
+*** Begin Patch
+*** Add File: src/app/rpg/story_arcs/__init__.py
++"""Deterministic RPG story arc state machine helpers."""
++
++from app.rpg.story_arcs.conditions import evaluate_story_arc_condition
++from app.rpg.story_arcs.state import (
++    apply_story_arc_pressure_delta,
++    ensure_story_arc_state,
++    get_story_arc,
++    link_story_arc,
++    normalize_story_arc_state,
++    set_story_arc_flag,
++    set_story_arc_stage,
++    start_story_arc,
++)
++from app.rpg.story_arcs.transitions import apply_story_arc_transition
++
++__all__ = [
++    "apply_story_arc_pressure_delta",
++    "apply_story_arc_transition",
++    "ensure_story_arc_state",
++    "evaluate_story_arc_condition",
++    "get_story_arc",
++    "link_story_arc",
++    "normalize_story_arc_state",
++    "set_story_arc_flag",
++    "set_story_arc_stage",
++    "start_story_arc",
++]
+*** End Patch
+7. Add src/app/rpg/story_arcs/model.py
+*** Begin Patch
+*** Add File: src/app/rpg/story_arcs/model.py
++from __future__ import annotations
++
++from dataclasses import asdict, dataclass, field
++from typing import Any, Dict, List, Literal
++
++
++StoryArcStatus = Literal["inactive", "active", "resolved", "failed"]
++
++
++@dataclass
++class StoryArcRecord:
++    arc_id: str
++    title: str
++    status: StoryArcStatus = "inactive"
++    stage: str = "inactive"
++    pressure: int = 0
++    escalation_level: int = 0
++    linked_lore: List[str] = field(default_factory=list)
++    linked_quests: List[str] = field(default_factory=list)
++    linked_puzzles: List[str] = field(default_factory=list)
++    linked_locations: List[str] = field(default_factory=list)
++    linked_entities: List[str] = field(default_factory=list)
++    flags: Dict[str, Any] = field(default_factory=dict)
++    started_turn: int | None = None
++    resolved_turn: int | None = None
++    metadata: Dict[str, Any] = field(default_factory=dict)
++
++    def to_dict(self) -> Dict[str, Any]:
++        return asdict(self)
+*** End Patch
+8. Add src/app/rpg/story_arcs/state.py
+*** Begin Patch
+*** Add File: src/app/rpg/story_arcs/state.py
++from __future__ import annotations
++
 +from typing import Any, Dict, List
 +
-+from app.rpg.quests.state import get_quest
++
++VALID_ARC_STATUSES = {"inactive", "active", "resolved", "failed"}
++LINK_KINDS = {
++    "lore": "linked_lore",
++    "quest": "linked_quests",
++    "puzzle": "linked_puzzles",
++    "location": "linked_locations",
++    "entity": "linked_entities",
++}
++
++
++def clamp_pressure(value: Any) -> int:
++    try:
++        number = int(value)
++    except Exception:
++        number = 0
++    return max(0, min(100, number))
 +
 +
 +def _safe_dict(value: Any) -> Dict[str, Any]:
@@ -509,253 +537,6 @@ Patch 1 — Add quest package
 +
 +def _safe_list(value: Any) -> List[Any]:
 +    return value if isinstance(value, list) else []
-+
-+
-+def stable_reward_id(quest_id: str, rewards: List[Dict[str, Any]]) -> str:
-+    payload = json.dumps(
-+        {"quest_id": quest_id, "rewards": rewards},
-+        sort_keys=True,
-+        ensure_ascii=False,
-+        default=str,
-+    )
-+    digest = hashlib.sha1(payload.encode("utf-8")).hexdigest()[:16]
-+    return f"reward:{digest}"
-+
-+
-+def build_reward_payload(
-+    simulation_state: Dict[str, Any],
-+    quest_id: str,
-+    rewards: List[Dict[str, Any]],
-+) -> Dict[str, Any]:
-+    quest = get_quest(simulation_state, quest_id)
-+    if not quest:
-+        return {
-+            "ok": False,
-+            "reason": "quest_missing",
-+            "quest_id": quest_id,
-+            "reward_id": "",
-+            "rewards": [],
-+            "auto_granted": False,
-+        }
-+    normalized_rewards = [
-+        dict(row)
-+        for row in _safe_list(rewards)
-+        if isinstance(row, dict)
-+    ]
-+    reward_id = stable_reward_id(quest_id, normalized_rewards)
-+    payload = {
-+        "ok": True,
-+        "reason": "reward_payload_built",
-+        "quest_id": quest_id,
-+        "reward_id": reward_id,
-+        "rewards": normalized_rewards,
-+        "auto_granted": False,
-+        "already_claimed": bool(quest.get("reward_claimed")),
-+    }
-+    if not any(row.get("reward_id") == reward_id for row in quest.setdefault("rewards", [])):
-+        quest["rewards"].append(payload)
-+    return payload
-+
-+
-+def mark_reward_claimed(
-+    simulation_state: Dict[str, Any],
-+    quest_id: str,
-+    reward_id: str,
-+) -> Dict[str, Any]:
-+    quest = get_quest(simulation_state, quest_id)
-+    if not quest:
-+        return {"ok": False, "reason": "quest_missing", "quest_id": quest_id}
-+    if quest.get("reward_claimed"):
-+        return {
-+            "ok": True,
-+            "reason": "already_claimed",
-+            "quest_id": quest_id,
-+            "reward_id": reward_id,
-+        }
-+    quest["reward_claimed"] = True
-+    return {
-+        "ok": True,
-+        "reason": "claimed",
-+        "quest_id": quest_id,
-+        "reward_id": reward_id,
-+    }
-*** End Patch
-6. Add src/app/rpg/quests/transitions.py
-*** Begin Patch
-*** Add File: src/app/rpg/quests/transitions.py
-+from __future__ import annotations
-+
-+from typing import Any, Dict
-+
-+from app.rpg.quests.conditions import evaluate_all_quest_conditions
-+from app.rpg.quests.rewards import build_reward_payload
-+from app.rpg.quests.state import (
-+    complete_objective,
-+    get_quest,
-+    set_quest_stage,
-+    start_quest,
-+)
-+
-+
-+def _safe_dict(value: Any) -> Dict[str, Any]:
-+    return value if isinstance(value, dict) else {}
-+
-+
-+def apply_quest_transition(
-+    simulation_state: Dict[str, Any],
-+    transition: Dict[str, Any],
-+    *,
-+    turn_index: int = 0,
-+) -> Dict[str, Any]:
-+    transition = _safe_dict(transition)
-+    action = str(transition.get("action") or "")
-+    quest_id = str(transition.get("quest_id") or "")
-+
-+    conditions = transition.get("conditions") or []
-+    condition_result = evaluate_all_quest_conditions(simulation_state, conditions)
-+    if not condition_result.get("ok"):
-+        return {
-+            "ok": False,
-+            "kind": "quest_transition",
-+            "action": action,
-+            "quest_id": quest_id,
-+            "reason": "conditions_failed",
-+            "conditions": condition_result,
-+        }
-+
-+    if action == "start":
-+        return dict(
-+            start_quest(
-+                simulation_state,
-+                quest_id,
-+                title=str(transition.get("title") or quest_id),
-+                stage=str(transition.get("stage") or "started"),
-+                objectives=transition.get("objectives") or {},
-+                turn_index=turn_index,
-+            ),
-+            conditions=condition_result,
-+        )
-+
-+    if action == "set_stage":
-+        return dict(
-+            set_quest_stage(
-+                simulation_state,
-+                quest_id,
-+                str(transition.get("stage") or ""),
-+                status=transition.get("status"),
-+                turn_index=turn_index,
-+            ),
-+            conditions=condition_result,
-+        )
-+
-+    if action == "complete_objective":
-+        return dict(
-+            complete_objective(
-+                simulation_state,
-+                quest_id,
-+                str(transition.get("objective_id") or ""),
-+                turn_index=turn_index,
-+            ),
-+            conditions=condition_result,
-+        )
-+
-+    if action == "complete_quest":
-+        result = set_quest_stage(
-+            simulation_state,
-+            quest_id,
-+            str(transition.get("stage") or "completed"),
-+            status="completed",
-+            turn_index=turn_index,
-+        )
-+        reward_payload = {}
-+        if transition.get("rewards"):
-+            reward_payload = build_reward_payload(
-+                simulation_state,
-+                quest_id,
-+                transition.get("rewards") or [],
-+            )
-+        return dict(
-+            result,
-+            kind="quest_complete",
-+            conditions=condition_result,
-+            reward_payload=reward_payload,
-+        )
-+
-+    quest = get_quest(simulation_state, quest_id)
-+    return {
-+        "ok": False,
-+        "kind": "quest_transition",
-+        "action": action,
-+        "quest_id": quest_id,
-+        "reason": f"unknown_action:{action}",
-+        "quest": quest,
-+        "conditions": condition_result,
-+    }
-*** End Patch
-Patch 2 — Add puzzle package
-7. Add src/app/rpg/puzzles/__init__.py
-*** Begin Patch
-*** Add File: src/app/rpg/puzzles/__init__.py
-+"""Deterministic RPG puzzle state machine helpers."""
-+
-+from app.rpg.puzzles.conditions import evaluate_puzzle_condition
-+from app.rpg.puzzles.state import (
-+    ensure_puzzle_state,
-+    get_puzzle,
-+    normalize_puzzle_state,
-+    set_puzzle_flag,
-+    set_puzzle_state,
-+    start_puzzle,
-+)
-+from app.rpg.puzzles.transitions import apply_puzzle_transition
-+
-+__all__ = [
-+    "apply_puzzle_transition",
-+    "ensure_puzzle_state",
-+    "evaluate_puzzle_condition",
-+    "get_puzzle",
-+    "normalize_puzzle_state",
-+    "set_puzzle_flag",
-+    "set_puzzle_state",
-+    "start_puzzle",
-+]
-*** End Patch
-8. Add src/app/rpg/puzzles/model.py
-*** Begin Patch
-*** Add File: src/app/rpg/puzzles/model.py
-+from __future__ import annotations
-+
-+from dataclasses import asdict, dataclass, field
-+from typing import Any, Dict, Literal
-+
-+
-+PuzzleStatus = Literal["inactive", "active", "solved", "failed"]
-+
-+
-+@dataclass
-+class PuzzleRecord:
-+    puzzle_id: str
-+    title: str
-+    status: PuzzleStatus = "inactive"
-+    state: str = "initial"
-+    flags: Dict[str, Any] = field(default_factory=dict)
-+    attempts: int = 0
-+    solved_turn: int | None = None
-+    metadata: Dict[str, Any] = field(default_factory=dict)
-+
-+    def to_dict(self) -> Dict[str, Any]:
-+        return asdict(self)
-*** End Patch
-9. Add src/app/rpg/puzzles/state.py
-*** Begin Patch
-*** Add File: src/app/rpg/puzzles/state.py
-+from __future__ import annotations
-+
-+from typing import Any, Dict
-+
-+
-+def _safe_dict(value: Any) -> Dict[str, Any]:
-+    return value if isinstance(value, dict) else {}
 +
 +
 +def _safe_str(value: Any) -> str:
@@ -778,168 +559,364 @@ Patch 2 — Add puzzle package
 +        return None
 +
 +
-+def normalize_puzzle(value: Dict[str, Any], *, puzzle_id: str = "") -> Dict[str, Any]:
++def _unique_strs(values: Any) -> List[str]:
++    seen = set()
++    out: List[str] = []
++    for value in _safe_list(values):
++        text = str(value or "").strip()
++        if text and text not in seen:
++            seen.add(text)
++            out.append(text)
++    return out
++
++
++def normalize_story_arc(value: Dict[str, Any], *, arc_id: str = "") -> Dict[str, Any]:
 +    value = _safe_dict(value)
-+    normalized_id = _safe_str(value.get("puzzle_id")) or puzzle_id
++    normalized_id = _safe_str(value.get("arc_id")) or arc_id
 +    status = _safe_str(value.get("status")) or "inactive"
-+    if status not in {"inactive", "active", "solved", "failed"}:
++    if status not in VALID_ARC_STATUSES:
 +        status = "inactive"
 +    return {
-+        "puzzle_id": normalized_id,
++        "arc_id": normalized_id,
 +        "title": _safe_str(value.get("title")) or normalized_id,
 +        "status": status,
-+        "state": _safe_str(value.get("state")) or "initial",
++        "stage": _safe_str(value.get("stage")) or status,
++        "pressure": clamp_pressure(value.get("pressure")),
++        "escalation_level": max(0, _safe_int(value.get("escalation_level"), 0)),
++        "linked_lore": _unique_strs(value.get("linked_lore")),
++        "linked_quests": _unique_strs(value.get("linked_quests")),
++        "linked_puzzles": _unique_strs(value.get("linked_puzzles")),
++        "linked_locations": _unique_strs(value.get("linked_locations")),
++        "linked_entities": _unique_strs(value.get("linked_entities")),
 +        "flags": dict(_safe_dict(value.get("flags"))),
-+        "attempts": _safe_int(value.get("attempts"), 0),
-+        "solved_turn": _safe_int_or_none(value.get("solved_turn")),
++        "started_turn": _safe_int_or_none(value.get("started_turn")),
++        "resolved_turn": _safe_int_or_none(value.get("resolved_turn")),
 +        "metadata": dict(_safe_dict(value.get("metadata"))),
 +    }
 +
 +
-+def normalize_puzzle_state(value: Dict[str, Any] | None) -> Dict[str, Any]:
++def normalize_story_arc_state(value: Dict[str, Any] | None) -> Dict[str, Any]:
 +    value = _safe_dict(value)
-+    puzzles = {}
-+    for puzzle_id, puzzle in _safe_dict(value.get("puzzles")).items():
-+        puzzle_id = str(puzzle_id or "")
-+        if not puzzle_id:
++    arcs: Dict[str, Dict[str, Any]] = {}
++    for arc_id, arc in _safe_dict(value.get("arcs")).items():
++        arc_id = str(arc_id or "")
++        if not arc_id:
 +            continue
-+        puzzles[puzzle_id] = normalize_puzzle(puzzle, puzzle_id=puzzle_id)
++        arcs[arc_id] = normalize_story_arc(arc, arc_id=arc_id)
 +    return {
 +        "version": 1,
-+        "puzzles": puzzles,
++        "arcs": arcs,
 +    }
 +
 +
-+def ensure_puzzle_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
++def ensure_story_arc_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
 +    if not isinstance(simulation_state, dict):
 +        raise TypeError("simulation_state_must_be_dict")
-+    puzzle_state = normalize_puzzle_state(simulation_state.get("puzzle_state"))
-+    simulation_state["puzzle_state"] = puzzle_state
-+    return puzzle_state
++    state = normalize_story_arc_state(simulation_state.get("story_arc_state"))
++    simulation_state["story_arc_state"] = state
++    return state
 +
 +
-+def get_puzzle(
++def get_story_arc(
 +    simulation_state: Dict[str, Any],
-+    puzzle_id: str,
++    arc_id: str,
 +    *,
 +    create: bool = False,
 +    title: str = "",
 +) -> Dict[str, Any] | None:
-+    puzzle_state = ensure_puzzle_state(simulation_state)
-+    puzzles = puzzle_state.setdefault("puzzles", {})
-+    if puzzle_id not in puzzles and create:
-+        puzzles[puzzle_id] = normalize_puzzle(
++    state = ensure_story_arc_state(simulation_state)
++    arcs = state.setdefault("arcs", {})
++    if arc_id not in arcs and create:
++        arcs[arc_id] = normalize_story_arc(
 +            {
-+                "puzzle_id": puzzle_id,
-+                "title": title or puzzle_id,
++                "arc_id": arc_id,
++                "title": title or arc_id,
 +                "status": "inactive",
-+                "state": "initial",
++                "stage": "inactive",
 +            },
-+            puzzle_id=puzzle_id,
++            arc_id=arc_id,
 +        )
-+    return puzzles.get(puzzle_id)
++    return arcs.get(arc_id)
 +
 +
-+def start_puzzle(
++def _apply_links(arc: Dict[str, Any], links: Dict[str, Any]) -> None:
++    links = _safe_dict(links)
++    for kind, key in LINK_KINDS.items():
++        values = list(arc.get(key) or [])
++        values.extend(_safe_list(links.get(kind)))
++        values.extend(_safe_list(links.get(key)))
++        arc[key] = _unique_strs(values)
++
++
++def start_story_arc(
 +    simulation_state: Dict[str, Any],
-+    puzzle_id: str,
++    arc_id: str,
 +    *,
 +    title: str = "",
-+    state: str = "initial",
++    stage: str = "started",
++    pressure: int = 0,
++    links: Dict[str, Any] | None = None,
++    turn_index: int = 0,
 +) -> Dict[str, Any]:
-+    puzzle = get_puzzle(simulation_state, puzzle_id, create=True, title=title)
-+    assert puzzle is not None
-+    puzzle["status"] = "active"
-+    puzzle["state"] = state
++    arc = get_story_arc(simulation_state, arc_id, create=True, title=title)
++    assert arc is not None
++    arc["status"] = "active"
++    arc["stage"] = stage
++    arc["pressure"] = clamp_pressure(pressure)
++    if arc.get("started_turn") is None:
++        arc["started_turn"] = int(turn_index or 0)
++    _apply_links(arc, links or {})
 +    return {
 +        "ok": True,
-+        "kind": "puzzle_start",
-+        "puzzle_id": puzzle_id,
-+        "state": puzzle["state"],
-+        "status": puzzle["status"],
-+        "puzzle": puzzle,
++        "kind": "story_arc_start",
++        "arc_id": arc_id,
++        "stage": arc["stage"],
++        "status": arc["status"],
++        "pressure": arc["pressure"],
++        "arc": arc,
 +    }
 +
 +
-+def set_puzzle_state(
++def set_story_arc_stage(
 +    simulation_state: Dict[str, Any],
-+    puzzle_id: str,
-+    state: str,
++    arc_id: str,
++    stage: str,
 +    *,
 +    status: str | None = None,
 +    turn_index: int = 0,
 +) -> Dict[str, Any]:
-+    puzzle = get_puzzle(simulation_state, puzzle_id, create=True)
-+    assert puzzle is not None
-+    puzzle["state"] = state
++    arc = get_story_arc(simulation_state, arc_id, create=True)
++    assert arc is not None
++    arc["stage"] = stage
 +    if status:
-+        puzzle["status"] = status
-+    if status == "solved" and puzzle.get("solved_turn") is None:
-+        puzzle["solved_turn"] = int(turn_index or 0)
++        arc["status"] = status
++    if status in {"resolved", "failed"} and arc.get("resolved_turn") is None:
++        arc["resolved_turn"] = int(turn_index or 0)
 +    return {
 +        "ok": True,
-+        "kind": "puzzle_state",
-+        "puzzle_id": puzzle_id,
-+        "state": puzzle["state"],
-+        "status": puzzle["status"],
-+        "puzzle": puzzle,
++        "kind": "story_arc_stage",
++        "arc_id": arc_id,
++        "stage": arc["stage"],
++        "status": arc["status"],
++        "arc": arc,
 +    }
 +
 +
-+def set_puzzle_flag(
++def apply_story_arc_pressure_delta(
 +    simulation_state: Dict[str, Any],
-+    puzzle_id: str,
++    arc_id: str,
++    delta: int,
++    *,
++    turn_index: int = 0,
++) -> Dict[str, Any]:
++    arc = get_story_arc(simulation_state, arc_id, create=True)
++    assert arc is not None
++    before = int(arc.get("pressure") or 0)
++    after = clamp_pressure(before + int(delta or 0))
++    arc["pressure"] = after
++    arc.setdefault("metadata", {})["last_pressure_turn"] = int(turn_index or 0)
++    return {
++        "ok": True,
++        "kind": "story_arc_pressure_delta",
++        "arc_id": arc_id,
++        "before": before,
++        "delta": int(delta or 0),
++        "after": after,
++        "arc": arc,
++    }
++
++
++def set_story_arc_flag(
++    simulation_state: Dict[str, Any],
++    arc_id: str,
 +    flag: str,
 +    value: Any,
 +) -> Dict[str, Any]:
-+    puzzle = get_puzzle(simulation_state, puzzle_id, create=True)
-+    assert puzzle is not None
-+    puzzle.setdefault("flags", {})[flag] = value
++    arc = get_story_arc(simulation_state, arc_id, create=True)
++    assert arc is not None
++    arc.setdefault("flags", {})[flag] = value
 +    return {
 +        "ok": True,
-+        "kind": "puzzle_flag",
-+        "puzzle_id": puzzle_id,
++        "kind": "story_arc_flag",
++        "arc_id": arc_id,
 +        "flag": flag,
 +        "value": value,
-+        "puzzle": puzzle,
++        "arc": arc,
++    }
++
++
++def link_story_arc(
++    simulation_state: Dict[str, Any],
++    arc_id: str,
++    kind: str,
++    target_id: str,
++) -> Dict[str, Any]:
++    arc = get_story_arc(simulation_state, arc_id, create=True)
++    assert arc is not None
++    key = LINK_KINDS.get(kind)
++    if not key:
++        return {
++            "ok": False,
++            "reason": f"unknown_link_kind:{kind}",
++            "arc_id": arc_id,
++            "kind": kind,
++            "target_id": target_id,
++        }
++    values = list(arc.get(key) or [])
++    if target_id not in values:
++        values.append(target_id)
++    arc[key] = _unique_strs(values)
++    return {
++        "ok": True,
++        "reason": "linked",
++        "arc_id": arc_id,
++        "kind": kind,
++        "target_id": target_id,
++        "arc": arc,
 +    }
 *** End Patch
-10. Add src/app/rpg/puzzles/conditions.py
+9. Add src/app/rpg/story_arcs/conditions.py
 *** Begin Patch
-*** Add File: src/app/rpg/puzzles/conditions.py
+*** Add File: src/app/rpg/story_arcs/conditions.py
 +from __future__ import annotations
 +
 +from typing import Any, Dict
 +
++from app.rpg.lore.conditions import evaluate_lore_condition
++from app.rpg.memory.causal_retrieval import retrieve_causal_memories
 +from app.rpg.puzzles.state import get_puzzle
++from app.rpg.quests.state import get_quest
++from app.rpg.story_arcs.state import get_story_arc
 +
 +
 +def _safe_dict(value: Any) -> Dict[str, Any]:
 +    return value if isinstance(value, dict) else {}
 +
 +
-+def evaluate_puzzle_condition(
++def evaluate_story_arc_condition(
 +    simulation_state: Dict[str, Any],
 +    condition: Dict[str, Any],
 +) -> Dict[str, Any]:
 +    condition = _safe_dict(condition)
 +    condition_type = str(condition.get("type") or "")
++    arc_id = str(condition.get("arc_id") or "")
 +
-+    if condition_type == "always":
-+        return {"ok": True, "type": condition_type, "reason": "always"}
-+
-+    if condition_type == "puzzle_state":
-+        puzzle_id = str(condition.get("puzzle_id") or "")
-+        expected_state = str(condition.get("state") or "")
-+        puzzle = get_puzzle(simulation_state, puzzle_id)
-+        actual_state = str((puzzle or {}).get("state") or "")
++    if condition_type == "arc_exists":
++        arc = get_story_arc(simulation_state, arc_id)
 +        return {
-+            "ok": actual_state == expected_state,
++            "ok": bool(arc),
 +            "type": condition_type,
-+            "puzzle_id": puzzle_id,
-+            "state": expected_state,
-+            "actual_state": actual_state,
-+            "reason": "state_matches" if actual_state == expected_state else "state_mismatch",
++            "arc_id": arc_id,
++            "reason": "arc_exists" if arc else "arc_missing",
++        }
++
++    if condition_type == "arc_status":
++        expected = str(condition.get("status") or "")
++        arc = get_story_arc(simulation_state, arc_id)
++        actual = str((arc or {}).get("status") or "")
++        return {
++            "ok": actual == expected,
++            "type": condition_type,
++            "arc_id": arc_id,
++            "expected": expected,
++            "actual": actual,
++            "reason": "status_matches" if actual == expected else "status_mismatch",
++        }
++
++    if condition_type == "arc_stage":
++        expected = str(condition.get("stage") or "")
++        arc = get_story_arc(simulation_state, arc_id)
++        actual = str((arc or {}).get("stage") or "")
++        return {
++            "ok": actual == expected,
++            "type": condition_type,
++            "arc_id": arc_id,
++            "expected": expected,
++            "actual": actual,
++            "reason": "stage_matches" if actual == expected else "stage_mismatch",
++        }
++
++    if condition_type == "arc_pressure_at_least":
++        minimum = int(condition.get("minimum") or 0)
++        arc = get_story_arc(simulation_state, arc_id)
++        actual = int((arc or {}).get("pressure") or 0)
++        return {
++            "ok": actual >= minimum,
++            "type": condition_type,
++            "arc_id": arc_id,
++            "minimum": minimum,
++            "actual": actual,
++            "reason": "pressure_sufficient" if actual >= minimum else "pressure_too_low",
++        }
++
++    if condition_type == "arc_pressure_below":
++        maximum = int(condition.get("maximum") or 0)
++        arc = get_story_arc(simulation_state, arc_id)
++        actual = int((arc or {}).get("pressure") or 0)
++        return {
++            "ok": actual < maximum,
++            "type": condition_type,
++            "arc_id": arc_id,
++            "maximum": maximum,
++            "actual": actual,
++            "reason": "pressure_below" if actual < maximum else "pressure_too_high",
++        }
++
++    if condition_type == "arc_flag":
++        flag = str(condition.get("flag") or "")
++        expected = condition.get("expected", True)
++        arc = get_story_arc(simulation_state, arc_id)
++        flags = _safe_dict((arc or {}).get("flags"))
++        actual = flags.get(flag)
++        return {
++            "ok": actual == expected,
++            "type": condition_type,
++            "arc_id": arc_id,
++            "flag": flag,
++            "expected": expected,
++            "actual": actual,
++            "available_flags": sorted(str(key) for key in flags.keys()),
++            "reason": "flag_matches" if actual == expected else "flag_mismatch",
++        }
++
++    if condition_type in {
++        "lore_revealed_to_player",
++        "lore_known_by",
++        "lore_truth_status",
++        "lore_has_tag",
++        "lore_exists",
++    }:
++        return dict(
++            evaluate_lore_condition(simulation_state, condition),
++            delegated_from="story_arc_condition",
++        )
++
++    if condition_type == "quest_stage":
++        quest_id = str(condition.get("quest_id") or "")
++        expected = str(condition.get("stage") or "")
++        quest = get_quest(simulation_state, quest_id)
++        actual = str((quest or {}).get("stage") or "")
++        return {
++            "ok": actual == expected,
++            "type": condition_type,
++            "quest_id": quest_id,
++            "expected": expected,
++            "actual": actual,
++            "reason": "quest_stage_matches" if actual == expected else "quest_stage_mismatch",
++        }
++
++    if condition_type == "quest_status":
++        quest_id = str(condition.get("quest_id") or "")
++        expected = str(condition.get("status") or "")
++        quest = get_quest(simulation_state, quest_id)
++        actual = str((quest or {}).get("status") or "")
++        return {
++            "ok": actual == expected,
++            "type": condition_type,
++            "quest_id": quest_id,
++            "expected": expected,
++            "actual": actual,
++            "reason": "quest_status_matches" if actual == expected else "quest_status_mismatch",
 +        }
 +
 +    if condition_type == "puzzle_flag":
@@ -947,7 +924,8 @@ Patch 2 — Add puzzle package
 +        flag = str(condition.get("flag") or "")
 +        expected = condition.get("expected", True)
 +        puzzle = get_puzzle(simulation_state, puzzle_id)
-+        actual = _safe_dict((puzzle or {}).get("flags")).get(flag)
++        flags = _safe_dict((puzzle or {}).get("flags"))
++        actual = flags.get(flag)
 +        return {
 +            "ok": actual == expected,
 +            "type": condition_type,
@@ -955,22 +933,46 @@ Patch 2 — Add puzzle package
 +            "flag": flag,
 +            "expected": expected,
 +            "actual": actual,
-+            "reason": "flag_matches" if actual == expected else "flag_mismatch",
++            "available_flags": sorted(str(key) for key in flags.keys()),
++            "reason": "puzzle_flag_matches" if actual == expected else "puzzle_flag_mismatch",
++        }
++
++    if condition_type == "npc_knows_memory":
++        npc_id = str(condition.get("npc_id") or "")
++        event_id = str(condition.get("event_id") or "")
++        rows = retrieve_causal_memories(
++            simulation_state,
++            npc_id,
++            actor_id=condition.get("actor_id"),
++            target_id=condition.get("target_id"),
++            tags=condition.get("tags") or [],
++            max_items=20,
++        )
++        actual_event_ids = [row.get("event_id") for row in rows]
++        ok = event_id in actual_event_ids
++        return {
++            "ok": ok,
++            "type": condition_type,
++            "npc_id": npc_id,
++            "event_id": event_id,
++            "actual_event_ids": actual_event_ids,
++            "reason": "memory_known" if ok else "memory_missing",
 +        }
 +
 +    return {
 +        "ok": False,
 +        "type": condition_type,
-+        "reason": f"unknown_condition_type:{condition_type}",
++        "arc_id": arc_id,
++        "reason": f"unknown_story_arc_condition_type:{condition_type}",
 +    }
 +
 +
-+def evaluate_all_puzzle_conditions(
++def evaluate_all_story_arc_conditions(
 +    simulation_state: Dict[str, Any],
 +    conditions: list[Dict[str, Any]],
 +) -> Dict[str, Any]:
 +    results = [
-+        evaluate_puzzle_condition(simulation_state, condition)
++        evaluate_story_arc_condition(simulation_state, condition)
 +        for condition in conditions
 +    ]
 +    ok = all(row.get("ok") for row in results)
@@ -980,19 +982,21 @@ Patch 2 — Add puzzle package
 +        "failed": [row for row in results if not row.get("ok")],
 +    }
 *** End Patch
-11. Add src/app/rpg/puzzles/transitions.py
+10. Add src/app/rpg/story_arcs/transitions.py
 *** Begin Patch
-*** Add File: src/app/rpg/puzzles/transitions.py
+*** Add File: src/app/rpg/story_arcs/transitions.py
 +from __future__ import annotations
 +
 +from typing import Any, Dict
 +
-+from app.rpg.puzzles.conditions import evaluate_all_puzzle_conditions
-+from app.rpg.puzzles.state import (
-+    get_puzzle,
-+    set_puzzle_flag,
-+    set_puzzle_state,
-+    start_puzzle,
++from app.rpg.lore.transitions import apply_lore_transition
++from app.rpg.story_arcs.conditions import evaluate_all_story_arc_conditions
++from app.rpg.story_arcs.state import (
++    apply_story_arc_pressure_delta,
++    link_story_arc,
++    set_story_arc_flag,
++    set_story_arc_stage,
++    start_story_arc,
 +)
 +
 +
@@ -1000,13 +1004,7 @@ Patch 2 — Add puzzle package
 +    return value if isinstance(value, dict) else {}
 +
 +
-+def _input_matches(expected: Any, actual: Any) -> bool:
-+    if expected is None:
-+        return True
-+    return str(expected).strip().lower() == str(actual).strip().lower()
-+
-+
-+def apply_puzzle_transition(
++def apply_story_arc_transition(
 +    simulation_state: Dict[str, Any],
 +    transition: Dict[str, Any],
 +    *,
@@ -1014,203 +1012,428 @@ Patch 2 — Add puzzle package
 +) -> Dict[str, Any]:
 +    transition = _safe_dict(transition)
 +    action = str(transition.get("action") or "")
-+    puzzle_id = str(transition.get("puzzle_id") or "")
++    arc_id = str(transition.get("arc_id") or "")
 +
 +    conditions = transition.get("conditions") or []
-+    condition_result = evaluate_all_puzzle_conditions(simulation_state, conditions)
++    condition_result = evaluate_all_story_arc_conditions(simulation_state, conditions)
 +    if not condition_result.get("ok"):
 +        return {
 +            "ok": False,
-+            "kind": "puzzle_transition",
++            "kind": "story_arc_transition",
 +            "action": action,
-+            "puzzle_id": puzzle_id,
++            "arc_id": arc_id,
 +            "reason": "conditions_failed",
 +            "conditions": condition_result,
 +        }
 +
 +    if action == "start":
 +        return dict(
-+            start_puzzle(
++            start_story_arc(
 +                simulation_state,
-+                puzzle_id,
-+                title=str(transition.get("title") or puzzle_id),
-+                state=str(transition.get("state") or "initial"),
++                arc_id,
++                title=str(transition.get("title") or arc_id),
++                stage=str(transition.get("stage") or "started"),
++                pressure=int(transition.get("pressure") or 0),
++                links=transition.get("links") or {},
++                turn_index=turn_index,
 +            ),
++            action=action,
 +            conditions=condition_result,
 +        )
 +
-+    if action == "input":
-+        puzzle = get_puzzle(simulation_state, puzzle_id, create=True)
-+        assert puzzle is not None
-+        puzzle["attempts"] = int(puzzle.get("attempts") or 0) + 1
-+        expected_input = transition.get("expected_input")
-+        actual_input = transition.get("input")
-+        if not _input_matches(expected_input, actual_input):
-+            return {
-+                "ok": False,
-+                "kind": "puzzle_input",
-+                "action": action,
-+                "puzzle_id": puzzle_id,
-+                "reason": "wrong_input",
-+                "expected_input": expected_input,
-+                "input": actual_input,
-+                "puzzle": puzzle,
-+                "conditions": condition_result,
-+            }
-+        result = set_puzzle_state(
-+            simulation_state,
-+            puzzle_id,
-+            str(transition.get("next_state") or puzzle.get("state") or "initial"),
-+            status=transition.get("status"),
-+            turn_index=turn_index,
-+        )
-+        for flag, value in _safe_dict(transition.get("set_flags")).items():
-+            set_puzzle_flag(simulation_state, puzzle_id, str(flag), value)
++    if action == "set_stage":
 +        return dict(
-+            result,
-+            kind="puzzle_input",
-+            reason="correct_input",
-+            input=actual_input,
++            set_story_arc_stage(
++                simulation_state,
++                arc_id,
++                str(transition.get("stage") or ""),
++                status=transition.get("status"),
++                turn_index=turn_index,
++            ),
++            action=action,
++            conditions=condition_result,
++        )
++
++    if action == "pressure_delta":
++        return dict(
++            apply_story_arc_pressure_delta(
++                simulation_state,
++                arc_id,
++                int(transition.get("delta") or 0),
++                turn_index=turn_index,
++            ),
++            action=action,
 +            conditions=condition_result,
 +        )
 +
 +    if action == "set_flag":
 +        return dict(
-+            set_puzzle_flag(
++            set_story_arc_flag(
 +                simulation_state,
-+                puzzle_id,
++                arc_id,
 +                str(transition.get("flag") or ""),
 +                transition.get("value", True),
 +            ),
++            action=action,
 +            conditions=condition_result,
 +        )
 +
-+    if action == "solve":
-+        result = set_puzzle_state(
-+            simulation_state,
-+            puzzle_id,
-+            str(transition.get("state") or "solved"),
-+            status="solved",
-+            turn_index=turn_index,
-+        )
-+        for flag, value in _safe_dict(transition.get("set_flags")).items():
-+            set_puzzle_flag(simulation_state, puzzle_id, str(flag), value)
++    if action.startswith("link_"):
++        kind = action.replace("link_", "", 1)
 +        return dict(
-+            result,
-+            kind="puzzle_solve",
-+            reason="solved",
++            link_story_arc(
++                simulation_state,
++                arc_id,
++                kind,
++                str(transition.get("target_id") or ""),
++            ),
++            action=action,
++            conditions=condition_result,
++        )
++
++    if action == "reveal_lore":
++        return dict(
++            apply_lore_transition(
++                simulation_state,
++                {
++                    "action": "reveal_to_player",
++                    "lore_id": str(transition.get("lore_id") or ""),
++                },
++                turn_index=turn_index,
++            ),
++            kind="story_arc_lore_reveal",
++            action=action,
++            arc_id=arc_id,
++            conditions=condition_result,
++        )
++
++    if action == "resolve":
++        return dict(
++            set_story_arc_stage(
++                simulation_state,
++                arc_id,
++                str(transition.get("stage") or "resolved"),
++                status="resolved",
++                turn_index=turn_index,
++            ),
++            action=action,
++            conditions=condition_result,
++        )
++
++    if action == "fail":
++        return dict(
++            set_story_arc_stage(
++                simulation_state,
++                arc_id,
++                str(transition.get("stage") or "failed"),
++                status="failed",
++                turn_index=turn_index,
++            ),
++            action=action,
 +            conditions=condition_result,
 +        )
 +
 +    return {
 +        "ok": False,
-+        "kind": "puzzle_transition",
++        "kind": "story_arc_transition",
 +        "action": action,
-+        "puzzle_id": puzzle_id,
-+        "reason": f"unknown_action:{action}",
++        "arc_id": arc_id,
++        "reason": f"unknown_story_arc_action:{action}",
 +        "conditions": condition_result,
 +    }
 *** End Patch
 Patch 3 — Unit tests
-12. Add src/tests/rpg/quests/test_quest_state.py
+11. Add lore tests
 *** Begin Patch
-*** Add File: src/tests/rpg/quests/test_quest_state.py
-+from app.rpg.quests.state import (
-+    complete_objective,
-+    get_quest,
-+    set_quest_stage,
-+    start_quest,
+*** Add File: src/tests/rpg/lore/test_lore_state.py
++from app.rpg.lore.state import (
++    add_lore_known_by,
++    get_lore_entry,
++    is_lore_available_to_player,
++    is_lore_known_by,
++    reveal_lore_to_player,
++    set_lore_truth_status,
++    upsert_lore_entry,
 +)
 +
 +
-+def test_start_quest_sets_active_stage_and_objectives():
++def test_lore_entry_upsert_and_reveal():
 +    simulation_state = {}
-+    result = start_quest(
++    upsert_lore_entry(
 +        simulation_state,
-+        "quest:rat_cellar",
-+        title="Rats in the Cellar",
-+        stage="started",
-+        objectives={
-+            "talk_to_bran": {"description": "Talk to Bran."},
++        {
++            "lore_id": "lore:red_sashes",
++            "title": "The Red Sashes",
++            "kind": "faction",
++            "truth_status": "true",
++            "known_by": ["bran"],
++            "tags": ["bandits"],
 +        },
++    )
++
++    assert get_lore_entry(simulation_state, "lore:red_sashes")["title"] == "The Red Sashes"
++    assert is_lore_available_to_player(simulation_state, "lore:red_sashes") is False
++
++    reveal_lore_to_player(simulation_state, "lore:red_sashes")
++    assert is_lore_available_to_player(simulation_state, "lore:red_sashes") is True
++
++
++def test_lore_known_by_and_truth_status():
++    simulation_state = {}
++    upsert_lore_entry(simulation_state, {"lore_id": "lore:secret", "title": "Secret", "truth_status": "secret"})
++    add_lore_known_by(simulation_state, "lore:secret", "bran")
++    set_lore_truth_status(simulation_state, "lore:secret", "rumor")
++
++    entry = get_lore_entry(simulation_state, "lore:secret")
++    assert is_lore_known_by(simulation_state, "lore:secret", "bran") is True
++    assert entry["truth_status"] == "rumor"
++
++
++def test_rumor_not_promoted_to_truth_by_reveal():
++    simulation_state = {}
++    upsert_lore_entry(simulation_state, {"lore_id": "lore:rumor", "title": "Rumor", "truth_status": "rumor"})
++    reveal_lore_to_player(simulation_state, "lore:rumor")
++
++    assert get_lore_entry(simulation_state, "lore:rumor")["truth_status"] == "rumor"
+*** End Patch
+*** Begin Patch
+*** Add File: src/tests/rpg/lore/test_lore_conditions.py
++from app.rpg.lore.conditions import evaluate_lore_condition
++from app.rpg.lore.state import reveal_lore_to_player, upsert_lore_entry
++
++
++def test_lore_revealed_condition():
++    simulation_state = {}
++    upsert_lore_entry(simulation_state, {"lore_id": "lore:red_sashes", "title": "The Red Sashes"})
++    reveal_lore_to_player(simulation_state, "lore:red_sashes")
++
++    result = evaluate_lore_condition(
++        simulation_state,
++        {"type": "lore_revealed_to_player", "lore_id": "lore:red_sashes"},
++    )
++
++    assert result["ok"] is True
++
++
++def test_lore_known_by_condition():
++    simulation_state = {}
++    upsert_lore_entry(
++        simulation_state,
++        {
++            "lore_id": "lore:red_sashes",
++            "title": "The Red Sashes",
++            "known_by": ["bran"],
++        },
++    )
++
++    result = evaluate_lore_condition(
++        simulation_state,
++        {"type": "lore_known_by", "lore_id": "lore:red_sashes", "entity_id": "bran"},
++    )
++
++    assert result["ok"] is True
++
++
++def test_lore_truth_status_condition():
++    simulation_state = {}
++    upsert_lore_entry(simulation_state, {"lore_id": "lore:rumor", "title": "Rumor", "truth_status": "rumor"})
++
++    result = evaluate_lore_condition(
++        simulation_state,
++        {"type": "lore_truth_status", "lore_id": "lore:rumor", "truth_status": "rumor"},
++    )
++
++    assert result["ok"] is True
+*** End Patch
+*** Begin Patch
+*** Add File: src/tests/rpg/lore/test_lore_transitions.py
++from app.rpg.lore.state import get_lore_entry, is_lore_available_to_player
++from app.rpg.lore.transitions import apply_lore_transition
++
++
++def test_lore_transition_upsert_and_reveal():
++    simulation_state = {}
++    apply_lore_transition(
++        simulation_state,
++        {
++            "action": "upsert",
++            "lore_id": "lore:red_sashes",
++            "title": "The Red Sashes",
++            "truth_status": "true",
++        },
++    )
++    apply_lore_transition(
++        simulation_state,
++        {"action": "reveal_to_player", "lore_id": "lore:red_sashes"},
++    )
++
++    assert get_lore_entry(simulation_state, "lore:red_sashes")["truth_status"] == "true"
++    assert is_lore_available_to_player(simulation_state, "lore:red_sashes") is True
++
++
++def test_lore_transition_add_known_by():
++    simulation_state = {}
++    apply_lore_transition(simulation_state, {"action": "upsert", "lore_id": "lore:secret", "title": "Secret"})
++    result = apply_lore_transition(
++        simulation_state,
++        {"action": "add_known_by", "lore_id": "lore:secret", "entity_id": "bran"},
++    )
++
++    assert result["ok"] is True
++    assert "bran" in get_lore_entry(simulation_state, "lore:secret")["known_by"]
+*** End Patch
+*** Begin Patch
+*** Add File: src/tests/rpg/lore/test_lore_save_load.py
++import json
++
++from app.rpg.lore.state import normalize_lore_state, reveal_lore_to_player, upsert_lore_entry
++
++
++def test_lore_state_json_roundtrip():
++    simulation_state = {}
++    upsert_lore_entry(
++        simulation_state,
++        {
++            "lore_id": "lore:red_sashes",
++            "title": "The Red Sashes",
++            "truth_status": "rumor",
++            "known_by": ["bran"],
++            "tags": ["bandits"],
++        },
++    )
++    reveal_lore_to_player(simulation_state, "lore:red_sashes")
++
++    encoded = json.dumps(simulation_state["lore_state"], sort_keys=True)
++    decoded = json.loads(encoded)
++    normalized = normalize_lore_state(decoded)
++
++    entry = normalized["entries"]["lore:red_sashes"]
++    assert entry["revealed_to_player"] is True
++    assert entry["truth_status"] == "rumor"
++    assert entry["known_by"] == ["bran"]
+*** End Patch
+12. Add story arc tests
+*** Begin Patch
+*** Add File: src/tests/rpg/story_arcs/test_story_arc_state.py
++from app.rpg.story_arcs.state import (
++    apply_story_arc_pressure_delta,
++    get_story_arc,
++    link_story_arc,
++    set_story_arc_flag,
++    set_story_arc_stage,
++    start_story_arc,
++)
++
++
++def test_start_story_arc_sets_active_stage_pressure_and_links():
++    simulation_state = {}
++    result = start_story_arc(
++        simulation_state,
++        "arc:bandit_pressure",
++        title="Bandit Pressure",
++        stage="rumors",
++        pressure=20,
++        links={"lore": ["lore:red_sashes"], "entities": ["bran"]},
 +        turn_index=1,
 +    )
 +
-+    quest = get_quest(simulation_state, "quest:rat_cellar")
++    arc = get_story_arc(simulation_state, "arc:bandit_pressure")
 +    assert result["ok"] is True
-+    assert quest["status"] == "active"
-+    assert quest["stage"] == "started"
-+    assert quest["objectives"]["talk_to_bran"]["status"] == "open"
++    assert arc["status"] == "active"
++    assert arc["stage"] == "rumors"
++    assert arc["pressure"] == 20
++    assert "lore:red_sashes" in arc["linked_lore"]
++    assert "bran" in arc["linked_entities"]
 +
 +
-+def test_complete_objective_marks_completed():
++def test_pressure_delta_clamps():
 +    simulation_state = {}
-+    start_quest(
-+        simulation_state,
-+        "quest:rat_cellar",
-+        objectives={"talk_to_bran": {"description": "Talk to Bran."}},
-+    )
++    start_story_arc(simulation_state, "arc:bandit_pressure", pressure=90)
++    result = apply_story_arc_pressure_delta(simulation_state, "arc:bandit_pressure", 30)
 +
-+    result = complete_objective(
-+        simulation_state,
-+        "quest:rat_cellar",
-+        "talk_to_bran",
-+        turn_index=2,
-+    )
-+
-+    assert result["ok"] is True
-+    assert result["objective"]["status"] == "completed"
-+    assert result["objective"]["completed_turn"] == 2
++    assert result["after"] == 100
 +
 +
-+def test_set_quest_stage_can_complete():
++def test_stage_flag_and_link_updates():
 +    simulation_state = {}
-+    start_quest(simulation_state, "quest:rat_cellar")
-+    result = set_quest_stage(
-+        simulation_state,
-+        "quest:rat_cellar",
-+        "completed",
-+        status="completed",
-+        turn_index=3,
-+    )
++    start_story_arc(simulation_state, "arc:bandit_pressure")
++    set_story_arc_stage(simulation_state, "arc:bandit_pressure", "threat")
++    set_story_arc_flag(simulation_state, "arc:bandit_pressure", "bran_warned", True)
++    link_story_arc(simulation_state, "arc:bandit_pressure", "quest", "quest:stop_red_sashes")
 +
-+    assert result["ok"] is True
-+    assert result["quest"]["status"] == "completed"
-+    assert result["quest"]["completed_turn"] == 3
++    arc = get_story_arc(simulation_state, "arc:bandit_pressure")
++    assert arc["stage"] == "threat"
++    assert arc["flags"]["bran_warned"] is True
++    assert "quest:stop_red_sashes" in arc["linked_quests"]
 *** End Patch
-13. Add src/tests/rpg/quests/test_quest_conditions.py
 *** Begin Patch
-*** Add File: src/tests/rpg/quests/test_quest_conditions.py
+*** Add File: src/tests/rpg/story_arcs/test_story_arc_conditions.py
++from app.rpg.lore.state import reveal_lore_to_player, upsert_lore_entry
 +from app.rpg.memory.observation import record_told_memory
-+from app.rpg.quests.conditions import evaluate_quest_condition
++from app.rpg.puzzles.state import set_puzzle_flag, start_puzzle
 +from app.rpg.quests.state import start_quest
-+from app.rpg.social.reputation import set_relationship_values
-+from tests.rpg.spatial.fixtures import tavern_spatial_fixture
++from app.rpg.story_arcs.conditions import evaluate_story_arc_condition
++from app.rpg.story_arcs.state import set_story_arc_flag, start_story_arc
 +
 +
-+def test_condition_has_item_manual_inventory():
-+    simulation_state = {"manual_inventory_items": ["cellar_key"]}
-+    result = evaluate_quest_condition(
-+        simulation_state,
-+        {"type": "has_item", "item_id": "cellar_key"},
-+    )
-+
-+    assert result["ok"] is True
-+
-+
-+def test_condition_social_trust_at_least():
++def test_arc_pressure_condition():
 +    simulation_state = {}
-+    set_relationship_values(simulation_state, "bran", {"trust": 40})
++    start_story_arc(simulation_state, "arc:bandit_pressure", pressure=60)
 +
-+    result = evaluate_quest_condition(
++    result = evaluate_story_arc_condition(
 +        simulation_state,
-+        {"type": "social_trust_at_least", "npc_id": "bran", "minimum": 30},
++        {"type": "arc_pressure_at_least", "arc_id": "arc:bandit_pressure", "minimum": 50},
 +    )
 +
 +    assert result["ok"] is True
 +
 +
-+def test_condition_npc_knows_memory():
++def test_arc_flag_condition():
++    simulation_state = {}
++    start_story_arc(simulation_state, "arc:bandit_pressure")
++    set_story_arc_flag(simulation_state, "arc:bandit_pressure", "bran_warned", True)
++
++    result = evaluate_story_arc_condition(
++        simulation_state,
++        {"type": "arc_flag", "arc_id": "arc:bandit_pressure", "flag": "bran_warned", "expected": True},
++    )
++
++    assert result["ok"] is True
++
++
++def test_lore_condition_delegation():
++    simulation_state = {}
++    upsert_lore_entry(simulation_state, {"lore_id": "lore:red_sashes", "title": "The Red Sashes"})
++    reveal_lore_to_player(simulation_state, "lore:red_sashes")
++
++    result = evaluate_story_arc_condition(
++        simulation_state,
++        {"type": "lore_revealed_to_player", "lore_id": "lore:red_sashes"},
++    )
++
++    assert result["ok"] is True
++
++
++def test_quest_and_puzzle_conditions():
++    simulation_state = {}
++    start_quest(simulation_state, "quest:stop_red_sashes", stage="investigate")
++    start_puzzle(simulation_state, "puzzle:cellar_runes")
++    set_puzzle_flag(simulation_state, "puzzle:cellar_runes", "rune_unlocked", True)
++
++    quest_result = evaluate_story_arc_condition(
++        simulation_state,
++        {"type": "quest_stage", "quest_id": "quest:stop_red_sashes", "stage": "investigate"},
++    )
++    puzzle_result = evaluate_story_arc_condition(
++        simulation_state,
++        {"type": "puzzle_flag", "puzzle_id": "puzzle:cellar_runes", "flag": "rune_unlocked", "expected": True},
++    )
++
++    assert quest_result["ok"] is True
++    assert puzzle_result["ok"] is True
++
++
++def test_npc_memory_condition():
 +    simulation_state = {}
 +    record_told_memory(
 +        simulation_state,
@@ -1223,7 +1446,7 @@ Patch 3 — Unit tests
 +        verified=True,
 +    )
 +
-+    result = evaluate_quest_condition(
++    result = evaluate_story_arc_condition(
 +        simulation_state,
 +        {
 +            "type": "npc_knows_memory",
@@ -1234,324 +1457,138 @@ Patch 3 — Unit tests
 +    )
 +
 +    assert result["ok"] is True
-+
-+
-+def test_condition_entity_in_area():
-+    simulation_state = {"spatial_graph": tavern_spatial_fixture()}
-+    result = evaluate_quest_condition(
-+        simulation_state,
-+        {
-+            "type": "entity_in_area",
-+            "entity_id": "player",
-+            "area_id": "tavern_common_room",
-+        },
-+    )
-+
-+    assert result["ok"] is True
-+
-+
-+def test_condition_quest_stage():
-+    simulation_state = {}
-+    start_quest(simulation_state, "quest:rat_cellar", stage="investigate")
-+    result = evaluate_quest_condition(
-+        simulation_state,
-+        {
-+            "type": "quest_stage",
-+            "quest_id": "quest:rat_cellar",
-+            "stage": "investigate",
-+        },
-+    )
-+
-+    assert result["ok"] is True
 *** End Patch
-14. Add src/tests/rpg/quests/test_quest_transitions.py
 *** Begin Patch
-*** Add File: src/tests/rpg/quests/test_quest_transitions.py
-+from app.rpg.quests.state import get_quest, start_quest
-+from app.rpg.quests.transitions import apply_quest_transition
+*** Add File: src/tests/rpg/story_arcs/test_story_arc_transitions.py
++from app.rpg.lore.state import get_lore_entry, upsert_lore_entry
++from app.rpg.story_arcs.state import get_story_arc, start_story_arc
++from app.rpg.story_arcs.transitions import apply_story_arc_transition
 +
 +
-+def test_quest_start_transition():
++def test_story_arc_start_transition():
 +    simulation_state = {}
-+    result = apply_quest_transition(
++    result = apply_story_arc_transition(
 +        simulation_state,
 +        {
 +            "action": "start",
-+            "quest_id": "quest:rat_cellar",
-+            "title": "Rats in the Cellar",
-+            "stage": "started",
++            "arc_id": "arc:bandit_pressure",
++            "title": "Bandit Pressure",
++            "stage": "rumors",
++            "pressure": 20,
++            "links": {"lore": ["lore:red_sashes"]},
 +        },
 +        turn_index=1,
 +    )
 +
++    arc = get_story_arc(simulation_state, "arc:bandit_pressure")
 +    assert result["ok"] is True
-+    assert get_quest(simulation_state, "quest:rat_cellar")["stage"] == "started"
++    assert arc["stage"] == "rumors"
++    assert arc["pressure"] == 20
++    assert "lore:red_sashes" in arc["linked_lore"]
 +
 +
-+def test_quest_transition_conditions_block_stage_change():
-+    simulation_state = {"manual_inventory_items": []}
-+    start_quest(simulation_state, "quest:rat_cellar", stage="started")
-+    result = apply_quest_transition(
++def test_story_arc_stage_advances_when_pressure_threshold_met():
++    simulation_state = {}
++    start_story_arc(simulation_state, "arc:bandit_pressure", stage="rumors", pressure=60)
++    result = apply_story_arc_transition(
 +        simulation_state,
 +        {
 +            "action": "set_stage",
-+            "quest_id": "quest:rat_cellar",
-+            "stage": "cellar_unlocked",
-+            "conditions": [{"type": "has_item", "item_id": "cellar_key"}],
-+        },
-+    )
-+
-+    assert result["ok"] is False
-+    assert result["reason"] == "conditions_failed"
-+    assert get_quest(simulation_state, "quest:rat_cellar")["stage"] == "started"
-+
-+
-+def test_quest_complete_transition_sets_reward_payload_once():
-+    simulation_state = {}
-+    start_quest(simulation_state, "quest:rat_cellar", stage="return_to_bran")
-+    first = apply_quest_transition(
-+        simulation_state,
-+        {
-+            "action": "complete_quest",
-+            "quest_id": "quest:rat_cellar",
-+            "rewards": [{"type": "gold", "amount": 10}],
-+        },
-+        turn_index=5,
-+    )
-+    second = apply_quest_transition(
-+        simulation_state,
-+        {
-+            "action": "complete_quest",
-+            "quest_id": "quest:rat_cellar",
-+            "rewards": [{"type": "gold", "amount": 10}],
-+        },
-+        turn_index=6,
-+    )
-+
-+    quest = get_quest(simulation_state, "quest:rat_cellar")
-+    assert first["ok"] is True
-+    assert second["ok"] is True
-+    assert len(quest["rewards"]) == 1
-+    assert quest["reward_claimed"] is False
-*** End Patch
-15. Add src/tests/rpg/quests/test_quest_rewards.py
-*** Begin Patch
-*** Add File: src/tests/rpg/quests/test_quest_rewards.py
-+from app.rpg.quests.rewards import build_reward_payload, mark_reward_claimed
-+from app.rpg.quests.state import start_quest
-+
-+
-+def test_reward_payload_not_auto_granted():
-+    simulation_state = {}
-+    start_quest(simulation_state, "quest:rat_cellar")
-+
-+    reward = build_reward_payload(
-+        simulation_state,
-+        "quest:rat_cellar",
-+        [{"type": "gold", "amount": 10}],
-+    )
-+
-+    assert reward["ok"] is True
-+    assert reward["auto_granted"] is False
-+    assert reward["already_claimed"] is False
-+
-+
-+def test_mark_reward_claimed_is_idempotent():
-+    simulation_state = {}
-+    start_quest(simulation_state, "quest:rat_cellar")
-+    reward = build_reward_payload(
-+        simulation_state,
-+        "quest:rat_cellar",
-+        [{"type": "gold", "amount": 10}],
-+    )
-+
-+    first = mark_reward_claimed(
-+        simulation_state,
-+        "quest:rat_cellar",
-+        reward["reward_id"],
-+    )
-+    second = mark_reward_claimed(
-+        simulation_state,
-+        "quest:rat_cellar",
-+        reward["reward_id"],
-+    )
-+
-+    assert first["ok"] is True
-+    assert first["reason"] == "claimed"
-+    assert second["ok"] is True
-+    assert second["reason"] == "already_claimed"
-*** End Patch
-16. Add src/tests/rpg/quests/test_quest_save_load.py
-*** Begin Patch
-*** Add File: src/tests/rpg/quests/test_quest_save_load.py
-+import json
-+
-+from app.rpg.quests.state import complete_objective, normalize_quest_state, start_quest
-+
-+
-+def test_quest_state_json_roundtrip():
-+    simulation_state = {}
-+    start_quest(
-+        simulation_state,
-+        "quest:rat_cellar",
-+        stage="started",
-+        objectives={"talk_to_bran": {"description": "Talk to Bran."}},
-+    )
-+    complete_objective(simulation_state, "quest:rat_cellar", "talk_to_bran", turn_index=2)
-+
-+    encoded = json.dumps(simulation_state["quest_state"], sort_keys=True)
-+    decoded = json.loads(encoded)
-+    normalized = normalize_quest_state(decoded)
-+
-+    quest = normalized["quests"]["quest:rat_cellar"]
-+    assert quest["stage"] == "started"
-+    assert quest["objectives"]["talk_to_bran"]["status"] == "completed"
-*** End Patch
-17. Add puzzle tests
-*** Begin Patch
-*** Add File: src/tests/rpg/puzzles/test_puzzle_state.py
-+from app.rpg.puzzles.state import get_puzzle, set_puzzle_flag, set_puzzle_state, start_puzzle
-+
-+
-+def test_start_puzzle_sets_active_state():
-+    simulation_state = {}
-+    result = start_puzzle(
-+        simulation_state,
-+        "puzzle:cellar_runes",
-+        title="Cellar Runes",
-+        state="initial",
-+    )
-+
-+    puzzle = get_puzzle(simulation_state, "puzzle:cellar_runes")
-+    assert result["ok"] is True
-+    assert puzzle["status"] == "active"
-+    assert puzzle["state"] == "initial"
-+
-+
-+def test_set_puzzle_state_can_solve():
-+    simulation_state = {}
-+    start_puzzle(simulation_state, "puzzle:cellar_runes")
-+    result = set_puzzle_state(
-+        simulation_state,
-+        "puzzle:cellar_runes",
-+        "solved",
-+        status="solved",
-+        turn_index=3,
-+    )
-+
-+    assert result["ok"] is True
-+    assert result["puzzle"]["status"] == "solved"
-+    assert result["puzzle"]["solved_turn"] == 3
-+
-+
-+def test_set_puzzle_flag():
-+    simulation_state = {}
-+    set_puzzle_flag(simulation_state, "puzzle:cellar_runes", "rune_a_lit", True)
-+
-+    puzzle = get_puzzle(simulation_state, "puzzle:cellar_runes")
-+    assert puzzle["flags"]["rune_a_lit"] is True
-*** End Patch
-*** Begin Patch
-*** Add File: src/tests/rpg/puzzles/test_puzzle_transitions.py
-+from app.rpg.puzzles.state import get_puzzle, start_puzzle
-+from app.rpg.puzzles.transitions import apply_puzzle_transition
-+
-+
-+def test_wrong_input_does_not_advance():
-+    simulation_state = {}
-+    start_puzzle(simulation_state, "puzzle:cellar_runes", state="initial")
-+    result = apply_puzzle_transition(
-+        simulation_state,
-+        {
-+            "action": "input",
-+            "puzzle_id": "puzzle:cellar_runes",
-+            "expected_input": "moon",
-+            "input": "sun",
-+            "next_state": "rune_unlocked",
-+        },
-+    )
-+
-+    puzzle = get_puzzle(simulation_state, "puzzle:cellar_runes")
-+    assert result["ok"] is False
-+    assert result["reason"] == "wrong_input"
-+    assert puzzle["state"] == "initial"
-+
-+
-+def test_correct_input_advances_state_and_sets_flag():
-+    simulation_state = {}
-+    start_puzzle(simulation_state, "puzzle:cellar_runes", state="initial")
-+    result = apply_puzzle_transition(
-+        simulation_state,
-+        {
-+            "action": "input",
-+            "puzzle_id": "puzzle:cellar_runes",
-+            "expected_input": "moon",
-+            "input": "moon",
-+            "next_state": "rune_unlocked",
-+            "set_flags": {"rune_unlocked": True},
-+        },
-+    )
-+
-+    puzzle = get_puzzle(simulation_state, "puzzle:cellar_runes")
-+    assert result["ok"] is True
-+    assert puzzle["state"] == "rune_unlocked"
-+    assert puzzle["flags"]["rune_unlocked"] is True
-+
-+
-+def test_puzzle_requires_prior_flag():
-+    simulation_state = {}
-+    start_puzzle(simulation_state, "puzzle:cellar_runes", state="initial")
-+    result = apply_puzzle_transition(
-+        simulation_state,
-+        {
-+            "action": "solve",
-+            "puzzle_id": "puzzle:cellar_runes",
++            "arc_id": "arc:bandit_pressure",
++            "stage": "threat",
 +            "conditions": [
-+                {
-+                    "type": "puzzle_flag",
-+                    "puzzle_id": "puzzle:cellar_runes",
-+                    "flag": "rune_unlocked",
-+                    "expected": True,
-+                }
++                {"type": "arc_pressure_at_least", "arc_id": "arc:bandit_pressure", "minimum": 50}
++            ],
++        },
++    )
++
++    assert result["ok"] is True
++    assert get_story_arc(simulation_state, "arc:bandit_pressure")["stage"] == "threat"
++
++
++def test_story_arc_transition_blocked_by_condition():
++    simulation_state = {}
++    start_story_arc(simulation_state, "arc:bandit_pressure", stage="rumors", pressure=20)
++    result = apply_story_arc_transition(
++        simulation_state,
++        {
++            "action": "set_stage",
++            "arc_id": "arc:bandit_pressure",
++            "stage": "threat",
++            "conditions": [
++                {"type": "arc_pressure_at_least", "arc_id": "arc:bandit_pressure", "minimum": 50}
 +            ],
 +        },
 +    )
 +
 +    assert result["ok"] is False
 +    assert result["reason"] == "conditions_failed"
++    assert get_story_arc(simulation_state, "arc:bandit_pressure")["stage"] == "rumors"
++
++
++def test_story_arc_reveal_lore_transition():
++    simulation_state = {}
++    upsert_lore_entry(simulation_state, {"lore_id": "lore:red_sashes", "title": "The Red Sashes"})
++    start_story_arc(simulation_state, "arc:bandit_pressure")
++
++    result = apply_story_arc_transition(
++        simulation_state,
++        {
++            "action": "reveal_lore",
++            "arc_id": "arc:bandit_pressure",
++            "lore_id": "lore:red_sashes",
++        },
++    )
++
++    assert result["ok"] is True
++    assert get_lore_entry(simulation_state, "lore:red_sashes")["revealed_to_player"] is True
 *** End Patch
 *** Begin Patch
-*** Add File: src/tests/rpg/puzzles/test_puzzle_save_load.py
+*** Add File: src/tests/rpg/story_arcs/test_story_arc_save_load.py
 +import json
 +
-+from app.rpg.puzzles.state import normalize_puzzle_state, set_puzzle_flag, start_puzzle
++from app.rpg.story_arcs.state import (
++    apply_story_arc_pressure_delta,
++    normalize_story_arc_state,
++    set_story_arc_flag,
++    start_story_arc,
++)
 +
 +
-+def test_puzzle_state_json_roundtrip():
++def test_story_arc_state_json_roundtrip():
 +    simulation_state = {}
-+    start_puzzle(simulation_state, "puzzle:cellar_runes", state="initial")
-+    set_puzzle_flag(simulation_state, "puzzle:cellar_runes", "rune_unlocked", True)
++    start_story_arc(
++        simulation_state,
++        "arc:bandit_pressure",
++        stage="rumors",
++        pressure=20,
++        links={"lore": ["lore:red_sashes"], "entities": ["bran"]},
++    )
++    apply_story_arc_pressure_delta(simulation_state, "arc:bandit_pressure", 15)
++    set_story_arc_flag(simulation_state, "arc:bandit_pressure", "bran_warned", True)
 +
-+    encoded = json.dumps(simulation_state["puzzle_state"], sort_keys=True)
++    encoded = json.dumps(simulation_state["story_arc_state"], sort_keys=True)
 +    decoded = json.loads(encoded)
-+    normalized = normalize_puzzle_state(decoded)
++    normalized = normalize_story_arc_state(decoded)
 +
-+    puzzle = normalized["puzzles"]["puzzle:cellar_runes"]
-+    assert puzzle["state"] == "initial"
-+    assert puzzle["flags"]["rune_unlocked"] is True
++    arc = normalized["arcs"]["arc:bandit_pressure"]
++    assert arc["pressure"] == 35
++    assert arc["flags"]["bran_warned"] is True
++    assert "lore:red_sashes" in arc["linked_lore"]
++    assert "bran" in arc["linked_entities"]
 *** End Patch
-Patch 4 — Manual quest/puzzle checks and setup
-18. Add src/tests/rpg/manual/quest_puzzle_checks.py
+Patch 4 — Manual setup and checks
+13. Add src/tests/rpg/manual/story_m1_m3_checks.py
 *** Begin Patch
-*** Add File: src/tests/rpg/manual/quest_puzzle_checks.py
+*** Add File: src/tests/rpg/manual/story_m1_m3_checks.py
 +from __future__ import annotations
 +
 +from typing import Any, Dict, List
 +
-+from app.rpg.quests.conditions import evaluate_quest_condition
-+from app.rpg.quests.state import get_quest
-+from app.rpg.puzzles.conditions import evaluate_puzzle_condition
-+from app.rpg.puzzles.state import get_puzzle
++from app.rpg.lore.conditions import evaluate_lore_condition
++from app.rpg.lore.state import get_lore_entry
++from app.rpg.story_arcs.conditions import evaluate_story_arc_condition
++from app.rpg.story_arcs.state import get_story_arc
 +
 +
 +def _safe_dict(value: Any) -> Dict[str, Any]:
@@ -1583,12 +1620,12 @@ Patch 4 — Manual quest/puzzle checks and setup
 +        candidate = _safe_dict(candidate)
 +        if candidate and not first_non_empty:
 +            first_non_empty = candidate
-+        if isinstance(candidate.get("quest_state"), dict) or isinstance(candidate.get("puzzle_state"), dict):
++        if isinstance(candidate.get("lore_state"), dict) or isinstance(candidate.get("story_arc_state"), dict):
 +            return candidate
 +    return first_non_empty
 +
 +
-+def run_quest_puzzle_check(
++def run_story_m1_m3_check(
 +    *,
 +    check: Dict[str, Any],
 +    result: Dict[str, Any],
@@ -1597,46 +1634,27 @@ Patch 4 — Manual quest/puzzle checks and setup
 +    simulation_state = _extract_simulation_state(result=result, session=session)
 +    check_type = str(check.get("type") or "")
 +
-+    if check_type == "quest_stage":
-+        quest_id = str(check.get("quest_id") or "")
-+        expected_stage = str(check.get("expected_stage") or "")
-+        expected_status = check.get("expected_status")
-+        quest = get_quest(simulation_state, quest_id)
-+        actual_stage = str((quest or {}).get("stage") or "")
-+        actual_status = str((quest or {}).get("status") or "")
-+        ok = actual_stage == expected_stage
-+        if expected_status is not None:
-+            ok = ok and actual_status == str(expected_status)
++    if check_type == "lore_entry":
++        lore_id = str(check.get("lore_id") or "")
++        entry = get_lore_entry(simulation_state, lore_id)
++        expected = _safe_dict(check.get("expected"))
++        failures = {}
++        for key, expected_value in expected.items():
++            actual = _safe_dict(entry).get(key)
++            if actual != expected_value:
++                failures[key] = {"expected": expected_value, "actual": actual}
 +        return {
 +            "check_type": check_type,
-+            "ok": ok,
-+            "quest_id": quest_id,
-+            "expected_stage": expected_stage,
-+            "actual_stage": actual_stage,
-+            "expected_status": expected_status,
-+            "actual_status": actual_status,
++            "ok": bool(entry) and not failures,
++            "lore_id": lore_id,
++            "entry": entry,
++            "failures": failures,
 +        }
 +
-+    if check_type == "quest_objective":
-+        quest_id = str(check.get("quest_id") or "")
-+        objective_id = str(check.get("objective_id") or "")
-+        expected_status = str(check.get("expected_status") or "")
-+        quest = get_quest(simulation_state, quest_id)
-+        objective = _safe_dict(_safe_dict((quest or {}).get("objectives")).get(objective_id))
-+        actual_status = str(objective.get("status") or "")
-+        return {
-+            "check_type": check_type,
-+            "ok": actual_status == expected_status,
-+            "quest_id": quest_id,
-+            "objective_id": objective_id,
-+            "expected_status": expected_status,
-+            "actual_status": actual_status,
-+        }
-+
-+    if check_type == "quest_condition":
++    if check_type == "lore_condition":
 +        condition = _safe_dict(check.get("condition"))
 +        expected_ok = bool(check.get("expected_ok"))
-+        condition_result = evaluate_quest_condition(simulation_state, condition)
++        condition_result = evaluate_lore_condition(simulation_state, condition)
 +        return {
 +            "check_type": check_type,
 +            "ok": bool(condition_result.get("ok")) is expected_ok,
@@ -1645,175 +1663,174 @@ Patch 4 — Manual quest/puzzle checks and setup
 +            "condition_result": condition_result,
 +        }
 +
-+    if check_type == "quest_reward_payload":
-+        quest_id = str(check.get("quest_id") or "")
-+        quest = get_quest(simulation_state, quest_id)
-+        rewards = list(_safe_dict(quest).get("rewards") or [])
-+        expected_count = check.get("expected_count")
-+        expected_auto_granted = check.get("expected_auto_granted")
-+        ok = True
-+        if expected_count is not None:
-+            ok = ok and len(rewards) == int(expected_count)
-+        if expected_auto_granted is not None:
-+            ok = ok and all(row.get("auto_granted") is bool(expected_auto_granted) for row in rewards)
++    if check_type == "story_arc":
++        arc_id = str(check.get("arc_id") or "")
++        arc = get_story_arc(simulation_state, arc_id)
++        expected = _safe_dict(check.get("expected"))
++        failures = {}
++        for key, expected_value in expected.items():
++            actual = _safe_dict(arc).get(key)
++            if actual != expected_value:
++                failures[key] = {"expected": expected_value, "actual": actual}
 +        return {
 +            "check_type": check_type,
-+            "ok": ok,
-+            "quest_id": quest_id,
-+            "expected_count": expected_count,
-+            "actual_count": len(rewards),
-+            "expected_auto_granted": expected_auto_granted,
-+            "rewards": rewards,
++            "ok": bool(arc) and not failures,
++            "arc_id": arc_id,
++            "arc": _bounded_arc(arc),
++            "failures": failures,
 +        }
 +
-+    if check_type == "puzzle_state":
-+        puzzle_id = str(check.get("puzzle_id") or "")
-+        expected_state = str(check.get("expected_state") or "")
-+        expected_status = check.get("expected_status")
-+        puzzle = get_puzzle(simulation_state, puzzle_id)
-+        actual_state = str((puzzle or {}).get("state") or "")
-+        actual_status = str((puzzle or {}).get("status") or "")
-+        ok = actual_state == expected_state
-+        if expected_status is not None:
-+            ok = ok and actual_status == str(expected_status)
-+        return {
-+            "check_type": check_type,
-+            "ok": ok,
-+            "puzzle_id": puzzle_id,
-+            "expected_state": expected_state,
-+            "actual_state": actual_state,
-+            "expected_status": expected_status,
-+            "actual_status": actual_status,
-+        }
-+
-+    if check_type == "puzzle_flag":
-+        puzzle_id = str(check.get("puzzle_id") or "")
-+        flag = str(check.get("flag") or "")
-+        expected = check.get("expected")
-+        puzzle = get_puzzle(simulation_state, puzzle_id)
-+        actual = _safe_dict((puzzle or {}).get("flags")).get(flag)
-+        return {
-+            "check_type": check_type,
-+            "ok": actual == expected,
-+            "puzzle_id": puzzle_id,
-+            "flag": flag,
-+            "expected": expected,
-+            "actual": actual,
-+        }
-+
-+    if check_type == "puzzle_condition":
++    if check_type == "story_arc_condition":
 +        condition = _safe_dict(check.get("condition"))
 +        expected_ok = bool(check.get("expected_ok"))
-+        condition_result = evaluate_puzzle_condition(simulation_state, condition)
++        condition_result = evaluate_story_arc_condition(simulation_state, condition)
 +        return {
 +            "check_type": check_type,
 +            "ok": bool(condition_result.get("ok")) is expected_ok,
 +            "expected_ok": expected_ok,
 +            "actual_ok": bool(condition_result.get("ok")),
 +            "condition_result": condition_result,
++        }
++
++    if check_type == "story_arc_debug_bounded":
++        arc_id = str(check.get("arc_id") or "")
++        arc = _bounded_arc(get_story_arc(simulation_state, arc_id))
++        max_link_count = int(check.get("max_link_count") or 20)
++        link_count = (
++            len(arc.get("linked_lore") or [])
++            + len(arc.get("linked_quests") or [])
++            + len(arc.get("linked_puzzles") or [])
++            + len(arc.get("linked_locations") or [])
++            + len(arc.get("linked_entities") or [])
++        )
++        return {
++            "check_type": check_type,
++            "ok": link_count <= max_link_count,
++            "arc_id": arc_id,
++            "link_count": link_count,
++            "max_link_count": max_link_count,
++            "arc": arc,
 +        }
 +
 +    return {
 +        "check_type": check_type,
 +        "ok": False,
-+        "error": f"unknown_quest_puzzle_check_type:{check_type}",
++        "error": f"unknown_story_m1_m3_check_type:{check_type}",
 +    }
 +
 +
-+def run_quest_puzzle_checks(
++def _bounded_arc(arc: Dict[str, Any] | None) -> Dict[str, Any]:
++    arc = _safe_dict(arc)
++    if not arc:
++        return {}
++    return {
++        "arc_id": arc.get("arc_id"),
++        "title": arc.get("title"),
++        "status": arc.get("status"),
++        "stage": arc.get("stage"),
++        "pressure": arc.get("pressure"),
++        "escalation_level": arc.get("escalation_level"),
++        "linked_lore": list(arc.get("linked_lore") or [])[:20],
++        "linked_quests": list(arc.get("linked_quests") or [])[:20],
++        "linked_puzzles": list(arc.get("linked_puzzles") or [])[:20],
++        "linked_locations": list(arc.get("linked_locations") or [])[:20],
++        "linked_entities": list(arc.get("linked_entities") or [])[:20],
++        "flags": dict(arc.get("flags") or {}),
++        "started_turn": arc.get("started_turn"),
++        "resolved_turn": arc.get("resolved_turn"),
++    }
++
++
++def run_story_m1_m3_checks(
 +    *,
 +    checks: List[Dict[str, Any]],
 +    result: Dict[str, Any],
 +    session: Dict[str, Any] | None = None,
 +) -> List[Dict[str, Any]]:
 +    return [
-+        run_quest_puzzle_check(check=check, result=result, session=session)
++        run_story_m1_m3_check(check=check, result=result, session=session)
 +        for check in checks
 +    ]
 *** End Patch
-19. Patch src/tests/rpg/manual/scenario_setup.py
+14. Patch src/tests/rpg/manual/scenario_setup.py
 
 Add imports:
 
 *** Begin Patch
 *** Update File: src/tests/rpg/manual/scenario_setup.py
 @@
- from app.rpg.social.resolution import (
-     resolve_intimidation,
-     resolve_persuasion,
- )
- from app.rpg.social.state import ensure_social_state, normalize_social_profile
-+from app.rpg.quests.transitions import apply_quest_transition
-+from app.rpg.puzzles.transitions import apply_puzzle_transition
+ from app.rpg.puzzles.transitions import apply_puzzle_transition
++from app.rpg.lore.transitions import apply_lore_transition
++from app.rpg.story_arcs.transitions import apply_story_arc_transition
  from tests.rpg.manual.memory_fixtures import build_manual_memory_event
 *** End Patch
 
-Inside _apply_manual_scenario_setup(...), after social setup actions, add:
+Add setup blocks after memory/social setup and before quest/puzzle/quest transitions is fine. Recommended order:
+
+1. spatial
+2. memory/told
+3. social
+4. lore transitions
+5. story arc transitions
+6. manual inventory
+7. puzzle transitions
+8. quest transitions
+
+Apply this block before setup_manual_inventory_items:
 
 *** Begin Patch
 *** Update File: src/tests/rpg/manual/scenario_setup.py
 @@
-     if social_actions:
-         social_state = ensure_social_state(simulation_state)
-         manual_results = social_state.setdefault("manual_results", {})
-@@
+         # Make the normalized social state with manual_results explicit on the
+         # authoritative simulation_state before session save/sync.
          simulation_state["social_state"] = social_state
 +
-+    for transition in scenario.get("setup_quest_transitions") or []:
++    for transition in scenario.get("setup_lore_transitions") or []:
 +        if isinstance(transition, dict):
-+            apply_quest_transition(
++            apply_lore_transition(
 +                simulation_state,
 +                transition,
-+                turn_index=int(transition.get("turn_index") or scenario.get("setup_turn_index") or 1),
++                turn_index=int(
++                    transition.get("turn_index")
++                    or scenario.get("setup_turn_index")
++                    or 1
++                ),
 +            )
 +
-+    for transition in scenario.get("setup_puzzle_transitions") or []:
++    for transition in scenario.get("setup_story_arc_transitions") or []:
 +        if isinstance(transition, dict):
-+            apply_puzzle_transition(
++            apply_story_arc_transition(
 +                simulation_state,
 +                transition,
-+                turn_index=int(transition.get("turn_index") or scenario.get("setup_turn_index") or 1),
++                turn_index=int(
++                    transition.get("turn_index")
++                    or scenario.get("setup_turn_index")
++                    or 1
++                ),
 +            )
-+
-+    for item_id in scenario.get("setup_manual_inventory_items") or []:
-+        simulation_state.setdefault("manual_inventory_items", [])
-+        if item_id not in simulation_state["manual_inventory_items"]:
-+            simulation_state["manual_inventory_items"].append(item_id)
  
-     return session
+     for item_id in scenario.get("setup_manual_inventory_items") or []:
+         simulation_state.setdefault("manual_inventory_items", [])
+         if item_id not in simulation_state["manual_inventory_items"]:
+             simulation_state["manual_inventory_items"].append(item_id)
 *** End Patch
-
-Important: inventory items should be available before quest transitions that require them. If any scenario needs item-gated transition setup, put setup_manual_inventory_items handling before setup_quest_transitions. If your patch order places it after, move the inventory block above quest transitions.
-
-Preferred final order in _apply_manual_scenario_setup:
-
-1. spatial setup
-2. memory/social setup
-3. manual inventory items
-4. puzzle transitions
-5. quest transitions
-
-If necessary, move this block above quest transitions:
-
-for item_id in scenario.get("setup_manual_inventory_items") or []:
-    ...
-20. Patch src/tests/rpg/manual/scenario_execution.py
+15. Patch src/tests/rpg/manual/scenario_execution.py
 
 Add import:
 
 *** Begin Patch
 *** Update File: src/tests/rpg/manual/scenario_execution.py
 @@
- from tests.rpg.manual.social_checks import run_social_checks
-+from tests.rpg.manual.quest_puzzle_checks import run_quest_puzzle_checks
+ from tests.rpg.manual.quest_puzzle_checks import run_quest_puzzle_checks
++from tests.rpg.manual.story_m1_m3_checks import run_story_m1_m3_checks
 *** End Patch
 
-After social checks, add quest/puzzle checks:
+Add check block after quest/puzzle checks:
 
 *** Begin Patch
 *** Update File: src/tests/rpg/manual/scenario_execution.py
 @@
-         if social_checks:
+         if quest_puzzle_checks:
              current_session = {}
              try:
                  current_session = _ensure_manual_session(session_id)
@@ -1822,32 +1839,32 @@ After social checks, add quest/puzzle checks:
                          + str(check_result.get("error") or "")
                      )
 +
-+        quest_puzzle_checks = [
++        story_m1_m3_checks = [
 +            check
 +            for check in checks
 +            if isinstance(check, dict)
 +            and (
-+                str(check.get("type") or "").startswith("quest_")
-+                or str(check.get("type") or "").startswith("puzzle_")
++                str(check.get("type") or "").startswith("lore_")
++                or str(check.get("type") or "").startswith("story_arc")
 +            )
 +        ]
-+        if quest_puzzle_checks:
++        if story_m1_m3_checks:
 +            current_session = {}
 +            try:
 +                current_session = _ensure_manual_session(session_id)
 +            except Exception:
 +                current_session = session
 +
-+            quest_puzzle_check_results = run_quest_puzzle_checks(
-+                checks=quest_puzzle_checks,
++            story_m1_m3_check_results = run_story_m1_m3_checks(
++                checks=story_m1_m3_checks,
 +                result=turn_record.get("result") or turn_record,
 +                session=current_session,
 +            )
-+            turn_record["quest_puzzle_check_results"] = quest_puzzle_check_results
-+            for check_result in quest_puzzle_check_results:
++            turn_record["story_m1_m3_check_results"] = story_m1_m3_check_results
++            for check_result in story_m1_m3_check_results:
 +                if not check_result.get("ok"):
 +                    turn_record.setdefault("scenario_warnings", []).append(
-+                        "quest_puzzle_check_failed:"
++                        "story_m1_m3_check_failed:"
 +                        + str(scenario_name)
 +                        + ":turn_"
 +                        + str(turn_index)
@@ -1859,162 +1876,307 @@ After social checks, add quest/puzzle checks:
  
          turns.append(turn_record)
 *** End Patch
-21. Patch src/tests/rpg/manual/summary_sanitizer.py
+16. Patch src/tests/rpg/manual/summary_sanitizer.py
 
-Add quest_puzzle_check_results beside social/memory/spatial.
+Add story check results beside the other check result sanitizers:
 
 *** Begin Patch
 *** Update File: src/tests/rpg/manual/summary_sanitizer.py
 @@
-     social_check_results = turn.get("social_check_results")
-     if isinstance(social_check_results, list):
-         sanitized["social_check_results"] = [
+     quest_puzzle_check_results = turn.get("quest_puzzle_check_results")
+     if isinstance(quest_puzzle_check_results, list):
+         sanitized["quest_puzzle_check_results"] = [
 @@
              if isinstance(item, dict)
          ]
 +
-+    quest_puzzle_check_results = turn.get("quest_puzzle_check_results")
-+    if isinstance(quest_puzzle_check_results, list):
-+        sanitized["quest_puzzle_check_results"] = [
++    story_m1_m3_check_results = turn.get("story_m1_m3_check_results")
++    if isinstance(story_m1_m3_check_results, list):
++        sanitized["story_m1_m3_check_results"] = [
 +            {
 +                "check_type": item.get("check_type"),
 +                "ok": item.get("ok"),
-+                "quest_id": item.get("quest_id"),
-+                "puzzle_id": item.get("puzzle_id"),
-+                "expected_stage": item.get("expected_stage"),
-+                "actual_stage": item.get("actual_stage"),
-+                "expected_state": item.get("expected_state"),
-+                "actual_state": item.get("actual_state"),
-+                "expected_status": item.get("expected_status"),
-+                "actual_status": item.get("actual_status"),
-+                "objective_id": item.get("objective_id"),
-+                "expected_count": item.get("expected_count"),
-+                "actual_count": item.get("actual_count"),
-+                "expected": item.get("expected"),
-+                "actual": item.get("actual"),
++                "lore_id": item.get("lore_id"),
++                "arc_id": item.get("arc_id"),
++                "entry": item.get("entry"),
++                "arc": item.get("arc"),
++                "expected_ok": item.get("expected_ok"),
++                "actual_ok": item.get("actual_ok"),
 +                "condition_result": item.get("condition_result"),
-+                "rewards": item.get("rewards"),
++                "failures": item.get("failures"),
++                "link_count": item.get("link_count"),
++                "max_link_count": item.get("max_link_count"),
 +                "error": item.get("error"),
 +            }
-+            for item in quest_puzzle_check_results[:50]
++            for item in story_m1_m3_check_results[:50]
 +            if isinstance(item, dict)
 +        ]
  
      return sanitized
 *** End Patch
 Patch 5 — Manual scenarios
-22. Add src/tests/rpg/manual/scenarios/quest_puzzle_l13_l15.py
+17. Add src/tests/rpg/manual/scenarios/story_m1_m3.py
 *** Begin Patch
-*** Add File: src/tests/rpg/manual/scenarios/quest_puzzle_l13_l15.py
+*** Add File: src/tests/rpg/manual/scenarios/story_m1_m3.py
 +from __future__ import annotations
 +
 +from typing import Any, Dict
 +
 +
-+QUEST_PUZZLE_L13_L15_SCENARIOS: Dict[str, Dict[str, Any]] = {
-+    "quest_start_sets_active_stage": {
-+        "setup_quest_transitions": [
++STORY_M1_M3_SCENARIOS: Dict[str, Dict[str, Any]] = {
++    "lore_entry_can_be_revealed_to_player": {
++        "setup_lore_transitions": [
 +            {
-+                "action": "start",
-+                "quest_id": "quest:rat_cellar",
-+                "title": "Rats in the Cellar",
-+                "stage": "started",
-+                "objectives": {
-+                    "talk_to_bran": {"description": "Talk to Bran."}
++                "action": "upsert",
++                "lore_id": "lore:red_sashes",
++                "title": "The Red Sashes",
++                "kind": "faction",
++                "truth_status": "true",
++                "known_by": ["bran"],
++                "tags": ["bandits", "local-threat"],
++                "summary": "A road gang known for red cloth tied around their arms.",
++            },
++            {"action": "reveal_to_player", "lore_id": "lore:red_sashes"},
++        ],
++        "turns": ["I ask Bran about the Red Sashes."],
++        "checks": [
++            {
++                "type": "lore_entry",
++                "lore_id": "lore:red_sashes",
++                "expected": {
++                    "revealed_to_player": True,
++                    "truth_status": "true",
 +                },
 +            }
 +        ],
-+        "turns": ["I ask Bran about work in the tavern."],
++    },
++    "lore_secret_not_available_until_revealed": {
++        "setup_lore_transitions": [
++            {
++                "action": "upsert",
++                "lore_id": "lore:bran_hidden_debt",
++                "title": "Bran's Hidden Debt",
++                "kind": "secret",
++                "truth_status": "secret",
++                "known_by": ["bran"],
++                "tags": ["secret", "debt"],
++            }
++        ],
++        "turns": ["I ask about Bran's hidden debt."],
 +        "checks": [
 +            {
-+                "type": "quest_stage",
-+                "quest_id": "quest:rat_cellar",
-+                "expected_stage": "started",
-+                "expected_status": "active",
++                "type": "lore_condition",
++                "condition": {
++                    "type": "lore_revealed_to_player",
++                    "lore_id": "lore:bran_hidden_debt",
++                },
++                "expected_ok": False,
 +            }
 +        ],
 +    },
-+    "quest_objective_completion_advances_stage": {
-+        "setup_quest_transitions": [
++    "lore_npc_knows_role_based_lore": {
++        "setup_lore_transitions": [
++            {
++                "action": "upsert",
++                "lore_id": "lore:tavern_cellar",
++                "title": "The Tavern Cellar",
++                "kind": "place",
++                "truth_status": "true",
++                "known_by": ["bran"],
++                "tags": ["tavern", "cellar"],
++            }
++        ],
++        "turns": ["I ask Bran about the cellar."],
++        "checks": [
++            {
++                "type": "lore_condition",
++                "condition": {
++                    "type": "lore_known_by",
++                    "lore_id": "lore:tavern_cellar",
++                    "entity_id": "bran",
++                },
++                "expected_ok": True,
++            }
++        ],
++    },
++    "lore_rumor_not_promoted_to_truth": {
++        "setup_lore_transitions": [
++            {
++                "action": "upsert",
++                "lore_id": "lore:dragon_owns_tavern",
++                "title": "Dragon Owns the Tavern",
++                "kind": "rumor",
++                "truth_status": "rumor",
++                "tags": ["rumor", "dragon"],
++            },
++            {"action": "reveal_to_player", "lore_id": "lore:dragon_owns_tavern"},
++        ],
++        "turns": ["I ask whether a dragon owns the tavern."],
++        "checks": [
++            {
++                "type": "lore_entry",
++                "lore_id": "lore:dragon_owns_tavern",
++                "expected": {
++                    "truth_status": "rumor",
++                    "revealed_to_player": True,
++                },
++            }
++        ],
++    },
++    "story_arc_start_sets_active_stage": {
++        "setup_story_arc_transitions": [
 +            {
 +                "action": "start",
-+                "quest_id": "quest:rat_cellar",
-+                "stage": "started",
-+                "objectives": {
-+                    "talk_to_bran": {"description": "Talk to Bran."}
++                "arc_id": "arc:bandit_pressure",
++                "title": "Bandit Pressure",
++                "stage": "rumors",
++                "pressure": 20,
++                "links": {
++                    "entities": ["bran", "mira"],
++                    "locations": ["tavern_common_room", "street"],
 +                },
-+            },
-+            {
-+                "action": "complete_objective",
-+                "quest_id": "quest:rat_cellar",
-+                "objective_id": "talk_to_bran",
-+            },
-+            {
-+                "action": "set_stage",
-+                "quest_id": "quest:rat_cellar",
-+                "stage": "investigate_cellar",
-+            },
++            }
 +        ],
-+        "turns": ["I agree to investigate the cellar."],
++        "turns": ["I listen for rumors about bandits."],
 +        "checks": [
 +            {
-+                "type": "quest_objective",
-+                "quest_id": "quest:rat_cellar",
-+                "objective_id": "talk_to_bran",
-+                "expected_status": "completed",
-+            },
-+            {
-+                "type": "quest_stage",
-+                "quest_id": "quest:rat_cellar",
-+                "expected_stage": "investigate_cellar",
-+            },
-+        ],
-+    },
-+    "quest_stage_gate_requires_item": {
-+        "setup_manual_inventory_items": ["cellar_key"],
-+        "setup_quest_transitions": [
-+            {"action": "start", "quest_id": "quest:rat_cellar", "stage": "started"},
-+            {
-+                "action": "set_stage",
-+                "quest_id": "quest:rat_cellar",
-+                "stage": "cellar_unlocked",
-+                "conditions": [{"type": "has_item", "item_id": "cellar_key"}],
-+            },
-+        ],
-+        "turns": ["I use the cellar key on the locked trapdoor."],
-+        "checks": [
-+            {
-+                "type": "quest_stage",
-+                "quest_id": "quest:rat_cellar",
-+                "expected_stage": "cellar_unlocked",
++                "type": "story_arc",
++                "arc_id": "arc:bandit_pressure",
++                "expected": {
++                    "status": "active",
++                    "stage": "rumors",
++                    "pressure": 20,
++                },
 +            }
 +        ],
 +    },
-+    "quest_stage_gate_requires_social_trust": {
-+        "setup_social_state": {
-+            "relationships": {"bran": {"trust": 45}},
-+        },
-+        "setup_quest_transitions": [
-+            {"action": "start", "quest_id": "quest:bran_secret", "stage": "rumor"},
++    "story_arc_pressure_increases_from_event": {
++        "setup_story_arc_transitions": [
++            {
++                "action": "start",
++                "arc_id": "arc:bandit_pressure",
++                "title": "Bandit Pressure",
++                "stage": "rumors",
++                "pressure": 20,
++            },
++            {
++                "action": "pressure_delta",
++                "arc_id": "arc:bandit_pressure",
++                "delta": 25,
++            },
++        ],
++        "turns": ["I ignore the growing bandit rumors."],
++        "checks": [
++            {
++                "type": "story_arc",
++                "arc_id": "arc:bandit_pressure",
++                "expected": {"pressure": 45},
++            }
++        ],
++    },
++    "story_arc_stage_advances_when_pressure_threshold_met": {
++        "setup_story_arc_transitions": [
++            {
++                "action": "start",
++                "arc_id": "arc:bandit_pressure",
++                "stage": "rumors",
++                "pressure": 60,
++            },
 +            {
 +                "action": "set_stage",
-+                "quest_id": "quest:bran_secret",
-+                "stage": "trusted_disclosure",
++                "arc_id": "arc:bandit_pressure",
++                "stage": "threat",
 +                "conditions": [
-+                    {"type": "social_trust_at_least", "npc_id": "bran", "minimum": 40}
++                    {
++                        "type": "arc_pressure_at_least",
++                        "arc_id": "arc:bandit_pressure",
++                        "minimum": 50,
++                    }
 +                ],
 +            },
 +        ],
-+        "turns": ["I ask Bran to trust me with the truth."],
++        "turns": ["The bandit rumors become threats."],
 +        "checks": [
 +            {
-+                "type": "quest_stage",
-+                "quest_id": "quest:bran_secret",
-+                "expected_stage": "trusted_disclosure",
++                "type": "story_arc",
++                "arc_id": "arc:bandit_pressure",
++                "expected": {"stage": "threat"},
 +            }
 +        ],
 +    },
-+    "quest_stage_gate_requires_npc_memory": {
++    "story_arc_links_to_quest_state": {
++        "setup_quest_transitions": [
++            {
++                "action": "start",
++                "quest_id": "quest:stop_red_sashes",
++                "stage": "investigate",
++            }
++        ],
++        "setup_story_arc_transitions": [
++            {
++                "action": "start",
++                "arc_id": "arc:bandit_pressure",
++                "stage": "rumors",
++                "links": {"quest": ["quest:stop_red_sashes"]},
++            },
++            {
++                "action": "set_flag",
++                "arc_id": "arc:bandit_pressure",
++                "flag": "quest_linked",
++                "value": True,
++                "conditions": [
++                    {
++                        "type": "quest_stage",
++                        "quest_id": "quest:stop_red_sashes",
++                        "stage": "investigate",
++                    }
++                ],
++            },
++        ],
++        "turns": ["I check whether the bandit arc is linked to the quest."],
++        "checks": [
++            {
++                "type": "story_arc",
++                "arc_id": "arc:bandit_pressure",
++                "expected": {"flags": {"quest_linked": True}},
++            }
++        ],
++    },
++    "story_arc_links_to_lore_reveal": {
++        "setup_lore_transitions": [
++            {
++                "action": "upsert",
++                "lore_id": "lore:red_sashes",
++                "title": "The Red Sashes",
++                "truth_status": "true",
++            }
++        ],
++        "setup_story_arc_transitions": [
++            {
++                "action": "start",
++                "arc_id": "arc:bandit_pressure",
++                "stage": "rumors",
++                "links": {"lore": ["lore:red_sashes"]},
++            },
++            {
++                "action": "reveal_lore",
++                "arc_id": "arc:bandit_pressure",
++                "lore_id": "lore:red_sashes",
++            },
++        ],
++        "turns": ["The bandit arc reveals the Red Sashes lore."],
++        "checks": [
++            {
++                "type": "lore_condition",
++                "condition": {
++                    "type": "lore_revealed_to_player",
++                    "lore_id": "lore:red_sashes",
++                },
++                "expected_ok": True,
++            }
++        ],
++    },
++    "story_arc_condition_requires_npc_memory": {
 +        "setup_told_memories": [
 +            {
 +                "subject_id": "bran",
@@ -2026,12 +2188,17 @@ Patch 5 — Manual scenarios
 +                "verified": True,
 +            }
 +        ],
-+        "setup_quest_transitions": [
-+            {"action": "start", "quest_id": "quest:bandit_warning", "stage": "unverified"},
++        "setup_story_arc_transitions": [
 +            {
-+                "action": "set_stage",
-+                "quest_id": "quest:bandit_warning",
-+                "stage": "bran_knows",
++                "action": "start",
++                "arc_id": "arc:bandit_pressure",
++                "stage": "rumors",
++            },
++            {
++                "action": "set_flag",
++                "arc_id": "arc:bandit_pressure",
++                "flag": "bran_warned",
++                "value": True,
 +                "conditions": [
 +                    {
 +                        "type": "npc_knows_memory",
@@ -2042,351 +2209,160 @@ Patch 5 — Manual scenarios
 +                ],
 +            },
 +        ],
-+        "turns": ["I remind Bran that I warned him about the bandits."],
++        "turns": ["I check whether Bran remembers my warning."],
 +        "checks": [
 +            {
-+                "type": "quest_stage",
-+                "quest_id": "quest:bandit_warning",
-+                "expected_stage": "bran_knows",
++                "type": "story_arc",
++                "arc_id": "arc:bandit_pressure",
++                "expected": {"flags": {"bran_warned": True}},
 +            }
 +        ],
 +    },
-+    "quest_stage_gate_requires_spatial_area": {
-+        "setup_spatial_graph": "tavern_fixture",
-+        "setup_quest_transitions": [
-+            {"action": "start", "quest_id": "quest:rat_cellar", "stage": "started"},
-+            {
-+                "action": "set_stage",
-+                "quest_id": "quest:rat_cellar",
-+                "stage": "at_tavern",
-+                "conditions": [
-+                    {
-+                        "type": "entity_in_area",
-+                        "entity_id": "player",
-+                        "area_id": "tavern_common_room",
-+                    }
-+                ],
-+            },
-+        ],
-+        "turns": ["I stand in the tavern common room."],
-+        "checks": [
-+            {
-+                "type": "quest_stage",
-+                "quest_id": "quest:rat_cellar",
-+                "expected_stage": "at_tavern",
-+            }
-+        ],
-+    },
-+    "quest_completion_produces_reward_payload_once": {
-+        "setup_quest_transitions": [
-+            {"action": "start", "quest_id": "quest:rat_cellar", "stage": "return_to_bran"},
-+            {
-+                "action": "complete_quest",
-+                "quest_id": "quest:rat_cellar",
-+                "rewards": [{"type": "gold", "amount": 10}],
-+            },
-+            {
-+                "action": "complete_quest",
-+                "quest_id": "quest:rat_cellar",
-+                "rewards": [{"type": "gold", "amount": 10}],
-+            },
-+        ],
-+        "turns": ["I report the cellar is clear and ask about the reward."],
-+        "checks": [
-+            {
-+                "type": "quest_stage",
-+                "quest_id": "quest:rat_cellar",
-+                "expected_stage": "completed",
-+                "expected_status": "completed",
-+            },
-+            {
-+                "type": "quest_reward_payload",
-+                "quest_id": "quest:rat_cellar",
-+                "expected_count": 1,
-+                "expected_auto_granted": False,
-+            },
-+        ],
-+    },
-+    "quest_reward_not_auto_granted_without_apply": {
-+        "setup_quest_transitions": [
-+            {"action": "start", "quest_id": "quest:rat_cellar", "stage": "return_to_bran"},
-+            {
-+                "action": "complete_quest",
-+                "quest_id": "quest:rat_cellar",
-+                "rewards": [{"type": "gold", "amount": 10}],
-+            },
-+        ],
-+        "turns": ["I ask whether the reward was directly granted."],
-+        "checks": [
-+            {
-+                "type": "quest_reward_payload",
-+                "quest_id": "quest:rat_cellar",
-+                "expected_count": 1,
-+                "expected_auto_granted": False,
-+            }
-+        ],
-+    },
-+    "quest_save_load_preserves_stage_and_objectives": {
-+        "setup_quest_transitions": [
++    "story_arc_save_load_preserves_pressure_and_stage": {
++        "setup_story_arc_transitions": [
 +            {
 +                "action": "start",
-+                "quest_id": "quest:rat_cellar",
-+                "stage": "started",
-+                "objectives": {"talk_to_bran": {"description": "Talk to Bran."}},
++                "arc_id": "arc:bandit_pressure",
++                "stage": "rumors",
++                "pressure": 20,
 +            },
 +            {
-+                "action": "complete_objective",
-+                "quest_id": "quest:rat_cellar",
-+                "objective_id": "talk_to_bran",
++                "action": "pressure_delta",
++                "arc_id": "arc:bandit_pressure",
++                "delta": 30,
 +            },
-+        ],
-+        "turns": ["I check my quest journal."],
-+        "checks": [
-+            {
-+                "type": "quest_stage",
-+                "quest_id": "quest:rat_cellar",
-+                "expected_stage": "started",
-+                "expected_status": "active",
-+            },
-+            {
-+                "type": "quest_objective",
-+                "quest_id": "quest:rat_cellar",
-+                "objective_id": "talk_to_bran",
-+                "expected_status": "completed",
-+            },
-+        ],
-+    },
-+    "puzzle_start_sets_initial_state": {
-+        "setup_puzzle_transitions": [
-+            {
-+                "action": "start",
-+                "puzzle_id": "puzzle:cellar_runes",
-+                "title": "Cellar Runes",
-+                "state": "initial",
-+            }
-+        ],
-+        "turns": ["I inspect the cellar rune puzzle."],
-+        "checks": [
-+            {
-+                "type": "puzzle_state",
-+                "puzzle_id": "puzzle:cellar_runes",
-+                "expected_state": "initial",
-+                "expected_status": "active",
-+            }
-+        ],
-+    },
-+    "puzzle_wrong_input_does_not_advance": {
-+        "setup_puzzle_transitions": [
-+            {"action": "start", "puzzle_id": "puzzle:cellar_runes", "state": "initial"},
-+            {
-+                "action": "input",
-+                "puzzle_id": "puzzle:cellar_runes",
-+                "expected_input": "moon",
-+                "input": "sun",
-+                "next_state": "rune_unlocked",
-+            },
-+        ],
-+        "turns": ["I press the sun rune."],
-+        "checks": [
-+            {
-+                "type": "puzzle_state",
-+                "puzzle_id": "puzzle:cellar_runes",
-+                "expected_state": "initial",
-+                "expected_status": "active",
-+            }
-+        ],
-+    },
-+    "puzzle_correct_input_advances_state": {
-+        "setup_puzzle_transitions": [
-+            {"action": "start", "puzzle_id": "puzzle:cellar_runes", "state": "initial"},
-+            {
-+                "action": "input",
-+                "puzzle_id": "puzzle:cellar_runes",
-+                "expected_input": "moon",
-+                "input": "moon",
-+                "next_state": "rune_unlocked",
-+                "set_flags": {"rune_unlocked": True},
-+            },
-+        ],
-+        "turns": ["I press the moon rune."],
-+        "checks": [
-+            {
-+                "type": "puzzle_state",
-+                "puzzle_id": "puzzle:cellar_runes",
-+                "expected_state": "rune_unlocked",
-+            },
-+            {
-+                "type": "puzzle_flag",
-+                "puzzle_id": "puzzle:cellar_runes",
-+                "flag": "rune_unlocked",
-+                "expected": True,
-+            },
-+        ],
-+    },
-+    "puzzle_requires_prior_flag": {
-+        "setup_puzzle_transitions": [
-+            {"action": "start", "puzzle_id": "puzzle:cellar_runes", "state": "initial"},
-+            {
-+                "action": "solve",
-+                "puzzle_id": "puzzle:cellar_runes",
-+                "conditions": [
-+                    {
-+                        "type": "puzzle_flag",
-+                        "puzzle_id": "puzzle:cellar_runes",
-+                        "flag": "rune_unlocked",
-+                        "expected": True,
-+                    }
-+                ],
-+            },
-+        ],
-+        "turns": ["I try to solve the rune puzzle without lighting the rune."],
-+        "checks": [
-+            {
-+                "type": "puzzle_state",
-+                "puzzle_id": "puzzle:cellar_runes",
-+                "expected_state": "initial",
-+                "expected_status": "active",
-+            }
-+        ],
-+    },
-+    "puzzle_completion_unlocks_quest_gate": {
-+        "setup_puzzle_transitions": [
-+            {"action": "start", "puzzle_id": "puzzle:cellar_runes", "state": "initial"},
-+            {
-+                "action": "input",
-+                "puzzle_id": "puzzle:cellar_runes",
-+                "expected_input": "moon",
-+                "input": "moon",
-+                "next_state": "rune_unlocked",
-+                "set_flags": {"rune_unlocked": True},
-+            },
-+        ],
-+        "setup_quest_transitions": [
-+            {"action": "start", "quest_id": "quest:rat_cellar", "stage": "blocked_by_runes"},
 +            {
 +                "action": "set_stage",
-+                "quest_id": "quest:rat_cellar",
-+                "stage": "runes_unlocked",
++                "arc_id": "arc:bandit_pressure",
++                "stage": "threat",
 +                "conditions": [
 +                    {
-+                        "type": "puzzle_flag",
-+                        "puzzle_id": "puzzle:cellar_runes",
-+                        "flag": "rune_unlocked",
-+                        "expected": True,
++                        "type": "arc_pressure_at_least",
++                        "arc_id": "arc:bandit_pressure",
++                        "minimum": 50,
 +                    }
 +                ],
 +            },
 +        ],
-+        "turns": ["I use the solved rune puzzle to unlock the quest path."],
++        "turns": ["I check the current bandit arc state."],
 +        "checks": [
 +            {
-+                "type": "quest_stage",
-+                "quest_id": "quest:rat_cellar",
-+                "expected_stage": "runes_unlocked",
++                "type": "story_arc",
++                "arc_id": "arc:bandit_pressure",
++                "expected": {
++                    "stage": "threat",
++                    "pressure": 50,
++                },
 +            }
 +        ],
 +    },
-+    "puzzle_save_load_preserves_flags": {
-+        "setup_puzzle_transitions": [
-+            {"action": "start", "puzzle_id": "puzzle:cellar_runes", "state": "initial"},
++    "story_arc_debug_payload_is_bounded": {
++        "setup_story_arc_transitions": [
 +            {
-+                "action": "input",
-+                "puzzle_id": "puzzle:cellar_runes",
-+                "expected_input": "moon",
-+                "input": "moon",
-+                "next_state": "rune_unlocked",
-+                "set_flags": {"rune_unlocked": True},
-+            },
++                "action": "start",
++                "arc_id": "arc:bandit_pressure",
++                "stage": "rumors",
++                "pressure": 20,
++                "links": {
++                    "lore": ["lore:red_sashes"],
++                    "entities": ["bran", "mira", "bandit"],
++                    "locations": ["tavern_common_room", "street"],
++                    "quest": ["quest:stop_red_sashes"],
++                    "puzzle": ["puzzle:cellar_runes"],
++                },
++            }
 +        ],
-+        "turns": ["I check the rune puzzle state after saving."],
++        "turns": ["I inspect the story arc debug payload."],
 +        "checks": [
 +            {
-+                "type": "puzzle_flag",
-+                "puzzle_id": "puzzle:cellar_runes",
-+                "flag": "rune_unlocked",
-+                "expected": True,
++                "type": "story_arc_debug_bounded",
++                "arc_id": "arc:bandit_pressure",
++                "max_link_count": 20,
 +            }
 +        ],
 +    },
 +}
 *** End Patch
-23. Add expected names file
+18. Add expected names file
 *** Begin Patch
-*** Add File: src/tests/rpg/manual/scenarios/expected_quest_puzzle_l13_l15_names.py
-+EXPECTED_QUEST_PUZZLE_L13_L15_SCENARIO_NAMES = {
-+    "quest_start_sets_active_stage",
-+    "quest_objective_completion_advances_stage",
-+    "quest_stage_gate_requires_item",
-+    "quest_stage_gate_requires_social_trust",
-+    "quest_stage_gate_requires_npc_memory",
-+    "quest_stage_gate_requires_spatial_area",
-+    "quest_completion_produces_reward_payload_once",
-+    "quest_reward_not_auto_granted_without_apply",
-+    "quest_save_load_preserves_stage_and_objectives",
-+    "puzzle_start_sets_initial_state",
-+    "puzzle_wrong_input_does_not_advance",
-+    "puzzle_correct_input_advances_state",
-+    "puzzle_requires_prior_flag",
-+    "puzzle_completion_unlocks_quest_gate",
-+    "puzzle_save_load_preserves_flags",
+*** Add File: src/tests/rpg/manual/scenarios/expected_story_m1_m3_names.py
++EXPECTED_STORY_M1_M3_SCENARIO_NAMES = {
++    "lore_entry_can_be_revealed_to_player",
++    "lore_secret_not_available_until_revealed",
++    "lore_npc_knows_role_based_lore",
++    "lore_rumor_not_promoted_to_truth",
++    "story_arc_start_sets_active_stage",
++    "story_arc_pressure_increases_from_event",
++    "story_arc_stage_advances_when_pressure_threshold_met",
++    "story_arc_links_to_quest_state",
++    "story_arc_links_to_lore_reveal",
++    "story_arc_condition_requires_npc_memory",
++    "story_arc_save_load_preserves_pressure_and_stage",
++    "story_arc_debug_payload_is_bounded",
 +}
 *** End Patch
-24. Patch registry
+19. Patch src/tests/rpg/manual/scenarios/registry.py
 *** Begin Patch
 *** Update File: src/tests/rpg/manual/scenarios/registry.py
 @@
- from tests.rpg.manual.scenarios.social_l10_l12 import SOCIAL_L10_L12_SCENARIOS
-+from tests.rpg.manual.scenarios.quest_puzzle_l13_l15 import (
-+    QUEST_PUZZLE_L13_L15_SCENARIOS,
-+)
+ from tests.rpg.manual.scenarios.quest_puzzle_l13_l15 import (
+     QUEST_PUZZLE_L13_L15_SCENARIOS,
+ )
++from tests.rpg.manual.scenarios.story_m1_m3 import STORY_M1_M3_SCENARIOS
 @@
-     scenarios.update(SOCIAL_L10_L12_SCENARIOS)
-+    scenarios.update(QUEST_PUZZLE_L13_L15_SCENARIOS)
+     scenarios.update(QUEST_PUZZLE_L13_L15_SCENARIOS)
++    scenarios.update(STORY_M1_M3_SCENARIOS)
      return scenarios
 *** End Patch
-25. Patch migration test
+20. Patch src/tests/rpg/manual/test_manual_scenario_migration.py
 *** Begin Patch
 *** Update File: src/tests/rpg/manual/test_manual_scenario_migration.py
 @@
- from tests.rpg.manual.scenarios.expected_social_l10_l12_names import (
-     EXPECTED_SOCIAL_L10_L12_SCENARIO_NAMES,
+ from tests.rpg.manual.scenarios.expected_quest_puzzle_l13_l15_names import (
+     EXPECTED_QUEST_PUZZLE_L13_L15_SCENARIO_NAMES,
  )
-+from tests.rpg.manual.scenarios.expected_quest_puzzle_l13_l15_names import (
-+    EXPECTED_QUEST_PUZZLE_L13_L15_SCENARIO_NAMES,
++from tests.rpg.manual.scenarios.expected_story_m1_m3_names import (
++    EXPECTED_STORY_M1_M3_SCENARIO_NAMES,
 +)
 @@
- def test_manual_scenario_registry_includes_social_l10_l12_names():
+ def test_manual_scenario_registry_includes_quest_puzzle_l13_l15_names():
      names = set(build_service_scenarios().keys())
-     missing = EXPECTED_SOCIAL_L10_L12_SCENARIO_NAMES - names
+     missing = EXPECTED_QUEST_PUZZLE_L13_L15_SCENARIO_NAMES - names
  
-     assert not missing, f"Missing L10-L12 social scenarios: {sorted(missing)}"
+     assert not missing, f"Missing L13-L15 quest/puzzle scenarios: {sorted(missing)}"
 +
 +
-+def test_manual_scenario_registry_includes_quest_puzzle_l13_l15_names():
++def test_manual_scenario_registry_includes_story_m1_m3_names():
 +    names = set(build_service_scenarios().keys())
-+    missing = EXPECTED_QUEST_PUZZLE_L13_L15_SCENARIO_NAMES - names
++    missing = EXPECTED_STORY_M1_M3_SCENARIO_NAMES - names
 +
-+    assert not missing, f"Missing L13-L15 quest/puzzle scenarios: {sorted(missing)}"
++    assert not missing, f"Missing M1-M3 story scenarios: {sorted(missing)}"
 *** End Patch
-26. Add manual check tests
+21. Add manual check test
 *** Begin Patch
-*** Add File: src/tests/rpg/manual/test_manual_quest_puzzle_checks.py
-+from app.rpg.quests.state import start_quest
-+from app.rpg.puzzles.state import set_puzzle_flag, start_puzzle
-+from tests.rpg.manual.quest_puzzle_checks import run_quest_puzzle_checks
+*** Add File: src/tests/rpg/manual/test_manual_story_m1_m3_checks.py
++from app.rpg.lore.state import reveal_lore_to_player, upsert_lore_entry
++from app.rpg.story_arcs.state import start_story_arc
++from tests.rpg.manual.story_m1_m3_checks import run_story_m1_m3_checks
 +
 +
-+def test_manual_quest_check_reads_session_state():
++def test_manual_lore_check_reads_session_state():
 +    session = {"simulation_state": {}}
-+    start_quest(session["simulation_state"], "quest:rat_cellar", stage="started")
++    upsert_lore_entry(
++        session["simulation_state"],
++        {"lore_id": "lore:red_sashes", "title": "The Red Sashes"},
++    )
++    reveal_lore_to_player(session["simulation_state"], "lore:red_sashes")
 +
-+    result = run_quest_puzzle_checks(
++    result = run_story_m1_m3_checks(
 +        checks=[
 +            {
-+                "type": "quest_stage",
-+                "quest_id": "quest:rat_cellar",
-+                "expected_stage": "started",
-+                "expected_status": "active",
++                "type": "lore_condition",
++                "condition": {
++                    "type": "lore_revealed_to_player",
++                    "lore_id": "lore:red_sashes",
++                },
++                "expected_ok": True,
 +            }
 +        ],
 +        result={},
@@ -2396,18 +2372,21 @@ Patch 5 — Manual scenarios
 +    assert result["ok"] is True
 +
 +
-+def test_manual_puzzle_check_reads_session_state():
++def test_manual_story_arc_check_reads_session_state():
 +    session = {"simulation_state": {}}
-+    start_puzzle(session["simulation_state"], "puzzle:cellar_runes", state="initial")
-+    set_puzzle_flag(session["simulation_state"], "puzzle:cellar_runes", "rune_unlocked", True)
++    start_story_arc(
++        session["simulation_state"],
++        "arc:bandit_pressure",
++        stage="rumors",
++        pressure=20,
++    )
 +
-+    result = run_quest_puzzle_checks(
++    result = run_story_m1_m3_checks(
 +        checks=[
 +            {
-+                "type": "puzzle_flag",
-+                "puzzle_id": "puzzle:cellar_runes",
-+                "flag": "rune_unlocked",
-+                "expected": True,
++                "type": "story_arc",
++                "arc_id": "arc:bandit_pressure",
++                "expected": {"stage": "rumors", "pressure": 20},
 +            }
 +        ],
 +        result={},
@@ -2418,16 +2397,15 @@ Patch 5 — Manual scenarios
 *** End Patch
 Validation commands
 Compile
-python -m py_compile src/app/rpg/quests/model.py
-python -m py_compile src/app/rpg/quests/state.py
-python -m py_compile src/app/rpg/quests/conditions.py
-python -m py_compile src/app/rpg/quests/transitions.py
-python -m py_compile src/app/rpg/quests/rewards.py
-python -m py_compile src/app/rpg/puzzles/model.py
-python -m py_compile src/app/rpg/puzzles/state.py
-python -m py_compile src/app/rpg/puzzles/conditions.py
-python -m py_compile src/app/rpg/puzzles/transitions.py
-python -m py_compile src/tests/rpg/manual/quest_puzzle_checks.py
-python -m py_compile src/tests/rpg/manual/scenarios/quest_puzzle_l13_l15.py
+python -m py_compile src/app/rpg/lore/model.py
+python -m py_compile src/app/rpg/lore/state.py
+python -m py_compile src/app/rpg/lore/conditions.py
+python -m py_compile src/app/rpg/lore/transitions.py
+python -m py_compile src/app/rpg/story_arcs/model.py
+python -m py_compile src/app/rpg/story_arcs/state.py
+python -m py_compile src/app/rpg/story_arcs/conditions.py
+python -m py_compile src/app/rpg/story_arcs/transitions.py
+python -m py_compile src/tests/rpg/manual/story_m1_m3_checks.py
+python -m py_compile src/tests/rpg/manual/scenarios/story_m1_m3.py
 Unit tests
-python -m pytest src/tests/rpg/quests src/tests/rpg/puzzles -q
+python -m pytest src/tests/rpg/lore src/tests/rpg/story_arcs -q
