@@ -650,6 +650,27 @@ def sanitize_turn_for_summary(
             if isinstance(item, dict)
         ]
 
+    npc_evolution_m19_m21_check_results = turn.get("npc_evolution_m19_m21_check_results")
+    if isinstance(npc_evolution_m19_m21_check_results, list):
+        sanitized["npc_evolution_m19_m21_check_results"] = [
+            {
+                "check_type": item.get("check_type"),
+                "ok": item.get("ok"),
+                "npc_id": item.get("npc_id"),
+                "evolution": item.get("evolution"),
+                "failures": item.get("failures"),
+                "expected_ok": item.get("expected_ok"),
+                "actual_ok": item.get("actual_ok"),
+                "condition_result": item.get("condition_result"),
+                "transition_result": item.get("transition_result"),
+                "history_count": item.get("history_count"),
+                "max_history": item.get("max_history"),
+                "error": item.get("error"),
+            }
+            for item in npc_evolution_m19_m21_check_results[:50]
+            if isinstance(item, dict)
+        ]
+
     return sanitized
 
 

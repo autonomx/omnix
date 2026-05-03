@@ -5,7 +5,6 @@ from typing import Any, Dict, List
 from app.rpg.escalation.rules import normalize_escalation_rule
 from app.rpg.story_proposals.normalization import normalize_proposal_story_event
 
-
 MAX_STORY_EVENT_DEFINITIONS = 500
 MAX_ESCALATION_RULE_DEFINITIONS = 500
 

@@ -6,7 +6,6 @@ from app.rpg.lore.state import get_lore_entry, is_lore_known_by
 from app.rpg.memory.causal_retrieval import retrieve_causal_memories
 from app.rpg.story_arcs.state import get_story_arc
 
-
 MAX_DIALOGUE_LORE = 10
 MAX_DIALOGUE_ARCS = 10
 MAX_DIALOGUE_MEMORIES = 10

@@ -20,6 +20,7 @@ ALLOWED_STORY_EVENT_EFFECT_TYPES = {
     "puzzle_transition",
     "memory_event",
     "social_delta",
+    "npc_evolution",
     "world_event_emit",
 }
 
@@ -123,6 +124,27 @@ def validate_story_event_effect(
                         "field": key,
                         "value": value,
                     }
+
+    if effect_type == "npc_evolution":
+        npc_id = str(effect.get("npc_id") or "")
+        if not npc_id:
+            return {
+                "ok": False,
+                "reason": "missing_npc_id",
+                "effect_type": effect_type,
+            }
+        personality_deltas = _safe_dict(effect.get("personality_deltas"))
+        for key, value in personality_deltas.items():
+            value = int(value or 0)
+            if value < -100 or value > 100:
+                return {
+                    "ok": False,
+                    "reason": "personality_delta_out_of_bounds",
+                    "effect_type": effect_type,
+                    "npc_id": npc_id,
+                    "field": str(key),
+                    "value": value,
+                }
 
     return {
         "ok": True,
