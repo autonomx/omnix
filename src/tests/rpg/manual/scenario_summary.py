@@ -5,6 +5,8 @@ from typing import Any, Dict, List
 from tests.rpg.manual.safe import _safe_dict, _safe_list
 from tests.rpg.manual.summary_sanitizer import (
     compact_result_for_summary as _sanitizer_compact_result,
+)
+from tests.rpg.manual.summary_sanitizer import (
     sanitize_scenario_summary,
 )
 

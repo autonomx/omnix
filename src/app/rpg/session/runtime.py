@@ -27,6 +27,8 @@ logger = logging.getLogger(__name__)
 
 from app.rpg.interactions.resolver import (
     detect_interaction_intent,
+)
+from app.rpg.interactions.resolver import (
     resolve_general_interaction as resolve_general_interaction_v2,
 )
 

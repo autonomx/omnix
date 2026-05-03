@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from typing import Any, Dict
 
-
 SOCIAL_L10_L12_SCENARIOS: Dict[str, Dict[str, Any]] = {
     "social_persuasion_success_high_trust": {
         "setup_social_state": {

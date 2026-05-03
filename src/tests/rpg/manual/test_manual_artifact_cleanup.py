@@ -1,7 +1,10 @@
 from pathlib import Path
 
 from tests.rpg.manual.constants import TEST_RESULTS_ROOT
-from tests.rpg.manual.output_artifacts import _should_include_in_results_zip, clear_test_results_root
+from tests.rpg.manual.output_artifacts import (
+    _should_include_in_results_zip,
+    clear_test_results_root,
+)
 from tests.rpg.manual.output_state import _OUTPUTS
 
 
