@@ -5,6 +5,9 @@ from pathlib import Path
 from typing import Set
 
 from tests.rpg.manual.runner import build_service_scenarios
+from tests.rpg.manual.scenarios.expected_escalation_m7_m9_names import (
+    EXPECTED_ESCALATION_M7_M9_SCENARIO_NAMES,
+)
 from tests.rpg.manual.scenarios.expected_legacy_names import (
     EXPECTED_LEGACY_SCENARIO_NAMES,
 )
@@ -13,9 +16,6 @@ from tests.rpg.manual.scenarios.expected_memory_l7_l9_names import (
 )
 from tests.rpg.manual.scenarios.expected_social_l10_l12_names import (
     EXPECTED_SOCIAL_L10_L12_SCENARIO_NAMES,
-)
-from tests.rpg.manual.scenarios.expected_escalation_m7_m9_names import (
-    EXPECTED_ESCALATION_M7_M9_SCENARIO_NAMES,
 )
 
 

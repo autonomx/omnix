@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from typing import Any, Dict, List
 
-
 MAX_ESCALATION_RULE_APPLICATIONS = 500
 
 

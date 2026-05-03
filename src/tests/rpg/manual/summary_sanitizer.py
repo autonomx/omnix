@@ -577,6 +577,24 @@ def sanitize_turn_for_summary(
             if isinstance(item, dict)
         ]
 
+    story_proposal_m10_m12_check_results = turn.get("story_proposal_m10_m12_check_results")
+    if isinstance(story_proposal_m10_m12_check_results, list):
+        sanitized["story_proposal_m10_m12_check_results"] = [
+            {
+                "check_type": item.get("check_type"),
+                "ok": item.get("ok"),
+                "expected_ok": item.get("expected_ok"),
+                "actual_ok": item.get("actual_ok"),
+                "required_error": item.get("required_error"),
+                "validation": item.get("validation"),
+                "counts": item.get("counts"),
+                "failures": item.get("failures"),
+                "error": item.get("error"),
+            }
+            for item in story_proposal_m10_m12_check_results[:50]
+            if isinstance(item, dict)
+        ]
+
     return sanitized
 
 

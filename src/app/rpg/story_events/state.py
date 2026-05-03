@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from typing import Any, Dict, List
 
-
 MAX_APPLIED_STORY_EVENTS = 500
 
 

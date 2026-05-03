@@ -3,16 +3,14 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any, Dict
 
+from app.rpg.escalation.rules import apply_escalation_rule
+from app.rpg.escalation.state import mark_escalation_rule_applied
+from app.rpg.lore.transitions import apply_lore_transition
 from app.rpg.memory.observation import (
     record_event_observations,
     record_told_memory,
 )
-from app.rpg.lore.transitions import apply_lore_transition
 from app.rpg.puzzles.transitions import apply_puzzle_transition
-from app.rpg.story_arcs.transitions import apply_story_arc_transition
-from app.rpg.story_events.application import apply_story_event
-from app.rpg.escalation.rules import apply_escalation_rule
-from app.rpg.escalation.state import mark_escalation_rule_applied
 from app.rpg.quests.transitions import apply_quest_transition
 from app.rpg.social.leverage import add_social_leverage
 from app.rpg.social.reputation import (
@@ -25,6 +23,8 @@ from app.rpg.social.resolution import (
 )
 from app.rpg.social.state import ensure_social_state, normalize_social_profile
 from app.rpg.spatial.serialization import normalize_spatial_graph
+from app.rpg.story_arcs.transitions import apply_story_arc_transition
+from app.rpg.story_events.application import apply_story_event
 from tests.rpg.manual.memory_fixtures import build_manual_memory_event
 from tests.rpg.manual.safe import _safe_dict, _safe_list
 from tests.rpg.manual.session_helpers import (

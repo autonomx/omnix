@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from typing import Any, Dict
 
-
 STORY_M1_M3_SCENARIOS: Dict[str, Dict[str, Any]] = {
     "lore_entry_can_be_revealed_to_player": {
         "setup_lore_transitions": [
