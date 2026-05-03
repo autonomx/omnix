@@ -1,4 +1,8 @@
-from app.rpg.spatial.visibility import can_see_area, can_see_entity, visible_entities_from
+from app.rpg.spatial.visibility import (
+    can_see_area,
+    can_see_entity,
+    visible_entities_from,
+)
 from tests.rpg.spatial.fixtures import (
     tavern_spatial_fixture,
     tavern_spatial_fixture_with_private_door_open,

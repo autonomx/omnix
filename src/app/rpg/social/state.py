@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from typing import Any, Dict, List
 
-
 DEFAULT_MAX_LEVERAGE_PER_NPC = 20
 
 

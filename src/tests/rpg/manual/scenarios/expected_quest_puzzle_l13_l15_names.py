@@ -1,0 +1,17 @@
+EXPECTED_QUEST_PUZZLE_L13_L15_SCENARIO_NAMES = {
+    "quest_start_sets_active_stage",
+    "quest_objective_completion_advances_stage",
+    "quest_stage_gate_requires_item",
+    "quest_stage_gate_requires_social_trust",
+    "quest_stage_gate_requires_npc_memory",
+    "quest_stage_gate_requires_spatial_area",
+    "quest_completion_produces_reward_payload_once",
+    "quest_reward_not_auto_granted_without_apply",
+    "quest_save_load_preserves_stage_and_objectives",
+    "puzzle_start_sets_initial_state",
+    "puzzle_wrong_input_does_not_advance",
+    "puzzle_correct_input_advances_state",
+    "puzzle_requires_prior_flag",
+    "puzzle_completion_unlocks_quest_gate",
+    "puzzle_save_load_preserves_flags",
+}

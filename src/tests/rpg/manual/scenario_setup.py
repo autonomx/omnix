@@ -3,11 +3,12 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any, Dict
 
-from app.rpg.spatial.serialization import normalize_spatial_graph
 from app.rpg.memory.observation import (
     record_event_observations,
     record_told_memory,
 )
+from app.rpg.puzzles.transitions import apply_puzzle_transition
+from app.rpg.quests.transitions import apply_quest_transition
 from app.rpg.social.leverage import add_social_leverage
 from app.rpg.social.reputation import (
     set_global_reputation,
@@ -18,7 +19,7 @@ from app.rpg.social.resolution import (
     resolve_persuasion,
 )
 from app.rpg.social.state import ensure_social_state, normalize_social_profile
-from tests.rpg.manual.spatial_fixtures import build_manual_spatial_fixture
+from app.rpg.spatial.serialization import normalize_spatial_graph
 from tests.rpg.manual.memory_fixtures import build_manual_memory_event
 from tests.rpg.manual.safe import _safe_dict, _safe_list
 from tests.rpg.manual.session_helpers import (
@@ -27,6 +28,7 @@ from tests.rpg.manual.session_helpers import (
     _save_manual_session_for_test,
     _sync_manual_simulation_state,
 )
+from tests.rpg.manual.spatial_fixtures import build_manual_spatial_fixture
 
 
 def apply_manual_scenario_setup_by_session_id(
@@ -173,6 +175,40 @@ def _apply_manual_scenario_setup(session: Dict[str, Any], scenario: Dict[str, An
         # Make the normalized social state with manual_results explicit on the
         # authoritative simulation_state before session save/sync.
         simulation_state["social_state"] = social_state
+
+    for item_id in scenario.get("setup_manual_inventory_items") or []:
+        simulation_state.setdefault("manual_inventory_items", [])
+        if item_id not in simulation_state["manual_inventory_items"]:
+            simulation_state["manual_inventory_items"].append(item_id)
+
+    # Puzzle transitions must run before quest transitions because quests can be
+    # gated by puzzle flags, for example:
+    #   condition: {"type": "puzzle_flag", ...}
+    for transition in scenario.get("setup_puzzle_transitions") or []:
+        if isinstance(transition, dict):
+            apply_puzzle_transition(
+                simulation_state,
+                transition,
+                turn_index=int(
+                    transition.get("turn_index")
+                    or scenario.get("setup_turn_index")
+                    or 1
+                ),
+            )
+
+    # Quest transitions intentionally run after inventory/puzzle setup so item
+    # gates and puzzle gates see the already-authoritative state.
+    for transition in scenario.get("setup_quest_transitions") or []:
+        if isinstance(transition, dict):
+            apply_quest_transition(
+                simulation_state,
+                transition,
+                turn_index=int(
+                    transition.get("turn_index")
+                    or scenario.get("setup_turn_index")
+                    or 1
+                ),
+            )
 
     runtime_state = _safe_dict(session.get("runtime_state"))
     runtime_settings = _safe_dict(runtime_state.get("runtime_settings"))

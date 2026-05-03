@@ -3,7 +3,11 @@ from __future__ import annotations
 import hashlib
 from typing import Any, Dict, List
 
-from app.rpg.social.state import clamp_social_value, ensure_relationship, ensure_social_state
+from app.rpg.social.state import (
+    clamp_social_value,
+    ensure_relationship,
+    ensure_social_state,
+)
 
 
 def _safe_dict(value: Any) -> Dict[str, Any]:

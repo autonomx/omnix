@@ -3,14 +3,13 @@ from __future__ import annotations
 from typing import Any, Dict, List
 
 from tests.rpg.manual import output_artifacts
-from tests.rpg.manual.spatial_checks import run_spatial_checks
 from tests.rpg.manual.memory_checks import run_memory_checks
-from tests.rpg.manual.social_checks import run_social_checks
 from tests.rpg.manual.output_state import (
     _REGRESSION_WARNING_LOCK,
     _REGRESSION_WARNING_ROWS,
     _REGRESSION_WARNINGS,
 )
+from tests.rpg.manual.quest_puzzle_checks import run_quest_puzzle_checks
 from tests.rpg.manual.safe import _compact_json, _safe_dict, _safe_list
 from tests.rpg.manual.scenario_setup import (
     _apply_manual_scenario_setup,
@@ -30,6 +29,8 @@ from tests.rpg.manual.session_helpers import (
     _seed_session_currency,
     _thread_label,
 )
+from tests.rpg.manual.social_checks import run_social_checks
+from tests.rpg.manual.spatial_checks import run_spatial_checks
 from tests.rpg.manual.turn_execution import _run_one_manual_turn
 
 
@@ -313,6 +314,41 @@ def _run_one_service_scenario(
                         + str(check_result.get("error") or "")
                     )
 
+        quest_puzzle_checks = [
+            check
+            for check in checks
+            if isinstance(check, dict)
+            and (
+                str(check.get("type") or "").startswith("quest_")
+                or str(check.get("type") or "").startswith("puzzle_")
+            )
+        ]
+        if quest_puzzle_checks:
+            current_session = {}
+            try:
+                current_session = _ensure_manual_session(session_id)
+            except Exception:
+                current_session = session
+
+            quest_puzzle_check_results = run_quest_puzzle_checks(
+                checks=quest_puzzle_checks,
+                result=turn_summary.get("result") or turn_summary,
+                session=current_session,
+            )
+            turn_summary["quest_puzzle_check_results"] = quest_puzzle_check_results
+            for check_result in quest_puzzle_check_results:
+                if not check_result.get("ok"):
+                    turn_summary.setdefault("scenario_warnings", []).append(
+                        "quest_puzzle_check_failed:"
+                        + str(scenario_name)
+                        + ":turn_"
+                        + str(turn_index)
+                        + ":"
+                        + str(check_result.get("check_type"))
+                        + ":"
+                        + str(check_result.get("error") or "")
+                    )
+
         turn_summaries.append(turn_summary)
 
         # Check for contamination
@@ -348,8 +384,8 @@ def _run_one_service_scenario(
 
     # Write per-scenario debug artifact if detail level requires it
     if artifact_detail in ("debug", "full"):
-        from tests.rpg.manual.summary_sanitizer import write_scenario_debug_artifact
         from tests.rpg.manual.constants import TEST_RESULTS_ROOT
+        from tests.rpg.manual.summary_sanitizer import write_scenario_debug_artifact
 
         debug_file = write_scenario_debug_artifact(
             scenario_name=scenario_name,

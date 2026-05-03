@@ -470,6 +470,33 @@ def sanitize_turn_for_summary(
             if isinstance(item, dict)
         ]
 
+    quest_puzzle_check_results = turn.get("quest_puzzle_check_results")
+    if isinstance(quest_puzzle_check_results, list):
+        sanitized["quest_puzzle_check_results"] = [
+            {
+                "check_type": item.get("check_type"),
+                "ok": item.get("ok"),
+                "quest_id": item.get("quest_id"),
+                "puzzle_id": item.get("puzzle_id"),
+                "expected_stage": item.get("expected_stage"),
+                "actual_stage": item.get("actual_stage"),
+                "expected_state": item.get("expected_state"),
+                "actual_state": item.get("actual_state"),
+                "expected_status": item.get("expected_status"),
+                "actual_status": item.get("actual_status"),
+                "objective_id": item.get("objective_id"),
+                "expected_count": item.get("expected_count"),
+                "actual_count": item.get("actual_count"),
+                "expected": item.get("expected"),
+                "actual": item.get("actual"),
+                "condition_result": item.get("condition_result"),
+                "rewards": item.get("rewards"),
+                "error": item.get("error"),
+            }
+            for item in quest_puzzle_check_results[:50]
+            if isinstance(item, dict)
+        ]
+
     # Ensure narration preview
     if "narration_preview" not in sanitized:
         sanitized["narration_preview"] = _extract_narration_preview(result, limits["max_text"])

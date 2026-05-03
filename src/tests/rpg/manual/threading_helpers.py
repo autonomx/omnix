@@ -1,6 +1,7 @@
 import os
 import threading
 
+
 def _default_scenario_workers() -> int:
     raw = os.environ.get("OMNIX_MANUAL_SCENARIO_WORKERS", "").strip()
     if raw:

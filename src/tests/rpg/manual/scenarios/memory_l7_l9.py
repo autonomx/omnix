@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from typing import Any, Dict
 
-
 MEMORY_L7_L9_SCENARIOS: Dict[str, Dict[str, Any]] = {
     "memory_npc_remembers_same_room_event": {
         "setup_spatial_graph": "tavern_fixture",

@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from typing import Any, Dict
 
-
 SPATIAL_L4_L6_SCENARIOS: Dict[str, Dict[str, Any]] = {
     "spatial_room_graph_basic_navigation": {
         "setup_spatial_graph": "tavern_fixture",

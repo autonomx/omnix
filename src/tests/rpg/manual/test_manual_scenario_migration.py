@@ -7,6 +7,9 @@ from tests.rpg.manual.scenarios.expected_legacy_names import (
 from tests.rpg.manual.scenarios.expected_memory_l7_l9_names import (
     EXPECTED_MEMORY_L7_L9_SCENARIO_NAMES,
 )
+from tests.rpg.manual.scenarios.expected_quest_puzzle_l13_l15_names import (
+    EXPECTED_QUEST_PUZZLE_L13_L15_SCENARIO_NAMES,
+)
 from tests.rpg.manual.scenarios.expected_social_l10_l12_names import (
     EXPECTED_SOCIAL_L10_L12_SCENARIO_NAMES,
 )
@@ -154,3 +157,10 @@ def test_manual_scenario_registry_includes_social_l10_l12_names():
     missing = EXPECTED_SOCIAL_L10_L12_SCENARIO_NAMES - names
 
     assert not missing, f"Missing L10-L12 social scenarios: {sorted(missing)}"
+
+
+def test_manual_scenario_registry_includes_quest_puzzle_l13_l15_names():
+    names = set(build_service_scenarios().keys())
+    missing = EXPECTED_QUEST_PUZZLE_L13_L15_SCENARIO_NAMES - names
+
+    assert not missing, f"Missing L13-L15 quest/puzzle scenarios: {sorted(missing)}"

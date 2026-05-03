@@ -5,7 +5,6 @@ import json
 from datetime import datetime, timezone
 from typing import Any, Dict, List
 
-
 DEFAULT_MAX_MEMORIES_PER_SUBJECT = 100
 
 BLOCKED_SYNTHETIC_SUBJECT_IDS = {
