@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from typing import Any, Dict, List
 
-
 MAX_PENDING_STORY_EVENTS = 200
 MAX_STORY_EVENT_QUEUE_HISTORY = 300
 

@@ -1,5 +1,8 @@
 from app.rpg.story_arcs.state import get_story_arc, start_story_arc
-from app.rpg.story_event_queue.queue import enqueue_story_event, process_story_event_queue
+from app.rpg.story_event_queue.queue import (
+    enqueue_story_event,
+    process_story_event_queue,
+)
 from app.rpg.story_events.state import get_applied_story_event
 
 

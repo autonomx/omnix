@@ -3,6 +3,9 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any, Dict
 
+from app.rpg.campaign_director.runtime import apply_campaign_director_tick
+from app.rpg.campaign_journal.journal import record_campaign_journal_entry
+from app.rpg.companions.offers import accept_companion_offer, refuse_companion_offer
 from app.rpg.dialogue_context.rumors import propagate_rumor
 from app.rpg.escalation.rules import apply_escalation_rule
 from app.rpg.escalation.state import mark_escalation_rule_applied
@@ -12,12 +15,6 @@ from app.rpg.memory.observation import (
     record_told_memory,
 )
 from app.rpg.npc_evolution.transitions import apply_npc_evolution_transition
-from app.rpg.campaign_director.runtime import apply_campaign_director_tick
-from app.rpg.story_event_queue.queue import (
-    enqueue_story_event,
-    enqueue_story_event_definition,
-    process_story_event_queue,
-)
 from app.rpg.puzzles.transitions import apply_puzzle_transition
 from app.rpg.quests.transitions import apply_quest_transition
 from app.rpg.social.leverage import add_social_leverage
@@ -32,9 +29,13 @@ from app.rpg.social.resolution import (
 from app.rpg.social.state import ensure_social_state, normalize_social_profile
 from app.rpg.spatial.serialization import normalize_spatial_graph
 from app.rpg.story_arcs.transitions import apply_story_arc_transition
+from app.rpg.story_event_queue.queue import (
+    enqueue_story_event,
+    enqueue_story_event_definition,
+    process_story_event_queue,
+)
 from app.rpg.story_events.application import apply_story_event
 from app.rpg.story_packs.importer import import_story_pack
-from app.rpg.companions.offers import accept_companion_offer, refuse_companion_offer
 from tests.rpg.manual.memory_fixtures import build_manual_memory_event
 from tests.rpg.manual.safe import _safe_dict, _safe_list
 from tests.rpg.manual.session_helpers import (
@@ -362,6 +363,26 @@ def _apply_manual_scenario_setup(session: Dict[str, Any], scenario: Dict[str, An
                     turn_index=int(offer.get("turn_index") or scenario.get("setup_turn_index") or 1),
                     reason=str(offer.get("reason") or "player_refused"),
                 )
+
+    for entry in scenario.get("setup_campaign_journal_entries") or []:
+        if isinstance(entry, dict):
+            record_campaign_journal_entry(
+                simulation_state,
+                kind=str(entry.get("kind") or "story"),
+                title=str(entry.get("title") or ""),
+                summary=str(entry.get("summary") or ""),
+                turn_index=int(entry.get("turn_index") or scenario.get("setup_turn_index") or 1),
+                visibility=str(entry.get("visibility") or "player"),
+                fact_status=str(entry.get("fact_status") or ""),
+                arc_ids=entry.get("arc_ids") or [],
+                lore_ids=entry.get("lore_ids") or [],
+                event_ids=entry.get("event_ids") or [],
+                npc_ids=entry.get("npc_ids") or [],
+                quest_ids=entry.get("quest_ids") or [],
+                tags=entry.get("tags") or [],
+                source_id=str(entry.get("source_id") or ""),
+                metadata=entry.get("metadata") or {},
+            )
 
     for item in scenario.get("setup_story_event_queue") or []:
         if isinstance(item, dict):

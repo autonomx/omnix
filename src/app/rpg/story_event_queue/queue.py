@@ -12,7 +12,6 @@ from app.rpg.story_events.application import apply_story_event
 from app.rpg.story_events.state import has_story_event_been_applied
 from app.rpg.story_packs.definition_registries import get_story_event_definition
 
-
 SAFE_QUEUE_PROCESS_MODES = {"idle", "wait", "listen", "observe", "world_tick", "__ambient_tick__"}
 MAX_QUEUE_APPLICATIONS_PER_TICK = 3
 

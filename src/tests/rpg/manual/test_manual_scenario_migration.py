@@ -1,6 +1,15 @@
 from __future__ import annotations
 
 from tests.rpg.manual.runner import build_service_scenarios
+from tests.rpg.manual.scenarios.expected_campaign_director_m22_m24_names import (
+    EXPECTED_CAMPAIGN_DIRECTOR_M22_M24_SCENARIO_NAMES,
+)
+from tests.rpg.manual.scenarios.expected_companion_m28_m30_names import (
+    EXPECTED_COMPANION_M28_M30_SCENARIO_NAMES,
+)
+from tests.rpg.manual.scenarios.expected_campaign_journal_m31_m33_names import (
+    EXPECTED_CAMPAIGN_JOURNAL_M31_M33_SCENARIO_NAMES,
+)
 from tests.rpg.manual.scenarios.expected_dialogue_m16_m18_names import (
     EXPECTED_DIALOGUE_M16_M18_SCENARIO_NAMES,
 )
@@ -22,20 +31,14 @@ from tests.rpg.manual.scenarios.expected_social_l10_l12_names import (
 from tests.rpg.manual.scenarios.expected_story_event_m4_m6_names import (
     EXPECTED_STORY_EVENT_M4_M6_SCENARIO_NAMES,
 )
+from tests.rpg.manual.scenarios.expected_story_event_queue_m25_m27_names import (
+    EXPECTED_STORY_EVENT_QUEUE_M25_M27_SCENARIO_NAMES,
+)
 from tests.rpg.manual.scenarios.expected_story_m1_m3_names import (
     EXPECTED_STORY_M1_M3_SCENARIO_NAMES,
 )
 from tests.rpg.manual.scenarios.expected_story_pack_m13_m15_names import (
     EXPECTED_STORY_PACK_M13_M15_SCENARIO_NAMES,
-)
-from tests.rpg.manual.scenarios.expected_campaign_director_m22_m24_names import (
-    EXPECTED_CAMPAIGN_DIRECTOR_M22_M24_SCENARIO_NAMES,
-)
-from tests.rpg.manual.scenarios.expected_story_event_queue_m25_m27_names import (
-    EXPECTED_STORY_EVENT_QUEUE_M25_M27_SCENARIO_NAMES,
-)
-from tests.rpg.manual.scenarios.expected_companion_m28_m30_names import (
-    EXPECTED_COMPANION_M28_M30_SCENARIO_NAMES,
 )
 
 
@@ -54,8 +57,8 @@ def test_manual_scenario_migration_audit():
     new_scenarios = build_service_scenarios()
     new_names = set(new_scenarios.keys())
 
-    # All scenarios should be present (updated count after story event queue M25-M27 integration)
-    assert len(new_names) == 275, f"Expected 275 scenarios, found {len(new_names)}"
+    # All scenarios should be present (updated count after campaign journal M31-M33 integration)
+    assert len(new_names) == 290, f"Expected 290 scenarios, found {len(new_names)}"
 
     # Check that Bundle A scenarios have been successfully ported
     bundle_a_scenarios = {"lodging_success", "shop_success", "blocked_purchase", "paid_info"}
@@ -244,3 +247,10 @@ def test_manual_scenario_registry_includes_companion_m28_m30_names():
     missing = EXPECTED_COMPANION_M28_M30_SCENARIO_NAMES - names
 
     assert not missing, f"Missing M28-M30 companion scenarios: {sorted(missing)}"
+
+
+def test_manual_scenario_registry_includes_campaign_journal_m31_m33_names():
+    names = set(build_service_scenarios().keys())
+    missing = EXPECTED_CAMPAIGN_JOURNAL_M31_M33_SCENARIO_NAMES - names
+
+    assert not missing, f"Missing M31-M33 campaign journal scenarios: {sorted(missing)}"

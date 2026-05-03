@@ -745,6 +745,32 @@ def sanitize_turn_for_summary(
             if isinstance(item, dict)
         ]
 
+    campaign_journal_m31_m33_check_results = turn.get("campaign_journal_m31_m33_check_results")
+    if isinstance(campaign_journal_m31_m33_check_results, list):
+        sanitized["campaign_journal_m31_m33_check_results"] = [
+            {
+                "check_type": item.get("check_type"),
+                "ok": item.get("ok"),
+                "record_result": item.get("record_result"),
+                "journal": item.get("journal"),
+                "recap": item.get("recap"),
+                "matched": item.get("matched"),
+                "known_lore": item.get("known_lore"),
+                "expected_summary_contains": item.get("expected_summary_contains"),
+                "expected_kind": item.get("expected_kind"),
+                "expected_arc_id": item.get("expected_arc_id"),
+                "expected_pending_event_id": item.get("expected_pending_event_id"),
+                "expected_npc_id": item.get("expected_npc_id"),
+                "expected_party_npc_id": item.get("expected_party_npc_id"),
+                "expected_truth_status": item.get("expected_truth_status"),
+                "expected_present": item.get("expected_present"),
+                "max_items": item.get("max_items"),
+                "error": item.get("error"),
+            }
+            for item in campaign_journal_m31_m33_check_results[:50]
+            if isinstance(item, dict)
+        ]
+
     return sanitized
 
 

@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from typing import Any, Dict, List
 
-
 MAX_PARTY_MEMBERS = 6
 MAX_COMPANION_HISTORY = 100
 

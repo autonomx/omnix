@@ -5,8 +5,8 @@ from app.rpg.campaign_director.runtime import (
 )
 from app.rpg.npc_evolution.state import get_npc_evolution
 from app.rpg.story_arcs.state import get_story_arc
-from app.rpg.story_packs.importer import import_story_pack
 from app.rpg.story_events.state import get_applied_story_event
+from app.rpg.story_packs.importer import import_story_pack
 
 
 def _pack():
