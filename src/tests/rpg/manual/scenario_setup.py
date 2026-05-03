@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import json
 from copy import deepcopy
 from typing import Any, Dict
 
 from app.rpg.campaign_director.runtime import apply_campaign_director_tick
 from app.rpg.campaign_journal.journal import record_campaign_journal_entry
+from app.rpg.story_authoring.runtime import author_story_proposal
 from app.rpg.companions.offers import accept_companion_offer, refuse_companion_offer
 from app.rpg.dialogue_context.rumors import propagate_rumor
 from app.rpg.escalation.rules import apply_escalation_rule
@@ -382,6 +384,20 @@ def _apply_manual_scenario_setup(session: Dict[str, Any], scenario: Dict[str, An
                 tags=entry.get("tags") or [],
                 source_id=str(entry.get("source_id") or ""),
                 metadata=entry.get("metadata") or {},
+            )
+
+    for authoring in scenario.get("setup_story_authoring_runs") or []:
+        if isinstance(authoring, dict):
+            llm_text_override = authoring.get("llm_text_override")
+            if isinstance(llm_text_override, dict):
+                llm_text_override = json.dumps(llm_text_override)
+            author_story_proposal(
+                simulation_state,
+                authoring_goal=str(authoring.get("authoring_goal") or "Create a story pack."),
+                turn_index=int(authoring.get("turn_index") or scenario.get("setup_turn_index") or 1),
+                import_if_valid=bool(authoring.get("import_if_valid", False)),
+                repair_once=bool(authoring.get("repair_once", False)),
+                llm_text_override=llm_text_override,
             )
 
     for item in scenario.get("setup_story_event_queue") or []:
