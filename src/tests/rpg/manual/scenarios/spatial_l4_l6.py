@@ -2,126 +2,204 @@ from __future__ import annotations
 
 from typing import Any, Dict
 
+
 SPATIAL_L4_L6_SCENARIOS: Dict[str, Dict[str, Any]] = {
-    "combat_melee_cannot_attack_far_target": {
-        "currency": {"gold": 0, "silver": 0, "copper": 0},
-        "conversation_settings": {"enabled": True, "autonomous_ticks_enabled": False, "frequency": "never", "conversation_chance_percent": 0},
-        "setup_interaction_state": {
-            "player_location_id": "loc_tavern_road",
-            "player_hp": 20,
-            "player_max_hp": 20,
-            "player_inventory": {"items": [], "equipment": {}, "carry_capacity": 50.0},
-            "party_state": {"max_size": 4, "companions": []},
-            "combat_state": {
-                "active": True,
-                "current_actor_id": "player",
-                "initiative_order": [{"actor_id": "player", "initiative": 20}, {"actor_id": "enemy:archer_1", "initiative": 1}],
-                "participants": {
-                    "player": {"actor_id": "player", "side": "party", "name": "You", "hp": 20, "max_hp": 20, "status": "active", "position": {"zone": "frontline", "range_band": "near", "engaged_with": []}},
-                    "enemy:archer_1": {"actor_id": "enemy:archer_1", "side": "enemy", "name": "Archer", "hp": 8, "max_hp": 8, "status": "active", "position": {"zone": "backline", "range_band": "far", "engaged_with": []}},
-                },
-            },
-        },
-        "turns": ["I attack the archer."],
+    "spatial_room_graph_basic_navigation": {
+        "setup_spatial_graph": "tavern_fixture",
+        "turns": ["I look around the tavern and check the exits"],
+        "checks": [
+            {
+                "type": "spatial_visible_entities",
+                "viewer": "player",
+                "mode": "contains",
+                "expected_entity_ids": ["bran", "mira", "bandit"],
+            }
+        ],
     },
-    "combat_reposition_moves_actor_near": {
-        "currency": {"gold": 0, "silver": 0, "copper": 0},
-        "conversation_settings": {"enabled": True, "autonomous_ticks_enabled": False, "frequency": "never", "conversation_chance_percent": 0},
-        "setup_interaction_state": {
-            "player_location_id": "loc_tavern_road",
-            "player_hp": 20,
-            "player_max_hp": 20,
-            "player_inventory": {"items": [], "equipment": {}, "carry_capacity": 50.0},
-            "party_state": {"max_size": 4, "companions": []},
-            "combat_state": {
-                "active": True,
-                "current_actor_id": "player",
-                "participants": {
-                    "player": {"actor_id": "player", "side": "party", "name": "You", "hp": 20, "max_hp": 20, "status": "active", "position": {"zone": "backline", "range_band": "far"}},
-                    "enemy:bandit_1": {"actor_id": "enemy:bandit_1", "side": "enemy", "name": "Bandit", "hp": 8, "max_hp": 8, "status": "active", "position": {"zone": "frontline", "range_band": "near"}},
-                },
-            },
-        },
-        "turns": ["I move closer."],
+    "spatial_closed_door_blocks_movement": {
+        "setup_spatial_graph": "tavern_fixture",
+        "turns": ["I try to walk into the private room"],
+        "checks": [
+            {
+                "type": "spatial_can_move",
+                "from_area_id": "tavern_common_room",
+                "to_area_id": "private_room",
+                "expected_ok": False,
+                "expected_reason": "closed",
+            }
+        ],
     },
-    "combat_ranged_enemy_attacks_from_backline": {
-        "currency": {"gold": 0, "silver": 0, "copper": 0},
-        "conversation_settings": {"enabled": True, "autonomous_ticks_enabled": False, "frequency": "never", "conversation_chance_percent": 0},
-        "setup_interaction_state": {
-            "player_location_id": "loc_tavern_road",
-            "player_hp": 20,
-            "player_max_hp": 20,
-            "player_inventory": {"items": [], "equipment": {}, "carry_capacity": 50.0},
-            "party_state": {"max_size": 4, "companions": []},
-            "combat_state": {
-                "active": True,
-                "current_actor_id": "enemy:archer_1",
-                "initiative_order": [{"actor_id": "enemy:archer_1", "initiative": 20}, {"actor_id": "player", "initiative": 1}],
-                "participants": {
-                    "enemy:archer_1": {"actor_id": "enemy:archer_1", "side": "enemy", "name": "Archer", "hp": 8, "max_hp": 8, "status": "active", "tags": ["ranged", "archer"], "position": {"zone": "backline", "range_band": "far", "engaged_with": []}},
-                    "player": {"actor_id": "player", "side": "party", "name": "You", "hp": 20, "max_hp": 20, "status": "active", "position": {"zone": "frontline", "range_band": "near", "engaged_with": []}},
-                },
-            },
-        },
-        "turns": ["__manual_resolve_current_combat_actor__"],
+    "spatial_open_door_allows_movement": {
+        "setup_spatial_graph": "tavern_fixture_private_door_open",
+        "turns": ["I walk into the private room"],
+        "checks": [
+            {
+                "type": "spatial_can_move",
+                "from_area_id": "tavern_common_room",
+                "to_area_id": "private_room",
+                "expected_ok": True,
+                "expected_reason": "passable",
+            }
+        ],
     },
-    "combat_victory_emits_world_event_once": {
-        "currency": {"gold": 0, "silver": 0, "copper": 0},
-        "conversation_settings": {"enabled": True, "autonomous_ticks_enabled": False, "frequency": "never", "conversation_chance_percent": 0},
-        "setup_interaction_state": {
-            "player_location_id": "loc_tavern_road",
-            "player_hp": 20,
-            "player_max_hp": 20,
-            "player_inventory": {"items": [], "equipment": {}, "carry_capacity": 50.0},
-            "party_state": {"max_size": 4, "companions": []},
-            "combat_state": {
-                "active": True,
-                "combat_id": "combat:world_event_bandit",
-                "current_actor_id": "player",
-                "initiative_order": [{"actor_id": "player", "initiative": 20}, {"actor_id": "enemy:bandit_1", "initiative": 1}],
-                "participants": {
-                    "player": {"actor_id": "player", "side": "party", "name": "You", "hp": 20, "max_hp": 20, "damage_min": 1, "status": "active"},
-                    "enemy:bandit_1": {"actor_id": "enemy:bandit_1", "side": "enemy", "name": "Bandit", "hp": 1, "max_hp": 8, "status": "active", "tags": ["bandit"], "loot_table_id": "loot:bandit_common"},
-                },
-            },
-        },
-        "turns": ["__manual_force_next_attack_roll__:20", "__manual_force_next_damage__:1", "I attack the bandit."],
+    "spatial_locked_door_blocks_movement": {
+        "setup_spatial_graph": "tavern_fixture",
+        "turns": ["I try to open the locked trapdoor to the cellar"],
+        "checks": [
+            {
+                "type": "spatial_can_move",
+                "from_area_id": "tavern_common_room",
+                "to_area_id": "cellar",
+                "expected_ok": False,
+                "expected_reason": "locked",
+            }
+        ],
     },
-    "combat_flee_emits_no_victory_world_event": {
-        "currency": {"gold": 0, "silver": 0, "copper": 0},
-        "conversation_settings": {"enabled": True, "autonomous_ticks_enabled": False, "frequency": "never", "conversation_chance_percent": 0},
-        "setup_interaction_state": {
-            "player_location_id": "loc_tavern_road",
-            "player_hp": 20,
-            "player_max_hp": 20,
-            "player_inventory": {"items": [], "equipment": {}, "carry_capacity": 50.0},
-            "party_state": {"max_size": 4, "companions": []},
-            "combat_state": {
-                "active": False,
-                "exit_reason": "fled",
-            },
-        },
-        "turns": ["I flee."],
+    "spatial_same_room_visibility": {
+        "setup_spatial_graph": "tavern_fixture",
+        "turns": ["I look at Bran"],
+        "checks": [
+            {
+                "type": "spatial_visibility",
+                "viewer": "player",
+                "target": "bran",
+                "expected_ok": True,
+                "expected_reason": "same_area",
+            }
+        ],
     },
-    "combat_bandit_victory_lowers_bandit_pressure": {
-        "currency": {"gold": 0, "silver": 0, "copper": 0},
-        "conversation_settings": {"enabled": True, "autonomous_ticks_enabled": False, "frequency": "never", "conversation_chance_percent": 0},
-        "setup_interaction_state": {
-            "player_location_id": "loc_tavern_road",
-            "player_hp": 20,
-            "player_max_hp": 20,
-            "player_inventory": {"items": [], "equipment": {}, "carry_capacity": 50.0},
-            "party_state": {"max_size": 4, "companions": []},
-            "combat_state": {
-                "active": True,
-                "current_actor_id": "player",
-                "initiative_order": [{"actor_id": "player", "initiative": 20}],
-                "participants": {
-                    "player": {"actor_id": "player", "side": "party", "name": "You", "hp": 20, "max_hp": 20, "damage_min": 1, "status": "active"},
-                    "enemy:bandit_1": {"actor_id": "enemy:bandit_1", "side": "enemy", "name": "Bandit", "hp": 1, "max_hp": 8, "status": "active", "tags": ["bandit"], "loot_table_id": "loot:bandit_common"},
-                },
+    "spatial_closed_door_blocks_visibility": {
+        "setup_spatial_graph": "tavern_fixture",
+        "turns": ["I look through the closed private room door"],
+        "checks": [
+            {
+                "type": "spatial_visibility",
+                "viewer": "player",
+                "target": "guest_private",
+                "expected_ok": False,
+                "expected_reason": "blocked_by_barrier",
+            }
+        ],
+    },
+    "spatial_open_door_allows_visibility": {
+        "setup_spatial_graph": "tavern_fixture_private_door_open",
+        "turns": ["I look into the private room through the open door"],
+        "checks": [
+            {
+                "type": "spatial_visibility",
+                "viewer": "player",
+                "target": "guest_private",
+                "expected_ok": True,
+                "expected_reason": "visible_connection",
+            }
+        ],
+    },
+    "spatial_wall_blocks_visibility": {
+        "setup_spatial_graph": "tavern_fixture",
+        "turns": ["I try to look through the stone wall"],
+        "checks": [
+            {
+                "type": "spatial_visibility",
+                "viewer": "player",
+                "target": "sealed_guard",
+                "expected_ok": False,
+                "expected_reason": "blocked_by_barrier",
+            }
+        ],
+    },
+    "spatial_same_room_audibility": {
+        "setup_spatial_graph": "tavern_fixture",
+        "turns": ["I listen to Bran speaking"],
+        "checks": [
+            {
+                "type": "spatial_audibility",
+                "listener": "player",
+                "source": "bran",
+                "expected_ok": True,
+                "expected_reason": "same_area",
+            }
+        ],
+    },
+    "spatial_closed_door_muffles_audibility": {
+        "setup_spatial_graph": "tavern_fixture",
+        "turns": ["I listen at the closed private room door"],
+        "checks": [
+            {
+                "type": "spatial_audibility",
+                "listener": "player",
+                "source": "spy",
+                "expected_ok": True,
+                "expected_reason": "muffled_by_barrier",
+            }
+        ],
+    },
+    "spatial_wall_blocks_audibility": {
+        "setup_spatial_graph": "tavern_fixture",
+        "turns": ["I listen through the stone wall"],
+        "checks": [
+            {
+                "type": "spatial_audibility",
+                "listener": "player",
+                "source": "sealed_guard",
+                "expected_ok": False,
+                "expected_reason": "blocked_by_barrier",
+            }
+        ],
+    },
+    "spatial_hidden_npc_not_visible": {
+        "setup_spatial_graph": "tavern_fixture_private_door_open",
+        "turns": ["I look into the private room"],
+        "checks": [
+            {
+                "type": "spatial_visibility",
+                "viewer": "player",
+                "target": "spy",
+                "expected_ok": False,
+                "expected_reason": "hidden",
+            }
+        ],
+    },
+    "spatial_visible_present_npcs_only": {
+        "setup_spatial_graph": "tavern_fixture",
+        "turns": ["I look around the tavern"],
+        "checks": [
+            {
+                "type": "spatial_visible_entities",
+                "viewer": "player",
+                "mode": "contains",
+                "expected_entity_ids": ["bran", "mira", "bandit"],
+            }
+        ],
+    },
+    "spatial_move_updates_current_area": {
+        "setup_spatial_graph": "tavern_fixture",
+        "turns": ["I walk out through the front door into the street"],
+        "checks": [
+            {
+                "type": "spatial_can_move",
+                "from_area_id": "tavern_common_room",
+                "to_area_id": "street",
+                "expected_ok": True,
+                "expected_reason": "passable",
             },
-        },
-        "turns": ["__manual_force_next_attack_roll__:20", "__manual_force_next_damage__:1", "I attack the bandit."],
+            {
+                "type": "spatial_current_area",
+                "entity": "player",
+                "expected_area_id": "tavern_common_room",
+            }
+        ],
+    },
+    "spatial_scene_graph_save_load_stability": {
+        "setup_spatial_graph": "tavern_fixture",
+        "turns": ["I look around to check the tavern layout"],
+        "checks": [
+            {
+                "type": "spatial_can_move",
+                "from_area_id": "tavern_common_room",
+                "to_area_id": "street",
+                "expected_ok": True,
+                "expected_reason": "passable",
+            }
+        ],
     },
 }

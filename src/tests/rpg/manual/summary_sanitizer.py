@@ -398,6 +398,38 @@ def sanitize_turn_for_summary(
         if key in turn:
             sanitized[key] = turn[key]
 
+    spatial_check_results = turn.get("spatial_check_results")
+    if isinstance(spatial_check_results, list):
+        if detail in ("debug", "full"):
+            sanitized["spatial_check_results"] = [
+                {
+                    "check_type": item.get("check_type"),
+                    "ok": item.get("ok"),
+                    "expected_ok": item.get("expected_ok"),
+                    "actual_ok": item.get("actual_ok"),
+                    "expected_reason": item.get("expected_reason"),
+                    "actual_reason": item.get("actual_reason"),
+                    "expected_area_id": item.get("expected_area_id"),
+                    "actual_area_id": item.get("actual_area_id"),
+                    "expected_entity_ids": item.get("expected_entity_ids"),
+                    "actual_entity_ids": item.get("actual_entity_ids"),
+                    "error": item.get("error"),
+                }
+                for item in spatial_check_results[:50]
+                if isinstance(item, dict)
+            ]
+        else:
+            sanitized["spatial_check_results"] = [
+                {
+                    "check_type": item.get("check_type"),
+                    "ok": item.get("ok"),
+                    "actual_reason": item.get("actual_reason"),
+                    "error": item.get("error"),
+                }
+                for item in turn.get("spatial_check_results", [])[:20]
+                if isinstance(item, dict)
+            ]
+
     # Ensure narration preview
     if "narration_preview" not in sanitized:
         sanitized["narration_preview"] = _extract_narration_preview(result, limits["max_text"])
@@ -486,6 +518,12 @@ def sanitize_scenario_summary(
         "scenario": _safe_str(summary.get("scenario")),
         "session_id": _safe_str(summary.get("session_id")),
         "seeded_currency": summary.get("seeded_currency"),
+        "error": summary.get("error"),
+        "setup_error_type": summary.get("setup_error_type"),
+        "setup_error": summary.get("setup_error"),
+        "setup_error_repr": summary.get("setup_error_repr"),
+        "regression_warnings": summary.get("regression_warnings") or [],
+        "scenario_warnings": summary.get("scenario_warnings") or [],
     }
 
     # Sanitize each turn

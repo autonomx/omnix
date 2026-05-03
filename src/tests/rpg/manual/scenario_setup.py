@@ -3,26 +3,69 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any, Dict
 
+from app.rpg.spatial.serialization import normalize_spatial_graph
+from tests.rpg.manual.spatial_fixtures import build_manual_spatial_fixture
 from tests.rpg.manual.safe import _safe_dict, _safe_list
 from tests.rpg.manual.session_helpers import (
+    _ensure_manual_session,
     _ensure_manual_simulation_roots,
-    _manual_apply_interaction_seed_fields,
-    _manual_apply_social_seed_fields,
     _save_manual_session_for_test,
     _sync_manual_simulation_state,
 )
 
 
-def _apply_manual_scenario_setup(session_id: str, scenario: Dict[str, Any]) -> bool:
-    try:
-        from app.rpg.session.service import load_session, save_session
-    except Exception:
-        return False
-    session = _safe_dict(load_session(session_id))
+def apply_manual_scenario_setup_by_session_id(
+    session_id: str,
+    scenario: Dict[str, Any],
+    *,
+    scenario_name: str = "",
+) -> bool:
+    session = _ensure_manual_session(session_id)
     if not session:
-        return False
+        raise RuntimeError(f"manual_session_ensure_failed:{session_id}")
+    _apply_manual_scenario_setup(
+        session,
+        scenario,
+        scenario_name=scenario_name,
+    )
+    _save_manual_session_for_test(session_id, session)
+    return True
 
+
+def _apply_manual_scenario_setup(session: Dict[str, Any], scenario: Dict[str, Any], *, scenario_name: str = "") -> bool:
     simulation_state = _ensure_manual_simulation_roots(session)
+
+    setup_spatial_graph = scenario.get("setup_spatial_graph")
+    if setup_spatial_graph:
+        simulation_state = session.setdefault("simulation_state", {})
+        if not isinstance(simulation_state, dict):
+            simulation_state = {}
+            session["simulation_state"] = simulation_state
+
+        spatial_graph = normalize_spatial_graph(
+            build_manual_spatial_fixture(str(setup_spatial_graph))
+        )
+
+        if not spatial_graph.get("areas") or not spatial_graph.get("connections"):
+            raise RuntimeError(
+                "manual_spatial_fixture_empty:"
+                + str(scenario.get("name") or "")
+                + ":"
+                + str(setup_spatial_graph)
+            )
+
+        simulation_state["spatial_graph"] = spatial_graph
+
+        # Some manual-runner paths carry a setup payload or metadata object.
+        # Keep those in sync if present, but do not require them.
+        setup_payload = session.setdefault("setup_payload", {})
+        if isinstance(setup_payload, dict):
+            metadata = setup_payload.setdefault("metadata", {})
+            if isinstance(metadata, dict):
+                metadata_simulation_state = metadata.setdefault("simulation_state", {})
+                if isinstance(metadata_simulation_state, dict):
+                    metadata_simulation_state["spatial_graph"] = spatial_graph
+
     runtime_state = _safe_dict(session.get("runtime_state"))
     runtime_settings = _safe_dict(runtime_state.get("runtime_settings"))
 
@@ -154,21 +197,10 @@ def _apply_manual_scenario_setup(session_id: str, scenario: Dict[str, Any]) -> b
             session,
             setup_interaction_state,
         )
-        simulation_state = _safe_dict(session.get("simulation_state"))
-        runtime_state = _safe_dict(session.get("runtime_state"))
-        _save_manual_session_for_test(
-            session,
-            reason=f"{scenario.get('name', 'unknown')}:manual_seed_fields",
-        )
 
     runtime_state["runtime_settings"] = runtime_settings
     session["runtime_state"] = runtime_state
-    _sync_manual_simulation_state(session, simulation_state)
-    try:
-        save_session(session)
-        return True
-    except Exception:
-        return False
+    _sync_manual_simulation_state(session)
 
 
 def _safe_str(value: Any) -> str:

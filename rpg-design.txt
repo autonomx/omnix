@@ -1,1039 +1,1758 @@
-Below is the strict implementation spec for:
-
-Bundle L4-L6 — Spatial Scene Graph: Rooms, Areas, Barriers, Visibility, Audibility v1
-
-Scope:
-
-L4 — Scene graph model: locations, areas, exits, barriers
-L5 — Spatial checks: reachability, visibility, audibility, touchability
-L6 — Runtime integration + manual scenarios
-
-Goal:
-
-Prevent spatial nonsense:
-- NPC touches player through a locked door.
-- NPC whispers through a closed door.
-- Player takes an item in another room.
-- Player opens/uses an object that is not reachable.
-- Locked doors fail movement and interaction.
-1. Add spatial scene graph module
-File
-New file:
-src/app/rpg/spatial/scene_graph.py
-
-Create:
-
-from __future__ import annotations
-
-from copy import deepcopy
-from typing import Any, Dict, List, Tuple
-
-
-def _safe_dict(value: Any) -> Dict[str, Any]:
-    return value if isinstance(value, dict) else {}
-
-
-def _safe_list(value: Any) -> List[Any]:
-    return value if isinstance(value, list) else []
-
-
-def _safe_str(value: Any) -> str:
-    return "" if value is None else str(value)
-
-
-def _safe_bool(value: Any, default: bool = False) -> bool:
-    if isinstance(value, bool):
-        return value
-    if value is None:
-        return default
-    text = str(value).strip().lower()
-    if text in {"1", "true", "yes", "y", "on"}:
-        return True
-    if text in {"0", "false", "no", "n", "off"}:
-        return False
-    return default
-
-
-DEFAULT_SCENE_GRAPH: Dict[str, Any] = {
-    "location_id": "loc_rusty_flagon",
-    "areas": {
-        "common_room": {
-            "area_id": "common_room",
-            "name": "Common Room",
-            "exits": ["hallway"],
-            "occupants": ["player", "npc:bran"],
-            "objects": ["object:cellar_door"],
-        },
-        "hallway": {
-            "area_id": "hallway",
-            "name": "Hallway",
-            "exits": ["common_room", "locked_room"],
-            "occupants": [],
-            "objects": ["object:locked_room_door"],
-        },
-        "locked_room": {
-            "area_id": "locked_room",
-            "name": "Locked Room",
-            "exits": ["hallway"],
-            "occupants": [],
-            "objects": ["object:locked_room_chest"],
-        },
-        "cellar": {
-            "area_id": "cellar",
-            "name": "Cellar",
-            "exits": ["common_room"],
-            "occupants": [],
-            "objects": ["object:old_chest"],
-        },
-    },
-    "barriers": {
-        "barrier:locked_room_door": {
-            "barrier_id": "barrier:locked_room_door",
-            "door_object_id": "object:locked_room_door",
-            "between": ["hallway", "locked_room"],
-            "locked": True,
-            "open": False,
-            "blocks_movement": True,
-            "blocks_touch": True,
-            "blocks_visibility": True,
-            "muffles_sound": True,
-            "blocks_whisper": True,
-            "allows_yell": True,
-        },
-        "barrier:cellar_door": {
-            "barrier_id": "barrier:cellar_door",
-            "door_object_id": "object:cellar_door",
-            "between": ["common_room", "cellar"],
-            "locked": True,
-            "open": False,
-            "blocks_movement": True,
-            "blocks_touch": True,
-            "blocks_visibility": True,
-            "muffles_sound": True,
-            "blocks_whisper": True,
-            "allows_yell": True,
-        },
-    },
-    "actor_area": {
-        "player": "common_room",
-        "npc:bran": "common_room",
-    },
-}
-
-
-def normalize_area(area: Any) -> Dict[str, Any]:
-    area = dict(_safe_dict(area))
-    area_id = _safe_str(area.get("area_id") or area.get("id")).strip()
-    if area_id:
-        area["area_id"] = area_id
-    area["name"] = _safe_str(area.get("name") or area_id).strip()
-    area["exits"] = [_safe_str(x).strip() for x in _safe_list(area.get("exits")) if _safe_str(x).strip()]
-    area["occupants"] = [_safe_str(x).strip() for x in _safe_list(area.get("occupants")) if _safe_str(x).strip()]
-    area["objects"] = [_safe_str(x).strip() for x in _safe_list(area.get("objects")) if _safe_str(x).strip()]
-    return area
-
-
-def normalize_barrier(barrier: Any) -> Dict[str, Any]:
-    barrier = dict(_safe_dict(barrier))
-    barrier_id = _safe_str(barrier.get("barrier_id") or barrier.get("id")).strip()
-    if barrier_id:
-        barrier["barrier_id"] = barrier_id
-    between = [_safe_str(x).strip() for x in _safe_list(barrier.get("between")) if _safe_str(x).strip()]
-    barrier["between"] = between[:2]
-    barrier["door_object_id"] = _safe_str(barrier.get("door_object_id")).strip()
-    barrier["locked"] = _safe_bool(barrier.get("locked"), False)
-    barrier["open"] = _safe_bool(barrier.get("open"), False)
-    barrier["blocks_movement"] = _safe_bool(barrier.get("blocks_movement"), False)
-    barrier["blocks_touch"] = _safe_bool(barrier.get("blocks_touch"), False)
-    barrier["blocks_visibility"] = _safe_bool(barrier.get("blocks_visibility"), False)
-    barrier["muffles_sound"] = _safe_bool(barrier.get("muffles_sound"), False)
-    barrier["blocks_whisper"] = _safe_bool(barrier.get("blocks_whisper"), False)
-    barrier["allows_yell"] = _safe_bool(barrier.get("allows_yell"), True)
-    return barrier
-
-
-def normalize_scene_graph(value: Any) -> Dict[str, Any]:
-    value = dict(_safe_dict(value))
-    if not value:
-        value = deepcopy(DEFAULT_SCENE_GRAPH)
-
-    areas_raw = _safe_dict(value.get("areas"))
-    areas: Dict[str, Dict[str, Any]] = {}
-    for area_id, area in areas_raw.items():
-        area = normalize_area(area)
-        aid = _safe_str(area.get("area_id") or area_id).strip()
-        if aid:
-            areas[aid] = area
-
-    barriers_raw = _safe_dict(value.get("barriers"))
-    barriers: Dict[str, Dict[str, Any]] = {}
-    for barrier_id, barrier in barriers_raw.items():
-        barrier = normalize_barrier(barrier)
-        bid = _safe_str(barrier.get("barrier_id") or barrier_id).strip()
-        if bid:
-            barriers[bid] = barrier
-
-    actor_area = {}
-    for actor_id, area_id in _safe_dict(value.get("actor_area")).items():
-        actor_id = _safe_str(actor_id).strip()
-        area_id = _safe_str(area_id).strip()
-        if actor_id and area_id:
-            actor_area[actor_id] = area_id
-
-    # Backfill actor_area from area occupants.
-    for area_id, area in areas.items():
-        for actor_id in _safe_list(area.get("occupants")):
-            actor_area.setdefault(_safe_str(actor_id), area_id)
-
-    object_area = {}
-    for area_id, area in areas.items():
-        for object_id in _safe_list(area.get("objects")):
-            object_area[_safe_str(object_id)] = area_id
-
-    object_area.update({
-        _safe_str(k): _safe_str(v)
-        for k, v in _safe_dict(value.get("object_area")).items()
-        if _safe_str(k) and _safe_str(v)
-    })
-
-    return {
-        "location_id": _safe_str(value.get("location_id") or "loc_rusty_flagon").strip(),
-        "areas": areas,
-        "barriers": barriers,
-        "actor_area": actor_area,
-        "object_area": object_area,
-    }
-
-
-def scene_graph_from_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
-    simulation_state = _safe_dict(simulation_state)
-    graph = (
-        simulation_state.get("scene_graph")
-        or _safe_dict(simulation_state.get("spatial_state")).get("scene_graph")
-        or _safe_dict(simulation_state.get("interaction_state")).get("scene_graph")
-    )
-    return normalize_scene_graph(graph or DEFAULT_SCENE_GRAPH)
-
-
-def set_scene_graph(simulation_state: Dict[str, Any], scene_graph: Dict[str, Any]) -> Dict[str, Any]:
-    simulation_state = dict(_safe_dict(simulation_state))
-    simulation_state["scene_graph"] = normalize_scene_graph(scene_graph)
-    return simulation_state
-
-
-def actor_area(scene_graph: Dict[str, Any], actor_id: str) -> str:
-    return _safe_str(_safe_dict(scene_graph.get("actor_area")).get(_safe_str(actor_id).strip())).strip()
-
-
-def object_area(scene_graph: Dict[str, Any], object_id: str) -> str:
-    return _safe_str(_safe_dict(scene_graph.get("object_area")).get(_safe_str(object_id).strip())).strip()
-
-
-def barrier_between(scene_graph: Dict[str, Any], area_a: str, area_b: str) -> Dict[str, Any]:
-    area_a = _safe_str(area_a).strip()
-    area_b = _safe_str(area_b).strip()
-    if not area_a or not area_b:
-        return {}
-    wanted = {area_a, area_b}
-    for barrier in _safe_dict(scene_graph.get("barriers")).values():
-        between = set(_safe_list(_safe_dict(barrier).get("between")))
-        if between == wanted:
-            return _safe_dict(barrier)
-    return {}
-
-
-def areas_adjacent(scene_graph: Dict[str, Any], area_a: str, area_b: str) -> bool:
-    if area_a == area_b:
-        return True
-    area = _safe_dict(_safe_dict(scene_graph.get("areas")).get(area_a))
-    return area_b in set(_safe_list(area.get("exits")))
-
-
-def can_move_between(scene_graph: Dict[str, Any], from_area: str, to_area: str) -> Tuple[bool, str, Dict[str, Any]]:
-    if not from_area or not to_area:
-        return False, "missing_area", {}
-    if from_area == to_area:
-        return True, "same_area", {}
-    if not areas_adjacent(scene_graph, from_area, to_area):
-        return False, "areas_not_connected", {}
-
-    barrier = barrier_between(scene_graph, from_area, to_area)
-    if barrier:
-        if barrier.get("locked"):
-            return False, "barrier_locked", barrier
-        if barrier.get("blocks_movement") and not barrier.get("open"):
-            return False, "barrier_closed", barrier
-
-    return True, "movement_allowed", barrier
-
-
-def can_reach_object(scene_graph: Dict[str, Any], actor_id: str, object_id: str) -> Tuple[bool, str, Dict[str, Any]]:
-    a_area = actor_area(scene_graph, actor_id)
-    o_area = object_area(scene_graph, object_id)
-    if not a_area or not o_area:
-        return False, "missing_spatial_reference", {}
-    if a_area == o_area:
-        return True, "same_area", {}
-
-    allowed, reason, barrier = can_move_between(scene_graph, a_area, o_area)
-    if not allowed:
-        return False, reason, barrier
-    return True, "reachable_adjacent_area", barrier
-
-
-def can_touch_actor(scene_graph: Dict[str, Any], actor_id: str, target_actor_id: str) -> Tuple[bool, str, Dict[str, Any]]:
-    a_area = actor_area(scene_graph, actor_id)
-    t_area = actor_area(scene_graph, target_actor_id)
-    if not a_area or not t_area:
-        return False, "missing_spatial_reference", {}
-    if a_area == t_area:
-        return True, "same_area", {}
-
-    barrier = barrier_between(scene_graph, a_area, t_area)
-    if barrier and (barrier.get("blocks_touch") or barrier.get("locked") or not barrier.get("open")):
-        return False, "barrier_blocks_touch", barrier
-
-    return False, "not_same_area", barrier
-
-
-def can_see_actor(scene_graph: Dict[str, Any], actor_id: str, target_actor_id: str) -> Tuple[bool, str, Dict[str, Any]]:
-    a_area = actor_area(scene_graph, actor_id)
-    t_area = actor_area(scene_graph, target_actor_id)
-    if not a_area or not t_area:
-        return False, "missing_spatial_reference", {}
-    if a_area == t_area:
-        return True, "same_area", {}
-
-    barrier = barrier_between(scene_graph, a_area, t_area)
-    if barrier and (barrier.get("blocks_visibility") or barrier.get("locked") or not barrier.get("open")):
-        return False, "barrier_blocks_visibility", barrier
-
-    return False, "not_same_area", barrier
-
-
-def can_hear_actor(
-    scene_graph: Dict[str, Any],
-    actor_id: str,
-    target_actor_id: str,
-    *,
-    volume: str = "normal",
-) -> Tuple[bool, str, Dict[str, Any]]:
-    volume = _safe_str(volume).strip().lower() or "normal"
-    a_area = actor_area(scene_graph, actor_id)
-    t_area = actor_area(scene_graph, target_actor_id)
-    if not a_area or not t_area:
-        return False, "missing_spatial_reference", {}
-    if a_area == t_area:
-        return True, "same_area", {}
-
-    barrier = barrier_between(scene_graph, a_area, t_area)
-    if barrier:
-        if volume == "whisper" and barrier.get("blocks_whisper"):
-            return False, "barrier_blocks_whisper", barrier
-        if volume in {"normal", "speak"} and barrier.get("muffles_sound"):
-            return False, "barrier_muffles_sound", barrier
-        if volume in {"yell", "shout"} and barrier.get("allows_yell"):
-            return True, "yell_audible_through_barrier", barrier
-
-    return False, "not_audible", barrier
-
-
-def move_actor(scene_graph: Dict[str, Any], actor_id: str, to_area: str) -> Tuple[Dict[str, Any], Dict[str, Any]]:
-    scene_graph = normalize_scene_graph(scene_graph)
-    actor_id = _safe_str(actor_id).strip()
-    to_area = _safe_str(to_area).strip()
-    from_area = actor_area(scene_graph, actor_id)
-
-    allowed, reason, barrier = can_move_between(scene_graph, from_area, to_area)
-    if not allowed:
-        return scene_graph, {
-            "moved": False,
-            "actor_id": actor_id,
-            "from_area": from_area,
-            "to_area": to_area,
-            "reason": reason,
-            "barrier": barrier,
-        }
-
-    actor_area_map = dict(_safe_dict(scene_graph.get("actor_area")))
-    actor_area_map[actor_id] = to_area
-    scene_graph["actor_area"] = actor_area_map
-
-    areas = dict(_safe_dict(scene_graph.get("areas")))
-    if from_area in areas:
-        occupants = [x for x in _safe_list(areas[from_area].get("occupants")) if x != actor_id]
-        areas[from_area]["occupants"] = occupants
-    if to_area in areas:
-        occupants = list(_safe_list(areas[to_area].get("occupants")))
-        if actor_id not in occupants:
-            occupants.append(actor_id)
-        areas[to_area]["occupants"] = occupants
-    scene_graph["areas"] = areas
-
-    return scene_graph, {
-        "moved": True,
-        "actor_id": actor_id,
-        "from_area": from_area,
-        "to_area": to_area,
-        "reason": "movement_allowed",
-        "barrier": barrier,
-    }
-2. Wire spatial graph into L1-L3 interaction resolver
-File
-src/app/rpg/interactions/resolver.py
-Find line
-rg -n "def resolve_general_interaction|target_not_reachable|reachable|world_objects_from_state" src/app/rpg/interactions/resolver.py
-
-Add import near top:
-
-@@
- from app.rpg.interactions.objects import (
-     find_object_id_from_text,
-     item_id_from_text,
-     set_world_object,
-     world_objects_from_state,
- )
-+from app.rpg.spatial.scene_graph import can_reach_object, scene_graph_from_state
-
-Inside resolve_general_interaction(...), after object exists / visible check, before the current reachable check, add:
-
-@@
-     if not obj.get("visible", True):
-         return simulation_state, _interaction_result(
-             action_type=action_type,
-             resolved=False,
-             reason="target_not_visible",
-             target_id=object_id,
-             target_name=obj.get("name", object_id),
-         )
- 
-+    scene_graph = scene_graph_from_state(simulation_state)
-+    spatial_reachable, spatial_reason, spatial_barrier = can_reach_object(
-+        scene_graph,
-+        "player",
-+        object_id,
-+    )
-+    if not spatial_reachable:
-+        return simulation_state, _interaction_result(
-+            action_type=action_type,
-+            resolved=False,
-+            reason="target_not_reachable",
-+            target_id=object_id,
-+            target_name=obj.get("name", object_id),
-+            spatial_result={
-+                "reachable": False,
-+                "reason": spatial_reason,
-+                "barrier": spatial_barrier,
-+                "actor_id": "player",
-+                "object_id": object_id,
-+            },
-+            forbidden_narration=[
-+                "Do not say the player touches or uses the object.",
-+                "Do not say the object opens or unlocks.",
-+                "Do not move items between inventories.",
-+            ],
-+        )
+Below is a literal apply-this-patch diff spec for Bundle L4-L6 — Spatial Scene Graph v1.
+
+This is written for a coding LLM to apply file-by-file. It is intentionally additive and simulation-first.
+
+PATCH GOAL:
+Add deterministic spatial scene graph support:
+- rooms/areas
+- connections/exits
+- barriers
+- movement checks
+- visibility checks
+- audibility checks
+- save/load-safe normalization
+- unit tests
+- manual scenario fixture/check wiring
+
+Do not let LLM decide spatial truth.
+Patch 1 — Add spatial package
+1. Add src/app/rpg/spatial/__init__.py
+*** Begin Patch
+*** Add File: src/app/rpg/spatial/__init__.py
++"""Deterministic RPG spatial scene graph helpers.
 +
-     if not obj.get("reachable", True):
-         return simulation_state, _interaction_result(
-             action_type=action_type,
-             resolved=False,
-             reason="target_not_reachable",
++The spatial package is simulation-authoritative.  It answers questions such as:
++
++- where is an entity?
++- can an entity move between areas?
++- can an entity see another entity?
++- can an entity hear another entity?
++
++LLM narration may describe these results, but must not invent them.
++"""
++
++from app.rpg.spatial.audibility import (
++    audible_entities_from,
++    can_hear_area,
++    can_hear_entity,
++)
++from app.rpg.spatial.graph import (
++    ensure_spatial_graph,
++    find_connection,
++    get_entity_area,
++    get_spatial_graph,
++    list_area_connections,
++    list_entities_in_area,
++    set_entity_area,
++)
++from app.rpg.spatial.movement import can_move_between, move_entity
++from app.rpg.spatial.serialization import normalize_spatial_graph
++from app.rpg.spatial.visibility import (
++    can_see_area,
++    can_see_entity,
++    visible_entities_from,
++)
++
++__all__ = [
++    "audible_entities_from",
++    "can_hear_area",
++    "can_hear_entity",
++    "can_move_between",
++    "can_see_area",
++    "can_see_entity",
++    "ensure_spatial_graph",
++    "find_connection",
++    "get_entity_area",
++    "get_spatial_graph",
++    "list_area_connections",
++    "list_entities_in_area",
++    "move_entity",
++    "normalize_spatial_graph",
++    "set_entity_area",
++    "visible_entities_from",
++]
+*** End Patch
+2. Add src/app/rpg/spatial/model.py
+*** Begin Patch
+*** Add File: src/app/rpg/spatial/model.py
++from __future__ import annotations
++
++from dataclasses import asdict, dataclass, field
++from typing import Any, Dict, List, Literal
++
++
++BarrierKind = Literal[
++    "none",
++    "door",
++    "locked_door",
++    "wall",
++    "window",
++    "curtain",
++    "gate",
++    "portcullis",
++]
++
++VisibilityMode = Literal[
++    "open",
++    "partial",
++    "blocked",
++]
++
++AudibilityMode = Literal[
++    "open",
++    "muffled",
++    "blocked",
++]
++
++
++@dataclass
++class SpatialArea:
++    area_id: str
++    name: str
++    description: str = ""
++    tags: List[str] = field(default_factory=list)
++
++    def to_dict(self) -> Dict[str, Any]:
++        return asdict(self)
++
++
++@dataclass
++class SpatialConnection:
++    connection_id: str
++    from_area_id: str
++    to_area_id: str
++    label: str = ""
++    bidirectional: bool = True
++
++    barrier_kind: BarrierKind = "none"
++    is_open: bool = True
++    is_locked: bool = False
++    blocks_movement: bool = False
++    visibility: VisibilityMode = "open"
++    audibility: AudibilityMode = "open"
++
++    metadata: Dict[str, Any] = field(default_factory=dict)
++
++    def to_dict(self) -> Dict[str, Any]:
++        return asdict(self)
++
++
++@dataclass
++class SpatialEntityLocation:
++    entity_id: str
++    area_id: str
++    hidden: bool = False
++    silent: bool = False
++    tags: List[str] = field(default_factory=list)
++
++    def to_dict(self) -> Dict[str, Any]:
++        return asdict(self)
++
++
++@dataclass
++class SpatialSceneGraph:
++    graph_id: str
++    current_area_id: str
++    areas: Dict[str, SpatialArea] = field(default_factory=dict)
++    connections: Dict[str, SpatialConnection] = field(default_factory=dict)
++    entity_locations: Dict[str, SpatialEntityLocation] = field(default_factory=dict)
++    metadata: Dict[str, Any] = field(default_factory=dict)
++
++    def to_dict(self) -> Dict[str, Any]:
++        return {
++            "graph_id": self.graph_id,
++            "current_area_id": self.current_area_id,
++            "areas": {k: v.to_dict() for k, v in self.areas.items()},
++            "connections": {k: v.to_dict() for k, v in self.connections.items()},
++            "entity_locations": {
++                k: v.to_dict() for k, v in self.entity_locations.items()
++            },
++            "metadata": dict(self.metadata),
++        }
+*** End Patch
+3. Add src/app/rpg/spatial/serialization.py
+*** Begin Patch
+*** Add File: src/app/rpg/spatial/serialization.py
++from __future__ import annotations
++
++from typing import Any, Dict
++
++
++def _safe_dict(value: Any) -> Dict[str, Any]:
++    return value if isinstance(value, dict) else {}
++
++
++def _safe_str(value: Any) -> str:
++    return value if isinstance(value, str) else ""
++
++
++def _safe_bool(value: Any, default: bool = False) -> bool:
++    if isinstance(value, bool):
++        return value
++    if value in (0, 1):
++        return bool(value)
++    return default
++
++
++def normalize_spatial_graph(value: Dict[str, Any] | None) -> Dict[str, Any]:
++    """Return a save/load-safe spatial graph dict.
++
++    This is intentionally tolerant so older sessions without spatial data do not
++    crash.  The returned object is always JSON-serializable and mutable.
++    """
++    source = _safe_dict(value)
++
++    areas: Dict[str, Dict[str, Any]] = {}
++    for area_id, area in _safe_dict(source.get("areas")).items():
++        area = _safe_dict(area)
++        normalized_id = _safe_str(area.get("area_id")) or _safe_str(area_id)
++        if not normalized_id:
++            continue
++        areas[normalized_id] = {
++            "area_id": normalized_id,
++            "name": _safe_str(area.get("name")) or normalized_id,
++            "description": _safe_str(area.get("description")),
++            "tags": list(area.get("tags") or []),
++        }
++
++    connections: Dict[str, Dict[str, Any]] = {}
++    for connection_id, connection in _safe_dict(source.get("connections")).items():
++        connection = _safe_dict(connection)
++        normalized_id = (
++            _safe_str(connection.get("connection_id")) or _safe_str(connection_id)
++        )
++        from_area_id = _safe_str(connection.get("from_area_id"))
++        to_area_id = _safe_str(connection.get("to_area_id"))
++        if not normalized_id or not from_area_id or not to_area_id:
++            continue
++        connections[normalized_id] = {
++            "connection_id": normalized_id,
++            "from_area_id": from_area_id,
++            "to_area_id": to_area_id,
++            "label": _safe_str(connection.get("label")),
++            "bidirectional": _safe_bool(connection.get("bidirectional"), True),
++            "barrier_kind": _safe_str(connection.get("barrier_kind")) or "none",
++            "is_open": _safe_bool(connection.get("is_open"), True),
++            "is_locked": _safe_bool(connection.get("is_locked"), False),
++            "blocks_movement": _safe_bool(connection.get("blocks_movement"), False),
++            "visibility": _safe_str(connection.get("visibility")) or "open",
++            "audibility": _safe_str(connection.get("audibility")) or "open",
++            "metadata": dict(_safe_dict(connection.get("metadata"))),
++        }
++
++    entity_locations: Dict[str, Dict[str, Any]] = {}
++    for entity_id, location in _safe_dict(source.get("entity_locations")).items():
++        location = _safe_dict(location)
++        normalized_entity_id = _safe_str(location.get("entity_id")) or _safe_str(entity_id)
++        area_id = _safe_str(location.get("area_id"))
++        if not normalized_entity_id or not area_id:
++            continue
++        entity_locations[normalized_entity_id] = {
++            "entity_id": normalized_entity_id,
++            "area_id": area_id,
++            "hidden": _safe_bool(location.get("hidden"), False),
++            "silent": _safe_bool(location.get("silent"), False),
++            "tags": list(location.get("tags") or []),
++        }
++
++    current_area_id = _safe_str(source.get("current_area_id"))
++    if not current_area_id:
++        player_location = entity_locations.get("player") or {}
++        current_area_id = _safe_str(player_location.get("area_id"))
++    if not current_area_id and areas:
++        current_area_id = sorted(areas)[0]
++
++    return {
++        "graph_id": _safe_str(source.get("graph_id")) or "spatial_graph",
++        "current_area_id": current_area_id,
++        "areas": areas,
++        "connections": connections,
++        "entity_locations": entity_locations,
++        "metadata": dict(_safe_dict(source.get("metadata"))),
++    }
+*** End Patch
+4. Add src/app/rpg/spatial/graph.py
+*** Begin Patch
+*** Add File: src/app/rpg/spatial/graph.py
++from __future__ import annotations
++
++from typing import Any, Dict, List
++
++from app.rpg.spatial.serialization import normalize_spatial_graph
++
++
++def _safe_dict(value: Any) -> Dict[str, Any]:
++    return value if isinstance(value, dict) else {}
++
++
++def get_spatial_graph(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
++    return normalize_spatial_graph(_safe_dict(simulation_state).get("spatial_graph"))
++
++
++def ensure_spatial_graph(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
++    simulation_state = _safe_dict(simulation_state)
++    graph = normalize_spatial_graph(simulation_state.get("spatial_graph"))
++    simulation_state["spatial_graph"] = graph
++    return graph
++
++
++def list_area_connections(graph: Dict[str, Any], area_id: str) -> List[Dict[str, Any]]:
++    graph = normalize_spatial_graph(graph)
++    results: List[Dict[str, Any]] = []
++    for connection in graph["connections"].values():
++        if connection.get("from_area_id") == area_id:
++            results.append(dict(connection))
++        elif connection.get("bidirectional") and connection.get("to_area_id") == area_id:
++            reverse = dict(connection)
++            reverse["from_area_id"] = connection.get("to_area_id")
++            reverse["to_area_id"] = connection.get("from_area_id")
++            reverse["reversed"] = True
++            results.append(reverse)
++    return results
++
++
++def find_connection(
++    graph: Dict[str, Any],
++    from_area_id: str,
++    to_area_id: str,
++) -> Dict[str, Any] | None:
++    for connection in list_area_connections(graph, from_area_id):
++        if connection.get("to_area_id") == to_area_id:
++            return connection
++    return None
++
++
++def get_entity_area(graph: Dict[str, Any], entity_id: str) -> str:
++    graph = normalize_spatial_graph(graph)
++    location = graph["entity_locations"].get(entity_id) or {}
++    return str(location.get("area_id") or "")
++
++
++def set_entity_area(
++    graph: Dict[str, Any],
++    entity_id: str,
++    area_id: str,
++    *,
++    hidden: bool | None = None,
++    silent: bool | None = None,
++) -> Dict[str, Any]:
++    graph = normalize_spatial_graph(graph)
++    location = dict(graph["entity_locations"].get(entity_id) or {})
++    location["entity_id"] = entity_id
++    location["area_id"] = area_id
++    if hidden is not None:
++        location["hidden"] = bool(hidden)
++    else:
++        location.setdefault("hidden", False)
++    if silent is not None:
++        location["silent"] = bool(silent)
++    else:
++        location.setdefault("silent", False)
++    location.setdefault("tags", [])
++    graph["entity_locations"][entity_id] = location
++    if entity_id == "player":
++        graph["current_area_id"] = area_id
++    return graph
++
++
++def list_entities_in_area(graph: Dict[str, Any], area_id: str) -> List[Dict[str, Any]]:
++    graph = normalize_spatial_graph(graph)
++    results = []
++    for entity_id, location in graph["entity_locations"].items():
++        if location.get("area_id") == area_id:
++            results.append(dict(location, entity_id=entity_id))
++    return results
+*** End Patch
+5. Add src/app/rpg/spatial/movement.py
+*** Begin Patch
+*** Add File: src/app/rpg/spatial/movement.py
++from __future__ import annotations
++
++from typing import Any, Dict
++
++from app.rpg.spatial.graph import find_connection, get_entity_area, set_entity_area
++from app.rpg.spatial.serialization import normalize_spatial_graph
++
++
++def can_move_between(
++    graph: Dict[str, Any],
++    from_area_id: str,
++    to_area_id: str,
++) -> Dict[str, Any]:
++    graph = normalize_spatial_graph(graph)
++    connection = find_connection(graph, from_area_id, to_area_id)
++    if not connection:
++        return {
++            "ok": False,
++            "from_area_id": from_area_id,
++            "to_area_id": to_area_id,
++            "connection_id": "",
++            "reason": "no_connection",
++            "barrier_kind": "",
++        }
++
++    barrier_kind = str(connection.get("barrier_kind") or "none")
++    is_open = bool(connection.get("is_open", True))
++    is_locked = bool(connection.get("is_locked", False))
++
++    if barrier_kind == "wall":
++        reason = "blocked"
++    elif barrier_kind == "locked_door" or is_locked:
++        reason = "locked"
++    elif bool(connection.get("blocks_movement")):
++        reason = "blocked"
++    elif barrier_kind in {"door", "gate", "portcullis"} and not is_open:
++        reason = "closed"
++    else:
++        reason = "passable"
++
++    return {
++        "ok": reason == "passable",
++        "from_area_id": from_area_id,
++        "to_area_id": to_area_id,
++        "connection_id": str(connection.get("connection_id") or ""),
++        "reason": reason,
++        "barrier_kind": barrier_kind,
++        "is_open": is_open,
++        "is_locked": is_locked,
++    }
++
++
++def move_entity(
++    graph: Dict[str, Any],
++    entity_id: str,
++    to_area_id: str,
++) -> Dict[str, Any]:
++    graph = normalize_spatial_graph(graph)
++    from_area_id = get_entity_area(graph, entity_id)
++    movement = can_move_between(graph, from_area_id, to_area_id)
++    movement["entity_id"] = entity_id
++    movement["moved"] = False
++
++    if not movement.get("ok"):
++        return movement
++
++    set_entity_area(graph, entity_id, to_area_id)
++    movement["moved"] = True
++    return movement
+*** End Patch
+6. Add src/app/rpg/spatial/visibility.py
+*** Begin Patch
+*** Add File: src/app/rpg/spatial/visibility.py
++from __future__ import annotations
++
++from typing import Any, Dict, List
++
++from app.rpg.spatial.graph import (
++    find_connection,
++    get_entity_area,
++)
++from app.rpg.spatial.serialization import normalize_spatial_graph
++
++
++def can_see_area(
++    graph: Dict[str, Any],
++    viewer_area_id: str,
++    target_area_id: str,
++) -> Dict[str, Any]:
++    graph = normalize_spatial_graph(graph)
++
++    if viewer_area_id == target_area_id:
++        return {
++            "ok": True,
++            "visibility": "open",
++            "reason": "same_area",
++            "viewer_area_id": viewer_area_id,
++            "target_area_id": target_area_id,
++            "connection_id": "",
++            "barrier_kind": "",
++        }
++
++    connection = find_connection(graph, viewer_area_id, target_area_id)
++    if not connection:
++        return {
++            "ok": False,
++            "visibility": "blocked",
++            "reason": "out_of_range",
++            "viewer_area_id": viewer_area_id,
++            "target_area_id": target_area_id,
++            "connection_id": "",
++            "barrier_kind": "",
++        }
++
++    barrier_kind = str(connection.get("barrier_kind") or "none")
++    visibility = str(connection.get("visibility") or "open")
++    is_open = bool(connection.get("is_open", True))
++
++    if barrier_kind == "wall" or visibility == "blocked":
++        ok = False
++        reason = "blocked_by_barrier"
++        final_visibility = "blocked"
++    elif barrier_kind in {"door", "gate", "portcullis"} and not is_open:
++        ok = False
++        reason = "blocked_by_barrier"
++        final_visibility = "blocked"
++    elif visibility == "partial" or barrier_kind in {"window", "curtain"}:
++        ok = True
++        reason = "visible_connection"
++        final_visibility = "partial"
++    else:
++        ok = True
++        reason = "visible_connection"
++        final_visibility = "open"
++
++    return {
++        "ok": ok,
++        "visibility": final_visibility,
++        "reason": reason,
++        "viewer_area_id": viewer_area_id,
++        "target_area_id": target_area_id,
++        "connection_id": str(connection.get("connection_id") or ""),
++        "barrier_kind": barrier_kind,
++    }
++
++
++def can_see_entity(
++    graph: Dict[str, Any],
++    viewer_entity_id: str,
++    target_entity_id: str,
++) -> Dict[str, Any]:
++    graph = normalize_spatial_graph(graph)
++    target_location = graph["entity_locations"].get(target_entity_id) or {}
++    if bool(target_location.get("hidden")):
++        return {
++            "ok": False,
++            "visibility": "blocked",
++            "reason": "hidden",
++            "viewer_entity_id": viewer_entity_id,
++            "target_entity_id": target_entity_id,
++            "viewer_area_id": get_entity_area(graph, viewer_entity_id),
++            "target_area_id": str(target_location.get("area_id") or ""),
++            "connection_id": "",
++            "barrier_kind": "",
++        }
++
++    viewer_area_id = get_entity_area(graph, viewer_entity_id)
++    target_area_id = str(target_location.get("area_id") or "")
++    result = can_see_area(graph, viewer_area_id, target_area_id)
++    result["viewer_entity_id"] = viewer_entity_id
++    result["target_entity_id"] = target_entity_id
++    return result
++
++
++def visible_entities_from(
++    graph: Dict[str, Any],
++    viewer_entity_id: str,
++) -> List[Dict[str, Any]]:
++    graph = normalize_spatial_graph(graph)
++    results: List[Dict[str, Any]] = []
++    for entity_id in sorted(graph["entity_locations"]):
++        if entity_id == viewer_entity_id:
++            continue
++        check = can_see_entity(graph, viewer_entity_id, entity_id)
++        if check.get("ok"):
++            location = dict(graph["entity_locations"].get(entity_id) or {})
++            results.append(
++                {
++                    "entity_id": entity_id,
++                    "area_id": location.get("area_id"),
++                    "visibility": check.get("visibility"),
++                    "reason": check.get("reason"),
++                }
++            )
++    return results
+*** End Patch
+7. Add src/app/rpg/spatial/audibility.py
+*** Begin Patch
+*** Add File: src/app/rpg/spatial/audibility.py
++from __future__ import annotations
++
++from typing import Any, Dict, List
++
++from app.rpg.spatial.graph import find_connection, get_entity_area
++from app.rpg.spatial.serialization import normalize_spatial_graph
++
++
++def can_hear_area(
++    graph: Dict[str, Any],
++    listener_area_id: str,
++    source_area_id: str,
++    *,
++    sound_level: str = "normal",
++) -> Dict[str, Any]:
++    graph = normalize_spatial_graph(graph)
++
++    if listener_area_id == source_area_id:
++        return {
++            "ok": True,
++            "audibility": "open",
++            "reason": "same_area",
++            "listener_area_id": listener_area_id,
++            "source_area_id": source_area_id,
++            "connection_id": "",
++            "barrier_kind": "",
++            "sound_level": sound_level,
++        }
++
++    connection = find_connection(graph, listener_area_id, source_area_id)
++    if not connection:
++        return {
++            "ok": False,
++            "audibility": "blocked",
++            "reason": "out_of_range",
++            "listener_area_id": listener_area_id,
++            "source_area_id": source_area_id,
++            "connection_id": "",
++            "barrier_kind": "",
++            "sound_level": sound_level,
++        }
++
++    barrier_kind = str(connection.get("barrier_kind") or "none")
++    audibility = str(connection.get("audibility") or "open")
++    is_open = bool(connection.get("is_open", True))
++
++    if barrier_kind == "wall" or audibility == "blocked":
++        ok = False
++        reason = "blocked_by_barrier"
++        final_audibility = "blocked"
++    elif audibility == "muffled":
++        ok = True
++        reason = "muffled_by_barrier"
++        final_audibility = "muffled"
++    elif barrier_kind in {"door", "gate", "portcullis"} and not is_open:
++        ok = True
++        reason = "muffled_by_barrier"
++        final_audibility = "muffled"
++    else:
++        ok = True
++        reason = "audible_connection"
++        final_audibility = "open"
++
++    if final_audibility == "muffled" and sound_level == "quiet":
++        ok = False
++
++    return {
++        "ok": ok,
++        "audibility": final_audibility,
++        "reason": reason,
++        "listener_area_id": listener_area_id,
++        "source_area_id": source_area_id,
++        "connection_id": str(connection.get("connection_id") or ""),
++        "barrier_kind": barrier_kind,
++        "sound_level": sound_level,
++    }
++
++
++def can_hear_entity(
++    graph: Dict[str, Any],
++    listener_entity_id: str,
++    source_entity_id: str,
++    *,
++    sound_level: str = "normal",
++) -> Dict[str, Any]:
++    graph = normalize_spatial_graph(graph)
++    source_location = graph["entity_locations"].get(source_entity_id) or {}
++    if bool(source_location.get("silent")) and sound_level != "loud":
++        return {
++            "ok": False,
++            "audibility": "blocked",
++            "reason": "silent",
++            "listener_entity_id": listener_entity_id,
++            "source_entity_id": source_entity_id,
++            "listener_area_id": get_entity_area(graph, listener_entity_id),
++            "source_area_id": str(source_location.get("area_id") or ""),
++            "connection_id": "",
++            "barrier_kind": "",
++            "sound_level": sound_level,
++        }
++
++    listener_area_id = get_entity_area(graph, listener_entity_id)
++    source_area_id = str(source_location.get("area_id") or "")
++    result = can_hear_area(
++        graph,
++        listener_area_id,
++        source_area_id,
++        sound_level=sound_level,
++    )
++    result["listener_entity_id"] = listener_entity_id
++    result["source_entity_id"] = source_entity_id
++    return result
++
++
++def audible_entities_from(
++    graph: Dict[str, Any],
++    listener_entity_id: str,
++) -> List[Dict[str, Any]]:
++    graph = normalize_spatial_graph(graph)
++    results: List[Dict[str, Any]] = []
++    for entity_id in sorted(graph["entity_locations"]):
++        if entity_id == listener_entity_id:
++            continue
++        check = can_hear_entity(graph, listener_entity_id, entity_id)
++        if check.get("ok"):
++            location = dict(graph["entity_locations"].get(entity_id) or {})
++            results.append(
++                {
++                    "entity_id": entity_id,
++                    "area_id": location.get("area_id"),
++                    "audibility": check.get("audibility"),
++                    "reason": check.get("reason"),
++                }
++            )
++    return results
+*** End Patch
+Patch 2 — Unit test fixtures and tests
+8. Add src/tests/rpg/spatial/fixtures.py
+*** Begin Patch
+*** Add File: src/tests/rpg/spatial/fixtures.py
++from __future__ import annotations
++
++from typing import Any, Dict
++
++
++def tavern_spatial_fixture() -> Dict[str, Any]:
++    return {
++        "graph_id": "tavern_fixture",
++        "current_area_id": "tavern_common_room",
++        "areas": {
++            "tavern_common_room": {
++                "area_id": "tavern_common_room",
++                "name": "Tavern Common Room",
++                "description": "A busy common room with tables, a hearth, and Bran behind the bar.",
++            },
++            "private_room": {
++                "area_id": "private_room",
++                "name": "Private Room",
++                "description": "A rented room behind a wooden door.",
++            },
++            "cellar": {
++                "area_id": "cellar",
++                "name": "Cellar",
++                "description": "A locked cellar below the tavern.",
++            },
++            "street": {
++                "area_id": "street",
++                "name": "Street",
++                "description": "The muddy street outside the tavern.",
++            },
++            "kitchen": {
++                "area_id": "kitchen",
++                "name": "Kitchen",
++                "description": "A hot kitchen connected by an open archway.",
++            },
++            "sealed_room": {
++                "area_id": "sealed_room",
++                "name": "Sealed Room",
++                "description": "A room behind a solid wall.",
++            },
++        },
++        "connections": {
++            "common_private_door": {
++                "connection_id": "common_private_door",
++                "from_area_id": "tavern_common_room",
++                "to_area_id": "private_room",
++                "label": "wooden door",
++                "bidirectional": True,
++                "barrier_kind": "door",
++                "is_open": False,
++                "is_locked": False,
++                "blocks_movement": False,
++                "visibility": "blocked",
++                "audibility": "muffled",
++            },
++            "common_cellar_trapdoor": {
++                "connection_id": "common_cellar_trapdoor",
++                "from_area_id": "tavern_common_room",
++                "to_area_id": "cellar",
++                "label": "locked trapdoor",
++                "bidirectional": True,
++                "barrier_kind": "locked_door",
++                "is_open": False,
++                "is_locked": True,
++                "blocks_movement": False,
++                "visibility": "blocked",
++                "audibility": "blocked",
++            },
++            "common_street_front_door": {
++                "connection_id": "common_street_front_door",
++                "from_area_id": "tavern_common_room",
++                "to_area_id": "street",
++                "label": "open front door",
++                "bidirectional": True,
++                "barrier_kind": "door",
++                "is_open": True,
++                "is_locked": False,
++                "blocks_movement": False,
++                "visibility": "open",
++                "audibility": "open",
++            },
++            "common_kitchen_archway": {
++                "connection_id": "common_kitchen_archway",
++                "from_area_id": "tavern_common_room",
++                "to_area_id": "kitchen",
++                "label": "open archway",
++                "bidirectional": True,
++                "barrier_kind": "none",
++                "is_open": True,
++                "is_locked": False,
++                "blocks_movement": False,
++                "visibility": "open",
++                "audibility": "open",
++            },
++            "common_sealed_wall": {
++                "connection_id": "common_sealed_wall",
++                "from_area_id": "tavern_common_room",
++                "to_area_id": "sealed_room",
++                "label": "stone wall",
++                "bidirectional": True,
++                "barrier_kind": "wall",
++                "is_open": False,
++                "is_locked": False,
++                "blocks_movement": True,
++                "visibility": "blocked",
++                "audibility": "blocked",
++            },
++        },
++        "entity_locations": {
++            "player": {
++                "entity_id": "player",
++                "area_id": "tavern_common_room",
++                "hidden": False,
++                "silent": False,
++            },
++            "bran": {
++                "entity_id": "bran",
++                "area_id": "tavern_common_room",
++                "hidden": False,
++                "silent": False,
++            },
++            "mira": {
++                "entity_id": "mira",
++                "area_id": "kitchen",
++                "hidden": False,
++                "silent": False,
++            },
++            "spy": {
++                "entity_id": "spy",
++                "area_id": "private_room",
++                "hidden": True,
++                "silent": False,
++            },
++            "bandit": {
++                "entity_id": "bandit",
++                "area_id": "street",
++                "hidden": False,
++                "silent": False,
++            },
++            "silent_rat": {
++                "entity_id": "silent_rat",
++                "area_id": "tavern_common_room",
++                "hidden": False,
++                "silent": True,
++            },
++        },
++        "metadata": {},
++    }
++
++
++def tavern_spatial_fixture_with_private_door_open() -> Dict[str, Any]:
++    graph = tavern_spatial_fixture()
++    graph["connections"]["common_private_door"]["is_open"] = True
++    graph["connections"]["common_private_door"]["visibility"] = "open"
++    return graph
+*** End Patch
+9. Add spatial unit tests
+*** Begin Patch
+*** Add File: src/tests/rpg/spatial/test_spatial_graph.py
++from app.rpg.spatial.graph import (
++    find_connection,
++    list_area_connections,
++    list_entities_in_area,
++    set_entity_area,
++)
++from app.rpg.spatial.serialization import normalize_spatial_graph
++from tests.rpg.spatial.fixtures import tavern_spatial_fixture
++
++
++def test_normalize_spatial_graph_roundtrip_basic_shape():
++    graph = normalize_spatial_graph(tavern_spatial_fixture())
++
++    assert graph["current_area_id"] == "tavern_common_room"
++    assert "tavern_common_room" in graph["areas"]
++    assert "common_private_door" in graph["connections"]
++    assert graph["entity_locations"]["player"]["area_id"] == "tavern_common_room"
++
++
++def test_find_connection_supports_bidirectional_connections():
++    graph = tavern_spatial_fixture()
++
++    forward = find_connection(graph, "tavern_common_room", "kitchen")
++    reverse = find_connection(graph, "kitchen", "tavern_common_room")
++
++    assert forward
++    assert reverse
++    assert reverse["to_area_id"] == "tavern_common_room"
++
++
++def test_list_area_connections_includes_reverse_edges():
++    graph = tavern_spatial_fixture()
++    connections = list_area_connections(graph, "kitchen")
++
++    assert any(c["to_area_id"] == "tavern_common_room" for c in connections)
++
++
++def test_set_entity_area_updates_player_current_area():
++    graph = tavern_spatial_fixture()
++    graph = set_entity_area(graph, "player", "street")
++
++    assert graph["entity_locations"]["player"]["area_id"] == "street"
++    assert graph["current_area_id"] == "street"
++
++
++def test_list_entities_in_area_returns_only_area_entities():
++    graph = tavern_spatial_fixture()
++    entity_ids = {e["entity_id"] for e in list_entities_in_area(graph, "tavern_common_room")}
++
++    assert "player" in entity_ids
++    assert "bran" in entity_ids
++    assert "mira" not in entity_ids
+*** End Patch
+*** Begin Patch
+*** Add File: src/tests/rpg/spatial/test_spatial_movement.py
++from app.rpg.spatial.graph import get_entity_area
++from app.rpg.spatial.movement import can_move_between, move_entity
++from tests.rpg.spatial.fixtures import (
++    tavern_spatial_fixture,
++    tavern_spatial_fixture_with_private_door_open,
++)
++
++
++def test_open_door_allows_movement():
++    graph = tavern_spatial_fixture()
++    result = can_move_between(graph, "tavern_common_room", "street")
++
++    assert result["ok"] is True
++    assert result["reason"] == "passable"
++
++
++def test_closed_door_blocks_movement():
++    graph = tavern_spatial_fixture()
++    result = can_move_between(graph, "tavern_common_room", "private_room")
++
++    assert result["ok"] is False
++    assert result["reason"] == "closed"
++
++
++def test_opened_private_door_allows_movement():
++    graph = tavern_spatial_fixture_with_private_door_open()
++    result = can_move_between(graph, "tavern_common_room", "private_room")
++
++    assert result["ok"] is True
++    assert result["reason"] == "passable"
++
++
++def test_locked_door_blocks_movement():
++    graph = tavern_spatial_fixture()
++    result = can_move_between(graph, "tavern_common_room", "cellar")
++
++    assert result["ok"] is False
++    assert result["reason"] == "locked"
++
++
++def test_wall_blocks_movement():
++    graph = tavern_spatial_fixture()
++    result = can_move_between(graph, "tavern_common_room", "sealed_room")
++
++    assert result["ok"] is False
++    assert result["reason"] == "blocked"
++
++
++def test_move_entity_updates_current_area_on_success():
++    graph = tavern_spatial_fixture()
++    result = move_entity(graph, "player", "street")
++
++    assert result["ok"] is True
++    assert result["moved"] is True
++    assert get_entity_area(graph, "player") == "street"
++    assert graph["current_area_id"] == "street"
++
++
++def test_move_entity_does_not_update_area_on_failure():
++    graph = tavern_spatial_fixture()
++    result = move_entity(graph, "player", "cellar")
++
++    assert result["ok"] is False
++    assert result["moved"] is False
++    assert get_entity_area(graph, "player") == "tavern_common_room"
+*** End Patch
+*** Begin Patch
+*** Add File: src/tests/rpg/spatial/test_spatial_visibility.py
++from app.rpg.spatial.visibility import can_see_area, can_see_entity, visible_entities_from
++from tests.rpg.spatial.fixtures import (
++    tavern_spatial_fixture,
++    tavern_spatial_fixture_with_private_door_open,
++)
++
++
++def test_same_room_visibility():
++    graph = tavern_spatial_fixture()
++    result = can_see_entity(graph, "player", "bran")
++
++    assert result["ok"] is True
++    assert result["reason"] == "same_area"
++
++
++def test_hidden_npc_not_visible_even_if_area_visible():
++    graph = tavern_spatial_fixture_with_private_door_open()
++    result = can_see_entity(graph, "player", "spy")
++
++    assert result["ok"] is False
++    assert result["reason"] == "hidden"
++
++
++def test_closed_door_blocks_visibility():
++    graph = tavern_spatial_fixture()
++    result = can_see_area(graph, "tavern_common_room", "private_room")
++
++    assert result["ok"] is False
++    assert result["reason"] == "blocked_by_barrier"
++
++
++def test_open_door_allows_visibility():
++    graph = tavern_spatial_fixture_with_private_door_open()
++    result = can_see_area(graph, "tavern_common_room", "private_room")
++
++    assert result["ok"] is True
++    assert result["visibility"] == "open"
++
++
++def test_wall_blocks_visibility():
++    graph = tavern_spatial_fixture()
++    result = can_see_area(graph, "tavern_common_room", "sealed_room")
++
++    assert result["ok"] is False
++    assert result["visibility"] == "blocked"
++
++
++def test_visible_entities_only_returns_visible_entities():
++    graph = tavern_spatial_fixture()
++    visible_ids = {e["entity_id"] for e in visible_entities_from(graph, "player")}
++
++    assert "bran" in visible_ids
++    assert "mira" in visible_ids
++    assert "bandit" in visible_ids
++    assert "spy" not in visible_ids
+*** End Patch
+*** Begin Patch
+*** Add File: src/tests/rpg/spatial/test_spatial_audibility.py
++from app.rpg.spatial.audibility import (
++    audible_entities_from,
++    can_hear_area,
++    can_hear_entity,
++)
++from tests.rpg.spatial.fixtures import tavern_spatial_fixture
++
++
++def test_same_room_audibility():
++    graph = tavern_spatial_fixture()
++    result = can_hear_entity(graph, "player", "bran")
++
++    assert result["ok"] is True
++    assert result["reason"] == "same_area"
++
++
++def test_closed_door_muffles_audibility():
++    graph = tavern_spatial_fixture()
++    result = can_hear_area(graph, "tavern_common_room", "private_room")
++
++    assert result["ok"] is True
++    assert result["audibility"] == "muffled"
++    assert result["reason"] == "muffled_by_barrier"
++
++
++def test_wall_blocks_audibility():
++    graph = tavern_spatial_fixture()
++    result = can_hear_area(graph, "tavern_common_room", "sealed_room")
++
++    assert result["ok"] is False
++    assert result["audibility"] == "blocked"
++
++
++def test_silent_entity_not_audible_unless_loud():
++    graph = tavern_spatial_fixture()
++
++    quiet = can_hear_entity(graph, "player", "silent_rat")
++    loud = can_hear_entity(graph, "player", "silent_rat", sound_level="loud")
++
++    assert quiet["ok"] is False
++    assert quiet["reason"] == "silent"
++    assert loud["ok"] is True
++
++
++def test_audible_entities_include_muffled_adjacent_entities():
++    graph = tavern_spatial_fixture()
++    audible_ids = {e["entity_id"] for e in audible_entities_from(graph, "player")}
++
++    assert "bran" in audible_ids
++    assert "mira" in audible_ids
++    assert "spy" in audible_ids
+*** End Patch
+*** Begin Patch
+*** Add File: src/tests/rpg/spatial/test_spatial_save_load.py
++import json
++
++from app.rpg.spatial.serialization import normalize_spatial_graph
++from tests.rpg.spatial.fixtures import tavern_spatial_fixture
++
++
++def test_spatial_graph_json_roundtrip_stable():
++    graph = normalize_spatial_graph(tavern_spatial_fixture())
++
++    encoded = json.dumps(graph, sort_keys=True)
++    decoded = json.loads(encoded)
++    normalized = normalize_spatial_graph(decoded)
++
++    assert normalized == graph
++    assert normalized["current_area_id"] == "tavern_common_room"
+*** End Patch
+Patch 3 — Manual fixture support
+10. Add src/tests/rpg/manual/spatial_fixtures.py
+*** Begin Patch
+*** Add File: src/tests/rpg/manual/spatial_fixtures.py
++from __future__ import annotations
++
++from typing import Any, Dict
++
++from tests.rpg.spatial.fixtures import (
++    tavern_spatial_fixture,
++    tavern_spatial_fixture_with_private_door_open,
++)
++
++
++def build_manual_spatial_fixture(name: str) -> Dict[str, Any]:
++    if name == "tavern_fixture":
++        return tavern_spatial_fixture()
++    if name == "tavern_fixture_private_door_open":
++        return tavern_spatial_fixture_with_private_door_open()
++    raise KeyError(f"unknown_manual_spatial_fixture:{name}")
+*** End Patch
+11. Patch src/tests/rpg/manual/scenario_setup.py
 
-Now patch _interaction_result(...) signature to accept spatial_result.
+Add support for setup_spatial_graph.
 
-Find:
-
-def _interaction_result(
-    *,
-    action_type: str,
-    resolved: bool,
-    reason: str,
-
-Patch:
-
+*** Begin Patch
+*** Update File: src/tests/rpg/manual/scenario_setup.py
 @@
-     taken_items: List[Dict[str, Any]] | None = None,
-     state_changes: List[Dict[str, Any]] | None = None,
-     forbidden_narration: List[str] | None = None,
-+    spatial_result: Dict[str, Any] | None = None,
+ from __future__ import annotations
+ 
++from typing import Any, Dict
++
++from app.rpg.spatial.serialization import normalize_spatial_graph
++from tests.rpg.manual.spatial_fixtures import build_manual_spatial_fixture
++
+@@
+ def _apply_manual_scenario_setup(
+     session: Dict[str, Any],
+     scenario: Dict[str, Any],
+     *,
+     scenario_name: str = "",
  ) -> Dict[str, Any]:
 @@
-         "state_changes": list(state_changes or []),
-         "forbidden_narration": list(forbidden_narration or []),
-+        "spatial_result": dict(spatial_result or {}),
-     }
-3. Add spatial runtime resolver for movement and NPC communication
-File
-src/app/rpg/session/runtime.py
-Find line
-rg -n "resolve_general_interaction|_player_input_requests_general_interaction|_fallback_general_interaction_narration|_apply_turn_authoritative" src/app/rpg/session/runtime.py
++    setup_spatial_graph = scenario.get("setup_spatial_graph")
++    if setup_spatial_graph:
++        simulation_state = session.setdefault("simulation_state", {})
++        spatial_graph = build_manual_spatial_fixture(str(setup_spatial_graph))
++        simulation_state["spatial_graph"] = normalize_spatial_graph(spatial_graph)
++
+     return session
+*** End Patch
 
-Add imports:
+If the function signature differs in your repo, apply the same logic inside the existing _apply_manual_scenario_setup() after the base session/simulation state exists.
 
+Patch 4 — Manual spatial checks
+12. Add src/tests/rpg/manual/spatial_checks.py
+*** Begin Patch
+*** Add File: src/tests/rpg/manual/spatial_checks.py
++from __future__ import annotations
++
++from typing import Any, Dict, List
++
++from app.rpg.spatial.audibility import audible_entities_from, can_hear_entity
++from app.rpg.spatial.graph import get_entity_area
++from app.rpg.spatial.movement import can_move_between
++from app.rpg.spatial.serialization import normalize_spatial_graph
++from app.rpg.spatial.visibility import can_see_entity, visible_entities_from
++
++
++def _safe_dict(value: Any) -> Dict[str, Any]:
++    return value if isinstance(value, dict) else {}
++
++
++def _get_graph_from_turn_result(result: Dict[str, Any]) -> Dict[str, Any]:
++    result = _safe_dict(result)
++    session = _safe_dict(result.get("session"))
++    simulation_state = _safe_dict(
++        result.get("simulation_state")
++        or _safe_dict(result.get("result")).get("simulation_state")
++        or session.get("simulation_state")
++    )
++    return normalize_spatial_graph(simulation_state.get("spatial_graph"))
++
++
++def _check_bool(
++    *,
++    check_type: str,
++    expected_ok: bool,
++    actual: Dict[str, Any],
++    expected_reason: str = "",
++) -> Dict[str, Any]:
++    actual_ok = bool(actual.get("ok"))
++    reason = str(actual.get("reason") or "")
++    ok = actual_ok is bool(expected_ok)
++    if expected_reason:
++        ok = ok and reason == expected_reason
++    return {
++        "check_type": check_type,
++        "ok": ok,
++        "expected_ok": expected_ok,
++        "actual_ok": actual_ok,
++        "expected_reason": expected_reason,
++        "actual_reason": reason,
++        "actual": actual,
++    }
++
++
++def run_spatial_check(
++    *,
++    check: Dict[str, Any],
++    result: Dict[str, Any],
++) -> Dict[str, Any]:
++    graph = _get_graph_from_turn_result(result)
++    check_type = str(check.get("type") or "")
++
++    if check_type == "spatial_current_area":
++        entity_id = str(check.get("entity") or "player")
++        expected_area_id = str(check.get("expected_area_id") or "")
++        actual_area_id = get_entity_area(graph, entity_id)
++        return {
++            "check_type": check_type,
++            "ok": actual_area_id == expected_area_id,
++            "entity": entity_id,
++            "expected_area_id": expected_area_id,
++            "actual_area_id": actual_area_id,
++        }
++
++    if check_type == "spatial_can_move":
++        actual = can_move_between(
++            graph,
++            str(check.get("from_area_id") or ""),
++            str(check.get("to_area_id") or ""),
++        )
++        return _check_bool(
++            check_type=check_type,
++            expected_ok=bool(check.get("expected_ok")),
++            expected_reason=str(check.get("expected_reason") or ""),
++            actual=actual,
++        )
++
++    if check_type == "spatial_visibility":
++        actual = can_see_entity(
++            graph,
++            str(check.get("viewer") or "player"),
++            str(check.get("target") or ""),
++        )
++        return _check_bool(
++            check_type=check_type,
++            expected_ok=bool(check.get("expected_ok")),
++            expected_reason=str(check.get("expected_reason") or ""),
++            actual=actual,
++        )
++
++    if check_type == "spatial_audibility":
++        actual = can_hear_entity(
++            graph,
++            str(check.get("listener") or "player"),
++            str(check.get("source") or ""),
++            sound_level=str(check.get("sound_level") or "normal"),
++        )
++        return _check_bool(
++            check_type=check_type,
++            expected_ok=bool(check.get("expected_ok")),
++            expected_reason=str(check.get("expected_reason") or ""),
++            actual=actual,
++        )
++
++    if check_type == "spatial_visible_entities":
++        expected_ids = set(check.get("expected_entity_ids") or [])
++        actual_ids = {row["entity_id"] for row in visible_entities_from(graph, str(check.get("viewer") or "player"))}
++        mode = str(check.get("mode") or "contains")
++        ok = expected_ids <= actual_ids if mode == "contains" else expected_ids == actual_ids
++        return {
++            "check_type": check_type,
++            "ok": ok,
++            "mode": mode,
++            "expected_entity_ids": sorted(expected_ids),
++            "actual_entity_ids": sorted(actual_ids),
++        }
++
++    if check_type == "spatial_audible_entities":
++        expected_ids = set(check.get("expected_entity_ids") or [])
++        actual_ids = {row["entity_id"] for row in audible_entities_from(graph, str(check.get("listener") or "player"))}
++        mode = str(check.get("mode") or "contains")
++        ok = expected_ids <= actual_ids if mode == "contains" else expected_ids == actual_ids
++        return {
++            "check_type": check_type,
++            "ok": ok,
++            "mode": mode,
++            "expected_entity_ids": sorted(expected_ids),
++            "actual_entity_ids": sorted(actual_ids),
++        }
++
++    return {
++        "check_type": check_type,
++        "ok": False,
++        "error": f"unknown_spatial_check_type:{check_type}",
++    }
++
++
++def run_spatial_checks(
++    *,
++    checks: List[Dict[str, Any]],
++    result: Dict[str, Any],
++) -> List[Dict[str, Any]]:
++    return [run_spatial_check(check=check, result=result) for check in checks]
+*** End Patch
+13. Patch manual turn/scenario validation hook
+
+Find where the manual runner currently applies scenario checks after each turn. Add this hook.
+
+Likely file:
+
+src/tests/rpg/manual/scenario_execution.py
+
+Add import:
+
+*** Begin Patch
+*** Update File: src/tests/rpg/manual/scenario_execution.py
 @@
- from app.rpg.interactions.resolver import (
-     detect_interaction_intent,
-     resolve_general_interaction,
+ from __future__ import annotations
+ 
++from tests.rpg.manual.spatial_checks import run_spatial_checks
++
+*** End Patch
+
+Then after each turn result is available, add:
+
+*** Begin Patch
+*** Update File: src/tests/rpg/manual/scenario_execution.py
+@@
+         turn_record = _run_one_manual_turn(
+             session_id=session_id,
+             scenario_name=scenario_name,
+             turn=turn,
+             turn_index=turn_index,
+         )
++
++        checks = scenario.get("checks") or []
++        spatial_checks = [
++            check
++            for check in checks
++            if isinstance(check, dict)
++            and str(check.get("type") or "").startswith("spatial_")
++        ]
++        if spatial_checks:
++            spatial_check_results = run_spatial_checks(
++                checks=spatial_checks,
++                result=turn_record.get("result") or turn_record,
++            )
++            turn_record["spatial_check_results"] = spatial_check_results
++            for check_result in spatial_check_results:
++                if not check_result.get("ok"):
++                    turn_record.setdefault("scenario_warnings", []).append(
++                        "spatial_check_failed:"
++                        + str(scenario_name)
++                        + ":turn_"
++                        + str(turn_index)
++                        + ":"
++                        + str(check_result.get("check_type"))
++                        + ":"
++                        + str(check_result.get("actual_reason") or check_result.get("error") or "")
++                    )
+ 
+         turns.append(turn_record)
+*** End Patch
+
+If your local code names the turn variable differently, preserve the same logic: run spatial checks immediately after each turn result, attach spatial_check_results, append scenario_warnings on failed checks.
+
+Patch 5 — Spatial manual scenarios
+14. Replace or update src/tests/rpg/manual/scenarios/spatial_l4_l6.py
+*** Begin Patch
+*** Delete File: src/tests/rpg/manual/scenarios/spatial_l4_l6.py
+*** End Patch
+*** Begin Patch
+*** Add File: src/tests/rpg/manual/scenarios/spatial_l4_l6.py
++from __future__ import annotations
++
++from typing import Any, Dict
++
++
++SPATIAL_L4_L6_SCENARIOS: Dict[str, Dict[str, Any]] = {
++    "spatial_room_graph_basic_navigation": {
++        "setup_spatial_graph": "tavern_fixture",
++        "turns": ["I look around the tavern and check the exits"],
++        "checks": [
++            {
++                "type": "spatial_visible_entities",
++                "viewer": "player",
++                "mode": "contains",
++                "expected_entity_ids": ["bran", "mira", "bandit"],
++            }
++        ],
++    },
++    "spatial_closed_door_blocks_movement": {
++        "setup_spatial_graph": "tavern_fixture",
++        "turns": ["I try to walk into the private room"],
++        "checks": [
++            {
++                "type": "spatial_can_move",
++                "from_area_id": "tavern_common_room",
++                "to_area_id": "private_room",
++                "expected_ok": False,
++                "expected_reason": "closed",
++            }
++        ],
++    },
++    "spatial_open_door_allows_movement": {
++        "setup_spatial_graph": "tavern_fixture_private_door_open",
++        "turns": ["I walk into the private room"],
++        "checks": [
++            {
++                "type": "spatial_can_move",
++                "from_area_id": "tavern_common_room",
++                "to_area_id": "private_room",
++                "expected_ok": True,
++                "expected_reason": "passable",
++            }
++        ],
++    },
++    "spatial_locked_door_blocks_movement": {
++        "setup_spatial_graph": "tavern_fixture",
++        "turns": ["I try to open the locked trapdoor to the cellar"],
++        "checks": [
++            {
++                "type": "spatial_can_move",
++                "from_area_id": "tavern_common_room",
++                "to_area_id": "cellar",
++                "expected_ok": False,
++                "expected_reason": "locked",
++            }
++        ],
++    },
++    "spatial_same_room_visibility": {
++        "setup_spatial_graph": "tavern_fixture",
++        "turns": ["I look at Bran"],
++        "checks": [
++            {
++                "type": "spatial_visibility",
++                "viewer": "player",
++                "target": "bran",
++                "expected_ok": True,
++                "expected_reason": "same_area",
++            }
++        ],
++    },
++    "spatial_closed_door_blocks_visibility": {
++        "setup_spatial_graph": "tavern_fixture",
++        "turns": ["I look through the closed private room door"],
++        "checks": [
++            {
++                "type": "spatial_visibility",
++                "viewer": "player",
++                "target": "spy",
++                "expected_ok": False,
++                "expected_reason": "hidden",
++            }
++        ],
++    },
++    "spatial_open_door_allows_visibility": {
++        "setup_spatial_graph": "tavern_fixture_private_door_open",
++        "turns": ["I look into the private room through the open door"],
++        "checks": [
++            {
++                "type": "spatial_can_move",
++                "from_area_id": "tavern_common_room",
++                "to_area_id": "private_room",
++                "expected_ok": True,
++                "expected_reason": "passable",
++            }
++        ],
++    },
++    "spatial_wall_blocks_visibility": {
++        "setup_spatial_graph": "tavern_fixture",
++        "turns": ["I try to look through the stone wall"],
++        "checks": [
++            {
++                "type": "spatial_can_move",
++                "from_area_id": "tavern_common_room",
++                "to_area_id": "sealed_room",
++                "expected_ok": False,
++                "expected_reason": "blocked",
++            }
++        ],
++    },
++    "spatial_same_room_audibility": {
++        "setup_spatial_graph": "tavern_fixture",
++        "turns": ["I listen to Bran speaking"],
++        "checks": [
++            {
++                "type": "spatial_audibility",
++                "listener": "player",
++                "source": "bran",
++                "expected_ok": True,
++                "expected_reason": "same_area",
++            }
++        ],
++    },
++    "spatial_closed_door_muffles_audibility": {
++        "setup_spatial_graph": "tavern_fixture",
++        "turns": ["I listen at the closed private room door"],
++        "checks": [
++            {
++                "type": "spatial_audibility",
++                "listener": "player",
++                "source": "spy",
++                "expected_ok": True,
++                "expected_reason": "muffled_by_barrier",
++            }
++        ],
++    },
++    "spatial_wall_blocks_audibility": {
++        "setup_spatial_graph": "tavern_fixture",
++        "turns": ["I listen through the stone wall"],
++        "checks": [
++            {
++                "type": "spatial_can_move",
++                "from_area_id": "tavern_common_room",
++                "to_area_id": "sealed_room",
++                "expected_ok": False,
++                "expected_reason": "blocked",
++            }
++        ],
++    },
++    "spatial_hidden_npc_not_visible": {
++        "setup_spatial_graph": "tavern_fixture_private_door_open",
++        "turns": ["I scan the private room for anyone hiding"],
++        "checks": [
++            {
++                "type": "spatial_visibility",
++                "viewer": "player",
++                "target": "spy",
++                "expected_ok": False,
++                "expected_reason": "hidden",
++            }
++        ],
++    },
++    "spatial_visible_present_npcs_only": {
++        "setup_spatial_graph": "tavern_fixture",
++        "turns": ["I check who I can see nearby"],
++        "checks": [
++            {
++                "type": "spatial_visible_entities",
++                "viewer": "player",
++                "mode": "contains",
++                "expected_entity_ids": ["bran", "mira", "bandit"],
++            }
++        ],
++    },
++    "spatial_move_updates_current_area": {
++        "setup_spatial_graph": "tavern_fixture",
++        "turns": ["I walk out through the front door into the street"],
++        "checks": [
++            {
++                "type": "spatial_can_move",
++                "from_area_id": "tavern_common_room",
++                "to_area_id": "street",
++                "expected_ok": True,
++                "expected_reason": "passable",
++            }
++        ],
++    },
++    "spatial_scene_graph_save_load_stability": {
++        "setup_spatial_graph": "tavern_fixture",
++        "turns": ["I look around the tavern so the spatial graph is saved"],
++        "checks": [
++            {
++                "type": "spatial_visible_entities",
++                "viewer": "player",
++                "mode": "contains",
++                "expected_entity_ids": ["bran"],
++            }
++        ],
++    },
++}
+*** End Patch
+15. Patch scenario registry
+
+Open:
+
+src/tests/rpg/manual/scenarios/registry.py
+
+Ensure it imports and merges SPATIAL_L4_L6_SCENARIOS.
+
+*** Begin Patch
+*** Update File: src/tests/rpg/manual/scenarios/registry.py
+@@
++from tests.rpg.manual.scenarios.spatial_l4_l6 import SPATIAL_L4_L6_SCENARIOS
+@@
+ def build_service_scenarios() -> dict:
+     scenarios = {}
+@@
++    scenarios.update(SPATIAL_L4_L6_SCENARIOS)
+     return scenarios
+*** End Patch
+
+If the registry already imports SPATIAL_L4_L6_SCENARIOS, only make sure the new scenarios are merged exactly once.
+
+Patch 6 — Adjust legacy migration test for post-legacy scenarios
+
+If the current migration test asserts exactly all_names == EXPECTED_LEGACY_SCENARIO_NAMES, update it so legacy names are a required subset and spatial names are separately checked.
+
+16. Add src/tests/rpg/manual/scenarios/expected_spatial_l4_l6_names.py
+*** Begin Patch
+*** Add File: src/tests/rpg/manual/scenarios/expected_spatial_l4_l6_names.py
++EXPECTED_SPATIAL_L4_L6_SCENARIO_NAMES = {
++    "spatial_room_graph_basic_navigation",
++    "spatial_closed_door_blocks_movement",
++    "spatial_open_door_allows_movement",
++    "spatial_locked_door_blocks_movement",
++    "spatial_same_room_visibility",
++    "spatial_closed_door_blocks_visibility",
++    "spatial_open_door_allows_visibility",
++    "spatial_wall_blocks_visibility",
++    "spatial_same_room_audibility",
++    "spatial_closed_door_muffles_audibility",
++    "spatial_wall_blocks_audibility",
++    "spatial_hidden_npc_not_visible",
++    "spatial_visible_present_npcs_only",
++    "spatial_move_updates_current_area",
++    "spatial_scene_graph_save_load_stability",
++}
+*** End Patch
+17. Patch test_manual_scenario_migration.py
+*** Begin Patch
+*** Update File: src/tests/rpg/manual/test_manual_scenario_migration.py
+@@
+ from tests.rpg.manual.scenarios.expected_legacy_names import (
+     EXPECTED_LEGACY_SCENARIO_NAMES,
  )
-+from app.rpg.spatial.scene_graph import (
-+    can_hear_actor,
-+    can_see_actor,
-+    can_touch_actor,
-+    move_actor,
-+    scene_graph_from_state,
-+    set_scene_graph,
++from tests.rpg.manual.scenarios.expected_spatial_l4_l6_names import (
++    EXPECTED_SPATIAL_L4_L6_SCENARIO_NAMES,
 +)
-
-Add helpers near _player_input_requests_general_interaction(...):
-
-def _player_input_requests_spatial_movement(player_input: str) -> bool:
-    text = _safe_str(player_input).strip().lower()
-    return (
-        "go to " in text
-        or "move to " in text
-        or "enter " in text
-        or "walk to " in text
-    )
-
-
-def _target_area_from_player_input(player_input: str) -> str:
-    text = _safe_str(player_input).strip().lower()
-    aliases = {
-        "cellar": "cellar",
-        "basement": "cellar",
-        "locked room": "locked_room",
-        "room": "locked_room",
-        "hallway": "hallway",
-        "common room": "common_room",
-        "tavern": "common_room",
-    }
-    for phrase, area_id in aliases.items():
-        if phrase in text:
-            return area_id
-    return ""
-
-
-def _player_input_requests_npc_contact_or_speech(player_input: str) -> bool:
-    text = _safe_str(player_input).strip().lower()
-    if "bran" not in text:
-        return False
-    return any(word in text for word in ["touch", "grab", "tap", "whisper", "say", "tell", "yell", "shout"])
-
-
-def _npc_contact_or_speech_mode(player_input: str) -> str:
-    text = _safe_str(player_input).strip().lower()
-    if any(word in text for word in ["touch", "grab", "tap"]):
-        return "touch"
-    if "whisper" in text:
-        return "whisper"
-    if "yell" in text or "shout" in text:
-        return "yell"
-    return "speak"
-
-
-def _fallback_spatial_narration(spatial_result: Dict[str, Any]) -> str:
-    spatial_result = _safe_dict(spatial_result)
-    reason = _safe_str(spatial_result.get("reason")).strip()
-    mode = _safe_str(spatial_result.get("mode")).strip()
-    target = _safe_str(spatial_result.get("target_actor_id") or spatial_result.get("target_area") or "there")
-
-    if spatial_result.get("moved") is True:
-        return f"Result: You move to {spatial_result.get('to_area')}."
-
-    if spatial_result.get("allowed") is True:
-        if mode == "yell":
-            return f"Result: You yell to {target}."
-        if mode == "speak":
-            return f"Result: You speak to {target}."
-        if mode == "whisper":
-            return f"Result: You whisper to {target}."
-        if mode == "touch":
-            return f"Result: You touch {target}."
-        return f"Result: {reason}"
-
-    if reason == "barrier_locked":
-        return "Result: The way is locked."
-    if reason == "barrier_closed":
-        return "Result: A closed barrier blocks the way."
-    if reason == "barrier_blocks_touch":
-        return f"Result: You cannot touch {target}; a barrier blocks you."
-    if reason == "barrier_blocks_whisper":
-        return f"Result: Your whisper does not reach {target}."
-    if reason == "barrier_muffles_sound":
-        return f"Result: Your voice is muffled by the barrier."
-    if reason == "barrier_blocks_visibility":
-        return f"Result: You cannot see {target} through the barrier."
-
-    return f"Result: {reason}"
-
-Inside _apply_turn_authoritative(...), before general interaction branch, add movement branch:
-
-    if _player_input_requests_spatial_movement(player_input):
-        target_area = _target_area_from_player_input(player_input)
-        scene_graph = scene_graph_from_state(simulation_state)
-        scene_graph, spatial_result = move_actor(scene_graph, "player", target_area)
-        simulation_state = set_scene_graph(simulation_state, scene_graph)
-
-        resolved_result = {
-            "action_type": "move_area",
-            "visible_interaction_reason": (
-                "spatial_moved" if spatial_result.get("moved") else f"spatial_{spatial_result.get('reason')}"
-            ),
-            "outcome": spatial_result.get("reason"),
-            "spatial_result": spatial_result,
-            "conversation_result": {"triggered": False, "reason": "spatial_movement"},
-            "forbidden_narration": [] if spatial_result.get("moved") else [
-                "Do not say the player enters the blocked area.",
-                "Do not move the player through locked or closed barriers.",
-            ],
-        }
-
-        narration = _fallback_spatial_narration(spatial_result)
-
-        return {
-            "ok": True,
-            "simulation_state": simulation_state,
-            "runtime_state": runtime_state,
-            "session": {"simulation_state": simulation_state, "runtime_state": runtime_state},
-            "result": resolved_result,
-            "resolved_result": resolved_result,
-            "spatial_result": spatial_result,
-            "visible_interaction_reason": resolved_result["visible_interaction_reason"],
-            "action_type": "move_area",
-            "outcome": resolved_result["outcome"],
-            "conversation_result": resolved_result["conversation_result"],
-            "narration": narration,
-            "final_narration": narration,
-            "summary": narration,
-            "turn_id": _build_turn_id(runtime_state),
-            "tick": current_tick,
-        }
-
-Then add NPC contact/speech branch:
-
-    if _player_input_requests_npc_contact_or_speech(player_input):
-        mode = _npc_contact_or_speech_mode(player_input)
-        scene_graph = scene_graph_from_state(simulation_state)
-
-        if mode == "touch":
-            allowed, reason, barrier = can_touch_actor(scene_graph, "player", "npc:bran")
-        elif mode in {"whisper", "speak", "yell"}:
-            allowed, reason, barrier = can_hear_actor(scene_graph, "npc:bran", "player", volume=mode)
-        else:
-            allowed, reason, barrier = can_see_actor(scene_graph, "player", "npc:bran")
-
-        spatial_result = {
-            "allowed": allowed,
-            "mode": mode,
-            "actor_id": "player",
-            "target_actor_id": "npc:bran",
-            "reason": reason,
-            "barrier": barrier,
-        }
-
-        resolved_result = {
-            "action_type": "spatial_communication",
-            "visible_interaction_reason": (
-                "spatial_communication_allowed" if allowed else f"spatial_{reason}"
-            ),
-            "outcome": reason,
-            "spatial_result": spatial_result,
-            "conversation_result": {
-                "triggered": False,
-                "reason": "spatial_communication",
-            },
-            "forbidden_narration": [] if allowed else [
-                "Do not say physical contact happens through a barrier.",
-                "Do not say a whisper is heard through a muffling barrier.",
-            ],
-        }
-
-        narration = _fallback_spatial_narration(spatial_result)
-
-        return {
-            "ok": True,
-            "simulation_state": simulation_state,
-            "runtime_state": runtime_state,
-            "session": {"simulation_state": simulation_state, "runtime_state": runtime_state},
-            "result": resolved_result,
-            "resolved_result": resolved_result,
-            "spatial_result": spatial_result,
-            "visible_interaction_reason": resolved_result["visible_interaction_reason"],
-            "action_type": "spatial_communication",
-            "outcome": reason,
-            "conversation_result": resolved_result["conversation_result"],
-            "narration": narration,
-            "final_narration": narration,
-            "summary": narration,
-            "turn_id": _build_turn_id(runtime_state),
-            "tick": current_tick,
-        }
-4. Add final spatial rescue
-File
-src/app/rpg/session/runtime.py
-
-Add near other final reconciliation helpers:
-
-def _reconcile_spatial_action(
-    final_result: Dict[str, Any],
-    player_input: str,
-) -> Dict[str, Any]:
-    final_result = dict(_safe_dict(final_result))
-
-    if not (
-        _player_input_requests_spatial_movement(player_input)
-        or _player_input_requests_npc_contact_or_speech(player_input)
-    ):
-        return final_result
-
-    resolved_result = dict(_safe_dict(final_result.get("resolved_result")))
-    visible_reason = _safe_str(
-        resolved_result.get("visible_interaction_reason")
-        or final_result.get("visible_interaction_reason")
-    )
-    if visible_reason.startswith("combat_"):
-        return final_result
-
-    session = _safe_dict(final_result.get("session"))
-    simulation_state = _safe_dict(session.get("simulation_state") or final_result.get("simulation_state"))
-    runtime_state = _safe_dict(session.get("runtime_state") or final_result.get("runtime_state"))
-
-    if _player_input_requests_spatial_movement(player_input):
-        target_area = _target_area_from_player_input(player_input)
-        scene_graph = scene_graph_from_state(simulation_state)
-        scene_graph, spatial_result = move_actor(scene_graph, "player", target_area)
-        simulation_state = set_scene_graph(simulation_state, scene_graph)
-        action_type = "move_area"
-        visible = "spatial_moved" if spatial_result.get("moved") else f"spatial_{spatial_result.get('reason')}"
-    else:
-        mode = _npc_contact_or_speech_mode(player_input)
-        scene_graph = scene_graph_from_state(simulation_state)
-        if mode == "touch":
-            allowed, reason, barrier = can_touch_actor(scene_graph, "player", "npc:bran")
-        else:
-            allowed, reason, barrier = can_hear_actor(scene_graph, "npc:bran", "player", volume=mode)
-        spatial_result = {
-            "allowed": allowed,
-            "mode": mode,
-            "actor_id": "player",
-            "target_actor_id": "npc:bran",
-            "reason": reason,
-            "barrier": barrier,
-        }
-        action_type = "spatial_communication"
-        visible = "spatial_communication_allowed" if spatial_result.get("allowed") else f"spatial_{spatial_result.get('reason')}"
-
-    narration = _fallback_spatial_narration(spatial_result)
-
-    resolved_result["action_type"] = action_type
-    resolved_result["visible_interaction_reason"] = visible
-    resolved_result["outcome"] = spatial_result.get("reason")
-    resolved_result["spatial_result"] = spatial_result
-    resolved_result["conversation_result"] = {
-        "triggered": False,
-        "reason": "spatial_action",
-    }
-
-    final_result["resolved_result"] = resolved_result
-    final_result["spatial_result"] = spatial_result
-    final_result["visible_interaction_reason"] = visible
-    final_result["action_type"] = action_type
-    final_result["outcome"] = spatial_result.get("reason")
-    final_result["conversation_result"] = resolved_result["conversation_result"]
-    final_result["narration"] = narration
-    final_result["final_narration"] = narration
-    final_result["summary"] = narration
-    final_result["simulation_state"] = simulation_state
-
-    if session:
-        session["simulation_state"] = simulation_state
-        session["runtime_state"] = runtime_state
-        final_result["session"] = session
-
-    result_obj = dict(_safe_dict(final_result.get("result")) or _safe_parse_mapping_payload(final_result.get("result")))
-    if result_obj:
-        result_obj["spatial_result"] = spatial_result
-        result_obj["visible_interaction_reason"] = visible
-        result_obj["action_type"] = action_type
-        result_obj["outcome"] = spatial_result.get("reason")
-        result_obj["conversation_result"] = resolved_result["conversation_result"]
-        result_obj["narration"] = narration
-        result_obj["final_narration"] = narration
-        result_obj["summary"] = narration
-        final_result["result"] = result_obj
-
-    return final_result
-
-Call before general interaction rescue:
-
+ from tests.rpg.manual.scenarios.registry import build_service_scenarios
 @@
-     final_result = _reconcile_companion_command_conversation_suppression(final_result, player_input)
-+    final_result = _reconcile_spatial_action(final_result, player_input)
-     final_result = _reconcile_general_interaction_action(final_result, player_input)
-5. Manual scenario seed passthrough
-File
-src/tests/rpg/manual_llm_transcript.py
-Find line
-rg -n "def _manual_apply_interaction_seed_fields|passthrough_keys = \\[" src/tests/rpg/manual_llm_transcript.py
+ def test_manual_scenario_registry_matches_legacy_names():
+     names = set(build_service_scenarios().keys())
+-    missing = EXPECTED_LEGACY_SCENARIO_NAMES - names
+-    extra = names - EXPECTED_LEGACY_SCENARIO_NAMES
++    missing = EXPECTED_LEGACY_SCENARIO_NAMES - names
+ 
+     assert not missing, f"Missing legacy scenarios: {sorted(missing)}"
+-    assert not extra, f"Unexpected scenarios: {sorted(extra)}"
+-    assert len(names) == len(EXPECTED_LEGACY_SCENARIO_NAMES) == 136
++    assert len(EXPECTED_LEGACY_SCENARIO_NAMES) == 136
++
++
++def test_manual_scenario_registry_includes_spatial_l4_l6_names():
++    names = set(build_service_scenarios().keys())
++    missing = EXPECTED_SPATIAL_L4_L6_SCENARIO_NAMES - names
++
++    assert not missing, f"Missing L4-L6 spatial scenarios: {sorted(missing)}"
+*** End Patch
 
-Patch passthrough keys to include spatial fields:
+If the local test function has a different name, apply the same semantic change: legacy names must remain present; new post-legacy spatial names are allowed and checked separately.
 
-@@
-     passthrough_keys = [
-         "world_objects",
-         "player_inventory",
-         "inventory_state",
-         "interaction_state",
-+        "scene_graph",
-+        "spatial_state",
-     ]
-6. Manual validators
-File
-src/tests/rpg/manual_llm_transcript.py
+Patch 7 — Optional compact spatial context builder
 
-Add helpers near extraction helpers:
+This does not force integration into apply_turn yet. It gives a reusable deterministic payload.
 
-def _extract_spatial_result(turn_summary: Dict[str, Any]) -> Dict[str, Any]:
-    return _first_dict(
-        turn_summary.get("spatial_result"),
-        _safe_dict(turn_summary.get("resolved_result")).get("spatial_result"),
-        _safe_dict(turn_summary.get("result")).get("spatial_result"),
-        _safe_dict(_extract_general_interaction_result(turn_summary)).get("spatial_result"),
-        _extract_nested_dict_by_key(turn_summary, "spatial_result"),
-    )
+18. Add src/app/rpg/spatial/context.py
+*** Begin Patch
+*** Add File: src/app/rpg/spatial/context.py
++from __future__ import annotations
++
++from typing import Any, Dict, List
++
++from app.rpg.spatial.audibility import audible_entities_from
++from app.rpg.spatial.graph import list_area_connections
++from app.rpg.spatial.movement import can_move_between
++from app.rpg.spatial.serialization import normalize_spatial_graph
++from app.rpg.spatial.visibility import visible_entities_from
++
++
++def build_spatial_context(
++    graph: Dict[str, Any],
++    *,
++    viewer_entity_id: str = "player",
++) -> Dict[str, Any]:
++    graph = normalize_spatial_graph(graph)
++    current_area_id = str(graph.get("current_area_id") or "")
++    area = graph["areas"].get(current_area_id) or {}
++
++    exits: List[Dict[str, Any]] = []
++    for connection in list_area_connections(graph, current_area_id):
++        movement = can_move_between(
++            graph,
++            current_area_id,
++            str(connection.get("to_area_id") or ""),
++        )
++        exits.append(
++            {
++                "to_area_id": connection.get("to_area_id"),
++                "label": connection.get("label"),
++                "barrier_kind": connection.get("barrier_kind"),
++                "is_open": connection.get("is_open"),
++                "is_locked": connection.get("is_locked"),
++                "movement": movement.get("reason"),
++                "visibility": connection.get("visibility"),
++                "audibility": connection.get("audibility"),
++            }
++        )
++
++    return {
++        "current_area_id": current_area_id,
++        "current_area_name": area.get("name") or current_area_id,
++        "visible_entity_ids": [
++            row["entity_id"] for row in visible_entities_from(graph, viewer_entity_id)
++        ],
++        "audible_entity_ids": [
++            row["entity_id"] for row in audible_entities_from(graph, viewer_entity_id)
++        ],
++        "exits": exits,
++    }
+*** End Patch
 
+Later, integrate this into apply_turn result when the exact turn-contract assembly point is known:
 
-def _spatial_reason_is(turn_summary: Dict[str, Any], reason: str) -> bool:
-    return _safe_str(_extract_spatial_result(turn_summary).get("reason")) == reason
+from app.rpg.spatial.context import build_spatial_context
 
+graph = simulation_state.get("spatial_graph")
+if graph:
+    turn_contract["spatial_context"] = build_spatial_context(graph)
 
-def _spatial_moved(turn_summary: Dict[str, Any], to_area: str) -> bool:
-    spatial = _extract_spatial_result(turn_summary)
-    return spatial.get("moved") is True and _safe_str(spatial.get("to_area")) == to_area
+Do not dump the full graph into every turn contract.
 
+Validation commands
 
-def _spatial_allowed(turn_summary: Dict[str, Any]) -> bool:
-    return _extract_spatial_result(turn_summary).get("allowed") is True
-7. Manual scenarios
-File
-src/tests/rpg/manual_llm_transcript.py
+Run:
 
-Add these to SERVICE_SCENARIOS.
+python -m py_compile src/app/rpg/spatial/model.py
+python -m py_compile src/app/rpg/spatial/serialization.py
+python -m py_compile src/app/rpg/spatial/graph.py
+python -m py_compile src/app/rpg/spatial/movement.py
+python -m py_compile src/app/rpg/spatial/visibility.py
+python -m py_compile src/app/rpg/spatial/audibility.py
+python -m py_compile src/app/rpg/spatial/context.py
 
-    "spatial_npc_cannot_touch_through_locked_door": {
-        "currency": {"gold": 0, "silver": 0, "copper": 0},
-        "conversation_settings": {"enabled": True, "autonomous_ticks_enabled": False, "frequency": "never", "conversation_chance_percent": 0},
-        "setup_interaction_state": {
-            "player_location_id": "loc_rusty_flagon",
-            "scene_graph": {
-                "location_id": "loc_rusty_flagon",
-                "areas": {
-                    "hallway": {"area_id": "hallway", "name": "Hallway", "exits": ["locked_room"], "occupants": ["player"], "objects": []},
-                    "locked_room": {"area_id": "locked_room", "name": "Locked Room", "exits": ["hallway"], "occupants": ["npc:bran"], "objects": []},
-                },
-                "barriers": {
-                    "barrier:locked_room_door": {
-                        "barrier_id": "barrier:locked_room_door",
-                        "between": ["hallway", "locked_room"],
-                        "locked": True,
-                        "open": False,
-                        "blocks_movement": True,
-                        "blocks_touch": True,
-                        "blocks_visibility": True,
-                        "muffles_sound": True,
-                        "blocks_whisper": True,
-                        "allows_yell": True,
-                    }
-                },
-                "actor_area": {"player": "hallway", "npc:bran": "locked_room"},
-            },
-        },
-        "turns": ["I touch Bran."],
-    },
+Run unit tests:
 
-    "spatial_npc_yells_through_closed_door": {
-        "currency": {"gold": 0, "silver": 0, "copper": 0},
-        "conversation_settings": {"enabled": True, "autonomous_ticks_enabled": False, "frequency": "never", "conversation_chance_percent": 0},
-        "setup_interaction_state": {
-            "player_location_id": "loc_rusty_flagon",
-            "scene_graph": {
-                "location_id": "loc_rusty_flagon",
-                "areas": {
-                    "hallway": {"area_id": "hallway", "name": "Hallway", "exits": ["locked_room"], "occupants": ["player"], "objects": []},
-                    "locked_room": {"area_id": "locked_room", "name": "Locked Room", "exits": ["hallway"], "occupants": ["npc:bran"], "objects": []},
-                },
-                "barriers": {
-                    "barrier:locked_room_door": {
-                        "barrier_id": "barrier:locked_room_door",
-                        "between": ["hallway", "locked_room"],
-                        "locked": True,
-                        "open": False,
-                        "blocks_movement": True,
-                        "blocks_touch": True,
-                        "blocks_visibility": True,
-                        "muffles_sound": True,
-                        "blocks_whisper": True,
-                        "allows_yell": True,
-                    }
-                },
-                "actor_area": {"player": "hallway", "npc:bran": "locked_room"},
-            },
-        },
-        "turns": ["I yell to Bran."],
-    },
-
-    "spatial_whisper_blocked_by_door": {
-        "currency": {"gold": 0, "silver": 0, "copper": 0},
-        "conversation_settings": {"enabled": True, "autonomous_ticks_enabled": False, "frequency": "never", "conversation_chance_percent": 0},
-        "setup_interaction_state": {
-            "player_location_id": "loc_rusty_flagon",
-            "scene_graph": {
-                "location_id": "loc_rusty_flagon",
-                "areas": {
-                    "hallway": {"area_id": "hallway", "name": "Hallway", "exits": ["locked_room"], "occupants": ["player"], "objects": []},
-                    "locked_room": {"area_id": "locked_room", "name": "Locked Room", "exits": ["hallway"], "occupants": ["npc:bran"], "objects": []},
-                },
-                "barriers": {
-                    "barrier:locked_room_door": {
-                        "barrier_id": "barrier:locked_room_door",
-                        "between": ["hallway", "locked_room"],
-                        "locked": True,
-                        "open": False,
-                        "blocks_movement": True,
-                        "blocks_touch": True,
-                        "blocks_visibility": True,
-                        "muffles_sound": True,
-                        "blocks_whisper": True,
-                        "allows_yell": True,
-                    }
-                },
-                "actor_area": {"player": "hallway", "npc:bran": "locked_room"},
-            },
-        },
-        "turns": ["I whisper to Bran."],
-    },
-
-    "spatial_player_cannot_take_item_in_other_room": {
-        "currency": {"gold": 0, "silver": 0, "copper": 0},
-        "conversation_settings": {"enabled": True, "autonomous_ticks_enabled": False, "frequency": "never", "conversation_chance_percent": 0},
-        "setup_interaction_state": {
-            "player_location_id": "loc_rusty_flagon",
-            "player_inventory": {"items": [], "equipment": {}, "carry_capacity": 50.0},
-            "world_objects": {
-                "object:old_chest": {
-                    "object_id": "object:old_chest",
-                    "name": "Old Chest",
-                    "kind": "container",
-                    "location_id": "loc_rusty_flagon",
-                    "area_id": "locked_room",
-                    "locked": False,
-                    "open": True,
-                    "reachable": True,
-                    "visible": True,
-                    "contents": [{"item_id": "item:copper_coin", "name": "Copper coin", "quantity": 12}],
-                }
-            },
-            "scene_graph": {
-                "location_id": "loc_rusty_flagon",
-                "areas": {
-                    "hallway": {"area_id": "hallway", "name": "Hallway", "exits": ["locked_room"], "occupants": ["player"], "objects": []},
-                    "locked_room": {"area_id": "locked_room", "name": "Locked Room", "exits": ["hallway"], "occupants": [], "objects": ["object:old_chest"]},
-                },
-                "barriers": {
-                    "barrier:locked_room_door": {
-                        "barrier_id": "barrier:locked_room_door",
-                        "between": ["hallway", "locked_room"],
-                        "locked": True,
-                        "open": False,
-                        "blocks_movement": True,
-                        "blocks_touch": True,
-                        "blocks_visibility": True,
-                        "muffles_sound": True,
-                        "blocks_whisper": True,
-                        "allows_yell": True,
-                    }
-                },
-                "actor_area": {"player": "hallway"},
-                "object_area": {"object:old_chest": "locked_room"},
-            },
-        },
-        "turns": ["I take the coins from the chest."],
-    },
-
-    "spatial_move_between_connected_areas": {
-        "currency": {"gold": 0, "silver": 0, "copper": 0},
-        "conversation_settings": {"enabled": True, "autonomous_ticks_enabled": False, "frequency": "never", "conversation_chance_percent": 0},
-        "setup_interaction_state": {
-            "player_location_id": "loc_rusty_flagon",
-            "scene_graph": {
-                "location_id": "loc_rusty_flagon",
-                "areas": {
-                    "common_room": {"area_id": "common_room", "name": "Common Room", "exits": ["hallway"], "occupants": ["player"], "objects": []},
-                    "hallway": {"area_id": "hallway", "name": "Hallway", "exits": ["common_room"], "occupants": [], "objects": []},
-                },
-                "barriers": {},
-                "actor_area": {"player": "common_room"},
-            },
-        },
-        "turns": ["I go to the hallway."],
-    },
-
-    "spatial_locked_door_blocks_movement": {
-        "currency": {"gold": 0, "silver": 0, "copper": 0},
-        "conversation_settings": {"enabled": True, "autonomous_ticks_enabled": False, "frequency": "never", "conversation_chance_percent": 0},
-        "setup_interaction_state": {
-            "player_location_id": "loc_rusty_flagon",
-            "scene_graph": {
-                "location_id": "loc_rusty_flagon",
-                "areas": {
-                    "hallway": {"area_id": "hallway", "name": "Hallway", "exits": ["locked_room"], "occupants": ["player"], "objects": []},
-                    "locked_room": {"area_id": "locked_room", "name": "Locked Room", "exits": ["hallway"], "occupants": [], "objects": []},
-                },
-                "barriers": {
-                    "barrier:locked_room_door": {
-                        "barrier_id": "barrier:locked_room_door",
-                        "between": ["hallway", "locked_room"],
-                        "locked": True,
-                        "open": False,
-                        "blocks_movement": True,
-                    }
-                },
-                "actor_area": {"player": "hallway"},
-            },
-        },
-        "turns": ["I enter the locked room."],
-    },
-8. Per-turn validators
-File
-src/tests/rpg/manual_llm_transcript.py
-
-Add to scenario-specific warning block:
-
-        if scenario_name == "spatial_npc_cannot_touch_through_locked_door":
-            if not _spatial_reason_is(summary_row, "barrier_blocks_touch"):
-                summary_row.setdefault("scenario_warnings", []).append("spatial_touch_through_locked_door_not_blocked")
-
-        if scenario_name == "spatial_npc_yells_through_closed_door":
-            if not _spatial_allowed(summary_row):
-                summary_row.setdefault("scenario_warnings", []).append("spatial_yell_through_closed_door_not_allowed")
-
-        if scenario_name == "spatial_whisper_blocked_by_door":
-            if not _spatial_reason_is(summary_row, "barrier_blocks_whisper"):
-                summary_row.setdefault("scenario_warnings", []).append("spatial_whisper_through_door_not_blocked")
-
-        if scenario_name == "spatial_player_cannot_take_item_in_other_room":
-            interaction = _extract_general_interaction_result(summary_row)
-            spatial = _safe_dict(interaction.get("spatial_result")) or _extract_spatial_result(summary_row)
-            if _safe_str(spatial.get("reason")) not in {"barrier_locked", "barrier_closed", "target_not_reachable"}:
-                summary_row.setdefault("scenario_warnings", []).append("spatial_take_item_other_room_not_blocked")
-
-        if scenario_name == "spatial_move_between_connected_areas":
-            if not _spatial_moved(summary_row, "hallway"):
-                summary_row.setdefault("scenario_warnings", []).append("spatial_move_connected_area_failed")
-
-        if scenario_name == "spatial_locked_door_blocks_movement":
-            if not _spatial_reason_is(summary_row, "barrier_locked"):
-                summary_row.setdefault("scenario_warnings", []).append("spatial_locked_door_did_not_block_movement")
-
-Add scenario-level checks similarly if your file requires them.
+python -m pytest src/tests/rpg/spatial -q

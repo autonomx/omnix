@@ -10,10 +10,10 @@ def test_manual_scenario_migration_audit():
     """Audit migration by comparing expected legacy names vs new modular registry.
 
     This test ensures we don't silently drop or add scenarios during refactoring.
-    It compares against the exact 136 old scenario names from manual_llm_transcript_old.py.
+    It compares against the exact 145 old scenario names from manual_llm_transcript_old.py.
     """
 
-    # Load expected legacy names (exact 136 from old monolith)
+    # Load expected legacy names (exact 145 from old monolith)
     all_old_names = EXPECTED_LEGACY_SCENARIO_NAMES
     print(f"Expected legacy scenario count: {len(all_old_names)}")
 
@@ -21,8 +21,8 @@ def test_manual_scenario_migration_audit():
     new_scenarios = build_service_scenarios()
     new_names = set(new_scenarios.keys())
 
-    # All 136 scenarios should be present
-    assert len(new_names) == 136, f"Expected 136 scenarios, found {len(new_names)}"
+    # All 145 scenarios should be present
+    assert len(new_names) == 145, f"Expected 145 scenarios, found {len(new_names)}"
 
     # Check that Bundle A scenarios have been successfully ported
     bundle_a_scenarios = {"lodging_success", "shop_success", "blocked_purchase", "paid_info"}
