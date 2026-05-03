@@ -34,6 +34,9 @@ from tests.rpg.manual.scenarios.expected_campaign_director_m22_m24_names import 
 from tests.rpg.manual.scenarios.expected_story_event_queue_m25_m27_names import (
     EXPECTED_STORY_EVENT_QUEUE_M25_M27_SCENARIO_NAMES,
 )
+from tests.rpg.manual.scenarios.expected_companion_m28_m30_names import (
+    EXPECTED_COMPANION_M28_M30_SCENARIO_NAMES,
+)
 
 
 def test_manual_scenario_migration_audit():
@@ -234,3 +237,10 @@ def test_manual_scenario_registry_includes_story_event_queue_m25_m27_names():
     missing = EXPECTED_STORY_EVENT_QUEUE_M25_M27_SCENARIO_NAMES - names
 
     assert not missing, f"Missing M25-M27 story event queue scenarios: {sorted(missing)}"
+
+
+def test_manual_scenario_registry_includes_companion_m28_m30_names():
+    names = set(build_service_scenarios().keys())
+    missing = EXPECTED_COMPANION_M28_M30_SCENARIO_NAMES - names
+
+    assert not missing, f"Missing M28-M30 companion scenarios: {sorted(missing)}"

@@ -34,6 +34,7 @@ from app.rpg.spatial.serialization import normalize_spatial_graph
 from app.rpg.story_arcs.transitions import apply_story_arc_transition
 from app.rpg.story_events.application import apply_story_event
 from app.rpg.story_packs.importer import import_story_pack
+from app.rpg.companions.offers import accept_companion_offer, refuse_companion_offer
 from tests.rpg.manual.memory_fixtures import build_manual_memory_event
 from tests.rpg.manual.safe import _safe_dict, _safe_list
 from tests.rpg.manual.session_helpers import (
@@ -340,6 +341,27 @@ def _apply_manual_scenario_setup(session: Dict[str, Any], scenario: Dict[str, An
                     or 1
                 ),
             )
+
+    for offer in scenario.get("setup_companion_offer_actions") or []:
+        if isinstance(offer, dict):
+            action = str(offer.get("action") or "")
+            if action == "accept":
+                accept_companion_offer(
+                    simulation_state,
+                    str(offer.get("npc_id") or ""),
+                    arc_id=str(offer.get("arc_id") or ""),
+                    turn_index=int(offer.get("turn_index") or scenario.get("setup_turn_index") or 1),
+                    min_trust=int(offer.get("min_trust") or 70),
+                    max_hostility=int(offer.get("max_hostility") or 40),
+                )
+            elif action == "refuse":
+                refuse_companion_offer(
+                    simulation_state,
+                    str(offer.get("npc_id") or ""),
+                    arc_id=str(offer.get("arc_id") or ""),
+                    turn_index=int(offer.get("turn_index") or scenario.get("setup_turn_index") or 1),
+                    reason=str(offer.get("reason") or "player_refused"),
+                )
 
     for item in scenario.get("setup_story_event_queue") or []:
         if isinstance(item, dict):

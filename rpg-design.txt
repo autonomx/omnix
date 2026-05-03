@@ -1,58 +1,59 @@
-Bundle M25-M27 — Story Event Runtime Queue + Delayed Consequences v1
+Bundle M28-M30 — NPC Arc Runtime Integration + Companion Offer Flow v1
 GOAL:
-Add a deterministic story event runtime queue.
+Integrate NPC evolution arcs into runtime-facing dialogue/action flow.
 
-This allows systems like campaign director, story packs, quests, and NPC arcs to enqueue consequences that apply later.
-
-Queue supports:
-- enqueue registered story event definitions by event_id
-- delayed application after N turns
-- explicit apply-once semantics
-- skipped/failed/applied result records
-- bounded queue/history
-- safe runtime modes only
-- no LLM mutation
+This bundle makes NPC arc state actionable:
+- companion eligibility can surface as a deterministic offer
+- companion offers are gated by NPC evolution + relationship + story state
+- accepting/refusing companion offers mutates deterministic party/companion state
+- NPC runtime context exposes profession/role/motivation/personality/active arcs
+- companion offers are apply-once / bounded
+- hostile or low-trust NPCs do not offer companionship
+- LLM may narrate the offer, but cannot decide eligibility or mutate party state
 
 Important:
-- enqueueing does not apply effects
-- queue processing applies through apply_story_event()
-- duplicate event_ids are not applied twice
-- delayed events wait until due_turn
-- failed events remain visible with reasons
-Patch 1 — Add story event queue package
-1. Add src/app/rpg/story_event_queue/__init__.py
+- Simulation is authoritative.
+- Companion offers are deterministic.
+- Runtime context is bounded.
+- No LLM direct mutation.
+Patch 1 — Add companion runtime package
+1. Add src/app/rpg/companions/__init__.py
 *** Begin Patch
-*** Add File: src/app/rpg/story_event_queue/__init__.py
-+"""Deterministic story event queue runtime helpers."""
+*** Add File: src/app/rpg/companions/__init__.py
++"""Deterministic companion offer and party helpers."""
 +
-+from app.rpg.story_event_queue.queue import (
-+    enqueue_story_event,
-+    enqueue_story_event_definition,
-+    process_story_event_queue,
++from app.rpg.companions.offers import (
++    accept_companion_offer,
++    build_companion_offer_context,
++    evaluate_companion_offer,
++    refuse_companion_offer,
 +)
-+from app.rpg.story_event_queue.state import (
-+    ensure_story_event_queue_state,
-+    normalize_story_event_queue_state,
++from app.rpg.companions.party import (
++    ensure_party_state,
++    get_party_member,
++    normalize_party_state,
 +)
 +
 +__all__ = [
-+    "enqueue_story_event",
-+    "enqueue_story_event_definition",
-+    "ensure_story_event_queue_state",
-+    "normalize_story_event_queue_state",
-+    "process_story_event_queue",
++    "accept_companion_offer",
++    "build_companion_offer_context",
++    "ensure_party_state",
++    "evaluate_companion_offer",
++    "get_party_member",
++    "normalize_party_state",
++    "refuse_companion_offer",
 +]
 *** End Patch
-2. Add src/app/rpg/story_event_queue/state.py
+2. Add src/app/rpg/companions/party.py
 *** Begin Patch
-*** Add File: src/app/rpg/story_event_queue/state.py
+*** Add File: src/app/rpg/companions/party.py
 +from __future__ import annotations
 +
 +from typing import Any, Dict, List
 +
 +
-+MAX_PENDING_STORY_EVENTS = 200
-+MAX_STORY_EVENT_QUEUE_HISTORY = 300
++MAX_PARTY_MEMBERS = 6
++MAX_COMPANION_HISTORY = 100
 +
 +
 +def _safe_dict(value: Any) -> Dict[str, Any]:
@@ -63,6 +64,16 @@ Patch 1 — Add story event queue package
 +    return value if isinstance(value, list) else []
 +
 +
++def _safe_str(value: Any) -> str:
++    return value if isinstance(value, str) else ""
++
++
++def _safe_bool(value: Any, default: bool = False) -> bool:
++    if isinstance(value, bool):
++        return value
++    return default
++
++
 +def _safe_int(value: Any, default: int = 0) -> int:
 +    try:
 +        return int(value)
@@ -70,687 +81,729 @@ Patch 1 — Add story event queue package
 +        return default
 +
 +
-+def _safe_str(value: Any) -> str:
-+    return value if isinstance(value, str) else ""
-+
-+
-+def normalize_story_event_queue_item(value: Dict[str, Any]) -> Dict[str, Any]:
++def normalize_party_member(value: Dict[str, Any], *, npc_id: str = "") -> Dict[str, Any]:
 +    value = _safe_dict(value)
++    normalized_npc_id = _safe_str(value.get("npc_id")) or npc_id
 +    return {
-+        "queue_id": _safe_str(value.get("queue_id")),
-+        "event_id": _safe_str(value.get("event_id")),
-+        "source": _safe_str(value.get("source")) or "unknown",
-+        "status": _safe_str(value.get("status")) or "pending",
-+        "enqueued_turn": _safe_int(value.get("enqueued_turn"), 0),
-+        "due_turn": _safe_int(value.get("due_turn"), 0),
-+        "priority": max(0, min(100, _safe_int(value.get("priority"), 50))),
-+        "reason": _safe_str(value.get("reason")),
-+        "event": dict(_safe_dict(value.get("event"))),
++        "npc_id": normalized_npc_id,
++        "status": _safe_str(value.get("status")) or "active",
++        "joined_turn": _safe_int(value.get("joined_turn"), 0),
++        "role": _safe_str(value.get("role")),
++        "motivation": _safe_str(value.get("motivation")),
++        "source_offer_id": _safe_str(value.get("source_offer_id")),
 +        "metadata": dict(_safe_dict(value.get("metadata"))),
 +    }
 +
 +
-+def normalize_story_event_queue_history_item(value: Dict[str, Any]) -> Dict[str, Any]:
++def normalize_companion_offer_record(value: Dict[str, Any]) -> Dict[str, Any]:
 +    value = _safe_dict(value)
 +    return {
-+        "queue_id": _safe_str(value.get("queue_id")),
-+        "event_id": _safe_str(value.get("event_id")),
++        "offer_id": _safe_str(value.get("offer_id")),
++        "npc_id": _safe_str(value.get("npc_id")),
 +        "status": _safe_str(value.get("status")) or "unknown",
-+        "processed_turn": _safe_int(value.get("processed_turn"), 0),
++        "turn_index": _safe_int(value.get("turn_index"), 0),
 +        "reason": _safe_str(value.get("reason")),
-+        "result": dict(_safe_dict(value.get("result"))),
++        "details": dict(_safe_dict(value.get("details"))),
 +    }
 +
 +
-+def normalize_story_event_queue_state(value: Dict[str, Any] | None) -> Dict[str, Any]:
++def normalize_party_state(value: Dict[str, Any] | None) -> Dict[str, Any]:
 +    value = _safe_dict(value)
-+    pending = [
-+        normalize_story_event_queue_item(row)
-+        for row in _safe_list(value.get("pending"))
-+        if isinstance(row, dict)
-+    ]
-+    pending = [
-+        row
-+        for row in pending
-+        if row.get("queue_id") and row.get("event_id") and row.get("status") == "pending"
-+    ][-MAX_PENDING_STORY_EVENTS:]
-+    pending.sort(
-+        key=lambda row: (
-+            int(row.get("due_turn") or 0),
-+            -int(row.get("priority") or 0),
-+            str(row.get("queue_id") or ""),
-+        )
-+    )
-+
++    members = {}
++    for npc_id, row in _safe_dict(value.get("members")).items():
++        npc_id = str(npc_id or "")
++        if not npc_id:
++            continue
++        members[npc_id] = normalize_party_member(row, npc_id=npc_id)
 +    history = [
-+        normalize_story_event_queue_history_item(row)
-+        for row in _safe_list(value.get("history"))
++        normalize_companion_offer_record(row)
++        for row in _safe_list(value.get("companion_offer_history"))
 +        if isinstance(row, dict)
-+    ][-MAX_STORY_EVENT_QUEUE_HISTORY:]
-+
++    ][-MAX_COMPANION_HISTORY:]
 +    return {
 +        "version": 1,
-+        "pending": pending,
-+        "history": history,
-+        "max_pending": MAX_PENDING_STORY_EVENTS,
-+        "max_history": MAX_STORY_EVENT_QUEUE_HISTORY,
++        "members": members,
++        "companion_offer_history": history,
++        "max_party_members": MAX_PARTY_MEMBERS,
++        "max_companion_history": MAX_COMPANION_HISTORY,
 +    }
 +
 +
-+def ensure_story_event_queue_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
++def ensure_party_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
 +    if not isinstance(simulation_state, dict):
 +        raise TypeError("simulation_state_must_be_dict")
-+    state = normalize_story_event_queue_state(simulation_state.get("story_event_queue_state"))
-+    simulation_state["story_event_queue_state"] = state
++    state = normalize_party_state(simulation_state.get("party_state"))
++    simulation_state["party_state"] = state
 +    return state
 +
 +
-+def add_story_event_queue_history(
++def get_party_member(
++    simulation_state: Dict[str, Any],
++    npc_id: str,
++) -> Dict[str, Any] | None:
++    state = ensure_party_state(simulation_state)
++    return state.get("members", {}).get(npc_id)
++
++
++def is_party_member(simulation_state: Dict[str, Any], npc_id: str) -> bool:
++    member = get_party_member(simulation_state, npc_id)
++    return bool(member and member.get("status") == "active")
++
++
++def add_party_member(
 +    simulation_state: Dict[str, Any],
 +    *,
-+    queue_id: str,
-+    event_id: str,
-+    status: str,
-+    processed_turn: int,
-+    reason: str = "",
-+    result: Dict[str, Any] | None = None,
++    npc_id: str,
++    role: str = "",
++    motivation: str = "",
++    source_offer_id: str = "",
++    turn_index: int = 0,
++    metadata: Dict[str, Any] | None = None,
 +) -> Dict[str, Any]:
-+    state = ensure_story_event_queue_state(simulation_state)
-+    row = normalize_story_event_queue_history_item(
-+        {
-+            "queue_id": queue_id,
-+            "event_id": event_id,
-+            "status": status,
-+            "processed_turn": processed_turn,
-+            "reason": reason,
-+            "result": result or {},
++    state = ensure_party_state(simulation_state)
++    members = state.setdefault("members", {})
++    if npc_id in members and members[npc_id].get("status") == "active":
++        return {
++            "ok": True,
++            "reason": "already_party_member",
++            "npc_id": npc_id,
++            "member": members[npc_id],
 +        }
++    active_count = len([row for row in members.values() if row.get("status") == "active"])
++    if active_count >= MAX_PARTY_MEMBERS:
++        return {
++            "ok": False,
++            "reason": "party_full",
++            "npc_id": npc_id,
++            "active_count": active_count,
++            "max_party_members": MAX_PARTY_MEMBERS,
++        }
++    member = normalize_party_member(
++        {
++            "npc_id": npc_id,
++            "status": "active",
++            "joined_turn": turn_index,
++            "role": role,
++            "motivation": motivation,
++            "source_offer_id": source_offer_id,
++            "metadata": metadata or {},
++        },
++        npc_id=npc_id,
 +    )
-+    history = list(state.get("history") or [])
-+    history.append(row)
-+    state["history"] = history[-MAX_STORY_EVENT_QUEUE_HISTORY:]
-+    simulation_state["story_event_queue_state"] = normalize_story_event_queue_state(state)
++    members[npc_id] = member
++    simulation_state["party_state"] = normalize_party_state(state)
 +    return {
 +        "ok": True,
-+        "reason": "queue_history_recorded",
-+        "history_item": row,
++        "reason": "party_member_added",
++        "npc_id": npc_id,
++        "member": simulation_state["party_state"]["members"][npc_id],
 +    }
++
++
++def append_companion_offer_history(
++    simulation_state: Dict[str, Any],
++    *,
++    offer_id: str,
++    npc_id: str,
++    status: str,
++    turn_index: int = 0,
++    reason: str = "",
++    details: Dict[str, Any] | None = None,
++) -> Dict[str, Any]:
++    state = ensure_party_state(simulation_state)
++    history = list(state.get("companion_offer_history") or [])
++    row = normalize_companion_offer_record(
++        {
++            "offer_id": offer_id,
++            "npc_id": npc_id,
++            "status": status,
++            "turn_index": turn_index,
++            "reason": reason,
++            "details": details or {},
++        }
++    )
++    history.append(row)
++    state["companion_offer_history"] = history[-MAX_COMPANION_HISTORY:]
++    simulation_state["party_state"] = normalize_party_state(state)
++    return {
++        "ok": True,
++        "reason": "companion_offer_history_recorded",
++        "record": row,
++    }
++
++
++def has_companion_offer_status(
++    simulation_state: Dict[str, Any],
++    *,
++    offer_id: str,
++    status: str,
++) -> bool:
++    state = ensure_party_state(simulation_state)
++    return any(
++        row.get("offer_id") == offer_id and row.get("status") == status
++        for row in state.get("companion_offer_history") or []
++    )
 *** End Patch
-3. Add src/app/rpg/story_event_queue/queue.py
+3. Add src/app/rpg/companions/offers.py
 *** Begin Patch
-*** Add File: src/app/rpg/story_event_queue/queue.py
+*** Add File: src/app/rpg/companions/offers.py
 +from __future__ import annotations
 +
 +import hashlib
 +import json
-+from typing import Any, Dict, List
++from typing import Any, Dict
 +
-+from app.rpg.story_event_queue.state import (
-+    add_story_event_queue_history,
-+    ensure_story_event_queue_state,
++from app.rpg.companions.party import (
++    add_party_member,
++    append_companion_offer_history,
++    ensure_party_state,
++    has_companion_offer_status,
++    is_party_member,
 +)
-+from app.rpg.story_events.application import apply_story_event
-+from app.rpg.story_events.state import has_story_event_been_applied
-+from app.rpg.story_packs.definition_registries import get_story_event_definition
-+
-+
-+SAFE_QUEUE_PROCESS_MODES = {"idle", "wait", "listen", "observe", "world_tick", "__ambient_tick__"}
-+MAX_QUEUE_APPLICATIONS_PER_TICK = 3
++from app.rpg.npc_evolution.state import (
++    apply_npc_evolution_delta,
++    get_npc_evolution,
++)
++from app.rpg.social.reputation import get_relationship
 +
 +
 +def _safe_dict(value: Any) -> Dict[str, Any]:
 +    return value if isinstance(value, dict) else {}
 +
 +
-+def _safe_int(value: Any, default: int = 0) -> int:
-+    try:
-+        return int(value)
-+    except Exception:
-+        return default
++def _safe_str(value: Any) -> str:
++    return value if isinstance(value, str) else ""
 +
 +
-+def _stable_queue_id(
-+    *,
-+    event_id: str,
-+    source: str,
-+    due_turn: int,
-+    reason: str = "",
-+) -> str:
++def _stable_offer_id(npc_id: str, arc_id: str = "", motivation: str = "") -> str:
 +    payload = json.dumps(
 +        {
-+            "event_id": event_id,
-+            "source": source,
-+            "due_turn": int(due_turn or 0),
-+            "reason": reason,
++            "npc_id": npc_id,
++            "arc_id": arc_id,
++            "motivation": motivation,
 +        },
 +        sort_keys=True,
 +        ensure_ascii=False,
 +    )
 +    digest = hashlib.sha1(payload.encode("utf-8")).hexdigest()[:16]
-+    return f"story_event_queue:{digest}"
++    return f"companion_offer:{digest}"
 +
 +
-+def enqueue_story_event(
++def build_companion_offer_context(
 +    simulation_state: Dict[str, Any],
-+    event: Dict[str, Any],
++    npc_id: str,
 +    *,
-+    source: str = "manual",
-+    enqueued_turn: int = 0,
-+    due_turn: int | None = None,
-+    delay_turns: int = 0,
-+    priority: int = 50,
-+    reason: str = "",
-+    metadata: Dict[str, Any] | None = None,
++    arc_id: str = "",
 +) -> Dict[str, Any]:
-+    event = dict(_safe_dict(event))
-+    event_id = str(event.get("event_id") or "")
-+    if not event_id:
-+        return {"ok": False, "reason": "missing_event_id"}
-+
-+    if has_story_event_been_applied(simulation_state, event_id):
-+        return {
-+            "ok": True,
-+            "reason": "already_applied",
-+            "event_id": event_id,
-+            "queued": False,
-+        }
-+
-+    resolved_due_turn = int(due_turn if due_turn is not None else int(enqueued_turn or 0) + int(delay_turns or 0))
-+    queue_id = _stable_queue_id(
-+        event_id=event_id,
-+        source=source,
-+        due_turn=resolved_due_turn,
-+        reason=reason,
-+    )
-+    state = ensure_story_event_queue_state(simulation_state)
-+    pending = list(state.get("pending") or [])
-+
-+    for row in pending:
-+        if row.get("queue_id") == queue_id or row.get("event_id") == event_id:
-+            return {
-+                "ok": True,
-+                "reason": "already_queued",
-+                "event_id": event_id,
-+                "queue_id": row.get("queue_id"),
-+                "queued": False,
-+                "item": row,
-+            }
-+
-+    item = {
-+        "queue_id": queue_id,
-+        "event_id": event_id,
-+        "source": str(source or "manual"),
-+        "status": "pending",
-+        "enqueued_turn": int(enqueued_turn or 0),
-+        "due_turn": resolved_due_turn,
-+        "priority": max(0, min(100, int(priority or 50))),
-+        "reason": str(reason or ""),
-+        "event": event,
-+        "metadata": dict(metadata or {}),
-+    }
-+    pending.append(item)
-+    state["pending"] = pending
-+    simulation_state["story_event_queue_state"] = state
-+    ensure_story_event_queue_state(simulation_state)
++    npc_id = str(npc_id or "")
++    evolution = get_npc_evolution(simulation_state, npc_id) or {}
++    relationship = get_relationship(simulation_state, npc_id)
++    active_arcs = list(evolution.get("active_arcs") or [])
++    completed_arcs = list(evolution.get("completed_arcs") or [])
++    motivation = _safe_str(evolution.get("motivation"))
++    role = _safe_str(evolution.get("role"))
++    profession = _safe_str(evolution.get("profession"))
++    flags = dict(_safe_dict(evolution.get("flags")))
++    personality = dict(_safe_dict(evolution.get("personality")))
++    offer_id = _stable_offer_id(npc_id, arc_id or (active_arcs[0] if active_arcs else ""), motivation)
 +    return {
 +        "ok": True,
-+        "reason": "queued",
-+        "queued": True,
-+        "event_id": event_id,
-+        "queue_id": queue_id,
-+        "item": item,
++        "npc_id": npc_id,
++        "offer_id": offer_id,
++        "arc_id": arc_id,
++        "active_arcs": active_arcs[:10],
++        "completed_arcs": completed_arcs[:10],
++        "profession": profession,
++        "role": role,
++        "motivation": motivation,
++        "personality": personality,
++        "flags": flags,
++        "relationship": {
++            "trust": int(relationship.get("trust") or 0),
++            "fear": int(relationship.get("fear") or 0),
++            "respect": int(relationship.get("respect") or 0),
++            "hostility": int(relationship.get("hostility") or 0),
++            "reputation": int(relationship.get("reputation") or 0),
++        },
++        "companion_eligible": bool(evolution.get("companion_eligible")),
++        "companion_offered": bool(evolution.get("companion_offered")),
++        "is_party_member": is_party_member(simulation_state, npc_id),
++        "bounded": {
++            "max_active_arcs": 10,
++            "max_completed_arcs": 10,
++        },
 +    }
 +
 +
-+def enqueue_story_event_definition(
++def evaluate_companion_offer(
 +    simulation_state: Dict[str, Any],
-+    event_id: str,
++    npc_id: str,
 +    *,
-+    source: str = "definition",
-+    enqueued_turn: int = 0,
-+    due_turn: int | None = None,
-+    delay_turns: int = 0,
-+    priority: int = 50,
-+    reason: str = "",
-+    metadata: Dict[str, Any] | None = None,
++    arc_id: str = "",
++    min_trust: int = 70,
++    max_hostility: int = 40,
 +) -> Dict[str, Any]:
-+    event = get_story_event_definition(simulation_state, event_id)
-+    if not event:
++    ensure_party_state(simulation_state)
++    context = build_companion_offer_context(simulation_state, npc_id, arc_id=arc_id)
++    offer_id = context["offer_id"]
++    relationship = context["relationship"]
++
++    if not npc_id:
++        return {"ok": False, "eligible": False, "reason": "missing_npc_id", "context": context}
++    if context.get("is_party_member"):
++        return {"ok": True, "eligible": False, "reason": "already_party_member", "context": context}
++    if has_companion_offer_status(simulation_state, offer_id=offer_id, status="accepted"):
++        return {"ok": True, "eligible": False, "reason": "offer_already_accepted", "context": context}
++    if has_companion_offer_status(simulation_state, offer_id=offer_id, status="refused"):
++        return {"ok": True, "eligible": False, "reason": "offer_previously_refused", "context": context}
++    if not context.get("companion_eligible"):
++        return {"ok": True, "eligible": False, "reason": "npc_not_companion_eligible", "context": context}
++    if relationship["trust"] < int(min_trust or 0):
++        return {
++            "ok": True,
++            "eligible": False,
++            "reason": "trust_too_low",
++            "context": context,
++            "minimum_trust": int(min_trust or 0),
++        }
++    if relationship["hostility"] > int(max_hostility or 0):
++        return {
++            "ok": True,
++            "eligible": False,
++            "reason": "hostility_too_high",
++            "context": context,
++            "maximum_hostility": int(max_hostility or 0),
++        }
++    if not context.get("active_arcs") and not context.get("motivation"):
++        return {"ok": True, "eligible": False, "reason": "no_active_arc_or_motivation", "context": context}
++
++    return {
++        "ok": True,
++        "eligible": True,
++        "reason": "eligible",
++        "offer_id": offer_id,
++        "context": context,
++    }
++
++
++def accept_companion_offer(
++    simulation_state: Dict[str, Any],
++    npc_id: str,
++    *,
++    arc_id: str = "",
++    turn_index: int = 0,
++    min_trust: int = 70,
++    max_hostility: int = 40,
++) -> Dict[str, Any]:
++    evaluation = evaluate_companion_offer(
++        simulation_state,
++        npc_id,
++        arc_id=arc_id,
++        min_trust=min_trust,
++        max_hostility=max_hostility,
++    )
++    if not evaluation.get("eligible"):
++        append_companion_offer_history(
++            simulation_state,
++            offer_id=evaluation.get("context", {}).get("offer_id", ""),
++            npc_id=npc_id,
++            status="blocked",
++            turn_index=turn_index,
++            reason=evaluation.get("reason") or "not_eligible",
++            details={"evaluation": evaluation},
++        )
 +        return {
 +            "ok": False,
-+            "reason": "story_event_definition_missing",
-+            "event_id": event_id,
++            "reason": "not_eligible",
++            "evaluation": evaluation,
 +        }
-+    return enqueue_story_event(
++
++    context = evaluation["context"]
++    offer_id = evaluation["offer_id"]
++    party_result = add_party_member(
 +        simulation_state,
-+        event,
-+        source=source,
-+        enqueued_turn=enqueued_turn,
-+        due_turn=due_turn,
-+        delay_turns=delay_turns,
-+        priority=priority,
-+        reason=reason,
-+        metadata=metadata,
++        npc_id=npc_id,
++        role=context.get("role") or "companion",
++        motivation=context.get("motivation") or "",
++        source_offer_id=offer_id,
++        turn_index=turn_index,
++        metadata={"arc_id": arc_id, "source": "companion_offer_v1"},
 +    )
-+
-+
-+def _is_due(item: Dict[str, Any], *, turn_index: int) -> bool:
-+    return int(item.get("due_turn") or 0) <= int(turn_index or 0)
-+
-+
-+def process_story_event_queue(
-+    simulation_state: Dict[str, Any],
-+    *,
-+    mode: str = "idle",
-+    turn_index: int = 0,
-+    max_applications: int = MAX_QUEUE_APPLICATIONS_PER_TICK,
-+) -> Dict[str, Any]:
-+    state = ensure_story_event_queue_state(simulation_state)
-+    mode = str(mode or "")
-+    if mode not in SAFE_QUEUE_PROCESS_MODES:
++    if not party_result.get("ok"):
++        append_companion_offer_history(
++            simulation_state,
++            offer_id=offer_id,
++            npc_id=npc_id,
++            status="blocked",
++            turn_index=turn_index,
++            reason=party_result.get("reason") or "party_add_failed",
++            details={"party_result": party_result},
++        )
 +        return {
-+            "ok": True,
-+            "reason": "unsafe_mode",
-+            "mode": mode,
-+            "safe_modes": sorted(SAFE_QUEUE_PROCESS_MODES),
-+            "applied": [],
-+            "skipped": [],
-+            "remaining": list(state.get("pending") or []),
-+            "applied_count": 0,
++            "ok": False,
++            "reason": "party_add_failed",
++            "evaluation": evaluation,
++            "party_result": party_result,
 +        }
 +
-+    pending = list(state.get("pending") or [])
-+    due_items = [row for row in pending if _is_due(row, turn_index=turn_index)]
-+    future_items = [row for row in pending if not _is_due(row, turn_index=turn_index)]
-+    due_items.sort(
-+        key=lambda row: (
-+            -int(row.get("priority") or 0),
-+            int(row.get("due_turn") or 0),
-+            str(row.get("queue_id") or ""),
-+        )
++    evolution_result = apply_npc_evolution_delta(
++        simulation_state,
++        npc_id,
++        companion_offered=True,
++        flags={"joined_party": True},
++        source_event_id=offer_id,
++        turn_index=turn_index,
 +    )
-+
-+    max_applications = max(0, min(MAX_QUEUE_APPLICATIONS_PER_TICK, int(max_applications or 0)))
-+    applied: List[Dict[str, Any]] = []
-+    skipped: List[Dict[str, Any]] = []
-+    remaining_due: List[Dict[str, Any]] = []
-+
-+    for item in due_items:
-+        event_id = str(item.get("event_id") or "")
-+        queue_id = str(item.get("queue_id") or "")
-+        if len(applied) >= max_applications:
-+            remaining_due.append(item)
-+            skipped.append({"queue_id": queue_id, "event_id": event_id, "reason": "application_limit_reached"})
-+            continue
-+
-+        if has_story_event_been_applied(simulation_state, event_id):
-+            result = {
-+                "ok": True,
-+                "reason": "already_applied",
-+                "event_id": event_id,
-+            }
-+            add_story_event_queue_history(
-+                simulation_state,
-+                queue_id=queue_id,
-+                event_id=event_id,
-+                status="skipped",
-+                processed_turn=turn_index,
-+                reason="already_applied",
-+                result=result,
-+            )
-+            skipped.append({"queue_id": queue_id, "event_id": event_id, "reason": "already_applied"})
-+            continue
-+
-+        event = dict(_safe_dict(item.get("event")))
-+        result = apply_story_event(simulation_state, event, turn_index=turn_index)
-+        if result.get("ok"):
-+            applied.append(
-+                {
-+                    "queue_id": queue_id,
-+                    "event_id": event_id,
-+                    "result": result,
-+                }
-+            )
-+            add_story_event_queue_history(
-+                simulation_state,
-+                queue_id=queue_id,
-+                event_id=event_id,
-+                status="applied",
-+                processed_turn=turn_index,
-+                reason=result.get("reason") or "applied",
-+                result=result,
-+            )
-+        else:
-+            skipped.append(
-+                {
-+                    "queue_id": queue_id,
-+                    "event_id": event_id,
-+                    "reason": "apply_failed",
-+                    "result": result,
-+                }
-+            )
-+            add_story_event_queue_history(
-+                simulation_state,
-+                queue_id=queue_id,
-+                event_id=event_id,
-+                status="failed",
-+                processed_turn=turn_index,
-+                reason=result.get("reason") or "apply_failed",
-+                result=result,
-+            )
-+
-+    state = ensure_story_event_queue_state(simulation_state)
-+    state["pending"] = future_items + remaining_due
-+    simulation_state["story_event_queue_state"] = state
-+    ensure_story_event_queue_state(simulation_state)
-+    final_state = ensure_story_event_queue_state(simulation_state)
++    history_result = append_companion_offer_history(
++        simulation_state,
++        offer_id=offer_id,
++        npc_id=npc_id,
++        status="accepted",
++        turn_index=turn_index,
++        reason="accepted",
++        details={"party_result": party_result, "evolution_result": evolution_result},
++    )
 +    return {
 +        "ok": True,
-+        "reason": "processed",
-+        "mode": mode,
-+        "turn_index": int(turn_index or 0),
-+        "due_count": len(due_items),
-+        "applied": applied,
-+        "applied_count": len(applied),
-+        "skipped": skipped,
-+        "pending_count": len(final_state.get("pending") or []),
-+        "remaining": list(final_state.get("pending") or []),
++        "reason": "accepted",
++        "offer_id": offer_id,
++        "npc_id": npc_id,
++        "evaluation": evaluation,
++        "party_result": party_result,
++        "evolution_result": evolution_result,
++        "history_result": history_result,
++    }
++
++
++def refuse_companion_offer(
++    simulation_state: Dict[str, Any],
++    npc_id: str,
++    *,
++    arc_id: str = "",
++    turn_index: int = 0,
++    reason: str = "player_refused",
++) -> Dict[str, Any]:
++    context = build_companion_offer_context(simulation_state, npc_id, arc_id=arc_id)
++    offer_id = context["offer_id"]
++    if has_companion_offer_status(simulation_state, offer_id=offer_id, status="accepted"):
++        return {
++            "ok": False,
++            "reason": "offer_already_accepted",
++            "offer_id": offer_id,
++            "context": context,
++        }
++    evolution_result = apply_npc_evolution_delta(
++        simulation_state,
++        npc_id,
++        companion_offered=True,
++        flags={"companion_offer_refused": True},
++        source_event_id=offer_id,
++        turn_index=turn_index,
++    )
++    history_result = append_companion_offer_history(
++        simulation_state,
++        offer_id=offer_id,
++        npc_id=npc_id,
++        status="refused",
++        turn_index=turn_index,
++        reason=reason,
++        details={"evolution_result": evolution_result},
++    )
++    return {
++        "ok": True,
++        "reason": "refused",
++        "offer_id": offer_id,
++        "npc_id": npc_id,
++        "context": context,
++        "evolution_result": evolution_result,
++        "history_result": history_result,
 +    }
 *** End Patch
-Patch 2 — Integrate queue with campaign director runtime
-4. Patch src/app/rpg/campaign_director/runtime.py
-
-Add import:
-
+Patch 2 — Add NPC runtime context
+4. Add src/app/rpg/npc_runtime_context/__init__.py
 *** Begin Patch
-*** Update File: src/app/rpg/campaign_director/runtime.py
-@@
- from app.rpg.story_packs.definition_registries import (
-     get_story_event_definition,
-     list_escalation_rule_definitions,
- )
-+from app.rpg.story_event_queue.queue import process_story_event_queue
- from app.rpg.campaign_director.state import (
-*** End Patch
-
-In apply_campaign_director_tick, after escalation application and before record_campaign_director_tick(...), process the queue:
-
-*** Begin Patch
-*** Update File: src/app/rpg/campaign_director/runtime.py
-@@
-     for item in eligible:
-         if len(applied) >= max_applications:
-             skipped.append(
-                 {
-@@
-         else:
-             skipped.append(
-                 {
-                     "reason": "apply_failed",
-                     "rule_id": rule.get("rule_id"),
-                     "result_reason": result.get("reason"),
-                     "result": result,
-                 }
-             )
+*** Add File: src/app/rpg/npc_runtime_context/__init__.py
++"""Bounded deterministic NPC runtime context."""
 +
-+    queue_result = process_story_event_queue(
++from app.rpg.npc_runtime_context.context import build_npc_runtime_context
++
++__all__ = ["build_npc_runtime_context"]
+*** End Patch
+5. Add src/app/rpg/npc_runtime_context/context.py
+*** Begin Patch
+*** Add File: src/app/rpg/npc_runtime_context/context.py
++from __future__ import annotations
++
++from typing import Any, Dict
++
++from app.rpg.companions.offers import evaluate_companion_offer
++from app.rpg.companions.party import get_party_member
++from app.rpg.dialogue_context.arc_context import build_arc_dialogue_context
++from app.rpg.npc_evolution.state import get_npc_evolution
++from app.rpg.social.reputation import get_relationship
++
++
++def _safe_dict(value: Any) -> Dict[str, Any]:
++    return value if isinstance(value, dict) else {}
++
++
++def build_npc_runtime_context(
++    simulation_state: Dict[str, Any],
++    npc_id: str,
++    *,
++    arc_id: str = "",
++    topic_lore_id: str = "",
++) -> Dict[str, Any]:
++    npc_id = str(npc_id or "")
++    evolution = get_npc_evolution(simulation_state, npc_id) or {}
++    relationship = get_relationship(simulation_state, npc_id)
++    dialogue_context = build_arc_dialogue_context(
 +        simulation_state,
-+        mode=mode,
-+        turn_index=turn_index,
-+        max_applications=3,
++        npc_id,
++        arc_id=arc_id,
++        topic_lore_id=topic_lore_id,
 +    )
- 
-     record = record_campaign_director_tick(
-         simulation_state,
-         turn_index=turn_index,
-         mode=mode,
-         eligible_count=int(evaluation.get("eligible_count") or 0),
-@@
-             str(row.get("event_id") or "")
-             for row in applied
-             if row.get("event_id")
--        ],
-+        ]
-+        + [
-+            str(row.get("event_id") or "")
-+            for row in queue_result.get("applied") or []
-+            if isinstance(row, dict) and row.get("event_id")
-+        ],
-         skipped_reasons=skipped,
-     )
-     return {
-         "ok": True,
-         "reason": "applied",
-@@
-         "applied": applied,
-         "applied_count": len(applied),
-         "skipped": skipped,
-+        "queue_result": queue_result,
-         "evaluation": evaluation,
-         "record": record,
-     }
-*** End Patch
-
-This keeps existing director behavior and adds queued delayed consequence processing during safe director ticks.
-
-Patch 3 — Unit tests
-5. Add src/tests/rpg/story_event_queue/test_story_event_queue.py
-*** Begin Patch
-*** Add File: src/tests/rpg/story_event_queue/test_story_event_queue.py
-+from app.rpg.story_arcs.state import get_story_arc, start_story_arc
-+from app.rpg.story_event_queue.queue import enqueue_story_event, process_story_event_queue
-+from app.rpg.story_events.state import get_applied_story_event
-+
-+
-+def test_enqueue_story_event_does_not_apply_immediately():
-+    simulation_state = {}
-+    start_story_arc(simulation_state, "arc:x", stage="start")
-+    result = enqueue_story_event(
++    companion_offer = evaluate_companion_offer(
 +        simulation_state,
-+        {
-+            "event_id": "event:x",
-+            "arc_id": "arc:x",
-+            "effects": [{"type": "arc_stage_set", "arc_id": "arc:x", "stage": "done"}],
++        npc_id,
++        arc_id=arc_id,
++    )
++    party_member = get_party_member(simulation_state, npc_id)
++    return {
++        "ok": True,
++        "npc_id": npc_id,
++        "profession": evolution.get("profession") or "",
++        "role": evolution.get("role") or "",
++        "motivation": evolution.get("motivation") or "",
++        "active_arcs": list(evolution.get("active_arcs") or [])[:10],
++        "completed_arcs": list(evolution.get("completed_arcs") or [])[:10],
++        "personality": dict(_safe_dict(evolution.get("personality"))),
++        "flags": dict(_safe_dict(evolution.get("flags"))),
++        "relationship": {
++            "trust": int(relationship.get("trust") or 0),
++            "fear": int(relationship.get("fear") or 0),
++            "respect": int(relationship.get("respect") or 0),
++            "hostility": int(relationship.get("hostility") or 0),
++            "reputation": int(relationship.get("reputation") or 0),
 +        },
-+        enqueued_turn=1,
-+        delay_turns=2,
++        "dialogue_context": dialogue_context,
++        "companion_offer": {
++            "eligible": bool(companion_offer.get("eligible")),
++            "reason": companion_offer.get("reason"),
++            "offer_id": companion_offer.get("offer_id") or companion_offer.get("context", {}).get("offer_id"),
++        },
++        "party_member": party_member,
++        "bounded": {
++            "max_active_arcs": 10,
++            "max_completed_arcs": 10,
++        },
++    }
+*** End Patch
+Patch 3 — Unit tests
+6. Add src/tests/rpg/companions/test_companion_offers.py
+*** Begin Patch
+*** Add File: src/tests/rpg/companions/test_companion_offers.py
++from app.rpg.companions.offers import (
++    accept_companion_offer,
++    evaluate_companion_offer,
++    refuse_companion_offer,
++)
++from app.rpg.companions.party import get_party_member
++from app.rpg.npc_evolution.state import apply_npc_evolution_delta, get_npc_evolution, start_npc_arc
++from app.rpg.social.reputation import set_relationship_values
++
++
++def _eligible_bran_state():
++    simulation_state = {}
++    start_npc_arc(
++        simulation_state,
++        "bran",
++        "npc_arc:bran_revenge",
++        motivation="revenge_against_red_sashes",
++        role="companion",
++    )
++    apply_npc_evolution_delta(simulation_state, "bran", companion_eligible=True)
++    set_relationship_values(simulation_state, "bran", {"trust": 80, "hostility": 0})
++    return simulation_state
++
++
++def test_evaluate_companion_offer_eligible():
++    simulation_state = _eligible_bran_state()
++
++    result = evaluate_companion_offer(simulation_state, "bran")
++
++    assert result["ok"] is True
++    assert result["eligible"] is True
++    assert result["reason"] == "eligible"
++
++
++def test_evaluate_companion_offer_blocks_low_trust():
++    simulation_state = _eligible_bran_state()
++    set_relationship_values(simulation_state, "bran", {"trust": 20})
++
++    result = evaluate_companion_offer(simulation_state, "bran")
++
++    assert result["eligible"] is False
++    assert result["reason"] == "trust_too_low"
++
++
++def test_evaluate_companion_offer_blocks_hostility():
++    simulation_state = _eligible_bran_state()
++    set_relationship_values(simulation_state, "bran", {"hostility": 80})
++
++    result = evaluate_companion_offer(simulation_state, "bran")
++
++    assert result["eligible"] is False
++    assert result["reason"] == "hostility_too_high"
++
++
++def test_accept_companion_offer_adds_party_member_and_marks_evolution():
++    simulation_state = _eligible_bran_state()
++
++    result = accept_companion_offer(simulation_state, "bran", turn_index=5)
++
++    member = get_party_member(simulation_state, "bran")
++    evolution = get_npc_evolution(simulation_state, "bran")
++    assert result["ok"] is True
++    assert member["status"] == "active"
++    assert member["motivation"] == "revenge_against_red_sashes"
++    assert evolution["companion_offered"] is True
++    assert evolution["flags"]["joined_party"] is True
++
++
++def test_accept_companion_offer_apply_once():
++    simulation_state = _eligible_bran_state()
++
++    first = accept_companion_offer(simulation_state, "bran", turn_index=5)
++    second = accept_companion_offer(simulation_state, "bran", turn_index=6)
++
++    assert first["ok"] is True
++    assert second["ok"] is False
++    assert second["evaluation"]["reason"] == "already_party_member"
++
++
++def test_refuse_companion_offer_blocks_future_offer():
++    simulation_state = _eligible_bran_state()
++
++    refusal = refuse_companion_offer(simulation_state, "bran", turn_index=5)
++    later = evaluate_companion_offer(simulation_state, "bran")
++
++    assert refusal["ok"] is True
++    assert later["eligible"] is False
++    assert later["reason"] == "offer_previously_refused"
++    assert get_npc_evolution(simulation_state, "bran")["flags"]["companion_offer_refused"] is True
+*** End Patch
+7. Add src/tests/rpg/companions/test_party_state.py
+*** Begin Patch
+*** Add File: src/tests/rpg/companions/test_party_state.py
++import json
++
++from app.rpg.companions.party import (
++    add_party_member,
++    append_companion_offer_history,
++    normalize_party_state,
++)
++
++
++def test_party_state_adds_member():
++    simulation_state = {}
++    result = add_party_member(
++        simulation_state,
++        npc_id="bran",
++        role="companion",
++        motivation="revenge_against_red_sashes",
++        turn_index=3,
 +    )
 +
 +    assert result["ok"] is True
-+    assert result["queued"] is True
-+    assert get_story_arc(simulation_state, "arc:x")["stage"] == "start"
-+    assert get_applied_story_event(simulation_state, "event:x") is None
++    assert simulation_state["party_state"]["members"]["bran"]["status"] == "active"
 +
 +
-+def test_process_story_event_queue_waits_until_due_turn():
++def test_party_state_offer_history_bounded():
 +    simulation_state = {}
-+    start_story_arc(simulation_state, "arc:x", stage="start")
-+    enqueue_story_event(
-+        simulation_state,
-+        {
-+            "event_id": "event:x",
-+            "arc_id": "arc:x",
-+            "effects": [{"type": "arc_stage_set", "arc_id": "arc:x", "stage": "done"}],
-+        },
-+        enqueued_turn=1,
-+        delay_turns=2,
-+    )
-+
-+    early = process_story_event_queue(simulation_state, mode="idle", turn_index=2)
-+    due = process_story_event_queue(simulation_state, mode="idle", turn_index=3)
-+
-+    assert early["applied_count"] == 0
-+    assert due["applied_count"] == 1
-+    assert get_story_arc(simulation_state, "arc:x")["stage"] == "done"
-+
-+
-+def test_story_event_queue_does_not_process_in_unsafe_mode():
-+    simulation_state = {}
-+    start_story_arc(simulation_state, "arc:x", stage="start")
-+    enqueue_story_event(
-+        simulation_state,
-+        {
-+            "event_id": "event:x",
-+            "arc_id": "arc:x",
-+            "effects": [{"type": "arc_stage_set", "arc_id": "arc:x", "stage": "done"}],
-+        },
-+        enqueued_turn=1,
-+        due_turn=1,
-+    )
-+
-+    result = process_story_event_queue(simulation_state, mode="combat", turn_index=5)
-+
-+    assert result["reason"] == "unsafe_mode"
-+    assert result["applied_count"] == 0
-+    assert get_story_arc(simulation_state, "arc:x")["stage"] == "start"
-+
-+
-+def test_story_event_queue_prevents_duplicate_event_application():
-+    simulation_state = {}
-+    start_story_arc(simulation_state, "arc:x", stage="start")
-+    event = {
-+        "event_id": "event:x",
-+        "arc_id": "arc:x",
-+        "effects": [{"type": "arc_stage_set", "arc_id": "arc:x", "stage": "done"}],
-+    }
-+    first_enqueue = enqueue_story_event(simulation_state, event, enqueued_turn=1, due_turn=1)
-+    second_enqueue = enqueue_story_event(simulation_state, event, enqueued_turn=1, due_turn=1)
-+    first_process = process_story_event_queue(simulation_state, mode="idle", turn_index=1)
-+    second_process = process_story_event_queue(simulation_state, mode="idle", turn_index=2)
-+
-+    assert first_enqueue["queued"] is True
-+    assert second_enqueue["queued"] is False
-+    assert first_process["applied_count"] == 1
-+    assert second_process["applied_count"] == 0
-+
-+
-+def test_story_event_queue_records_failed_event_history():
-+    simulation_state = {}
-+    enqueue_story_event(
-+        simulation_state,
-+        {
-+            "event_id": "event:bad",
-+            "arc_id": "arc:missing",
-+            "effects": [{"type": "arc_stage_set", "arc_id": "arc:missing", "stage": "done"}],
-+        },
-+        enqueued_turn=1,
-+        due_turn=1,
-+    )
-+
-+    result = process_story_event_queue(simulation_state, mode="idle", turn_index=1)
-+    history = simulation_state["story_event_queue_state"]["history"]
-+
-+    assert result["applied_count"] == 0
-+    assert history[0]["status"] == "failed"
-+    assert history[0]["event_id"] == "event:bad"
-*** End Patch
-6. Add src/tests/rpg/story_event_queue/test_story_event_queue_definitions.py
-*** Begin Patch
-*** Add File: src/tests/rpg/story_event_queue/test_story_event_queue_definitions.py
-+from app.rpg.story_arcs.state import get_story_arc
-+from app.rpg.story_event_queue.queue import (
-+    enqueue_story_event_definition,
-+    process_story_event_queue,
-+)
-+from app.rpg.story_packs.importer import import_story_pack
-+
-+
-+def _pack():
-+    return {
-+        "proposal_version": "story_proposal_v1",
-+        "proposal_type": "story_pack",
-+        "proposal_id": "queue_pack",
-+        "title": "Queue Pack",
-+        "lore_entries": [{"lore_id": "lore:x", "title": "X"}],
-+        "story_arcs": [{"arc_id": "arc:x", "title": "X", "stage": "start", "pressure": 10, "linked_lore": ["lore:x"]}],
-+        "story_events": [
-+            {
-+                "event_id": "event:x",
-+                "arc_id": "arc:x",
-+                "effects": [{"type": "arc_stage_set", "arc_id": "arc:x", "stage": "done"}],
-+            }
-+        ],
-+        "escalation_rules": [],
-+    }
-+
-+
-+def test_enqueue_story_event_definition_from_registry():
-+    simulation_state = {}
-+    import_story_pack(simulation_state, _pack())
-+
-+    enqueue = enqueue_story_event_definition(
-+        simulation_state,
-+        "event:x",
-+        enqueued_turn=1,
-+        due_turn=1,
-+        source="test",
-+    )
-+    process = process_story_event_queue(simulation_state, mode="idle", turn_index=1)
-+
-+    assert enqueue["ok"] is True
-+    assert process["applied_count"] == 1
-+    assert get_story_arc(simulation_state, "arc:x")["stage"] == "done"
-+
-+
-+def test_enqueue_missing_story_event_definition_rejected():
-+    result = enqueue_story_event_definition({}, "event:missing")
-+
-+    assert result["ok"] is False
-+    assert result["reason"] == "story_event_definition_missing"
-*** End Patch
-7. Add src/tests/rpg/story_event_queue/test_story_event_queue_state.py
-*** Begin Patch
-*** Add File: src/tests/rpg/story_event_queue/test_story_event_queue_state.py
-+import json
-+
-+from app.rpg.story_event_queue.queue import enqueue_story_event
-+from app.rpg.story_event_queue.state import normalize_story_event_queue_state
-+
-+
-+def test_story_event_queue_state_json_roundtrip():
-+    simulation_state = {}
-+    enqueue_story_event(
-+        simulation_state,
-+        {"event_id": "event:x", "effects": []},
-+        enqueued_turn=1,
-+        due_turn=3,
-+    )
-+
-+    encoded = json.dumps(simulation_state["story_event_queue_state"], sort_keys=True)
-+    decoded = json.loads(encoded)
-+    normalized = normalize_story_event_queue_state(decoded)
-+
-+    assert normalized["pending"][0]["event_id"] == "event:x"
-+    assert normalized["pending"][0]["due_turn"] == 3
-+
-+
-+def test_story_event_queue_pending_is_bounded():
-+    simulation_state = {}
-+    for i in range(250):
-+        enqueue_story_event(
++    for i in range(130):
++        append_companion_offer_history(
 +            simulation_state,
-+            {"event_id": f"event:{i}", "effects": []},
-+            enqueued_turn=1,
-+            due_turn=i,
++            offer_id=f"offer:{i}",
++            npc_id="bran",
++            status="blocked",
++            turn_index=i,
 +        )
 +
-+    assert len(simulation_state["story_event_queue_state"]["pending"]) <= 200
++    assert len(simulation_state["party_state"]["companion_offer_history"]) == 100
++
++
++def test_party_state_json_roundtrip():
++    simulation_state = {}
++    add_party_member(simulation_state, npc_id="bran", role="companion", turn_index=3)
++
++    encoded = json.dumps(simulation_state["party_state"], sort_keys=True)
++    decoded = json.loads(encoded)
++    normalized = normalize_party_state(decoded)
++
++    assert normalized["members"]["bran"]["role"] == "companion"
++    assert normalized["members"]["bran"]["joined_turn"] == 3
 *** End Patch
-Patch 4 — Manual checks/setup
-8. Add src/tests/rpg/manual/story_event_queue_m25_m27_checks.py
+8. Add src/tests/rpg/npc_runtime_context/test_npc_runtime_context.py
 *** Begin Patch
-*** Add File: src/tests/rpg/manual/story_event_queue_m25_m27_checks.py
+*** Add File: src/tests/rpg/npc_runtime_context/test_npc_runtime_context.py
++from app.rpg.npc_evolution.state import apply_npc_evolution_delta, start_npc_arc
++from app.rpg.npc_runtime_context.context import build_npc_runtime_context
++from app.rpg.social.reputation import set_relationship_values
++
++
++def test_npc_runtime_context_exposes_arc_evolution_and_offer():
++    simulation_state = {}
++    start_npc_arc(
++        simulation_state,
++        "bran",
++        "npc_arc:bran_revenge",
++        motivation="revenge_against_red_sashes",
++        role="companion",
++        profession="former_innkeeper",
++    )
++    apply_npc_evolution_delta(
++        simulation_state,
++        "bran",
++        personality_deltas={"vengeful": 20},
++        companion_eligible=True,
++    )
++    set_relationship_values(simulation_state, "bran", {"trust": 80})
++
++    context = build_npc_runtime_context(simulation_state, "bran")
++
++    assert context["ok"] is True
++    assert context["profession"] == "former_innkeeper"
++    assert context["motivation"] == "revenge_against_red_sashes"
++    assert context["personality"]["vengeful"] == 20
++    assert context["companion_offer"]["eligible"] is True
++
++
++def test_npc_runtime_context_bounded():
++    simulation_state = {}
++    for i in range(20):
++        start_npc_arc(simulation_state, "bran", f"npc_arc:{i}")
++
++    context = build_npc_runtime_context(simulation_state, "bran")
++
++    assert len(context["active_arcs"]) <= context["bounded"]["max_active_arcs"]
+*** End Patch
+Patch 4 — Manual companion checks/setup
+9. Add src/tests/rpg/manual/companion_m28_m30_checks.py
+*** Begin Patch
+*** Add File: src/tests/rpg/manual/companion_m28_m30_checks.py
 +from __future__ import annotations
 +
 +from typing import Any, Dict, List
 +
-+from app.rpg.story_arcs.state import get_story_arc
-+from app.rpg.story_event_queue.queue import (
-+    enqueue_story_event,
-+    enqueue_story_event_definition,
-+    process_story_event_queue,
++from app.rpg.companions.offers import (
++    accept_companion_offer,
++    build_companion_offer_context,
++    evaluate_companion_offer,
++    refuse_companion_offer,
 +)
-+from app.rpg.story_events.state import get_applied_story_event
++from app.rpg.companions.party import get_party_member
++from app.rpg.npc_runtime_context.context import build_npc_runtime_context
 +
 +
 +def _safe_dict(value: Any) -> Dict[str, Any]:
@@ -782,12 +835,16 @@ Patch 4 — Manual checks/setup
 +        candidate = _safe_dict(candidate)
 +        if candidate and not first_non_empty:
 +            first_non_empty = candidate
-+        if isinstance(candidate.get("story_event_queue_state"), dict):
++        if (
++            isinstance(candidate.get("npc_evolution_state"), dict)
++            or isinstance(candidate.get("party_state"), dict)
++            or isinstance(candidate.get("social_state"), dict)
++        ):
 +            return candidate
 +    return first_non_empty
 +
 +
-+def run_story_event_queue_m25_m27_check(
++def run_companion_m28_m30_check(
 +    *,
 +    check: Dict[str, Any],
 +    result: Dict[str, Any],
@@ -796,169 +853,180 @@ Patch 4 — Manual checks/setup
 +    simulation_state = _extract_simulation_state(result=result, session=session)
 +    check_type = str(check.get("type") or "")
 +
-+    if check_type == "story_event_queue_enqueue":
-+        if check.get("definition_event_id"):
-+            enqueue_result = enqueue_story_event_definition(
-+                simulation_state,
-+                str(check.get("definition_event_id") or ""),
-+                source=str(check.get("source") or "manual_check"),
-+                enqueued_turn=int(check.get("enqueued_turn") or 1),
-+                due_turn=check.get("due_turn"),
-+                delay_turns=int(check.get("delay_turns") or 0),
-+                priority=int(check.get("priority") or 50),
-+                reason=str(check.get("reason") or ""),
-+            )
-+        else:
-+            enqueue_result = enqueue_story_event(
-+                simulation_state,
-+                _safe_dict(check.get("event")),
-+                source=str(check.get("source") or "manual_check"),
-+                enqueued_turn=int(check.get("enqueued_turn") or 1),
-+                due_turn=check.get("due_turn"),
-+                delay_turns=int(check.get("delay_turns") or 0),
-+                priority=int(check.get("priority") or 50),
-+                reason=str(check.get("reason") or ""),
-+            )
-+        expected_ok = check.get("expected_ok")
-+        expected_queued = check.get("expected_queued")
-+        ok = True
-+        if expected_ok is not None:
-+            ok = ok and enqueue_result.get("ok") is bool(expected_ok)
-+        if expected_queued is not None:
-+            ok = ok and enqueue_result.get("queued") is bool(expected_queued)
-+        return {
-+            "check_type": check_type,
-+            "ok": ok,
-+            "enqueue_result": enqueue_result,
-+            "expected_ok": expected_ok,
-+            "expected_queued": expected_queued,
-+        }
-+
-+    if check_type == "story_event_queue_process":
-+        process_result = process_story_event_queue(
++    if check_type == "companion_offer_evaluate":
++        npc_id = str(check.get("npc_id") or "")
++        evaluation = evaluate_companion_offer(
 +            simulation_state,
-+            mode=str(check.get("mode") or "idle"),
-+            turn_index=int(check.get("turn_index") or 1),
-+            max_applications=int(check.get("max_applications") or 3),
++            npc_id,
++            arc_id=str(check.get("arc_id") or ""),
++            min_trust=int(check.get("min_trust") or 70),
++            max_hostility=int(check.get("max_hostility") or 40),
 +        )
-+        expected_applied_count = check.get("expected_applied_count")
++        expected_eligible = check.get("expected_eligible")
 +        expected_reason = check.get("expected_reason")
 +        ok = True
-+        if expected_applied_count is not None:
-+            ok = ok and int(process_result.get("applied_count") or 0) == int(expected_applied_count)
++        if expected_eligible is not None:
++            ok = ok and evaluation.get("eligible") is bool(expected_eligible)
 +        if expected_reason:
-+            ok = ok and process_result.get("reason") == expected_reason
++            ok = ok and evaluation.get("reason") == expected_reason
 +        return {
 +            "check_type": check_type,
 +            "ok": ok,
-+            "process_result": process_result,
-+            "expected_applied_count": expected_applied_count,
++            "npc_id": npc_id,
++            "evaluation": evaluation,
++            "expected_eligible": expected_eligible,
 +            "expected_reason": expected_reason,
 +        }
 +
-+    if check_type == "story_event_queue_pending":
-+        state = _safe_dict(simulation_state.get("story_event_queue_state"))
-+        pending = state.get("pending") or []
-+        expected_count = check.get("expected_count")
-+        expected_event_id = check.get("expected_event_id")
-+        ok = True
-+        if expected_count is not None:
-+            ok = ok and len(pending) == int(expected_count)
-+        if expected_event_id:
-+            ok = ok and expected_event_id in [row.get("event_id") for row in pending if isinstance(row, dict)]
-+        return {
-+            "check_type": check_type,
-+            "ok": ok,
-+            "pending": pending,
-+            "expected_count": expected_count,
-+            "expected_event_id": expected_event_id,
-+        }
-+
-+    if check_type == "story_event_queue_history":
-+        state = _safe_dict(simulation_state.get("story_event_queue_state"))
-+        history = state.get("history") or []
-+        expected_event_id = check.get("expected_event_id")
-+        expected_status = check.get("expected_status")
-+        rows = [
-+            row
-+            for row in history
-+            if isinstance(row, dict)
-+            and (not expected_event_id or row.get("event_id") == expected_event_id)
-+            and (not expected_status or row.get("status") == expected_status)
-+        ]
-+        return {
-+            "check_type": check_type,
-+            "ok": bool(rows),
-+            "expected_event_id": expected_event_id,
-+            "expected_status": expected_status,
-+            "rows": rows,
-+            "history": history[-20:],
-+        }
-+
-+    if check_type == "story_event_queue_arc":
-+        arc_id = str(check.get("arc_id") or "")
-+        arc = get_story_arc(simulation_state, arc_id)
++    if check_type == "companion_offer_context":
++        npc_id = str(check.get("npc_id") or "")
++        context = build_companion_offer_context(
++            simulation_state,
++            npc_id,
++            arc_id=str(check.get("arc_id") or ""),
++        )
 +        expected = _safe_dict(check.get("expected"))
 +        failures = {}
 +        for key, expected_value in expected.items():
-+            actual = _safe_dict(arc).get(key)
++            actual = context.get(key)
 +            if actual != expected_value:
 +                failures[key] = {"expected": expected_value, "actual": actual}
 +        return {
 +            "check_type": check_type,
-+            "ok": bool(arc) and not failures,
-+            "arc_id": arc_id,
-+            "arc": arc,
++            "ok": not failures,
++            "npc_id": npc_id,
++            "context": context,
 +            "failures": failures,
 +        }
 +
-+    if check_type == "story_event_queue_event_applied":
-+        event_id = str(check.get("event_id") or "")
-+        applied = get_applied_story_event(simulation_state, event_id)
-+        expected_applied = check.get("expected_applied", True)
++    if check_type == "companion_offer_accept":
++        npc_id = str(check.get("npc_id") or "")
++        accept_result = accept_companion_offer(
++            simulation_state,
++            npc_id,
++            arc_id=str(check.get("arc_id") or ""),
++            turn_index=int(check.get("turn_index") or 1),
++            min_trust=int(check.get("min_trust") or 70),
++            max_hostility=int(check.get("max_hostility") or 40),
++        )
++        expected_ok = check.get("expected_ok")
++        expected_reason = check.get("expected_reason")
++        ok = True
++        if expected_ok is not None:
++            ok = ok and accept_result.get("ok") is bool(expected_ok)
++        if expected_reason:
++            ok = ok and accept_result.get("reason") == expected_reason
 +        return {
 +            "check_type": check_type,
-+            "ok": bool(applied) is bool(expected_applied),
-+            "event_id": event_id,
-+            "expected_applied": expected_applied,
-+            "applied": applied,
++            "ok": ok,
++            "npc_id": npc_id,
++            "accept_result": accept_result,
++            "expected_ok": expected_ok,
++            "expected_reason": expected_reason,
++        }
++
++    if check_type == "companion_offer_refuse":
++        npc_id = str(check.get("npc_id") or "")
++        refuse_result = refuse_companion_offer(
++            simulation_state,
++            npc_id,
++            arc_id=str(check.get("arc_id") or ""),
++            turn_index=int(check.get("turn_index") or 1),
++            reason=str(check.get("reason") or "player_refused"),
++        )
++        expected_ok = check.get("expected_ok")
++        ok = True
++        if expected_ok is not None:
++            ok = ok and refuse_result.get("ok") is bool(expected_ok)
++        return {
++            "check_type": check_type,
++            "ok": ok,
++            "npc_id": npc_id,
++            "refuse_result": refuse_result,
++            "expected_ok": expected_ok,
++        }
++
++    if check_type == "party_member":
++        npc_id = str(check.get("npc_id") or "")
++        member = get_party_member(simulation_state, npc_id)
++        expected_present = check.get("expected_present", True)
++        expected = _safe_dict(check.get("expected"))
++        failures = {}
++        for key, expected_value in expected.items():
++            actual = _safe_dict(member).get(key)
++            if actual != expected_value:
++                failures[key] = {"expected": expected_value, "actual": actual}
++        return {
++            "check_type": check_type,
++            "ok": (bool(member) is bool(expected_present)) and not failures,
++            "npc_id": npc_id,
++            "member": member,
++            "expected_present": expected_present,
++            "failures": failures,
++        }
++
++    if check_type == "npc_runtime_context":
++        npc_id = str(check.get("npc_id") or "")
++        context = build_npc_runtime_context(
++            simulation_state,
++            npc_id,
++            arc_id=str(check.get("arc_id") or ""),
++            topic_lore_id=str(check.get("topic_lore_id") or ""),
++        )
++        expected = _safe_dict(check.get("expected"))
++        failures = {}
++        for key, expected_value in expected.items():
++            actual = context.get(key)
++            if actual != expected_value:
++                failures[key] = {"expected": expected_value, "actual": actual}
++        if "expected_companion_eligible" in check:
++            actual = context.get("companion_offer", {}).get("eligible")
++            expected_value = bool(check.get("expected_companion_eligible"))
++            if actual is not expected_value:
++                failures["companion_offer.eligible"] = {"expected": expected_value, "actual": actual}
++        return {
++            "check_type": check_type,
++            "ok": not failures,
++            "npc_id": npc_id,
++            "context": context,
++            "failures": failures,
 +        }
 +
 +    return {
 +        "check_type": check_type,
 +        "ok": False,
-+        "error": f"unknown_story_event_queue_m25_m27_check_type:{check_type}",
++        "error": f"unknown_companion_m28_m30_check_type:{check_type}",
 +    }
 +
 +
-+def run_story_event_queue_m25_m27_checks(
++def run_companion_m28_m30_checks(
 +    *,
 +    checks: List[Dict[str, Any]],
 +    result: Dict[str, Any],
 +    session: Dict[str, Any] | None = None,
 +) -> List[Dict[str, Any]]:
 +    return [
-+        run_story_event_queue_m25_m27_check(check=check, result=result, session=session)
++        run_companion_m28_m30_check(check=check, result=result, session=session)
 +        for check in checks
 +    ]
 *** End Patch
-9. Patch src/tests/rpg/manual/scenario_setup.py
+10. Patch src/tests/rpg/manual/scenario_setup.py
 
-Add import:
+Add imports:
 
 *** Begin Patch
 *** Update File: src/tests/rpg/manual/scenario_setup.py
 @@
- from app.rpg.campaign_director.runtime import apply_campaign_director_tick
-+from app.rpg.story_event_queue.queue import (
-+    enqueue_story_event,
-+    enqueue_story_event_definition,
-+    process_story_event_queue,
-+)
+ from app.rpg.story_event_queue.queue import (
+     enqueue_story_event,
+     enqueue_story_event_definition,
+     process_story_event_queue,
+ )
++from app.rpg.companions.offers import accept_companion_offer, refuse_companion_offer
  from tests.rpg.manual.memory_fixtures import build_manual_memory_event
 *** End Patch
 
-Add setup blocks before setup_campaign_director_ticks or before manual inventory:
+Add setup block after setup_npc_evolution_transitions:
 
 *** Begin Patch
 *** Update File: src/tests/rpg/manual/scenario_setup.py
@@ -973,67 +1041,49 @@ Add setup blocks before setup_campaign_director_ticks or before manual inventory
                  ),
              )
 +
-+    for item in scenario.get("setup_story_event_queue") or []:
-+        if isinstance(item, dict):
-+            if item.get("definition_event_id"):
-+                enqueue_story_event_definition(
++    for offer in scenario.get("setup_companion_offer_actions") or []:
++        if isinstance(offer, dict):
++            action = str(offer.get("action") or "")
++            if action == "accept":
++                accept_companion_offer(
 +                    simulation_state,
-+                    str(item.get("definition_event_id") or ""),
-+                    source=str(item.get("source") or "scenario_setup"),
-+                    enqueued_turn=int(item.get("enqueued_turn") or scenario.get("setup_turn_index") or 1),
-+                    due_turn=item.get("due_turn"),
-+                    delay_turns=int(item.get("delay_turns") or 0),
-+                    priority=int(item.get("priority") or 50),
-+                    reason=str(item.get("reason") or ""),
-+                    metadata=item.get("metadata"),
++                    str(offer.get("npc_id") or ""),
++                    arc_id=str(offer.get("arc_id") or ""),
++                    turn_index=int(offer.get("turn_index") or scenario.get("setup_turn_index") or 1),
++                    min_trust=int(offer.get("min_trust") or 70),
++                    max_hostility=int(offer.get("max_hostility") or 40),
 +                )
-+            else:
-+                enqueue_story_event(
++            elif action == "refuse":
++                refuse_companion_offer(
 +                    simulation_state,
-+                    item.get("event") or item,
-+                    source=str(item.get("source") or "scenario_setup"),
-+                    enqueued_turn=int(item.get("enqueued_turn") or scenario.get("setup_turn_index") or 1),
-+                    due_turn=item.get("due_turn"),
-+                    delay_turns=int(item.get("delay_turns") or 0),
-+                    priority=int(item.get("priority") or 50),
-+                    reason=str(item.get("reason") or ""),
-+                    metadata=item.get("metadata"),
++                    str(offer.get("npc_id") or ""),
++                    arc_id=str(offer.get("arc_id") or ""),
++                    turn_index=int(offer.get("turn_index") or scenario.get("setup_turn_index") or 1),
++                    reason=str(offer.get("reason") or "player_refused"),
 +                )
-+
-+    for tick in scenario.get("setup_story_event_queue_process") or []:
-+        if isinstance(tick, dict):
-+            process_story_event_queue(
-+                simulation_state,
-+                mode=str(tick.get("mode") or "idle"),
-+                turn_index=int(tick.get("turn_index") or scenario.get("setup_turn_index") or 1),
-+                max_applications=int(tick.get("max_applications") or 3),
-+            )
  
-     for tick in scenario.get("setup_campaign_director_ticks") or []:
-         if isinstance(tick, dict):
-             apply_campaign_director_tick(
+     for item in scenario.get("setup_story_event_queue") or []:
+         if isinstance(item, dict):
 *** End Patch
-10. Patch src/tests/rpg/manual/scenario_execution.py
+11. Patch src/tests/rpg/manual/scenario_execution.py
 
 Add import:
 
 *** Begin Patch
 *** Update File: src/tests/rpg/manual/scenario_execution.py
 @@
- from tests.rpg.manual.campaign_director_m22_m24_checks import (
-     run_campaign_director_m22_m24_checks,
+ from tests.rpg.manual.story_event_queue_m25_m27_checks import (
+     run_story_event_queue_m25_m27_checks,
  )
-+from tests.rpg.manual.story_event_queue_m25_m27_checks import (
-+    run_story_event_queue_m25_m27_checks,
-+)
++from tests.rpg.manual.companion_m28_m30_checks import run_companion_m28_m30_checks
 *** End Patch
 
-Add check block after campaign director checks:
+Add check block after M25-M27 queue checks:
 
 *** Begin Patch
 *** Update File: src/tests/rpg/manual/scenario_execution.py
 @@
-         if campaign_director_m22_m24_checks:
+         if story_event_queue_m25_m27_checks:
              current_session = {}
              try:
                  current_session = _ensure_manual_session(session_id)
@@ -1042,29 +1092,33 @@ Add check block after campaign director checks:
                          + str(check_result.get("error") or "")
                      )
 +
-+        story_event_queue_m25_m27_checks = [
++        companion_m28_m30_checks = [
 +            check
 +            for check in checks
 +            if isinstance(check, dict)
-+            and str(check.get("type") or "").startswith("story_event_queue")
++            and (
++                str(check.get("type") or "").startswith("companion_")
++                or str(check.get("type") or "") == "party_member"
++                or str(check.get("type") or "") == "npc_runtime_context"
++            )
 +        ]
-+        if story_event_queue_m25_m27_checks:
++        if companion_m28_m30_checks:
 +            current_session = {}
 +            try:
 +                current_session = _ensure_manual_session(session_id)
 +            except Exception:
 +                current_session = session
 +
-+            story_event_queue_m25_m27_check_results = run_story_event_queue_m25_m27_checks(
-+                checks=story_event_queue_m25_m27_checks,
++            companion_m28_m30_check_results = run_companion_m28_m30_checks(
++                checks=companion_m28_m30_checks,
 +                result=turn_record.get("result") or turn_record,
 +                session=current_session,
 +            )
-+            turn_record["story_event_queue_m25_m27_check_results"] = story_event_queue_m25_m27_check_results
-+            for check_result in story_event_queue_m25_m27_check_results:
++            turn_record["companion_m28_m30_check_results"] = companion_m28_m30_check_results
++            for check_result in companion_m28_m30_check_results:
 +                if not check_result.get("ok"):
 +                    turn_record.setdefault("scenario_warnings", []).append(
-+                        "story_event_queue_m25_m27_check_failed:"
++                        "companion_m28_m30_check_failed:"
 +                        + str(scenario_name)
 +                        + ":turn_"
 +                        + str(turn_index)
@@ -1076,456 +1130,353 @@ Add check block after campaign director checks:
  
          turn_summaries.append(turn_record)
 *** End Patch
-11. Patch src/tests/rpg/manual/summary_sanitizer.py
+12. Patch src/tests/rpg/manual/summary_sanitizer.py
 
 Add sanitizer block:
 
 *** Begin Patch
 *** Update File: src/tests/rpg/manual/summary_sanitizer.py
 @@
-     campaign_director_m22_m24_check_results = turn.get("campaign_director_m22_m24_check_results")
-     if isinstance(campaign_director_m22_m24_check_results, list):
-         sanitized["campaign_director_m22_m24_check_results"] = [
+     story_event_queue_m25_m27_check_results = turn.get("story_event_queue_m25_m27_check_results")
+     if isinstance(story_event_queue_m25_m27_check_results, list):
+         sanitized["story_event_queue_m25_m27_check_results"] = [
 @@
              if isinstance(item, dict)
          ]
 +
-+    story_event_queue_m25_m27_check_results = turn.get("story_event_queue_m25_m27_check_results")
-+    if isinstance(story_event_queue_m25_m27_check_results, list):
-+        sanitized["story_event_queue_m25_m27_check_results"] = [
++    companion_m28_m30_check_results = turn.get("companion_m28_m30_check_results")
++    if isinstance(companion_m28_m30_check_results, list):
++        sanitized["companion_m28_m30_check_results"] = [
 +            {
 +                "check_type": item.get("check_type"),
 +                "ok": item.get("ok"),
-+                "enqueue_result": item.get("enqueue_result"),
-+                "process_result": item.get("process_result"),
-+                "pending": item.get("pending"),
-+                "history": item.get("history"),
-+                "rows": item.get("rows"),
-+                "arc_id": item.get("arc_id"),
-+                "arc": item.get("arc"),
-+                "event_id": item.get("event_id"),
-+                "applied": item.get("applied"),
-+                "expected_count": item.get("expected_count"),
-+                "expected_event_id": item.get("expected_event_id"),
-+                "expected_status": item.get("expected_status"),
-+                "expected_applied": item.get("expected_applied"),
++                "npc_id": item.get("npc_id"),
++                "evaluation": item.get("evaluation"),
++                "context": item.get("context"),
++                "accept_result": item.get("accept_result"),
++                "refuse_result": item.get("refuse_result"),
++                "member": item.get("member"),
++                "expected_eligible": item.get("expected_eligible"),
++                "expected_reason": item.get("expected_reason"),
++                "expected_ok": item.get("expected_ok"),
++                "expected_present": item.get("expected_present"),
 +                "failures": item.get("failures"),
 +                "error": item.get("error"),
 +            }
-+            for item in story_event_queue_m25_m27_check_results[:50]
++            for item in companion_m28_m30_check_results[:50]
 +            if isinstance(item, dict)
 +        ]
  
      return sanitized
 *** End Patch
 Patch 5 — Manual scenarios
-12. Add src/tests/rpg/manual/scenarios/story_event_queue_m25_m27.py
+13. Add src/tests/rpg/manual/scenarios/companion_m28_m30.py
 *** Begin Patch
-*** Add File: src/tests/rpg/manual/scenarios/story_event_queue_m25_m27.py
+*** Add File: src/tests/rpg/manual/scenarios/companion_m28_m30.py
 +from __future__ import annotations
 +
 +from typing import Any, Dict
 +
 +
-+def _queue_pack() -> Dict[str, Any]:
++def _make_bran_eligible_setup(trust: int = 80, hostility: int = 0) -> Dict[str, Any]:
 +    return {
-+        "proposal_version": "story_proposal_v1",
-+        "proposal_type": "story_pack",
-+        "proposal_id": "queue_bandit_pack",
-+        "title": "Queue Bandit Pack",
-+        "lore_entries": [
-+            {"lore_id": "lore:red_sashes", "title": "The Red Sashes", "truth_status": "rumor"}
-+        ],
-+        "story_arcs": [
++        "setup_social_state": {"relationships": {"bran": {"trust": trust, "hostility": hostility}}},
++        "setup_npc_evolution_transitions": [
 +            {
-+                "arc_id": "arc:bandit_pressure",
-+                "title": "Bandit Pressure",
-+                "status": "active",
-+                "stage": "rumors",
-+                "pressure": 60,
-+                "linked_lore": ["lore:red_sashes"],
-+            }
-+        ],
-+        "story_events": [
-+            {
-+                "event_id": "event:delayed_bandit_attack",
-+                "arc_id": "arc:bandit_pressure",
-+                "kind": "consequence",
-+                "summary": "The delayed bandit attack lands.",
-+                "effects": [
-+                    {"type": "arc_stage_set", "arc_id": "arc:bandit_pressure", "stage": "attack"},
-+                    {"type": "world_event_emit"},
-+                ],
++                "action": "start_arc",
++                "npc_id": "bran",
++                "arc_id": "npc_arc:bran_revenge",
++                "motivation": "revenge_against_red_sashes",
++                "role": "companion",
++                "profession": "former_innkeeper",
 +            },
 +            {
-+                "event_id": "event:bad_missing_arc",
-+                "arc_id": "arc:missing",
-+                "effects": [
-+                    {"type": "arc_stage_set", "arc_id": "arc:missing", "stage": "bad"}
-+                ],
++                "action": "evolve",
++                "npc_id": "bran",
++                "companion_eligible": True,
++                "personality_deltas": {"vengeful": 20},
 +            },
 +        ],
-+        "escalation_rules": [],
 +    }
 +
 +
-+STORY_EVENT_QUEUE_M25_M27_SCENARIOS: Dict[str, Dict[str, Any]] = {
-+    "story_event_queue_enqueues_without_applying": {
-+        "setup_story_packs": [{"proposal": _queue_pack(), "turn_index": 1}],
-+        "setup_story_event_queue": [
-+            {
-+                "definition_event_id": "event:delayed_bandit_attack",
-+                "enqueued_turn": 1,
-+                "delay_turns": 2,
-+                "source": "manual",
-+            }
-+        ],
-+        "turns": ["I inspect the delayed consequence before it fires."],
++COMPANION_M28_M30_SCENARIOS: Dict[str, Dict[str, Any]] = {
++    "companion_offer_available_when_arc_and_trust_ready": {
++        **_make_bran_eligible_setup(),
++        "turns": ["I ask Bran if he wants to travel with me."],
 +        "checks": [
 +            {
-+                "type": "story_event_queue_pending",
-+                "expected_count": 1,
-+                "expected_event_id": "event:delayed_bandit_attack",
++                "type": "companion_offer_evaluate",
++                "npc_id": "bran",
++                "expected_eligible": True,
++                "expected_reason": "eligible",
 +            },
 +            {
-+                "type": "story_event_queue_arc",
-+                "arc_id": "arc:bandit_pressure",
-+                "expected": {"stage": "rumors"},
-+            },
-+            {
-+                "type": "story_event_queue_event_applied",
-+                "event_id": "event:delayed_bandit_attack",
-+                "expected_applied": False,
-+            },
-+        ],
-+    },
-+    "story_event_queue_waits_until_due_turn": {
-+        "setup_story_packs": [{"proposal": _queue_pack(), "turn_index": 1}],
-+        "setup_story_event_queue": [
-+            {
-+                "definition_event_id": "event:delayed_bandit_attack",
-+                "enqueued_turn": 1,
-+                "due_turn": 4,
-+                "source": "manual",
-+            }
-+        ],
-+        "setup_story_event_queue_process": [
-+            {"mode": "idle", "turn_index": 3}
-+        ],
-+        "turns": ["I check that the event is still waiting."],
-+        "checks": [
-+            {
-+                "type": "story_event_queue_pending",
-+                "expected_count": 1,
-+                "expected_event_id": "event:delayed_bandit_attack",
-+            },
-+            {
-+                "type": "story_event_queue_arc",
-+                "arc_id": "arc:bandit_pressure",
-+                "expected": {"stage": "rumors"},
-+            },
-+        ],
-+    },
-+    "story_event_queue_applies_when_due": {
-+        "setup_story_packs": [{"proposal": _queue_pack(), "turn_index": 1}],
-+        "setup_story_event_queue": [
-+            {
-+                "definition_event_id": "event:delayed_bandit_attack",
-+                "enqueued_turn": 1,
-+                "due_turn": 3,
-+                "source": "manual",
-+            }
-+        ],
-+        "setup_story_event_queue_process": [
-+            {"mode": "idle", "turn_index": 3}
-+        ],
-+        "turns": ["I inspect the applied delayed bandit attack."],
-+        "checks": [
-+            {
-+                "type": "story_event_queue_event_applied",
-+                "event_id": "event:delayed_bandit_attack",
-+                "expected_applied": True,
-+            },
-+            {
-+                "type": "story_event_queue_arc",
-+                "arc_id": "arc:bandit_pressure",
-+                "expected": {"stage": "attack"},
-+            },
-+            {
-+                "type": "story_event_queue_history",
-+                "expected_event_id": "event:delayed_bandit_attack",
-+                "expected_status": "applied",
-+            },
-+        ],
-+    },
-+    "story_event_queue_does_not_process_in_combat_mode": {
-+        "setup_story_packs": [{"proposal": _queue_pack(), "turn_index": 1}],
-+        "setup_story_event_queue": [
-+            {
-+                "definition_event_id": "event:delayed_bandit_attack",
-+                "enqueued_turn": 1,
-+                "due_turn": 1,
-+                "source": "manual",
-+            }
-+        ],
-+        "setup_story_event_queue_process": [
-+            {"mode": "combat", "turn_index": 2}
-+        ],
-+        "turns": ["I check that combat blocks queued story consequences."],
-+        "checks": [
-+            {
-+                "type": "story_event_queue_pending",
-+                "expected_count": 1,
-+                "expected_event_id": "event:delayed_bandit_attack",
-+            },
-+            {
-+                "type": "story_event_queue_arc",
-+                "arc_id": "arc:bandit_pressure",
-+                "expected": {"stage": "rumors"},
-+            },
-+        ],
-+    },
-+    "story_event_queue_prevents_duplicate_event_application": {
-+        "setup_story_packs": [{"proposal": _queue_pack(), "turn_index": 1}],
-+        "setup_story_event_queue": [
-+            {
-+                "definition_event_id": "event:delayed_bandit_attack",
-+                "enqueued_turn": 1,
-+                "due_turn": 1,
-+                "source": "manual",
-+            },
-+            {
-+                "definition_event_id": "event:delayed_bandit_attack",
-+                "enqueued_turn": 1,
-+                "due_turn": 1,
-+                "source": "manual",
-+            },
-+        ],
-+        "setup_story_event_queue_process": [
-+            {"mode": "idle", "turn_index": 1},
-+            {"mode": "idle", "turn_index": 2},
-+        ],
-+        "turns": ["I check that the delayed attack only applies once."],
-+        "checks": [
-+            {
-+                "type": "story_event_queue_event_applied",
-+                "event_id": "event:delayed_bandit_attack",
-+                "expected_applied": True,
-+            },
-+            {
-+                "type": "story_event_queue_pending",
-+                "expected_count": 0,
-+            },
-+        ],
-+    },
-+    "story_event_queue_records_failed_event": {
-+        "setup_story_packs": [{"proposal": _queue_pack(), "turn_index": 1}],
-+        "setup_story_event_queue": [
-+            {
-+                "definition_event_id": "event:bad_missing_arc",
-+                "enqueued_turn": 1,
-+                "due_turn": 1,
-+                "source": "manual",
-+            }
-+        ],
-+        "setup_story_event_queue_process": [
-+            {"mode": "idle", "turn_index": 1}
-+        ],
-+        "turns": ["I inspect a failed queued story event."],
-+        "checks": [
-+            {
-+                "type": "story_event_queue_history",
-+                "expected_event_id": "event:bad_missing_arc",
-+                "expected_status": "failed",
-+            }
-+        ],
-+    },
-+    "story_event_queue_campaign_director_processes_due_items": {
-+        "setup_story_packs": [{"proposal": _queue_pack(), "turn_index": 1}],
-+        "setup_story_event_queue": [
-+            {
-+                "definition_event_id": "event:delayed_bandit_attack",
-+                "enqueued_turn": 1,
-+                "due_turn": 2,
-+                "source": "manual",
-+            }
-+        ],
-+        "setup_campaign_director_ticks": [
-+            {"mode": "idle", "turn_index": 2}
-+        ],
-+        "turns": ["I inspect a queued event processed by campaign director runtime."],
-+        "checks": [
-+            {
-+                "type": "story_event_queue_event_applied",
-+                "event_id": "event:delayed_bandit_attack",
-+                "expected_applied": True,
-+            },
-+            {
-+                "type": "story_event_queue_arc",
-+                "arc_id": "arc:bandit_pressure",
-+                "expected": {"stage": "attack"},
-+            },
-+        ],
-+    },
-+    "story_event_queue_debug_is_bounded": {
-+        "setup_story_packs": [{"proposal": _queue_pack(), "turn_index": 1}],
-+        "setup_story_event_queue": [
-+            {
-+                "event": {
-+                    "event_id": f"event:queued_{i}",
-+                    "arc_id": "arc:bandit_pressure",
-+                    "effects": [],
++                "type": "companion_offer_context",
++                "npc_id": "bran",
++                "expected": {
++                    "profession": "former_innkeeper",
++                    "motivation": "revenge_against_red_sashes",
++                    "companion_eligible": True,
 +                },
-+                "enqueued_turn": 1,
-+                "due_turn": i,
-+                "source": "manual",
-+            }
-+            for i in range(250)
++            },
 +        ],
-+        "turns": ["I inspect the bounded story event queue."],
++    },
++    "companion_offer_blocked_by_low_trust": {
++        **_make_bran_eligible_setup(trust=20),
++        "turns": ["I ask Bran to join despite low trust."],
 +        "checks": [
 +            {
-+                "type": "story_event_queue_pending",
-+                "expected_count": 200,
++                "type": "companion_offer_evaluate",
++                "npc_id": "bran",
++                "expected_eligible": False,
++                "expected_reason": "trust_too_low",
++            }
++        ],
++    },
++    "companion_offer_blocked_by_hostility": {
++        **_make_bran_eligible_setup(trust=80, hostility=80),
++        "turns": ["I ask hostile Bran to join."],
++        "checks": [
++            {
++                "type": "companion_offer_evaluate",
++                "npc_id": "bran",
++                "expected_eligible": False,
++                "expected_reason": "hostility_too_high",
++            }
++        ],
++    },
++    "accepting_companion_offer_adds_party_member": {
++        **_make_bran_eligible_setup(),
++        "setup_companion_offer_actions": [
++            {"action": "accept", "npc_id": "bran", "turn_index": 3}
++        ],
++        "turns": ["I check that Bran joined my party."],
++        "checks": [
++            {
++                "type": "party_member",
++                "npc_id": "bran",
++                "expected_present": True,
++                "expected": {
++                    "status": "active",
++                    "role": "companion",
++                    "motivation": "revenge_against_red_sashes",
++                },
++            },
++            {
++                "type": "companion_offer_evaluate",
++                "npc_id": "bran",
++                "expected_eligible": False,
++                "expected_reason": "already_party_member",
++            },
++        ],
++    },
++    "accepting_companion_offer_is_apply_once": {
++        **_make_bran_eligible_setup(),
++        "setup_companion_offer_actions": [
++            {"action": "accept", "npc_id": "bran", "turn_index": 3}
++        ],
++        "turns": ["I try to accept Bran twice."],
++        "checks": [
++            {
++                "type": "companion_offer_accept",
++                "npc_id": "bran",
++                "turn_index": 4,
++                "expected_ok": False,
++                "expected_reason": "not_eligible",
++            },
++            {
++                "type": "party_member",
++                "npc_id": "bran",
++                "expected_present": True,
++            },
++        ],
++    },
++    "refusing_companion_offer_blocks_future_offer": {
++        **_make_bran_eligible_setup(),
++        "setup_companion_offer_actions": [
++            {"action": "refuse", "npc_id": "bran", "turn_index": 3}
++        ],
++        "turns": ["I check that Bran's refused offer stays refused."],
++        "checks": [
++            {
++                "type": "companion_offer_evaluate",
++                "npc_id": "bran",
++                "expected_eligible": False,
++                "expected_reason": "offer_previously_refused",
++            },
++            {
++                "type": "party_member",
++                "npc_id": "bran",
++                "expected_present": False,
++            },
++        ],
++    },
++    "npc_runtime_context_exposes_evolution_and_offer": {
++        **_make_bran_eligible_setup(),
++        "turns": ["I inspect Bran's runtime context."],
++        "checks": [
++            {
++                "type": "npc_runtime_context",
++                "npc_id": "bran",
++                "expected": {
++                    "profession": "former_innkeeper",
++                    "motivation": "revenge_against_red_sashes",
++                },
++                "expected_companion_eligible": True,
++            }
++        ],
++    },
++    "companion_offer_not_available_without_npc_arc": {
++        "setup_social_state": {"relationships": {"bran": {"trust": 80}}},
++        "setup_npc_evolution_transitions": [
++            {
++                "action": "evolve",
++                "npc_id": "bran",
++                "companion_eligible": True,
++            }
++        ],
++        "turns": ["I ask Bran to join without an active motivation arc."],
++        "checks": [
++            {
++                "type": "companion_offer_evaluate",
++                "npc_id": "bran",
++                "expected_eligible": False,
++                "expected_reason": "no_active_arc_or_motivation",
 +            }
 +        ],
 +    },
 +}
 *** End Patch
-13. Add expected names file
+14. Add expected names file
 *** Begin Patch
-*** Add File: src/tests/rpg/manual/scenarios/expected_story_event_queue_m25_m27_names.py
-+EXPECTED_STORY_EVENT_QUEUE_M25_M27_SCENARIO_NAMES = {
-+    "story_event_queue_enqueues_without_applying",
-+    "story_event_queue_waits_until_due_turn",
-+    "story_event_queue_applies_when_due",
-+    "story_event_queue_does_not_process_in_combat_mode",
-+    "story_event_queue_prevents_duplicate_event_application",
-+    "story_event_queue_records_failed_event",
-+    "story_event_queue_campaign_director_processes_due_items",
-+    "story_event_queue_debug_is_bounded",
+*** Add File: src/tests/rpg/manual/scenarios/expected_companion_m28_m30_names.py
++EXPECTED_COMPANION_M28_M30_SCENARIO_NAMES = {
++    "companion_offer_available_when_arc_and_trust_ready",
++    "companion_offer_blocked_by_low_trust",
++    "companion_offer_blocked_by_hostility",
++    "accepting_companion_offer_adds_party_member",
++    "accepting_companion_offer_is_apply_once",
++    "refusing_companion_offer_blocks_future_offer",
++    "npc_runtime_context_exposes_evolution_and_offer",
++    "companion_offer_not_available_without_npc_arc",
 +}
 *** End Patch
-14. Patch src/tests/rpg/manual/scenarios/registry.py
+15. Patch src/tests/rpg/manual/scenarios/registry.py
 *** Begin Patch
 *** Update File: src/tests/rpg/manual/scenarios/registry.py
 @@
- from tests.rpg.manual.scenarios.campaign_director_m22_m24 import (
-     CAMPAIGN_DIRECTOR_M22_M24_SCENARIOS,
+ from tests.rpg.manual.scenarios.story_event_queue_m25_m27 import (
+     STORY_EVENT_QUEUE_M25_M27_SCENARIOS,
  )
-+from tests.rpg.manual.scenarios.story_event_queue_m25_m27 import (
-+    STORY_EVENT_QUEUE_M25_M27_SCENARIOS,
++from tests.rpg.manual.scenarios.companion_m28_m30 import (
++    COMPANION_M28_M30_SCENARIOS,
 +)
 @@
-     scenarios.update(CAMPAIGN_DIRECTOR_M22_M24_SCENARIOS)
-+    scenarios.update(STORY_EVENT_QUEUE_M25_M27_SCENARIOS)
+     scenarios.update(STORY_EVENT_QUEUE_M25_M27_SCENARIOS)
++    scenarios.update(COMPANION_M28_M30_SCENARIOS)
      return scenarios
 *** End Patch
-15. Patch src/tests/rpg/manual/test_manual_scenario_migration.py
+16. Patch src/tests/rpg/manual/test_manual_scenario_migration.py
 *** Begin Patch
 *** Update File: src/tests/rpg/manual/test_manual_scenario_migration.py
 @@
- from tests.rpg.manual.scenarios.expected_campaign_director_m22_m24_names import (
-     EXPECTED_CAMPAIGN_DIRECTOR_M22_M24_SCENARIO_NAMES,
+ from tests.rpg.manual.scenarios.expected_story_event_queue_m25_m27_names import (
+     EXPECTED_STORY_EVENT_QUEUE_M25_M27_SCENARIO_NAMES,
  )
-+from tests.rpg.manual.scenarios.expected_story_event_queue_m25_m27_names import (
-+    EXPECTED_STORY_EVENT_QUEUE_M25_M27_SCENARIO_NAMES,
++from tests.rpg.manual.scenarios.expected_companion_m28_m30_names import (
++    EXPECTED_COMPANION_M28_M30_SCENARIO_NAMES,
 +)
 @@
- def test_manual_scenario_registry_includes_campaign_director_m22_m24_names():
+ def test_manual_scenario_registry_includes_story_event_queue_m25_m27_names():
      names = set(build_service_scenarios().keys())
-     missing = EXPECTED_CAMPAIGN_DIRECTOR_M22_M24_SCENARIO_NAMES - names
+     missing = EXPECTED_STORY_EVENT_QUEUE_M25_M27_SCENARIO_NAMES - names
  
-     assert not missing, f"Missing M22-M24 campaign director scenarios: {sorted(missing)}"
+     assert not missing, f"Missing M25-M27 story event queue scenarios: {sorted(missing)}"
 +
 +
-+def test_manual_scenario_registry_includes_story_event_queue_m25_m27_names():
++def test_manual_scenario_registry_includes_companion_m28_m30_names():
 +    names = set(build_service_scenarios().keys())
-+    missing = EXPECTED_STORY_EVENT_QUEUE_M25_M27_SCENARIO_NAMES - names
++    missing = EXPECTED_COMPANION_M28_M30_SCENARIO_NAMES - names
 +
-+    assert not missing, f"Missing M25-M27 story event queue scenarios: {sorted(missing)}"
++    assert not missing, f"Missing M28-M30 companion scenarios: {sorted(missing)}"
 *** End Patch
-16. Add manual check tests
+17. Add manual check tests
 *** Begin Patch
-*** Add File: src/tests/rpg/manual/test_manual_story_event_queue_m25_m27_checks.py
-+from app.rpg.story_arcs.state import start_story_arc
-+from tests.rpg.manual.story_event_queue_m25_m27_checks import (
-+    run_story_event_queue_m25_m27_checks,
-+)
+*** Add File: src/tests/rpg/manual/test_manual_companion_m28_m30_checks.py
++from app.rpg.npc_evolution.state import apply_npc_evolution_delta, start_npc_arc
++from app.rpg.social.reputation import set_relationship_values
++from tests.rpg.manual.companion_m28_m30_checks import run_companion_m28_m30_checks
 +
 +
-+def test_manual_story_event_queue_enqueue_and_process_checks():
-+    session = {"simulation_state": {}}
-+    start_story_arc(session["simulation_state"], "arc:x", stage="start")
-+
-+    enqueue = run_story_event_queue_m25_m27_checks(
-+        checks=[
-+            {
-+                "type": "story_event_queue_enqueue",
-+                "event": {
-+                    "event_id": "event:x",
-+                    "arc_id": "arc:x",
-+                    "effects": [{"type": "arc_stage_set", "arc_id": "arc:x", "stage": "done"}],
-+                },
-+                "due_turn": 1,
-+                "expected_ok": True,
-+                "expected_queued": True,
-+            }
-+        ],
-+        result={},
-+        session=session,
-+    )[0]
-+    process = run_story_event_queue_m25_m27_checks(
-+        checks=[
-+            {
-+                "type": "story_event_queue_process",
-+                "mode": "idle",
-+                "turn_index": 1,
-+                "expected_applied_count": 1,
-+            }
-+        ],
-+        result={},
-+        session=session,
-+    )[0]
-+
-+    assert enqueue["ok"] is True
-+    assert process["ok"] is True
-+
-+
-+def test_manual_story_event_queue_pending_check():
-+    session = {"simulation_state": {}}
-+    run_story_event_queue_m25_m27_checks(
-+        checks=[
-+            {
-+                "type": "story_event_queue_enqueue",
-+                "event": {"event_id": "event:x", "effects": []},
-+                "due_turn": 5,
-+                "expected_ok": True,
-+            }
-+        ],
-+        result={},
-+        session=session,
++def _setup(session):
++    start_npc_arc(
++        session["simulation_state"],
++        "bran",
++        "npc_arc:bran_revenge",
++        motivation="revenge_against_red_sashes",
++        role="companion",
 +    )
-+    pending = run_story_event_queue_m25_m27_checks(
++    apply_npc_evolution_delta(session["simulation_state"], "bran", companion_eligible=True)
++    set_relationship_values(session["simulation_state"], "bran", {"trust": 80})
++
++
++def test_manual_companion_offer_evaluate_check():
++    session = {"simulation_state": {}}
++    _setup(session)
++
++    result = run_companion_m28_m30_checks(
 +        checks=[
 +            {
-+                "type": "story_event_queue_pending",
-+                "expected_count": 1,
-+                "expected_event_id": "event:x",
++                "type": "companion_offer_evaluate",
++                "npc_id": "bran",
++                "expected_eligible": True,
++                "expected_reason": "eligible",
 +            }
 +        ],
 +        result={},
 +        session=session,
 +    )[0]
 +
-+    assert pending["ok"] is True
++    assert result["ok"] is True
++
++
++def test_manual_companion_offer_accept_check_adds_party_member():
++    session = {"simulation_state": {}}
++    _setup(session)
++
++    accept = run_companion_m28_m30_checks(
++        checks=[
++            {
++                "type": "companion_offer_accept",
++                "npc_id": "bran",
++                "expected_ok": True,
++            }
++        ],
++        result={},
++        session=session,
++    )[0]
++    member = run_companion_m28_m30_checks(
++        checks=[
++            {
++                "type": "party_member",
++                "npc_id": "bran",
++                "expected_present": True,
++            }
++        ],
++        result={},
++        session=session,
++    )[0]
++
++    assert accept["ok"] is True
++    assert member["ok"] is True
 *** End Patch
 Validation commands
 Compile
-python -m py_compile src/app/rpg/story_event_queue/state.py
-python -m py_compile src/app/rpg/story_event_queue/queue.py
-python -m py_compile src/app/rpg/campaign_director/runtime.py
-python -m py_compile src/tests/rpg/manual/story_event_queue_m25_m27_checks.py
-python -m py_compile src/tests/rpg/manual/scenarios/story_event_queue_m25_m27.py
+python -m py_compile src/app/rpg/companions/party.py
+python -m py_compile src/app/rpg/companions/offers.py
+python -m py_compile src/app/rpg/npc_runtime_context/context.py
+python -m py_compile src/tests/rpg/manual/companion_m28_m30_checks.py
+python -m py_compile src/tests/rpg/manual/scenarios/companion_m28_m30.py
 Unit tests
-python -m pytest src/tests/rpg/story_event_queue src/tests/rpg/campaign_director src/tests/rpg/npc_evolution src/tests/rpg/dialogue_context src/tests/rpg/story_packs src/tests/rpg/story_proposals src/tests/rpg/escalation src/tests/rpg/story_events src/tests/rpg/story_arcs src/tests/rpg/lore -q
+python -m pytest src/tests/rpg/companions src/tests/rpg/npc_runtime_context src/tests/rpg/npc_evolution src/tests/rpg/story_event_queue src/tests/rpg/campaign_director src/tests/rpg/dialogue_context src/tests/rpg/story_packs src/tests/rpg/story_proposals src/tests/rpg/escalation src/tests/rpg/story_events src/tests/rpg/story_arcs src/tests/rpg/lore -q

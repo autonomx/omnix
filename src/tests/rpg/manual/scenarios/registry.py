@@ -139,6 +139,13 @@ try:
 except Exception:
     STORY_EVENT_QUEUE_M25_M27_SCENARIOS = {}
 
+try:
+    from tests.rpg.manual.scenarios.companion_m28_m30 import (
+        COMPANION_M28_M30_SCENARIOS,
+    )
+except Exception:
+    COMPANION_M28_M30_SCENARIOS = {}
+
 
 def build_service_scenarios(
     legacy_scenarios: Dict[str, Dict[str, Any]] | None = None,
@@ -171,6 +178,7 @@ def build_service_scenarios(
         SOCIAL_L10_L12_SCENARIOS,
         QUEST_PUZZLE_L13_L15_SCENARIOS,
         STORY_EVENT_QUEUE_M25_M27_SCENARIOS,
+        COMPANION_M28_M30_SCENARIOS,
     ]:
         overlap = set(scenarios).intersection(group)
         if overlap:

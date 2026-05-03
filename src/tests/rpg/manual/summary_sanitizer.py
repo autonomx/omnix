@@ -722,6 +722,29 @@ def sanitize_turn_for_summary(
             if isinstance(item, dict)
         ]
 
+    companion_m28_m30_check_results = turn.get("companion_m28_m30_check_results")
+    if isinstance(companion_m28_m30_check_results, list):
+        sanitized["companion_m28_m30_check_results"] = [
+            {
+                "check_type": item.get("check_type"),
+                "ok": item.get("ok"),
+                "npc_id": item.get("npc_id"),
+                "evaluation": item.get("evaluation"),
+                "context": item.get("context"),
+                "accept_result": item.get("accept_result"),
+                "refuse_result": item.get("refuse_result"),
+                "member": item.get("member"),
+                "expected_eligible": item.get("expected_eligible"),
+                "expected_reason": item.get("expected_reason"),
+                "expected_ok": item.get("expected_ok"),
+                "expected_present": item.get("expected_present"),
+                "failures": item.get("failures"),
+                "error": item.get("error"),
+            }
+            for item in companion_m28_m30_check_results[:50]
+            if isinstance(item, dict)
+        ]
+
     return sanitized
 
 

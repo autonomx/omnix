@@ -45,6 +45,7 @@ from tests.rpg.manual.story_pack_m13_m15_checks import run_story_pack_m13_m15_ch
 from tests.rpg.manual.story_event_queue_m25_m27_checks import (
     run_story_event_queue_m25_m27_checks,
 )
+from tests.rpg.manual.companion_m28_m30_checks import run_companion_m28_m30_checks
 from tests.rpg.manual.story_proposal_m10_m12_checks import (
     run_story_proposal_m10_m12_checks,
 )
@@ -511,6 +512,42 @@ def _run_one_service_scenario(
                     turn_record.setdefault("scenario_warnings", []).append(
                         f"story_event_queue_m25_m27_check_failed:{scenario_name}:turn_{turn_index}:"
                         + str(check_result.get("check_type")) + ":" + str(check_result.get("error") or "")
+                    )
+
+        companion_m28_m30_checks = [
+            check
+            for check in checks
+            if isinstance(check, dict)
+            and (
+                str(check.get("type") or "").startswith("companion_")
+                or str(check.get("type") or "") == "party_member"
+                or str(check.get("type") or "") == "npc_runtime_context"
+            )
+        ]
+        if companion_m28_m30_checks:
+            current_session = {}
+            try:
+                current_session = _ensure_manual_session(session_id)
+            except Exception:
+                current_session = session
+
+            companion_m28_m30_check_results = run_companion_m28_m30_checks(
+                checks=companion_m28_m30_checks,
+                result=turn_record.get("result") or turn_record,
+                session=current_session,
+            )
+            turn_record["companion_m28_m30_check_results"] = companion_m28_m30_check_results
+            for check_result in companion_m28_m30_check_results:
+                if not check_result.get("ok"):
+                    turn_record.setdefault("scenario_warnings", []).append(
+                        "companion_m28_m30_check_failed:"
+                        + str(scenario_name)
+                        + ":turn_"
+                        + str(turn_index)
+                        + ":"
+                        + str(check_result.get("check_type"))
+                        + ":"
+                        + str(check_result.get("error") or "")
                     )
 
         contamination_warnings = _scenario_contamination_warnings(
