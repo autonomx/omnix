@@ -6,6 +6,11 @@ from typing import Any, Dict
 
 from app.rpg.campaign_director.runtime import apply_campaign_director_tick
 from app.rpg.campaign_journal.journal import record_campaign_journal_entry
+from app.rpg.story_authoring.approval import (
+    approve_story_proposal,
+    draft_story_proposal_for_approval,
+    reject_story_proposal,
+)
 from app.rpg.story_authoring.runtime import author_story_proposal
 from app.rpg.companions.offers import accept_companion_offer, refuse_companion_offer
 from app.rpg.dialogue_context.rumors import propagate_rumor
@@ -399,6 +404,43 @@ def _apply_manual_scenario_setup(session: Dict[str, Any], scenario: Dict[str, An
                 repair_once=bool(authoring.get("repair_once", False)),
                 llm_text_override=llm_text_override,
             )
+
+    for action in scenario.get("setup_story_authoring_approval_actions") or []:
+        if isinstance(action, dict):
+            kind = str(action.get("action") or "")
+            if kind == "draft":
+                llm_text_override = action.get("llm_text_override")
+                if isinstance(llm_text_override, dict):
+                    llm_text_override = json.dumps(llm_text_override)
+                draft_story_proposal_for_approval(
+                    simulation_state,
+                    authoring_goal=str(action.get("authoring_goal") or "Draft a story pack."),
+                    turn_index=int(action.get("turn_index") or scenario.get("setup_turn_index") or 1),
+                    llm_text_override=llm_text_override,
+                    repair_once=bool(action.get("repair_once", False)),
+                )
+            elif kind == "approve":
+                pending_id = str(action.get("pending_id") or "")
+                if not pending_id:
+                    pending = simulation_state.get("story_authoring_approval_state", {}).get("pending", [])
+                    pending_id = str((pending[-1] if pending else {}).get("pending_id") or "")
+                approve_story_proposal(
+                    simulation_state,
+                    pending_id=pending_id,
+                    turn_index=int(action.get("turn_index") or scenario.get("setup_turn_index") or 1),
+                    reason=str(action.get("reason") or "gm_approved"),
+                )
+            elif kind == "reject":
+                pending_id = str(action.get("pending_id") or "")
+                if not pending_id:
+                    pending = simulation_state.get("story_authoring_approval_state", {}).get("pending", [])
+                    pending_id = str((pending[-1] if pending else {}).get("pending_id") or "")
+                reject_story_proposal(
+                    simulation_state,
+                    pending_id=pending_id,
+                    turn_index=int(action.get("turn_index") or scenario.get("setup_turn_index") or 1),
+                    reason=str(action.get("reason") or "gm_rejected"),
+                )
 
     for item in scenario.get("setup_story_event_queue") or []:
         if isinstance(item, dict):
