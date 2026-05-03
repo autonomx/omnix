@@ -83,18 +83,7 @@ def _compact_memory(memory: Dict[str, Any]) -> Dict[str, Any]:
         "kind": memory.get("kind"),
         "source": memory.get("source"),
         "summary": memory.get("summary"),
-        "facts": {
-            key: facts.get(key)
-            for key in (
-                "actor_id",
-                "target_id",
-                "action",
-                "location_id",
-                "object_id",
-                "quest_id",
-            )
-            if key in facts
-        },
+        "facts": facts,
         "confidence": memory.get("confidence"),
         "turn_index": memory.get("turn_index"),
         "tags": list(memory.get("tags") or [])[:12],
