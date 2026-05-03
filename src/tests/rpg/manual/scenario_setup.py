@@ -10,6 +10,7 @@ from app.rpg.memory.observation import (
 from app.rpg.lore.transitions import apply_lore_transition
 from app.rpg.puzzles.transitions import apply_puzzle_transition
 from app.rpg.story_arcs.transitions import apply_story_arc_transition
+from app.rpg.story_events.application import apply_story_event
 from app.rpg.quests.transitions import apply_quest_transition
 from app.rpg.social.leverage import add_social_leverage
 from app.rpg.social.reputation import (
@@ -231,6 +232,18 @@ def _apply_manual_scenario_setup(session: Dict[str, Any], scenario: Dict[str, An
                 transition,
                 turn_index=int(
                     transition.get("turn_index")
+                    or scenario.get("setup_turn_index")
+                    or 1
+                ),
+            )
+
+    for event in scenario.get("setup_story_events") or []:
+        if isinstance(event, dict):
+            apply_story_event(
+                simulation_state,
+                event,
+                turn_index=int(
+                    event.get("turn_index")
                     or scenario.get("setup_turn_index")
                     or 1
                 ),
