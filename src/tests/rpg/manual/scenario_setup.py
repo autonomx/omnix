@@ -11,6 +11,8 @@ from app.rpg.lore.transitions import apply_lore_transition
 from app.rpg.puzzles.transitions import apply_puzzle_transition
 from app.rpg.story_arcs.transitions import apply_story_arc_transition
 from app.rpg.story_events.application import apply_story_event
+from app.rpg.escalation.rules import apply_escalation_rule
+from app.rpg.escalation.state import mark_escalation_rule_applied
 from app.rpg.quests.transitions import apply_quest_transition
 from app.rpg.social.leverage import add_social_leverage
 from app.rpg.social.reputation import (
@@ -244,6 +246,32 @@ def _apply_manual_scenario_setup(session: Dict[str, Any], scenario: Dict[str, An
                 event,
                 turn_index=int(
                     event.get("turn_index")
+                    or scenario.get("setup_turn_index")
+                    or 1
+                ),
+            )
+
+    for application in scenario.get("setup_escalation_applications") or []:
+        if isinstance(application, dict):
+            mark_escalation_rule_applied(
+                simulation_state,
+                rule_id=str(application.get("rule_id") or ""),
+                arc_id=str(application.get("arc_id") or ""),
+                event_id=str(application.get("event_id") or ""),
+                turn_index=int(
+                    application.get("turn_index")
+                    or scenario.get("setup_turn_index")
+                    or 1
+                ),
+            )
+
+    for rule in scenario.get("setup_apply_escalation_rules") or []:
+        if isinstance(rule, dict):
+            apply_escalation_rule(
+                simulation_state,
+                rule,
+                turn_index=int(
+                    rule.get("turn_index")
                     or scenario.get("setup_turn_index")
                     or 1
                 ),

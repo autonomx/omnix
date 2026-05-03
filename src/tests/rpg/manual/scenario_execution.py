@@ -12,6 +12,7 @@ from tests.rpg.manual.output_state import (
 from tests.rpg.manual.quest_puzzle_checks import run_quest_puzzle_checks
 from tests.rpg.manual.story_m1_m3_checks import run_story_m1_m3_checks
 from tests.rpg.manual.story_event_m4_m6_checks import run_story_event_m4_m6_checks
+from tests.rpg.manual.escalation_m7_m9_checks import run_escalation_m7_m9_checks
 from tests.rpg.manual.safe import _compact_json, _safe_dict, _safe_list
 from tests.rpg.manual.scenario_setup import (
     _apply_manual_scenario_setup,
@@ -409,6 +410,38 @@ def _run_one_service_scenario(
                 if not check_result.get("ok"):
                     turn_summary.setdefault("scenario_warnings", []).append(
                         "story_event_m4_m6_check_failed:"
+                        + str(scenario_name)
+                        + ":turn_"
+                        + str(turn_index)
+                        + ":"
+                        + str(check_result.get("check_type"))
+                        + ":"
+                        + str(check_result.get("error") or "")
+                    )
+
+        escalation_m7_m9_checks = [
+            check
+            for check in checks
+            if isinstance(check, dict)
+            and str(check.get("type") or "").startswith("escalation_")
+        ]
+        if escalation_m7_m9_checks:
+            current_session = {}
+            try:
+                current_session = _ensure_manual_session(session_id)
+            except Exception:
+                current_session = session
+
+            escalation_m7_m9_check_results = run_escalation_m7_m9_checks(
+                checks=escalation_m7_m9_checks,
+                result=turn_summary.get("result") or turn_summary,
+                session=current_session,
+            )
+            turn_summary["escalation_m7_m9_check_results"] = escalation_m7_m9_check_results
+            for check_result in escalation_m7_m9_check_results:
+                if not check_result.get("ok"):
+                    turn_summary.setdefault("scenario_warnings", []).append(
+                        "escalation_m7_m9_check_failed:"
                         + str(scenario_name)
                         + ":turn_"
                         + str(turn_index)
