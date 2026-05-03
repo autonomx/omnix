@@ -1,54 +1,42 @@
-Bundle M34-M36 — LLM Story Authoring Runtime v1
+Bundle M37-M39 — Runtime Story Authoring UI + GM Approval Flow v1
 GOAL:
-Allow AI-assisted story/lore/event/arc creation safely.
+Add a deterministic GM approval workflow for LLM-authored story proposals.
 
-This bundle adds an authoring runtime that:
-- asks the central app LLM provider for story_proposal_v1 JSON
-- validates the proposal with existing M10-M12 validator
-- rejects unsafe/invalid proposals with reasons
-- optionally attempts bounded repair
-- imports accepted proposals through M13-M15 story pack importer
-- records accepted/rejected proposal attempts in deterministic authoring state
-- never lets LLM mutate simulation state directly
+This bundle connects M34-M36 authoring runtime to a safe review/import flow:
+- LLM can draft a story proposal
+- draft is stored as pending GM approval
+- pending proposals can be listed in bounded debug state
+- GM can approve/import a pending proposal
+- GM can reject a pending proposal with a reason
+- invalid proposals cannot be approved/imported
+- approval is apply-once
+- rejection is apply-once
+- imported proposals still go through validator + story pack importer
+- optional API endpoints expose draft/list/approve/reject flows
+- manual tests validate everything with full debug
 
 Important:
-- LLM output is proposal-only.
-- Validator is the authority.
-- Importer is the only mutation path.
-- Failed proposals are recorded but not imported.
-- Repair is bounded and optional.
-- Prompt uses current campaign recap/journal as context, but LLM cannot invent authoritative facts.
-Patch 1 — Add story authoring package
-1. Add src/app/rpg/story_authoring/__init__.py
+- LLM still cannot mutate simulation state directly.
+- Drafting does not import.
+- Approval is the only import path from pending authored proposals.
+- Rejected proposals remain recorded for audit/debug.
+Patch 1 — Add GM approval state/runtime
+1. Add src/app/rpg/story_authoring/approval.py
 *** Begin Patch
-*** Add File: src/app/rpg/story_authoring/__init__.py
-+"""LLM-assisted story proposal authoring runtime."""
-+
-+from app.rpg.story_authoring.runtime import (
-+    author_story_proposal,
-+    import_authored_story_proposal,
-+)
-+from app.rpg.story_authoring.state import (
-+    ensure_story_authoring_state,
-+    normalize_story_authoring_state,
-+)
-+
-+__all__ = [
-+    "author_story_proposal",
-+    "ensure_story_authoring_state",
-+    "import_authored_story_proposal",
-+    "normalize_story_authoring_state",
-+]
-*** End Patch
-2. Add src/app/rpg/story_authoring/state.py
-*** Begin Patch
-*** Add File: src/app/rpg/story_authoring/state.py
+*** Add File: src/app/rpg/story_authoring/approval.py
 +from __future__ import annotations
 +
++import hashlib
++import json
 +from typing import Any, Dict, List
 +
++from app.rpg.story_authoring.runtime import author_story_proposal
++from app.rpg.story_packs.importer import import_story_pack
++from app.rpg.story_proposals.validation import validate_story_proposal
 +
-+MAX_STORY_AUTHORING_ATTEMPTS = 100
++
++MAX_PENDING_AUTHORED_PROPOSALS = 50
++MAX_AUTHORING_APPROVAL_HISTORY = 100
 +
 +
 +def _safe_dict(value: Any) -> Dict[str, Any]:
@@ -70,669 +58,516 @@ Patch 1 — Add story authoring package
 +        return default
 +
 +
-+def _safe_bool(value: Any, default: bool = False) -> bool:
-+    if isinstance(value, bool):
-+        return value
-+    return default
-+
-+
-+def normalize_story_authoring_attempt(value: Dict[str, Any]) -> Dict[str, Any]:
-+    value = _safe_dict(value)
-+    return {
-+        "attempt_id": _safe_str(value.get("attempt_id")),
-+        "turn_index": _safe_int(value.get("turn_index"), 0),
-+        "status": _safe_str(value.get("status")) or "unknown",
-+        "prompt_kind": _safe_str(value.get("prompt_kind")) or "story_pack",
-+        "provider": _safe_str(value.get("provider")),
-+        "model": _safe_str(value.get("model")),
-+        "proposal_id": _safe_str(value.get("proposal_id")),
-+        "proposal_type": _safe_str(value.get("proposal_type")),
-+        "validation_ok": _safe_bool(value.get("validation_ok"), False),
-+        "import_ok": _safe_bool(value.get("import_ok"), False),
-+        "imported_pack_id": _safe_str(value.get("imported_pack_id")),
-+        "errors": [
-+            dict(row)
-+            for row in _safe_list(value.get("errors"))
-+            if isinstance(row, dict)
-+        ][:50],
-+        "repair_attempted": _safe_bool(value.get("repair_attempted"), False),
-+        "metadata": dict(_safe_dict(value.get("metadata"))),
-+    }
-+
-+
-+def normalize_story_authoring_state(value: Dict[str, Any] | None) -> Dict[str, Any]:
-+    value = _safe_dict(value)
-+    attempts = [
-+        normalize_story_authoring_attempt(row)
-+        for row in _safe_list(value.get("attempts"))
-+        if isinstance(row, dict)
-+    ][-MAX_STORY_AUTHORING_ATTEMPTS:]
-+    attempts.sort(
-+        key=lambda row: (
-+            int(row.get("turn_index") or 0),
-+            str(row.get("attempt_id") or ""),
-+        )
-+    )
-+    return {
-+        "version": 1,
-+        "attempts": attempts,
-+        "max_attempts": MAX_STORY_AUTHORING_ATTEMPTS,
-+    }
-+
-+
-+def ensure_story_authoring_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
-+    if not isinstance(simulation_state, dict):
-+        raise TypeError("simulation_state_must_be_dict")
-+    state = normalize_story_authoring_state(simulation_state.get("story_authoring_state"))
-+    simulation_state["story_authoring_state"] = state
-+    return state
-+
-+
-+def record_story_authoring_attempt(
-+    simulation_state: Dict[str, Any],
-+    *,
-+    attempt_id: str,
-+    turn_index: int = 0,
-+    status: str,
-+    prompt_kind: str = "story_pack",
-+    provider: str = "",
-+    model: str = "",
-+    proposal_id: str = "",
-+    proposal_type: str = "",
-+    validation_ok: bool = False,
-+    import_ok: bool = False,
-+    imported_pack_id: str = "",
-+    errors: List[Dict[str, Any]] | None = None,
-+    repair_attempted: bool = False,
-+    metadata: Dict[str, Any] | None = None,
-+) -> Dict[str, Any]:
-+    state = ensure_story_authoring_state(simulation_state)
-+    row = normalize_story_authoring_attempt(
-+        {
-+            "attempt_id": attempt_id,
-+            "turn_index": turn_index,
-+            "status": status,
-+            "prompt_kind": prompt_kind,
-+            "provider": provider,
-+            "model": model,
-+            "proposal_id": proposal_id,
-+            "proposal_type": proposal_type,
-+            "validation_ok": validation_ok,
-+            "import_ok": import_ok,
-+            "imported_pack_id": imported_pack_id,
-+            "errors": errors or [],
-+            "repair_attempted": repair_attempted,
-+            "metadata": metadata or {},
-+        }
-+    )
-+    attempts = list(state.get("attempts") or [])
-+    attempts.append(row)
-+    state["attempts"] = attempts[-MAX_STORY_AUTHORING_ATTEMPTS:]
-+    simulation_state["story_authoring_state"] = normalize_story_authoring_state(state)
-+    return {
-+        "ok": True,
-+        "reason": "story_authoring_attempt_recorded",
-+        "attempt": row,
-+    }
-*** End Patch
-3. Add src/app/rpg/story_authoring/prompts.py
-*** Begin Patch
-*** Add File: src/app/rpg/story_authoring/prompts.py
-+from __future__ import annotations
-+
-+import json
-+from typing import Any, Dict
-+
-+from app.rpg.campaign_journal.journal import build_player_story_recap
-+
-+
-+STORY_AUTHORING_SYSTEM_PROMPT = """You are an RPG campaign story authoring assistant.
-+
-+You must output only valid JSON.
-+You are not the simulation.
-+You do not grant rewards.
-+You do not decide outcomes.
-+You only propose a story_proposal_v1 object.
-+
-+Rules:
-+- Use only the provided campaign recap as context.
-+- Mark uncertain information as rumor.
-+- Do not reveal hidden or secret lore.
-+- Do not invent confirmed facts that contradict the recap.
-+- Do not mutate player inventory, currency, XP, health, or quest rewards.
-+- Keep arcs, events, effects, and escalation rules bounded.
-+- All IDs must be stable strings.
-+"""
-+
-+
-+def build_story_authoring_prompt(
-+    simulation_state: Dict[str, Any],
-+    *,
-+    authoring_goal: str,
-+    turn_index: int = 0,
-+    max_items: int = 10,
-+) -> Dict[str, Any]:
-+    recap = build_player_story_recap(
-+        simulation_state,
-+        turn_index=turn_index,
-+        max_items=max_items,
-+    )
-+    user_payload = {
-+        "task": "Create one story_proposal_v1 JSON object.",
-+        "authoring_goal": str(authoring_goal or "Create a small grounded story pack."),
-+        "required_schema": {
-+            "proposal_version": "story_proposal_v1",
-+            "proposal_type": "story_pack",
-+            "proposal_id": "stable_unique_id",
-+            "title": "short title",
-+            "lore_entries": [],
-+            "story_arcs": [],
-+            "story_events": [],
-+            "escalation_rules": [],
-+        },
-+        "campaign_recap": recap,
-+        "hard_constraints": [
-+            "Return JSON only.",
-+            "Do not include markdown.",
-+            "Do not include commentary.",
-+            "Do not reveal secret lore.",
-+            "Rumors must remain rumors.",
-+            "No direct rewards, currency, XP, loot, or inventory changes.",
-+            "Use only supported story event effects.",
-+        ],
-+    }
-+    return {
-+        "system": STORY_AUTHORING_SYSTEM_PROMPT,
-+        "user": json.dumps(user_payload, sort_keys=True, ensure_ascii=False),
-+        "recap": recap,
-+    }
-+
-+
-+def build_story_repair_prompt(
-+    *,
-+    invalid_proposal: Any,
-+    validation: Dict[str, Any],
-+    authoring_goal: str,
-+) -> Dict[str, str]:
-+    payload = {
-+        "task": "Repair the invalid story_proposal_v1 JSON object.",
-+        "authoring_goal": str(authoring_goal or ""),
-+        "invalid_proposal": invalid_proposal,
-+        "validation_errors": validation.get("errors") or [],
-+        "hard_constraints": [
-+            "Return JSON only.",
-+            "Do not include markdown.",
-+            "Preserve the user's authoring goal.",
-+            "Fix only validation errors.",
-+            "Do not reveal secret lore.",
-+            "Do not add unsupported effects.",
-+        ],
-+    }
-+    return {
-+        "system": STORY_AUTHORING_SYSTEM_PROMPT,
-+        "user": json.dumps(payload, sort_keys=True, ensure_ascii=False, default=str),
-+    }
-*** End Patch
-4. Add src/app/rpg/story_authoring/parsing.py
-*** Begin Patch
-*** Add File: src/app/rpg/story_authoring/parsing.py
-+from __future__ import annotations
-+
-+import json
-+from typing import Any, Dict
-+
-+
-+def parse_story_authoring_json(raw: Any) -> Dict[str, Any]:
-+    if isinstance(raw, dict):
-+        return {
-+            "ok": True,
-+            "proposal": raw,
-+            "error": "",
-+        }
-+    if raw is None:
-+        return {
-+            "ok": False,
-+            "proposal": {},
-+            "error": "empty_llm_response",
-+        }
-+    text = str(raw).strip()
-+    if text.startswith("```"):
-+        lines = text.splitlines()
-+        if lines and lines[0].strip().startswith("```"):
-+            lines = lines[1:]
-+        if lines and lines[-1].strip().startswith("```"):
-+            lines = lines[:-1]
-+        text = "\n".join(lines).strip()
-+    try:
-+        parsed = json.loads(text)
-+    except Exception as exc:
-+        return {
-+            "ok": False,
-+            "proposal": {},
-+            "error": f"invalid_json:{type(exc).__name__}:{exc}",
-+            "raw": str(raw)[:4000],
-+        }
-+    if not isinstance(parsed, dict):
-+        return {
-+            "ok": False,
-+            "proposal": {},
-+            "error": f"json_root_not_object:{type(parsed).__name__}",
-+            "raw": str(raw)[:4000],
-+        }
-+    return {
-+        "ok": True,
-+        "proposal": parsed,
-+        "error": "",
-+        "raw": str(raw)[:4000],
-+    }
-*** End Patch
-5. Add src/app/rpg/story_authoring/provider.py
-*** Begin Patch
-*** Add File: src/app/rpg/story_authoring/provider.py
-+from __future__ import annotations
-+
-+from typing import Any, Dict
-+
-+
-+def _extract_text_from_provider_result(result: Any) -> str:
-+    if result is None:
-+        return ""
-+    if isinstance(result, str):
-+        return result
-+    if isinstance(result, dict):
-+        for key in ("text", "content", "response", "message"):
-+            value = result.get(key)
-+            if isinstance(value, str):
-+                return value
-+        choices = result.get("choices")
-+        if isinstance(choices, list) and choices:
-+            first = choices[0]
-+            if isinstance(first, dict):
-+                message = first.get("message")
-+                if isinstance(message, dict) and isinstance(message.get("content"), str):
-+                    return message["content"]
-+                if isinstance(first.get("text"), str):
-+                    return first["text"]
-+    return str(result)
-+
-+
-+def call_story_authoring_provider(
-+    app_context: Any,
-+    *,
-+    system_prompt: str,
-+    user_prompt: str,
-+) -> Dict[str, Any]:
-+    if app_context is None:
-+        return {
-+            "ok": False,
-+            "reason": "missing_app_context",
-+            "text": "",
-+            "provider": "",
-+            "model": "",
-+        }
-+    get_provider = getattr(app_context, "get_provider", None)
-+    if not callable(get_provider):
-+        return {
-+            "ok": False,
-+            "reason": "missing_get_provider",
-+            "text": "",
-+            "provider": "",
-+            "model": "",
-+        }
-+    provider = get_provider()
-+    if provider is None:
-+        return {
-+            "ok": False,
-+            "reason": "provider_unavailable",
-+            "text": "",
-+            "provider": "",
-+            "model": "",
-+        }
-+
-+    provider_name = str(getattr(provider, "name", "") or getattr(provider, "provider_name", "") or "")
-+    model_name = str(getattr(provider, "model", "") or getattr(provider, "model_name", "") or "")
-+
-+    messages = [
-+        {"role": "system", "content": system_prompt},
-+        {"role": "user", "content": user_prompt},
-+    ]
-+
-+    try:
-+        if hasattr(provider, "chat") and callable(provider.chat):
-+            result = provider.chat(messages=messages)
-+        elif hasattr(provider, "complete") and callable(provider.complete):
-+            result = provider.complete(system_prompt + "\n\n" + user_prompt)
-+        elif hasattr(provider, "generate") and callable(provider.generate):
-+            result = provider.generate(system_prompt + "\n\n" + user_prompt)
-+        else:
-+            return {
-+                "ok": False,
-+                "reason": "provider_has_no_supported_call_method",
-+                "text": "",
-+                "provider": provider_name,
-+                "model": model_name,
-+            }
-+    except Exception as exc:
-+        return {
-+            "ok": False,
-+            "reason": f"provider_error:{type(exc).__name__}",
-+            "error": str(exc),
-+            "text": "",
-+            "provider": provider_name,
-+            "model": model_name,
-+        }
-+
-+    return {
-+        "ok": True,
-+        "reason": "provider_called",
-+        "text": _extract_text_from_provider_result(result),
-+        "provider": provider_name,
-+        "model": model_name,
-+    }
-*** End Patch
-6. Add src/app/rpg/story_authoring/runtime.py
-*** Begin Patch
-*** Add File: src/app/rpg/story_authoring/runtime.py
-+from __future__ import annotations
-+
-+import hashlib
-+import json
-+from typing import Any, Dict
-+
-+from app.rpg.story_authoring.parsing import parse_story_authoring_json
-+from app.rpg.story_authoring.prompts import (
-+    build_story_authoring_prompt,
-+    build_story_repair_prompt,
-+)
-+from app.rpg.story_authoring.provider import call_story_authoring_provider
-+from app.rpg.story_authoring.state import record_story_authoring_attempt
-+from app.rpg.story_packs.importer import import_story_pack
-+from app.rpg.story_proposals.validation import validate_story_proposal
-+
-+
-+def _stable_attempt_id(*, authoring_goal: str, turn_index: int, raw: Any = "") -> str:
++def _stable_pending_id(*, proposal: Dict[str, Any], authoring_goal: str, turn_index: int) -> str:
 +    payload = json.dumps(
 +        {
++            "proposal_id": proposal.get("proposal_id"),
++            "proposal_type": proposal.get("proposal_type"),
 +            "authoring_goal": authoring_goal,
 +            "turn_index": int(turn_index or 0),
-+            "raw": str(raw)[:1000],
 +        },
 +        sort_keys=True,
 +        ensure_ascii=False,
 +        default=str,
 +    )
 +    digest = hashlib.sha1(payload.encode("utf-8")).hexdigest()[:16]
-+    return f"story_authoring:{digest}"
++    return f"authored_pending:{digest}"
 +
 +
-+def _error_row(reason: str, **kwargs: Any) -> Dict[str, Any]:
-+    row = {"reason": reason}
-+    row.update(kwargs)
-+    return row
++def normalize_pending_authored_proposal(value: Dict[str, Any]) -> Dict[str, Any]:
++    value = _safe_dict(value)
++    return {
++        "pending_id": _safe_str(value.get("pending_id")),
++        "status": _safe_str(value.get("status")) or "pending",
++        "turn_index": _safe_int(value.get("turn_index"), 0),
++        "authoring_goal": _safe_str(value.get("authoring_goal")),
++        "proposal_id": _safe_str(value.get("proposal_id")),
++        "proposal_type": _safe_str(value.get("proposal_type")),
++        "title": _safe_str(value.get("title")),
++        "proposal": dict(_safe_dict(value.get("proposal"))),
++        "validation": dict(_safe_dict(value.get("validation"))),
++        "attempt_id": _safe_str(value.get("attempt_id")),
++        "metadata": dict(_safe_dict(value.get("metadata"))),
++    }
 +
 +
-+def author_story_proposal(
++def normalize_authoring_approval_history_item(value: Dict[str, Any]) -> Dict[str, Any]:
++    value = _safe_dict(value)
++    return {
++        "pending_id": _safe_str(value.get("pending_id")),
++        "status": _safe_str(value.get("status")) or "unknown",
++        "turn_index": _safe_int(value.get("turn_index"), 0),
++        "reason": _safe_str(value.get("reason")),
++        "import_ok": bool(value.get("import_ok")),
++        "imported_pack_id": _safe_str(value.get("imported_pack_id")),
++        "details": dict(_safe_dict(value.get("details"))),
++    }
++
++
++def normalize_story_authoring_approval_state(value: Dict[str, Any] | None) -> Dict[str, Any]:
++    value = _safe_dict(value)
++    pending = [
++        normalize_pending_authored_proposal(row)
++        for row in _safe_list(value.get("pending"))
++        if isinstance(row, dict)
++    ]
++    pending = [
++        row
++        for row in pending
++        if row.get("pending_id") and row.get("status") == "pending"
++    ][-MAX_PENDING_AUTHORED_PROPOSALS:]
++    pending.sort(key=lambda row: (int(row.get("turn_index") or 0), str(row.get("pending_id") or "")))
++
++    history = [
++        normalize_authoring_approval_history_item(row)
++        for row in _safe_list(value.get("history"))
++        if isinstance(row, dict)
++    ][-MAX_AUTHORING_APPROVAL_HISTORY:]
++    history.sort(key=lambda row: (int(row.get("turn_index") or 0), str(row.get("pending_id") or "")))
++
++    return {
++        "version": 1,
++        "pending": pending,
++        "history": history,
++        "max_pending": MAX_PENDING_AUTHORED_PROPOSALS,
++        "max_history": MAX_AUTHORING_APPROVAL_HISTORY,
++    }
++
++
++def ensure_story_authoring_approval_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
++    if not isinstance(simulation_state, dict):
++        raise TypeError("simulation_state_must_be_dict")
++    state = normalize_story_authoring_approval_state(simulation_state.get("story_authoring_approval_state"))
++    simulation_state["story_authoring_approval_state"] = state
++    return state
++
++
++def _append_history(
++    simulation_state: Dict[str, Any],
++    *,
++    pending_id: str,
++    status: str,
++    turn_index: int,
++    reason: str = "",
++    import_ok: bool = False,
++    imported_pack_id: str = "",
++    details: Dict[str, Any] | None = None,
++) -> Dict[str, Any]:
++    state = ensure_story_authoring_approval_state(simulation_state)
++    history = list(state.get("history") or [])
++    history.append(
++        normalize_authoring_approval_history_item(
++            {
++                "pending_id": pending_id,
++                "status": status,
++                "turn_index": turn_index,
++                "reason": reason,
++                "import_ok": import_ok,
++                "imported_pack_id": imported_pack_id,
++                "details": details or {},
++            }
++        )
++    )
++    state["history"] = history[-MAX_AUTHORING_APPROVAL_HISTORY:]
++    simulation_state["story_authoring_approval_state"] = normalize_story_authoring_approval_state(state)
++    return {"ok": True, "reason": "approval_history_recorded"}
++
++
++def draft_story_proposal_for_approval(
 +    simulation_state: Dict[str, Any],
 +    *,
 +    authoring_goal: str,
 +    app_context: Any = None,
 +    turn_index: int = 0,
-+    import_if_valid: bool = False,
-+    repair_once: bool = False,
 +    llm_text_override: Any = None,
++    repair_once: bool = False,
 +) -> Dict[str, Any]:
-+    prompt = build_story_authoring_prompt(
++    authoring_result = author_story_proposal(
 +        simulation_state,
 +        authoring_goal=authoring_goal,
++        app_context=app_context,
 +        turn_index=turn_index,
++        import_if_valid=False,
++        repair_once=repair_once,
++        llm_text_override=llm_text_override,
 +    )
-+
-+    provider_result = {
-+        "ok": True,
-+        "reason": "override_used",
-+        "text": llm_text_override,
-+        "provider": "override",
-+        "model": "override",
-+    }
-+    if llm_text_override is None:
-+        provider_result = call_story_authoring_provider(
-+            app_context,
-+            system_prompt=prompt["system"],
-+            user_prompt=prompt["user"],
-+        )
-+    if not provider_result.get("ok"):
-+        attempt_id = _stable_attempt_id(
-+            authoring_goal=authoring_goal,
-+            turn_index=turn_index,
-+            raw=provider_result.get("reason"),
-+        )
-+        record_story_authoring_attempt(
-+            simulation_state,
-+            attempt_id=attempt_id,
-+            turn_index=turn_index,
-+            status="provider_failed",
-+            provider=provider_result.get("provider") or "",
-+            model=provider_result.get("model") or "",
-+            errors=[_error_row(provider_result.get("reason") or "provider_failed")],
-+            metadata={"provider_result": provider_result},
-+        )
++    if not authoring_result.get("ok"):
 +        return {
 +            "ok": False,
-+            "reason": "provider_failed",
-+            "attempt_id": attempt_id,
-+            "provider_result": provider_result,
-+            "prompt": prompt,
++            "reason": "authoring_failed",
++            "authoring_result": authoring_result,
 +        }
 +
-+    parsed = parse_story_authoring_json(provider_result.get("text"))
-+    attempt_id = _stable_attempt_id(
++    proposal = dict(_safe_dict(authoring_result.get("proposal")))
++    validation = dict(_safe_dict(authoring_result.get("validation")))
++    if not validation.get("ok"):
++        return {
++            "ok": False,
++            "reason": "validation_failed",
++            "authoring_result": authoring_result,
++            "validation": validation,
++        }
++
++    pending_id = _stable_pending_id(
++        proposal=proposal,
 +        authoring_goal=authoring_goal,
 +        turn_index=turn_index,
-+        raw=provider_result.get("text"),
 +    )
-+    if not parsed.get("ok"):
-+        record_story_authoring_attempt(
-+            simulation_state,
-+            attempt_id=attempt_id,
-+            turn_index=turn_index,
-+            status="parse_failed",
-+            provider=provider_result.get("provider") or "",
-+            model=provider_result.get("model") or "",
-+            errors=[_error_row(parsed.get("error") or "parse_failed")],
-+            metadata={"raw": parsed.get("raw", "")},
-+        )
-+        return {
-+            "ok": False,
-+            "reason": "parse_failed",
-+            "attempt_id": attempt_id,
-+            "parse": parsed,
-+            "provider_result": provider_result,
-+            "prompt": prompt,
++    state = ensure_story_authoring_approval_state(simulation_state)
++    pending = list(state.get("pending") or [])
++    for row in pending:
++        if row.get("pending_id") == pending_id:
++            return {
++                "ok": True,
++                "reason": "already_pending",
++                "pending_id": pending_id,
++                "pending": row,
++                "authoring_result": authoring_result,
++            }
++
++    item = normalize_pending_authored_proposal(
++        {
++            "pending_id": pending_id,
++            "status": "pending",
++            "turn_index": turn_index,
++            "authoring_goal": authoring_goal,
++            "proposal_id": proposal.get("proposal_id"),
++            "proposal_type": proposal.get("proposal_type"),
++            "title": proposal.get("title"),
++            "proposal": proposal,
++            "validation": validation,
++            "attempt_id": authoring_result.get("attempt_id"),
++            "metadata": {"source": "story_authoring_approval_v1"},
 +        }
++    )
++    pending.append(item)
++    state["pending"] = pending[-MAX_PENDING_AUTHORED_PROPOSALS:]
++    simulation_state["story_authoring_approval_state"] = normalize_story_authoring_approval_state(state)
++    return {
++        "ok": True,
++        "reason": "pending_approval",
++        "pending_id": pending_id,
++        "pending": item,
++        "authoring_result": authoring_result,
++    }
 +
-+    validation = validate_story_proposal(simulation_state, parsed["proposal"])
-+    repair_result: Dict[str, Any] | None = None
-+    proposal = parsed["proposal"]
-+    repair_attempted = False
 +
-+    if not validation.get("ok") and repair_once and app_context is not None and llm_text_override is None:
-+        repair_attempted = True
-+        repair_prompt = build_story_repair_prompt(
-+            invalid_proposal=proposal,
-+            validation=validation,
-+            authoring_goal=authoring_goal,
-+        )
-+        repair_provider_result = call_story_authoring_provider(
-+            app_context,
-+            system_prompt=repair_prompt["system"],
-+            user_prompt=repair_prompt["user"],
-+        )
-+        repair_parsed = parse_story_authoring_json(repair_provider_result.get("text"))
-+        if repair_provider_result.get("ok") and repair_parsed.get("ok"):
-+            repair_validation = validate_story_proposal(simulation_state, repair_parsed["proposal"])
-+            repair_result = {
-+                "provider_result": repair_provider_result,
-+                "parse": repair_parsed,
-+                "validation": repair_validation,
-+            }
-+            if repair_validation.get("ok"):
-+                proposal = repair_parsed["proposal"]
-+                validation = repair_validation
++def list_pending_story_proposals(simulation_state: Dict[str, Any], *, limit: int = 20) -> Dict[str, Any]:
++    state = ensure_story_authoring_approval_state(simulation_state)
++    limit = max(0, min(50, int(limit or 20)))
++    pending = list(state.get("pending") or [])[-limit:]
++    return {
++        "ok": True,
++        "pending": pending,
++        "pending_count": len(state.get("pending") or []),
++        "history": list(state.get("history") or [])[-limit:],
++        "bounded": {"limit": limit, "max_pending": MAX_PENDING_AUTHORED_PROPOSALS},
++    }
++
++
++def get_pending_story_proposal(simulation_state: Dict[str, Any], pending_id: str) -> Dict[str, Any] | None:
++    state = ensure_story_authoring_approval_state(simulation_state)
++    for row in state.get("pending") or []:
++        if row.get("pending_id") == pending_id:
++            return row
++    return None
++
++
++def approve_story_proposal(
++    simulation_state: Dict[str, Any],
++    *,
++    pending_id: str,
++    turn_index: int = 0,
++    reason: str = "gm_approved",
++) -> Dict[str, Any]:
++    pending_id = str(pending_id or "")
++    state = ensure_story_authoring_approval_state(simulation_state)
++    pending = list(state.get("pending") or [])
++    item = None
++    remaining = []
++    for row in pending:
++        if row.get("pending_id") == pending_id:
++            item = row
 +        else:
-+            repair_result = {
-+                "provider_result": repair_provider_result,
-+                "parse": repair_parsed,
-+            }
++            remaining.append(row)
++    if item is None:
++        return {"ok": False, "reason": "pending_proposal_missing", "pending_id": pending_id}
 +
++    proposal = dict(_safe_dict(item.get("proposal")))
++    validation = validate_story_proposal(simulation_state, proposal)
 +    if not validation.get("ok"):
-+        record_story_authoring_attempt(
++        _append_history(
 +            simulation_state,
-+            attempt_id=attempt_id,
++            pending_id=pending_id,
++            status="approval_failed",
 +            turn_index=turn_index,
-+            status="validation_failed",
-+            provider=provider_result.get("provider") or "",
-+            model=provider_result.get("model") or "",
-+            proposal_id=str(proposal.get("proposal_id") or ""),
-+            proposal_type=str(proposal.get("proposal_type") or ""),
-+            validation_ok=False,
-+            errors=validation.get("errors") or [],
-+            repair_attempted=repair_attempted,
-+            metadata={"repair_result": repair_result or {}},
++            reason="validation_failed",
++            details={"validation": validation},
 +        )
 +        return {
 +            "ok": False,
 +            "reason": "validation_failed",
-+            "attempt_id": attempt_id,
-+            "proposal": proposal,
++            "pending_id": pending_id,
 +            "validation": validation,
-+            "repair_result": repair_result,
-+            "prompt": prompt,
 +        }
 +
-+    import_result: Dict[str, Any] | None = None
-+    if import_if_valid:
-+        import_result = import_story_pack(
++    import_result = import_story_pack(simulation_state, proposal, turn_index=turn_index)
++    if not import_result.get("ok"):
++        _append_history(
 +            simulation_state,
-+            proposal,
++            pending_id=pending_id,
++            status="approval_failed",
 +            turn_index=turn_index,
++            reason="import_failed",
++            details={"import_result": import_result},
 +        )
++        return {
++            "ok": False,
++            "reason": "import_failed",
++            "pending_id": pending_id,
++            "import_result": import_result,
++        }
 +
-+    import_ok = bool(import_result and import_result.get("ok"))
-+    status = "imported" if import_ok else "validated"
-+    record_story_authoring_attempt(
++    state = ensure_story_authoring_approval_state(simulation_state)
++    state["pending"] = remaining
++    simulation_state["story_authoring_approval_state"] = normalize_story_authoring_approval_state(state)
++    _append_history(
 +        simulation_state,
-+        attempt_id=attempt_id,
++        pending_id=pending_id,
++        status="approved",
 +        turn_index=turn_index,
-+        status=status,
-+        provider=provider_result.get("provider") or "",
-+        model=provider_result.get("model") or "",
-+        proposal_id=str(proposal.get("proposal_id") or ""),
-+        proposal_type=str(proposal.get("proposal_type") or ""),
-+        validation_ok=True,
-+        import_ok=import_ok,
-+        imported_pack_id=str((import_result or {}).get("pack_id") or ""),
-+        errors=[],
-+        repair_attempted=repair_attempted,
-+        metadata={
-+            "authoring_goal": authoring_goal,
-+            "import_if_valid": import_if_valid,
-+        },
++        reason=reason,
++        import_ok=True,
++        imported_pack_id=str(import_result.get("pack_id") or ""),
++        details={"proposal_id": proposal.get("proposal_id"), "import_result": import_result},
 +    )
 +    return {
 +        "ok": True,
-+        "reason": status,
-+        "attempt_id": attempt_id,
-+        "proposal": proposal,
-+        "validation": validation,
++        "reason": "approved_imported",
++        "pending_id": pending_id,
 +        "import_result": import_result,
-+        "repair_result": repair_result,
-+        "prompt": prompt,
 +    }
 +
 +
-+def import_authored_story_proposal(
++def reject_story_proposal(
 +    simulation_state: Dict[str, Any],
-+    proposal: Dict[str, Any],
 +    *,
++    pending_id: str,
 +    turn_index: int = 0,
++    reason: str = "gm_rejected",
 +) -> Dict[str, Any]:
-+    validation = validate_story_proposal(simulation_state, proposal)
-+    if not validation.get("ok"):
-+        return {
-+            "ok": False,
-+            "reason": "validation_failed",
-+            "validation": validation,
-+        }
-+    return import_story_pack(
++    pending_id = str(pending_id or "")
++    state = ensure_story_authoring_approval_state(simulation_state)
++    pending = list(state.get("pending") or [])
++    item = None
++    remaining = []
++    for row in pending:
++        if row.get("pending_id") == pending_id:
++            item = row
++        else:
++            remaining.append(row)
++    if item is None:
++        return {"ok": False, "reason": "pending_proposal_missing", "pending_id": pending_id}
++
++    state["pending"] = remaining
++    simulation_state["story_authoring_approval_state"] = normalize_story_authoring_approval_state(state)
++    _append_history(
 +        simulation_state,
-+        proposal,
++        pending_id=pending_id,
++        status="rejected",
 +        turn_index=turn_index,
++        reason=reason,
++        details={"proposal_id": item.get("proposal_id")},
++    )
++    return {
++        "ok": True,
++        "reason": "rejected",
++        "pending_id": pending_id,
++    }
+*** End Patch
+2. Patch src/app/rpg/story_authoring/__init__.py
+*** Begin Patch
+*** Update File: src/app/rpg/story_authoring/__init__.py
+@@
+ from app.rpg.story_authoring.runtime import (
+     author_story_proposal,
+     import_authored_story_proposal,
+ )
++from app.rpg.story_authoring.approval import (
++    approve_story_proposal,
++    draft_story_proposal_for_approval,
++    list_pending_story_proposals,
++    reject_story_proposal,
++)
+@@
+     "author_story_proposal",
++    "approve_story_proposal",
++    "draft_story_proposal_for_approval",
+     "ensure_story_authoring_state",
+     "import_authored_story_proposal",
++    "list_pending_story_proposals",
+     "normalize_story_authoring_state",
++    "reject_story_proposal",
+ ]
+*** End Patch
+Patch 2 — Optional API endpoints
+
+This patch assumes your FastAPI app has an RPG API router/module. If your project’s route file name differs, apply the same endpoint functions to the active RPG API module.
+
+3. Add src/app/rpg/api/story_authoring.py
+*** Begin Patch
+*** Add File: src/app/rpg/api/story_authoring.py
++from __future__ import annotations
++
++from typing import Any, Dict
++
++from fastapi import APIRouter
++from pydantic import BaseModel, Field
++
++from app.rpg.session_store import get_session
++from app.shared import get_provider
++from app.rpg.story_authoring.approval import (
++    approve_story_proposal,
++    draft_story_proposal_for_approval,
++    list_pending_story_proposals,
++    reject_story_proposal,
++)
++
++
++router = APIRouter(prefix="/api/rpg/story_authoring", tags=["rpg-story-authoring"])
++
++
++class StoryAuthoringDraftRequest(BaseModel):
++    session_id: str
++    authoring_goal: str
++    turn_index: int = 0
++    repair_once: bool = False
++    llm_text_override: Any | None = None
++
++
++class StoryAuthoringListRequest(BaseModel):
++    session_id: str
++    limit: int = Field(default=20, ge=0, le=50)
++
++
++class StoryAuthoringApprovalRequest(BaseModel):
++    session_id: str
++    pending_id: str
++    turn_index: int = 0
++    reason: str = ""
++
++
++class _AppContext:
++    def get_provider(self):
++        return get_provider()
++
++
++def _simulation_state_for_session(session_id: str) -> Dict[str, Any]:
++    session = get_session(session_id)
++    if not isinstance(session, dict):
++        raise KeyError(f"session_not_found:{session_id}")
++    simulation_state = session.setdefault("simulation_state", {})
++    return simulation_state
++
++
++@router.post("/draft")
++def draft_story_authoring_proposal(request: StoryAuthoringDraftRequest) -> Dict[str, Any]:
++    simulation_state = _simulation_state_for_session(request.session_id)
++    result = draft_story_proposal_for_approval(
++        simulation_state,
++        authoring_goal=request.authoring_goal,
++        app_context=_AppContext(),
++        turn_index=request.turn_index,
++        llm_text_override=request.llm_text_override,
++        repair_once=request.repair_once,
++    )
++    return result
++
++
++@router.post("/pending")
++def pending_story_authoring_proposals(request: StoryAuthoringListRequest) -> Dict[str, Any]:
++    simulation_state = _simulation_state_for_session(request.session_id)
++    return list_pending_story_proposals(simulation_state, limit=request.limit)
++
++
++@router.post("/approve")
++def approve_story_authoring_proposal(request: StoryAuthoringApprovalRequest) -> Dict[str, Any]:
++    simulation_state = _simulation_state_for_session(request.session_id)
++    return approve_story_proposal(
++        simulation_state,
++        pending_id=request.pending_id,
++        turn_index=request.turn_index,
++        reason=request.reason or "gm_approved",
++    )
++
++
++@router.post("/reject")
++def reject_story_authoring_proposal(request: StoryAuthoringApprovalRequest) -> Dict[str, Any]:
++    simulation_state = _simulation_state_for_session(request.session_id)
++    return reject_story_proposal(
++        simulation_state,
++        pending_id=request.pending_id,
++        turn_index=request.turn_index,
++        reason=request.reason or "gm_rejected",
 +    )
 *** End Patch
-Patch 2 — Unit tests
-7. Add src/tests/rpg/story_authoring/test_story_authoring_parsing.py
+4. Register router in active FastAPI app
+
+Patch the active FastAPI app bootstrap file. Common candidates:
+
+src/app/main.py
+src/app/api.py
+src/app/server.py
+
+Add:
+
 *** Begin Patch
-*** Add File: src/tests/rpg/story_authoring/test_story_authoring_parsing.py
-+from app.rpg.story_authoring.parsing import parse_story_authoring_json
-+
-+
-+def test_parse_story_authoring_json_accepts_object_string():
-+    result = parse_story_authoring_json('{"proposal_version":"story_proposal_v1"}')
-+
-+    assert result["ok"] is True
-+    assert result["proposal"]["proposal_version"] == "story_proposal_v1"
-+
-+
-+def test_parse_story_authoring_json_strips_code_fence():
-+    result = parse_story_authoring_json('```json\n{"proposal_type":"story_pack"}\n```')
-+
-+    assert result["ok"] is True
-+    assert result["proposal"]["proposal_type"] == "story_pack"
-+
-+
-+def test_parse_story_authoring_json_rejects_non_object():
-+    result = parse_story_authoring_json('["bad"]')
-+
-+    assert result["ok"] is False
-+    assert result["error"].startswith("json_root_not_object")
-+
-+
-+def test_parse_story_authoring_json_rejects_invalid_json():
-+    result = parse_story_authoring_json("{bad json")
-+
-+    assert result["ok"] is False
-+    assert result["error"].startswith("invalid_json")
+*** Update File: src/app/main.py
+@@
++from app.rpg.api.story_authoring import router as rpg_story_authoring_router
+@@
+ app.include_router(...)
++app.include_router(rpg_story_authoring_router)
 *** End Patch
-8. Add src/tests/rpg/story_authoring/test_story_authoring_runtime.py
+
+If your actual app file is not src/app/main.py, apply this to the file that already includes RPG routers.
+
+Patch 3 — Unit tests
+5. Add src/tests/rpg/story_authoring/test_story_authoring_approval.py
 *** Begin Patch
-*** Add File: src/tests/rpg/story_authoring/test_story_authoring_runtime.py
+*** Add File: src/tests/rpg/story_authoring/test_story_authoring_approval.py
 +import json
 +
-+from app.rpg.story_authoring.runtime import author_story_proposal
++from app.rpg.story_authoring.approval import (
++    approve_story_proposal,
++    draft_story_proposal_for_approval,
++    list_pending_story_proposals,
++    reject_story_proposal,
++)
 +from app.rpg.story_packs.registry import get_imported_story_pack
 +
 +
-+def _valid_proposal():
++def _valid_pack(proposal_id: str = "approval_bandit_pack"):
 +    return {
 +        "proposal_version": "story_proposal_v1",
 +        "proposal_type": "story_pack",
-+        "proposal_id": "authored_bandit_pack",
-+        "title": "Authored Bandit Pack",
++        "proposal_id": proposal_id,
++        "title": "Approval Bandit Pack",
 +        "lore_entries": [
 +            {
-+                "lore_id": "lore:authored_red_sashes",
-+                "title": "Authored Red Sashes",
++                "lore_id": f"lore:{proposal_id}",
++                "title": "Approval Red Sashes",
 +                "truth_status": "rumor",
 +            }
 +        ],
 +        "story_arcs": [
 +            {
-+                "arc_id": "arc:authored_bandit_pressure",
-+                "title": "Authored Bandit Pressure",
++                "arc_id": f"arc:{proposal_id}",
++                "title": "Approval Bandit Pressure",
 +                "status": "active",
 +                "stage": "rumors",
 +                "pressure": 10,
-+                "linked_lore": ["lore:authored_red_sashes"],
++                "linked_lore": [f"lore:{proposal_id}"],
 +            }
 +        ],
 +        "story_events": [],
@@ -740,158 +575,119 @@ Patch 2 — Unit tests
 +    }
 +
 +
-+def test_author_story_proposal_validates_override_without_import():
++def test_draft_story_proposal_for_approval_does_not_import():
 +    simulation_state = {}
 +
-+    result = author_story_proposal(
++    result = draft_story_proposal_for_approval(
 +        simulation_state,
-+        authoring_goal="Create a small bandit rumor pack.",
-+        llm_text_override=json.dumps(_valid_proposal()),
-+        import_if_valid=False,
++        authoring_goal="Draft a pack.",
++        llm_text_override=json.dumps(_valid_pack()),
 +        turn_index=1,
 +    )
 +
++    pending = list_pending_story_proposals(simulation_state)
 +    assert result["ok"] is True
-+    assert result["reason"] == "validated"
-+    assert simulation_state["story_authoring_state"]["attempts"][0]["validation_ok"] is True
++    assert result["reason"] == "pending_approval"
++    assert pending["pending_count"] == 1
 +    assert "story_pack_state" not in simulation_state
 +
 +
-+def test_author_story_proposal_imports_when_enabled():
++def test_approve_story_proposal_imports_pending_pack_once():
 +    simulation_state = {}
-+
-+    result = author_story_proposal(
++    draft = draft_story_proposal_for_approval(
 +        simulation_state,
-+        authoring_goal="Create a small bandit rumor pack.",
-+        llm_text_override=json.dumps(_valid_proposal()),
-+        import_if_valid=True,
++        authoring_goal="Draft a pack.",
++        llm_text_override=json.dumps(_valid_pack()),
 +        turn_index=1,
 +    )
 +
++    first = approve_story_proposal(
++        simulation_state,
++        pending_id=draft["pending_id"],
++        turn_index=2,
++    )
++    second = approve_story_proposal(
++        simulation_state,
++        pending_id=draft["pending_id"],
++        turn_index=3,
++    )
++
++    assert first["ok"] is True
++    assert first["reason"] == "approved_imported"
++    assert get_imported_story_pack(simulation_state, "storypack:approval_bandit_pack") is not None
++    assert second["ok"] is False
++    assert second["reason"] == "pending_proposal_missing"
++    assert list_pending_story_proposals(simulation_state)["pending_count"] == 0
++
++
++def test_reject_story_proposal_removes_pending_without_import():
++    simulation_state = {}
++    draft = draft_story_proposal_for_approval(
++        simulation_state,
++        authoring_goal="Draft a pack.",
++        llm_text_override=json.dumps(_valid_pack()),
++        turn_index=1,
++    )
++
++    result = reject_story_proposal(
++        simulation_state,
++        pending_id=draft["pending_id"],
++        turn_index=2,
++        reason="not today",
++    )
++
++    state = simulation_state["story_authoring_approval_state"]
 +    assert result["ok"] is True
-+    assert result["reason"] == "imported"
-+    pack_id = result["import_result"]["pack_id"]
-+    assert get_imported_story_pack(simulation_state, pack_id) is not None
-+    assert simulation_state["story_authoring_state"]["attempts"][0]["import_ok"] is True
-+
-+
-+def test_author_story_proposal_rejects_invalid_json():
-+    simulation_state = {}
-+
-+    result = author_story_proposal(
-+        simulation_state,
-+        authoring_goal="Create a bad pack.",
-+        llm_text_override="{bad json",
-+        import_if_valid=True,
-+        turn_index=1,
-+    )
-+
-+    assert result["ok"] is False
-+    assert result["reason"] == "parse_failed"
-+    assert simulation_state["story_authoring_state"]["attempts"][0]["status"] == "parse_failed"
++    assert result["reason"] == "rejected"
++    assert state["pending"] == []
++    assert state["history"][0]["status"] == "rejected"
 +    assert "story_pack_state" not in simulation_state
 +
 +
-+def test_author_story_proposal_rejects_validator_failure_without_import():
++def test_invalid_draft_is_not_pending():
 +    simulation_state = {}
-+    invalid = _valid_proposal()
-+    invalid["story_events"] = [
-+        {"event_id": "event:bad", "arc_id": "arc:missing", "effects": []}
-+    ]
++    invalid = _valid_pack()
++    invalid["story_events"] = [{"event_id": "event:bad", "arc_id": "arc:missing", "effects": []}]
 +
-+    result = author_story_proposal(
++    result = draft_story_proposal_for_approval(
 +        simulation_state,
-+        authoring_goal="Create an invalid pack.",
++        authoring_goal="Draft invalid pack.",
 +        llm_text_override=json.dumps(invalid),
-+        import_if_valid=True,
 +        turn_index=1,
 +    )
 +
 +    assert result["ok"] is False
-+    assert result["reason"] == "validation_failed"
-+    assert simulation_state["story_authoring_state"]["attempts"][0]["validation_ok"] is False
-+    assert "story_pack_state" not in simulation_state
++    assert result["reason"] == "authoring_failed"
++    assert list_pending_story_proposals(simulation_state)["pending_count"] == 0
 +
 +
-+def test_story_authoring_attempt_history_bounded():
++def test_authoring_approval_state_is_bounded():
 +    simulation_state = {}
-+    for i in range(130):
-+        proposal = _valid_proposal()
-+        proposal["proposal_id"] = f"authored_pack_{i}"
-+        proposal["lore_entries"][0]["lore_id"] = f"lore:x_{i}"
-+        proposal["story_arcs"][0]["arc_id"] = f"arc:x_{i}"
-+        proposal["story_arcs"][0]["linked_lore"] = [f"lore:x_{i}"]
-+        author_story_proposal(
++    for i in range(70):
++        draft_story_proposal_for_approval(
 +            simulation_state,
-+            authoring_goal=f"Create pack {i}.",
-+            llm_text_override=json.dumps(proposal),
-+            import_if_valid=False,
++            authoring_goal=f"Draft pack {i}.",
++            llm_text_override=json.dumps(_valid_pack(f"approval_pack_{i}")),
 +            turn_index=i,
 +        )
 +
-+    assert len(simulation_state["story_authoring_state"]["attempts"]) == 100
++    assert len(simulation_state["story_authoring_approval_state"]["pending"]) == 50
 *** End Patch
-9. Add src/tests/rpg/story_authoring/test_story_authoring_prompt.py
+Patch 4 — Manual checks/setup
+6. Add src/tests/rpg/manual/story_authoring_approval_m37_m39_checks.py
 *** Begin Patch
-*** Add File: src/tests/rpg/story_authoring/test_story_authoring_prompt.py
-+from app.rpg.campaign_journal.journal import record_campaign_journal_entry
-+from app.rpg.lore.state import upsert_lore_entry
-+from app.rpg.story_authoring.prompts import build_story_authoring_prompt
-+
-+
-+def test_story_authoring_prompt_contains_recap_and_constraints():
-+    simulation_state = {}
-+    record_campaign_journal_entry(
-+        simulation_state,
-+        kind="story_event",
-+        summary="Bandit rumors reached the tavern.",
-+        turn_index=1,
-+        source_id="event:rumor",
-+    )
-+
-+    prompt = build_story_authoring_prompt(
-+        simulation_state,
-+        authoring_goal="Create an escalation pack.",
-+        turn_index=2,
-+    )
-+
-+    assert "Return JSON only" in prompt["user"]
-+    assert "campaign_recap" in prompt["user"]
-+    assert "story_proposal_v1" in prompt["user"]
-+
-+
-+def test_story_authoring_prompt_does_not_surface_unrevealed_secret_lore():
-+    simulation_state = {}
-+    upsert_lore_entry(
-+        simulation_state,
-+        {
-+            "lore_id": "lore:secret",
-+            "title": "Secret",
-+            "truth_status": "secret",
-+            "revealed_to_player": False,
-+            "summary": "This should not appear.",
-+        },
-+    )
-+
-+    prompt = build_story_authoring_prompt(
-+        simulation_state,
-+        authoring_goal="Create a story pack.",
-+        turn_index=2,
-+    )
-+
-+    assert "This should not appear." not in prompt["user"]
-*** End Patch
-Patch 3 — Manual checks/setup
-10. Add src/tests/rpg/manual/story_authoring_m34_m36_checks.py
-*** Begin Patch
-*** Add File: src/tests/rpg/manual/story_authoring_m34_m36_checks.py
+*** Add File: src/tests/rpg/manual/story_authoring_approval_m37_m39_checks.py
 +from __future__ import annotations
 +
 +import json
 +from typing import Any, Dict, List
 +
-+from app.rpg.story_authoring.prompts import build_story_authoring_prompt
-+from app.rpg.story_authoring.runtime import author_story_proposal
++from app.rpg.story_authoring.approval import (
++    approve_story_proposal,
++    draft_story_proposal_for_approval,
++    list_pending_story_proposals,
++    reject_story_proposal,
++)
 +from app.rpg.story_packs.registry import get_imported_story_pack
 +
 +
@@ -925,16 +721,22 @@ Patch 3 — Manual checks/setup
 +        if candidate and not first_non_empty:
 +            first_non_empty = candidate
 +        if (
-+            isinstance(candidate.get("story_authoring_state"), dict)
-+            or isinstance(candidate.get("campaign_journal_state"), dict)
++            isinstance(candidate.get("story_authoring_approval_state"), dict)
++            or isinstance(candidate.get("story_authoring_state"), dict)
 +            or isinstance(candidate.get("story_pack_state"), dict)
-+            or isinstance(candidate.get("lore_state"), dict)
 +        ):
 +            return candidate
 +    return first_non_empty
 +
 +
-+def run_story_authoring_m34_m36_check(
++def _latest_pending_id(simulation_state: Dict[str, Any]) -> str:
++    pending = list_pending_story_proposals(simulation_state).get("pending") or []
++    if not pending:
++        return ""
++    return str(pending[-1].get("pending_id") or "")
++
++
++def run_story_authoring_approval_m37_m39_check(
 +    *,
 +    check: Dict[str, Any],
 +    result: Dict[str, Any],
@@ -943,187 +745,252 @@ Patch 3 — Manual checks/setup
 +    simulation_state = _extract_simulation_state(result=result, session=session)
 +    check_type = str(check.get("type") or "")
 +
-+    if check_type == "story_authoring_prompt":
-+        prompt = build_story_authoring_prompt(
-+            simulation_state,
-+            authoring_goal=str(check.get("authoring_goal") or "Create a story pack."),
-+            turn_index=int(check.get("turn_index") or 1),
-+            max_items=int(check.get("max_items") or 10),
-+        )
-+        must_contain = check.get("must_contain") or []
-+        must_not_contain = check.get("must_not_contain") or []
-+        user_text = prompt.get("user") or ""
-+        ok = all(text in user_text for text in must_contain) and all(text not in user_text for text in must_not_contain)
-+        return {
-+            "check_type": check_type,
-+            "ok": ok,
-+            "prompt": prompt,
-+            "must_contain": must_contain,
-+            "must_not_contain": must_not_contain,
-+        }
-+
-+    if check_type == "story_authoring_run":
++    if check_type == "story_authoring_approval_draft":
 +        llm_text_override = check.get("llm_text_override")
 +        if isinstance(llm_text_override, dict):
 +            llm_text_override = json.dumps(llm_text_override)
-+        authoring_result = author_story_proposal(
++        draft_result = draft_story_proposal_for_approval(
 +            simulation_state,
-+            authoring_goal=str(check.get("authoring_goal") or "Create a story pack."),
++            authoring_goal=str(check.get("authoring_goal") or "Draft a story pack."),
 +            turn_index=int(check.get("turn_index") or 1),
-+            import_if_valid=bool(check.get("import_if_valid", False)),
-+            repair_once=bool(check.get("repair_once", False)),
 +            llm_text_override=llm_text_override,
++            repair_once=bool(check.get("repair_once", False)),
 +        )
 +        expected_ok = check.get("expected_ok")
 +        expected_reason = check.get("expected_reason")
 +        ok = True
 +        if expected_ok is not None:
-+            ok = ok and authoring_result.get("ok") is bool(expected_ok)
++            ok = ok and draft_result.get("ok") is bool(expected_ok)
 +        if expected_reason:
-+            ok = ok and authoring_result.get("reason") == expected_reason
++            ok = ok and draft_result.get("reason") == expected_reason
 +        return {
 +            "check_type": check_type,
 +            "ok": ok,
-+            "authoring_result": authoring_result,
++            "draft_result": draft_result,
 +            "expected_ok": expected_ok,
 +            "expected_reason": expected_reason,
 +        }
 +
-+    if check_type == "story_authoring_attempt":
-+        state = _safe_dict(simulation_state.get("story_authoring_state"))
-+        attempts = list(state.get("attempts") or [])
++    if check_type == "story_authoring_approval_pending":
++        listing = list_pending_story_proposals(
++            simulation_state,
++            limit=int(check.get("limit") or 20),
++        )
++        expected_count = check.get("expected_count")
++        expected_proposal_id = check.get("expected_proposal_id")
++        ok = True
++        if expected_count is not None:
++            ok = ok and int(listing.get("pending_count") or 0) == int(expected_count)
++        if expected_proposal_id:
++            ok = ok and expected_proposal_id in [row.get("proposal_id") for row in listing.get("pending") or []]
++        return {
++            "check_type": check_type,
++            "ok": ok,
++            "listing": listing,
++            "expected_count": expected_count,
++            "expected_proposal_id": expected_proposal_id,
++        }
++
++    if check_type == "story_authoring_approval_approve":
++        pending_id = str(check.get("pending_id") or "") or _latest_pending_id(simulation_state)
++        approve_result = approve_story_proposal(
++            simulation_state,
++            pending_id=pending_id,
++            turn_index=int(check.get("turn_index") or 1),
++            reason=str(check.get("reason") or "gm_approved"),
++        )
++        expected_ok = check.get("expected_ok")
++        expected_reason = check.get("expected_reason")
++        ok = True
++        if expected_ok is not None:
++            ok = ok and approve_result.get("ok") is bool(expected_ok)
++        if expected_reason:
++            ok = ok and approve_result.get("reason") == expected_reason
++        return {
++            "check_type": check_type,
++            "ok": ok,
++            "pending_id": pending_id,
++            "approve_result": approve_result,
++            "expected_ok": expected_ok,
++            "expected_reason": expected_reason,
++        }
++
++    if check_type == "story_authoring_approval_reject":
++        pending_id = str(check.get("pending_id") or "") or _latest_pending_id(simulation_state)
++        reject_result = reject_story_proposal(
++            simulation_state,
++            pending_id=pending_id,
++            turn_index=int(check.get("turn_index") or 1),
++            reason=str(check.get("reason") or "gm_rejected"),
++        )
++        expected_ok = check.get("expected_ok")
++        expected_reason = check.get("expected_reason")
++        ok = True
++        if expected_ok is not None:
++            ok = ok and reject_result.get("ok") is bool(expected_ok)
++        if expected_reason:
++            ok = ok and reject_result.get("reason") == expected_reason
++        return {
++            "check_type": check_type,
++            "ok": ok,
++            "pending_id": pending_id,
++            "reject_result": reject_result,
++            "expected_ok": expected_ok,
++            "expected_reason": expected_reason,
++        }
++
++    if check_type == "story_authoring_approval_imported_pack":
++        pack_id = str(check.get("pack_id") or "")
++        imported = get_imported_story_pack(simulation_state, pack_id)
++        expected_present = bool(check.get("expected_present", True))
++        return {
++            "check_type": check_type,
++            "ok": bool(imported) is expected_present,
++            "pack_id": pack_id,
++            "imported": imported,
++            "expected_present": expected_present,
++        }
++
++    if check_type == "story_authoring_approval_history":
++        state = _safe_dict(simulation_state.get("story_authoring_approval_state"))
++        history = list(state.get("history") or [])
 +        expected_status = check.get("expected_status")
-+        expected_validation_ok = check.get("expected_validation_ok")
-+        expected_import_ok = check.get("expected_import_ok")
-+        rows = attempts
++        rows = history
 +        if expected_status:
 +            rows = [row for row in rows if row.get("status") == expected_status]
-+        if expected_validation_ok is not None:
-+            rows = [row for row in rows if row.get("validation_ok") is bool(expected_validation_ok)]
-+        if expected_import_ok is not None:
-+            rows = [row for row in rows if row.get("import_ok") is bool(expected_import_ok)]
 +        return {
 +            "check_type": check_type,
 +            "ok": bool(rows),
-+            "attempts": attempts,
++            "history": history,
 +            "matched": rows,
 +            "expected_status": expected_status,
-+            "expected_validation_ok": expected_validation_ok,
-+            "expected_import_ok": expected_import_ok,
 +        }
 +
-+    if check_type == "story_authoring_imported_pack":
-+        pack_id = str(check.get("pack_id") or "")
-+        imported = get_imported_story_pack(simulation_state, pack_id)
++    if check_type == "story_authoring_approval_debug_bounded":
++        state = _safe_dict(simulation_state.get("story_authoring_approval_state"))
++        pending_count = len(state.get("pending") or [])
++        history_count = len(state.get("history") or [])
++        max_pending = int(check.get("max_pending") or 50)
++        max_history = int(check.get("max_history") or 100)
 +        return {
 +            "check_type": check_type,
-+            "ok": bool(imported),
-+            "pack_id": pack_id,
-+            "imported": imported,
-+        }
-+
-+    if check_type == "story_authoring_debug_bounded":
-+        state = _safe_dict(simulation_state.get("story_authoring_state"))
-+        attempts = list(state.get("attempts") or [])
-+        max_attempts = int(check.get("max_attempts") or 100)
-+        return {
-+            "check_type": check_type,
-+            "ok": len(attempts) <= max_attempts,
-+            "attempt_count": len(attempts),
-+            "max_attempts": max_attempts,
++            "ok": pending_count <= max_pending and history_count <= max_history,
++            "pending_count": pending_count,
++            "history_count": history_count,
++            "max_pending": max_pending,
++            "max_history": max_history,
 +        }
 +
 +    return {
 +        "check_type": check_type,
 +        "ok": False,
-+        "error": f"unknown_story_authoring_m34_m36_check_type:{check_type}",
++        "error": f"unknown_story_authoring_approval_m37_m39_check_type:{check_type}",
 +    }
 +
 +
-+def run_story_authoring_m34_m36_checks(
++def run_story_authoring_approval_m37_m39_checks(
 +    *,
 +    checks: List[Dict[str, Any]],
 +    result: Dict[str, Any],
 +    session: Dict[str, Any] | None = None,
 +) -> List[Dict[str, Any]]:
 +    return [
-+        run_story_authoring_m34_m36_check(check=check, result=result, session=session)
++        run_story_authoring_approval_m37_m39_check(check=check, result=result, session=session)
 +        for check in checks
 +    ]
 *** End Patch
-11. Patch src/tests/rpg/manual/scenario_setup.py
+7. Patch src/tests/rpg/manual/scenario_setup.py
 
 Add import:
 
 *** Begin Patch
 *** Update File: src/tests/rpg/manual/scenario_setup.py
 @@
- from app.rpg.campaign_journal.journal import record_campaign_journal_entry
-+from app.rpg.story_authoring.runtime import author_story_proposal
+ from app.rpg.story_authoring.runtime import author_story_proposal
++from app.rpg.story_authoring.approval import (
++    approve_story_proposal,
++    draft_story_proposal_for_approval,
++    reject_story_proposal,
++)
  from tests.rpg.manual.memory_fixtures import build_manual_memory_event
 *** End Patch
 
-Add setup block after campaign journal setup:
+Add setup block after setup_story_authoring_runs:
 
 *** Begin Patch
 *** Update File: src/tests/rpg/manual/scenario_setup.py
 @@
-     for entry in scenario.get("setup_campaign_journal_entries") or []:
-         if isinstance(entry, dict):
-             record_campaign_journal_entry(
-                 simulation_state,
-                 kind=str(entry.get("kind") or "story"),
+     for authoring in scenario.get("setup_story_authoring_runs") or []:
+         if isinstance(authoring, dict):
+             llm_text_override = authoring.get("llm_text_override")
+             if isinstance(llm_text_override, dict):
+                 llm_text_override = json.dumps(llm_text_override)
 @@
-                 source_id=str(entry.get("source_id") or ""),
-                 metadata=entry.get("metadata") or {},
+                 repair_once=bool(authoring.get("repair_once", False)),
+                 llm_text_override=llm_text_override,
              )
 +
-+    for authoring in scenario.get("setup_story_authoring_runs") or []:
-+        if isinstance(authoring, dict):
-+            llm_text_override = authoring.get("llm_text_override")
-+            if isinstance(llm_text_override, dict):
-+                llm_text_override = json.dumps(llm_text_override)
-+            author_story_proposal(
-+                simulation_state,
-+                authoring_goal=str(authoring.get("authoring_goal") or "Create a story pack."),
-+                turn_index=int(authoring.get("turn_index") or scenario.get("setup_turn_index") or 1),
-+                import_if_valid=bool(authoring.get("import_if_valid", False)),
-+                repair_once=bool(authoring.get("repair_once", False)),
-+                llm_text_override=llm_text_override,
-+            )
++    for action in scenario.get("setup_story_authoring_approval_actions") or []:
++        if isinstance(action, dict):
++            kind = str(action.get("action") or "")
++            if kind == "draft":
++                llm_text_override = action.get("llm_text_override")
++                if isinstance(llm_text_override, dict):
++                    llm_text_override = json.dumps(llm_text_override)
++                draft_story_proposal_for_approval(
++                    simulation_state,
++                    authoring_goal=str(action.get("authoring_goal") or "Draft a story pack."),
++                    turn_index=int(action.get("turn_index") or scenario.get("setup_turn_index") or 1),
++                    llm_text_override=llm_text_override,
++                    repair_once=bool(action.get("repair_once", False)),
++                )
++            elif kind == "approve":
++                pending_id = str(action.get("pending_id") or "")
++                if not pending_id:
++                    pending = simulation_state.get("story_authoring_approval_state", {}).get("pending", [])
++                    pending_id = str((pending[-1] if pending else {}).get("pending_id") or "")
++                approve_story_proposal(
++                    simulation_state,
++                    pending_id=pending_id,
++                    turn_index=int(action.get("turn_index") or scenario.get("setup_turn_index") or 1),
++                    reason=str(action.get("reason") or "gm_approved"),
++                )
++            elif kind == "reject":
++                pending_id = str(action.get("pending_id") or "")
++                if not pending_id:
++                    pending = simulation_state.get("story_authoring_approval_state", {}).get("pending", [])
++                    pending_id = str((pending[-1] if pending else {}).get("pending_id") or "")
++                reject_story_proposal(
++                    simulation_state,
++                    pending_id=pending_id,
++                    turn_index=int(action.get("turn_index") or scenario.get("setup_turn_index") or 1),
++                    reason=str(action.get("reason") or "gm_rejected"),
++                )
  
      for item in scenario.get("setup_story_event_queue") or []:
          if isinstance(item, dict):
 *** End Patch
-
-If json is not imported at top of scenario_setup.py, add:
-
-*** Begin Patch
-*** Update File: src/tests/rpg/manual/scenario_setup.py
-@@
-+import json
-*** End Patch
-12. Patch src/tests/rpg/manual/scenario_execution.py
+8. Patch src/tests/rpg/manual/scenario_execution.py
 
 Add import:
 
 *** Begin Patch
 *** Update File: src/tests/rpg/manual/scenario_execution.py
 @@
- from tests.rpg.manual.campaign_journal_m31_m33_checks import (
-     run_campaign_journal_m31_m33_checks,
+ from tests.rpg.manual.story_authoring_m34_m36_checks import (
+     run_story_authoring_m34_m36_checks,
  )
-+from tests.rpg.manual.story_authoring_m34_m36_checks import (
-+    run_story_authoring_m34_m36_checks,
++from tests.rpg.manual.story_authoring_approval_m37_m39_checks import (
++    run_story_authoring_approval_m37_m39_checks,
 +)
 *** End Patch
 
-Add check block after campaign journal checks:
+Add check block after M34-M36 checks:
 
 *** Begin Patch
 *** Update File: src/tests/rpg/manual/scenario_execution.py
 @@
-         if campaign_journal_m31_m33_checks:
+         if story_authoring_m34_m36_checks:
              current_session = {}
              try:
                  current_session = _ensure_manual_session(session_id)
@@ -1132,29 +999,29 @@ Add check block after campaign journal checks:
                          + str(check_result.get("error") or "")
                      )
 +
-+        story_authoring_m34_m36_checks = [
++        story_authoring_approval_m37_m39_checks = [
 +            check
 +            for check in checks
 +            if isinstance(check, dict)
-+            and str(check.get("type") or "").startswith("story_authoring")
++            and str(check.get("type") or "").startswith("story_authoring_approval")
 +        ]
-+        if story_authoring_m34_m36_checks:
++        if story_authoring_approval_m37_m39_checks:
 +            current_session = {}
 +            try:
 +                current_session = _ensure_manual_session(session_id)
 +            except Exception:
 +                current_session = session
 +
-+            story_authoring_m34_m36_check_results = run_story_authoring_m34_m36_checks(
-+                checks=story_authoring_m34_m36_checks,
++            story_authoring_approval_m37_m39_check_results = run_story_authoring_approval_m37_m39_checks(
++                checks=story_authoring_approval_m37_m39_checks,
 +                result=turn_record.get("result") or turn_record,
 +                session=current_session,
 +            )
-+            turn_record["story_authoring_m34_m36_check_results"] = story_authoring_m34_m36_check_results
-+            for check_result in story_authoring_m34_m36_check_results:
++            turn_record["story_authoring_approval_m37_m39_check_results"] = story_authoring_approval_m37_m39_check_results
++            for check_result in story_authoring_approval_m37_m39_check_results:
 +                if not check_result.get("ok"):
 +                    turn_record.setdefault("scenario_warnings", []).append(
-+                        "story_authoring_m34_m36_check_failed:"
++                        "story_authoring_approval_m37_m39_check_failed:"
 +                        + str(scenario_name)
 +                        + ":turn_"
 +                        + str(turn_index)
@@ -1166,79 +1033,81 @@ Add check block after campaign journal checks:
  
          turn_summaries.append(turn_record)
 *** End Patch
-13. Patch src/tests/rpg/manual/summary_sanitizer.py
+9. Patch src/tests/rpg/manual/summary_sanitizer.py
 
 Add sanitizer block:
 
 *** Begin Patch
 *** Update File: src/tests/rpg/manual/summary_sanitizer.py
 @@
-     campaign_journal_m31_m33_check_results = turn.get("campaign_journal_m31_m33_check_results")
-     if isinstance(campaign_journal_m31_m33_check_results, list):
-         sanitized["campaign_journal_m31_m33_check_results"] = [
+     story_authoring_m34_m36_check_results = turn.get("story_authoring_m34_m36_check_results")
+     if isinstance(story_authoring_m34_m36_check_results, list):
+         sanitized["story_authoring_m34_m36_check_results"] = [
 @@
              if isinstance(item, dict)
          ]
 +
-+    story_authoring_m34_m36_check_results = turn.get("story_authoring_m34_m36_check_results")
-+    if isinstance(story_authoring_m34_m36_check_results, list):
-+        sanitized["story_authoring_m34_m36_check_results"] = [
++    story_authoring_approval_m37_m39_check_results = turn.get("story_authoring_approval_m37_m39_check_results")
++    if isinstance(story_authoring_approval_m37_m39_check_results, list):
++        sanitized["story_authoring_approval_m37_m39_check_results"] = [
 +            {
 +                "check_type": item.get("check_type"),
 +                "ok": item.get("ok"),
-+                "authoring_result": item.get("authoring_result"),
-+                "attempts": item.get("attempts"),
-+                "matched": item.get("matched"),
++                "draft_result": item.get("draft_result"),
++                "listing": item.get("listing"),
++                "approve_result": item.get("approve_result"),
++                "reject_result": item.get("reject_result"),
++                "pending_id": item.get("pending_id"),
 +                "pack_id": item.get("pack_id"),
 +                "imported": item.get("imported"),
-+                "attempt_count": item.get("attempt_count"),
-+                "max_attempts": item.get("max_attempts"),
++                "history": item.get("history"),
++                "matched": item.get("matched"),
++                "pending_count": item.get("pending_count"),
++                "history_count": item.get("history_count"),
 +                "expected_ok": item.get("expected_ok"),
 +                "expected_reason": item.get("expected_reason"),
++                "expected_count": item.get("expected_count"),
++                "expected_proposal_id": item.get("expected_proposal_id"),
 +                "expected_status": item.get("expected_status"),
-+                "expected_validation_ok": item.get("expected_validation_ok"),
-+                "expected_import_ok": item.get("expected_import_ok"),
-+                "must_contain": item.get("must_contain"),
-+                "must_not_contain": item.get("must_not_contain"),
++                "expected_present": item.get("expected_present"),
 +                "error": item.get("error"),
 +            }
-+            for item in story_authoring_m34_m36_check_results[:50]
++            for item in story_authoring_approval_m37_m39_check_results[:50]
 +            if isinstance(item, dict)
 +        ]
  
      return sanitized
 *** End Patch
-Patch 4 — Manual scenarios
-14. Add src/tests/rpg/manual/scenarios/story_authoring_m34_m36.py
+Patch 5 — Manual scenarios
+10. Add src/tests/rpg/manual/scenarios/story_authoring_approval_m37_m39.py
 *** Begin Patch
-*** Add File: src/tests/rpg/manual/scenarios/story_authoring_m34_m36.py
+*** Add File: src/tests/rpg/manual/scenarios/story_authoring_approval_m37_m39.py
 +from __future__ import annotations
 +
 +from typing import Any, Dict
 +
 +
-+def _valid_authored_pack() -> Dict[str, Any]:
++def _valid_approval_pack(proposal_id: str = "approval_bandit_pack") -> Dict[str, Any]:
 +    return {
 +        "proposal_version": "story_proposal_v1",
 +        "proposal_type": "story_pack",
-+        "proposal_id": "authored_bandit_pack",
-+        "title": "Authored Bandit Pack",
++        "proposal_id": proposal_id,
++        "title": "Approval Bandit Pack",
 +        "lore_entries": [
 +            {
-+                "lore_id": "lore:authored_red_sashes",
-+                "title": "Authored Red Sashes",
++                "lore_id": f"lore:{proposal_id}",
++                "title": "Approval Red Sashes",
 +                "truth_status": "rumor",
-+                "summary": "A fresh rumor says the Red Sashes are testing the road.",
 +            }
 +        ],
 +        "story_arcs": [
 +            {
-+                "arc_id": "arc:authored_bandit_pressure",
-+                "title": "Authored Bandit Pressure",
++                "arc_id": f"arc:{proposal_id}",
++                "title": "Approval Bandit Pressure",
 +                "status": "active",
 +                "stage": "rumors",
 +                "pressure": 10,
-+                "linked_lore": ["lore:authored_red_sashes"],
++                "linked_lore": [f"lore:{proposal_id}"],
 +            }
 +        ],
 +        "story_events": [],
@@ -1246,11 +1115,11 @@ Patch 4 — Manual scenarios
 +    }
 +
 +
-+def _invalid_reference_pack() -> Dict[str, Any]:
-+    pack = _valid_authored_pack()
++def _invalid_approval_pack() -> Dict[str, Any]:
++    pack = _valid_approval_pack("approval_invalid_pack")
 +    pack["story_events"] = [
 +        {
-+            "event_id": "event:bad_authored",
++            "event_id": "event:approval_bad",
 +            "arc_id": "arc:missing",
 +            "effects": [],
 +        }
@@ -1258,223 +1127,214 @@ Patch 4 — Manual scenarios
 +    return pack
 +
 +
-+STORY_AUTHORING_M34_M36_SCENARIOS: Dict[str, Dict[str, Any]] = {
-+    "story_authoring_prompt_uses_campaign_recap": {
-+        "setup_campaign_journal_entries": [
++STORY_AUTHORING_APPROVAL_M37_M39_SCENARIOS: Dict[str, Dict[str, Any]] = {
++    "story_authoring_approval_draft_creates_pending_without_import": {
++        "turns": ["I draft an authored story pack for GM review."],
++        "checks": [
 +            {
-+                "kind": "story_event",
-+                "summary": "Bandit rumors reached the tavern.",
++                "type": "story_authoring_approval_draft",
++                "authoring_goal": "Draft a bandit pack for approval.",
++                "llm_text_override": _valid_approval_pack(),
 +                "turn_index": 1,
-+                "source_id": "event:rumor",
-+            }
-+        ],
-+        "turns": ["I ask the story authoring system for a grounded proposal prompt."],
-+        "checks": [
-+            {
-+                "type": "story_authoring_prompt",
-+                "authoring_goal": "Create a grounded bandit escalation pack.",
-+                "must_contain": ["campaign_recap", "story_proposal_v1", "Bandit rumors reached the tavern"],
-+            }
-+        ],
-+    },
-+    "story_authoring_prompt_excludes_unrevealed_secret_lore": {
-+        "setup_lore_transitions": [
-+            {
-+                "action": "upsert",
-+                "lore_id": "lore:secret_debt",
-+                "title": "Secret Debt",
-+                "truth_status": "secret",
-+                "revealed_to_player": False,
-+                "summary": "Bran secretly owes the Red Sashes.",
-+            }
-+        ],
-+        "turns": ["I inspect the story authoring prompt for leaked secrets."],
-+        "checks": [
-+            {
-+                "type": "story_authoring_prompt",
-+                "authoring_goal": "Create a grounded story pack.",
-+                "must_contain": ["campaign_recap", "Do not reveal hidden or secret lore"],
-+                "must_not_contain": ["Bran secretly owes the Red Sashes"],
-+            }
-+        ],
-+    },
-+    "story_authoring_valid_proposal_validates_without_import": {
-+        "turns": ["I validate an authored story proposal without importing it."],
-+        "checks": [
-+            {
-+                "type": "story_authoring_run",
-+                "authoring_goal": "Create a small authored bandit pack.",
-+                "llm_text_override": _valid_authored_pack(),
-+                "import_if_valid": False,
 +                "expected_ok": True,
-+                "expected_reason": "validated",
++                "expected_reason": "pending_approval",
 +            },
 +            {
-+                "type": "story_authoring_attempt",
-+                "expected_status": "validated",
-+                "expected_validation_ok": True,
-+                "expected_import_ok": False,
++                "type": "story_authoring_approval_pending",
++                "expected_count": 1,
++                "expected_proposal_id": "approval_bandit_pack",
++            },
++            {
++                "type": "story_authoring_approval_imported_pack",
++                "pack_id": "storypack:approval_bandit_pack",
++                "expected_present": False,
 +            },
 +        ],
 +    },
-+    "story_authoring_valid_proposal_imports_when_enabled": {
-+        "turns": ["I import a valid authored story proposal."],
++    "story_authoring_approval_approve_imports_pending_pack": {
++        "setup_story_authoring_approval_actions": [
++            {
++                "action": "draft",
++                "authoring_goal": "Draft a bandit pack for approval.",
++                "llm_text_override": _valid_approval_pack(),
++                "turn_index": 1,
++            }
++        ],
++        "turns": ["I approve the pending authored story pack."],
 +        "checks": [
 +            {
-+                "type": "story_authoring_run",
-+                "authoring_goal": "Create and import a small authored bandit pack.",
-+                "llm_text_override": _valid_authored_pack(),
-+                "import_if_valid": True,
++                "type": "story_authoring_approval_approve",
++                "turn_index": 2,
 +                "expected_ok": True,
-+                "expected_reason": "imported",
++                "expected_reason": "approved_imported",
 +            },
 +            {
-+                "type": "story_authoring_imported_pack",
-+                "pack_id": "storypack:authored_bandit_pack",
++                "type": "story_authoring_approval_imported_pack",
++                "pack_id": "storypack:approval_bandit_pack",
++                "expected_present": True,
 +            },
 +            {
-+                "type": "story_authoring_attempt",
-+                "expected_status": "imported",
-+                "expected_validation_ok": True,
-+                "expected_import_ok": True,
++                "type": "story_authoring_approval_pending",
++                "expected_count": 0,
++            },
++            {
++                "type": "story_authoring_approval_history",
++                "expected_status": "approved",
 +            },
 +        ],
 +    },
-+    "story_authoring_invalid_json_rejected": {
-+        "turns": ["I reject invalid story authoring JSON."],
++    "story_authoring_approval_reject_removes_pending_without_import": {
++        "setup_story_authoring_approval_actions": [
++            {
++                "action": "draft",
++                "authoring_goal": "Draft a bandit pack for approval.",
++                "llm_text_override": _valid_approval_pack("approval_rejected_pack"),
++                "turn_index": 1,
++            }
++        ],
++        "turns": ["I reject the pending authored story pack."],
 +        "checks": [
 +            {
-+                "type": "story_authoring_run",
-+                "authoring_goal": "Create invalid JSON.",
-+                "llm_text_override": "{bad json",
-+                "import_if_valid": True,
-+                "expected_ok": False,
-+                "expected_reason": "parse_failed",
++                "type": "story_authoring_approval_reject",
++                "turn_index": 2,
++                "reason": "too early",
++                "expected_ok": True,
++                "expected_reason": "rejected",
 +            },
 +            {
-+                "type": "story_authoring_attempt",
-+                "expected_status": "parse_failed",
-+                "expected_validation_ok": False,
-+                "expected_import_ok": False,
++                "type": "story_authoring_approval_imported_pack",
++                "pack_id": "storypack:approval_rejected_pack",
++                "expected_present": False,
++            },
++            {
++                "type": "story_authoring_approval_pending",
++                "expected_count": 0,
++            },
++            {
++                "type": "story_authoring_approval_history",
++                "expected_status": "rejected",
 +            },
 +        ],
 +    },
-+    "story_authoring_invalid_reference_rejected_without_import": {
-+        "turns": ["I reject an authored story proposal with invalid references."],
++    "story_authoring_approval_invalid_draft_not_pending": {
++        "turns": ["I try to draft an invalid authored story pack."],
 +        "checks": [
 +            {
-+                "type": "story_authoring_run",
-+                "authoring_goal": "Create invalid referenced pack.",
-+                "llm_text_override": _invalid_reference_pack(),
-+                "import_if_valid": True,
++                "type": "story_authoring_approval_draft",
++                "authoring_goal": "Draft an invalid pack.",
++                "llm_text_override": _invalid_approval_pack(),
++                "turn_index": 1,
 +                "expected_ok": False,
-+                "expected_reason": "validation_failed",
++                "expected_reason": "authoring_failed",
 +            },
 +            {
-+                "type": "story_authoring_attempt",
-+                "expected_status": "validation_failed",
-+                "expected_validation_ok": False,
-+                "expected_import_ok": False,
++                "type": "story_authoring_approval_pending",
++                "expected_count": 0,
 +            },
 +        ],
 +    },
-+    "story_authoring_attempt_history_is_bounded": {
-+        "setup_story_authoring_runs": [
++    "story_authoring_approval_approve_missing_pending_rejected": {
++        "turns": ["I try to approve a missing authored proposal."],
++        "checks": [
 +            {
-+                "authoring_goal": f"Create authored pack {i}",
++                "type": "story_authoring_approval_approve",
++                "pending_id": "authored_pending:missing",
++                "turn_index": 1,
++                "expected_ok": False,
++                "expected_reason": "pending_proposal_missing",
++            }
++        ],
++    },
++    "story_authoring_approval_reject_missing_pending_rejected": {
++        "turns": ["I try to reject a missing authored proposal."],
++        "checks": [
++            {
++                "type": "story_authoring_approval_reject",
++                "pending_id": "authored_pending:missing",
++                "turn_index": 1,
++                "expected_ok": False,
++                "expected_reason": "pending_proposal_missing",
++            }
++        ],
++    },
++    "story_authoring_approval_debug_is_bounded": {
++        "setup_story_authoring_approval_actions": [
++            {
++                "action": "draft",
++                "authoring_goal": f"Draft pack {i}",
++                "llm_text_override": _valid_approval_pack(f"approval_pack_{i}"),
 +                "turn_index": i,
-+                "llm_text_override": dict(
-+                    _valid_authored_pack(),
-+                    proposal_id=f"authored_pack_{i}",
-+                    lore_entries=[
-+                        {
-+                            "lore_id": f"lore:authored_{i}",
-+                            "title": f"Authored {i}",
-+                            "truth_status": "rumor",
-+                        }
-+                    ],
-+                    story_arcs=[
-+                        {
-+                            "arc_id": f"arc:authored_{i}",
-+                            "title": f"Authored {i}",
-+                            "status": "active",
-+                            "stage": "rumors",
-+                            "pressure": 1,
-+                            "linked_lore": [f"lore:authored_{i}"],
-+                        }
-+                    ],
-+                ),
-+                "import_if_valid": False,
 +            }
-+            for i in range(130)
++            for i in range(70)
 +        ],
-+        "turns": ["I inspect bounded story authoring attempt history."],
++        "turns": ["I inspect bounded GM approval debug state."],
 +        "checks": [
 +            {
-+                "type": "story_authoring_debug_bounded",
-+                "max_attempts": 100,
++                "type": "story_authoring_approval_debug_bounded",
++                "max_pending": 50,
++                "max_history": 100,
 +            }
 +        ],
 +    },
 +}
 *** End Patch
-15. Add expected names file
+11. Add expected names file
 *** Begin Patch
-*** Add File: src/tests/rpg/manual/scenarios/expected_story_authoring_m34_m36_names.py
-+EXPECTED_STORY_AUTHORING_M34_M36_SCENARIO_NAMES = {
-+    "story_authoring_prompt_uses_campaign_recap",
-+    "story_authoring_prompt_excludes_unrevealed_secret_lore",
-+    "story_authoring_valid_proposal_validates_without_import",
-+    "story_authoring_valid_proposal_imports_when_enabled",
-+    "story_authoring_invalid_json_rejected",
-+    "story_authoring_invalid_reference_rejected_without_import",
-+    "story_authoring_attempt_history_is_bounded",
+*** Add File: src/tests/rpg/manual/scenarios/expected_story_authoring_approval_m37_m39_names.py
++EXPECTED_STORY_AUTHORING_APPROVAL_M37_M39_SCENARIO_NAMES = {
++    "story_authoring_approval_draft_creates_pending_without_import",
++    "story_authoring_approval_approve_imports_pending_pack",
++    "story_authoring_approval_reject_removes_pending_without_import",
++    "story_authoring_approval_invalid_draft_not_pending",
++    "story_authoring_approval_approve_missing_pending_rejected",
++    "story_authoring_approval_reject_missing_pending_rejected",
++    "story_authoring_approval_debug_is_bounded",
 +}
 *** End Patch
-16. Patch src/tests/rpg/manual/scenarios/registry.py
+12. Patch src/tests/rpg/manual/scenarios/registry.py
 *** Begin Patch
 *** Update File: src/tests/rpg/manual/scenarios/registry.py
 @@
- from tests.rpg.manual.scenarios.campaign_journal_m31_m33 import (
-     CAMPAIGN_JOURNAL_M31_M33_SCENARIOS,
+ from tests.rpg.manual.scenarios.story_authoring_m34_m36 import (
+     STORY_AUTHORING_M34_M36_SCENARIOS,
  )
-+from tests.rpg.manual.scenarios.story_authoring_m34_m36 import (
-+    STORY_AUTHORING_M34_M36_SCENARIOS,
++from tests.rpg.manual.scenarios.story_authoring_approval_m37_m39 import (
++    STORY_AUTHORING_APPROVAL_M37_M39_SCENARIOS,
 +)
 @@
-     scenarios.update(CAMPAIGN_JOURNAL_M31_M33_SCENARIOS)
-+    scenarios.update(STORY_AUTHORING_M34_M36_SCENARIOS)
+     scenarios.update(STORY_AUTHORING_M34_M36_SCENARIOS)
++    scenarios.update(STORY_AUTHORING_APPROVAL_M37_M39_SCENARIOS)
      return scenarios
 *** End Patch
-17. Patch src/tests/rpg/manual/test_manual_scenario_migration.py
+13. Patch src/tests/rpg/manual/test_manual_scenario_migration.py
 *** Begin Patch
 *** Update File: src/tests/rpg/manual/test_manual_scenario_migration.py
 @@
- from tests.rpg.manual.scenarios.expected_campaign_journal_m31_m33_names import (
-     EXPECTED_CAMPAIGN_JOURNAL_M31_M33_SCENARIO_NAMES,
+ from tests.rpg.manual.scenarios.expected_story_authoring_m34_m36_names import (
+     EXPECTED_STORY_AUTHORING_M34_M36_SCENARIO_NAMES,
  )
-+from tests.rpg.manual.scenarios.expected_story_authoring_m34_m36_names import (
-+    EXPECTED_STORY_AUTHORING_M34_M36_SCENARIO_NAMES,
++from tests.rpg.manual.scenarios.expected_story_authoring_approval_m37_m39_names import (
++    EXPECTED_STORY_AUTHORING_APPROVAL_M37_M39_SCENARIO_NAMES,
 +)
 @@
- def test_manual_scenario_registry_includes_campaign_journal_m31_m33_names():
+ def test_manual_scenario_registry_includes_story_authoring_m34_m36_names():
      names = set(build_service_scenarios().keys())
-     missing = EXPECTED_CAMPAIGN_JOURNAL_M31_M33_SCENARIO_NAMES - names
+     missing = EXPECTED_STORY_AUTHORING_M34_M36_SCENARIO_NAMES - names
  
-     assert not missing, f"Missing M31-M33 campaign journal scenarios: {sorted(missing)}"
+     assert not missing, f"Missing M34-M36 story authoring scenarios: {sorted(missing)}"
 +
 +
-+def test_manual_scenario_registry_includes_story_authoring_m34_m36_names():
++def test_manual_scenario_registry_includes_story_authoring_approval_m37_m39_names():
 +    names = set(build_service_scenarios().keys())
-+    missing = EXPECTED_STORY_AUTHORING_M34_M36_SCENARIO_NAMES - names
++    missing = EXPECTED_STORY_AUTHORING_APPROVAL_M37_M39_SCENARIO_NAMES - names
 +
-+    assert not missing, f"Missing M34-M36 story authoring scenarios: {sorted(missing)}"
++    assert not missing, f"Missing M37-M39 story authoring approval scenarios: {sorted(missing)}"
 *** End Patch
-18. Add manual check tests
+14. Add manual check tests
 *** Begin Patch
-*** Add File: src/tests/rpg/manual/test_manual_story_authoring_m34_m36_checks.py
-+from tests.rpg.manual.story_authoring_m34_m36_checks import (
-+    run_story_authoring_m34_m36_checks,
+*** Add File: src/tests/rpg/manual/test_manual_story_authoring_approval_m37_m39_checks.py
++from tests.rpg.manual.story_authoring_approval_m37_m39_checks import (
++    run_story_authoring_approval_m37_m39_checks,
 +)
 +
 +
@@ -1482,73 +1342,97 @@ Patch 4 — Manual scenarios
 +    return {
 +        "proposal_version": "story_proposal_v1",
 +        "proposal_type": "story_pack",
-+        "proposal_id": "manual_authoring_test",
-+        "title": "Manual Authoring Test",
-+        "lore_entries": [{"lore_id": "lore:x", "title": "X", "truth_status": "rumor"}],
-+        "story_arcs": [{"arc_id": "arc:x", "title": "X", "stage": "rumors", "linked_lore": ["lore:x"]}],
++        "proposal_id": "manual_approval_pack",
++        "title": "Manual Approval Pack",
++        "lore_entries": [
++            {"lore_id": "lore:manual_approval", "title": "Manual Approval", "truth_status": "rumor"}
++        ],
++        "story_arcs": [
++            {
++                "arc_id": "arc:manual_approval",
++                "title": "Manual Approval",
++                "status": "active",
++                "stage": "rumors",
++                "pressure": 1,
++                "linked_lore": ["lore:manual_approval"],
++            }
++        ],
 +        "story_events": [],
 +        "escalation_rules": [],
 +    }
 +
 +
-+def test_manual_story_authoring_run_check_validates_override():
++def test_manual_story_authoring_approval_draft_and_pending_checks():
 +    session = {"simulation_state": {}}
 +
-+    result = run_story_authoring_m34_m36_checks(
++    draft = run_story_authoring_approval_m37_m39_checks(
 +        checks=[
 +            {
-+                "type": "story_authoring_run",
-+                "authoring_goal": "Create a small pack.",
++                "type": "story_authoring_approval_draft",
++                "authoring_goal": "Draft a pack.",
 +                "llm_text_override": _valid_pack(),
 +                "expected_ok": True,
-+                "expected_reason": "validated",
++                "expected_reason": "pending_approval",
++            }
++        ],
++        result={},
++        session=session,
++    )[0]
++    pending = run_story_authoring_approval_m37_m39_checks(
++        checks=[
++            {
++                "type": "story_authoring_approval_pending",
++                "expected_count": 1,
++                "expected_proposal_id": "manual_approval_pack",
 +            }
 +        ],
 +        result={},
 +        session=session,
 +    )[0]
 +
-+    assert result["ok"] is True
++    assert draft["ok"] is True
++    assert pending["ok"] is True
 +
 +
-+def test_manual_story_authoring_attempt_check_reads_state():
++def test_manual_story_authoring_approval_approve_check_imports_pack():
 +    session = {"simulation_state": {}}
-+    run_story_authoring_m34_m36_checks(
++    run_story_authoring_approval_m37_m39_checks(
 +        checks=[
 +            {
-+                "type": "story_authoring_run",
-+                "authoring_goal": "Create a small pack.",
++                "type": "story_authoring_approval_draft",
++                "authoring_goal": "Draft a pack.",
 +                "llm_text_override": _valid_pack(),
 +                "expected_ok": True,
-+                "expected_reason": "validated",
 +            }
 +        ],
 +        result={},
 +        session=session,
 +    )
 +
-+    result = run_story_authoring_m34_m36_checks(
++    approved = run_story_authoring_approval_m37_m39_checks(
 +        checks=[
 +            {
-+                "type": "story_authoring_attempt",
-+                "expected_status": "validated",
-+                "expected_validation_ok": True,
++                "type": "story_authoring_approval_approve",
++                "expected_ok": True,
++                "expected_reason": "approved_imported",
 +            }
 +        ],
 +        result={},
 +        session=session,
 +    )[0]
 +
-+    assert result["ok"] is True
++    assert approved["ok"] is True
 *** End Patch
 Validation commands
 Compile
-python -m py_compile src/app/rpg/story_authoring/state.py
-python -m py_compile src/app/rpg/story_authoring/prompts.py
-python -m py_compile src/app/rpg/story_authoring/parsing.py
-python -m py_compile src/app/rpg/story_authoring/provider.py
-python -m py_compile src/app/rpg/story_authoring/runtime.py
-python -m py_compile src/tests/rpg/manual/story_authoring_m34_m36_checks.py
-python -m py_compile src/tests/rpg/manual/scenarios/story_authoring_m34_m36.py
+python -m py_compile src/app/rpg/story_authoring/approval.py
+python -m py_compile src/app/rpg/story_authoring/__init__.py
+python -m py_compile src/tests/rpg/manual/story_authoring_approval_m37_m39_checks.py
+python -m py_compile src/tests/rpg/manual/scenarios/story_authoring_approval_m37_m39.py
+python -m py_compile src/tests/rpg/manual/scenarios/expected_story_authoring_approval_m37_m39_names.py
+
+If you added the optional API module:
+
+python -m py_compile src/app/rpg/api/story_authoring.py
 Unit tests
 python -m pytest src/tests/rpg/story_authoring src/tests/rpg/campaign_journal src/tests/rpg/companions src/tests/rpg/npc_runtime_context src/tests/rpg/npc_evolution src/tests/rpg/story_event_queue src/tests/rpg/campaign_director src/tests/rpg/dialogue_context src/tests/rpg/story_packs src/tests/rpg/story_proposals src/tests/rpg/escalation src/tests/rpg/story_events src/tests/rpg/story_arcs src/tests/rpg/lore -q

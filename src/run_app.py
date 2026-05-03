@@ -85,6 +85,7 @@ from app.rpg.api.rpg_adventure_routes import rpg_adventure_bp
 from app.rpg.api.rpg_game_routes import rpg_game_bp
 from app.rpg.api.rpg_presentation_routes import rpg_presentation_bp
 from app.rpg.api.rpg_session_routes import rpg_session_bp
+from app.rpg.api.story_authoring import router as rpg_story_authoring_router
 from app.runtime_paths import generated_images_root, resources_models_root
 from app.runtime_services import get_runtime_status_bundle
 from app.tts_http_client import (
@@ -520,6 +521,7 @@ app.include_router(rpg_adventure_bp)
 app.include_router(rpg_presentation_bp)
 app.include_router(rpg_game_bp)
 app.include_router(rpg_session_bp)
+app.include_router(rpg_story_authoring_router)
 app.include_router(image_router)
 
 # Import and register remaining RPG routers

@@ -37,6 +37,9 @@ from tests.rpg.manual.scenarios.expected_story_event_queue_m25_m27_names import 
 from tests.rpg.manual.scenarios.expected_story_m1_m3_names import (
     EXPECTED_STORY_M1_M3_SCENARIO_NAMES,
 )
+from tests.rpg.manual.scenarios.expected_story_authoring_approval_m37_m39_names import (
+    EXPECTED_STORY_AUTHORING_APPROVAL_M37_M39_SCENARIO_NAMES,
+)
 from tests.rpg.manual.scenarios.expected_story_pack_m13_m15_names import (
     EXPECTED_STORY_PACK_M13_M15_SCENARIO_NAMES,
 )
@@ -254,3 +257,10 @@ def test_manual_scenario_registry_includes_campaign_journal_m31_m33_names():
     missing = EXPECTED_CAMPAIGN_JOURNAL_M31_M33_SCENARIO_NAMES - names
 
     assert not missing, f"Missing M31-M33 campaign journal scenarios: {sorted(missing)}"
+
+
+def test_manual_scenario_registry_includes_story_authoring_approval_m37_m39_names():
+    names = set(build_service_scenarios().keys())
+    missing = EXPECTED_STORY_AUTHORING_APPROVAL_M37_M39_SCENARIO_NAMES - names
+
+    assert not missing, f"Missing M37-M39 story authoring approval scenarios: {sorted(missing)}"

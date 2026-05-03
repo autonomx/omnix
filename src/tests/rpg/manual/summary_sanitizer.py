@@ -797,6 +797,35 @@ def sanitize_turn_for_summary(
             if isinstance(item, dict)
         ]
 
+    story_authoring_approval_m37_m39_check_results = turn.get("story_authoring_approval_m37_m39_check_results")
+    if isinstance(story_authoring_approval_m37_m39_check_results, list):
+        sanitized["story_authoring_approval_m37_m39_check_results"] = [
+            {
+                "check_type": item.get("check_type"),
+                "ok": item.get("ok"),
+                "draft_result": item.get("draft_result"),
+                "listing": item.get("listing"),
+                "approve_result": item.get("approve_result"),
+                "reject_result": item.get("reject_result"),
+                "pending_id": item.get("pending_id"),
+                "pack_id": item.get("pack_id"),
+                "imported": item.get("imported"),
+                "history": item.get("history"),
+                "matched": item.get("matched"),
+                "pending_count": item.get("pending_count"),
+                "history_count": item.get("history_count"),
+                "expected_ok": item.get("expected_ok"),
+                "expected_reason": item.get("expected_reason"),
+                "expected_count": item.get("expected_count"),
+                "expected_proposal_id": item.get("expected_proposal_id"),
+                "expected_status": item.get("expected_status"),
+                "expected_present": item.get("expected_present"),
+                "error": item.get("error"),
+            }
+            for item in story_authoring_approval_m37_m39_check_results[:50]
+            if isinstance(item, dict)
+        ]
+
     return sanitized
 
 
