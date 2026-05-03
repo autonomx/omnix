@@ -1,1758 +1,1603 @@
-Below is a literal apply-this-patch diff spec for Bundle L4-L6 — Spatial Scene Graph v1.
+Below is a literal apply-this-patch diff spec for:
 
-This is written for a coding LLM to apply file-by-file. It is intentionally additive and simulation-first.
+Bundle L7-L9 — Causal NPC Memory Retrieval v1
 
-PATCH GOAL:
-Add deterministic spatial scene graph support:
-- rooms/areas
-- connections/exits
-- barriers
-- movement checks
-- visibility checks
-- audibility checks
-- save/load-safe normalization
-- unit tests
-- manual scenario fixture/check wiring
+This patch is additive and deterministic. It does not let the LLM decide memory truth.
 
-Do not let LLM decide spatial truth.
-Patch 1 — Add spatial package
-1. Add src/app/rpg/spatial/__init__.py
+Bundle L7-L9 — Causal NPC Memory Retrieval v1
+GOAL:
+Add deterministic causal NPC memory retrieval.
+
+NPCs can remember an event if:
+- they observed it
+- they heard it
+- someone told them
+- it directly affected them
+- it was explicitly recorded as conversation/social/relationship memory
+
+NPCs must not magically know unrelated global events.
+
+Use L4-L6 spatial graph when available:
+- can_see_entity()
+- can_hear_area()
+- visible_entities_from()
+- audible_entities_from()
+- entity locations
+
+All manual test commands below include:
+
+  --artifact-detail full
+Patch 1 — Add causal memory package files
+1. Add src/app/rpg/memory/__init__.py
 *** Begin Patch
-*** Add File: src/app/rpg/spatial/__init__.py
-+"""Deterministic RPG spatial scene graph helpers.
+*** Add File: src/app/rpg/memory/__init__.py
++"""Deterministic RPG memory helpers."""
 +
-+The spatial package is simulation-authoritative.  It answers questions such as:
-+
-+- where is an entity?
-+- can an entity move between areas?
-+- can an entity see another entity?
-+- can an entity hear another entity?
-+
-+LLM narration may describe these results, but must not invent them.
-+"""
-+
-+from app.rpg.spatial.audibility import (
-+    audible_entities_from,
-+    can_hear_area,
-+    can_hear_entity,
++from app.rpg.memory.causal_memory import (
++    add_causal_memory,
++    ensure_npc_memory_state,
++    make_causal_memory,
++    normalize_causal_memory,
++    normalize_npc_memory_state,
 +)
-+from app.rpg.spatial.graph import (
-+    ensure_spatial_graph,
-+    find_connection,
-+    get_entity_area,
-+    get_spatial_graph,
-+    list_area_connections,
-+    list_entities_in_area,
-+    set_entity_area,
-+)
-+from app.rpg.spatial.movement import can_move_between, move_entity
-+from app.rpg.spatial.serialization import normalize_spatial_graph
-+from app.rpg.spatial.visibility import (
-+    can_see_area,
-+    can_see_entity,
-+    visible_entities_from,
++from app.rpg.memory.causal_retrieval import retrieve_causal_memories
++from app.rpg.memory.observation import (
++    record_event_observations,
++    record_told_memory,
 +)
 +
 +__all__ = [
-+    "audible_entities_from",
-+    "can_hear_area",
-+    "can_hear_entity",
-+    "can_move_between",
-+    "can_see_area",
-+    "can_see_entity",
-+    "ensure_spatial_graph",
-+    "find_connection",
-+    "get_entity_area",
-+    "get_spatial_graph",
-+    "list_area_connections",
-+    "list_entities_in_area",
-+    "move_entity",
-+    "normalize_spatial_graph",
-+    "set_entity_area",
-+    "visible_entities_from",
++    "add_causal_memory",
++    "ensure_npc_memory_state",
++    "make_causal_memory",
++    "normalize_causal_memory",
++    "normalize_npc_memory_state",
++    "record_event_observations",
++    "record_told_memory",
++    "retrieve_causal_memories",
 +]
 *** End Patch
-2. Add src/app/rpg/spatial/model.py
+2. Add src/app/rpg/memory/causal_memory.py
 *** Begin Patch
-*** Add File: src/app/rpg/spatial/model.py
+*** Add File: src/app/rpg/memory/causal_memory.py
 +from __future__ import annotations
 +
-+from dataclasses import asdict, dataclass, field
-+from typing import Any, Dict, List, Literal
++import hashlib
++import json
++from datetime import datetime, timezone
++from typing import Any, Dict, List
 +
 +
-+BarrierKind = Literal[
-+    "none",
-+    "door",
-+    "locked_door",
-+    "wall",
-+    "window",
-+    "curtain",
-+    "gate",
-+    "portcullis",
-+]
++DEFAULT_MAX_MEMORIES_PER_SUBJECT = 100
 +
-+VisibilityMode = Literal[
-+    "open",
-+    "partial",
-+    "blocked",
-+]
-+
-+AudibilityMode = Literal[
-+    "open",
-+    "muffled",
-+    "blocked",
-+]
-+
-+
-+@dataclass
-+class SpatialArea:
-+    area_id: str
-+    name: str
-+    description: str = ""
-+    tags: List[str] = field(default_factory=list)
-+
-+    def to_dict(self) -> Dict[str, Any]:
-+        return asdict(self)
-+
-+
-+@dataclass
-+class SpatialConnection:
-+    connection_id: str
-+    from_area_id: str
-+    to_area_id: str
-+    label: str = ""
-+    bidirectional: bool = True
-+
-+    barrier_kind: BarrierKind = "none"
-+    is_open: bool = True
-+    is_locked: bool = False
-+    blocks_movement: bool = False
-+    visibility: VisibilityMode = "open"
-+    audibility: AudibilityMode = "open"
-+
-+    metadata: Dict[str, Any] = field(default_factory=dict)
-+
-+    def to_dict(self) -> Dict[str, Any]:
-+        return asdict(self)
-+
-+
-+@dataclass
-+class SpatialEntityLocation:
-+    entity_id: str
-+    area_id: str
-+    hidden: bool = False
-+    silent: bool = False
-+    tags: List[str] = field(default_factory=list)
-+
-+    def to_dict(self) -> Dict[str, Any]:
-+        return asdict(self)
-+
-+
-+@dataclass
-+class SpatialSceneGraph:
-+    graph_id: str
-+    current_area_id: str
-+    areas: Dict[str, SpatialArea] = field(default_factory=dict)
-+    connections: Dict[str, SpatialConnection] = field(default_factory=dict)
-+    entity_locations: Dict[str, SpatialEntityLocation] = field(default_factory=dict)
-+    metadata: Dict[str, Any] = field(default_factory=dict)
-+
-+    def to_dict(self) -> Dict[str, Any]:
-+        return {
-+            "graph_id": self.graph_id,
-+            "current_area_id": self.current_area_id,
-+            "areas": {k: v.to_dict() for k, v in self.areas.items()},
-+            "connections": {k: v.to_dict() for k, v in self.connections.items()},
-+            "entity_locations": {
-+                k: v.to_dict() for k, v in self.entity_locations.items()
-+            },
-+            "metadata": dict(self.metadata),
-+        }
-*** End Patch
-3. Add src/app/rpg/spatial/serialization.py
-*** Begin Patch
-*** Add File: src/app/rpg/spatial/serialization.py
-+from __future__ import annotations
-+
-+from typing import Any, Dict
++BLOCKED_SYNTHETIC_SUBJECT_IDS = {
++    "",
++    "environment",
++    "ambient_wait",
++    "observe",
++    "observe_environment",
++    "npc:The Room/Environment",
++    "Environment/NPCs (General)",
++}
 +
 +
 +def _safe_dict(value: Any) -> Dict[str, Any]:
 +    return value if isinstance(value, dict) else {}
++
++
++def _safe_list(value: Any) -> List[Any]:
++    return value if isinstance(value, list) else []
 +
 +
 +def _safe_str(value: Any) -> str:
 +    return value if isinstance(value, str) else ""
 +
 +
-+def _safe_bool(value: Any, default: bool = False) -> bool:
-+    if isinstance(value, bool):
-+        return value
-+    if value in (0, 1):
-+        return bool(value)
-+    return default
++def _safe_float(value: Any, default: float = 1.0) -> float:
++    try:
++        return float(value)
++    except Exception:
++        return default
 +
 +
-+def normalize_spatial_graph(value: Dict[str, Any] | None) -> Dict[str, Any]:
-+    """Return a save/load-safe spatial graph dict.
++def _safe_int(value: Any, default: int = 0) -> int:
++    try:
++        return int(value)
++    except Exception:
++        return default
 +
-+    This is intentionally tolerant so older sessions without spatial data do not
-+    crash.  The returned object is always JSON-serializable and mutable.
-+    """
-+    source = _safe_dict(value)
 +
-+    areas: Dict[str, Dict[str, Any]] = {}
-+    for area_id, area in _safe_dict(source.get("areas")).items():
-+        area = _safe_dict(area)
-+        normalized_id = _safe_str(area.get("area_id")) or _safe_str(area_id)
-+        if not normalized_id:
-+            continue
-+        areas[normalized_id] = {
-+            "area_id": normalized_id,
-+            "name": _safe_str(area.get("name")) or normalized_id,
-+            "description": _safe_str(area.get("description")),
-+            "tags": list(area.get("tags") or []),
-+        }
++def is_valid_memory_subject(subject_id: str) -> bool:
++    subject_id = str(subject_id or "").strip()
++    if subject_id in BLOCKED_SYNTHETIC_SUBJECT_IDS:
++        return False
++    lowered = subject_id.lower()
++    if "environment/npcs" in lowered:
++        return False
++    if "room/environment" in lowered:
++        return False
++    return bool(subject_id)
 +
-+    connections: Dict[str, Dict[str, Any]] = {}
-+    for connection_id, connection in _safe_dict(source.get("connections")).items():
-+        connection = _safe_dict(connection)
-+        normalized_id = (
-+            _safe_str(connection.get("connection_id")) or _safe_str(connection_id)
++
++def stable_memory_id(
++    *,
++    subject_id: str,
++    event_id: str,
++    kind: str,
++    source: str,
++    facts: Dict[str, Any] | None = None,
++) -> str:
++    payload = {
++        "subject_id": subject_id,
++        "event_id": event_id,
++        "kind": kind,
++        "source": source,
++        "facts": facts or {},
++    }
++    text = json.dumps(payload, sort_keys=True, ensure_ascii=False, default=str)
++    digest = hashlib.sha1(text.encode("utf-8")).hexdigest()[:16]
++    return f"mem:{digest}"
++
++
++def normalize_causal_memory(value: Dict[str, Any]) -> Dict[str, Any]:
++    value = _safe_dict(value)
++    subject_id = _safe_str(value.get("subject_id"))
++    event_id = _safe_str(value.get("event_id"))
++    kind = _safe_str(value.get("kind")) or "system"
++    source = _safe_str(value.get("source")) or "manual"
++    facts = dict(_safe_dict(value.get("facts")))
++    memory_id = (
++        _safe_str(value.get("memory_id"))
++        or stable_memory_id(
++            subject_id=subject_id,
++            event_id=event_id,
++            kind=kind,
++            source=source,
++            facts=facts,
 +        )
-+        from_area_id = _safe_str(connection.get("from_area_id"))
-+        to_area_id = _safe_str(connection.get("to_area_id"))
-+        if not normalized_id or not from_area_id or not to_area_id:
-+            continue
-+        connections[normalized_id] = {
-+            "connection_id": normalized_id,
-+            "from_area_id": from_area_id,
-+            "to_area_id": to_area_id,
-+            "label": _safe_str(connection.get("label")),
-+            "bidirectional": _safe_bool(connection.get("bidirectional"), True),
-+            "barrier_kind": _safe_str(connection.get("barrier_kind")) or "none",
-+            "is_open": _safe_bool(connection.get("is_open"), True),
-+            "is_locked": _safe_bool(connection.get("is_locked"), False),
-+            "blocks_movement": _safe_bool(connection.get("blocks_movement"), False),
-+            "visibility": _safe_str(connection.get("visibility")) or "open",
-+            "audibility": _safe_str(connection.get("audibility")) or "open",
-+            "metadata": dict(_safe_dict(connection.get("metadata"))),
-+        }
-+
-+    entity_locations: Dict[str, Dict[str, Any]] = {}
-+    for entity_id, location in _safe_dict(source.get("entity_locations")).items():
-+        location = _safe_dict(location)
-+        normalized_entity_id = _safe_str(location.get("entity_id")) or _safe_str(entity_id)
-+        area_id = _safe_str(location.get("area_id"))
-+        if not normalized_entity_id or not area_id:
-+            continue
-+        entity_locations[normalized_entity_id] = {
-+            "entity_id": normalized_entity_id,
-+            "area_id": area_id,
-+            "hidden": _safe_bool(location.get("hidden"), False),
-+            "silent": _safe_bool(location.get("silent"), False),
-+            "tags": list(location.get("tags") or []),
-+        }
-+
-+    current_area_id = _safe_str(source.get("current_area_id"))
-+    if not current_area_id:
-+        player_location = entity_locations.get("player") or {}
-+        current_area_id = _safe_str(player_location.get("area_id"))
-+    if not current_area_id and areas:
-+        current_area_id = sorted(areas)[0]
++    )
 +
 +    return {
-+        "graph_id": _safe_str(source.get("graph_id")) or "spatial_graph",
-+        "current_area_id": current_area_id,
-+        "areas": areas,
-+        "connections": connections,
-+        "entity_locations": entity_locations,
-+        "metadata": dict(_safe_dict(source.get("metadata"))),
++        "memory_id": memory_id,
++        "subject_id": subject_id,
++        "event_id": event_id,
++        "kind": kind,
++        "source": source,
++        "summary": _safe_str(value.get("summary")),
++        "facts": facts,
++        "confidence": max(0.0, min(1.0, _safe_float(value.get("confidence"), 1.0))),
++        "turn_index": _safe_int(value.get("turn_index"), 0),
++        "timestamp": _safe_str(value.get("timestamp")),
++        "tags": [str(tag) for tag in _safe_list(value.get("tags")) if str(tag)],
++        "visibility": dict(_safe_dict(value.get("visibility"))),
++        "audibility": dict(_safe_dict(value.get("audibility"))),
++        "expires_after_turn": value.get("expires_after_turn"),
++    }
++
++
++def make_causal_memory(
++    *,
++    subject_id: str,
++    event_id: str,
++    kind: str,
++    source: str,
++    summary: str,
++    facts: Dict[str, Any] | None = None,
++    confidence: float = 1.0,
++    turn_index: int = 0,
++    tags: List[str] | None = None,
++    visibility: Dict[str, Any] | None = None,
++    audibility: Dict[str, Any] | None = None,
++    expires_after_turn: int | None = None,
++) -> Dict[str, Any]:
++    facts = dict(facts or {})
++    memory = {
++        "subject_id": subject_id,
++        "event_id": event_id,
++        "kind": kind,
++        "source": source,
++        "summary": summary,
++        "facts": facts,
++        "confidence": confidence,
++        "turn_index": turn_index,
++        "timestamp": datetime.now(timezone.utc).isoformat(),
++        "tags": list(tags or []),
++        "visibility": dict(visibility or {}),
++        "audibility": dict(audibility or {}),
++        "expires_after_turn": expires_after_turn,
++    }
++    memory["memory_id"] = stable_memory_id(
++        subject_id=subject_id,
++        event_id=event_id,
++        kind=kind,
++        source=source,
++        facts=facts,
++    )
++    return normalize_causal_memory(memory)
++
++
++def normalize_npc_memory_state(value: Dict[str, Any] | None) -> Dict[str, Any]:
++    value = _safe_dict(value)
++    max_memories = _safe_int(
++        value.get("max_memories_per_subject"),
++        DEFAULT_MAX_MEMORIES_PER_SUBJECT,
++    )
++    if max_memories <= 0:
++        max_memories = DEFAULT_MAX_MEMORIES_PER_SUBJECT
++
++    memories_by_subject: Dict[str, List[Dict[str, Any]]] = {}
++    for subject_id, rows in _safe_dict(value.get("memories_by_subject")).items():
++        subject_id = str(subject_id or "")
++        if not is_valid_memory_subject(subject_id):
++            continue
++        normalized_rows = [
++            normalize_causal_memory(row)
++            for row in _safe_list(rows)
++            if isinstance(row, dict)
++        ]
++        deduped: Dict[str, Dict[str, Any]] = {}
++        for row in normalized_rows:
++            if row.get("subject_id") != subject_id:
++                row["subject_id"] = subject_id
++            deduped[str(row.get("memory_id"))] = row
++        kept = sorted(
++            deduped.values(),
++            key=lambda row: (
++                _safe_int(row.get("turn_index"), 0),
++                str(row.get("memory_id") or ""),
++            ),
++        )[-max_memories:]
++        memories_by_subject[subject_id] = kept
++
++    return {
++        "version": 1,
++        "memories_by_subject": memories_by_subject,
++        "max_memories_per_subject": max_memories,
++    }
++
++
++def ensure_npc_memory_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
++    if not isinstance(simulation_state, dict):
++        raise TypeError("simulation_state_must_be_dict")
++    state = normalize_npc_memory_state(simulation_state.get("npc_memory_state"))
++    simulation_state["npc_memory_state"] = state
++    return state
++
++
++def add_causal_memory(
++    simulation_state: Dict[str, Any],
++    memory: Dict[str, Any],
++) -> Dict[str, Any]:
++    memory = normalize_causal_memory(memory)
++    subject_id = str(memory.get("subject_id") or "")
++    if not is_valid_memory_subject(subject_id):
++        return {
++            "ok": False,
++            "reason": "invalid_subject",
++            "subject_id": subject_id,
++            "memory": memory,
++        }
++
++    state = ensure_npc_memory_state(simulation_state)
++    max_memories = int(state.get("max_memories_per_subject") or DEFAULT_MAX_MEMORIES_PER_SUBJECT)
++    rows = list(state["memories_by_subject"].get(subject_id) or [])
++
++    by_id = {str(row.get("memory_id")): row for row in rows}
++    by_id[str(memory.get("memory_id"))] = memory
++    kept = sorted(
++        by_id.values(),
++        key=lambda row: (
++            _safe_int(row.get("turn_index"), 0),
++            str(row.get("memory_id") or ""),
++        ),
++    )[-max_memories:]
++    state["memories_by_subject"][subject_id] = kept
++
++    return {
++        "ok": True,
++        "reason": "recorded",
++        "subject_id": subject_id,
++        "memory_id": memory.get("memory_id"),
++        "memory": memory,
++        "count": len(kept),
 +    }
 *** End Patch
-4. Add src/app/rpg/spatial/graph.py
+3. Add src/app/rpg/memory/causal_retrieval.py
 *** Begin Patch
-*** Add File: src/app/rpg/spatial/graph.py
+*** Add File: src/app/rpg/memory/causal_retrieval.py
 +from __future__ import annotations
 +
-+from typing import Any, Dict, List
++from typing import Any, Dict, Iterable, List
 +
-+from app.rpg.spatial.serialization import normalize_spatial_graph
++from app.rpg.memory.causal_memory import normalize_npc_memory_state
++
++
++def _safe_int(value: Any, default: int = 0) -> int:
++    try:
++        return int(value)
++    except Exception:
++        return default
++
++
++def _safe_float(value: Any, default: float = 0.0) -> float:
++    try:
++        return float(value)
++    except Exception:
++        return default
 +
 +
 +def _safe_dict(value: Any) -> Dict[str, Any]:
 +    return value if isinstance(value, dict) else {}
 +
 +
-+def get_spatial_graph(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
-+    return normalize_spatial_graph(_safe_dict(simulation_state).get("spatial_graph"))
++def _safe_tags(value: Any) -> set[str]:
++    if not isinstance(value, (list, tuple, set)):
++        return set()
++    return {str(item) for item in value if str(item)}
 +
 +
-+def ensure_spatial_graph(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
++def _memory_score(
++    memory: Dict[str, Any],
++    *,
++    actor_id: str | None = None,
++    target_id: str | None = None,
++    location_id: str | None = None,
++    tags: Iterable[str] | None = None,
++    query_text: str | None = None,
++) -> tuple:
++    facts = _safe_dict(memory.get("facts"))
++    memory_tags = _safe_tags(memory.get("tags"))
++    requested_tags = {str(tag) for tag in (tags or []) if str(tag)}
++
++    direct_actor = 1 if actor_id and facts.get("actor_id") == actor_id else 0
++    direct_target = 1 if target_id and facts.get("target_id") == target_id else 0
++    same_location = 1 if location_id and facts.get("location_id") == location_id else 0
++    tag_overlap = len(memory_tags & requested_tags)
++
++    query_hit = 0
++    if query_text:
++        q = query_text.lower()
++        haystack = " ".join(
++            [
++                str(memory.get("summary") or ""),
++                " ".join(sorted(memory_tags)),
++                " ".join(str(v) for v in facts.values()),
++            ]
++        ).lower()
++        query_hit = 1 if q and q in haystack else 0
++
++    confidence = _safe_float(memory.get("confidence"), 0.0)
++    turn_index = _safe_int(memory.get("turn_index"), 0)
++    memory_id = str(memory.get("memory_id") or "")
++
++    return (
++        direct_actor + direct_target,
++        same_location,
++        tag_overlap,
++        query_hit,
++        confidence,
++        turn_index,
++        memory_id,
++    )
++
++
++def _compact_memory(memory: Dict[str, Any]) -> Dict[str, Any]:
++    facts = _safe_dict(memory.get("facts"))
++    return {
++        "memory_id": memory.get("memory_id"),
++        "subject_id": memory.get("subject_id"),
++        "event_id": memory.get("event_id"),
++        "kind": memory.get("kind"),
++        "source": memory.get("source"),
++        "summary": memory.get("summary"),
++        "facts": {
++            key: facts.get(key)
++            for key in (
++                "actor_id",
++                "target_id",
++                "action",
++                "location_id",
++                "object_id",
++                "quest_id",
++            )
++            if key in facts
++        },
++        "confidence": memory.get("confidence"),
++        "turn_index": memory.get("turn_index"),
++        "tags": list(memory.get("tags") or [])[:12],
++    }
++
++
++def retrieve_causal_memories(
++    simulation_state: Dict[str, Any],
++    subject_id: str,
++    *,
++    actor_id: str | None = None,
++    target_id: str | None = None,
++    location_id: str | None = None,
++    tags: Iterable[str] | None = None,
++    query_text: str | None = None,
++    max_items: int = 5,
++) -> List[Dict[str, Any]]:
++    state = normalize_npc_memory_state(
++        _safe_dict(simulation_state).get("npc_memory_state")
++    )
++    rows = list(state.get("memories_by_subject", {}).get(subject_id) or [])
++    if not rows:
++        return []
++
++    scored = [
++        (
++            _memory_score(
++                row,
++                actor_id=actor_id,
++                target_id=target_id,
++                location_id=location_id,
++                tags=tags,
++                query_text=query_text,
++            ),
++            row,
++        )
++        for row in rows
++    ]
++    scored.sort(key=lambda item: item[0], reverse=True)
++    limit = max(0, int(max_items or 0))
++    return [_compact_memory(row) for _, row in scored[:limit]]
+*** End Patch
+4. Add src/app/rpg/memory/observation.py
+*** Begin Patch
+*** Add File: src/app/rpg/memory/observation.py
++from __future__ import annotations
++
++from typing import Any, Dict, Iterable, List
++
++from app.rpg.memory.causal_memory import add_causal_memory, make_causal_memory
++from app.rpg.spatial.audibility import can_hear_area
++from app.rpg.spatial.graph import get_entity_area
++from app.rpg.spatial.serialization import normalize_spatial_graph
++from app.rpg.spatial.visibility import can_see_entity
++
++
++def _safe_dict(value: Any) -> Dict[str, Any]:
++    return value if isinstance(value, dict) else {}
++
++
++def _safe_list(value: Any) -> List[Any]:
++    return value if isinstance(value, list) else []
++
++
++def _safe_str(value: Any) -> str:
++    return value if isinstance(value, str) else ""
++
++
++def _event_facts(event: Dict[str, Any]) -> Dict[str, Any]:
++    event = _safe_dict(event)
++    facts = dict(_safe_dict(event.get("facts")))
++    for key in (
++        "actor_id",
++        "target_id",
++        "action",
++        "location_id",
++        "object_id",
++        "quest_id",
++    ):
++        if key in event and key not in facts:
++            facts[key] = event.get(key)
++    return facts
++
++
++def _all_entity_ids(graph: Dict[str, Any]) -> List[str]:
++    return sorted(str(k) for k in _safe_dict(graph.get("entity_locations")).keys())
++
++
++def _record(
++    simulation_state: Dict[str, Any],
++    *,
++    subject_id: str,
++    event: Dict[str, Any],
++    kind: str,
++    source: str,
++    confidence: float,
++    turn_index: int,
++    tags: List[str],
++    visibility: Dict[str, Any] | None = None,
++    audibility: Dict[str, Any] | None = None,
++) -> Dict[str, Any]:
++    memory = make_causal_memory(
++        subject_id=subject_id,
++        event_id=_safe_str(event.get("event_id")) or "event:unknown",
++        kind=kind,
++        source=source,
++        summary=_safe_str(event.get("summary")) or "An event occurred.",
++        facts=_event_facts(event),
++        confidence=confidence,
++        turn_index=turn_index,
++        tags=tags,
++        visibility=visibility,
++        audibility=audibility,
++    )
++    return add_causal_memory(simulation_state, memory)
++
++
++def record_event_observations(
++    simulation_state: Dict[str, Any],
++    event: Dict[str, Any],
++    *,
++    observer_entity_ids: Iterable[str] | None = None,
++    turn_index: int = 0,
++) -> Dict[str, Any]:
++    """Record deterministic memories for observers/hearers/affected entities."""
 +    simulation_state = _safe_dict(simulation_state)
++    event = _safe_dict(event)
 +    graph = normalize_spatial_graph(simulation_state.get("spatial_graph"))
-+    simulation_state["spatial_graph"] = graph
-+    return graph
++    has_graph = bool(graph.get("areas") and graph.get("entity_locations"))
 +
++    actor_id = _safe_str(event.get("actor_id"))
++    target_id = _safe_str(event.get("target_id"))
++    location_id = _safe_str(event.get("location_id"))
++    sound_level = _safe_str(event.get("sound_level")) or "normal"
++    tags = [str(tag) for tag in _safe_list(event.get("tags")) if str(tag)]
 +
-+def list_area_connections(graph: Dict[str, Any], area_id: str) -> List[Dict[str, Any]]:
-+    graph = normalize_spatial_graph(graph)
-+    results: List[Dict[str, Any]] = []
-+    for connection in graph["connections"].values():
-+        if connection.get("from_area_id") == area_id:
-+            results.append(dict(connection))
-+        elif connection.get("bidirectional") and connection.get("to_area_id") == area_id:
-+            reverse = dict(connection)
-+            reverse["from_area_id"] = connection.get("to_area_id")
-+            reverse["to_area_id"] = connection.get("from_area_id")
-+            reverse["reversed"] = True
-+            results.append(reverse)
-+    return results
-+
-+
-+def find_connection(
-+    graph: Dict[str, Any],
-+    from_area_id: str,
-+    to_area_id: str,
-+) -> Dict[str, Any] | None:
-+    for connection in list_area_connections(graph, from_area_id):
-+        if connection.get("to_area_id") == to_area_id:
-+            return connection
-+    return None
-+
-+
-+def get_entity_area(graph: Dict[str, Any], entity_id: str) -> str:
-+    graph = normalize_spatial_graph(graph)
-+    location = graph["entity_locations"].get(entity_id) or {}
-+    return str(location.get("area_id") or "")
-+
-+
-+def set_entity_area(
-+    graph: Dict[str, Any],
-+    entity_id: str,
-+    area_id: str,
-+    *,
-+    hidden: bool | None = None,
-+    silent: bool | None = None,
-+) -> Dict[str, Any]:
-+    graph = normalize_spatial_graph(graph)
-+    location = dict(graph["entity_locations"].get(entity_id) or {})
-+    location["entity_id"] = entity_id
-+    location["area_id"] = area_id
-+    if hidden is not None:
-+        location["hidden"] = bool(hidden)
++    if observer_entity_ids is None:
++        observer_ids = _all_entity_ids(graph) if has_graph else []
 +    else:
-+        location.setdefault("hidden", False)
-+    if silent is not None:
-+        location["silent"] = bool(silent)
-+    else:
-+        location.setdefault("silent", False)
-+    location.setdefault("tags", [])
-+    graph["entity_locations"][entity_id] = location
-+    if entity_id == "player":
-+        graph["current_area_id"] = area_id
-+    return graph
++        observer_ids = [str(item) for item in observer_entity_ids if str(item)]
 +
++    recorded: List[Dict[str, Any]] = []
 +
-+def list_entities_in_area(graph: Dict[str, Any], area_id: str) -> List[Dict[str, Any]]:
-+    graph = normalize_spatial_graph(graph)
-+    results = []
-+    for entity_id, location in graph["entity_locations"].items():
-+        if location.get("area_id") == area_id:
-+            results.append(dict(location, entity_id=entity_id))
-+    return results
-*** End Patch
-5. Add src/app/rpg/spatial/movement.py
-*** Begin Patch
-*** Add File: src/app/rpg/spatial/movement.py
-+from __future__ import annotations
-+
-+from typing import Any, Dict
-+
-+from app.rpg.spatial.graph import find_connection, get_entity_area, set_entity_area
-+from app.rpg.spatial.serialization import normalize_spatial_graph
-+
-+
-+def can_move_between(
-+    graph: Dict[str, Any],
-+    from_area_id: str,
-+    to_area_id: str,
-+) -> Dict[str, Any]:
-+    graph = normalize_spatial_graph(graph)
-+    connection = find_connection(graph, from_area_id, to_area_id)
-+    if not connection:
-+        return {
-+            "ok": False,
-+            "from_area_id": from_area_id,
-+            "to_area_id": to_area_id,
-+            "connection_id": "",
-+            "reason": "no_connection",
-+            "barrier_kind": "",
-+        }
-+
-+    barrier_kind = str(connection.get("barrier_kind") or "none")
-+    is_open = bool(connection.get("is_open", True))
-+    is_locked = bool(connection.get("is_locked", False))
-+
-+    if barrier_kind == "wall":
-+        reason = "blocked"
-+    elif barrier_kind == "locked_door" or is_locked:
-+        reason = "locked"
-+    elif bool(connection.get("blocks_movement")):
-+        reason = "blocked"
-+    elif barrier_kind in {"door", "gate", "portcullis"} and not is_open:
-+        reason = "closed"
-+    else:
-+        reason = "passable"
-+
-+    return {
-+        "ok": reason == "passable",
-+        "from_area_id": from_area_id,
-+        "to_area_id": to_area_id,
-+        "connection_id": str(connection.get("connection_id") or ""),
-+        "reason": reason,
-+        "barrier_kind": barrier_kind,
-+        "is_open": is_open,
-+        "is_locked": is_locked,
-+    }
-+
-+
-+def move_entity(
-+    graph: Dict[str, Any],
-+    entity_id: str,
-+    to_area_id: str,
-+) -> Dict[str, Any]:
-+    graph = normalize_spatial_graph(graph)
-+    from_area_id = get_entity_area(graph, entity_id)
-+    movement = can_move_between(graph, from_area_id, to_area_id)
-+    movement["entity_id"] = entity_id
-+    movement["moved"] = False
-+
-+    if not movement.get("ok"):
-+        return movement
-+
-+    set_entity_area(graph, entity_id, to_area_id)
-+    movement["moved"] = True
-+    return movement
-*** End Patch
-6. Add src/app/rpg/spatial/visibility.py
-*** Begin Patch
-*** Add File: src/app/rpg/spatial/visibility.py
-+from __future__ import annotations
-+
-+from typing import Any, Dict, List
-+
-+from app.rpg.spatial.graph import (
-+    find_connection,
-+    get_entity_area,
-+)
-+from app.rpg.spatial.serialization import normalize_spatial_graph
-+
-+
-+def can_see_area(
-+    graph: Dict[str, Any],
-+    viewer_area_id: str,
-+    target_area_id: str,
-+) -> Dict[str, Any]:
-+    graph = normalize_spatial_graph(graph)
-+
-+    if viewer_area_id == target_area_id:
-+        return {
-+            "ok": True,
-+            "visibility": "open",
-+            "reason": "same_area",
-+            "viewer_area_id": viewer_area_id,
-+            "target_area_id": target_area_id,
-+            "connection_id": "",
-+            "barrier_kind": "",
-+        }
-+
-+    connection = find_connection(graph, viewer_area_id, target_area_id)
-+    if not connection:
-+        return {
-+            "ok": False,
-+            "visibility": "blocked",
-+            "reason": "out_of_range",
-+            "viewer_area_id": viewer_area_id,
-+            "target_area_id": target_area_id,
-+            "connection_id": "",
-+            "barrier_kind": "",
-+        }
-+
-+    barrier_kind = str(connection.get("barrier_kind") or "none")
-+    visibility = str(connection.get("visibility") or "open")
-+    is_open = bool(connection.get("is_open", True))
-+
-+    if barrier_kind == "wall" or visibility == "blocked":
-+        ok = False
-+        reason = "blocked_by_barrier"
-+        final_visibility = "blocked"
-+    elif barrier_kind in {"door", "gate", "portcullis"} and not is_open:
-+        ok = False
-+        reason = "blocked_by_barrier"
-+        final_visibility = "blocked"
-+    elif visibility == "partial" or barrier_kind in {"window", "curtain"}:
-+        ok = True
-+        reason = "visible_connection"
-+        final_visibility = "partial"
-+    else:
-+        ok = True
-+        reason = "visible_connection"
-+        final_visibility = "open"
-+
-+    return {
-+        "ok": ok,
-+        "visibility": final_visibility,
-+        "reason": reason,
-+        "viewer_area_id": viewer_area_id,
-+        "target_area_id": target_area_id,
-+        "connection_id": str(connection.get("connection_id") or ""),
-+        "barrier_kind": barrier_kind,
-+    }
-+
-+
-+def can_see_entity(
-+    graph: Dict[str, Any],
-+    viewer_entity_id: str,
-+    target_entity_id: str,
-+) -> Dict[str, Any]:
-+    graph = normalize_spatial_graph(graph)
-+    target_location = graph["entity_locations"].get(target_entity_id) or {}
-+    if bool(target_location.get("hidden")):
-+        return {
-+            "ok": False,
-+            "visibility": "blocked",
-+            "reason": "hidden",
-+            "viewer_entity_id": viewer_entity_id,
-+            "target_entity_id": target_entity_id,
-+            "viewer_area_id": get_entity_area(graph, viewer_entity_id),
-+            "target_area_id": str(target_location.get("area_id") or ""),
-+            "connection_id": "",
-+            "barrier_kind": "",
-+        }
-+
-+    viewer_area_id = get_entity_area(graph, viewer_entity_id)
-+    target_area_id = str(target_location.get("area_id") or "")
-+    result = can_see_area(graph, viewer_area_id, target_area_id)
-+    result["viewer_entity_id"] = viewer_entity_id
-+    result["target_entity_id"] = target_entity_id
-+    return result
-+
-+
-+def visible_entities_from(
-+    graph: Dict[str, Any],
-+    viewer_entity_id: str,
-+) -> List[Dict[str, Any]]:
-+    graph = normalize_spatial_graph(graph)
-+    results: List[Dict[str, Any]] = []
-+    for entity_id in sorted(graph["entity_locations"]):
-+        if entity_id == viewer_entity_id:
-+            continue
-+        check = can_see_entity(graph, viewer_entity_id, entity_id)
-+        if check.get("ok"):
-+            location = dict(graph["entity_locations"].get(entity_id) or {})
-+            results.append(
-+                {
-+                    "entity_id": entity_id,
-+                    "area_id": location.get("area_id"),
-+                    "visibility": check.get("visibility"),
-+                    "reason": check.get("reason"),
-+                }
++    # Directly affected target always remembers.
++    if target_id:
++        recorded.append(
++            _record(
++                simulation_state,
++                subject_id=target_id,
++                event=event,
++                kind="affected",
++                source=_safe_str(event.get("source")) or "event",
++                confidence=1.0,
++                turn_index=turn_index,
++                tags=sorted(set(tags + ["affected"])),
 +            )
-+    return results
-*** End Patch
-7. Add src/app/rpg/spatial/audibility.py
-*** Begin Patch
-*** Add File: src/app/rpg/spatial/audibility.py
-+from __future__ import annotations
++        )
 +
-+from typing import Any, Dict, List
++    # Actor remembers their own action if present.
++    if actor_id and actor_id != target_id:
++        recorded.append(
++            _record(
++                simulation_state,
++                subject_id=actor_id,
++                event=event,
++                kind="observed",
++                source=_safe_str(event.get("source")) or "event_actor",
++                confidence=1.0,
++                turn_index=turn_index,
++                tags=sorted(set(tags + ["self"])),
++            )
++        )
 +
-+from app.rpg.spatial.graph import find_connection, get_entity_area
-+from app.rpg.spatial.serialization import normalize_spatial_graph
-+
-+
-+def can_hear_area(
-+    graph: Dict[str, Any],
-+    listener_area_id: str,
-+    source_area_id: str,
-+    *,
-+    sound_level: str = "normal",
-+) -> Dict[str, Any]:
-+    graph = normalize_spatial_graph(graph)
-+
-+    if listener_area_id == source_area_id:
++    if not has_graph:
++        # Conservative fallback: explicit observer list only.
++        for observer_id in observer_ids:
++            if observer_id in {actor_id, target_id}:
++                continue
++            recorded.append(
++                _record(
++                    simulation_state,
++                    subject_id=observer_id,
++                    event=event,
++                    kind="observed",
++                    source="explicit_observer",
++                    confidence=1.0,
++                    turn_index=turn_index,
++                    tags=sorted(set(tags + ["explicit_observer"])),
++                )
++            )
 +        return {
 +            "ok": True,
-+            "audibility": "open",
-+            "reason": "same_area",
-+            "listener_area_id": listener_area_id,
-+            "source_area_id": source_area_id,
-+            "connection_id": "",
-+            "barrier_kind": "",
-+            "sound_level": sound_level,
++            "has_spatial_graph": False,
++            "recorded": recorded,
 +        }
 +
-+    connection = find_connection(graph, listener_area_id, source_area_id)
-+    if not connection:
-+        return {
-+            "ok": False,
-+            "audibility": "blocked",
-+            "reason": "out_of_range",
-+            "listener_area_id": listener_area_id,
-+            "source_area_id": source_area_id,
-+            "connection_id": "",
-+            "barrier_kind": "",
-+            "sound_level": sound_level,
-+        }
++    for observer_id in observer_ids:
++        if observer_id in {actor_id, target_id}:
++            continue
 +
-+    barrier_kind = str(connection.get("barrier_kind") or "none")
-+    audibility = str(connection.get("audibility") or "open")
-+    is_open = bool(connection.get("is_open", True))
++        observed = None
++        if actor_id:
++            observed = can_see_entity(graph, observer_id, actor_id)
++        if (not observed or not observed.get("ok")) and target_id:
++            observed = can_see_entity(graph, observer_id, target_id)
 +
-+    if barrier_kind == "wall" or audibility == "blocked":
-+        ok = False
-+        reason = "blocked_by_barrier"
-+        final_audibility = "blocked"
-+    elif audibility == "muffled":
-+        ok = True
-+        reason = "muffled_by_barrier"
-+        final_audibility = "muffled"
-+    elif barrier_kind in {"door", "gate", "portcullis"} and not is_open:
-+        ok = True
-+        reason = "muffled_by_barrier"
-+        final_audibility = "muffled"
-+    else:
-+        ok = True
-+        reason = "audible_connection"
-+        final_audibility = "open"
++        if observed and observed.get("ok"):
++            recorded.append(
++                _record(
++                    simulation_state,
++                    subject_id=observer_id,
++                    event=event,
++                    kind="observed",
++                    source="spatial_visibility",
++                    confidence=1.0,
++                    turn_index=turn_index,
++                    tags=sorted(set(tags + ["observed"])),
++                    visibility=observed,
++                )
++            )
++            continue
 +
-+    if final_audibility == "muffled" and sound_level == "quiet":
-+        ok = False
++        observer_area = get_entity_area(graph, observer_id)
++        heard = can_hear_area(
++            graph,
++            observer_area,
++            location_id,
++            sound_level=sound_level,
++        )
++        if heard.get("ok"):
++            recorded.append(
++                _record(
++                    simulation_state,
++                    subject_id=observer_id,
++                    event=event,
++                    kind="heard",
++                    source="spatial_audibility",
++                    confidence=0.75 if heard.get("audibility") == "muffled" else 0.9,
++                    turn_index=turn_index,
++                    tags=sorted(set(tags + ["heard"])),
++                    audibility=heard,
++                )
++            )
 +
 +    return {
-+        "ok": ok,
-+        "audibility": final_audibility,
-+        "reason": reason,
-+        "listener_area_id": listener_area_id,
-+        "source_area_id": source_area_id,
-+        "connection_id": str(connection.get("connection_id") or ""),
-+        "barrier_kind": barrier_kind,
-+        "sound_level": sound_level,
++        "ok": True,
++        "has_spatial_graph": True,
++        "recorded": recorded,
 +    }
 +
 +
-+def can_hear_entity(
-+    graph: Dict[str, Any],
-+    listener_entity_id: str,
-+    source_entity_id: str,
++def record_told_memory(
++    simulation_state: Dict[str, Any],
++    subject_id: str,
 +    *,
-+    sound_level: str = "normal",
++    speaker_id: str,
++    event_id: str,
++    summary: str,
++    facts: Dict[str, Any],
++    confidence: float = 0.7,
++    turn_index: int = 0,
++    tags: List[str] | None = None,
++    verified: bool = False,
 +) -> Dict[str, Any]:
-+    graph = normalize_spatial_graph(graph)
-+    source_location = graph["entity_locations"].get(source_entity_id) or {}
-+    if bool(source_location.get("silent")) and sound_level != "loud":
-+        return {
-+            "ok": False,
-+            "audibility": "blocked",
-+            "reason": "silent",
-+            "listener_entity_id": listener_entity_id,
-+            "source_entity_id": source_entity_id,
-+            "listener_area_id": get_entity_area(graph, listener_entity_id),
-+            "source_area_id": str(source_location.get("area_id") or ""),
-+            "connection_id": "",
-+            "barrier_kind": "",
-+            "sound_level": sound_level,
-+        }
-+
-+    listener_area_id = get_entity_area(graph, listener_entity_id)
-+    source_area_id = str(source_location.get("area_id") or "")
-+    result = can_hear_area(
-+        graph,
-+        listener_area_id,
-+        source_area_id,
-+        sound_level=sound_level,
++    tags = list(tags or [])
++    if not verified:
++        tags = sorted(set(tags + ["claim", "unverified"]))
++    memory = make_causal_memory(
++        subject_id=subject_id,
++        event_id=event_id,
++        kind="told",
++        source="dialogue",
++        summary=summary,
++        facts=dict(facts or {}, speaker_id=speaker_id),
++        confidence=confidence if not verified else max(confidence, 0.9),
++        turn_index=turn_index,
++        tags=tags,
 +    )
-+    result["listener_entity_id"] = listener_entity_id
-+    result["source_entity_id"] = source_entity_id
-+    return result
-+
-+
-+def audible_entities_from(
-+    graph: Dict[str, Any],
-+    listener_entity_id: str,
-+) -> List[Dict[str, Any]]:
-+    graph = normalize_spatial_graph(graph)
-+    results: List[Dict[str, Any]] = []
-+    for entity_id in sorted(graph["entity_locations"]):
-+        if entity_id == listener_entity_id:
-+            continue
-+        check = can_hear_entity(graph, listener_entity_id, entity_id)
-+        if check.get("ok"):
-+            location = dict(graph["entity_locations"].get(entity_id) or {})
-+            results.append(
-+                {
-+                    "entity_id": entity_id,
-+                    "area_id": location.get("area_id"),
-+                    "audibility": check.get("audibility"),
-+                    "reason": check.get("reason"),
-+                }
-+            )
-+    return results
++    return add_causal_memory(simulation_state, memory)
 *** End Patch
-Patch 2 — Unit test fixtures and tests
-8. Add src/tests/rpg/spatial/fixtures.py
+Patch 2 — Add memory unit tests
+5. Add src/tests/rpg/memory/test_causal_memory_model.py
 *** Begin Patch
-*** Add File: src/tests/rpg/spatial/fixtures.py
-+from __future__ import annotations
+*** Add File: src/tests/rpg/memory/test_causal_memory_model.py
++from app.rpg.memory.causal_memory import (
++    add_causal_memory,
++    ensure_npc_memory_state,
++    make_causal_memory,
++)
 +
-+from typing import Any, Dict
++
++def test_make_causal_memory_is_json_safe_and_stable():
++    memory = make_causal_memory(
++        subject_id="bran",
++        event_id="evt:1",
++        kind="observed",
++        source="manual",
++        summary="Bran saw the player enter.",
++        facts={"actor_id": "player", "location_id": "tavern_common_room"},
++        tags=["arrival"],
++        turn_index=1,
++    )
++
++    assert memory["memory_id"].startswith("mem:")
++    assert memory["subject_id"] == "bran"
++    assert memory["facts"]["actor_id"] == "player"
 +
 +
-+def tavern_spatial_fixture() -> Dict[str, Any]:
-+    return {
-+        "graph_id": "tavern_fixture",
-+        "current_area_id": "tavern_common_room",
-+        "areas": {
-+            "tavern_common_room": {
-+                "area_id": "tavern_common_room",
-+                "name": "Tavern Common Room",
-+                "description": "A busy common room with tables, a hearth, and Bran behind the bar.",
-+            },
-+            "private_room": {
-+                "area_id": "private_room",
-+                "name": "Private Room",
-+                "description": "A rented room behind a wooden door.",
-+            },
-+            "cellar": {
-+                "area_id": "cellar",
-+                "name": "Cellar",
-+                "description": "A locked cellar below the tavern.",
-+            },
-+            "street": {
-+                "area_id": "street",
-+                "name": "Street",
-+                "description": "The muddy street outside the tavern.",
-+            },
-+            "kitchen": {
-+                "area_id": "kitchen",
-+                "name": "Kitchen",
-+                "description": "A hot kitchen connected by an open archway.",
-+            },
-+            "sealed_room": {
-+                "area_id": "sealed_room",
-+                "name": "Sealed Room",
-+                "description": "A room behind a solid wall.",
-+            },
-+        },
-+        "connections": {
-+            "common_private_door": {
-+                "connection_id": "common_private_door",
-+                "from_area_id": "tavern_common_room",
-+                "to_area_id": "private_room",
-+                "label": "wooden door",
-+                "bidirectional": True,
-+                "barrier_kind": "door",
-+                "is_open": False,
-+                "is_locked": False,
-+                "blocks_movement": False,
-+                "visibility": "blocked",
-+                "audibility": "muffled",
-+            },
-+            "common_cellar_trapdoor": {
-+                "connection_id": "common_cellar_trapdoor",
-+                "from_area_id": "tavern_common_room",
-+                "to_area_id": "cellar",
-+                "label": "locked trapdoor",
-+                "bidirectional": True,
-+                "barrier_kind": "locked_door",
-+                "is_open": False,
-+                "is_locked": True,
-+                "blocks_movement": False,
-+                "visibility": "blocked",
-+                "audibility": "blocked",
-+            },
-+            "common_street_front_door": {
-+                "connection_id": "common_street_front_door",
-+                "from_area_id": "tavern_common_room",
-+                "to_area_id": "street",
-+                "label": "open front door",
-+                "bidirectional": True,
-+                "barrier_kind": "door",
-+                "is_open": True,
-+                "is_locked": False,
-+                "blocks_movement": False,
-+                "visibility": "open",
-+                "audibility": "open",
-+            },
-+            "common_kitchen_archway": {
-+                "connection_id": "common_kitchen_archway",
-+                "from_area_id": "tavern_common_room",
-+                "to_area_id": "kitchen",
-+                "label": "open archway",
-+                "bidirectional": True,
-+                "barrier_kind": "none",
-+                "is_open": True,
-+                "is_locked": False,
-+                "blocks_movement": False,
-+                "visibility": "open",
-+                "audibility": "open",
-+            },
-+            "common_sealed_wall": {
-+                "connection_id": "common_sealed_wall",
-+                "from_area_id": "tavern_common_room",
-+                "to_area_id": "sealed_room",
-+                "label": "stone wall",
-+                "bidirectional": True,
-+                "barrier_kind": "wall",
-+                "is_open": False,
-+                "is_locked": False,
-+                "blocks_movement": True,
-+                "visibility": "blocked",
-+                "audibility": "blocked",
-+            },
-+        },
-+        "entity_locations": {
-+            "player": {
-+                "entity_id": "player",
-+                "area_id": "tavern_common_room",
-+                "hidden": False,
-+                "silent": False,
-+            },
-+            "bran": {
-+                "entity_id": "bran",
-+                "area_id": "tavern_common_room",
-+                "hidden": False,
-+                "silent": False,
-+            },
-+            "mira": {
-+                "entity_id": "mira",
-+                "area_id": "kitchen",
-+                "hidden": False,
-+                "silent": False,
-+            },
-+            "spy": {
-+                "entity_id": "spy",
-+                "area_id": "private_room",
-+                "hidden": True,
-+                "silent": False,
-+            },
-+            "bandit": {
-+                "entity_id": "bandit",
-+                "area_id": "street",
-+                "hidden": False,
-+                "silent": False,
-+            },
-+            "silent_rat": {
-+                "entity_id": "silent_rat",
-+                "area_id": "tavern_common_room",
-+                "hidden": False,
-+                "silent": True,
-+            },
-+        },
-+        "metadata": {},
++def test_add_causal_memory_dedupes_by_memory_id():
++    simulation_state = {}
++    memory = make_causal_memory(
++        subject_id="bran",
++        event_id="evt:1",
++        kind="observed",
++        source="manual",
++        summary="Bran saw the player enter.",
++        facts={"actor_id": "player"},
++        turn_index=1,
++    )
++
++    first = add_causal_memory(simulation_state, memory)
++    second = add_causal_memory(simulation_state, memory)
++
++    assert first["ok"] is True
++    assert second["ok"] is True
++    rows = simulation_state["npc_memory_state"]["memories_by_subject"]["bran"]
++    assert len(rows) == 1
++
++
++def test_memory_state_bounds_per_subject():
++    simulation_state = {
++        "npc_memory_state": {
++            "version": 1,
++            "max_memories_per_subject": 3,
++            "memories_by_subject": {},
++        }
 +    }
 +
++    for i in range(10):
++        add_causal_memory(
++            simulation_state,
++            make_causal_memory(
++                subject_id="bran",
++                event_id=f"evt:{i}",
++                kind="observed",
++                source="manual",
++                summary=f"event {i}",
++                facts={"actor_id": "player", "index": i},
++                turn_index=i,
++            ),
++        )
 +
-+def tavern_spatial_fixture_with_private_door_open() -> Dict[str, Any]:
-+    graph = tavern_spatial_fixture()
-+    graph["connections"]["common_private_door"]["is_open"] = True
-+    graph["connections"]["common_private_door"]["visibility"] = "open"
-+    return graph
++    state = ensure_npc_memory_state(simulation_state)
++    rows = state["memories_by_subject"]["bran"]
++    assert len(rows) == 3
++    assert [row["event_id"] for row in rows] == ["evt:7", "evt:8", "evt:9"]
++
++
++def test_invalid_environment_subject_is_not_recorded():
++    simulation_state = {}
++    result = add_causal_memory(
++        simulation_state,
++        make_causal_memory(
++            subject_id="Environment/NPCs (General)",
++            event_id="evt:bad",
++            kind="observed",
++            source="manual",
++            summary="bad",
++        ),
++    )
++
++    assert result["ok"] is False
++    assert "Environment/NPCs (General)" not in simulation_state.get("npc_memory_state", {}).get("memories_by_subject", {})
 *** End Patch
-9. Add spatial unit tests
+6. Add src/tests/rpg/memory/test_causal_memory_retrieval.py
 *** Begin Patch
-*** Add File: src/tests/rpg/spatial/test_spatial_graph.py
-+from app.rpg.spatial.graph import (
-+    find_connection,
-+    list_area_connections,
-+    list_entities_in_area,
-+    set_entity_area,
-+)
-+from app.rpg.spatial.serialization import normalize_spatial_graph
+*** Add File: src/tests/rpg/memory/test_causal_memory_retrieval.py
++from app.rpg.memory.causal_memory import add_causal_memory, make_causal_memory
++from app.rpg.memory.causal_retrieval import retrieve_causal_memories
++
++
++def _add(simulation_state, *, event_id, subject_id="bran", actor_id="player", target_id="", location_id="tavern_common_room", tags=None, turn_index=1):
++    add_causal_memory(
++        simulation_state,
++        make_causal_memory(
++            subject_id=subject_id,
++            event_id=event_id,
++            kind="observed",
++            source="manual",
++            summary=f"{subject_id} remembers {event_id}",
++            facts={
++                "actor_id": actor_id,
++                "target_id": target_id,
++                "location_id": location_id,
++                "action": "test",
++            },
++            tags=list(tags or []),
++            turn_index=turn_index,
++        ),
++    )
++
++
++def test_retrieval_prefers_actor_target_location_tags_and_recency():
++    simulation_state = {}
++    _add(simulation_state, event_id="evt:old", actor_id="mira", location_id="street", tags=["smalltalk"], turn_index=1)
++    _add(simulation_state, event_id="evt:match", actor_id="player", target_id="mira", location_id="tavern_common_room", tags=["threat"], turn_index=2)
++    _add(simulation_state, event_id="evt:new", actor_id="player", target_id="mira", location_id="tavern_common_room", tags=["threat"], turn_index=3)
++
++    rows = retrieve_causal_memories(
++        simulation_state,
++        "bran",
++        actor_id="player",
++        target_id="mira",
++        location_id="tavern_common_room",
++        tags=["threat"],
++        max_items=2,
++    )
++
++    assert [row["event_id"] for row in rows] == ["evt:new", "evt:match"]
++
++
++def test_retrieval_is_subject_scoped_not_global():
++    simulation_state = {}
++    _add(simulation_state, subject_id="bran", event_id="evt:bran", actor_id="player")
++    _add(simulation_state, subject_id="mira", event_id="evt:mira", actor_id="player")
++
++    rows = retrieve_causal_memories(simulation_state, "bran", actor_id="player")
++
++    assert [row["event_id"] for row in rows] == ["evt:bran"]
++
++
++def test_retrieval_returns_compact_rows():
++    simulation_state = {}
++    _add(simulation_state, event_id="evt:compact", actor_id="player", tags=["threat"])
++
++    row = retrieve_causal_memories(simulation_state, "bran", max_items=1)[0]
++
++    assert "summary" in row
++    assert "facts" in row
++    assert row["facts"]["actor_id"] == "player"
++    assert "timestamp" not in row
+*** End Patch
+7. Add src/tests/rpg/memory/test_spatial_observation_memory.py
+*** Begin Patch
+*** Add File: src/tests/rpg/memory/test_spatial_observation_memory.py
++from app.rpg.memory.causal_retrieval import retrieve_causal_memories
++from app.rpg.memory.observation import record_event_observations, record_told_memory
 +from tests.rpg.spatial.fixtures import tavern_spatial_fixture
 +
 +
-+def test_normalize_spatial_graph_roundtrip_basic_shape():
-+    graph = normalize_spatial_graph(tavern_spatial_fixture())
++def test_same_room_npc_observes_event():
++    simulation_state = {"spatial_graph": tavern_spatial_fixture()}
++    event = {
++        "event_id": "evt:player_greets_bran",
++        "actor_id": "player",
++        "target_id": "bran",
++        "location_id": "tavern_common_room",
++        "summary": "The player greeted Bran.",
++        "tags": ["social"],
++    }
 +
-+    assert graph["current_area_id"] == "tavern_common_room"
-+    assert "tavern_common_room" in graph["areas"]
-+    assert "common_private_door" in graph["connections"]
-+    assert graph["entity_locations"]["player"]["area_id"] == "tavern_common_room"
-+
-+
-+def test_find_connection_supports_bidirectional_connections():
-+    graph = tavern_spatial_fixture()
-+
-+    forward = find_connection(graph, "tavern_common_room", "kitchen")
-+    reverse = find_connection(graph, "kitchen", "tavern_common_room")
-+
-+    assert forward
-+    assert reverse
-+    assert reverse["to_area_id"] == "tavern_common_room"
-+
-+
-+def test_list_area_connections_includes_reverse_edges():
-+    graph = tavern_spatial_fixture()
-+    connections = list_area_connections(graph, "kitchen")
-+
-+    assert any(c["to_area_id"] == "tavern_common_room" for c in connections)
-+
-+
-+def test_set_entity_area_updates_player_current_area():
-+    graph = tavern_spatial_fixture()
-+    graph = set_entity_area(graph, "player", "street")
-+
-+    assert graph["entity_locations"]["player"]["area_id"] == "street"
-+    assert graph["current_area_id"] == "street"
-+
-+
-+def test_list_entities_in_area_returns_only_area_entities():
-+    graph = tavern_spatial_fixture()
-+    entity_ids = {e["entity_id"] for e in list_entities_in_area(graph, "tavern_common_room")}
-+
-+    assert "player" in entity_ids
-+    assert "bran" in entity_ids
-+    assert "mira" not in entity_ids
-*** End Patch
-*** Begin Patch
-*** Add File: src/tests/rpg/spatial/test_spatial_movement.py
-+from app.rpg.spatial.graph import get_entity_area
-+from app.rpg.spatial.movement import can_move_between, move_entity
-+from tests.rpg.spatial.fixtures import (
-+    tavern_spatial_fixture,
-+    tavern_spatial_fixture_with_private_door_open,
-+)
-+
-+
-+def test_open_door_allows_movement():
-+    graph = tavern_spatial_fixture()
-+    result = can_move_between(graph, "tavern_common_room", "street")
++    result = record_event_observations(simulation_state, event, turn_index=1)
++    rows = retrieve_causal_memories(simulation_state, "bran", actor_id="player")
 +
 +    assert result["ok"] is True
-+    assert result["reason"] == "passable"
++    assert rows
++    assert rows[0]["kind"] == "affected"
 +
 +
-+def test_closed_door_blocks_movement():
-+    graph = tavern_spatial_fixture()
-+    result = can_move_between(graph, "tavern_common_room", "private_room")
++def test_private_room_event_not_seen_by_common_room_npc_when_door_closed():
++    simulation_state = {"spatial_graph": tavern_spatial_fixture()}
++    event = {
++        "event_id": "evt:private_whisper",
++        "actor_id": "guest_private",
++        "target_id": "spy",
++        "location_id": "private_room",
++        "summary": "A private whisper happened in the room.",
++        "tags": ["private"],
++        "sound_level": "quiet",
++    }
 +
-+    assert result["ok"] is False
-+    assert result["reason"] == "closed"
++    record_event_observations(simulation_state, event, turn_index=2)
++    bran_rows = retrieve_causal_memories(simulation_state, "bran", tags=["private"])
 +
-+
-+def test_opened_private_door_allows_movement():
-+    graph = tavern_spatial_fixture_with_private_door_open()
-+    result = can_move_between(graph, "tavern_common_room", "private_room")
-+
-+    assert result["ok"] is True
-+    assert result["reason"] == "passable"
-+
-+
-+def test_locked_door_blocks_movement():
-+    graph = tavern_spatial_fixture()
-+    result = can_move_between(graph, "tavern_common_room", "cellar")
-+
-+    assert result["ok"] is False
-+    assert result["reason"] == "locked"
++    assert bran_rows == []
 +
 +
-+def test_wall_blocks_movement():
-+    graph = tavern_spatial_fixture()
-+    result = can_move_between(graph, "tavern_common_room", "sealed_room")
++def test_closed_door_normal_sound_is_heard_as_muffled():
++    simulation_state = {"spatial_graph": tavern_spatial_fixture()}
++    event = {
++        "event_id": "evt:private_argument",
++        "actor_id": "guest_private",
++        "target_id": "spy",
++        "location_id": "private_room",
++        "summary": "A muffled argument came from the private room.",
++        "tags": ["argument"],
++        "sound_level": "normal",
++    }
 +
-+    assert result["ok"] is False
-+    assert result["reason"] == "blocked"
++    record_event_observations(simulation_state, event, turn_index=3)
++    rows = retrieve_causal_memories(simulation_state, "bran", tags=["argument"])
 +
-+
-+def test_move_entity_updates_current_area_on_success():
-+    graph = tavern_spatial_fixture()
-+    result = move_entity(graph, "player", "street")
-+
-+    assert result["ok"] is True
-+    assert result["moved"] is True
-+    assert get_entity_area(graph, "player") == "street"
-+    assert graph["current_area_id"] == "street"
-+
-+
-+def test_move_entity_does_not_update_area_on_failure():
-+    graph = tavern_spatial_fixture()
-+    result = move_entity(graph, "player", "cellar")
-+
-+    assert result["ok"] is False
-+    assert result["moved"] is False
-+    assert get_entity_area(graph, "player") == "tavern_common_room"
-*** End Patch
-*** Begin Patch
-*** Add File: src/tests/rpg/spatial/test_spatial_visibility.py
-+from app.rpg.spatial.visibility import can_see_area, can_see_entity, visible_entities_from
-+from tests.rpg.spatial.fixtures import (
-+    tavern_spatial_fixture,
-+    tavern_spatial_fixture_with_private_door_open,
-+)
++    assert rows
++    assert rows[0]["kind"] == "heard"
++    assert rows[0]["confidence"] < 1.0
 +
 +
-+def test_same_room_visibility():
-+    graph = tavern_spatial_fixture()
-+    result = can_see_entity(graph, "player", "bran")
++def test_told_memory_is_unverified_claim_by_default():
++    simulation_state = {}
++    result = record_told_memory(
++        simulation_state,
++        "bran",
++        speaker_id="player",
++        event_id="evt:claim_bandits",
++        summary="The player claimed bandits were nearby.",
++        facts={"actor_id": "bandits", "location_id": "road"},
++        turn_index=4,
++    )
++
++    rows = retrieve_causal_memories(simulation_state, "bran", tags=["claim"])
 +
 +    assert result["ok"] is True
-+    assert result["reason"] == "same_area"
++    assert rows
++    assert "unverified" in rows[0]["tags"]
++    assert rows[0]["confidence"] < 1.0
 +
 +
-+def test_hidden_npc_not_visible_even_if_area_visible():
-+    graph = tavern_spatial_fixture_with_private_door_open()
-+    result = can_see_entity(graph, "player", "spy")
++def test_save_load_preserves_causal_memory_state_json_shape():
++    import json
 +
-+    assert result["ok"] is False
-+    assert result["reason"] == "hidden"
++    simulation_state = {"spatial_graph": tavern_spatial_fixture()}
++    event = {
++        "event_id": "evt:save_load",
++        "actor_id": "player",
++        "target_id": "bran",
++        "location_id": "tavern_common_room",
++        "summary": "The player spoke to Bran.",
++        "tags": ["social"],
++    }
++    record_event_observations(simulation_state, event, turn_index=5)
 +
-+
-+def test_closed_door_blocks_visibility():
-+    graph = tavern_spatial_fixture()
-+    result = can_see_area(graph, "tavern_common_room", "private_room")
-+
-+    assert result["ok"] is False
-+    assert result["reason"] == "blocked_by_barrier"
-+
-+
-+def test_open_door_allows_visibility():
-+    graph = tavern_spatial_fixture_with_private_door_open()
-+    result = can_see_area(graph, "tavern_common_room", "private_room")
-+
-+    assert result["ok"] is True
-+    assert result["visibility"] == "open"
-+
-+
-+def test_wall_blocks_visibility():
-+    graph = tavern_spatial_fixture()
-+    result = can_see_area(graph, "tavern_common_room", "sealed_room")
-+
-+    assert result["ok"] is False
-+    assert result["visibility"] == "blocked"
-+
-+
-+def test_visible_entities_only_returns_visible_entities():
-+    graph = tavern_spatial_fixture()
-+    visible_ids = {e["entity_id"] for e in visible_entities_from(graph, "player")}
-+
-+    assert "bran" in visible_ids
-+    assert "mira" in visible_ids
-+    assert "bandit" in visible_ids
-+    assert "spy" not in visible_ids
-*** End Patch
-*** Begin Patch
-*** Add File: src/tests/rpg/spatial/test_spatial_audibility.py
-+from app.rpg.spatial.audibility import (
-+    audible_entities_from,
-+    can_hear_area,
-+    can_hear_entity,
-+)
-+from tests.rpg.spatial.fixtures import tavern_spatial_fixture
-+
-+
-+def test_same_room_audibility():
-+    graph = tavern_spatial_fixture()
-+    result = can_hear_entity(graph, "player", "bran")
-+
-+    assert result["ok"] is True
-+    assert result["reason"] == "same_area"
-+
-+
-+def test_closed_door_muffles_audibility():
-+    graph = tavern_spatial_fixture()
-+    result = can_hear_area(graph, "tavern_common_room", "private_room")
-+
-+    assert result["ok"] is True
-+    assert result["audibility"] == "muffled"
-+    assert result["reason"] == "muffled_by_barrier"
-+
-+
-+def test_wall_blocks_audibility():
-+    graph = tavern_spatial_fixture()
-+    result = can_hear_area(graph, "tavern_common_room", "sealed_room")
-+
-+    assert result["ok"] is False
-+    assert result["audibility"] == "blocked"
-+
-+
-+def test_silent_entity_not_audible_unless_loud():
-+    graph = tavern_spatial_fixture()
-+
-+    quiet = can_hear_entity(graph, "player", "silent_rat")
-+    loud = can_hear_entity(graph, "player", "silent_rat", sound_level="loud")
-+
-+    assert quiet["ok"] is False
-+    assert quiet["reason"] == "silent"
-+    assert loud["ok"] is True
-+
-+
-+def test_audible_entities_include_muffled_adjacent_entities():
-+    graph = tavern_spatial_fixture()
-+    audible_ids = {e["entity_id"] for e in audible_entities_from(graph, "player")}
-+
-+    assert "bran" in audible_ids
-+    assert "mira" in audible_ids
-+    assert "spy" in audible_ids
-*** End Patch
-*** Begin Patch
-*** Add File: src/tests/rpg/spatial/test_spatial_save_load.py
-+import json
-+
-+from app.rpg.spatial.serialization import normalize_spatial_graph
-+from tests.rpg.spatial.fixtures import tavern_spatial_fixture
-+
-+
-+def test_spatial_graph_json_roundtrip_stable():
-+    graph = normalize_spatial_graph(tavern_spatial_fixture())
-+
-+    encoded = json.dumps(graph, sort_keys=True)
++    encoded = json.dumps(simulation_state, sort_keys=True)
 +    decoded = json.loads(encoded)
-+    normalized = normalize_spatial_graph(decoded)
 +
-+    assert normalized == graph
-+    assert normalized["current_area_id"] == "tavern_common_room"
++    rows = retrieve_causal_memories(decoded, "bran", actor_id="player")
++    assert rows
 *** End Patch
-Patch 3 — Manual fixture support
-10. Add src/tests/rpg/manual/spatial_fixtures.py
+Patch 3 — Add manual memory fixtures and checks
+8. Add src/tests/rpg/manual/memory_fixtures.py
 *** Begin Patch
-*** Add File: src/tests/rpg/manual/spatial_fixtures.py
+*** Add File: src/tests/rpg/manual/memory_fixtures.py
 +from __future__ import annotations
 +
 +from typing import Any, Dict
 +
-+from tests.rpg.spatial.fixtures import (
-+    tavern_spatial_fixture,
-+    tavern_spatial_fixture_with_private_door_open,
-+)
 +
++def build_manual_memory_event(name: str) -> Dict[str, Any]:
++    if name == "same_room_greeting":
++        return {
++            "event_id": "evt:manual_same_room_greeting",
++            "actor_id": "player",
++            "target_id": "bran",
++            "location_id": "tavern_common_room",
++            "summary": "The player greeted Bran in the tavern common room.",
++            "tags": ["social", "greeting"],
++            "sound_level": "normal",
++        }
 +
-+def build_manual_spatial_fixture(name: str) -> Dict[str, Any]:
-+    if name == "tavern_fixture":
-+        return tavern_spatial_fixture()
-+    if name == "tavern_fixture_private_door_open":
-+        return tavern_spatial_fixture_with_private_door_open()
-+    raise KeyError(f"unknown_manual_spatial_fixture:{name}")
++    if name == "private_room_quiet_event":
++        return {
++            "event_id": "evt:manual_private_room_quiet_event",
++            "actor_id": "guest_private",
++            "target_id": "spy",
++            "location_id": "private_room",
++            "summary": "A quiet private exchange happened in the private room.",
++            "tags": ["private", "quiet"],
++            "sound_level": "quiet",
++        }
++
++    if name == "private_room_argument":
++        return {
++            "event_id": "evt:manual_private_room_argument",
++            "actor_id": "guest_private",
++            "target_id": "spy",
++            "location_id": "private_room",
++            "summary": "A muffled argument came from the private room.",
++            "tags": ["argument", "muffled"],
++            "sound_level": "normal",
++        }
++
++    if name == "player_affects_bran":
++        return {
++            "event_id": "evt:manual_player_affects_bran",
++            "actor_id": "player",
++            "target_id": "bran",
++            "location_id": "tavern_common_room",
++            "summary": "The player directly insulted Bran.",
++            "tags": ["insult", "social"],
++            "sound_level": "normal",
++        }
++
++    if name == "street_bandit_seen":
++        return {
++            "event_id": "evt:manual_street_bandit_seen",
++            "actor_id": "bandit",
++            "target_id": "player",
++            "location_id": "street",
++            "summary": "A bandit confronted the player in the street.",
++            "tags": ["bandit", "threat"],
++            "sound_level": "normal",
++        }
++
++    raise KeyError(f"unknown_manual_memory_event:{name}")
 *** End Patch
-11. Patch src/tests/rpg/manual/scenario_setup.py
-
-Add support for setup_spatial_graph.
-
+9. Add src/tests/rpg/manual/memory_checks.py
 *** Begin Patch
-*** Update File: src/tests/rpg/manual/scenario_setup.py
-@@
- from __future__ import annotations
- 
-+from typing import Any, Dict
-+
-+from app.rpg.spatial.serialization import normalize_spatial_graph
-+from tests.rpg.manual.spatial_fixtures import build_manual_spatial_fixture
-+
-@@
- def _apply_manual_scenario_setup(
-     session: Dict[str, Any],
-     scenario: Dict[str, Any],
-     *,
-     scenario_name: str = "",
- ) -> Dict[str, Any]:
-@@
-+    setup_spatial_graph = scenario.get("setup_spatial_graph")
-+    if setup_spatial_graph:
-+        simulation_state = session.setdefault("simulation_state", {})
-+        spatial_graph = build_manual_spatial_fixture(str(setup_spatial_graph))
-+        simulation_state["spatial_graph"] = normalize_spatial_graph(spatial_graph)
-+
-     return session
-*** End Patch
-
-If the function signature differs in your repo, apply the same logic inside the existing _apply_manual_scenario_setup() after the base session/simulation state exists.
-
-Patch 4 — Manual spatial checks
-12. Add src/tests/rpg/manual/spatial_checks.py
-*** Begin Patch
-*** Add File: src/tests/rpg/manual/spatial_checks.py
+*** Add File: src/tests/rpg/manual/memory_checks.py
 +from __future__ import annotations
 +
 +from typing import Any, Dict, List
 +
-+from app.rpg.spatial.audibility import audible_entities_from, can_hear_entity
-+from app.rpg.spatial.graph import get_entity_area
-+from app.rpg.spatial.movement import can_move_between
-+from app.rpg.spatial.serialization import normalize_spatial_graph
-+from app.rpg.spatial.visibility import can_see_entity, visible_entities_from
++from app.rpg.memory.causal_retrieval import retrieve_causal_memories
 +
 +
 +def _safe_dict(value: Any) -> Dict[str, Any]:
 +    return value if isinstance(value, dict) else {}
 +
 +
-+def _get_graph_from_turn_result(result: Dict[str, Any]) -> Dict[str, Any]:
-+    result = _safe_dict(result)
-+    session = _safe_dict(result.get("session"))
-+    simulation_state = _safe_dict(
-+        result.get("simulation_state")
-+        or _safe_dict(result.get("result")).get("simulation_state")
-+        or session.get("simulation_state")
-+    )
-+    return normalize_spatial_graph(simulation_state.get("spatial_graph"))
-+
-+
-+def _check_bool(
++def _extract_simulation_state(
 +    *,
-+    check_type: str,
-+    expected_ok: bool,
-+    actual: Dict[str, Any],
-+    expected_reason: str = "",
++    result: Dict[str, Any],
++    session: Dict[str, Any] | None = None,
 +) -> Dict[str, Any]:
-+    actual_ok = bool(actual.get("ok"))
-+    reason = str(actual.get("reason") or "")
-+    ok = actual_ok is bool(expected_ok)
-+    if expected_reason:
-+        ok = ok and reason == expected_reason
-+    return {
-+        "check_type": check_type,
-+        "ok": ok,
-+        "expected_ok": expected_ok,
-+        "actual_ok": actual_ok,
-+        "expected_reason": expected_reason,
-+        "actual_reason": reason,
-+        "actual": actual,
-+    }
++    result = _safe_dict(result)
++    nested = _safe_dict(result.get("result"))
++    session_dict = _safe_dict(session)
++    for candidate in [
++        result.get("simulation_state"),
++        _safe_dict(result.get("session")).get("simulation_state"),
++        nested.get("simulation_state"),
++        _safe_dict(nested.get("session")).get("simulation_state"),
++        session_dict.get("simulation_state"),
++    ]:
++        candidate = _safe_dict(candidate)
++        if candidate:
++            return candidate
++    return {}
 +
 +
-+def run_spatial_check(
++def run_memory_check(
 +    *,
 +    check: Dict[str, Any],
 +    result: Dict[str, Any],
++    session: Dict[str, Any] | None = None,
 +) -> Dict[str, Any]:
-+    graph = _get_graph_from_turn_result(result)
++    simulation_state = _extract_simulation_state(result=result, session=session)
 +    check_type = str(check.get("type") or "")
 +
-+    if check_type == "spatial_current_area":
-+        entity_id = str(check.get("entity") or "player")
-+        expected_area_id = str(check.get("expected_area_id") or "")
-+        actual_area_id = get_entity_area(graph, entity_id)
-+        return {
-+            "check_type": check_type,
-+            "ok": actual_area_id == expected_area_id,
-+            "entity": entity_id,
-+            "expected_area_id": expected_area_id,
-+            "actual_area_id": actual_area_id,
-+        }
-+
-+    if check_type == "spatial_can_move":
-+        actual = can_move_between(
-+            graph,
-+            str(check.get("from_area_id") or ""),
-+            str(check.get("to_area_id") or ""),
++    if check_type == "memory_retrieval":
++        subject_id = str(check.get("subject_id") or "")
++        expected_event_ids = set(check.get("expected_event_ids") or [])
++        forbidden_event_ids = set(check.get("forbidden_event_ids") or [])
++        rows = retrieve_causal_memories(
++            simulation_state,
++            subject_id,
++            actor_id=check.get("actor_id"),
++            target_id=check.get("target_id"),
++            location_id=check.get("location_id"),
++            tags=check.get("tags") or [],
++            query_text=check.get("query_text"),
++            max_items=int(check.get("max_items") or 5),
 +        )
-+        return _check_bool(
-+            check_type=check_type,
-+            expected_ok=bool(check.get("expected_ok")),
-+            expected_reason=str(check.get("expected_reason") or ""),
-+            actual=actual,
++        actual_event_ids = {str(row.get("event_id")) for row in rows}
++        ok = expected_event_ids <= actual_event_ids and not (
++            forbidden_event_ids & actual_event_ids
 +        )
-+
-+    if check_type == "spatial_visibility":
-+        actual = can_see_entity(
-+            graph,
-+            str(check.get("viewer") or "player"),
-+            str(check.get("target") or ""),
-+        )
-+        return _check_bool(
-+            check_type=check_type,
-+            expected_ok=bool(check.get("expected_ok")),
-+            expected_reason=str(check.get("expected_reason") or ""),
-+            actual=actual,
-+        )
-+
-+    if check_type == "spatial_audibility":
-+        actual = can_hear_entity(
-+            graph,
-+            str(check.get("listener") or "player"),
-+            str(check.get("source") or ""),
-+            sound_level=str(check.get("sound_level") or "normal"),
-+        )
-+        return _check_bool(
-+            check_type=check_type,
-+            expected_ok=bool(check.get("expected_ok")),
-+            expected_reason=str(check.get("expected_reason") or ""),
-+            actual=actual,
-+        )
-+
-+    if check_type == "spatial_visible_entities":
-+        expected_ids = set(check.get("expected_entity_ids") or [])
-+        actual_ids = {row["entity_id"] for row in visible_entities_from(graph, str(check.get("viewer") or "player"))}
-+        mode = str(check.get("mode") or "contains")
-+        ok = expected_ids <= actual_ids if mode == "contains" else expected_ids == actual_ids
 +        return {
 +            "check_type": check_type,
 +            "ok": ok,
-+            "mode": mode,
-+            "expected_entity_ids": sorted(expected_ids),
-+            "actual_entity_ids": sorted(actual_ids),
++            "subject_id": subject_id,
++            "expected_event_ids": sorted(expected_event_ids),
++            "forbidden_event_ids": sorted(forbidden_event_ids),
++            "actual_event_ids": sorted(actual_event_ids),
++            "retrieved": rows,
 +        }
 +
-+    if check_type == "spatial_audible_entities":
-+        expected_ids = set(check.get("expected_entity_ids") or [])
-+        actual_ids = {row["entity_id"] for row in audible_entities_from(graph, str(check.get("listener") or "player"))}
-+        mode = str(check.get("mode") or "contains")
-+        ok = expected_ids <= actual_ids if mode == "contains" else expected_ids == actual_ids
++    if check_type == "memory_count_max":
++        subject_id = str(check.get("subject_id") or "")
++        max_expected = int(check.get("max_expected") or 0)
++        state = _safe_dict(simulation_state.get("npc_memory_state"))
++        rows = list(_safe_dict(state.get("memories_by_subject")).get(subject_id) or [])
 +        return {
 +            "check_type": check_type,
-+            "ok": ok,
-+            "mode": mode,
-+            "expected_entity_ids": sorted(expected_ids),
-+            "actual_entity_ids": sorted(actual_ids),
++            "ok": len(rows) <= max_expected,
++            "subject_id": subject_id,
++            "actual_count": len(rows),
++            "max_expected": max_expected,
 +        }
 +
 +    return {
 +        "check_type": check_type,
 +        "ok": False,
-+        "error": f"unknown_spatial_check_type:{check_type}",
++        "error": f"unknown_memory_check_type:{check_type}",
 +    }
 +
 +
-+def run_spatial_checks(
++def run_memory_checks(
 +    *,
 +    checks: List[Dict[str, Any]],
 +    result: Dict[str, Any],
++    session: Dict[str, Any] | None = None,
 +) -> List[Dict[str, Any]]:
-+    return [run_spatial_check(check=check, result=result) for check in checks]
++    return [
++        run_memory_check(check=check, result=result, session=session)
++        for check in checks
++    ]
 *** End Patch
-13. Patch manual turn/scenario validation hook
+Patch 4 — Apply memory setup in manual scenario setup
+10. Patch src/tests/rpg/manual/scenario_setup.py
 
-Find where the manual runner currently applies scenario checks after each turn. Add this hook.
+Add imports:
 
-Likely file:
+*** Begin Patch
+*** Update File: src/tests/rpg/manual/scenario_setup.py
+@@
+ from app.rpg.spatial.serialization import normalize_spatial_graph
++from app.rpg.memory.observation import (
++    record_event_observations,
++    record_told_memory,
++)
++from tests.rpg.manual.memory_fixtures import build_manual_memory_event
+ from tests.rpg.manual.spatial_fixtures import build_manual_spatial_fixture
+*** End Patch
 
-src/tests/rpg/manual/scenario_execution.py
+Inside _apply_manual_scenario_setup(...), after spatial setup is applied, add:
+
+*** Begin Patch
+*** Update File: src/tests/rpg/manual/scenario_setup.py
+@@
+     setup_spatial_graph = scenario.get("setup_spatial_graph")
+     if setup_spatial_graph:
+         simulation_state = session.setdefault("simulation_state", {})
+@@
+                     metadata_simulation_state["spatial_graph"] = spatial_graph
++
++    simulation_state = session.setdefault("simulation_state", {})
++
++    for memory_event_name in scenario.get("setup_memory_events") or []:
++        event = build_manual_memory_event(str(memory_event_name))
++        record_event_observations(
++            simulation_state,
++            event,
++            turn_index=int(scenario.get("setup_turn_index") or 1),
++        )
++
++    for told in scenario.get("setup_told_memories") or []:
++        if not isinstance(told, dict):
++            continue
++        record_told_memory(
++            simulation_state,
++            str(told.get("subject_id") or ""),
++            speaker_id=str(told.get("speaker_id") or "player"),
++            event_id=str(told.get("event_id") or "evt:told"),
++            summary=str(told.get("summary") or ""),
++            facts=dict(told.get("facts") or {}),
++            confidence=float(told.get("confidence") or 0.7),
++            turn_index=int(told.get("turn_index") or 1),
++            tags=list(told.get("tags") or []),
++            verified=bool(told.get("verified")),
++        )
+ 
+     return session
+*** End Patch
+Patch 5 — Run memory checks from manual scenario execution
+11. Patch src/tests/rpg/manual/scenario_execution.py
 
 Add import:
 
 *** Begin Patch
 *** Update File: src/tests/rpg/manual/scenario_execution.py
 @@
- from __future__ import annotations
- 
-+from tests.rpg.manual.spatial_checks import run_spatial_checks
-+
+ from tests.rpg.manual.spatial_checks import run_spatial_checks
++from tests.rpg.manual.memory_checks import run_memory_checks
 *** End Patch
 
-Then after each turn result is available, add:
+After the spatial check block, add memory check block:
 
 *** Begin Patch
 *** Update File: src/tests/rpg/manual/scenario_execution.py
 @@
-         turn_record = _run_one_manual_turn(
-             session_id=session_id,
-             scenario_name=scenario_name,
-             turn=turn,
-             turn_index=turn_index,
-         )
+         if spatial_checks:
+             current_session = {}
+             try:
+                 current_session = _ensure_manual_session(session_id)
+             except Exception:
+                 current_session = session
+@@
+                         + str(check_result.get("actual_reason") or check_result.get("error") or "")
+                     )
 +
-+        checks = scenario.get("checks") or []
-+        spatial_checks = [
++        memory_checks = [
 +            check
 +            for check in checks
 +            if isinstance(check, dict)
-+            and str(check.get("type") or "").startswith("spatial_")
++            and str(check.get("type") or "").startswith("memory_")
 +        ]
-+        if spatial_checks:
-+            spatial_check_results = run_spatial_checks(
-+                checks=spatial_checks,
++        if memory_checks:
++            current_session = {}
++            try:
++                current_session = _ensure_manual_session(session_id)
++            except Exception:
++                current_session = session
++
++            memory_check_results = run_memory_checks(
++                checks=memory_checks,
 +                result=turn_record.get("result") or turn_record,
++                session=current_session,
 +            )
-+            turn_record["spatial_check_results"] = spatial_check_results
-+            for check_result in spatial_check_results:
++            turn_record["memory_check_results"] = memory_check_results
++            for check_result in memory_check_results:
 +                if not check_result.get("ok"):
 +                    turn_record.setdefault("scenario_warnings", []).append(
-+                        "spatial_check_failed:"
++                        "memory_check_failed:"
 +                        + str(scenario_name)
 +                        + ":turn_"
 +                        + str(turn_index)
 +                        + ":"
 +                        + str(check_result.get("check_type"))
 +                        + ":"
-+                        + str(check_result.get("actual_reason") or check_result.get("error") or "")
++                        + str(check_result.get("error") or "")
 +                    )
  
          turns.append(turn_record)
 *** End Patch
 
-If your local code names the turn variable differently, preserve the same logic: run spatial checks immediately after each turn result, attach spatial_check_results, append scenario_warnings on failed checks.
+If your file uses a different variable than checks, use the existing scenario checks list.
 
-Patch 5 — Spatial manual scenarios
-14. Replace or update src/tests/rpg/manual/scenarios/spatial_l4_l6.py
+Patch 6 — Add manual L7-L9 scenarios
+12. Add src/tests/rpg/manual/scenarios/memory_l7_l9.py
 *** Begin Patch
-*** Delete File: src/tests/rpg/manual/scenarios/spatial_l4_l6.py
-*** End Patch
-*** Begin Patch
-*** Add File: src/tests/rpg/manual/scenarios/spatial_l4_l6.py
+*** Add File: src/tests/rpg/manual/scenarios/memory_l7_l9.py
 +from __future__ import annotations
 +
 +from typing import Any, Dict
 +
 +
-+SPATIAL_L4_L6_SCENARIOS: Dict[str, Dict[str, Any]] = {
-+    "spatial_room_graph_basic_navigation": {
++MEMORY_L7_L9_SCENARIOS: Dict[str, Dict[str, Any]] = {
++    "memory_npc_remembers_same_room_event": {
 +        "setup_spatial_graph": "tavern_fixture",
-+        "turns": ["I look around the tavern and check the exits"],
++        "setup_memory_events": ["same_room_greeting"],
++        "turns": ["I ask Bran if he remembers me greeting him."],
 +        "checks": [
 +            {
-+                "type": "spatial_visible_entities",
-+                "viewer": "player",
-+                "mode": "contains",
-+                "expected_entity_ids": ["bran", "mira", "bandit"],
++                "type": "memory_retrieval",
++                "subject_id": "bran",
++                "actor_id": "player",
++                "tags": ["greeting"],
++                "expected_event_ids": ["evt:manual_same_room_greeting"],
 +            }
 +        ],
 +    },
-+    "spatial_closed_door_blocks_movement": {
++    "memory_npc_does_not_remember_unseen_private_room_event": {
 +        "setup_spatial_graph": "tavern_fixture",
-+        "turns": ["I try to walk into the private room"],
++        "setup_memory_events": ["private_room_quiet_event"],
++        "turns": ["I ask Bran about the quiet private-room exchange."],
 +        "checks": [
 +            {
-+                "type": "spatial_can_move",
-+                "from_area_id": "tavern_common_room",
-+                "to_area_id": "private_room",
-+                "expected_ok": False,
-+                "expected_reason": "closed",
++                "type": "memory_retrieval",
++                "subject_id": "bran",
++                "tags": ["private"],
++                "forbidden_event_ids": ["evt:manual_private_room_quiet_event"],
 +            }
 +        ],
 +    },
-+    "spatial_open_door_allows_movement": {
++    "memory_npc_hears_muffled_event_through_closed_door": {
++        "setup_spatial_graph": "tavern_fixture",
++        "setup_memory_events": ["private_room_argument"],
++        "turns": ["I ask Bran if he heard the argument in the private room."],
++        "checks": [
++            {
++                "type": "memory_retrieval",
++                "subject_id": "bran",
++                "tags": ["argument"],
++                "expected_event_ids": ["evt:manual_private_room_argument"],
++            }
++        ],
++    },
++    "memory_hidden_npc_not_observed_by_player": {
 +        "setup_spatial_graph": "tavern_fixture_private_door_open",
-+        "turns": ["I walk into the private room"],
++        "setup_memory_events": ["private_room_quiet_event"],
++        "turns": ["I ask what I noticed in the private room."],
 +        "checks": [
 +            {
-+                "type": "spatial_can_move",
-+                "from_area_id": "tavern_common_room",
-+                "to_area_id": "private_room",
-+                "expected_ok": True,
-+                "expected_reason": "passable",
++                "type": "memory_retrieval",
++                "subject_id": "player",
++                "target_id": "spy",
++                "forbidden_event_ids": ["evt:manual_private_room_quiet_event"],
 +            }
 +        ],
 +    },
-+    "spatial_locked_door_blocks_movement": {
++    "memory_told_event_becomes_known": {
 +        "setup_spatial_graph": "tavern_fixture",
-+        "turns": ["I try to open the locked trapdoor to the cellar"],
++        "setup_told_memories": [
++            {
++                "subject_id": "bran",
++                "speaker_id": "player",
++                "event_id": "evt:manual_told_bandits",
++                "summary": "The player told Bran that bandits were on the road.",
++                "facts": {
++                    "actor_id": "bandits",
++                    "location_id": "road",
++                    "action": "reported",
++                },
++                "confidence": 0.7,
++                "tags": ["bandit"],
++                "verified": False,
++            }
++        ],
++        "turns": ["I ask Bran what I told him about bandits."],
 +        "checks": [
 +            {
-+                "type": "spatial_can_move",
-+                "from_area_id": "tavern_common_room",
-+                "to_area_id": "cellar",
-+                "expected_ok": False,
-+                "expected_reason": "locked",
++                "type": "memory_retrieval",
++                "subject_id": "bran",
++                "tags": ["bandit", "claim"],
++                "expected_event_ids": ["evt:manual_told_bandits"],
 +            }
 +        ],
 +    },
-+    "spatial_same_room_visibility": {
++    "memory_unbacked_claim_not_promoted_to_fact": {
 +        "setup_spatial_graph": "tavern_fixture",
-+        "turns": ["I look at Bran"],
++        "setup_told_memories": [
++            {
++                "subject_id": "bran",
++                "speaker_id": "player",
++                "event_id": "evt:manual_unbacked_dragon_claim",
++                "summary": "The player claimed a dragon owned the tavern.",
++                "facts": {
++                    "actor_id": "player",
++                    "target_id": "dragon",
++                    "action": "claimed",
++                },
++                "confidence": 0.4,
++                "tags": ["dragon"],
++                "verified": False,
++            }
++        ],
++        "turns": ["I ask Bran if the dragon claim is proven fact."],
 +        "checks": [
 +            {
-+                "type": "spatial_visibility",
-+                "viewer": "player",
-+                "target": "bran",
-+                "expected_ok": True,
-+                "expected_reason": "same_area",
++                "type": "memory_retrieval",
++                "subject_id": "bran",
++                "tags": ["claim", "unverified"],
++                "expected_event_ids": ["evt:manual_unbacked_dragon_claim"],
 +            }
 +        ],
 +    },
-+    "spatial_closed_door_blocks_visibility": {
++    "memory_directly_affected_npc_remembers": {
 +        "setup_spatial_graph": "tavern_fixture",
-+        "turns": ["I look through the closed private room door"],
++        "setup_memory_events": ["player_affects_bran"],
++        "turns": ["I ask Bran whether he remembers the insult."],
 +        "checks": [
 +            {
-+                "type": "spatial_visibility",
-+                "viewer": "player",
-+                "target": "spy",
-+                "expected_ok": False,
-+                "expected_reason": "hidden",
++                "type": "memory_retrieval",
++                "subject_id": "bran",
++                "tags": ["insult"],
++                "expected_event_ids": ["evt:manual_player_affects_bran"],
 +            }
 +        ],
 +    },
-+    "spatial_open_door_allows_visibility": {
-+        "setup_spatial_graph": "tavern_fixture_private_door_open",
-+        "turns": ["I look into the private room through the open door"],
-+        "checks": [
-+            {
-+                "type": "spatial_can_move",
-+                "from_area_id": "tavern_common_room",
-+                "to_area_id": "private_room",
-+                "expected_ok": True,
-+                "expected_reason": "passable",
-+            }
-+        ],
-+    },
-+    "spatial_wall_blocks_visibility": {
++    "memory_retrieval_bounded_to_recent_relevant_items": {
 +        "setup_spatial_graph": "tavern_fixture",
-+        "turns": ["I try to look through the stone wall"],
++        "setup_memory_events": [
++            "same_room_greeting",
++            "private_room_argument",
++            "player_affects_bran",
++            "street_bandit_seen",
++        ],
++        "turns": ["I ask Bran for the most relevant recent memories about me."],
 +        "checks": [
 +            {
-+                "type": "spatial_can_move",
-+                "from_area_id": "tavern_common_room",
-+                "to_area_id": "sealed_room",
-+                "expected_ok": False,
-+                "expected_reason": "blocked",
-+            }
++                "type": "memory_retrieval",
++                "subject_id": "bran",
++                "actor_id": "player",
++                "max_items": 3,
++                "expected_event_ids": ["evt:manual_player_affects_bran"],
++            },
++            {
++                "type": "memory_count_max",
++                "subject_id": "bran",
++                "max_expected": 100,
++            },
 +        ],
 +    },
-+    "spatial_same_room_audibility": {
++    "memory_spatial_visibility_filters_observers": {
 +        "setup_spatial_graph": "tavern_fixture",
-+        "turns": ["I listen to Bran speaking"],
++        "setup_memory_events": ["private_room_quiet_event"],
++        "turns": ["I check whether visibility filtered observers."],
 +        "checks": [
 +            {
-+                "type": "spatial_audibility",
-+                "listener": "player",
-+                "source": "bran",
-+                "expected_ok": True,
-+                "expected_reason": "same_area",
++                "type": "memory_retrieval",
++                "subject_id": "bran",
++                "tags": ["quiet"],
++                "forbidden_event_ids": ["evt:manual_private_room_quiet_event"],
 +            }
 +        ],
 +    },
-+    "spatial_closed_door_muffles_audibility": {
++    "memory_spatial_audibility_filters_hearers": {
 +        "setup_spatial_graph": "tavern_fixture",
-+        "turns": ["I listen at the closed private room door"],
++        "setup_memory_events": ["private_room_argument"],
++        "turns": ["I check whether audibility created a heard memory."],
 +        "checks": [
 +            {
-+                "type": "spatial_audibility",
-+                "listener": "player",
-+                "source": "spy",
-+                "expected_ok": True,
-+                "expected_reason": "muffled_by_barrier",
++                "type": "memory_retrieval",
++                "subject_id": "bran",
++                "tags": ["muffled"],
++                "expected_event_ids": ["evt:manual_private_room_argument"],
 +            }
 +        ],
 +    },
-+    "spatial_wall_blocks_audibility": {
++    "memory_save_load_preserves_causal_memory": {
 +        "setup_spatial_graph": "tavern_fixture",
-+        "turns": ["I listen through the stone wall"],
++        "setup_memory_events": ["same_room_greeting"],
++        "turns": ["I ask Bran about the saved greeting memory."],
 +        "checks": [
 +            {
-+                "type": "spatial_can_move",
-+                "from_area_id": "tavern_common_room",
-+                "to_area_id": "sealed_room",
-+                "expected_ok": False,
-+                "expected_reason": "blocked",
++                "type": "memory_retrieval",
++                "subject_id": "bran",
++                "tags": ["greeting"],
++                "expected_event_ids": ["evt:manual_same_room_greeting"],
 +            }
 +        ],
 +    },
-+    "spatial_hidden_npc_not_visible": {
-+        "setup_spatial_graph": "tavern_fixture_private_door_open",
-+        "turns": ["I scan the private room for anyone hiding"],
-+        "checks": [
-+            {
-+                "type": "spatial_visibility",
-+                "viewer": "player",
-+                "target": "spy",
-+                "expected_ok": False,
-+                "expected_reason": "hidden",
-+            }
-+        ],
-+    },
-+    "spatial_visible_present_npcs_only": {
++    "memory_npc_dialogue_uses_retrieved_fact_not_global_state": {
 +        "setup_spatial_graph": "tavern_fixture",
-+        "turns": ["I check who I can see nearby"],
++        "setup_memory_events": ["same_room_greeting"],
++        "turns": ["I ask Bran what he personally remembers seeing."],
 +        "checks": [
 +            {
-+                "type": "spatial_visible_entities",
-+                "viewer": "player",
-+                "mode": "contains",
-+                "expected_entity_ids": ["bran", "mira", "bandit"],
-+            }
-+        ],
-+    },
-+    "spatial_move_updates_current_area": {
-+        "setup_spatial_graph": "tavern_fixture",
-+        "turns": ["I walk out through the front door into the street"],
-+        "checks": [
-+            {
-+                "type": "spatial_can_move",
-+                "from_area_id": "tavern_common_room",
-+                "to_area_id": "street",
-+                "expected_ok": True,
-+                "expected_reason": "passable",
-+            }
-+        ],
-+    },
-+    "spatial_scene_graph_save_load_stability": {
-+        "setup_spatial_graph": "tavern_fixture",
-+        "turns": ["I look around the tavern so the spatial graph is saved"],
-+        "checks": [
-+            {
-+                "type": "spatial_visible_entities",
-+                "viewer": "player",
-+                "mode": "contains",
-+                "expected_entity_ids": ["bran"],
++                "type": "memory_retrieval",
++                "subject_id": "bran",
++                "actor_id": "player",
++                "expected_event_ids": ["evt:manual_same_room_greeting"],
++                "forbidden_event_ids": ["evt:manual_private_room_quiet_event"],
 +            }
 +        ],
 +    },
 +}
 *** End Patch
-15. Patch scenario registry
-
-Open:
-
-src/tests/rpg/manual/scenarios/registry.py
-
-Ensure it imports and merges SPATIAL_L4_L6_SCENARIOS.
-
+13. Patch src/tests/rpg/manual/scenarios/registry.py
 *** Begin Patch
 *** Update File: src/tests/rpg/manual/scenarios/registry.py
 @@
-+from tests.rpg.manual.scenarios.spatial_l4_l6 import SPATIAL_L4_L6_SCENARIOS
+ from tests.rpg.manual.scenarios.spatial_l4_l6 import SPATIAL_L4_L6_SCENARIOS
++from tests.rpg.manual.scenarios.memory_l7_l9 import MEMORY_L7_L9_SCENARIOS
 @@
- def build_service_scenarios() -> dict:
-     scenarios = {}
-@@
-+    scenarios.update(SPATIAL_L4_L6_SCENARIOS)
+     scenarios.update(SPATIAL_L4_L6_SCENARIOS)
++    scenarios.update(MEMORY_L7_L9_SCENARIOS)
      return scenarios
 *** End Patch
 
-If the registry already imports SPATIAL_L4_L6_SCENARIOS, only make sure the new scenarios are merged exactly once.
+If the file orders scenario updates differently, just add MEMORY_L7_L9_SCENARIOS once.
 
-Patch 6 — Adjust legacy migration test for post-legacy scenarios
-
-If the current migration test asserts exactly all_names == EXPECTED_LEGACY_SCENARIO_NAMES, update it so legacy names are a required subset and spatial names are separately checked.
-
-16. Add src/tests/rpg/manual/scenarios/expected_spatial_l4_l6_names.py
+Patch 7 — Add expected memory scenario names
+14. Add src/tests/rpg/manual/scenarios/expected_memory_l7_l9_names.py
 *** Begin Patch
-*** Add File: src/tests/rpg/manual/scenarios/expected_spatial_l4_l6_names.py
-+EXPECTED_SPATIAL_L4_L6_SCENARIO_NAMES = {
-+    "spatial_room_graph_basic_navigation",
-+    "spatial_closed_door_blocks_movement",
-+    "spatial_open_door_allows_movement",
-+    "spatial_locked_door_blocks_movement",
-+    "spatial_same_room_visibility",
-+    "spatial_closed_door_blocks_visibility",
-+    "spatial_open_door_allows_visibility",
-+    "spatial_wall_blocks_visibility",
-+    "spatial_same_room_audibility",
-+    "spatial_closed_door_muffles_audibility",
-+    "spatial_wall_blocks_audibility",
-+    "spatial_hidden_npc_not_visible",
-+    "spatial_visible_present_npcs_only",
-+    "spatial_move_updates_current_area",
-+    "spatial_scene_graph_save_load_stability",
+*** Add File: src/tests/rpg/manual/scenarios/expected_memory_l7_l9_names.py
++EXPECTED_MEMORY_L7_L9_SCENARIO_NAMES = {
++    "memory_npc_remembers_same_room_event",
++    "memory_npc_does_not_remember_unseen_private_room_event",
++    "memory_npc_hears_muffled_event_through_closed_door",
++    "memory_hidden_npc_not_observed_by_player",
++    "memory_told_event_becomes_known",
++    "memory_unbacked_claim_not_promoted_to_fact",
++    "memory_directly_affected_npc_remembers",
++    "memory_retrieval_bounded_to_recent_relevant_items",
++    "memory_spatial_visibility_filters_observers",
++    "memory_spatial_audibility_filters_hearers",
++    "memory_save_load_preserves_causal_memory",
++    "memory_npc_dialogue_uses_retrieved_fact_not_global_state",
 +}
 *** End Patch
-17. Patch test_manual_scenario_migration.py
+15. Patch src/tests/rpg/manual/test_manual_scenario_migration.py
 *** Begin Patch
 *** Update File: src/tests/rpg/manual/test_manual_scenario_migration.py
 @@
- from tests.rpg.manual.scenarios.expected_legacy_names import (
-     EXPECTED_LEGACY_SCENARIO_NAMES,
+ from tests.rpg.manual.scenarios.expected_spatial_l4_l6_names import (
+     EXPECTED_SPATIAL_L4_L6_SCENARIO_NAMES,
  )
-+from tests.rpg.manual.scenarios.expected_spatial_l4_l6_names import (
-+    EXPECTED_SPATIAL_L4_L6_SCENARIO_NAMES,
++from tests.rpg.manual.scenarios.expected_memory_l7_l9_names import (
++    EXPECTED_MEMORY_L7_L9_SCENARIO_NAMES,
 +)
- from tests.rpg.manual.scenarios.registry import build_service_scenarios
 @@
- def test_manual_scenario_registry_matches_legacy_names():
+ def test_manual_scenario_registry_includes_spatial_l4_l6_names():
      names = set(build_service_scenarios().keys())
--    missing = EXPECTED_LEGACY_SCENARIO_NAMES - names
--    extra = names - EXPECTED_LEGACY_SCENARIO_NAMES
-+    missing = EXPECTED_LEGACY_SCENARIO_NAMES - names
+     missing = EXPECTED_SPATIAL_L4_L6_SCENARIO_NAMES - names
  
-     assert not missing, f"Missing legacy scenarios: {sorted(missing)}"
--    assert not extra, f"Unexpected scenarios: {sorted(extra)}"
--    assert len(names) == len(EXPECTED_LEGACY_SCENARIO_NAMES) == 136
-+    assert len(EXPECTED_LEGACY_SCENARIO_NAMES) == 136
+     assert not missing, f"Missing L4-L6 spatial scenarios: {sorted(missing)}"
 +
 +
-+def test_manual_scenario_registry_includes_spatial_l4_l6_names():
++def test_manual_scenario_registry_includes_memory_l7_l9_names():
 +    names = set(build_service_scenarios().keys())
-+    missing = EXPECTED_SPATIAL_L4_L6_SCENARIO_NAMES - names
++    missing = EXPECTED_MEMORY_L7_L9_SCENARIO_NAMES - names
 +
-+    assert not missing, f"Missing L4-L6 spatial scenarios: {sorted(missing)}"
++    assert not missing, f"Missing L7-L9 memory scenarios: {sorted(missing)}"
+*** End Patch
+Patch 8 — Include memory check results in debug/full artifacts
+16. Patch src/tests/rpg/manual/summary_sanitizer.py
+
+Find the sanitizer that already includes spatial_check_results. Add memory_check_results.
+
+*** Begin Patch
+*** Update File: src/tests/rpg/manual/summary_sanitizer.py
+@@
+     spatial_check_results = turn.get("spatial_check_results")
+     if isinstance(spatial_check_results, list):
+         sanitized["spatial_check_results"] = [
+@@
+             if isinstance(item, dict)
+         ]
++
++    memory_check_results = turn.get("memory_check_results")
++    if isinstance(memory_check_results, list):
++        sanitized["memory_check_results"] = [
++            {
++                "check_type": item.get("check_type"),
++                "ok": item.get("ok"),
++                "subject_id": item.get("subject_id"),
++                "expected_event_ids": item.get("expected_event_ids"),
++                "forbidden_event_ids": item.get("forbidden_event_ids"),
++                "actual_event_ids": item.get("actual_event_ids"),
++                "actual_count": item.get("actual_count"),
++                "max_expected": item.get("max_expected"),
++                "error": item.get("error"),
++                "retrieved": item.get("retrieved"),
++            }
++            for item in memory_check_results[:50]
++            if isinstance(item, dict)
++        ]
+ 
+     return sanitized
 *** End Patch
 
-If the local test function has a different name, apply the same semantic change: legacy names must remain present; new post-legacy spatial names are allowed and checked separately.
+If your sanitizer has separate summary and artifact paths, put full retrieved rows only in debug/full artifacts. In compact summary, keep just event IDs and ok/error.
 
-Patch 7 — Optional compact spatial context builder
+Patch 9 — Optional compact dialogue context helper
 
-This does not force integration into apply_turn yet. It gives a reusable deterministic payload.
+This adds a reusable function but does not force prompt integration.
 
-18. Add src/app/rpg/spatial/context.py
+17. Add src/app/rpg/memory/dialogue_context.py
 *** Begin Patch
-*** Add File: src/app/rpg/spatial/context.py
+*** Add File: src/app/rpg/memory/dialogue_context.py
 +from __future__ import annotations
 +
 +from typing import Any, Dict, List
 +
-+from app.rpg.spatial.audibility import audible_entities_from
-+from app.rpg.spatial.graph import list_area_connections
-+from app.rpg.spatial.movement import can_move_between
-+from app.rpg.spatial.serialization import normalize_spatial_graph
-+from app.rpg.spatial.visibility import visible_entities_from
++from app.rpg.memory.causal_retrieval import retrieve_causal_memories
 +
 +
-+def build_spatial_context(
-+    graph: Dict[str, Any],
++def build_causal_memory_dialogue_context(
++    simulation_state: Dict[str, Any],
++    npc_id: str,
 +    *,
-+    viewer_entity_id: str = "player",
++    actor_id: str | None = None,
++    target_id: str | None = None,
++    location_id: str | None = None,
++    tags: List[str] | None = None,
++    max_items: int = 5,
 +) -> Dict[str, Any]:
-+    graph = normalize_spatial_graph(graph)
-+    current_area_id = str(graph.get("current_area_id") or "")
-+    area = graph["areas"].get(current_area_id) or {}
-+
-+    exits: List[Dict[str, Any]] = []
-+    for connection in list_area_connections(graph, current_area_id):
-+        movement = can_move_between(
-+            graph,
-+            current_area_id,
-+            str(connection.get("to_area_id") or ""),
-+        )
-+        exits.append(
-+            {
-+                "to_area_id": connection.get("to_area_id"),
-+                "label": connection.get("label"),
-+                "barrier_kind": connection.get("barrier_kind"),
-+                "is_open": connection.get("is_open"),
-+                "is_locked": connection.get("is_locked"),
-+                "movement": movement.get("reason"),
-+                "visibility": connection.get("visibility"),
-+                "audibility": connection.get("audibility"),
-+            }
-+        )
-+
++    memories = retrieve_causal_memories(
++        simulation_state,
++        npc_id,
++        actor_id=actor_id,
++        target_id=target_id,
++        location_id=location_id,
++        tags=tags or [],
++        max_items=max_items,
++    )
 +    return {
-+        "current_area_id": current_area_id,
-+        "current_area_name": area.get("name") or current_area_id,
-+        "visible_entity_ids": [
-+            row["entity_id"] for row in visible_entities_from(graph, viewer_entity_id)
-+        ],
-+        "audible_entity_ids": [
-+            row["entity_id"] for row in audible_entities_from(graph, viewer_entity_id)
-+        ],
-+        "exits": exits,
++        "npc_id": npc_id,
++        "retrieved_causal_memories": memories,
++        "memory_truth_rule": (
++            "These memories are deterministic simulation facts or explicitly "
++            "marked told/unverified claims. Do not invent memories outside this list."
++        ),
 +    }
 *** End Patch
-
-Later, integrate this into apply_turn result when the exact turn-contract assembly point is known:
-
-from app.rpg.spatial.context import build_spatial_context
-
-graph = simulation_state.get("spatial_graph")
-if graph:
-    turn_contract["spatial_context"] = build_spatial_context(graph)
-
-Do not dump the full graph into every turn contract.
-
 Validation commands
-
-Run:
-
-python -m py_compile src/app/rpg/spatial/model.py
-python -m py_compile src/app/rpg/spatial/serialization.py
-python -m py_compile src/app/rpg/spatial/graph.py
-python -m py_compile src/app/rpg/spatial/movement.py
-python -m py_compile src/app/rpg/spatial/visibility.py
-python -m py_compile src/app/rpg/spatial/audibility.py
-python -m py_compile src/app/rpg/spatial/context.py
-
-Run unit tests:
-
-python -m pytest src/tests/rpg/spatial -q
+Compile
+python -m py_compile src/app/rpg/memory/causal_memory.py
+python -m py_compile src/app/rpg/memory/causal_retrieval.py
+python -m py_compile src/app/rpg/memory/observation.py
+python -m py_compile src/app/rpg/memory/dialogue_context.py
+python -m py_compile src/tests/rpg/manual/memory_checks.py
+python -m py_compile src/tests/rpg/manual/memory_fixtures.py
+python -m py_compile src/tests/rpg/manual/scenarios/memory_l7_l9.py
+Unit tests
+python -m pytest src/tests/rpg/memory src/tests/rpg/spatial -q
+Manual registry and integrity tests
+python -m pytest src/tests/rpg/manual/test_manual_scenario_migration.py src/tests/rpg/manual/test_manual_scenario_registry_integrity.py -q

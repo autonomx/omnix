@@ -30,6 +30,11 @@ except Exception:
     SPATIAL_L4_L6_SCENARIOS = {}
 
 try:
+    from tests.rpg.manual.scenarios.memory_l7_l9 import MEMORY_L7_L9_SCENARIOS
+except Exception:
+    MEMORY_L7_L9_SCENARIOS = {}
+
+try:
     from tests.rpg.manual.scenarios.services_core import SERVICES_CORE_SCENARIOS
 except Exception:
     SERVICES_CORE_SCENARIOS = {}
@@ -75,6 +80,7 @@ def build_service_scenarios(
         NARRATION_N1_N3_SCENARIOS,
         INTERACTION_L1_L3_SCENARIOS,
         SPATIAL_L4_L6_SCENARIOS,
+        MEMORY_L7_L9_SCENARIOS,
         SERVICES_CORE_SCENARIOS,
         CONVERSATION_CORE_SCENARIOS,
         NPC_SOCIAL_MEMORY_SCENARIOS,

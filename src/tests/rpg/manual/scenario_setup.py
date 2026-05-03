@@ -4,7 +4,12 @@ from copy import deepcopy
 from typing import Any, Dict
 
 from app.rpg.spatial.serialization import normalize_spatial_graph
+from app.rpg.memory.observation import (
+    record_event_observations,
+    record_told_memory,
+)
 from tests.rpg.manual.spatial_fixtures import build_manual_spatial_fixture
+from tests.rpg.manual.memory_fixtures import build_manual_memory_event
 from tests.rpg.manual.safe import _safe_dict, _safe_list
 from tests.rpg.manual.session_helpers import (
     _ensure_manual_session,
@@ -65,6 +70,32 @@ def _apply_manual_scenario_setup(session: Dict[str, Any], scenario: Dict[str, An
                 metadata_simulation_state = metadata.setdefault("simulation_state", {})
                 if isinstance(metadata_simulation_state, dict):
                     metadata_simulation_state["spatial_graph"] = spatial_graph
+
+    simulation_state = session.setdefault("simulation_state", {})
+
+    for memory_event_name in scenario.get("setup_memory_events") or []:
+        event = build_manual_memory_event(str(memory_event_name))
+        record_event_observations(
+            simulation_state,
+            event,
+            turn_index=int(scenario.get("setup_turn_index") or 1),
+        )
+
+    for told in scenario.get("setup_told_memories") or []:
+        if not isinstance(told, dict):
+            continue
+        record_told_memory(
+            simulation_state,
+            str(told.get("subject_id") or ""),
+            speaker_id=str(told.get("speaker_id") or "player"),
+            event_id=str(told.get("event_id") or "evt:told"),
+            summary=str(told.get("summary") or ""),
+            facts=dict(told.get("facts") or {}),
+            confidence=float(told.get("confidence") or 0.7),
+            turn_index=int(told.get("turn_index") or 1),
+            tags=list(told.get("tags") or []),
+            verified=bool(told.get("verified")),
+        )
 
     runtime_state = _safe_dict(session.get("runtime_state"))
     runtime_settings = _safe_dict(runtime_state.get("runtime_settings"))
