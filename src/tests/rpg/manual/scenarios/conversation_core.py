@@ -286,6 +286,45 @@ CONVERSATION_CORE_SCENARIOS: Dict[str, Dict[str, Any]] = {
             "__ambient_tick__"
         ]
     },
+    "story_event_queue_delayed_arc": {
+        "currency": {"gold": 0, "silver": 0, "copper": 0},
+        "setup_story_arcs": [
+            {
+                "arc_id": "arc:queue_test",
+                "title": "Queue Test Arc",
+                "stage": "start",
+                "pressure": 10,
+            }
+        ],
+        "turns": [
+            {"input": "__ambient_tick__", "story_event_queue_checks": [
+                {
+                    "type": "story_event_queue_enqueue",
+                    "event": {
+                        "event_id": "event:queue_arc_advance",
+                        "arc_id": "arc:queue_test",
+                        "effects": [{"type": "arc_stage_set", "arc_id": "arc:queue_test", "stage": "advanced"}],
+                    },
+                    "enqueued_turn": 1,
+                    "delay_turns": 2,
+                }
+            ]},
+            {"input": "__ambient_tick__"},
+            {"input": "__ambient_tick__", "story_event_queue_checks": [
+                {
+                    "type": "story_event_queue_process",
+                    "mode": "idle",
+                    "turn_index": 3,
+                    "expected_applied_count": 1,
+                },
+                {
+                    "type": "story_event_queue_arc",
+                    "arc_id": "arc:queue_test",
+                    "expected": {"stage": "advanced"},
+                },
+            ]},
+        ],
+    },
     "npc_npc_multiturn_quest_discussion": {
         "currency": {
             "gold": 0,

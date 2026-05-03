@@ -1,56 +1,58 @@
-Bundle M22-M24 — Campaign Director Runtime + Story Pack Driven Escalation v1
+Bundle M25-M27 — Story Event Runtime Queue + Delayed Consequences v1
 GOAL:
-Wire imported story pack escalation rules into deterministic runtime.
+Add a deterministic story event runtime queue.
 
-This connects:
-- escalation_rule_registry
-- story_event_registry
-- director pressure
-- escalation application
-- story event effects
-- NPC evolution effects
+This allows systems like campaign director, story packs, quests, and NPC arcs to enqueue consequences that apply later.
 
-Runtime should:
-- evaluate registered escalation rules during safe story ticks
-- expose bounded director pressure
-- apply eligible registered escalation rules only when explicitly requested by deterministic runtime
-- resolve event definitions from story_event_registry
-- prevent duplicate story event application
-- respect cooldown/max applications/resolved arcs
-- never let LLM decide eligibility or mutate state
-Patch 1 — Add campaign director runtime package
-1. Add src/app/rpg/campaign_director/__init__.py
+Queue supports:
+- enqueue registered story event definitions by event_id
+- delayed application after N turns
+- explicit apply-once semantics
+- skipped/failed/applied result records
+- bounded queue/history
+- safe runtime modes only
+- no LLM mutation
+
+Important:
+- enqueueing does not apply effects
+- queue processing applies through apply_story_event()
+- duplicate event_ids are not applied twice
+- delayed events wait until due_turn
+- failed events remain visible with reasons
+Patch 1 — Add story event queue package
+1. Add src/app/rpg/story_event_queue/__init__.py
 *** Begin Patch
-*** Add File: src/app/rpg/campaign_director/__init__.py
-+"""Deterministic campaign director runtime helpers."""
+*** Add File: src/app/rpg/story_event_queue/__init__.py
++"""Deterministic story event queue runtime helpers."""
 +
-+from app.rpg.campaign_director.runtime import (
-+    apply_campaign_director_tick,
-+    build_campaign_director_snapshot,
-+    evaluate_campaign_director_tick,
++from app.rpg.story_event_queue.queue import (
++    enqueue_story_event,
++    enqueue_story_event_definition,
++    process_story_event_queue,
 +)
-+from app.rpg.campaign_director.state import (
-+    ensure_campaign_director_state,
-+    normalize_campaign_director_state,
++from app.rpg.story_event_queue.state import (
++    ensure_story_event_queue_state,
++    normalize_story_event_queue_state,
 +)
 +
 +__all__ = [
-+    "apply_campaign_director_tick",
-+    "build_campaign_director_snapshot",
-+    "ensure_campaign_director_state",
-+    "evaluate_campaign_director_tick",
-+    "normalize_campaign_director_state",
++    "enqueue_story_event",
++    "enqueue_story_event_definition",
++    "ensure_story_event_queue_state",
++    "normalize_story_event_queue_state",
++    "process_story_event_queue",
 +]
 *** End Patch
-2. Add src/app/rpg/campaign_director/state.py
+2. Add src/app/rpg/story_event_queue/state.py
 *** Begin Patch
-*** Add File: src/app/rpg/campaign_director/state.py
+*** Add File: src/app/rpg/story_event_queue/state.py
 +from __future__ import annotations
 +
 +from typing import Any, Dict, List
 +
 +
-+MAX_DIRECTOR_TICK_HISTORY = 100
++MAX_PENDING_STORY_EVENTS = 200
++MAX_STORY_EVENT_QUEUE_HISTORY = 300
 +
 +
 +def _safe_dict(value: Any) -> Dict[str, Any]:
@@ -68,566 +70,686 @@ Patch 1 — Add campaign director runtime package
 +        return default
 +
 +
-+def _safe_bool(value: Any, default: bool = True) -> bool:
-+    if isinstance(value, bool):
-+        return value
-+    return default
++def _safe_str(value: Any) -> str:
++    return value if isinstance(value, str) else ""
 +
 +
-+def normalize_director_tick_record(value: Dict[str, Any]) -> Dict[str, Any]:
++def normalize_story_event_queue_item(value: Dict[str, Any]) -> Dict[str, Any]:
 +    value = _safe_dict(value)
 +    return {
-+        "turn_index": _safe_int(value.get("turn_index"), 0),
-+        "mode": str(value.get("mode") or ""),
-+        "eligible_count": _safe_int(value.get("eligible_count"), 0),
-+        "applied_count": _safe_int(value.get("applied_count"), 0),
-+        "applied_rule_ids": [
-+            str(item)
-+            for item in _safe_list(value.get("applied_rule_ids"))
-+            if str(item)
-+        ][:20],
-+        "applied_event_ids": [
-+            str(item)
-+            for item in _safe_list(value.get("applied_event_ids"))
-+            if str(item)
-+        ][:20],
-+        "skipped_reasons": [
-+            dict(row)
-+            for row in _safe_list(value.get("skipped_reasons"))
-+            if isinstance(row, dict)
-+        ][:20],
++        "queue_id": _safe_str(value.get("queue_id")),
++        "event_id": _safe_str(value.get("event_id")),
++        "source": _safe_str(value.get("source")) or "unknown",
++        "status": _safe_str(value.get("status")) or "pending",
++        "enqueued_turn": _safe_int(value.get("enqueued_turn"), 0),
++        "due_turn": _safe_int(value.get("due_turn"), 0),
++        "priority": max(0, min(100, _safe_int(value.get("priority"), 50))),
++        "reason": _safe_str(value.get("reason")),
++        "event": dict(_safe_dict(value.get("event"))),
++        "metadata": dict(_safe_dict(value.get("metadata"))),
 +    }
 +
 +
-+def normalize_campaign_director_state(value: Dict[str, Any] | None) -> Dict[str, Any]:
++def normalize_story_event_queue_history_item(value: Dict[str, Any]) -> Dict[str, Any]:
 +    value = _safe_dict(value)
-+    history = [
-+        normalize_director_tick_record(row)
-+        for row in _safe_list(value.get("tick_history"))
++    return {
++        "queue_id": _safe_str(value.get("queue_id")),
++        "event_id": _safe_str(value.get("event_id")),
++        "status": _safe_str(value.get("status")) or "unknown",
++        "processed_turn": _safe_int(value.get("processed_turn"), 0),
++        "reason": _safe_str(value.get("reason")),
++        "result": dict(_safe_dict(value.get("result"))),
++    }
++
++
++def normalize_story_event_queue_state(value: Dict[str, Any] | None) -> Dict[str, Any]:
++    value = _safe_dict(value)
++    pending = [
++        normalize_story_event_queue_item(row)
++        for row in _safe_list(value.get("pending"))
 +        if isinstance(row, dict)
-+    ][-MAX_DIRECTOR_TICK_HISTORY:]
++    ]
++    pending = [
++        row
++        for row in pending
++        if row.get("queue_id") and row.get("event_id") and row.get("status") == "pending"
++    ][-MAX_PENDING_STORY_EVENTS:]
++    pending.sort(
++        key=lambda row: (
++            int(row.get("due_turn") or 0),
++            -int(row.get("priority") or 0),
++            str(row.get("queue_id") or ""),
++        )
++    )
++
++    history = [
++        normalize_story_event_queue_history_item(row)
++        for row in _safe_list(value.get("history"))
++        if isinstance(row, dict)
++    ][-MAX_STORY_EVENT_QUEUE_HISTORY:]
++
 +    return {
 +        "version": 1,
-+        "enabled": _safe_bool(value.get("enabled"), True),
-+        "last_tick_turn": _safe_int(value.get("last_tick_turn"), 0),
-+        "last_mode": str(value.get("last_mode") or ""),
-+        "tick_history": history,
-+        "max_tick_history": MAX_DIRECTOR_TICK_HISTORY,
++        "pending": pending,
++        "history": history,
++        "max_pending": MAX_PENDING_STORY_EVENTS,
++        "max_history": MAX_STORY_EVENT_QUEUE_HISTORY,
 +    }
 +
 +
-+def ensure_campaign_director_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
++def ensure_story_event_queue_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
 +    if not isinstance(simulation_state, dict):
 +        raise TypeError("simulation_state_must_be_dict")
-+    state = normalize_campaign_director_state(simulation_state.get("campaign_director_state"))
-+    simulation_state["campaign_director_state"] = state
++    state = normalize_story_event_queue_state(simulation_state.get("story_event_queue_state"))
++    simulation_state["story_event_queue_state"] = state
 +    return state
 +
 +
-+def record_campaign_director_tick(
++def add_story_event_queue_history(
 +    simulation_state: Dict[str, Any],
 +    *,
-+    turn_index: int,
-+    mode: str,
-+    eligible_count: int = 0,
-+    applied_rule_ids: List[str] | None = None,
-+    applied_event_ids: List[str] | None = None,
-+    skipped_reasons: List[Dict[str, Any]] | None = None,
++    queue_id: str,
++    event_id: str,
++    status: str,
++    processed_turn: int,
++    reason: str = "",
++    result: Dict[str, Any] | None = None,
 +) -> Dict[str, Any]:
-+    state = ensure_campaign_director_state(simulation_state)
-+    applied_rule_ids = applied_rule_ids or []
-+    applied_event_ids = applied_event_ids or []
-+    row = normalize_director_tick_record(
++    state = ensure_story_event_queue_state(simulation_state)
++    row = normalize_story_event_queue_history_item(
 +        {
-+            "turn_index": turn_index,
-+            "mode": mode,
-+            "eligible_count": eligible_count,
-+            "applied_count": len(applied_event_ids),
-+            "applied_rule_ids": applied_rule_ids,
-+            "applied_event_ids": applied_event_ids,
-+            "skipped_reasons": skipped_reasons or [],
++            "queue_id": queue_id,
++            "event_id": event_id,
++            "status": status,
++            "processed_turn": processed_turn,
++            "reason": reason,
++            "result": result or {},
 +        }
 +    )
-+    history = list(state.get("tick_history") or [])
++    history = list(state.get("history") or [])
 +    history.append(row)
-+    state["tick_history"] = history[-MAX_DIRECTOR_TICK_HISTORY:]
-+    state["last_tick_turn"] = int(turn_index or 0)
-+    state["last_mode"] = str(mode or "")
-+    simulation_state["campaign_director_state"] = normalize_campaign_director_state(state)
++    state["history"] = history[-MAX_STORY_EVENT_QUEUE_HISTORY:]
++    simulation_state["story_event_queue_state"] = normalize_story_event_queue_state(state)
 +    return {
 +        "ok": True,
-+        "reason": "director_tick_recorded",
-+        "tick": row,
-+        "state": simulation_state["campaign_director_state"],
++        "reason": "queue_history_recorded",
++        "history_item": row,
 +    }
 *** End Patch
-3. Add src/app/rpg/campaign_director/runtime.py
+3. Add src/app/rpg/story_event_queue/queue.py
 *** Begin Patch
-*** Add File: src/app/rpg/campaign_director/runtime.py
+*** Add File: src/app/rpg/story_event_queue/queue.py
 +from __future__ import annotations
 +
++import hashlib
++import json
 +from typing import Any, Dict, List
 +
-+from app.rpg.escalation.director import build_director_pressure
-+from app.rpg.escalation.rules import apply_escalation_rule, evaluate_escalation_rules
-+from app.rpg.story_packs.definition_registries import (
-+    get_story_event_definition,
-+    list_escalation_rule_definitions,
++from app.rpg.story_event_queue.state import (
++    add_story_event_queue_history,
++    ensure_story_event_queue_state,
 +)
-+from app.rpg.campaign_director.state import (
-+    ensure_campaign_director_state,
-+    record_campaign_director_tick,
-+)
++from app.rpg.story_events.application import apply_story_event
++from app.rpg.story_events.state import has_story_event_been_applied
++from app.rpg.story_packs.definition_registries import get_story_event_definition
 +
 +
-+SAFE_DIRECTOR_MODES = {"idle", "wait", "listen", "observe", "world_tick", "__ambient_tick__"}
-+MAX_DIRECTOR_APPLICATIONS_PER_TICK = 1
-+MAX_DIRECTOR_PRESSURE_ITEMS = 10
++SAFE_QUEUE_PROCESS_MODES = {"idle", "wait", "listen", "observe", "world_tick", "__ambient_tick__"}
++MAX_QUEUE_APPLICATIONS_PER_TICK = 3
 +
 +
 +def _safe_dict(value: Any) -> Dict[str, Any]:
 +    return value if isinstance(value, dict) else {}
 +
 +
-+def _safe_list(value: Any) -> List[Any]:
-+    return value if isinstance(value, list) else []
++def _safe_int(value: Any, default: int = 0) -> int:
++    try:
++        return int(value)
++    except Exception:
++        return default
 +
 +
-+def _resolve_registered_rules(
-+    simulation_state: Dict[str, Any],
++def _stable_queue_id(
 +    *,
-+    arc_id: str = "",
-+) -> List[Dict[str, Any]]:
-+    return list_escalation_rule_definitions(simulation_state, arc_id=arc_id)
++    event_id: str,
++    source: str,
++    due_turn: int,
++    reason: str = "",
++) -> str:
++    payload = json.dumps(
++        {
++            "event_id": event_id,
++            "source": source,
++            "due_turn": int(due_turn or 0),
++            "reason": reason,
++        },
++        sort_keys=True,
++        ensure_ascii=False,
++    )
++    digest = hashlib.sha1(payload.encode("utf-8")).hexdigest()[:16]
++    return f"story_event_queue:{digest}"
 +
 +
-+def _hydrate_registered_rule_event(
++def enqueue_story_event(
 +    simulation_state: Dict[str, Any],
-+    rule: Dict[str, Any],
++    event: Dict[str, Any],
++    *,
++    source: str = "manual",
++    enqueued_turn: int = 0,
++    due_turn: int | None = None,
++    delay_turns: int = 0,
++    priority: int = 50,
++    reason: str = "",
++    metadata: Dict[str, Any] | None = None,
 +) -> Dict[str, Any]:
-+    rule = dict(_safe_dict(rule))
-+    event = dict(_safe_dict(rule.get("event")))
++    event = dict(_safe_dict(event))
 +    event_id = str(event.get("event_id") or "")
-+    registered_event = get_story_event_definition(simulation_state, event_id) if event_id else None
-+    if registered_event:
-+        # Registered event definitions are authoritative. Rule-local event fields
-+        # may still provide arc_id/event_id defaults, but do not replace effects.
-+        hydrated = dict(registered_event)
-+        hydrated.setdefault("event_id", event_id)
-+        hydrated.setdefault("arc_id", rule.get("arc_id") or "")
-+        rule["event"] = hydrated
-+    else:
-+        event.setdefault("arc_id", rule.get("arc_id") or "")
-+        rule["event"] = event
-+    return rule
++    if not event_id:
++        return {"ok": False, "reason": "missing_event_id"}
 +
-+
-+def _hydrate_registered_rules(
-+    simulation_state: Dict[str, Any],
-+    rules: List[Dict[str, Any]],
-+) -> List[Dict[str, Any]]:
-+    return [
-+        _hydrate_registered_rule_event(simulation_state, rule)
-+        for rule in rules
-+        if isinstance(rule, dict)
-+    ]
-+
-+
-+def evaluate_campaign_director_tick(
-+    simulation_state: Dict[str, Any],
-+    *,
-+    mode: str = "idle",
-+    turn_index: int = 0,
-+    arc_id: str = "",
-+    max_pressure_items: int = MAX_DIRECTOR_PRESSURE_ITEMS,
-+) -> Dict[str, Any]:
-+    director_state = ensure_campaign_director_state(simulation_state)
-+    mode = str(mode or "")
-+    if not director_state.get("enabled", True):
++    if has_story_event_been_applied(simulation_state, event_id):
 +        return {
 +            "ok": True,
-+            "eligible": [],
-+            "eligible_count": 0,
-+            "director_pressure": [],
-+            "reason": "director_disabled",
-+            "safe_mode": False,
-+            "advisory_only": True,
-+        }
-+    if mode not in SAFE_DIRECTOR_MODES:
-+        return {
-+            "ok": True,
-+            "eligible": [],
-+            "eligible_count": 0,
-+            "director_pressure": [],
-+            "reason": "unsafe_mode",
-+            "mode": mode,
-+            "safe_modes": sorted(SAFE_DIRECTOR_MODES),
-+            "safe_mode": False,
-+            "advisory_only": True,
++            "reason": "already_applied",
++            "event_id": event_id,
++            "queued": False,
 +        }
 +
-+    registered_rules = _resolve_registered_rules(simulation_state, arc_id=arc_id)
-+    rules = _hydrate_registered_rules(simulation_state, registered_rules)
-+    evaluation = evaluate_escalation_rules(
-+        simulation_state,
-+        rules,
-+        turn_index=turn_index,
++    resolved_due_turn = int(due_turn if due_turn is not None else int(enqueued_turn or 0) + int(delay_turns or 0))
++    queue_id = _stable_queue_id(
++        event_id=event_id,
++        source=source,
++        due_turn=resolved_due_turn,
++        reason=reason,
 +    )
-+    pressure = build_director_pressure(
-+        simulation_state,
-+        rules,
-+        turn_index=turn_index,
-+        max_items=max_pressure_items,
-+    )
++    state = ensure_story_event_queue_state(simulation_state)
++    pending = list(state.get("pending") or [])
++
++    for row in pending:
++        if row.get("queue_id") == queue_id or row.get("event_id") == event_id:
++            return {
++                "ok": True,
++                "reason": "already_queued",
++                "event_id": event_id,
++                "queue_id": row.get("queue_id"),
++                "queued": False,
++                "item": row,
++            }
++
++    item = {
++        "queue_id": queue_id,
++        "event_id": event_id,
++        "source": str(source or "manual"),
++        "status": "pending",
++        "enqueued_turn": int(enqueued_turn or 0),
++        "due_turn": resolved_due_turn,
++        "priority": max(0, min(100, int(priority or 50))),
++        "reason": str(reason or ""),
++        "event": event,
++        "metadata": dict(metadata or {}),
++    }
++    pending.append(item)
++    state["pending"] = pending
++    simulation_state["story_event_queue_state"] = state
++    ensure_story_event_queue_state(simulation_state)
 +    return {
 +        "ok": True,
-+        "reason": "evaluated",
-+        "mode": mode,
-+        "turn_index": int(turn_index or 0),
-+        "safe_mode": True,
-+        "registered_rule_count": len(registered_rules),
-+        "eligible": evaluation.get("eligible") or [],
-+        "eligible_count": int(evaluation.get("eligible_count") or 0),
-+        "director_pressure": pressure.get("director_pressure") or [],
-+        "advisory_only": True,
-+        "evaluation": evaluation,
++        "reason": "queued",
++        "queued": True,
++        "event_id": event_id,
++        "queue_id": queue_id,
++        "item": item,
 +    }
 +
 +
-+def apply_campaign_director_tick(
++def enqueue_story_event_definition(
++    simulation_state: Dict[str, Any],
++    event_id: str,
++    *,
++    source: str = "definition",
++    enqueued_turn: int = 0,
++    due_turn: int | None = None,
++    delay_turns: int = 0,
++    priority: int = 50,
++    reason: str = "",
++    metadata: Dict[str, Any] | None = None,
++) -> Dict[str, Any]:
++    event = get_story_event_definition(simulation_state, event_id)
++    if not event:
++        return {
++            "ok": False,
++            "reason": "story_event_definition_missing",
++            "event_id": event_id,
++        }
++    return enqueue_story_event(
++        simulation_state,
++        event,
++        source=source,
++        enqueued_turn=enqueued_turn,
++        due_turn=due_turn,
++        delay_turns=delay_turns,
++        priority=priority,
++        reason=reason,
++        metadata=metadata,
++    )
++
++
++def _is_due(item: Dict[str, Any], *, turn_index: int) -> bool:
++    return int(item.get("due_turn") or 0) <= int(turn_index or 0)
++
++
++def process_story_event_queue(
 +    simulation_state: Dict[str, Any],
 +    *,
 +    mode: str = "idle",
 +    turn_index: int = 0,
-+    arc_id: str = "",
-+    max_applications: int = MAX_DIRECTOR_APPLICATIONS_PER_TICK,
++    max_applications: int = MAX_QUEUE_APPLICATIONS_PER_TICK,
 +) -> Dict[str, Any]:
-+    evaluation = evaluate_campaign_director_tick(
-+        simulation_state,
-+        mode=mode,
-+        turn_index=turn_index,
-+        arc_id=arc_id,
-+    )
-+    if not evaluation.get("safe_mode"):
-+        record_campaign_director_tick(
-+            simulation_state,
-+            turn_index=turn_index,
-+            mode=mode,
-+            eligible_count=0,
-+            skipped_reasons=[{"reason": evaluation.get("reason"), "mode": mode}],
-+        )
++    state = ensure_story_event_queue_state(simulation_state)
++    mode = str(mode or "")
++    if mode not in SAFE_QUEUE_PROCESS_MODES:
 +        return {
 +            "ok": True,
-+            "reason": evaluation.get("reason"),
++            "reason": "unsafe_mode",
 +            "mode": mode,
++            "safe_modes": sorted(SAFE_QUEUE_PROCESS_MODES),
 +            "applied": [],
++            "skipped": [],
++            "remaining": list(state.get("pending") or []),
 +            "applied_count": 0,
-+            "evaluation": evaluation,
 +        }
 +
-+    applied = []
-+    skipped = []
-+    max_applications = max(0, min(MAX_DIRECTOR_APPLICATIONS_PER_TICK, int(max_applications or 0)))
-+    eligible = _safe_list(evaluation.get("eligible"))
-+    for item in eligible:
-+        if len(applied) >= max_applications:
-+            skipped.append(
-+                {
-+                    "reason": "application_limit_reached",
-+                    "rule_id": _safe_dict(item.get("rule")).get("rule_id"),
-+                }
-+            )
-+            continue
-+        rule = _safe_dict(item.get("rule"))
-+        result = apply_escalation_rule(
-+            simulation_state,
-+            rule,
-+            turn_index=turn_index,
++    pending = list(state.get("pending") or [])
++    due_items = [row for row in pending if _is_due(row, turn_index=turn_index)]
++    future_items = [row for row in pending if not _is_due(row, turn_index=turn_index)]
++    due_items.sort(
++        key=lambda row: (
++            -int(row.get("priority") or 0),
++            int(row.get("due_turn") or 0),
++            str(row.get("queue_id") or ""),
 +        )
++    )
++
++    max_applications = max(0, min(MAX_QUEUE_APPLICATIONS_PER_TICK, int(max_applications or 0)))
++    applied: List[Dict[str, Any]] = []
++    skipped: List[Dict[str, Any]] = []
++    remaining_due: List[Dict[str, Any]] = []
++
++    for item in due_items:
++        event_id = str(item.get("event_id") or "")
++        queue_id = str(item.get("queue_id") or "")
++        if len(applied) >= max_applications:
++            remaining_due.append(item)
++            skipped.append({"queue_id": queue_id, "event_id": event_id, "reason": "application_limit_reached"})
++            continue
++
++        if has_story_event_been_applied(simulation_state, event_id):
++            result = {
++                "ok": True,
++                "reason": "already_applied",
++                "event_id": event_id,
++            }
++            add_story_event_queue_history(
++                simulation_state,
++                queue_id=queue_id,
++                event_id=event_id,
++                status="skipped",
++                processed_turn=turn_index,
++                reason="already_applied",
++                result=result,
++            )
++            skipped.append({"queue_id": queue_id, "event_id": event_id, "reason": "already_applied"})
++            continue
++
++        event = dict(_safe_dict(item.get("event")))
++        result = apply_story_event(simulation_state, event, turn_index=turn_index)
 +        if result.get("ok"):
-+            applied.append(result)
-+        else:
-+            skipped.append(
++            applied.append(
 +                {
-+                    "reason": "apply_failed",
-+                    "rule_id": rule.get("rule_id"),
-+                    "result_reason": result.get("reason"),
++                    "queue_id": queue_id,
++                    "event_id": event_id,
 +                    "result": result,
 +                }
 +            )
++            add_story_event_queue_history(
++                simulation_state,
++                queue_id=queue_id,
++                event_id=event_id,
++                status="applied",
++                processed_turn=turn_index,
++                reason=result.get("reason") or "applied",
++                result=result,
++            )
++        else:
++            skipped.append(
++                {
++                    "queue_id": queue_id,
++                    "event_id": event_id,
++                    "reason": "apply_failed",
++                    "result": result,
++                }
++            )
++            add_story_event_queue_history(
++                simulation_state,
++                queue_id=queue_id,
++                event_id=event_id,
++                status="failed",
++                processed_turn=turn_index,
++                reason=result.get("reason") or "apply_failed",
++                result=result,
++            )
 +
-+    record = record_campaign_director_tick(
-+        simulation_state,
-+        turn_index=turn_index,
-+        mode=mode,
-+        eligible_count=int(evaluation.get("eligible_count") or 0),
-+        applied_rule_ids=[
-+            str(row.get("rule_id") or "")
-+            for row in applied
-+            if row.get("rule_id")
-+        ],
-+        applied_event_ids=[
-+            str(row.get("event_id") or "")
-+            for row in applied
-+            if row.get("event_id")
-+        ],
-+        skipped_reasons=skipped,
-+    )
++    state = ensure_story_event_queue_state(simulation_state)
++    state["pending"] = future_items + remaining_due
++    simulation_state["story_event_queue_state"] = state
++    ensure_story_event_queue_state(simulation_state)
++    final_state = ensure_story_event_queue_state(simulation_state)
 +    return {
 +        "ok": True,
-+        "reason": "applied",
++        "reason": "processed",
 +        "mode": mode,
 +        "turn_index": int(turn_index or 0),
++        "due_count": len(due_items),
 +        "applied": applied,
 +        "applied_count": len(applied),
 +        "skipped": skipped,
-+        "evaluation": evaluation,
-+        "record": record,
++        "pending_count": len(final_state.get("pending") or []),
++        "remaining": list(final_state.get("pending") or []),
 +    }
+*** End Patch
+Patch 2 — Integrate queue with campaign director runtime
+4. Patch src/app/rpg/campaign_director/runtime.py
+
+Add import:
+
+*** Begin Patch
+*** Update File: src/app/rpg/campaign_director/runtime.py
+@@
+ from app.rpg.story_packs.definition_registries import (
+     get_story_event_definition,
+     list_escalation_rule_definitions,
+ )
++from app.rpg.story_event_queue.queue import process_story_event_queue
+ from app.rpg.campaign_director.state import (
+*** End Patch
+
+In apply_campaign_director_tick, after escalation application and before record_campaign_director_tick(...), process the queue:
+
+*** Begin Patch
+*** Update File: src/app/rpg/campaign_director/runtime.py
+@@
+     for item in eligible:
+         if len(applied) >= max_applications:
+             skipped.append(
+                 {
+@@
+         else:
+             skipped.append(
+                 {
+                     "reason": "apply_failed",
+                     "rule_id": rule.get("rule_id"),
+                     "result_reason": result.get("reason"),
+                     "result": result,
+                 }
+             )
 +
-+
-+def build_campaign_director_snapshot(
-+    simulation_state: Dict[str, Any],
-+    *,
-+    mode: str = "idle",
-+    turn_index: int = 0,
-+    arc_id: str = "",
-+) -> Dict[str, Any]:
-+    state = ensure_campaign_director_state(simulation_state)
-+    evaluation = evaluate_campaign_director_tick(
++    queue_result = process_story_event_queue(
 +        simulation_state,
 +        mode=mode,
 +        turn_index=turn_index,
-+        arc_id=arc_id,
++        max_applications=3,
 +    )
-+    return {
-+        "ok": True,
-+        "campaign_director_state": state,
-+        "director_pressure": evaluation.get("director_pressure") or [],
-+        "eligible_count": evaluation.get("eligible_count") or 0,
-+        "registered_rule_count": evaluation.get("registered_rule_count") or 0,
-+        "safe_mode": evaluation.get("safe_mode"),
-+        "advisory_only": True,
-+        "bounded": {
-+            "max_pressure_items": MAX_DIRECTOR_PRESSURE_ITEMS,
-+            "max_applications_per_tick": MAX_DIRECTOR_APPLICATIONS_PER_TICK,
-+        },
-+    }
+ 
+     record = record_campaign_director_tick(
+         simulation_state,
+         turn_index=turn_index,
+         mode=mode,
+         eligible_count=int(evaluation.get("eligible_count") or 0),
+@@
+             str(row.get("event_id") or "")
+             for row in applied
+             if row.get("event_id")
+-        ],
++        ]
++        + [
++            str(row.get("event_id") or "")
++            for row in queue_result.get("applied") or []
++            if isinstance(row, dict) and row.get("event_id")
++        ],
+         skipped_reasons=skipped,
+     )
+     return {
+         "ok": True,
+         "reason": "applied",
+@@
+         "applied": applied,
+         "applied_count": len(applied),
+         "skipped": skipped,
++        "queue_result": queue_result,
+         "evaluation": evaluation,
+         "record": record,
+     }
 *** End Patch
-Patch 2 — Unit tests
-4. Add src/tests/rpg/campaign_director/test_campaign_director_runtime.py
+
+This keeps existing director behavior and adds queued delayed consequence processing during safe director ticks.
+
+Patch 3 — Unit tests
+5. Add src/tests/rpg/story_event_queue/test_story_event_queue.py
 *** Begin Patch
-*** Add File: src/tests/rpg/campaign_director/test_campaign_director_runtime.py
-+from app.rpg.campaign_director.runtime import (
-+    apply_campaign_director_tick,
-+    build_campaign_director_snapshot,
-+    evaluate_campaign_director_tick,
-+)
-+from app.rpg.npc_evolution.state import get_npc_evolution
-+from app.rpg.story_arcs.state import get_story_arc
-+from app.rpg.story_packs.importer import import_story_pack
+*** Add File: src/tests/rpg/story_event_queue/test_story_event_queue.py
++from app.rpg.story_arcs.state import get_story_arc, start_story_arc
++from app.rpg.story_event_queue.queue import enqueue_story_event, process_story_event_queue
 +from app.rpg.story_events.state import get_applied_story_event
++
++
++def test_enqueue_story_event_does_not_apply_immediately():
++    simulation_state = {}
++    start_story_arc(simulation_state, "arc:x", stage="start")
++    result = enqueue_story_event(
++        simulation_state,
++        {
++            "event_id": "event:x",
++            "arc_id": "arc:x",
++            "effects": [{"type": "arc_stage_set", "arc_id": "arc:x", "stage": "done"}],
++        },
++        enqueued_turn=1,
++        delay_turns=2,
++    )
++
++    assert result["ok"] is True
++    assert result["queued"] is True
++    assert get_story_arc(simulation_state, "arc:x")["stage"] == "start"
++    assert get_applied_story_event(simulation_state, "event:x") is None
++
++
++def test_process_story_event_queue_waits_until_due_turn():
++    simulation_state = {}
++    start_story_arc(simulation_state, "arc:x", stage="start")
++    enqueue_story_event(
++        simulation_state,
++        {
++            "event_id": "event:x",
++            "arc_id": "arc:x",
++            "effects": [{"type": "arc_stage_set", "arc_id": "arc:x", "stage": "done"}],
++        },
++        enqueued_turn=1,
++        delay_turns=2,
++    )
++
++    early = process_story_event_queue(simulation_state, mode="idle", turn_index=2)
++    due = process_story_event_queue(simulation_state, mode="idle", turn_index=3)
++
++    assert early["applied_count"] == 0
++    assert due["applied_count"] == 1
++    assert get_story_arc(simulation_state, "arc:x")["stage"] == "done"
++
++
++def test_story_event_queue_does_not_process_in_unsafe_mode():
++    simulation_state = {}
++    start_story_arc(simulation_state, "arc:x", stage="start")
++    enqueue_story_event(
++        simulation_state,
++        {
++            "event_id": "event:x",
++            "arc_id": "arc:x",
++            "effects": [{"type": "arc_stage_set", "arc_id": "arc:x", "stage": "done"}],
++        },
++        enqueued_turn=1,
++        due_turn=1,
++    )
++
++    result = process_story_event_queue(simulation_state, mode="combat", turn_index=5)
++
++    assert result["reason"] == "unsafe_mode"
++    assert result["applied_count"] == 0
++    assert get_story_arc(simulation_state, "arc:x")["stage"] == "start"
++
++
++def test_story_event_queue_prevents_duplicate_event_application():
++    simulation_state = {}
++    start_story_arc(simulation_state, "arc:x", stage="start")
++    event = {
++        "event_id": "event:x",
++        "arc_id": "arc:x",
++        "effects": [{"type": "arc_stage_set", "arc_id": "arc:x", "stage": "done"}],
++    }
++    first_enqueue = enqueue_story_event(simulation_state, event, enqueued_turn=1, due_turn=1)
++    second_enqueue = enqueue_story_event(simulation_state, event, enqueued_turn=1, due_turn=1)
++    first_process = process_story_event_queue(simulation_state, mode="idle", turn_index=1)
++    second_process = process_story_event_queue(simulation_state, mode="idle", turn_index=2)
++
++    assert first_enqueue["queued"] is True
++    assert second_enqueue["queued"] is False
++    assert first_process["applied_count"] == 1
++    assert second_process["applied_count"] == 0
++
++
++def test_story_event_queue_records_failed_event_history():
++    simulation_state = {}
++    enqueue_story_event(
++        simulation_state,
++        {
++            "event_id": "event:bad",
++            "arc_id": "arc:missing",
++            "effects": [{"type": "arc_stage_set", "arc_id": "arc:missing", "stage": "done"}],
++        },
++        enqueued_turn=1,
++        due_turn=1,
++    )
++
++    result = process_story_event_queue(simulation_state, mode="idle", turn_index=1)
++    history = simulation_state["story_event_queue_state"]["history"]
++
++    assert result["applied_count"] == 0
++    assert history[0]["status"] == "failed"
++    assert history[0]["event_id"] == "event:bad"
+*** End Patch
+6. Add src/tests/rpg/story_event_queue/test_story_event_queue_definitions.py
+*** Begin Patch
+*** Add File: src/tests/rpg/story_event_queue/test_story_event_queue_definitions.py
++from app.rpg.story_arcs.state import get_story_arc
++from app.rpg.story_event_queue.queue import (
++    enqueue_story_event_definition,
++    process_story_event_queue,
++)
++from app.rpg.story_packs.importer import import_story_pack
 +
 +
 +def _pack():
 +    return {
 +        "proposal_version": "story_proposal_v1",
 +        "proposal_type": "story_pack",
-+        "proposal_id": "director_bandit_pack",
-+        "title": "Director Bandit Pack",
-+        "lore_entries": [{"lore_id": "lore:red_sashes", "title": "The Red Sashes", "truth_status": "rumor"}],
-+        "story_arcs": [
-+            {
-+                "arc_id": "arc:bandit_pressure",
-+                "title": "Bandit Pressure",
-+                "status": "active",
-+                "stage": "rumors",
-+                "pressure": 60,
-+                "linked_lore": ["lore:red_sashes"],
-+            }
-+        ],
++        "proposal_id": "queue_pack",
++        "title": "Queue Pack",
++        "lore_entries": [{"lore_id": "lore:x", "title": "X"}],
++        "story_arcs": [{"arc_id": "arc:x", "title": "X", "stage": "start", "pressure": 10, "linked_lore": ["lore:x"]}],
 +        "story_events": [
 +            {
-+                "event_id": "event:bandits_burn_tavern",
-+                "arc_id": "arc:bandit_pressure",
-+                "kind": "consequence",
-+                "summary": "Bandits burned Bran's tavern.",
-+                "effects": [
-+                    {"type": "arc_stage_set", "arc_id": "arc:bandit_pressure", "stage": "aftermath"},
-+                    {
-+                        "type": "npc_evolution",
-+                        "npc_id": "bran",
-+                        "npc_arc_id": "npc_arc:bran_revenge",
-+                        "profession": "former_innkeeper",
-+                        "motivation": "revenge_against_red_sashes",
-+                        "personality_deltas": {"vengeful": 20},
-+                        "flags": {"tavern_lost": True},
-+                    },
-+                    {"type": "world_event_emit"},
-+                ],
++                "event_id": "event:x",
++                "arc_id": "arc:x",
++                "effects": [{"type": "arc_stage_set", "arc_id": "arc:x", "stage": "done"}],
 +            }
 +        ],
-+        "escalation_rules": [
-+            {
-+                "rule_id": "rule:burn_tavern",
-+                "arc_id": "arc:bandit_pressure",
-+                "priority": 90,
-+                "conditions": [
-+                    {
-+                        "type": "arc_pressure_at_least",
-+                        "arc_id": "arc:bandit_pressure",
-+                        "minimum": 50,
-+                    },
-+                    {
-+                        "type": "arc_stage",
-+                        "arc_id": "arc:bandit_pressure",
-+                        "stage": "rumors",
-+                    },
-+                ],
-+                "event": {"event_id": "event:bandits_burn_tavern", "arc_id": "arc:bandit_pressure", "effects": []},
-+                "cooldown_turns": 5,
-+                "max_applications": 1,
-+            }
-+        ],
++        "escalation_rules": [],
 +    }
 +
 +
-+def test_campaign_director_evaluates_registered_rules_without_applying():
++def test_enqueue_story_event_definition_from_registry():
 +    simulation_state = {}
-+    import_story_pack(simulation_state, _pack(), turn_index=1)
++    import_story_pack(simulation_state, _pack())
 +
-+    result = evaluate_campaign_director_tick(simulation_state, mode="idle", turn_index=2)
++    enqueue = enqueue_story_event_definition(
++        simulation_state,
++        "event:x",
++        enqueued_turn=1,
++        due_turn=1,
++        source="test",
++    )
++    process = process_story_event_queue(simulation_state, mode="idle", turn_index=1)
 +
-+    assert result["ok"] is True
-+    assert result["eligible_count"] == 1
-+    assert result["director_pressure"][0]["eligible_event_id"] == "event:bandits_burn_tavern"
-+    assert get_story_arc(simulation_state, "arc:bandit_pressure")["stage"] == "rumors"
-+    assert get_applied_story_event(simulation_state, "event:bandits_burn_tavern") is None
-+
-+
-+def test_campaign_director_applies_registered_story_event_effects():
-+    simulation_state = {}
-+    import_story_pack(simulation_state, _pack(), turn_index=1)
-+
-+    result = apply_campaign_director_tick(simulation_state, mode="idle", turn_index=2)
-+
-+    arc = get_story_arc(simulation_state, "arc:bandit_pressure")
-+    evolution = get_npc_evolution(simulation_state, "bran")
-+    assert result["ok"] is True
-+    assert result["applied_count"] == 1
-+    assert arc["stage"] == "aftermath"
-+    assert evolution["motivation"] == "revenge_against_red_sashes"
-+    assert evolution["flags"]["tavern_lost"] is True
-+    assert get_applied_story_event(simulation_state, "event:bandits_burn_tavern") is not None
++    assert enqueue["ok"] is True
++    assert process["applied_count"] == 1
++    assert get_story_arc(simulation_state, "arc:x")["stage"] == "done"
 +
 +
-+def test_campaign_director_does_not_apply_in_unsafe_mode():
-+    simulation_state = {}
-+    import_story_pack(simulation_state, _pack(), turn_index=1)
++def test_enqueue_missing_story_event_definition_rejected():
++    result = enqueue_story_event_definition({}, "event:missing")
 +
-+    result = apply_campaign_director_tick(simulation_state, mode="combat", turn_index=2)
-+
-+    assert result["ok"] is True
-+    assert result["reason"] == "unsafe_mode"
-+    assert result["applied_count"] == 0
-+    assert get_story_arc(simulation_state, "arc:bandit_pressure")["stage"] == "rumors"
-+
-+
-+def test_campaign_director_respects_max_applications_and_story_event_idempotency():
-+    simulation_state = {}
-+    import_story_pack(simulation_state, _pack(), turn_index=1)
-+
-+    first = apply_campaign_director_tick(simulation_state, mode="idle", turn_index=2)
-+    second = apply_campaign_director_tick(simulation_state, mode="idle", turn_index=3)
-+
-+    assert first["applied_count"] == 1
-+    assert second["applied_count"] == 0
-+    assert get_story_arc(simulation_state, "arc:bandit_pressure")["stage"] == "aftermath"
-+
-+
-+def test_campaign_director_snapshot_is_bounded_and_advisory():
-+    simulation_state = {}
-+    import_story_pack(simulation_state, _pack(), turn_index=1)
-+
-+    snapshot = build_campaign_director_snapshot(simulation_state, mode="idle", turn_index=2)
-+
-+    assert snapshot["ok"] is True
-+    assert snapshot["advisory_only"] is True
-+    assert len(snapshot["director_pressure"]) <= snapshot["bounded"]["max_pressure_items"]
++    assert result["ok"] is False
++    assert result["reason"] == "story_event_definition_missing"
 *** End Patch
-5. Add src/tests/rpg/campaign_director/test_campaign_director_state.py
+7. Add src/tests/rpg/story_event_queue/test_story_event_queue_state.py
 *** Begin Patch
-*** Add File: src/tests/rpg/campaign_director/test_campaign_director_state.py
+*** Add File: src/tests/rpg/story_event_queue/test_story_event_queue_state.py
 +import json
 +
-+from app.rpg.campaign_director.state import (
-+    normalize_campaign_director_state,
-+    record_campaign_director_tick,
-+)
++from app.rpg.story_event_queue.queue import enqueue_story_event
++from app.rpg.story_event_queue.state import normalize_story_event_queue_state
 +
 +
-+def test_campaign_director_state_records_tick_history():
++def test_story_event_queue_state_json_roundtrip():
 +    simulation_state = {}
-+    record_campaign_director_tick(
++    enqueue_story_event(
 +        simulation_state,
-+        turn_index=4,
-+        mode="idle",
-+        eligible_count=2,
-+        applied_rule_ids=["rule:x"],
-+        applied_event_ids=["event:x"],
++        {"event_id": "event:x", "effects": []},
++        enqueued_turn=1,
++        due_turn=3,
 +    )
 +
-+    state = simulation_state["campaign_director_state"]
-+    assert state["last_tick_turn"] == 4
-+    assert state["tick_history"][0]["applied_event_ids"] == ["event:x"]
-+
-+
-+def test_campaign_director_state_json_roundtrip():
-+    simulation_state = {}
-+    record_campaign_director_tick(
-+        simulation_state,
-+        turn_index=4,
-+        mode="idle",
-+        eligible_count=1,
-+        applied_rule_ids=["rule:x"],
-+        applied_event_ids=["event:x"],
-+    )
-+
-+    encoded = json.dumps(simulation_state["campaign_director_state"], sort_keys=True)
++    encoded = json.dumps(simulation_state["story_event_queue_state"], sort_keys=True)
 +    decoded = json.loads(encoded)
-+    normalized = normalize_campaign_director_state(decoded)
++    normalized = normalize_story_event_queue_state(decoded)
 +
-+    assert normalized["last_tick_turn"] == 4
-+    assert normalized["tick_history"][0]["applied_rule_ids"] == ["rule:x"]
++    assert normalized["pending"][0]["event_id"] == "event:x"
++    assert normalized["pending"][0]["due_turn"] == 3
 +
 +
-+def test_campaign_director_tick_history_is_bounded():
++def test_story_event_queue_pending_is_bounded():
 +    simulation_state = {}
-+    for i in range(130):
-+        record_campaign_director_tick(
++    for i in range(250):
++        enqueue_story_event(
 +            simulation_state,
-+            turn_index=i,
-+            mode="idle",
-+            eligible_count=0,
++            {"event_id": f"event:{i}", "effects": []},
++            enqueued_turn=1,
++            due_turn=i,
 +        )
 +
-+    assert len(simulation_state["campaign_director_state"]["tick_history"]) == 100
++    assert len(simulation_state["story_event_queue_state"]["pending"]) <= 200
 *** End Patch
-Patch 3 — Manual director checks/setup
-6. Add src/tests/rpg/manual/campaign_director_m22_m24_checks.py
+Patch 4 — Manual checks/setup
+8. Add src/tests/rpg/manual/story_event_queue_m25_m27_checks.py
 *** Begin Patch
-*** Add File: src/tests/rpg/manual/campaign_director_m22_m24_checks.py
+*** Add File: src/tests/rpg/manual/story_event_queue_m25_m27_checks.py
 +from __future__ import annotations
 +
 +from typing import Any, Dict, List
 +
-+from app.rpg.campaign_director.runtime import (
-+    apply_campaign_director_tick,
-+    build_campaign_director_snapshot,
-+    evaluate_campaign_director_tick,
-+)
-+from app.rpg.npc_evolution.state import get_npc_evolution
 +from app.rpg.story_arcs.state import get_story_arc
++from app.rpg.story_event_queue.queue import (
++    enqueue_story_event,
++    enqueue_story_event_definition,
++    process_story_event_queue,
++)
 +from app.rpg.story_events.state import get_applied_story_event
 +
 +
@@ -660,16 +782,12 @@ Patch 3 — Manual director checks/setup
 +        candidate = _safe_dict(candidate)
 +        if candidate and not first_non_empty:
 +            first_non_empty = candidate
-+        if (
-+            isinstance(candidate.get("campaign_director_state"), dict)
-+            or isinstance(candidate.get("escalation_rule_registry"), dict)
-+            or isinstance(candidate.get("story_event_registry"), dict)
-+        ):
++        if isinstance(candidate.get("story_event_queue_state"), dict):
 +            return candidate
 +    return first_non_empty
 +
 +
-+def run_campaign_director_m22_m24_check(
++def run_story_event_queue_m25_m27_check(
 +    *,
 +    check: Dict[str, Any],
 +    result: Dict[str, Any],
@@ -678,73 +796,106 @@ Patch 3 — Manual director checks/setup
 +    simulation_state = _extract_simulation_state(result=result, session=session)
 +    check_type = str(check.get("type") or "")
 +
-+    if check_type == "campaign_director_evaluate":
-+        evaluation = evaluate_campaign_director_tick(
-+            simulation_state,
-+            mode=str(check.get("mode") or "idle"),
-+            turn_index=int(check.get("turn_index") or 1),
-+            arc_id=str(check.get("arc_id") or ""),
-+        )
-+        expected_eligible_count = check.get("expected_eligible_count")
-+        expected_first_event_id = check.get("expected_first_event_id")
++    if check_type == "story_event_queue_enqueue":
++        if check.get("definition_event_id"):
++            enqueue_result = enqueue_story_event_definition(
++                simulation_state,
++                str(check.get("definition_event_id") or ""),
++                source=str(check.get("source") or "manual_check"),
++                enqueued_turn=int(check.get("enqueued_turn") or 1),
++                due_turn=check.get("due_turn"),
++                delay_turns=int(check.get("delay_turns") or 0),
++                priority=int(check.get("priority") or 50),
++                reason=str(check.get("reason") or ""),
++            )
++        else:
++            enqueue_result = enqueue_story_event(
++                simulation_state,
++                _safe_dict(check.get("event")),
++                source=str(check.get("source") or "manual_check"),
++                enqueued_turn=int(check.get("enqueued_turn") or 1),
++                due_turn=check.get("due_turn"),
++                delay_turns=int(check.get("delay_turns") or 0),
++                priority=int(check.get("priority") or 50),
++                reason=str(check.get("reason") or ""),
++            )
++        expected_ok = check.get("expected_ok")
++        expected_queued = check.get("expected_queued")
 +        ok = True
-+        if expected_eligible_count is not None:
-+            ok = ok and int(evaluation.get("eligible_count") or 0) == int(expected_eligible_count)
-+        if expected_first_event_id:
-+            first = (evaluation.get("director_pressure") or [{}])[0].get("eligible_event_id")
-+            ok = ok and first == expected_first_event_id
++        if expected_ok is not None:
++            ok = ok and enqueue_result.get("ok") is bool(expected_ok)
++        if expected_queued is not None:
++            ok = ok and enqueue_result.get("queued") is bool(expected_queued)
 +        return {
 +            "check_type": check_type,
 +            "ok": ok,
-+            "evaluation": evaluation,
-+            "expected_eligible_count": expected_eligible_count,
-+            "expected_first_event_id": expected_first_event_id,
++            "enqueue_result": enqueue_result,
++            "expected_ok": expected_ok,
++            "expected_queued": expected_queued,
 +        }
 +
-+    if check_type == "campaign_director_apply":
-+        applied = apply_campaign_director_tick(
++    if check_type == "story_event_queue_process":
++        process_result = process_story_event_queue(
 +            simulation_state,
 +            mode=str(check.get("mode") or "idle"),
 +            turn_index=int(check.get("turn_index") or 1),
-+            arc_id=str(check.get("arc_id") or ""),
-+            max_applications=int(check.get("max_applications") or 1),
++            max_applications=int(check.get("max_applications") or 3),
 +        )
 +        expected_applied_count = check.get("expected_applied_count")
 +        expected_reason = check.get("expected_reason")
 +        ok = True
 +        if expected_applied_count is not None:
-+            ok = ok and int(applied.get("applied_count") or 0) == int(expected_applied_count)
++            ok = ok and int(process_result.get("applied_count") or 0) == int(expected_applied_count)
 +        if expected_reason:
-+            ok = ok and applied.get("reason") == expected_reason
++            ok = ok and process_result.get("reason") == expected_reason
 +        return {
 +            "check_type": check_type,
 +            "ok": ok,
-+            "applied": applied,
++            "process_result": process_result,
 +            "expected_applied_count": expected_applied_count,
 +            "expected_reason": expected_reason,
 +        }
 +
-+    if check_type == "campaign_director_snapshot":
-+        snapshot = build_campaign_director_snapshot(
-+            simulation_state,
-+            mode=str(check.get("mode") or "idle"),
-+            turn_index=int(check.get("turn_index") or 1),
-+            arc_id=str(check.get("arc_id") or ""),
-+        )
-+        expected_advisory_only = check.get("expected_advisory_only")
-+        max_pressure_items = int(check.get("max_pressure_items") or 10)
-+        ok = len(snapshot.get("director_pressure") or []) <= max_pressure_items
-+        if expected_advisory_only is not None:
-+            ok = ok and snapshot.get("advisory_only") is bool(expected_advisory_only)
++    if check_type == "story_event_queue_pending":
++        state = _safe_dict(simulation_state.get("story_event_queue_state"))
++        pending = state.get("pending") or []
++        expected_count = check.get("expected_count")
++        expected_event_id = check.get("expected_event_id")
++        ok = True
++        if expected_count is not None:
++            ok = ok and len(pending) == int(expected_count)
++        if expected_event_id:
++            ok = ok and expected_event_id in [row.get("event_id") for row in pending if isinstance(row, dict)]
 +        return {
 +            "check_type": check_type,
 +            "ok": ok,
-+            "snapshot": snapshot,
-+            "expected_advisory_only": expected_advisory_only,
-+            "max_pressure_items": max_pressure_items,
++            "pending": pending,
++            "expected_count": expected_count,
++            "expected_event_id": expected_event_id,
 +        }
 +
-+    if check_type == "campaign_director_arc":
++    if check_type == "story_event_queue_history":
++        state = _safe_dict(simulation_state.get("story_event_queue_state"))
++        history = state.get("history") or []
++        expected_event_id = check.get("expected_event_id")
++        expected_status = check.get("expected_status")
++        rows = [
++            row
++            for row in history
++            if isinstance(row, dict)
++            and (not expected_event_id or row.get("event_id") == expected_event_id)
++            and (not expected_status or row.get("status") == expected_status)
++        ]
++        return {
++            "check_type": check_type,
++            "ok": bool(rows),
++            "expected_event_id": expected_event_id,
++            "expected_status": expected_status,
++            "rows": rows,
++            "history": history[-20:],
++        }
++
++    if check_type == "story_event_queue_arc":
 +        arc_id = str(check.get("arc_id") or "")
 +        arc = get_story_arc(simulation_state, arc_id)
 +        expected = _safe_dict(check.get("expected"))
@@ -761,64 +912,53 @@ Patch 3 — Manual director checks/setup
 +            "failures": failures,
 +        }
 +
-+    if check_type == "campaign_director_event_applied":
++    if check_type == "story_event_queue_event_applied":
 +        event_id = str(check.get("event_id") or "")
 +        applied = get_applied_story_event(simulation_state, event_id)
++        expected_applied = check.get("expected_applied", True)
 +        return {
 +            "check_type": check_type,
-+            "ok": bool(applied),
++            "ok": bool(applied) is bool(expected_applied),
 +            "event_id": event_id,
++            "expected_applied": expected_applied,
 +            "applied": applied,
-+        }
-+
-+    if check_type == "campaign_director_npc_evolution":
-+        npc_id = str(check.get("npc_id") or "")
-+        evolution = get_npc_evolution(simulation_state, npc_id)
-+        expected = _safe_dict(check.get("expected"))
-+        failures = {}
-+        for key, expected_value in expected.items():
-+            actual = _safe_dict(evolution).get(key)
-+            if actual != expected_value:
-+                failures[key] = {"expected": expected_value, "actual": actual}
-+        return {
-+            "check_type": check_type,
-+            "ok": bool(evolution) and not failures,
-+            "npc_id": npc_id,
-+            "evolution": evolution,
-+            "failures": failures,
 +        }
 +
 +    return {
 +        "check_type": check_type,
 +        "ok": False,
-+        "error": f"unknown_campaign_director_m22_m24_check_type:{check_type}",
++        "error": f"unknown_story_event_queue_m25_m27_check_type:{check_type}",
 +    }
 +
 +
-+def run_campaign_director_m22_m24_checks(
++def run_story_event_queue_m25_m27_checks(
 +    *,
 +    checks: List[Dict[str, Any]],
 +    result: Dict[str, Any],
 +    session: Dict[str, Any] | None = None,
 +) -> List[Dict[str, Any]]:
 +    return [
-+        run_campaign_director_m22_m24_check(check=check, result=result, session=session)
++        run_story_event_queue_m25_m27_check(check=check, result=result, session=session)
 +        for check in checks
 +    ]
 *** End Patch
-7. Patch src/tests/rpg/manual/scenario_setup.py
+9. Patch src/tests/rpg/manual/scenario_setup.py
 
 Add import:
 
 *** Begin Patch
 *** Update File: src/tests/rpg/manual/scenario_setup.py
 @@
- from app.rpg.npc_evolution.transitions import apply_npc_evolution_transition
-+from app.rpg.campaign_director.runtime import apply_campaign_director_tick
+ from app.rpg.campaign_director.runtime import apply_campaign_director_tick
++from app.rpg.story_event_queue.queue import (
++    enqueue_story_event,
++    enqueue_story_event_definition,
++    process_story_event_queue,
++)
  from tests.rpg.manual.memory_fixtures import build_manual_memory_event
 *** End Patch
 
-Add setup block after story packs / NPC evolution setup:
+Add setup blocks before setup_campaign_director_ticks or before manual inventory:
 
 *** Begin Patch
 *** Update File: src/tests/rpg/manual/scenario_setup.py
@@ -833,46 +973,67 @@ Add setup block after story packs / NPC evolution setup:
                  ),
              )
 +
-+    for tick in scenario.get("setup_campaign_director_ticks") or []:
++    for item in scenario.get("setup_story_event_queue") or []:
++        if isinstance(item, dict):
++            if item.get("definition_event_id"):
++                enqueue_story_event_definition(
++                    simulation_state,
++                    str(item.get("definition_event_id") or ""),
++                    source=str(item.get("source") or "scenario_setup"),
++                    enqueued_turn=int(item.get("enqueued_turn") or scenario.get("setup_turn_index") or 1),
++                    due_turn=item.get("due_turn"),
++                    delay_turns=int(item.get("delay_turns") or 0),
++                    priority=int(item.get("priority") or 50),
++                    reason=str(item.get("reason") or ""),
++                    metadata=item.get("metadata"),
++                )
++            else:
++                enqueue_story_event(
++                    simulation_state,
++                    item.get("event") or item,
++                    source=str(item.get("source") or "scenario_setup"),
++                    enqueued_turn=int(item.get("enqueued_turn") or scenario.get("setup_turn_index") or 1),
++                    due_turn=item.get("due_turn"),
++                    delay_turns=int(item.get("delay_turns") or 0),
++                    priority=int(item.get("priority") or 50),
++                    reason=str(item.get("reason") or ""),
++                    metadata=item.get("metadata"),
++                )
++
++    for tick in scenario.get("setup_story_event_queue_process") or []:
 +        if isinstance(tick, dict):
-+            apply_campaign_director_tick(
++            process_story_event_queue(
 +                simulation_state,
 +                mode=str(tick.get("mode") or "idle"),
-+                turn_index=int(
-+                    tick.get("turn_index")
-+                    or scenario.get("setup_turn_index")
-+                    or 1
-+                ),
-+                arc_id=str(tick.get("arc_id") or ""),
-+                max_applications=int(tick.get("max_applications") or 1),
++                turn_index=int(tick.get("turn_index") or scenario.get("setup_turn_index") or 1),
++                max_applications=int(tick.get("max_applications") or 3),
 +            )
  
-     for item_id in scenario.get("setup_manual_inventory_items") or []:
-         simulation_state.setdefault("manual_inventory_items", [])
-         if item_id not in simulation_state["manual_inventory_items"]:
-             simulation_state["manual_inventory_items"].append(item_id)
+     for tick in scenario.get("setup_campaign_director_ticks") or []:
+         if isinstance(tick, dict):
+             apply_campaign_director_tick(
 *** End Patch
-8. Patch src/tests/rpg/manual/scenario_execution.py
+10. Patch src/tests/rpg/manual/scenario_execution.py
 
 Add import:
 
 *** Begin Patch
 *** Update File: src/tests/rpg/manual/scenario_execution.py
 @@
- from tests.rpg.manual.npc_evolution_m19_m21_checks import (
-     run_npc_evolution_m19_m21_checks,
+ from tests.rpg.manual.campaign_director_m22_m24_checks import (
+     run_campaign_director_m22_m24_checks,
  )
-+from tests.rpg.manual.campaign_director_m22_m24_checks import (
-+    run_campaign_director_m22_m24_checks,
++from tests.rpg.manual.story_event_queue_m25_m27_checks import (
++    run_story_event_queue_m25_m27_checks,
 +)
 *** End Patch
 
-Add check block after NPC evolution checks:
+Add check block after campaign director checks:
 
 *** Begin Patch
 *** Update File: src/tests/rpg/manual/scenario_execution.py
 @@
-         if npc_evolution_m19_m21_checks:
+         if campaign_director_m22_m24_checks:
              current_session = {}
              try:
                  current_session = _ensure_manual_session(session_id)
@@ -881,29 +1042,29 @@ Add check block after NPC evolution checks:
                          + str(check_result.get("error") or "")
                      )
 +
-+        campaign_director_m22_m24_checks = [
++        story_event_queue_m25_m27_checks = [
 +            check
 +            for check in checks
 +            if isinstance(check, dict)
-+            and str(check.get("type") or "").startswith("campaign_director")
++            and str(check.get("type") or "").startswith("story_event_queue")
 +        ]
-+        if campaign_director_m22_m24_checks:
++        if story_event_queue_m25_m27_checks:
 +            current_session = {}
 +            try:
 +                current_session = _ensure_manual_session(session_id)
 +            except Exception:
 +                current_session = session
 +
-+            campaign_director_m22_m24_check_results = run_campaign_director_m22_m24_checks(
-+                checks=campaign_director_m22_m24_checks,
++            story_event_queue_m25_m27_check_results = run_story_event_queue_m25_m27_checks(
++                checks=story_event_queue_m25_m27_checks,
 +                result=turn_record.get("result") or turn_record,
 +                session=current_session,
 +            )
-+            turn_record["campaign_director_m22_m24_check_results"] = campaign_director_m22_m24_check_results
-+            for check_result in campaign_director_m22_m24_check_results:
++            turn_record["story_event_queue_m25_m27_check_results"] = story_event_queue_m25_m27_check_results
++            for check_result in story_event_queue_m25_m27_check_results:
 +                if not check_result.get("ok"):
 +                    turn_record.setdefault("scenario_warnings", []).append(
-+                        "campaign_director_m22_m24_check_failed:"
++                        "story_event_queue_m25_m27_check_failed:"
 +                        + str(scenario_name)
 +                        + ":turn_"
 +                        + str(turn_index)
@@ -913,70 +1074,67 @@ Add check block after NPC evolution checks:
 +                        + str(check_result.get("error") or "")
 +                    )
  
-         turns.append(turn_record)
+         turn_summaries.append(turn_record)
 *** End Patch
-9. Patch src/tests/rpg/manual/summary_sanitizer.py
+11. Patch src/tests/rpg/manual/summary_sanitizer.py
 
 Add sanitizer block:
 
 *** Begin Patch
 *** Update File: src/tests/rpg/manual/summary_sanitizer.py
 @@
-     npc_evolution_m19_m21_check_results = turn.get("npc_evolution_m19_m21_check_results")
-     if isinstance(npc_evolution_m19_m21_check_results, list):
-         sanitized["npc_evolution_m19_m21_check_results"] = [
+     campaign_director_m22_m24_check_results = turn.get("campaign_director_m22_m24_check_results")
+     if isinstance(campaign_director_m22_m24_check_results, list):
+         sanitized["campaign_director_m22_m24_check_results"] = [
 @@
              if isinstance(item, dict)
          ]
 +
-+    campaign_director_m22_m24_check_results = turn.get("campaign_director_m22_m24_check_results")
-+    if isinstance(campaign_director_m22_m24_check_results, list):
-+        sanitized["campaign_director_m22_m24_check_results"] = [
++    story_event_queue_m25_m27_check_results = turn.get("story_event_queue_m25_m27_check_results")
++    if isinstance(story_event_queue_m25_m27_check_results, list):
++        sanitized["story_event_queue_m25_m27_check_results"] = [
 +            {
 +                "check_type": item.get("check_type"),
 +                "ok": item.get("ok"),
-+                "evaluation": item.get("evaluation"),
-+                "applied": item.get("applied"),
-+                "snapshot": item.get("snapshot"),
++                "enqueue_result": item.get("enqueue_result"),
++                "process_result": item.get("process_result"),
++                "pending": item.get("pending"),
++                "history": item.get("history"),
++                "rows": item.get("rows"),
 +                "arc_id": item.get("arc_id"),
 +                "arc": item.get("arc"),
 +                "event_id": item.get("event_id"),
-+                "npc_id": item.get("npc_id"),
-+                "evolution": item.get("evolution"),
-+                "expected_eligible_count": item.get("expected_eligible_count"),
-+                "expected_first_event_id": item.get("expected_first_event_id"),
-+                "expected_applied_count": item.get("expected_applied_count"),
-+                "expected_reason": item.get("expected_reason"),
++                "applied": item.get("applied"),
++                "expected_count": item.get("expected_count"),
++                "expected_event_id": item.get("expected_event_id"),
++                "expected_status": item.get("expected_status"),
++                "expected_applied": item.get("expected_applied"),
 +                "failures": item.get("failures"),
 +                "error": item.get("error"),
 +            }
-+            for item in campaign_director_m22_m24_check_results[:50]
++            for item in story_event_queue_m25_m27_check_results[:50]
 +            if isinstance(item, dict)
 +        ]
  
      return sanitized
 *** End Patch
-Patch 4 — Manual scenarios
-10. Add src/tests/rpg/manual/scenarios/campaign_director_m22_m24.py
+Patch 5 — Manual scenarios
+12. Add src/tests/rpg/manual/scenarios/story_event_queue_m25_m27.py
 *** Begin Patch
-*** Add File: src/tests/rpg/manual/scenarios/campaign_director_m22_m24.py
+*** Add File: src/tests/rpg/manual/scenarios/story_event_queue_m25_m27.py
 +from __future__ import annotations
 +
 +from typing import Any, Dict
 +
 +
-+def _director_pack() -> Dict[str, Any]:
++def _queue_pack() -> Dict[str, Any]:
 +    return {
 +        "proposal_version": "story_proposal_v1",
 +        "proposal_type": "story_pack",
-+        "proposal_id": "director_bandit_pack",
-+        "title": "Director Bandit Pack",
++        "proposal_id": "queue_bandit_pack",
++        "title": "Queue Bandit Pack",
 +        "lore_entries": [
-+            {
-+                "lore_id": "lore:red_sashes",
-+                "title": "The Red Sashes",
-+                "truth_status": "rumor",
-+            }
++            {"lore_id": "lore:red_sashes", "title": "The Red Sashes", "truth_status": "rumor"}
 +        ],
 +        "story_arcs": [
 +            {
@@ -986,336 +1144,343 @@ Patch 4 — Manual scenarios
 +                "stage": "rumors",
 +                "pressure": 60,
 +                "linked_lore": ["lore:red_sashes"],
-+                "linked_entities": ["bran"],
 +            }
 +        ],
 +        "story_events": [
 +            {
-+                "event_id": "event:bandits_burn_tavern",
++                "event_id": "event:delayed_bandit_attack",
 +                "arc_id": "arc:bandit_pressure",
 +                "kind": "consequence",
-+                "summary": "Bandits burned Bran's tavern.",
++                "summary": "The delayed bandit attack lands.",
 +                "effects": [
-+                    {"type": "arc_stage_set", "arc_id": "arc:bandit_pressure", "stage": "aftermath"},
-+                    {
-+                        "type": "npc_evolution",
-+                        "npc_id": "bran",
-+                        "npc_arc_id": "npc_arc:bran_revenge",
-+                        "profession": "former_innkeeper",
-+                        "motivation": "revenge_against_red_sashes",
-+                        "personality_deltas": {"vengeful": 20},
-+                        "flags": {"tavern_lost": True},
-+                    },
++                    {"type": "arc_stage_set", "arc_id": "arc:bandit_pressure", "stage": "attack"},
 +                    {"type": "world_event_emit"},
 +                ],
++            },
++            {
++                "event_id": "event:bad_missing_arc",
++                "arc_id": "arc:missing",
++                "effects": [
++                    {"type": "arc_stage_set", "arc_id": "arc:missing", "stage": "bad"}
++                ],
++            },
++        ],
++        "escalation_rules": [],
++    }
++
++
++STORY_EVENT_QUEUE_M25_M27_SCENARIOS: Dict[str, Dict[str, Any]] = {
++    "story_event_queue_enqueues_without_applying": {
++        "setup_story_packs": [{"proposal": _queue_pack(), "turn_index": 1}],
++        "setup_story_event_queue": [
++            {
++                "definition_event_id": "event:delayed_bandit_attack",
++                "enqueued_turn": 1,
++                "delay_turns": 2,
++                "source": "manual",
 +            }
 +        ],
-+        "escalation_rules": [
++        "turns": ["I inspect the delayed consequence before it fires."],
++        "checks": [
 +            {
-+                "rule_id": "rule:burn_tavern",
++                "type": "story_event_queue_pending",
++                "expected_count": 1,
++                "expected_event_id": "event:delayed_bandit_attack",
++            },
++            {
++                "type": "story_event_queue_arc",
 +                "arc_id": "arc:bandit_pressure",
-+                "priority": 90,
-+                "conditions": [
-+                    {
-+                        "type": "arc_pressure_at_least",
-+                        "arc_id": "arc:bandit_pressure",
-+                        "minimum": 50,
-+                    },
-+                    {
-+                        "type": "arc_stage",
-+                        "arc_id": "arc:bandit_pressure",
-+                        "stage": "rumors",
-+                    },
-+                ],
++                "expected": {"stage": "rumors"},
++            },
++            {
++                "type": "story_event_queue_event_applied",
++                "event_id": "event:delayed_bandit_attack",
++                "expected_applied": False,
++            },
++        ],
++    },
++    "story_event_queue_waits_until_due_turn": {
++        "setup_story_packs": [{"proposal": _queue_pack(), "turn_index": 1}],
++        "setup_story_event_queue": [
++            {
++                "definition_event_id": "event:delayed_bandit_attack",
++                "enqueued_turn": 1,
++                "due_turn": 4,
++                "source": "manual",
++            }
++        ],
++        "setup_story_event_queue_process": [
++            {"mode": "idle", "turn_index": 3}
++        ],
++        "turns": ["I check that the event is still waiting."],
++        "checks": [
++            {
++                "type": "story_event_queue_pending",
++                "expected_count": 1,
++                "expected_event_id": "event:delayed_bandit_attack",
++            },
++            {
++                "type": "story_event_queue_arc",
++                "arc_id": "arc:bandit_pressure",
++                "expected": {"stage": "rumors"},
++            },
++        ],
++    },
++    "story_event_queue_applies_when_due": {
++        "setup_story_packs": [{"proposal": _queue_pack(), "turn_index": 1}],
++        "setup_story_event_queue": [
++            {
++                "definition_event_id": "event:delayed_bandit_attack",
++                "enqueued_turn": 1,
++                "due_turn": 3,
++                "source": "manual",
++            }
++        ],
++        "setup_story_event_queue_process": [
++            {"mode": "idle", "turn_index": 3}
++        ],
++        "turns": ["I inspect the applied delayed bandit attack."],
++        "checks": [
++            {
++                "type": "story_event_queue_event_applied",
++                "event_id": "event:delayed_bandit_attack",
++                "expected_applied": True,
++            },
++            {
++                "type": "story_event_queue_arc",
++                "arc_id": "arc:bandit_pressure",
++                "expected": {"stage": "attack"},
++            },
++            {
++                "type": "story_event_queue_history",
++                "expected_event_id": "event:delayed_bandit_attack",
++                "expected_status": "applied",
++            },
++        ],
++    },
++    "story_event_queue_does_not_process_in_combat_mode": {
++        "setup_story_packs": [{"proposal": _queue_pack(), "turn_index": 1}],
++        "setup_story_event_queue": [
++            {
++                "definition_event_id": "event:delayed_bandit_attack",
++                "enqueued_turn": 1,
++                "due_turn": 1,
++                "source": "manual",
++            }
++        ],
++        "setup_story_event_queue_process": [
++            {"mode": "combat", "turn_index": 2}
++        ],
++        "turns": ["I check that combat blocks queued story consequences."],
++        "checks": [
++            {
++                "type": "story_event_queue_pending",
++                "expected_count": 1,
++                "expected_event_id": "event:delayed_bandit_attack",
++            },
++            {
++                "type": "story_event_queue_arc",
++                "arc_id": "arc:bandit_pressure",
++                "expected": {"stage": "rumors"},
++            },
++        ],
++    },
++    "story_event_queue_prevents_duplicate_event_application": {
++        "setup_story_packs": [{"proposal": _queue_pack(), "turn_index": 1}],
++        "setup_story_event_queue": [
++            {
++                "definition_event_id": "event:delayed_bandit_attack",
++                "enqueued_turn": 1,
++                "due_turn": 1,
++                "source": "manual",
++            },
++            {
++                "definition_event_id": "event:delayed_bandit_attack",
++                "enqueued_turn": 1,
++                "due_turn": 1,
++                "source": "manual",
++            },
++        ],
++        "setup_story_event_queue_process": [
++            {"mode": "idle", "turn_index": 1},
++            {"mode": "idle", "turn_index": 2},
++        ],
++        "turns": ["I check that the delayed attack only applies once."],
++        "checks": [
++            {
++                "type": "story_event_queue_event_applied",
++                "event_id": "event:delayed_bandit_attack",
++                "expected_applied": True,
++            },
++            {
++                "type": "story_event_queue_pending",
++                "expected_count": 0,
++            },
++        ],
++    },
++    "story_event_queue_records_failed_event": {
++        "setup_story_packs": [{"proposal": _queue_pack(), "turn_index": 1}],
++        "setup_story_event_queue": [
++            {
++                "definition_event_id": "event:bad_missing_arc",
++                "enqueued_turn": 1,
++                "due_turn": 1,
++                "source": "manual",
++            }
++        ],
++        "setup_story_event_queue_process": [
++            {"mode": "idle", "turn_index": 1}
++        ],
++        "turns": ["I inspect a failed queued story event."],
++        "checks": [
++            {
++                "type": "story_event_queue_history",
++                "expected_event_id": "event:bad_missing_arc",
++                "expected_status": "failed",
++            }
++        ],
++    },
++    "story_event_queue_campaign_director_processes_due_items": {
++        "setup_story_packs": [{"proposal": _queue_pack(), "turn_index": 1}],
++        "setup_story_event_queue": [
++            {
++                "definition_event_id": "event:delayed_bandit_attack",
++                "enqueued_turn": 1,
++                "due_turn": 2,
++                "source": "manual",
++            }
++        ],
++        "setup_campaign_director_ticks": [
++            {"mode": "idle", "turn_index": 2}
++        ],
++        "turns": ["I inspect a queued event processed by campaign director runtime."],
++        "checks": [
++            {
++                "type": "story_event_queue_event_applied",
++                "event_id": "event:delayed_bandit_attack",
++                "expected_applied": True,
++            },
++            {
++                "type": "story_event_queue_arc",
++                "arc_id": "arc:bandit_pressure",
++                "expected": {"stage": "attack"},
++            },
++        ],
++    },
++    "story_event_queue_debug_is_bounded": {
++        "setup_story_packs": [{"proposal": _queue_pack(), "turn_index": 1}],
++        "setup_story_event_queue": [
++            {
 +                "event": {
-+                    "event_id": "event:bandits_burn_tavern",
++                    "event_id": f"event:queued_{i}",
 +                    "arc_id": "arc:bandit_pressure",
 +                    "effects": [],
 +                },
-+                "cooldown_turns": 5,
-+                "max_applications": 1,
++                "enqueued_turn": 1,
++                "due_turn": i,
++                "source": "manual",
 +            }
++            for i in range(250)
 +        ],
-+    }
-+
-+
-+CAMPAIGN_DIRECTOR_M22_M24_SCENARIOS: Dict[str, Dict[str, Any]] = {
-+    "campaign_director_evaluates_story_pack_rules": {
-+        "setup_story_packs": [{"proposal": _director_pack(), "turn_index": 1}],
-+        "turns": ["I wait and let the campaign director inspect the world."],
++        "turns": ["I inspect the bounded story event queue."],
 +        "checks": [
 +            {
-+                "type": "campaign_director_evaluate",
-+                "mode": "idle",
-+                "turn_index": 2,
-+                "expected_eligible_count": 1,
-+                "expected_first_event_id": "event:bandits_burn_tavern",
-+            },
-+            {
-+                "type": "campaign_director_arc",
-+                "arc_id": "arc:bandit_pressure",
-+                "expected": {"stage": "rumors"},
-+            },
-+        ],
-+    },
-+    "campaign_director_applies_registered_escalation_event": {
-+        "setup_story_packs": [{"proposal": _director_pack(), "turn_index": 1}],
-+        "setup_campaign_director_ticks": [{"mode": "idle", "turn_index": 2}],
-+        "turns": ["I inspect the director-applied consequence."],
-+        "checks": [
-+            {
-+                "type": "campaign_director_event_applied",
-+                "event_id": "event:bandits_burn_tavern",
-+            },
-+            {
-+                "type": "campaign_director_arc",
-+                "arc_id": "arc:bandit_pressure",
-+                "expected": {"stage": "aftermath"},
-+            },
-+            {
-+                "type": "campaign_director_npc_evolution",
-+                "npc_id": "bran",
-+                "expected": {
-+                    "active_arcs": ["npc_arc:bran_revenge"],
-+                    "profession": "former_innkeeper",
-+                    "motivation": "revenge_against_red_sashes",
-+                    "personality": {"vengeful": 20},
-+                    "flags": {"tavern_lost": True},
-+                },
-+            },
-+        ],
-+    },
-+    "campaign_director_does_not_apply_in_combat_mode": {
-+        "setup_story_packs": [{"proposal": _director_pack(), "turn_index": 1}],
-+        "turns": ["I check that combat mode blocks campaign escalation."],
-+        "checks": [
-+            {
-+                "type": "campaign_director_apply",
-+                "mode": "combat",
-+                "turn_index": 2,
-+                "expected_applied_count": 0,
-+                "expected_reason": "unsafe_mode",
-+            },
-+            {
-+                "type": "campaign_director_arc",
-+                "arc_id": "arc:bandit_pressure",
-+                "expected": {"stage": "rumors"},
-+            },
-+        ],
-+    },
-+    "campaign_director_respects_max_applications": {
-+        "setup_story_packs": [{"proposal": _director_pack(), "turn_index": 1}],
-+        "setup_campaign_director_ticks": [
-+            {"mode": "idle", "turn_index": 2},
-+            {"mode": "idle", "turn_index": 3},
-+        ],
-+        "turns": ["I check that the campaign consequence only applied once."],
-+        "checks": [
-+            {
-+                "type": "campaign_director_arc",
-+                "arc_id": "arc:bandit_pressure",
-+                "expected": {"stage": "aftermath"},
-+            },
-+            {
-+                "type": "campaign_director_event_applied",
-+                "event_id": "event:bandits_burn_tavern",
-+            },
-+            {
-+                "type": "campaign_director_apply",
-+                "mode": "idle",
-+                "turn_index": 4,
-+                "expected_applied_count": 0,
-+            },
-+        ],
-+    },
-+    "campaign_director_ignores_resolved_arc": {
-+        "setup_story_packs": [
-+            {
-+                "proposal": dict(
-+                    _director_pack(),
-+                    story_arcs=[
-+                        dict(
-+                            _director_pack()["story_arcs"][0],
-+                            status="resolved",
-+                            stage="resolved",
-+                        )
-+                    ],
-+                ),
-+                "turn_index": 1,
++                "type": "story_event_queue_pending",
++                "expected_count": 200,
 +            }
-+        ],
-+        "turns": ["I check that resolved arcs do not escalate."],
-+        "checks": [
-+            {
-+                "type": "campaign_director_evaluate",
-+                "mode": "idle",
-+                "turn_index": 2,
-+                "expected_eligible_count": 0,
-+            }
-+        ],
-+    },
-+    "campaign_director_snapshot_is_bounded": {
-+        "setup_story_packs": [{"proposal": _director_pack(), "turn_index": 1}],
-+        "turns": ["I inspect the bounded campaign director snapshot."],
-+        "checks": [
-+            {
-+                "type": "campaign_director_snapshot",
-+                "mode": "idle",
-+                "turn_index": 2,
-+                "expected_advisory_only": True,
-+                "max_pressure_items": 10,
-+            }
-+        ],
-+    },
-+    "campaign_director_no_story_pack_rules_noops": {
-+        "turns": ["I wait with no imported story pack rules."],
-+        "checks": [
-+            {
-+                "type": "campaign_director_evaluate",
-+                "mode": "idle",
-+                "turn_index": 2,
-+                "expected_eligible_count": 0,
-+            },
-+            {
-+                "type": "campaign_director_apply",
-+                "mode": "idle",
-+                "turn_index": 3,
-+                "expected_applied_count": 0,
-+            },
 +        ],
 +    },
 +}
 *** End Patch
-11. Add expected names file
+13. Add expected names file
 *** Begin Patch
-*** Add File: src/tests/rpg/manual/scenarios/expected_campaign_director_m22_m24_names.py
-+EXPECTED_CAMPAIGN_DIRECTOR_M22_M24_SCENARIO_NAMES = {
-+    "campaign_director_evaluates_story_pack_rules",
-+    "campaign_director_applies_registered_escalation_event",
-+    "campaign_director_does_not_apply_in_combat_mode",
-+    "campaign_director_respects_max_applications",
-+    "campaign_director_ignores_resolved_arc",
-+    "campaign_director_snapshot_is_bounded",
-+    "campaign_director_no_story_pack_rules_noops",
+*** Add File: src/tests/rpg/manual/scenarios/expected_story_event_queue_m25_m27_names.py
++EXPECTED_STORY_EVENT_QUEUE_M25_M27_SCENARIO_NAMES = {
++    "story_event_queue_enqueues_without_applying",
++    "story_event_queue_waits_until_due_turn",
++    "story_event_queue_applies_when_due",
++    "story_event_queue_does_not_process_in_combat_mode",
++    "story_event_queue_prevents_duplicate_event_application",
++    "story_event_queue_records_failed_event",
++    "story_event_queue_campaign_director_processes_due_items",
++    "story_event_queue_debug_is_bounded",
 +}
 *** End Patch
-12. Patch src/tests/rpg/manual/scenarios/registry.py
+14. Patch src/tests/rpg/manual/scenarios/registry.py
 *** Begin Patch
 *** Update File: src/tests/rpg/manual/scenarios/registry.py
 @@
- from tests.rpg.manual.scenarios.npc_evolution_m19_m21 import (
-     NPC_EVOLUTION_M19_M21_SCENARIOS,
+ from tests.rpg.manual.scenarios.campaign_director_m22_m24 import (
+     CAMPAIGN_DIRECTOR_M22_M24_SCENARIOS,
  )
-+from tests.rpg.manual.scenarios.campaign_director_m22_m24 import (
-+    CAMPAIGN_DIRECTOR_M22_M24_SCENARIOS,
++from tests.rpg.manual.scenarios.story_event_queue_m25_m27 import (
++    STORY_EVENT_QUEUE_M25_M27_SCENARIOS,
 +)
 @@
-     scenarios.update(NPC_EVOLUTION_M19_M21_SCENARIOS)
-+    scenarios.update(CAMPAIGN_DIRECTOR_M22_M24_SCENARIOS)
+     scenarios.update(CAMPAIGN_DIRECTOR_M22_M24_SCENARIOS)
++    scenarios.update(STORY_EVENT_QUEUE_M25_M27_SCENARIOS)
      return scenarios
 *** End Patch
-13. Patch src/tests/rpg/manual/test_manual_scenario_migration.py
+15. Patch src/tests/rpg/manual/test_manual_scenario_migration.py
 *** Begin Patch
 *** Update File: src/tests/rpg/manual/test_manual_scenario_migration.py
 @@
- from tests.rpg.manual.scenarios.expected_npc_evolution_m19_m21_names import (
-     EXPECTED_NPC_EVOLUTION_M19_M21_SCENARIO_NAMES,
+ from tests.rpg.manual.scenarios.expected_campaign_director_m22_m24_names import (
+     EXPECTED_CAMPAIGN_DIRECTOR_M22_M24_SCENARIO_NAMES,
  )
-+from tests.rpg.manual.scenarios.expected_campaign_director_m22_m24_names import (
-+    EXPECTED_CAMPAIGN_DIRECTOR_M22_M24_SCENARIO_NAMES,
++from tests.rpg.manual.scenarios.expected_story_event_queue_m25_m27_names import (
++    EXPECTED_STORY_EVENT_QUEUE_M25_M27_SCENARIO_NAMES,
 +)
 @@
- def test_manual_scenario_registry_includes_npc_evolution_m19_m21_names():
+ def test_manual_scenario_registry_includes_campaign_director_m22_m24_names():
      names = set(build_service_scenarios().keys())
-     missing = EXPECTED_NPC_EVOLUTION_M19_M21_SCENARIO_NAMES - names
+     missing = EXPECTED_CAMPAIGN_DIRECTOR_M22_M24_SCENARIO_NAMES - names
  
-     assert not missing, f"Missing M19-M21 NPC evolution scenarios: {sorted(missing)}"
+     assert not missing, f"Missing M22-M24 campaign director scenarios: {sorted(missing)}"
 +
 +
-+def test_manual_scenario_registry_includes_campaign_director_m22_m24_names():
++def test_manual_scenario_registry_includes_story_event_queue_m25_m27_names():
 +    names = set(build_service_scenarios().keys())
-+    missing = EXPECTED_CAMPAIGN_DIRECTOR_M22_M24_SCENARIO_NAMES - names
++    missing = EXPECTED_STORY_EVENT_QUEUE_M25_M27_SCENARIO_NAMES - names
 +
-+    assert not missing, f"Missing M22-M24 campaign director scenarios: {sorted(missing)}"
++    assert not missing, f"Missing M25-M27 story event queue scenarios: {sorted(missing)}"
 *** End Patch
-14. Add manual check tests
+16. Add manual check tests
 *** Begin Patch
-*** Add File: src/tests/rpg/manual/test_manual_campaign_director_m22_m24_checks.py
-+from app.rpg.story_packs.importer import import_story_pack
-+from tests.rpg.manual.campaign_director_m22_m24_checks import (
-+    run_campaign_director_m22_m24_checks,
+*** Add File: src/tests/rpg/manual/test_manual_story_event_queue_m25_m27_checks.py
++from app.rpg.story_arcs.state import start_story_arc
++from tests.rpg.manual.story_event_queue_m25_m27_checks import (
++    run_story_event_queue_m25_m27_checks,
 +)
 +
 +
-+def _pack():
-+    return {
-+        "proposal_version": "story_proposal_v1",
-+        "proposal_type": "story_pack",
-+        "proposal_id": "tiny_director",
-+        "title": "Tiny Director",
-+        "lore_entries": [{"lore_id": "lore:x", "title": "X", "truth_status": "rumor"}],
-+        "story_arcs": [
-+            {
-+                "arc_id": "arc:x",
-+                "title": "X",
-+                "status": "active",
-+                "stage": "rumors",
-+                "pressure": 60,
-+                "linked_lore": ["lore:x"],
-+            }
-+        ],
-+        "story_events": [
-+            {
-+                "event_id": "event:x",
-+                "arc_id": "arc:x",
-+                "effects": [{"type": "arc_stage_set", "arc_id": "arc:x", "stage": "aftermath"}],
-+            }
-+        ],
-+        "escalation_rules": [
-+            {
-+                "rule_id": "rule:x",
-+                "arc_id": "arc:x",
-+                "priority": 80,
-+                "conditions": [
-+                    {"type": "arc_pressure_at_least", "arc_id": "arc:x", "minimum": 50}
-+                ],
-+                "event": {"event_id": "event:x", "arc_id": "arc:x", "effects": []},
-+            }
-+        ],
-+    }
-+
-+
-+def test_manual_campaign_director_evaluate_check_reads_session_state():
++def test_manual_story_event_queue_enqueue_and_process_checks():
 +    session = {"simulation_state": {}}
-+    import_story_pack(session["simulation_state"], _pack(), turn_index=1)
++    start_story_arc(session["simulation_state"], "arc:x", stage="start")
 +
-+    result = run_campaign_director_m22_m24_checks(
++    enqueue = run_story_event_queue_m25_m27_checks(
 +        checks=[
 +            {
-+                "type": "campaign_director_evaluate",
-+                "mode": "idle",
-+                "turn_index": 2,
-+                "expected_eligible_count": 1,
-+                "expected_first_event_id": "event:x",
++                "type": "story_event_queue_enqueue",
++                "event": {
++                    "event_id": "event:x",
++                    "arc_id": "arc:x",
++                    "effects": [{"type": "arc_stage_set", "arc_id": "arc:x", "stage": "done"}],
++                },
++                "due_turn": 1,
++                "expected_ok": True,
++                "expected_queued": True,
 +            }
 +        ],
 +        result={},
 +        session=session,
 +    )[0]
-+
-+    assert result["ok"] is True
-+
-+
-+def test_manual_campaign_director_apply_check_mutates_state():
-+    session = {"simulation_state": {}}
-+    import_story_pack(session["simulation_state"], _pack(), turn_index=1)
-+
-+    result = run_campaign_director_m22_m24_checks(
++    process = run_story_event_queue_m25_m27_checks(
 +        checks=[
 +            {
-+                "type": "campaign_director_apply",
++                "type": "story_event_queue_process",
 +                "mode": "idle",
-+                "turn_index": 2,
++                "turn_index": 1,
 +                "expected_applied_count": 1,
 +            }
 +        ],
@@ -1323,13 +1488,44 @@ Patch 4 — Manual scenarios
 +        session=session,
 +    )[0]
 +
-+    assert result["ok"] is True
++    assert enqueue["ok"] is True
++    assert process["ok"] is True
++
++
++def test_manual_story_event_queue_pending_check():
++    session = {"simulation_state": {}}
++    run_story_event_queue_m25_m27_checks(
++        checks=[
++            {
++                "type": "story_event_queue_enqueue",
++                "event": {"event_id": "event:x", "effects": []},
++                "due_turn": 5,
++                "expected_ok": True,
++            }
++        ],
++        result={},
++        session=session,
++    )
++    pending = run_story_event_queue_m25_m27_checks(
++        checks=[
++            {
++                "type": "story_event_queue_pending",
++                "expected_count": 1,
++                "expected_event_id": "event:x",
++            }
++        ],
++        result={},
++        session=session,
++    )[0]
++
++    assert pending["ok"] is True
 *** End Patch
 Validation commands
 Compile
-python -m py_compile src/app/rpg/campaign_director/state.py
+python -m py_compile src/app/rpg/story_event_queue/state.py
+python -m py_compile src/app/rpg/story_event_queue/queue.py
 python -m py_compile src/app/rpg/campaign_director/runtime.py
-python -m py_compile src/tests/rpg/manual/campaign_director_m22_m24_checks.py
-python -m py_compile src/tests/rpg/manual/scenarios/campaign_director_m22_m24.py
+python -m py_compile src/tests/rpg/manual/story_event_queue_m25_m27_checks.py
+python -m py_compile src/tests/rpg/manual/scenarios/story_event_queue_m25_m27.py
 Unit tests
-python -m pytest src/tests/rpg/campaign_director src/tests/rpg/npc_evolution src/tests/rpg/dialogue_context src/tests/rpg/story
+python -m pytest src/tests/rpg/story_event_queue src/tests/rpg/campaign_director src/tests/rpg/npc_evolution src/tests/rpg/dialogue_context src/tests/rpg/story_packs src/tests/rpg/story_proposals src/tests/rpg/escalation src/tests/rpg/story_events src/tests/rpg/story_arcs src/tests/rpg/lore -q

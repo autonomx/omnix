@@ -47,6 +47,7 @@ def normalize_escalation_rule(rule: Dict[str, Any]) -> Dict[str, Any]:
             for tag in _safe_list(rule.get("tags"))
             if str(tag)
         ][:20],
+        "metadata": dict(_safe_dict(rule.get("metadata"))),
     }
 
 

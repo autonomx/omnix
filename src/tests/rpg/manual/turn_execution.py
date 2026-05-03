@@ -5,6 +5,9 @@ from typing import Any, Callable, Dict
 
 from tests.rpg.manual import output_artifacts
 from tests.rpg.manual.safe import _safe_dict, _safe_str
+from tests.rpg.manual.story_event_queue_m25_m27_checks import (
+    run_story_event_queue_m25_m27_check,
+)
 from tests.rpg.manual.scenario_summary import _compact_result_for_summary
 from tests.rpg.manual.summary_sanitizer import sanitize_turn_for_summary
 from tests.rpg.manual.token_usage import _record_token_usage
@@ -51,6 +54,7 @@ def _run_one_manual_turn(
     console_llm: bool = True,
     console_llm_raw: bool = True,
     console_llm_max_chars: int = 1200,
+    story_event_queue_checks: list | None = None,
 ) -> Dict[str, Any]:
     """Run a single turn for a manual scenario."""
     raw_turn = turn
@@ -101,10 +105,24 @@ def _run_one_manual_turn(
         output_artifacts._emit("RAW RESULT KEYS:", channel=target_channel)
         output_artifacts._emit(", ".join(sorted(result.keys())), channel=target_channel)
 
+        # Run story event queue checks if provided
+        story_event_queue_check_results = []
+        if story_event_queue_checks:
+            from tests.rpg.manual.session_helpers import get_active_session
+            session_obj = get_active_session(session_id)
+            for check_def in story_event_queue_checks:
+                check_result = run_story_event_queue_m25_m27_check(
+                    check=check_def,
+                    result=result,
+                    session=session_obj,
+                )
+                story_event_queue_check_results.append(check_result)
+
         turn_summary = {
             "turn_index": turn_index,
             "player_input": player_input,
             "result": _compact_result_for_summary(result),
+            "story_event_queue_checks": story_event_queue_check_results,
         }
 
         # Apply sanitization for summary output

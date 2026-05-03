@@ -13,6 +13,11 @@ from app.rpg.memory.observation import (
 )
 from app.rpg.npc_evolution.transitions import apply_npc_evolution_transition
 from app.rpg.campaign_director.runtime import apply_campaign_director_tick
+from app.rpg.story_event_queue.queue import (
+    enqueue_story_event,
+    enqueue_story_event_definition,
+    process_story_event_queue,
+)
 from app.rpg.puzzles.transitions import apply_puzzle_transition
 from app.rpg.quests.transitions import apply_quest_transition
 from app.rpg.social.leverage import add_social_leverage
@@ -243,6 +248,19 @@ def _apply_manual_scenario_setup(session: Dict[str, Any], scenario: Dict[str, An
                 ),
             )
 
+    # Setup story arcs directly (for scenarios that need pre-seeded arc state)
+    setup_story_arcs = _safe_list(scenario.get("setup_story_arcs"))
+    if setup_story_arcs:
+        story_arc_state = _safe_dict(simulation_state.get("story_arc_state"))
+        arcs = _safe_dict(story_arc_state.get("arcs"))
+        for arc in setup_story_arcs:
+            arc = _safe_dict(arc)
+            arc_id = str(arc.get("arc_id") or "")
+            if arc_id:
+                arcs[arc_id] = arc
+        story_arc_state["arcs"] = arcs
+        simulation_state["story_arc_state"] = story_arc_state
+
     for event in scenario.get("setup_story_events") or []:
         if isinstance(event, dict):
             apply_story_event(
@@ -321,6 +339,42 @@ def _apply_manual_scenario_setup(session: Dict[str, Any], scenario: Dict[str, An
                     or scenario.get("setup_turn_index")
                     or 1
                 ),
+            )
+
+    for item in scenario.get("setup_story_event_queue") or []:
+        if isinstance(item, dict):
+            if item.get("definition_event_id"):
+                enqueue_story_event_definition(
+                    simulation_state,
+                    str(item.get("definition_event_id") or ""),
+                    source=str(item.get("source") or "scenario_setup"),
+                    enqueued_turn=int(item.get("enqueued_turn") or scenario.get("setup_turn_index") or 1),
+                    due_turn=item.get("due_turn"),
+                    delay_turns=int(item.get("delay_turns") or 0),
+                    priority=int(item.get("priority") or 50),
+                    reason=str(item.get("reason") or ""),
+                    metadata=item.get("metadata"),
+                )
+            else:
+                enqueue_story_event(
+                    simulation_state,
+                    item.get("event") or item,
+                    source=str(item.get("source") or "scenario_setup"),
+                    enqueued_turn=int(item.get("enqueued_turn") or scenario.get("setup_turn_index") or 1),
+                    due_turn=item.get("due_turn"),
+                    delay_turns=int(item.get("delay_turns") or 0),
+                    priority=int(item.get("priority") or 50),
+                    reason=str(item.get("reason") or ""),
+                    metadata=item.get("metadata"),
+                )
+
+    for tick in scenario.get("setup_story_event_queue_process") or []:
+        if isinstance(tick, dict):
+            process_story_event_queue(
+                simulation_state,
+                mode=str(tick.get("mode") or "idle"),
+                turn_index=int(tick.get("turn_index") or scenario.get("setup_turn_index") or 1),
+                max_applications=int(tick.get("max_applications") or 3),
             )
 
     for tick in scenario.get("setup_campaign_director_ticks") or []:

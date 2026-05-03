@@ -696,6 +696,32 @@ def sanitize_turn_for_summary(
             if isinstance(item, dict)
         ]
 
+    story_event_queue_m25_m27_check_results = turn.get("story_event_queue_m25_m27_check_results")
+    if isinstance(story_event_queue_m25_m27_check_results, list):
+        sanitized["story_event_queue_m25_m27_check_results"] = [
+            {
+                "check_type": item.get("check_type"),
+                "ok": item.get("ok"),
+                "enqueue_result": item.get("enqueue_result"),
+                "process_result": item.get("process_result"),
+                "pending": item.get("pending"),
+                "history": item.get("history"),
+                "rows": item.get("rows"),
+                "arc_id": item.get("arc_id"),
+                "arc": item.get("arc"),
+                "event_id": item.get("event_id"),
+                "applied": item.get("applied"),
+                "expected_count": item.get("expected_count"),
+                "expected_event_id": item.get("expected_event_id"),
+                "expected_status": item.get("expected_status"),
+                "expected_applied": item.get("expected_applied"),
+                "failures": item.get("failures"),
+                "error": item.get("error"),
+            }
+            for item in story_event_queue_m25_m27_check_results[:50]
+            if isinstance(item, dict)
+        ]
+
     return sanitized
 
 
