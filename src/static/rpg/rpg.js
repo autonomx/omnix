@@ -6947,6 +6947,272 @@
         });
     }
 
+    // ---------------------------------------------------------------------------
+    // Story Authoring Inspector / GM Approval Panel
+    // ---------------------------------------------------------------------------
+
+    function rpgGetSessionIdForStoryAuthoring() {
+        if (window.RPG_SESSION_ID) return window.RPG_SESSION_ID;
+        if (window.rpgSessionId) return window.rpgSessionId;
+        const input = document.querySelector('[name="session_id"], #session_id, #rpg-session-id');
+        if (input && input.value) return input.value;
+        return "";
+    }
+
+    function rpgEscapeHtml(value) {
+        return String(value ?? "")
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;")
+            .replace(/'/g, "&#039;");
+    }
+
+    function ensureStoryAuthoringInspectorPanel() {
+        let panel = document.getElementById("story-authoring-inspector-panel");
+        if (panel) return panel;
+
+        const host =
+            document.getElementById("rpg-inspector-panel") ||
+            document.getElementById("rpg-debug-panel") ||
+            document.getElementById("rpg-top-panels") ||
+            document.body;
+
+        panel = document.createElement("section");
+        panel.id = "story-authoring-inspector-panel";
+        panel.className = "story-authoring-inspector-panel";
+        panel.innerHTML = `
+            <div class="story-authoring-header">
+                <div>
+                    <h3>Story Authoring</h3>
+                    <div class="story-authoring-subtitle">GM approval queue</div>
+                </div>
+                <button type="button" id="story-authoring-refresh-btn">Refresh</button>
+            </div>
+            <div class="story-authoring-draft-row">
+                <input id="story-authoring-goal-input" type="text" placeholder="Draft a grounded story pack..." />
+                <button type="button" id="story-authoring-draft-btn">Draft</button>
+            </div>
+            <div id="story-authoring-status" class="story-authoring-status"></div>
+            <div id="story-authoring-pending-list" class="story-authoring-pending-list"></div>
+            <details class="story-authoring-history-wrap">
+                <summary>Approval history</summary>
+                <div id="story-authoring-history-list"></div>
+            </details>
+        `;
+        host.appendChild(panel);
+
+        document.getElementById("story-authoring-refresh-btn")?.addEventListener("click", () => {
+            refreshStoryAuthoringInspector();
+        });
+        document.getElementById("story-authoring-draft-btn")?.addEventListener("click", () => {
+            draftStoryAuthoringProposalFromUI();
+        });
+
+        return panel;
+    }
+
+    function setStoryAuthoringStatus(message, isError = false) {
+        const el = document.getElementById("story-authoring-status");
+        if (!el) return;
+        el.textContent = message || "";
+        el.classList.toggle("error", Boolean(isError));
+    }
+
+    async function postStoryAuthoring(endpoint, payload) {
+        const response = await fetch(endpoint, {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify(payload),
+        });
+        const text = await response.text();
+        let data = {};
+        try {
+            data = text ? JSON.parse(text) : {};
+        } catch (err) {
+            throw new Error(`Invalid JSON from ${endpoint}: ${text.slice(0, 200)}`);
+        }
+        if (!response.ok) {
+            throw new Error(data?.detail || data?.error || data?.reason || `HTTP ${response.status}`);
+        }
+        return data;
+    }
+
+    function renderStoryAuthoringInspector(payload) {
+        ensureStoryAuthoringInspectorPanel();
+        const pendingList = document.getElementById("story-authoring-pending-list");
+        const historyList = document.getElementById("story-authoring-history-list");
+        if (!pendingList || !historyList) return;
+
+        const pending = Array.isArray(payload?.pending) ? payload.pending : [];
+        if (!pending.length) {
+            pendingList.innerHTML = `<div class="story-authoring-empty">No pending authored proposals.</div>`;
+        } else {
+            pendingList.innerHTML = pending.map((item) => {
+                const summary = item.proposal_summary || {};
+                const counts = summary.counts || {};
+                const lore = Array.isArray(summary.lore_entries) ? summary.lore_entries : [];
+                const arcs = Array.isArray(summary.story_arcs) ? summary.story_arcs : [];
+                const events = Array.isArray(summary.story_events) ? summary.story_events : [];
+                const rules = Array.isArray(summary.escalation_rules) ? summary.escalation_rules : [];
+                return `
+                    <article class="story-authoring-card" data-pending-id="${rpgEscapeHtml(item.pending_id)}">
+                        <div class="story-authoring-card-title">${rpgEscapeHtml(item.title || item.proposal_id)}</div>
+                        <div class="story-authoring-meta">
+                            <span>${rpgEscapeHtml(item.proposal_id)}</span>
+                            <span>turn ${rpgEscapeHtml(item.turn_index)}</span>
+                            <span>${item.validation_ok ? "valid" : "invalid"}</span>
+                        </div>
+                        <div class="story-authoring-goal">${rpgEscapeHtml(item.authoring_goal)}</div>
+                        <div class="story-authoring-counts">
+                            <span>Lore ${rpgEscapeHtml(counts.lore_entries || 0)}</span>
+                            <span>Arcs ${rpgEscapeHtml(counts.story_arcs || 0)}</span>
+                            <span>Events ${rpgEscapeHtml(counts.story_events || 0)}</span>
+                            <span>Rules ${rpgEscapeHtml(counts.escalation_rules || 0)}</span>
+                        </div>
+                        <details>
+                            <summary>Preview proposal</summary>
+                            <div class="story-authoring-preview-block">
+                                <strong>Lore</strong>
+                                ${lore.map(row => `<div>${rpgEscapeHtml(row.lore_id)} — ${rpgEscapeHtml(row.title)} (${rpgEscapeHtml(row.truth_status)})</div>`).join("") || "<div>None</div>"}
+                            </div>
+                            <div class="story-authoring-preview-block">
+                                <strong>Arcs</strong>
+                                ${arcs.map(row => `<div>${rpgEscapeHtml(row.arc_id)} — ${rpgEscapeHtml(row.title)} / ${rpgEscapeHtml(row.stage)}</div>`).join("") || "<div>None</div>"}
+                            </div>
+                            <div class="story-authoring-preview-block">
+                                <strong>Events</strong>
+                                ${events.map(row => `<div>${rpgEscapeHtml(row.event_id)} — ${rpgEscapeHtml(row.summary)}</div>`).join("") || "<div>None</div>"}
+                            </div>
+                            <div class="story-authoring-preview-block">
+                                <strong>Rules</strong>
+                                ${rules.map(row => `<div>${rpgEscapeHtml(row.rule_id)} — priority ${rpgEscapeHtml(row.priority)}</div>`).join("") || "<div>None</div>"}
+                            </div>
+                        </details>
+                        <div class="story-authoring-actions">
+                            <button type="button" data-story-authoring-action="approve" data-pending-id="${rpgEscapeHtml(item.pending_id)}">Approve</button>
+                            <button type="button" data-story-authoring-action="reject" data-pending-id="${rpgEscapeHtml(item.pending_id)}">Reject</button>
+                        </div>
+                    </article>
+                `;
+            }).join("");
+        }
+
+        const history = Array.isArray(payload?.history) ? payload.history : [];
+        historyList.innerHTML = history.length
+            ? history.map(row => `
+                <div class="story-authoring-history-item">
+                    <span>${rpgEscapeHtml(row.status)}</span>
+                    <span>${rpgEscapeHtml(row.pending_id)}</span>
+                    <span>${rpgEscapeHtml(row.reason)}</span>
+                    <span>${rpgEscapeHtml(row.imported_pack_id || "")}</span>
+                </div>
+            `).join("")
+            : `<div class="story-authoring-empty">No approval history yet.</div>`;
+
+        pendingList.querySelectorAll("[data-story-authoring-action]").forEach((button) => {
+            button.addEventListener("click", async () => {
+                const action = button.getAttribute("data-story-authoring-action");
+                const pendingId = button.getAttribute("data-pending-id");
+                if (action === "approve") {
+                    await approveStoryAuthoringProposalFromUI(pendingId);
+                } else if (action === "reject") {
+                    const reason = window.prompt("Reject reason?", "gm_rejected") || "gm_rejected";
+                    await rejectStoryAuthoringProposalFromUI(pendingId, reason);
+                }
+            });
+        });
+    }
+
+    async function refreshStoryAuthoringInspector() {
+        ensureStoryAuthoringInspectorPanel();
+        const sessionId = rpgGetSessionIdForStoryAuthoring();
+        if (!sessionId) {
+            setStoryAuthoringStatus("No RPG session id available.", true);
+            return;
+        }
+        setStoryAuthoringStatus("Loading story authoring queue...");
+        try {
+            const payload = await postStoryAuthoring("/api/rpg/story_authoring/inspector", {
+                session_id: sessionId,
+                limit: 20,
+            });
+            renderStoryAuthoringInspector(payload);
+            setStoryAuthoringStatus(`Pending proposals: ${payload.pending_count || 0}`);
+        } catch (err) {
+            console.error("[RPG][story-authoring] refresh failed", err);
+            setStoryAuthoringStatus(String(err.message || err), true);
+        }
+    }
+
+    async function draftStoryAuthoringProposalFromUI() {
+        const sessionId = rpgGetSessionIdForStoryAuthoring();
+        const input = document.getElementById("story-authoring-goal-input");
+        const authoringGoal = input?.value?.trim() || "Draft a grounded story pack.";
+        if (!sessionId) {
+            setStoryAuthoringStatus("No RPG session id available.", true);
+            return;
+        }
+        setStoryAuthoringStatus("Drafting story proposal...");
+        try {
+            const payload = await postStoryAuthoring("/api/rpg/story_authoring/inspector/draft", {
+                session_id: sessionId,
+                authoring_goal: authoringGoal,
+                turn_index: 0,
+                repair_once: true,
+            });
+            renderStoryAuthoringInspector(payload.inspector || payload);
+            setStoryAuthoringStatus(payload.ok ? "Draft queued for GM approval." : `Draft failed: ${payload.reason}`);
+        } catch (err) {
+            console.error("[RPG][story-authoring] draft failed", err);
+            setStoryAuthoringStatus(String(err.message || err), true);
+        }
+    }
+
+    async function approveStoryAuthoringProposalFromUI(pendingId) {
+        const sessionId = rpgGetSessionIdForStoryAuthoring();
+        setStoryAuthoringStatus("Approving story proposal...");
+        try {
+            const payload = await postStoryAuthoring("/api/rpg/story_authoring/inspector/approve", {
+                session_id: sessionId,
+                pending_id: pendingId,
+                turn_index: 0,
+                reason: "gm_approved",
+            });
+            renderStoryAuthoringInspector(payload.inspector || payload);
+            setStoryAuthoringStatus(payload.ok ? "Approved and imported." : `Approval failed: ${payload.reason}`);
+        } catch (err) {
+            console.error("[RPG][story-authoring] approve failed", err);
+            setStoryAuthoringStatus(String(err.message || err), true);
+        }
+    }
+
+    async function rejectStoryAuthoringProposalFromUI(pendingId, reason) {
+        const sessionId = rpgGetSessionIdForStoryAuthoring();
+        setStoryAuthoringStatus("Rejecting story proposal...");
+        try {
+            const payload = await postStoryAuthoring("/api/rpg/story_authoring/inspector/reject", {
+                session_id: sessionId,
+                pending_id: pendingId,
+                turn_index: 0,
+                reason: reason || "gm_rejected",
+            });
+            renderStoryAuthoringInspector(payload.inspector || payload);
+            setStoryAuthoringStatus(payload.ok ? "Rejected." : `Rejection failed: ${payload.reason}`);
+        } catch (err) {
+            console.error("[RPG][story-authoring] reject failed", err);
+            setStoryAuthoringStatus(String(err.message || err), true);
+        }
+    }
+
+    window.refreshStoryAuthoringInspector = refreshStoryAuthoringInspector;
+    window.renderStoryAuthoringInspector = renderStoryAuthoringInspector;
+
+    document.addEventListener("DOMContentLoaded", () => {
+        ensureStoryAuthoringInspectorPanel();
+        refreshStoryAuthoringInspector();
+    });
+
     // Defer until after all other scripts have initialised
     document.addEventListener('DOMContentLoaded', function () { setTimeout(init, INIT_DELAY_MS); });
 

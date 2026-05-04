@@ -9,12 +9,6 @@ from tests.rpg.manual.campaign_director_m22_m24_checks import (
 from tests.rpg.manual.campaign_journal_m31_m33_checks import (
     run_campaign_journal_m31_m33_checks,
 )
-from tests.rpg.manual.story_authoring_approval_m37_m39_checks import (
-    run_story_authoring_approval_m37_m39_checks,
-)
-from tests.rpg.manual.story_authoring_m34_m36_checks import (
-    run_story_authoring_m34_m36_checks,
-)
 from tests.rpg.manual.companion_m28_m30_checks import run_companion_m28_m30_checks
 from tests.rpg.manual.dialogue_m16_m18_checks import run_dialogue_m16_m18_checks
 from tests.rpg.manual.escalation_m7_m9_checks import run_escalation_m7_m9_checks
@@ -49,6 +43,15 @@ from tests.rpg.manual.session_helpers import (
 )
 from tests.rpg.manual.social_checks import run_social_checks
 from tests.rpg.manual.spatial_checks import run_spatial_checks
+from tests.rpg.manual.story_authoring_approval_m37_m39_checks import (
+    run_story_authoring_approval_m37_m39_checks,
+)
+from tests.rpg.manual.story_authoring_inspector_m40_m42_checks import (
+    run_story_authoring_inspector_m40_m42_checks,
+)
+from tests.rpg.manual.story_authoring_m34_m36_checks import (
+    run_story_authoring_m34_m36_checks,
+)
 from tests.rpg.manual.story_event_m4_m6_checks import run_story_event_m4_m6_checks
 from tests.rpg.manual.story_event_queue_m25_m27_checks import (
     run_story_event_queue_m25_m27_checks,
@@ -649,6 +652,38 @@ def _run_one_service_scenario(
                 if not check_result.get("ok"):
                     turn_record.setdefault("scenario_warnings", []).append(
                         "story_authoring_approval_m37_m39_check_failed:"
+                        + str(scenario_name)
+                        + ":turn_"
+                        + str(turn_index)
+                        + ":"
+                        + str(check_result.get("check_type"))
+                        + ":"
+                        + str(check_result.get("error") or "")
+                    )
+
+        story_authoring_inspector_m40_m42_checks = [
+            check
+            for check in checks
+            if isinstance(check, dict)
+            and str(check.get("type") or "").startswith("story_authoring_inspector")
+        ]
+        if story_authoring_inspector_m40_m42_checks:
+            current_session = {}
+            try:
+                current_session = _ensure_manual_session(session_id)
+            except Exception:
+                current_session = session
+
+            story_authoring_inspector_m40_m42_check_results = run_story_authoring_inspector_m40_m42_checks(
+                checks=story_authoring_inspector_m40_m42_checks,
+                result=turn_record.get("result") or turn_record,
+                session=current_session,
+            )
+            turn_record["story_authoring_inspector_m40_m42_check_results"] = story_authoring_inspector_m40_m42_check_results
+            for check_result in story_authoring_inspector_m40_m42_check_results:
+                if not check_result.get("ok"):
+                    turn_record.setdefault("scenario_warnings", []).append(
+                        "story_authoring_inspector_m40_m42_check_failed:"
                         + str(scenario_name)
                         + ":turn_"
                         + str(turn_index)

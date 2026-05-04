@@ -826,6 +826,31 @@ def sanitize_turn_for_summary(
             if isinstance(item, dict)
         ]
 
+    story_authoring_inspector_m40_m42_check_results = turn.get("story_authoring_inspector_m40_m42_check_results")
+    if isinstance(story_authoring_inspector_m40_m42_check_results, list):
+        sanitized["story_authoring_inspector_m40_m42_check_results"] = [
+            {
+                "check_type": item.get("check_type"),
+                "ok": item.get("ok"),
+                "payload": item.get("payload"),
+                "draft_result": item.get("draft_result"),
+                "approve_result": item.get("approve_result"),
+                "reject_result": item.get("reject_result"),
+                "pending_id": item.get("pending_id"),
+                "pack_id": item.get("pack_id"),
+                "imported": item.get("imported"),
+                "expected_pending_count": item.get("expected_pending_count"),
+                "expected_proposal_id": item.get("expected_proposal_id"),
+                "expected_ok": item.get("expected_ok"),
+                "expected_reason": item.get("expected_reason"),
+                "expected_present": item.get("expected_present"),
+                "limit": item.get("limit"),
+                "error": item.get("error"),
+            }
+            for item in story_authoring_inspector_m40_m42_check_results[:50]
+            if isinstance(item, dict)
+        ]
+
     return sanitized
 
 

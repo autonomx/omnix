@@ -4,11 +4,11 @@ from tests.rpg.manual.runner import build_service_scenarios
 from tests.rpg.manual.scenarios.expected_campaign_director_m22_m24_names import (
     EXPECTED_CAMPAIGN_DIRECTOR_M22_M24_SCENARIO_NAMES,
 )
-from tests.rpg.manual.scenarios.expected_companion_m28_m30_names import (
-    EXPECTED_COMPANION_M28_M30_SCENARIO_NAMES,
-)
 from tests.rpg.manual.scenarios.expected_campaign_journal_m31_m33_names import (
     EXPECTED_CAMPAIGN_JOURNAL_M31_M33_SCENARIO_NAMES,
+)
+from tests.rpg.manual.scenarios.expected_companion_m28_m30_names import (
+    EXPECTED_COMPANION_M28_M30_SCENARIO_NAMES,
 )
 from tests.rpg.manual.scenarios.expected_dialogue_m16_m18_names import (
     EXPECTED_DIALOGUE_M16_M18_SCENARIO_NAMES,
@@ -28,6 +28,9 @@ from tests.rpg.manual.scenarios.expected_quest_puzzle_l13_l15_names import (
 from tests.rpg.manual.scenarios.expected_social_l10_l12_names import (
     EXPECTED_SOCIAL_L10_L12_SCENARIO_NAMES,
 )
+from tests.rpg.manual.scenarios.expected_story_authoring_approval_m37_m39_names import (
+    EXPECTED_STORY_AUTHORING_APPROVAL_M37_M39_SCENARIO_NAMES,
+)
 from tests.rpg.manual.scenarios.expected_story_event_m4_m6_names import (
     EXPECTED_STORY_EVENT_M4_M6_SCENARIO_NAMES,
 )
@@ -36,9 +39,6 @@ from tests.rpg.manual.scenarios.expected_story_event_queue_m25_m27_names import 
 )
 from tests.rpg.manual.scenarios.expected_story_m1_m3_names import (
     EXPECTED_STORY_M1_M3_SCENARIO_NAMES,
-)
-from tests.rpg.manual.scenarios.expected_story_authoring_approval_m37_m39_names import (
-    EXPECTED_STORY_AUTHORING_APPROVAL_M37_M39_SCENARIO_NAMES,
 )
 from tests.rpg.manual.scenarios.expected_story_pack_m13_m15_names import (
     EXPECTED_STORY_PACK_M13_M15_SCENARIO_NAMES,

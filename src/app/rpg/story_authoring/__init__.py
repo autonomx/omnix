@@ -6,6 +6,12 @@ from app.rpg.story_authoring.approval import (
     list_pending_story_proposals,
     reject_story_proposal,
 )
+from app.rpg.story_authoring.inspector import (
+    approve_story_authoring_inspector_proposal,
+    build_story_authoring_inspector_payload,
+    draft_story_authoring_inspector_proposal,
+    reject_story_authoring_inspector_proposal,
+)
 from app.rpg.story_authoring.runtime import (
     author_story_proposal,
     import_authored_story_proposal,
@@ -16,12 +22,16 @@ from app.rpg.story_authoring.state import (
 )
 
 __all__ = [
+    "approve_story_authoring_inspector_proposal",
     "approve_story_proposal",
     "author_story_proposal",
+    "build_story_authoring_inspector_payload",
+    "draft_story_authoring_inspector_proposal",
     "draft_story_proposal_for_approval",
     "ensure_story_authoring_state",
     "import_authored_story_proposal",
     "list_pending_story_proposals",
     "normalize_story_authoring_state",
+    "reject_story_authoring_inspector_proposal",
     "reject_story_proposal",
 ]
