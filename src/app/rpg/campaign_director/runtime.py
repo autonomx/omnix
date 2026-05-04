@@ -11,6 +11,7 @@ from app.rpg.escalation.rules import apply_escalation_rule, evaluate_escalation_
 from app.rpg.story_event_queue.queue import process_story_event_queue
 from app.rpg.story_packs.definition_registries import (
     get_story_event_definition,
+    list_active_escalation_rule_definitions,
     list_escalation_rule_definitions,
 )
 
@@ -31,7 +32,10 @@ def _resolve_registered_rules(
     simulation_state: Dict[str, Any],
     *,
     arc_id: str = "",
+    active_only: bool = True,
 ) -> List[Dict[str, Any]]:
+    if active_only:
+        return list_active_escalation_rule_definitions(simulation_state, arc_id=arc_id)
     return list_escalation_rule_definitions(simulation_state, arc_id=arc_id)
 
 
@@ -73,6 +77,7 @@ def evaluate_campaign_director_tick(
     mode: str = "idle",
     turn_index: int = 0,
     arc_id: str = "",
+    active_packs_only: bool = True,
     max_pressure_items: int = MAX_DIRECTOR_PRESSURE_ITEMS,
 ) -> Dict[str, Any]:
     director_state = ensure_campaign_director_state(simulation_state)
@@ -100,7 +105,11 @@ def evaluate_campaign_director_tick(
             "advisory_only": True,
         }
 
-    registered_rules = _resolve_registered_rules(simulation_state, arc_id=arc_id)
+    registered_rules = _resolve_registered_rules(
+        simulation_state,
+        arc_id=arc_id,
+        active_only=active_packs_only,
+    )
     rules = _hydrate_registered_rules(simulation_state, registered_rules)
     evaluation = evaluate_escalation_rules(
         simulation_state,
@@ -120,6 +129,7 @@ def evaluate_campaign_director_tick(
         "turn_index": int(turn_index or 0),
         "safe_mode": True,
         "registered_rule_count": len(registered_rules),
+        "active_packs_only": active_packs_only,
         "eligible": evaluation.get("eligible") or [],
         "eligible_count": int(evaluation.get("eligible_count") or 0),
         "director_pressure": pressure.get("director_pressure") or [],
@@ -135,12 +145,14 @@ def apply_campaign_director_tick(
     turn_index: int = 0,
     arc_id: str = "",
     max_applications: int = MAX_DIRECTOR_APPLICATIONS_PER_TICK,
+    active_packs_only: bool = True,
 ) -> Dict[str, Any]:
     evaluation = evaluate_campaign_director_tick(
         simulation_state,
         mode=mode,
         turn_index=turn_index,
         arc_id=arc_id,
+        active_packs_only=active_packs_only,
     )
     if not evaluation.get("safe_mode"):
         record_campaign_director_tick(
@@ -239,6 +251,7 @@ def build_campaign_director_snapshot(
     mode: str = "idle",
     turn_index: int = 0,
     arc_id: str = "",
+    active_packs_only: bool = True,
 ) -> Dict[str, Any]:
     state = ensure_campaign_director_state(simulation_state)
     evaluation = evaluate_campaign_director_tick(
@@ -246,6 +259,7 @@ def build_campaign_director_snapshot(
         mode=mode,
         turn_index=turn_index,
         arc_id=arc_id,
+        active_packs_only=active_packs_only,
     )
     return {
         "ok": True,
@@ -253,6 +267,7 @@ def build_campaign_director_snapshot(
         "director_pressure": evaluation.get("director_pressure") or [],
         "eligible_count": evaluation.get("eligible_count") or 0,
         "registered_rule_count": evaluation.get("registered_rule_count") or 0,
+        "active_packs_only": active_packs_only,
         "safe_mode": evaluation.get("safe_mode"),
         "advisory_only": True,
         "bounded": {

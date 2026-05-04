@@ -851,6 +851,33 @@ def sanitize_turn_for_summary(
             if isinstance(item, dict)
         ]
 
+    story_pack_activation_m43_m45_check_results = turn.get("story_pack_activation_m43_m45_check_results")
+    if isinstance(story_pack_activation_m43_m45_check_results, list):
+        sanitized["story_pack_activation_m43_m45_check_results"] = [
+            {
+                "check_type": item.get("check_type"),
+                "ok": item.get("ok"),
+                "import_result": item.get("import_result"),
+                "activate_result": item.get("activate_result"),
+                "deactivate_result": item.get("deactivate_result"),
+                "snapshot": item.get("snapshot"),
+                "evaluation": item.get("evaluation"),
+                "applied": item.get("applied"),
+                "draft": item.get("draft"),
+                "approve": item.get("approve"),
+                "pack_id": item.get("pack_id"),
+                "actual_active": item.get("actual_active"),
+                "expected_active": item.get("expected_active"),
+                "expected_eligible_count": item.get("expected_eligible_count"),
+                "expected_registered_rule_count": item.get("expected_registered_rule_count"),
+                "expected_applied_count": item.get("expected_applied_count"),
+                "expected_reason": item.get("expected_reason"),
+                "error": item.get("error"),
+            }
+            for item in story_pack_activation_m43_m45_check_results[:50]
+            if isinstance(item, dict)
+        ]
+
     return sanitized
 
 

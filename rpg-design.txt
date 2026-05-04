@@ -1,40 +1,34 @@
-Bundle M40-M42 — Story Authoring Inspector UI + Pending Proposal Review Panel v1
+Bundle M43-M45 — Runtime Story Pack Activation + Campaign Director Bridge v1
 GOAL:
-Add a visible runtime/inspector review surface for authored story proposals.
+Bridge imported/approved story packs into the runtime campaign director safely.
 
-This bundle connects M37-M39 GM approval state to the legacy RPG UI/inspector:
-- fetch pending authored proposals for the current RPG session
-- show pending proposal cards in a bounded review panel
-- show proposal summary, title, lore/arcs/events/rules counts
-- approve pending proposal
-- reject pending proposal with reason
-- show approval history/debug
-- never import on draft alone
-- approval/rejection actions call deterministic backend endpoints
-- UI must not mutate story state directly
-- manual tests validate backend UI payloads and API behavior with full debug
+This bundle adds:
+- Story pack activation state
+- imported story packs can be inactive by default
+- active story packs expose escalation rules to campaign director
+- inactive packs do not drive escalation
+- approved/imported story packs can be activated explicitly
+- activation/deactivation is deterministic and bounded
+- campaign director evaluates only active story pack rules by default
+- story authoring approval/import flow can optionally auto-activate imported packs
+- inspector/API payload shows active/inactive imported packs
+- manual tests verify inactive packs do not escalate and active packs do
 
-This assumes you already added the optional M37-M39 API routes or equivalent backend functions. If those API routes were skipped, this bundle includes a small stable payload layer and FastAPI endpoints.
-
-Patch 1 — Add UI-facing payload builder
-1. Add src/app/rpg/story_authoring/inspector.py
+Important:
+- Importing a story pack does not automatically mean it drives runtime, unless auto_activate is explicitly requested.
+- Campaign director should not consume every imported pack forever without activation gating.
+- Activation state is authoritative deterministic simulation state.
+- LLM cannot activate packs directly.
+Patch 1 — Add story pack activation runtime
+1. Add src/app/rpg/story_packs/activation.py
 *** Begin Patch
-*** Add File: src/app/rpg/story_authoring/inspector.py
+*** Add File: src/app/rpg/story_packs/activation.py
 +from __future__ import annotations
 +
 +from typing import Any, Dict, List
 +
-+from app.rpg.story_authoring.approval import (
-+    approve_story_proposal,
-+    draft_story_proposal_for_approval,
-+    list_pending_story_proposals,
-+    reject_story_proposal,
-+)
 +
-+
-+MAX_INSPECTOR_PENDING = 20
-+MAX_INSPECTOR_HISTORY = 20
-+MAX_INSPECTOR_PROPOSAL_ITEMS = 20
++MAX_STORY_PACK_ACTIVATION_HISTORY = 100
 +
 +
 +def _safe_dict(value: Any) -> Dict[str, Any]:
@@ -45,750 +39,692 @@ Patch 1 — Add UI-facing payload builder
 +    return value if isinstance(value, list) else []
 +
 +
-+def _count(value: Any) -> int:
-+    return len(value) if isinstance(value, list) else 0
++def _safe_str(value: Any) -> str:
++    return value if isinstance(value, str) else ""
 +
 +
-+def _proposal_summary(proposal: Dict[str, Any]) -> Dict[str, Any]:
-+    proposal = _safe_dict(proposal)
-+    lore_entries = _safe_list(proposal.get("lore_entries"))
-+    story_arcs = _safe_list(proposal.get("story_arcs"))
-+    story_events = _safe_list(proposal.get("story_events"))
-+    escalation_rules = _safe_list(proposal.get("escalation_rules"))
++def _safe_int(value: Any, default: int = 0) -> int:
++    try:
++        return int(value)
++    except Exception:
++        return default
++
++
++def _normalize_activation_row(value: Dict[str, Any]) -> Dict[str, Any]:
++    value = _safe_dict(value)
 +    return {
-+        "proposal_id": str(proposal.get("proposal_id") or ""),
-+        "proposal_type": str(proposal.get("proposal_type") or ""),
-+        "title": str(proposal.get("title") or ""),
-+        "counts": {
-+            "lore_entries": _count(lore_entries),
-+            "story_arcs": _count(story_arcs),
-+            "story_events": _count(story_events),
-+            "escalation_rules": _count(escalation_rules),
-+        },
-+        "lore_entries": [
-+            {
-+                "lore_id": str(_safe_dict(row).get("lore_id") or ""),
-+                "title": str(_safe_dict(row).get("title") or ""),
-+                "truth_status": str(_safe_dict(row).get("truth_status") or "unknown"),
-+            }
-+            for row in lore_entries[:MAX_INSPECTOR_PROPOSAL_ITEMS]
-+            if isinstance(row, dict)
-+        ],
-+        "story_arcs": [
-+            {
-+                "arc_id": str(_safe_dict(row).get("arc_id") or ""),
-+                "title": str(_safe_dict(row).get("title") or ""),
-+                "status": str(_safe_dict(row).get("status") or ""),
-+                "stage": str(_safe_dict(row).get("stage") or ""),
-+                "pressure": int(_safe_dict(row).get("pressure") or 0),
-+            }
-+            for row in story_arcs[:MAX_INSPECTOR_PROPOSAL_ITEMS]
-+            if isinstance(row, dict)
-+        ],
-+        "story_events": [
-+            {
-+                "event_id": str(_safe_dict(row).get("event_id") or ""),
-+                "arc_id": str(_safe_dict(row).get("arc_id") or ""),
-+                "kind": str(_safe_dict(row).get("kind") or ""),
-+                "summary": str(_safe_dict(row).get("summary") or ""),
-+                "effect_count": _count(_safe_dict(row).get("effects")),
-+            }
-+            for row in story_events[:MAX_INSPECTOR_PROPOSAL_ITEMS]
-+            if isinstance(row, dict)
-+        ],
-+        "escalation_rules": [
-+            {
-+                "rule_id": str(_safe_dict(row).get("rule_id") or ""),
-+                "arc_id": str(_safe_dict(row).get("arc_id") or ""),
-+                "priority": int(_safe_dict(row).get("priority") or 0),
-+            }
-+            for row in escalation_rules[:MAX_INSPECTOR_PROPOSAL_ITEMS]
-+            if isinstance(row, dict)
-+        ],
-+        "bounded": {
-+            "max_items": MAX_INSPECTOR_PROPOSAL_ITEMS,
-+        },
++        "pack_id": _safe_str(value.get("pack_id")),
++        "status": _safe_str(value.get("status")) or "inactive",
++        "activated_turn": _safe_int(value.get("activated_turn"), 0),
++        "deactivated_turn": _safe_int(value.get("deactivated_turn"), 0),
++        "reason": _safe_str(value.get("reason")),
++        "metadata": dict(_safe_dict(value.get("metadata"))),
 +    }
 +
 +
-+def _pending_payload(row: Dict[str, Any]) -> Dict[str, Any]:
-+    row = _safe_dict(row)
-+    proposal = _safe_dict(row.get("proposal"))
-+    validation = _safe_dict(row.get("validation"))
++def _normalize_history_row(value: Dict[str, Any]) -> Dict[str, Any]:
++    value = _safe_dict(value)
 +    return {
-+        "pending_id": str(row.get("pending_id") or ""),
-+        "status": str(row.get("status") or "pending"),
-+        "turn_index": int(row.get("turn_index") or 0),
-+        "authoring_goal": str(row.get("authoring_goal") or ""),
-+        "proposal_id": str(row.get("proposal_id") or ""),
-+        "proposal_type": str(row.get("proposal_type") or ""),
-+        "title": str(row.get("title") or ""),
-+        "attempt_id": str(row.get("attempt_id") or ""),
-+        "validation_ok": bool(validation.get("ok")),
-+        "validation_errors": list(validation.get("errors") or [])[:20],
-+        "proposal_summary": _proposal_summary(proposal),
++        "pack_id": _safe_str(value.get("pack_id")),
++        "action": _safe_str(value.get("action")),
++        "turn_index": _safe_int(value.get("turn_index"), 0),
++        "reason": _safe_str(value.get("reason")),
++        "metadata": dict(_safe_dict(value.get("metadata"))),
 +    }
 +
 +
-+def _history_payload(row: Dict[str, Any]) -> Dict[str, Any]:
-+    row = _safe_dict(row)
++def normalize_story_pack_activation_state(value: Dict[str, Any] | None) -> Dict[str, Any]:
++    value = _safe_dict(value)
++    packs = {}
++    for pack_id, row in _safe_dict(value.get("packs")).items():
++        pack_id = str(pack_id or "")
++        if not pack_id:
++            continue
++        normalized = _normalize_activation_row(row)
++        normalized["pack_id"] = pack_id
++        if normalized["status"] not in {"active", "inactive"}:
++            normalized["status"] = "inactive"
++        packs[pack_id] = normalized
++
++    history = [
++        _normalize_history_row(row)
++        for row in _safe_list(value.get("history"))
++        if isinstance(row, dict)
++    ][-MAX_STORY_PACK_ACTIVATION_HISTORY:]
++
 +    return {
-+        "pending_id": str(row.get("pending_id") or ""),
-+        "status": str(row.get("status") or "unknown"),
-+        "turn_index": int(row.get("turn_index") or 0),
-+        "reason": str(row.get("reason") or ""),
-+        "import_ok": bool(row.get("import_ok")),
-+        "imported_pack_id": str(row.get("imported_pack_id") or ""),
++        "version": 1,
++        "packs": packs,
++        "history": history,
++        "max_history": MAX_STORY_PACK_ACTIVATION_HISTORY,
 +    }
 +
 +
-+def build_story_authoring_inspector_payload(
++def ensure_story_pack_activation_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
++    if not isinstance(simulation_state, dict):
++        raise TypeError("simulation_state_must_be_dict")
++    state = normalize_story_pack_activation_state(simulation_state.get("story_pack_activation_state"))
++    simulation_state["story_pack_activation_state"] = state
++    return state
++
++
++def _append_history(
 +    simulation_state: Dict[str, Any],
 +    *,
-+    limit: int = MAX_INSPECTOR_PENDING,
++    pack_id: str,
++    action: str,
++    turn_index: int = 0,
++    reason: str = "",
++    metadata: Dict[str, Any] | None = None,
++) -> None:
++    state = ensure_story_pack_activation_state(simulation_state)
++    history = list(state.get("history") or [])
++    history.append(
++        _normalize_history_row(
++            {
++                "pack_id": pack_id,
++                "action": action,
++                "turn_index": turn_index,
++                "reason": reason,
++                "metadata": metadata or {},
++            }
++        )
++    )
++    state["history"] = history[-MAX_STORY_PACK_ACTIVATION_HISTORY:]
++    simulation_state["story_pack_activation_state"] = normalize_story_pack_activation_state(state)
++
++
++def activate_story_pack(
++    simulation_state: Dict[str, Any],
++    pack_id: str,
++    *,
++    turn_index: int = 0,
++    reason: str = "activated",
++    metadata: Dict[str, Any] | None = None,
 +) -> Dict[str, Any]:
-+    limit = max(0, min(MAX_INSPECTOR_PENDING, int(limit or MAX_INSPECTOR_PENDING)))
-+    listing = list_pending_story_proposals(simulation_state, limit=limit)
-+    pending = [_pending_payload(row) for row in _safe_list(listing.get("pending"))[:limit]]
-+    history = [_history_payload(row) for row in _safe_list(listing.get("history"))[-MAX_INSPECTOR_HISTORY:]]
++    pack_id = str(pack_id or "")
++    if not pack_id:
++        return {"ok": False, "reason": "missing_pack_id"}
++
++    story_pack_state = _safe_dict(simulation_state.get("story_pack_state"))
++    imported = _safe_dict(story_pack_state.get("imported_packs"))
++    if pack_id not in imported:
++        return {"ok": False, "reason": "story_pack_not_imported", "pack_id": pack_id}
++
++    state = ensure_story_pack_activation_state(simulation_state)
++    current = _safe_dict(state.get("packs", {}).get(pack_id))
++    if current.get("status") == "active":
++        return {
++            "ok": True,
++            "reason": "already_active",
++            "pack_id": pack_id,
++            "activation": current,
++        }
++
++    row = _normalize_activation_row(
++        {
++            "pack_id": pack_id,
++            "status": "active",
++            "activated_turn": turn_index,
++            "deactivated_turn": 0,
++            "reason": reason,
++            "metadata": metadata or {},
++        }
++    )
++    state.setdefault("packs", {})[pack_id] = row
++    simulation_state["story_pack_activation_state"] = normalize_story_pack_activation_state(state)
++    _append_history(
++        simulation_state,
++        pack_id=pack_id,
++        action="activate",
++        turn_index=turn_index,
++        reason=reason,
++        metadata=metadata,
++    )
 +    return {
 +        "ok": True,
-+        "format_version": "story_authoring_inspector_v1",
-+        "pending_count": int(listing.get("pending_count") or 0),
-+        "pending": pending,
-+        "history": history,
-+        "actions": {
-+            "draft": "/api/rpg/story_authoring/draft",
-+            "pending": "/api/rpg/story_authoring/pending",
-+            "approve": "/api/rpg/story_authoring/approve",
-+            "reject": "/api/rpg/story_authoring/reject",
-+        },
++        "reason": "activated",
++        "pack_id": pack_id,
++        "activation": ensure_story_pack_activation_state(simulation_state)["packs"][pack_id],
++    }
++
++
++def deactivate_story_pack(
++    simulation_state: Dict[str, Any],
++    pack_id: str,
++    *,
++    turn_index: int = 0,
++    reason: str = "deactivated",
++    metadata: Dict[str, Any] | None = None,
++) -> Dict[str, Any]:
++    pack_id = str(pack_id or "")
++    if not pack_id:
++        return {"ok": False, "reason": "missing_pack_id"}
++
++    state = ensure_story_pack_activation_state(simulation_state)
++    current = _safe_dict(state.get("packs", {}).get(pack_id))
++    if current.get("status") != "active":
++        return {
++            "ok": True,
++            "reason": "already_inactive",
++            "pack_id": pack_id,
++            "activation": current or {"pack_id": pack_id, "status": "inactive"},
++        }
++
++    row = dict(current)
++    row["status"] = "inactive"
++    row["deactivated_turn"] = int(turn_index or 0)
++    row["reason"] = reason
++    row["metadata"] = dict(metadata or row.get("metadata") or {})
++    state.setdefault("packs", {})[pack_id] = _normalize_activation_row(row)
++    simulation_state["story_pack_activation_state"] = normalize_story_pack_activation_state(state)
++    _append_history(
++        simulation_state,
++        pack_id=pack_id,
++        action="deactivate",
++        turn_index=turn_index,
++        reason=reason,
++        metadata=metadata,
++    )
++    return {
++        "ok": True,
++        "reason": "deactivated",
++        "pack_id": pack_id,
++        "activation": ensure_story_pack_activation_state(simulation_state)["packs"][pack_id],
++    }
++
++
++def is_story_pack_active(simulation_state: Dict[str, Any], pack_id: str) -> bool:
++    state = ensure_story_pack_activation_state(simulation_state)
++    return _safe_dict(state.get("packs", {}).get(str(pack_id or ""))).get("status") == "active"
++
++
++def list_active_story_pack_ids(simulation_state: Dict[str, Any]) -> List[str]:
++    state = ensure_story_pack_activation_state(simulation_state)
++    return [
++        pack_id
++        for pack_id, row in _safe_dict(state.get("packs")).items()
++        if _safe_dict(row).get("status") == "active"
++    ]
++
++
++def build_story_pack_activation_snapshot(simulation_state: Dict[str, Any], *, limit: int = 20) -> Dict[str, Any]:
++    limit = max(0, min(50, int(limit or 20)))
++    state = ensure_story_pack_activation_state(simulation_state)
++    story_pack_state = _safe_dict(simulation_state.get("story_pack_state"))
++    imported = _safe_dict(story_pack_state.get("imported_packs"))
++    rows = []
++    for pack_id, imported_pack in imported.items():
++        activation = _safe_dict(state.get("packs", {}).get(pack_id))
++        proposal = _safe_dict(_safe_dict(imported_pack).get("proposal"))
++        rows.append(
++            {
++                "pack_id": str(pack_id),
++                "proposal_id": str(proposal.get("proposal_id") or _safe_dict(imported_pack).get("proposal_id") or ""),
++                "title": str(proposal.get("title") or _safe_dict(imported_pack).get("title") or ""),
++                "status": activation.get("status") or "inactive",
++                "activated_turn": int(activation.get("activated_turn") or 0),
++                "deactivated_turn": int(activation.get("deactivated_turn") or 0),
++                "reason": activation.get("reason") or "",
++                "counts": {
++                    "lore_entries": len(proposal.get("lore_entries") or []),
++                    "story_arcs": len(proposal.get("story_arcs") or []),
++                    "story_events": len(proposal.get("story_events") or []),
++                    "escalation_rules": len(proposal.get("escalation_rules") or []),
++                },
++            }
++        )
++    rows.sort(key=lambda row: (row["status"] != "active", row["pack_id"]))
++    return {
++        "ok": True,
++        "format_version": "story_pack_activation_snapshot_v1",
++        "packs": rows[:limit],
++        "active_pack_ids": list_active_story_pack_ids(simulation_state)[:limit],
++        "history": list(state.get("history") or [])[-limit:],
 +        "bounded": {
 +            "limit": limit,
-+            "max_pending": MAX_INSPECTOR_PENDING,
-+            "max_history": MAX_INSPECTOR_HISTORY,
-+            "max_proposal_items": MAX_INSPECTOR_PROPOSAL_ITEMS,
++            "max_history": MAX_STORY_PACK_ACTIVATION_HISTORY,
 +        },
-+        "rules": [
-+            "Drafting does not import.",
-+            "Approval imports through validator and story pack importer.",
-+            "Rejection never imports.",
-+            "The UI must not mutate story state directly.",
-+        ],
-+    }
-+
-+
-+def draft_story_authoring_inspector_proposal(
-+    simulation_state: Dict[str, Any],
-+    *,
-+    authoring_goal: str,
-+    app_context: Any = None,
-+    turn_index: int = 0,
-+    llm_text_override: Any = None,
-+    repair_once: bool = False,
-+) -> Dict[str, Any]:
-+    draft_result = draft_story_proposal_for_approval(
-+        simulation_state,
-+        authoring_goal=authoring_goal,
-+        app_context=app_context,
-+        turn_index=turn_index,
-+        llm_text_override=llm_text_override,
-+        repair_once=repair_once,
-+    )
-+    return {
-+        "ok": bool(draft_result.get("ok")),
-+        "reason": draft_result.get("reason"),
-+        "draft_result": draft_result,
-+        "inspector": build_story_authoring_inspector_payload(simulation_state),
-+    }
-+
-+
-+def approve_story_authoring_inspector_proposal(
-+    simulation_state: Dict[str, Any],
-+    *,
-+    pending_id: str,
-+    turn_index: int = 0,
-+    reason: str = "gm_approved",
-+) -> Dict[str, Any]:
-+    approve_result = approve_story_proposal(
-+        simulation_state,
-+        pending_id=pending_id,
-+        turn_index=turn_index,
-+        reason=reason,
-+    )
-+    return {
-+        "ok": bool(approve_result.get("ok")),
-+        "reason": approve_result.get("reason"),
-+        "approve_result": approve_result,
-+        "inspector": build_story_authoring_inspector_payload(simulation_state),
-+    }
-+
-+
-+def reject_story_authoring_inspector_proposal(
-+    simulation_state: Dict[str, Any],
-+    *,
-+    pending_id: str,
-+    turn_index: int = 0,
-+    reason: str = "gm_rejected",
-+) -> Dict[str, Any]:
-+    reject_result = reject_story_proposal(
-+        simulation_state,
-+        pending_id=pending_id,
-+        turn_index=turn_index,
-+        reason=reason,
-+    )
-+    return {
-+        "ok": bool(reject_result.get("ok")),
-+        "reason": reject_result.get("reason"),
-+        "reject_result": reject_result,
-+        "inspector": build_story_authoring_inspector_payload(simulation_state),
 +    }
 *** End Patch
-2. Patch src/app/rpg/story_authoring/__init__.py
+2. Patch src/app/rpg/story_packs/__init__.py
+
+If the file exists, add exports:
+
 *** Begin Patch
-*** Update File: src/app/rpg/story_authoring/__init__.py
+*** Update File: src/app/rpg/story_packs/__init__.py
 @@
- from app.rpg.story_authoring.approval import (
-     approve_story_proposal,
-     draft_story_proposal_for_approval,
-     list_pending_story_proposals,
-     reject_story_proposal,
- )
-+from app.rpg.story_authoring.inspector import (
-+    approve_story_authoring_inspector_proposal,
-+    build_story_authoring_inspector_payload,
-+    draft_story_authoring_inspector_proposal,
-+    reject_story_authoring_inspector_proposal,
++from app.rpg.story_packs.activation import (
++    activate_story_pack,
++    build_story_pack_activation_snapshot,
++    deactivate_story_pack,
++    ensure_story_pack_activation_state,
++    is_story_pack_active,
++    list_active_story_pack_ids,
++    normalize_story_pack_activation_state,
 +)
-@@
-     "approve_story_proposal",
-+    "approve_story_authoring_inspector_proposal",
-+    "build_story_authoring_inspector_payload",
-     "draft_story_proposal_for_approval",
-+    "draft_story_authoring_inspector_proposal",
-     "ensure_story_authoring_state",
-     "import_authored_story_proposal",
-     "list_pending_story_proposals",
-     "normalize_story_authoring_state",
-     "reject_story_proposal",
-+    "reject_story_authoring_inspector_proposal",
- ]
++
++__all__ = [
++    "activate_story_pack",
++    "build_story_pack_activation_snapshot",
++    "deactivate_story_pack",
++    "ensure_story_pack_activation_state",
++    "is_story_pack_active",
++    "list_active_story_pack_ids",
++    "normalize_story_pack_activation_state",
++]
 *** End Patch
-Patch 2 — Stable backend API payload endpoints
 
-If you already added src/app/rpg/api/story_authoring.py in M37-M39, patch it. If not, add this file and register it in the active FastAPI app.
+If __all__ already exists, merge these names into it instead of replacing existing exports.
 
-3. Patch or add src/app/rpg/api/story_authoring.py
+Patch 2 — Bridge active packs into campaign director
+3. Patch src/app/rpg/story_packs/definition_registries.py
+
+Add helper to resolve rules by active story packs. This assumes imported pack records retain proposal and existing registry stores rules globally.
+
+*** Begin Patch
+*** Update File: src/app/rpg/story_packs/definition_registries.py
+@@
+ from __future__ import annotations
+ 
+ from typing import Any, Dict, List
++from app.rpg.story_packs.activation import list_active_story_pack_ids
+@@
+ def list_escalation_rule_definitions(
+     simulation_state: Dict[str, Any],
+     *,
+     arc_id: str = "",
+ ) -> List[Dict[str, Any]]:
+@@
+     return rows
++
++
++def list_active_escalation_rule_definitions(
++    simulation_state: Dict[str, Any],
++    *,
++    arc_id: str = "",
++) -> List[Dict[str, Any]]:
++    """Return escalation rules belonging to active imported story packs only.
++
++    Rules imported before activation support may not have source_pack_id metadata.
++    In that case, this function falls back to proposal escalation_rules stored
++    on each active imported story pack.
++    """
++    active_pack_ids = set(list_active_story_pack_ids(simulation_state))
++    if not active_pack_ids:
++        return []
++
++    story_pack_state = simulation_state.get("story_pack_state") if isinstance(simulation_state, dict) else {}
++    imported_packs = story_pack_state.get("imported_packs") if isinstance(story_pack_state, dict) else {}
++    rows: List[Dict[str, Any]] = []
++    for pack_id in sorted(active_pack_ids):
++        imported = imported_packs.get(pack_id) if isinstance(imported_packs, dict) else None
++        if not isinstance(imported, dict):
++            continue
++        proposal = imported.get("proposal") if isinstance(imported.get("proposal"), dict) else {}
++        for rule in proposal.get("escalation_rules") or []:
++            if not isinstance(rule, dict):
++                continue
++            if arc_id and str(rule.get("arc_id") or "") != arc_id:
++                continue
++            copied = dict(rule)
++            copied.setdefault("source_pack_id", pack_id)
++            rows.append(copied)
++
++    # Deterministic order: highest priority first, then rule id.
++    rows.sort(key=lambda row: (-int(row.get("priority") or 0), str(row.get("rule_id") or "")))
++    return rows
+*** End Patch
+
+If the file already has import ordering rules, move the new import with other app imports.
+
+4. Patch src/app/rpg/campaign_director/runtime.py
+
+Switch director rule resolution to active rules by default.
+
+*** Begin Patch
+*** Update File: src/app/rpg/campaign_director/runtime.py
+@@
+ from app.rpg.story_packs.definition_registries import (
+     get_story_event_definition,
++    list_active_escalation_rule_definitions,
+     list_escalation_rule_definitions,
+ )
+@@
+ def _resolve_registered_rules(
+     simulation_state: Dict[str, Any],
+     *,
+     arc_id: str = "",
++    active_only: bool = True,
+ ) -> List[Dict[str, Any]]:
++    if active_only:
++        return list_active_escalation_rule_definitions(simulation_state, arc_id=arc_id)
+     return list_escalation_rule_definitions(simulation_state, arc_id=arc_id)
+@@
+ def evaluate_campaign_director_tick(
+     simulation_state: Dict[str, Any],
+     *,
+     mode: str = "idle",
+     turn_index: int = 0,
+     arc_id: str = "",
++    active_packs_only: bool = True,
+     max_pressure_items: int = MAX_DIRECTOR_PRESSURE_ITEMS,
+ ) -> Dict[str, Any]:
+@@
+-    registered_rules = _resolve_registered_rules(simulation_state, arc_id=arc_id)
++    registered_rules = _resolve_registered_rules(
++        simulation_state,
++        arc_id=arc_id,
++        active_only=active_packs_only,
++    )
+@@
+         "registered_rule_count": len(registered_rules),
++        "active_packs_only": active_packs_only,
+         "eligible": evaluation.get("eligible") or [],
+@@
+ def apply_campaign_director_tick(
+     simulation_state: Dict[str, Any],
+     *,
+     mode: str = "idle",
+     turn_index: int = 0,
+     arc_id: str = "",
+     max_applications: int = MAX_DIRECTOR_APPLICATIONS_PER_TICK,
++    active_packs_only: bool = True,
+ ) -> Dict[str, Any]:
+@@
+         mode=mode,
+         turn_index=turn_index,
+         arc_id=arc_id,
++        active_packs_only=active_packs_only,
+     )
+@@
+ def build_campaign_director_snapshot(
+     simulation_state: Dict[str, Any],
+     *,
+     mode: str = "idle",
+     turn_index: int = 0,
+     arc_id: str = "",
++    active_packs_only: bool = True,
+ ) -> Dict[str, Any]:
+@@
+         mode=mode,
+         turn_index=turn_index,
+         arc_id=arc_id,
++        active_packs_only=active_packs_only,
+     )
+@@
+         "registered_rule_count": evaluation.get("registered_rule_count") or 0,
++        "active_packs_only": active_packs_only,
+*** End Patch
+
+This intentionally changes the default: imported packs are not runtime-active until activated.
+
+Patch 3 — Auto-activate option from approval/import flows
+5. Patch src/app/rpg/story_authoring/approval.py
+
+Add import:
+
+*** Begin Patch
+*** Update File: src/app/rpg/story_authoring/approval.py
+@@
+ from app.rpg.story_packs.importer import import_story_pack
++from app.rpg.story_packs.activation import activate_story_pack
+ from app.rpg.story_proposals.validation import validate_story_proposal
+*** End Patch
+
+Update approve_story_proposal signature and activate if requested:
+
+*** Begin Patch
+*** Update File: src/app/rpg/story_authoring/approval.py
+@@
+ def approve_story_proposal(
+     simulation_state: Dict[str, Any],
+     *,
+     pending_id: str,
+     turn_index: int = 0,
+     reason: str = "gm_approved",
++    auto_activate: bool = False,
+ ) -> Dict[str, Any]:
+@@
+     import_result = import_story_pack(simulation_state, proposal, turn_index=turn_index)
+@@
+-    state = ensure_story_authoring_approval_state(simulation_state)
++    activation_result = None
++    if auto_activate:
++        activation_result = activate_story_pack(
++            simulation_state,
++            str(import_result.get("pack_id") or ""),
++            turn_index=turn_index,
++            reason="approved_auto_activate",
++            metadata={"pending_id": pending_id},
++        )
++
++    state = ensure_story_authoring_approval_state(simulation_state)
+@@
+         imported_pack_id=str(import_result.get("pack_id") or ""),
+-        details={"proposal_id": proposal.get("proposal_id"), "import_result": import_result},
++        details={
++            "proposal_id": proposal.get("proposal_id"),
++            "import_result": import_result,
++            "activation_result": activation_result or {},
++            "auto_activate": auto_activate,
++        },
+     )
+     return {
+         "ok": True,
+-        "reason": "approved_imported",
++        "reason": "approved_imported_activated" if activation_result and activation_result.get("ok") else "approved_imported",
+         "pending_id": pending_id,
+         "import_result": import_result,
++        "activation_result": activation_result,
+     }
+*** End Patch
+6. Patch src/app/rpg/story_authoring/inspector.py
+
+Add auto_activate option through inspector approval wrapper.
+
+*** Begin Patch
+*** Update File: src/app/rpg/story_authoring/inspector.py
+@@
+ def approve_story_authoring_inspector_proposal(
+     simulation_state: Dict[str, Any],
+     *,
+     pending_id: str,
+     turn_index: int = 0,
+     reason: str = "gm_approved",
++    auto_activate: bool = False,
+ ) -> Dict[str, Any]:
+     approve_result = approve_story_proposal(
+         simulation_state,
+         pending_id=pending_id,
+         turn_index=turn_index,
+         reason=reason,
++        auto_activate=auto_activate,
+     )
+*** End Patch
+Patch 4 — API endpoints for activation
+7. Patch src/app/rpg/api/story_authoring.py
+
+Add imports:
+
 *** Begin Patch
 *** Update File: src/app/rpg/api/story_authoring.py
 @@
- from app.rpg.story_authoring.approval import (
-     approve_story_proposal,
-     draft_story_proposal_for_approval,
-     list_pending_story_proposals,
-     reject_story_proposal,
+ from app.rpg.story_authoring.inspector import (
+     approve_story_authoring_inspector_proposal,
+     build_story_authoring_inspector_payload,
+     draft_story_authoring_inspector_proposal,
+     reject_story_authoring_inspector_proposal,
  )
-+from app.rpg.story_authoring.inspector import (
-+    approve_story_authoring_inspector_proposal,
-+    build_story_authoring_inspector_payload,
-+    draft_story_authoring_inspector_proposal,
-+    reject_story_authoring_inspector_proposal,
++from app.rpg.story_packs.activation import (
++    activate_story_pack,
++    build_story_pack_activation_snapshot,
++    deactivate_story_pack,
 +)
-@@
- @router.post("/pending")
- def pending_story_authoring_proposals(request: StoryAuthoringListRequest) -> Dict[str, Any]:
-     simulation_state = _simulation_state_for_session(request.session_id)
-     return list_pending_story_proposals(simulation_state, limit=request.limit)
-+
-+
-+@router.post("/inspector")
-+def story_authoring_inspector(request: StoryAuthoringListRequest) -> Dict[str, Any]:
-+    simulation_state = _simulation_state_for_session(request.session_id)
-+    return build_story_authoring_inspector_payload(simulation_state, limit=request.limit)
-+
-+
-+@router.post("/inspector/draft")
-+def draft_story_authoring_inspector(request: StoryAuthoringDraftRequest) -> Dict[str, Any]:
-+    simulation_state = _simulation_state_for_session(request.session_id)
-+    return draft_story_authoring_inspector_proposal(
-+        simulation_state,
-+        authoring_goal=request.authoring_goal,
-+        app_context=_AppContext(),
-+        turn_index=request.turn_index,
-+        llm_text_override=request.llm_text_override,
-+        repair_once=request.repair_once,
-+    )
-+
-+
-+@router.post("/inspector/approve")
-+def approve_story_authoring_inspector(request: StoryAuthoringApprovalRequest) -> Dict[str, Any]:
-+    simulation_state = _simulation_state_for_session(request.session_id)
-+    return approve_story_authoring_inspector_proposal(
-+        simulation_state,
-+        pending_id=request.pending_id,
-+        turn_index=request.turn_index,
-+        reason=request.reason or "gm_approved",
-+    )
-+
-+
-+@router.post("/inspector/reject")
-+def reject_story_authoring_inspector(request: StoryAuthoringApprovalRequest) -> Dict[str, Any]:
-+    simulation_state = _simulation_state_for_session(request.session_id)
-+    return reject_story_authoring_inspector_proposal(
-+        simulation_state,
-+        pending_id=request.pending_id,
-+        turn_index=request.turn_index,
-+        reason=request.reason or "gm_rejected",
-+    )
 *** End Patch
 
-If src/app/rpg/api/story_authoring.py does not exist, use the M37-M39 file and include the /inspector* endpoints above.
-
-Patch 3 — Legacy UI panel
-
-This assumes the active legacy UI files are under src/static. If your current active RPG UI file is different, apply the same JS/CSS additions to the active bundle loaded by the RPG page.
-
-4. Patch src/static/rpg.js
-
-Add this helper block near other RPG inspector/debug helpers:
+Add request model:
 
 *** Begin Patch
-*** Update File: src/static/rpg.js
+*** Update File: src/app/rpg/api/story_authoring.py
 @@
-+// ---------------------------------------------------------------------------
-+// Story Authoring Inspector / GM Approval Panel
-+// ---------------------------------------------------------------------------
+ class StoryAuthoringApprovalRequest(BaseModel):
+     session_id: str
+     pending_id: str
+     turn_index: int = 0
+     reason: str = ""
++    auto_activate: bool = False
 +
-+function rpgGetSessionIdForStoryAuthoring() {
-+    if (window.RPG_SESSION_ID) return window.RPG_SESSION_ID;
-+    if (window.rpgSessionId) return window.rpgSessionId;
-+    const input = document.querySelector('[name="session_id"], #session_id, #rpg-session-id');
-+    if (input && input.value) return input.value;
-+    return "";
-+}
 +
-+function rpgEscapeHtml(value) {
-+    return String(value ?? "")
-+        .replace(/&/g, "&amp;")
-+        .replace(/</g, "&lt;")
-+        .replace(/>/g, "&gt;")
-+        .replace(/"/g, "&quot;")
-+        .replace(/'/g, "&#039;");
-+}
++class StoryPackActivationRequest(BaseModel):
++    session_id: str
++    pack_id: str
++    turn_index: int = 0
++    reason: str = ""
 +
-+function ensureStoryAuthoringInspectorPanel() {
-+    let panel = document.getElementById("story-authoring-inspector-panel");
-+    if (panel) return panel;
 +
-+    const host =
-+        document.getElementById("rpg-inspector-panel") ||
-+        document.getElementById("rpg-debug-panel") ||
-+        document.getElementById("rpg-top-panels") ||
-+        document.body;
-+
-+    panel = document.createElement("section");
-+    panel.id = "story-authoring-inspector-panel";
-+    panel.className = "story-authoring-inspector-panel";
-+    panel.innerHTML = `
-+        <div class="story-authoring-header">
-+            <div>
-+                <h3>Story Authoring</h3>
-+                <div class="story-authoring-subtitle">GM approval queue</div>
-+            </div>
-+            <button type="button" id="story-authoring-refresh-btn">Refresh</button>
-+        </div>
-+        <div class="story-authoring-draft-row">
-+            <input id="story-authoring-goal-input" type="text" placeholder="Draft a grounded story pack..." />
-+            <button type="button" id="story-authoring-draft-btn">Draft</button>
-+        </div>
-+        <div id="story-authoring-status" class="story-authoring-status"></div>
-+        <div id="story-authoring-pending-list" class="story-authoring-pending-list"></div>
-+        <details class="story-authoring-history-wrap">
-+            <summary>Approval history</summary>
-+            <div id="story-authoring-history-list"></div>
-+        </details>
-+    `;
-+    host.appendChild(panel);
-+
-+    document.getElementById("story-authoring-refresh-btn")?.addEventListener("click", () => {
-+        refreshStoryAuthoringInspector();
-+    });
-+    document.getElementById("story-authoring-draft-btn")?.addEventListener("click", () => {
-+        draftStoryAuthoringProposalFromUI();
-+    });
-+
-+    return panel;
-+}
-+
-+function setStoryAuthoringStatus(message, isError = false) {
-+    const el = document.getElementById("story-authoring-status");
-+    if (!el) return;
-+    el.textContent = message || "";
-+    el.classList.toggle("error", Boolean(isError));
-+}
-+
-+async function postStoryAuthoring(endpoint, payload) {
-+    const response = await fetch(endpoint, {
-+        method: "POST",
-+        headers: {"Content-Type": "application/json"},
-+        body: JSON.stringify(payload),
-+    });
-+    const text = await response.text();
-+    let data = {};
-+    try {
-+        data = text ? JSON.parse(text) : {};
-+    } catch (err) {
-+        throw new Error(`Invalid JSON from ${endpoint}: ${text.slice(0, 200)}`);
-+    }
-+    if (!response.ok) {
-+        throw new Error(data?.detail || data?.error || data?.reason || `HTTP ${response.status}`);
-+    }
-+    return data;
-+}
-+
-+function renderStoryAuthoringInspector(payload) {
-+    ensureStoryAuthoringInspectorPanel();
-+    const pendingList = document.getElementById("story-authoring-pending-list");
-+    const historyList = document.getElementById("story-authoring-history-list");
-+    if (!pendingList || !historyList) return;
-+
-+    const pending = Array.isArray(payload?.pending) ? payload.pending : [];
-+    if (!pending.length) {
-+        pendingList.innerHTML = `<div class="story-authoring-empty">No pending authored proposals.</div>`;
-+    } else {
-+        pendingList.innerHTML = pending.map((item) => {
-+            const summary = item.proposal_summary || {};
-+            const counts = summary.counts || {};
-+            const lore = Array.isArray(summary.lore_entries) ? summary.lore_entries : [];
-+            const arcs = Array.isArray(summary.story_arcs) ? summary.story_arcs : [];
-+            const events = Array.isArray(summary.story_events) ? summary.story_events : [];
-+            const rules = Array.isArray(summary.escalation_rules) ? summary.escalation_rules : [];
-+            return `
-+                <article class="story-authoring-card" data-pending-id="${rpgEscapeHtml(item.pending_id)}">
-+                    <div class="story-authoring-card-title">${rpgEscapeHtml(item.title || item.proposal_id)}</div>
-+                    <div class="story-authoring-meta">
-+                        <span>${rpgEscapeHtml(item.proposal_id)}</span>
-+                        <span>turn ${rpgEscapeHtml(item.turn_index)}</span>
-+                        <span>${item.validation_ok ? "valid" : "invalid"}</span>
-+                    </div>
-+                    <div class="story-authoring-goal">${rpgEscapeHtml(item.authoring_goal)}</div>
-+                    <div class="story-authoring-counts">
-+                        <span>Lore ${rpgEscapeHtml(counts.lore_entries || 0)}</span>
-+                        <span>Arcs ${rpgEscapeHtml(counts.story_arcs || 0)}</span>
-+                        <span>Events ${rpgEscapeHtml(counts.story_events || 0)}</span>
-+                        <span>Rules ${rpgEscapeHtml(counts.escalation_rules || 0)}</span>
-+                    </div>
-+                    <details>
-+                        <summary>Preview proposal</summary>
-+                        <div class="story-authoring-preview-block">
-+                            <strong>Lore</strong>
-+                            ${lore.map(row => `<div>${rpgEscapeHtml(row.lore_id)} — ${rpgEscapeHtml(row.title)} (${rpgEscapeHtml(row.truth_status)})</div>`).join("") || "<div>None</div>"}
-+                        </div>
-+                        <div class="story-authoring-preview-block">
-+                            <strong>Arcs</strong>
-+                            ${arcs.map(row => `<div>${rpgEscapeHtml(row.arc_id)} — ${rpgEscapeHtml(row.title)} / ${rpgEscapeHtml(row.stage)}</div>`).join("") || "<div>None</div>"}
-+                        </div>
-+                        <div class="story-authoring-preview-block">
-+                            <strong>Events</strong>
-+                            ${events.map(row => `<div>${rpgEscapeHtml(row.event_id)} — ${rpgEscapeHtml(row.summary)}</div>`).join("") || "<div>None</div>"}
-+                        </div>
-+                        <div class="story-authoring-preview-block">
-+                            <strong>Rules</strong>
-+                            ${rules.map(row => `<div>${rpgEscapeHtml(row.rule_id)} — priority ${rpgEscapeHtml(row.priority)}</div>`).join("") || "<div>None</div>"}
-+                        </div>
-+                    </details>
-+                    <div class="story-authoring-actions">
-+                        <button type="button" data-story-authoring-action="approve" data-pending-id="${rpgEscapeHtml(item.pending_id)}">Approve</button>
-+                        <button type="button" data-story-authoring-action="reject" data-pending-id="${rpgEscapeHtml(item.pending_id)}">Reject</button>
-+                    </div>
-+                </article>
-+            `;
-+        }).join("");
-+    }
-+
-+    const history = Array.isArray(payload?.history) ? payload.history : [];
-+    historyList.innerHTML = history.length
-+        ? history.map(row => `
-+            <div class="story-authoring-history-item">
-+                <span>${rpgEscapeHtml(row.status)}</span>
-+                <span>${rpgEscapeHtml(row.pending_id)}</span>
-+                <span>${rpgEscapeHtml(row.reason)}</span>
-+                <span>${rpgEscapeHtml(row.imported_pack_id || "")}</span>
-+            </div>
-+        `).join("")
-+        : `<div class="story-authoring-empty">No approval history yet.</div>`;
-+
-+    pendingList.querySelectorAll("[data-story-authoring-action]").forEach((button) => {
-+        button.addEventListener("click", async () => {
-+            const action = button.getAttribute("data-story-authoring-action");
-+            const pendingId = button.getAttribute("data-pending-id");
-+            if (action === "approve") {
-+                await approveStoryAuthoringProposalFromUI(pendingId);
-+            } else if (action === "reject") {
-+                const reason = window.prompt("Reject reason?", "gm_rejected") || "gm_rejected";
-+                await rejectStoryAuthoringProposalFromUI(pendingId, reason);
-+            }
-+        });
-+    });
-+}
-+
-+async function refreshStoryAuthoringInspector() {
-+    ensureStoryAuthoringInspectorPanel();
-+    const sessionId = rpgGetSessionIdForStoryAuthoring();
-+    if (!sessionId) {
-+        setStoryAuthoringStatus("No RPG session id available.", true);
-+        return;
-+    }
-+    setStoryAuthoringStatus("Loading story authoring queue...");
-+    try {
-+        const payload = await postStoryAuthoring("/api/rpg/story_authoring/inspector", {
-+            session_id: sessionId,
-+            limit: 20,
-+        });
-+        renderStoryAuthoringInspector(payload);
-+        setStoryAuthoringStatus(`Pending proposals: ${payload.pending_count || 0}`);
-+    } catch (err) {
-+        console.error("[RPG][story-authoring] refresh failed", err);
-+        setStoryAuthoringStatus(String(err.message || err), true);
-+    }
-+}
-+
-+async function draftStoryAuthoringProposalFromUI() {
-+    const sessionId = rpgGetSessionIdForStoryAuthoring();
-+    const input = document.getElementById("story-authoring-goal-input");
-+    const authoringGoal = input?.value?.trim() || "Draft a grounded story pack.";
-+    if (!sessionId) {
-+        setStoryAuthoringStatus("No RPG session id available.", true);
-+        return;
-+    }
-+    setStoryAuthoringStatus("Drafting story proposal...");
-+    try {
-+        const payload = await postStoryAuthoring("/api/rpg/story_authoring/inspector/draft", {
-+            session_id: sessionId,
-+            authoring_goal: authoringGoal,
-+            turn_index: 0,
-+            repair_once: true,
-+        });
-+        renderStoryAuthoringInspector(payload.inspector || payload);
-+        setStoryAuthoringStatus(payload.ok ? "Draft queued for GM approval." : `Draft failed: ${payload.reason}`);
-+    } catch (err) {
-+        console.error("[RPG][story-authoring] draft failed", err);
-+        setStoryAuthoringStatus(String(err.message || err), true);
-+    }
-+}
-+
-+async function approveStoryAuthoringProposalFromUI(pendingId) {
-+    const sessionId = rpgGetSessionIdForStoryAuthoring();
-+    setStoryAuthoringStatus("Approving story proposal...");
-+    try {
-+        const payload = await postStoryAuthoring("/api/rpg/story_authoring/inspector/approve", {
-+            session_id: sessionId,
-+            pending_id: pendingId,
-+            turn_index: 0,
-+            reason: "gm_approved",
-+        });
-+        renderStoryAuthoringInspector(payload.inspector || payload);
-+        setStoryAuthoringStatus(payload.ok ? "Approved and imported." : `Approval failed: ${payload.reason}`);
-+    } catch (err) {
-+        console.error("[RPG][story-authoring] approve failed", err);
-+        setStoryAuthoringStatus(String(err.message || err), true);
-+    }
-+}
-+
-+async function rejectStoryAuthoringProposalFromUI(pendingId, reason) {
-+    const sessionId = rpgGetSessionIdForStoryAuthoring();
-+    setStoryAuthoringStatus("Rejecting story proposal...");
-+    try {
-+        const payload = await postStoryAuthoring("/api/rpg/story_authoring/inspector/reject", {
-+            session_id: sessionId,
-+            pending_id: pendingId,
-+            turn_index: 0,
-+            reason: reason || "gm_rejected",
-+        });
-+        renderStoryAuthoringInspector(payload.inspector || payload);
-+        setStoryAuthoringStatus(payload.ok ? "Rejected." : `Rejection failed: ${payload.reason}`);
-+    } catch (err) {
-+        console.error("[RPG][story-authoring] reject failed", err);
-+        setStoryAuthoringStatus(String(err.message || err), true);
-+    }
-+}
-+
-+window.refreshStoryAuthoringInspector = refreshStoryAuthoringInspector;
-+window.renderStoryAuthoringInspector = renderStoryAuthoringInspector;
-+
-+document.addEventListener("DOMContentLoaded", () => {
-+    ensureStoryAuthoringInspectorPanel();
-+    refreshStoryAuthoringInspector();
-+});
++class StoryPackActivationListRequest(BaseModel):
++    session_id: str
++    limit: int = Field(default=20, ge=0, le=50)
 *** End Patch
 
-If this creates duplicate helper names already present in your UI, rename only the helper functions with the storyAuthoring prefix and keep endpoint behavior identical.
+Patch approve endpoints to pass auto_activate:
 
-5. Patch src/static/rpg.css
 *** Begin Patch
-*** Update File: src/static/rpg.css
+*** Update File: src/app/rpg/api/story_authoring.py
 @@
-+.story-authoring-inspector-panel {
-+    border: 1px solid rgba(255, 255, 255, 0.14);
-+    border-radius: 12px;
-+    padding: 12px;
-+    margin: 10px 0;
-+    background: rgba(8, 10, 18, 0.72);
-+    color: #f2efe7;
-+    max-height: 520px;
-+    overflow: auto;
-+}
-+
-+.story-authoring-header {
-+    display: flex;
-+    justify-content: space-between;
-+    gap: 10px;
-+    align-items: center;
-+    margin-bottom: 10px;
-+}
-+
-+.story-authoring-header h3 {
-+    margin: 0;
-+    font-size: 16px;
-+}
-+
-+.story-authoring-subtitle,
-+.story-authoring-meta,
-+.story-authoring-status,
-+.story-authoring-goal {
-+    color: rgba(242, 239, 231, 0.72);
-+    font-size: 12px;
-+}
-+
-+.story-authoring-status.error {
-+    color: #ff9b9b;
-+}
-+
-+.story-authoring-draft-row {
-+    display: flex;
-+    gap: 8px;
-+    margin-bottom: 10px;
-+}
-+
-+.story-authoring-draft-row input {
-+    flex: 1;
-+    min-width: 0;
-+    border-radius: 8px;
-+    border: 1px solid rgba(255, 255, 255, 0.14);
-+    background: rgba(255, 255, 255, 0.06);
-+    color: #f2efe7;
-+    padding: 8px;
-+}
-+
-+.story-authoring-inspector-panel button {
-+    border-radius: 8px;
-+    border: 1px solid rgba(255, 255, 255, 0.18);
-+    background: rgba(255, 255, 255, 0.10);
-+    color: #f2efe7;
-+    padding: 7px 10px;
-+    cursor: pointer;
-+}
-+
-+.story-authoring-inspector-panel button:hover {
-+    background: rgba(255, 255, 255, 0.18);
-+}
-+
-+.story-authoring-pending-list {
-+    display: grid;
-+    gap: 10px;
-+}
-+
-+.story-authoring-card {
-+    border: 1px solid rgba(255, 255, 255, 0.12);
-+    border-radius: 10px;
-+    padding: 10px;
-+    background: rgba(255, 255, 255, 0.045);
-+}
-+
-+.story-authoring-card-title {
-+    font-weight: 700;
-+    margin-bottom: 4px;
-+}
-+
-+.story-authoring-meta,
-+.story-authoring-counts,
-+.story-authoring-actions {
-+    display: flex;
-+    flex-wrap: wrap;
-+    gap: 8px;
-+    margin: 6px 0;
-+}
-+
-+.story-authoring-counts span {
-+    border-radius: 999px;
-+    background: rgba(255, 255, 255, 0.08);
-+    padding: 2px 8px;
-+    font-size: 12px;
-+}
-+
-+.story-authoring-preview-block {
-+    margin-top: 8px;
-+    padding: 8px;
-+    border-radius: 8px;
-+    background: rgba(0, 0, 0, 0.18);
-+    font-size: 12px;
-+}
-+
-+.story-authoring-empty {
-+    color: rgba(242, 239, 231, 0.62);
-+    font-size: 12px;
-+    padding: 8px;
-+}
-+
-+.story-authoring-history-wrap {
-+    margin-top: 10px;
-+}
-+
-+.story-authoring-history-item {
-+    display: grid;
-+    grid-template-columns: 90px 1fr 1fr 1fr;
-+    gap: 8px;
-+    padding: 6px 0;
-+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-+    font-size: 12px;
-+}
+ def approve_story_authoring_proposal(request: StoryAuthoringApprovalRequest) -> Dict[str, Any]:
+@@
+         pending_id=request.pending_id,
+         turn_index=request.turn_index,
+         reason=request.reason or "gm_approved",
++        auto_activate=request.auto_activate,
+     )
+@@
+ def approve_story_authoring_inspector(request: StoryAuthoringApprovalRequest) -> Dict[str, Any]:
+@@
+         pending_id=request.pending_id,
+         turn_index=request.turn_index,
+         reason=request.reason or "gm_approved",
++        auto_activate=request.auto_activate,
+     )
 *** End Patch
 
-If your UI uses another stylesheet, place this in the stylesheet actually loaded by the RPG page.
+Add activation endpoints:
 
-Patch 4 — Unit tests
-6. Add src/tests/rpg/story_authoring/test_story_authoring_inspector.py
 *** Begin Patch
-*** Add File: src/tests/rpg/story_authoring/test_story_authoring_inspector.py
-+import json
+*** Update File: src/app/rpg/api/story_authoring.py
+@@
+ @router.post("/inspector/reject")
+ def reject_story_authoring_inspector(request: StoryAuthoringApprovalRequest) -> Dict[str, Any]:
+@@
+     return reject_story_authoring_inspector_proposal(
+         simulation_state,
+         pending_id=request.pending_id,
+         turn_index=request.turn_index,
+         reason=request.reason or "gm_rejected",
+     )
 +
-+from app.rpg.story_authoring.approval import draft_story_proposal_for_approval
-+from app.rpg.story_authoring.inspector import (
-+    approve_story_authoring_inspector_proposal,
-+    build_story_authoring_inspector_payload,
-+    draft_story_authoring_inspector_proposal,
-+    reject_story_authoring_inspector_proposal,
++
++@router.post("/packs/activation")
++def story_pack_activation_snapshot(request: StoryPackActivationListRequest) -> Dict[str, Any]:
++    simulation_state = _simulation_state_for_session(request.session_id)
++    return build_story_pack_activation_snapshot(simulation_state, limit=request.limit)
++
++
++@router.post("/packs/activate")
++def activate_imported_story_pack(request: StoryPackActivationRequest) -> Dict[str, Any]:
++    simulation_state = _simulation_state_for_session(request.session_id)
++    result = activate_story_pack(
++        simulation_state,
++        request.pack_id,
++        turn_index=request.turn_index,
++        reason=request.reason or "gm_activated",
++    )
++    return {
++        **result,
++        "activation": build_story_pack_activation_snapshot(simulation_state),
++    }
++
++
++@router.post("/packs/deactivate")
++def deactivate_imported_story_pack(request: StoryPackActivationRequest) -> Dict[str, Any]:
++    simulation_state = _simulation_state_for_session(request.session_id)
++    result = deactivate_story_pack(
++        simulation_state,
++        request.pack_id,
++        turn_index=request.turn_index,
++        reason=request.reason or "gm_deactivated",
++    )
++    return {
++        **result,
++        "activation": build_story_pack_activation_snapshot(simulation_state),
++    }
+*** End Patch
+Patch 5 — Inspector payload includes activation snapshot
+8. Patch src/app/rpg/story_authoring/inspector.py
+
+Add import:
+
+*** Begin Patch
+*** Update File: src/app/rpg/story_authoring/inspector.py
+@@
+ from app.rpg.story_authoring.approval import (
+@@
+ )
++from app.rpg.story_packs.activation import build_story_pack_activation_snapshot
+*** End Patch
+
+Add activation snapshot to inspector payload:
+
+*** Begin Patch
+*** Update File: src/app/rpg/story_authoring/inspector.py
+@@
+     return {
+         "ok": True,
+         "format_version": "story_authoring_inspector_v1",
+         "pending_count": int(listing.get("pending_count") or 0),
+         "pending": pending,
+         "history": history,
++        "story_pack_activation": build_story_pack_activation_snapshot(simulation_state, limit=limit),
+         "actions": {
+             "draft": "/api/rpg/story_authoring/draft",
+             "pending": "/api/rpg/story_authoring/pending",
+             "approve": "/api/rpg/story_authoring/approve",
+             "reject": "/api/rpg/story_authoring/reject",
++            "activate_pack": "/api/rpg/story_authoring/packs/activate",
++            "deactivate_pack": "/api/rpg/story_authoring/packs/deactivate",
+         },
+*** End Patch
+Patch 6 — Unit tests
+9. Add src/tests/rpg/story_packs/test_story_pack_activation.py
+*** Begin Patch
+*** Add File: src/tests/rpg/story_packs/test_story_pack_activation.py
++from app.rpg.story_packs.activation import (
++    activate_story_pack,
++    build_story_pack_activation_snapshot,
++    deactivate_story_pack,
++    is_story_pack_active,
++    list_active_story_pack_ids,
 +)
-+from app.rpg.story_packs.registry import get_imported_story_pack
++from app.rpg.story_packs.importer import import_story_pack
 +
 +
-+def _valid_pack(proposal_id: str = "inspector_bandit_pack"):
++def _pack():
 +    return {
 +        "proposal_version": "story_proposal_v1",
 +        "proposal_type": "story_pack",
-+        "proposal_id": proposal_id,
-+        "title": "Inspector Bandit Pack",
-+        "lore_entries": [
-+            {"lore_id": f"lore:{proposal_id}", "title": "Inspector Lore", "truth_status": "rumor"}
-+        ],
++        "proposal_id": "activation_pack",
++        "title": "Activation Pack",
++        "lore_entries": [{"lore_id": "lore:activation", "title": "Activation", "truth_status": "rumor"}],
 +        "story_arcs": [
 +            {
-+                "arc_id": f"arc:{proposal_id}",
-+                "title": "Inspector Arc",
++                "arc_id": "arc:activation",
++                "title": "Activation",
 +                "status": "active",
 +                "stage": "rumors",
-+                "pressure": 10,
-+                "linked_lore": [f"lore:{proposal_id}"],
++                "pressure": 60,
++                "linked_lore": ["lore:activation"],
 +            }
 +        ],
 +        "story_events": [],
@@ -796,113 +732,266 @@ Patch 4 — Unit tests
 +    }
 +
 +
-+def test_story_authoring_inspector_payload_lists_pending_summary_without_import():
++def test_imported_story_pack_starts_inactive():
 +    simulation_state = {}
-+    draft_story_proposal_for_approval(
-+        simulation_state,
-+        authoring_goal="Draft inspector pack.",
-+        llm_text_override=json.dumps(_valid_pack()),
-+        turn_index=1,
-+    )
-+
-+    payload = build_story_authoring_inspector_payload(simulation_state)
-+
-+    assert payload["ok"] is True
-+    assert payload["format_version"] == "story_authoring_inspector_v1"
-+    assert payload["pending_count"] == 1
-+    assert payload["pending"][0]["proposal_id"] == "inspector_bandit_pack"
-+    assert payload["pending"][0]["proposal_summary"]["counts"]["lore_entries"] == 1
-+    assert "story_pack_state" not in simulation_state
-+
-+
-+def test_story_authoring_inspector_draft_wrapper_returns_updated_payload():
-+    simulation_state = {}
-+
-+    result = draft_story_authoring_inspector_proposal(
-+        simulation_state,
-+        authoring_goal="Draft inspector pack.",
-+        llm_text_override=json.dumps(_valid_pack()),
-+        turn_index=1,
-+    )
++    result = import_story_pack(simulation_state, _pack(), turn_index=1)
 +
 +    assert result["ok"] is True
-+    assert result["inspector"]["pending_count"] == 1
++    assert is_story_pack_active(simulation_state, result["pack_id"]) is False
 +
 +
-+def test_story_authoring_inspector_approve_imports_and_refreshes_payload():
++def test_activate_and_deactivate_story_pack():
 +    simulation_state = {}
-+    draft = draft_story_proposal_for_approval(
-+        simulation_state,
-+        authoring_goal="Draft inspector pack.",
-+        llm_text_override=json.dumps(_valid_pack()),
-+        turn_index=1,
-+    )
++    imported = import_story_pack(simulation_state, _pack(), turn_index=1)
 +
-+    result = approve_story_authoring_inspector_proposal(
-+        simulation_state,
-+        pending_id=draft["pending_id"],
-+        turn_index=2,
-+    )
++    activated = activate_story_pack(simulation_state, imported["pack_id"], turn_index=2)
++    deactivated = deactivate_story_pack(simulation_state, imported["pack_id"], turn_index=3)
 +
-+    assert result["ok"] is True
-+    assert result["reason"] == "approved_imported"
-+    assert result["inspector"]["pending_count"] == 0
-+    assert get_imported_story_pack(simulation_state, "storypack:inspector_bandit_pack") is not None
++    assert activated["ok"] is True
++    assert activated["reason"] == "activated"
++    assert deactivated["ok"] is True
++    assert deactivated["reason"] == "deactivated"
++    assert is_story_pack_active(simulation_state, imported["pack_id"]) is False
 +
 +
-+def test_story_authoring_inspector_reject_removes_pending_without_import():
++def test_activate_missing_story_pack_rejected():
++    result = activate_story_pack({}, "storypack:missing", turn_index=1)
++
++    assert result["ok"] is False
++    assert result["reason"] == "story_pack_not_imported"
++
++
++def test_list_active_story_pack_ids():
 +    simulation_state = {}
-+    draft = draft_story_proposal_for_approval(
-+        simulation_state,
-+        authoring_goal="Draft inspector reject pack.",
-+        llm_text_override=json.dumps(_valid_pack("inspector_reject_pack")),
-+        turn_index=1,
-+    )
++    imported = import_story_pack(simulation_state, _pack(), turn_index=1)
++    activate_story_pack(simulation_state, imported["pack_id"], turn_index=2)
 +
-+    result = reject_story_authoring_inspector_proposal(
-+        simulation_state,
-+        pending_id=draft["pending_id"],
-+        turn_index=2,
-+        reason="not now",
-+    )
-+
-+    assert result["ok"] is True
-+    assert result["reason"] == "rejected"
-+    assert result["inspector"]["pending_count"] == 0
-+    assert get_imported_story_pack(simulation_state, "storypack:inspector_reject_pack") is None
++    assert list_active_story_pack_ids(simulation_state) == [imported["pack_id"]]
 +
 +
-+def test_story_authoring_inspector_payload_is_bounded():
++def test_story_pack_activation_snapshot_lists_status():
 +    simulation_state = {}
-+    for i in range(70):
-+        draft_story_proposal_for_approval(
-+            simulation_state,
-+            authoring_goal=f"Draft inspector pack {i}.",
-+            llm_text_override=json.dumps(_valid_pack(f"inspector_pack_{i}")),
-+            turn_index=i,
-+        )
++    imported = import_story_pack(simulation_state, _pack(), turn_index=1)
 +
-+    payload = build_story_authoring_inspector_payload(simulation_state, limit=20)
++    snapshot = build_story_pack_activation_snapshot(simulation_state)
 +
-+    assert len(payload["pending"]) <= 20
-+    assert payload["bounded"]["max_pending"] == 20
++    assert snapshot["ok"] is True
++    assert snapshot["packs"][0]["pack_id"] == imported["pack_id"]
++    assert snapshot["packs"][0]["status"] == "inactive"
 *** End Patch
-Patch 5 — Manual checks/setup
-7. Add src/tests/rpg/manual/story_authoring_inspector_m40_m42_checks.py
+10. Add src/tests/rpg/campaign_director/test_campaign_director_active_packs.py
 *** Begin Patch
-*** Add File: src/tests/rpg/manual/story_authoring_inspector_m40_m42_checks.py
+*** Add File: src/tests/rpg/campaign_director/test_campaign_director_active_packs.py
++from app.rpg.campaign_director.runtime import (
++    apply_campaign_director_tick,
++    evaluate_campaign_director_tick,
++)
++from app.rpg.story_arcs.state import get_story_arc
++from app.rpg.story_packs.activation import activate_story_pack, deactivate_story_pack
++from app.rpg.story_packs.importer import import_story_pack
++
++
++def _pack():
++    return {
++        "proposal_version": "story_proposal_v1",
++        "proposal_type": "story_pack",
++        "proposal_id": "director_activation_pack",
++        "title": "Director Activation Pack",
++        "lore_entries": [{"lore_id": "lore:director_activation", "title": "Director Activation", "truth_status": "rumor"}],
++        "story_arcs": [
++            {
++                "arc_id": "arc:director_activation",
++                "title": "Director Activation",
++                "status": "active",
++                "stage": "rumors",
++                "pressure": 60,
++                "linked_lore": ["lore:director_activation"],
++            }
++        ],
++        "story_events": [
++            {
++                "event_id": "event:director_activation",
++                "arc_id": "arc:director_activation",
++                "kind": "consequence",
++                "summary": "The active story pack escalated.",
++                "effects": [
++                    {"type": "arc_stage_set", "arc_id": "arc:director_activation", "stage": "active_escalation"}
++                ],
++            }
++        ],
++        "escalation_rules": [
++            {
++                "rule_id": "rule:director_activation",
++                "arc_id": "arc:director_activation",
++                "priority": 90,
++                "conditions": [
++                    {"type": "arc_pressure_at_least", "arc_id": "arc:director_activation", "minimum": 50},
++                    {"type": "arc_stage", "arc_id": "arc:director_activation", "stage": "rumors"},
++                ],
++                "event": {"event_id": "event:director_activation", "arc_id": "arc:director_activation", "effects": []},
++                "max_applications": 1,
++            }
++        ],
++    }
++
++
++def test_campaign_director_ignores_inactive_imported_pack_rules():
++    simulation_state = {}
++    import_story_pack(simulation_state, _pack(), turn_index=1)
++
++    result = evaluate_campaign_director_tick(simulation_state, mode="idle", turn_index=2)
++
++    assert result["ok"] is True
++    assert result["eligible_count"] == 0
++    assert result["registered_rule_count"] == 0
++
++
++def test_campaign_director_uses_active_pack_rules():
++    simulation_state = {}
++    imported = import_story_pack(simulation_state, _pack(), turn_index=1)
++    activate_story_pack(simulation_state, imported["pack_id"], turn_index=2)
++
++    result = evaluate_campaign_director_tick(simulation_state, mode="idle", turn_index=3)
++
++    assert result["eligible_count"] == 1
++    assert result["registered_rule_count"] == 1
++
++
++def test_campaign_director_applies_active_pack_event():
++    simulation_state = {}
++    imported = import_story_pack(simulation_state, _pack(), turn_index=1)
++    activate_story_pack(simulation_state, imported["pack_id"], turn_index=2)
++
++    result = apply_campaign_director_tick(simulation_state, mode="idle", turn_index=3)
++
++    assert result["applied_count"] == 1
++    assert get_story_arc(simulation_state, "arc:director_activation")["stage"] == "active_escalation"
++
++
++def test_campaign_director_stops_after_pack_deactivation():
++    simulation_state = {}
++    imported = import_story_pack(simulation_state, _pack(), turn_index=1)
++    activate_story_pack(simulation_state, imported["pack_id"], turn_index=2)
++    deactivate_story_pack(simulation_state, imported["pack_id"], turn_index=3)
++
++    result = evaluate_campaign_director_tick(simulation_state, mode="idle", turn_index=4)
++
++    assert result["eligible_count"] == 0
++    assert result["registered_rule_count"] == 0
+*** End Patch
+11. Add src/tests/rpg/story_authoring/test_story_authoring_activation_bridge.py
+*** Begin Patch
+*** Add File: src/tests/rpg/story_authoring/test_story_authoring_activation_bridge.py
++import json
++
++from app.rpg.campaign_director.runtime import evaluate_campaign_director_tick
++from app.rpg.story_authoring.approval import (
++    approve_story_proposal,
++    draft_story_proposal_for_approval,
++)
++from app.rpg.story_packs.activation import is_story_pack_active
++
++
++def _pack():
++    return {
++        "proposal_version": "story_proposal_v1",
++        "proposal_type": "story_pack",
++        "proposal_id": "approval_activation_pack",
++        "title": "Approval Activation Pack",
++        "lore_entries": [{"lore_id": "lore:approval_activation", "title": "Approval Activation", "truth_status": "rumor"}],
++        "story_arcs": [
++            {
++                "arc_id": "arc:approval_activation",
++                "title": "Approval Activation",
++                "status": "active",
++                "stage": "rumors",
++                "pressure": 60,
++                "linked_lore": ["lore:approval_activation"],
++            }
++        ],
++        "story_events": [
++            {
++                "event_id": "event:approval_activation",
++                "arc_id": "arc:approval_activation",
++                "kind": "consequence",
++                "summary": "Approval activated pack escalated.",
++                "effects": [],
++            }
++        ],
++        "escalation_rules": [
++            {
++                "rule_id": "rule:approval_activation",
++                "arc_id": "arc:approval_activation",
++                "priority": 90,
++                "conditions": [
++                    {"type": "arc_pressure_at_least", "arc_id": "arc:approval_activation", "minimum": 50}
++                ],
++                "event": {"event_id": "event:approval_activation", "arc_id": "arc:approval_activation", "effects": []},
++            }
++        ],
++    }
++
++
++def test_approve_without_auto_activate_imports_but_director_ignores():
++    simulation_state = {}
++    draft = draft_story_proposal_for_approval(
++        simulation_state,
++        authoring_goal="Draft activation pack.",
++        llm_text_override=json.dumps(_pack()),
++        turn_index=1,
++    )
++    approved = approve_story_proposal(
++        simulation_state,
++        pending_id=draft["pending_id"],
++        turn_index=2,
++        auto_activate=False,
++    )
++    evaluation = evaluate_campaign_director_tick(simulation_state, mode="idle", turn_index=3)
++
++    assert approved["ok"] is True
++    assert is_story_pack_active(simulation_state, "storypack:approval_activation_pack") is False
++    assert evaluation["eligible_count"] == 0
++
++
++def test_approve_with_auto_activate_bridges_to_director():
++    simulation_state = {}
++    draft = draft_story_proposal_for_approval(
++        simulation_state,
++        authoring_goal="Draft activation pack.",
++        llm_text_override=json.dumps(_pack()),
++        turn_index=1,
++    )
++    approved = approve_story_proposal(
++        simulation_state,
++        pending_id=draft["pending_id"],
++        turn_index=2,
++        auto_activate=True,
++    )
++    evaluation = evaluate_campaign_director_tick(simulation_state, mode="idle", turn_index=3)
++
++    assert approved["ok"] is True
++    assert approved["reason"] == "approved_imported_activated"
++    assert is_story_pack_active(simulation_state, "storypack:approval_activation_pack") is True
++    assert evaluation["eligible_count"] == 1
+*** End Patch
+Patch 7 — Manual checks/setup
+12. Add src/tests/rpg/manual/story_pack_activation_m43_m45_checks.py
+*** Begin Patch
+*** Add File: src/tests/rpg/manual/story_pack_activation_m43_m45_checks.py
 +from __future__ import annotations
 +
 +import json
 +from typing import Any, Dict, List
 +
-+from app.rpg.story_authoring.inspector import (
-+    approve_story_authoring_inspector_proposal,
-+    build_story_authoring_inspector_payload,
-+    draft_story_authoring_inspector_proposal,
-+    reject_story_authoring_inspector_proposal,
++from app.rpg.campaign_director.runtime import apply_campaign_director_tick, evaluate_campaign_director_tick
++from app.rpg.story_authoring.approval import approve_story_proposal, draft_story_proposal_for_approval
++from app.rpg.story_packs.activation import (
++    activate_story_pack,
++    build_story_pack_activation_snapshot,
++    deactivate_story_pack,
++    is_story_pack_active,
 +)
-+from app.rpg.story_packs.registry import get_imported_story_pack
++from app.rpg.story_packs.importer import import_story_pack
 +
 +
 +def _safe_dict(value: Any) -> Dict[str, Any]:
@@ -935,22 +1024,15 @@ Patch 5 — Manual checks/setup
 +        if candidate and not first_non_empty:
 +            first_non_empty = candidate
 +        if (
-+            isinstance(candidate.get("story_authoring_approval_state"), dict)
++            isinstance(candidate.get("story_pack_activation_state"), dict)
 +            or isinstance(candidate.get("story_pack_state"), dict)
++            or isinstance(candidate.get("campaign_director_state"), dict)
 +        ):
 +            return candidate
 +    return first_non_empty
 +
 +
-+def _latest_pending_id(simulation_state: Dict[str, Any]) -> str:
-+    payload = build_story_authoring_inspector_payload(simulation_state)
-+    pending = payload.get("pending") or []
-+    if not pending:
-+        return ""
-+    return str(pending[-1].get("pending_id") or "")
-+
-+
-+def run_story_authoring_inspector_m40_m42_check(
++def run_story_pack_activation_m43_m45_check(
 +    *,
 +    check: Dict[str, Any],
 +    result: Dict[str, Any],
@@ -959,164 +1041,263 @@ Patch 5 — Manual checks/setup
 +    simulation_state = _extract_simulation_state(result=result, session=session)
 +    check_type = str(check.get("type") or "")
 +
-+    if check_type == "story_authoring_inspector_payload":
-+        payload = build_story_authoring_inspector_payload(
++    if check_type == "story_pack_activation_import":
++        proposal = _safe_dict(check.get("proposal"))
++        import_result = import_story_pack(
 +            simulation_state,
-+            limit=int(check.get("limit") or 20),
-+        )
-+        expected_pending_count = check.get("expected_pending_count")
-+        expected_proposal_id = check.get("expected_proposal_id")
-+        ok = payload.get("ok") is True
-+        if expected_pending_count is not None:
-+            ok = ok and int(payload.get("pending_count") or 0) == int(expected_pending_count)
-+        if expected_proposal_id:
-+            ok = ok and expected_proposal_id in [row.get("proposal_id") for row in payload.get("pending") or []]
-+        return {
-+            "check_type": check_type,
-+            "ok": ok,
-+            "payload": payload,
-+            "expected_pending_count": expected_pending_count,
-+            "expected_proposal_id": expected_proposal_id,
-+        }
-+
-+    if check_type == "story_authoring_inspector_draft":
-+        llm_text_override = check.get("llm_text_override")
-+        if isinstance(llm_text_override, dict):
-+            llm_text_override = json.dumps(llm_text_override)
-+        draft_result = draft_story_authoring_inspector_proposal(
-+            simulation_state,
-+            authoring_goal=str(check.get("authoring_goal") or "Draft a story pack."),
++            proposal,
 +            turn_index=int(check.get("turn_index") or 1),
-+            llm_text_override=llm_text_override,
-+            repair_once=bool(check.get("repair_once", False)),
 +        )
 +        expected_ok = check.get("expected_ok")
-+        expected_reason = check.get("expected_reason")
 +        ok = True
 +        if expected_ok is not None:
-+            ok = ok and draft_result.get("ok") is bool(expected_ok)
-+        if expected_reason:
-+            ok = ok and draft_result.get("reason") == expected_reason
++            ok = ok and import_result.get("ok") is bool(expected_ok)
 +        return {
 +            "check_type": check_type,
 +            "ok": ok,
-+            "draft_result": draft_result,
++            "import_result": import_result,
 +            "expected_ok": expected_ok,
-+            "expected_reason": expected_reason,
 +        }
 +
-+    if check_type == "story_authoring_inspector_approve":
-+        pending_id = str(check.get("pending_id") or "") or _latest_pending_id(simulation_state)
-+        approve_result = approve_story_authoring_inspector_proposal(
-+            simulation_state,
-+            pending_id=pending_id,
-+            turn_index=int(check.get("turn_index") or 1),
-+            reason=str(check.get("reason") or "gm_approved"),
-+        )
-+        expected_ok = check.get("expected_ok")
-+        expected_reason = check.get("expected_reason")
-+        ok = True
-+        if expected_ok is not None:
-+            ok = ok and approve_result.get("ok") is bool(expected_ok)
-+        if expected_reason:
-+            ok = ok and approve_result.get("reason") == expected_reason
-+        return {
-+            "check_type": check_type,
-+            "ok": ok,
-+            "pending_id": pending_id,
-+            "approve_result": approve_result,
-+            "expected_ok": expected_ok,
-+            "expected_reason": expected_reason,
-+        }
-+
-+    if check_type == "story_authoring_inspector_reject":
-+        pending_id = str(check.get("pending_id") or "") or _latest_pending_id(simulation_state)
-+        reject_result = reject_story_authoring_inspector_proposal(
-+            simulation_state,
-+            pending_id=pending_id,
-+            turn_index=int(check.get("turn_index") or 1),
-+            reason=str(check.get("reason") or "gm_rejected"),
-+        )
-+        expected_ok = check.get("expected_ok")
-+        expected_reason = check.get("expected_reason")
-+        ok = True
-+        if expected_ok is not None:
-+            ok = ok and reject_result.get("ok") is bool(expected_ok)
-+        if expected_reason:
-+            ok = ok and reject_result.get("reason") == expected_reason
-+        return {
-+            "check_type": check_type,
-+            "ok": ok,
-+            "pending_id": pending_id,
-+            "reject_result": reject_result,
-+            "expected_ok": expected_ok,
-+            "expected_reason": expected_reason,
-+        }
-+
-+    if check_type == "story_authoring_inspector_imported_pack":
++    if check_type == "story_pack_activation_activate":
 +        pack_id = str(check.get("pack_id") or "")
-+        imported = get_imported_story_pack(simulation_state, pack_id)
-+        expected_present = bool(check.get("expected_present", True))
++        activate_result = activate_story_pack(
++            simulation_state,
++            pack_id,
++            turn_index=int(check.get("turn_index") or 1),
++            reason=str(check.get("reason") or "manual_activate"),
++        )
++        expected_ok = check.get("expected_ok")
++        expected_reason = check.get("expected_reason")
++        ok = True
++        if expected_ok is not None:
++            ok = ok and activate_result.get("ok") is bool(expected_ok)
++        if expected_reason:
++            ok = ok and activate_result.get("reason") == expected_reason
 +        return {
 +            "check_type": check_type,
-+            "ok": bool(imported) is expected_present,
-+            "pack_id": pack_id,
-+            "imported": imported,
-+            "expected_present": expected_present,
++            "ok": ok,
++            "activate_result": activate_result,
++            "expected_ok": expected_ok,
++            "expected_reason": expected_reason,
 +        }
 +
-+    if check_type == "story_authoring_inspector_debug_bounded":
-+        payload = build_story_authoring_inspector_payload(
++    if check_type == "story_pack_activation_deactivate":
++        pack_id = str(check.get("pack_id") or "")
++        deactivate_result = deactivate_story_pack(
++            simulation_state,
++            pack_id,
++            turn_index=int(check.get("turn_index") or 1),
++            reason=str(check.get("reason") or "manual_deactivate"),
++        )
++        expected_ok = check.get("expected_ok")
++        expected_reason = check.get("expected_reason")
++        ok = True
++        if expected_ok is not None:
++            ok = ok and deactivate_result.get("ok") is bool(expected_ok)
++        if expected_reason:
++            ok = ok and deactivate_result.get("reason") == expected_reason
++        return {
++            "check_type": check_type,
++            "ok": ok,
++            "deactivate_result": deactivate_result,
++            "expected_ok": expected_ok,
++            "expected_reason": expected_reason,
++        }
++
++    if check_type == "story_pack_activation_status":
++        pack_id = str(check.get("pack_id") or "")
++        expected_active = bool(check.get("expected_active", True))
++        actual = is_story_pack_active(simulation_state, pack_id)
++        return {
++            "check_type": check_type,
++            "ok": actual is expected_active,
++            "pack_id": pack_id,
++            "actual_active": actual,
++            "expected_active": expected_active,
++            "snapshot": build_story_pack_activation_snapshot(simulation_state),
++        }
++
++    if check_type == "story_pack_activation_snapshot":
++        snapshot = build_story_pack_activation_snapshot(
 +            simulation_state,
 +            limit=int(check.get("limit") or 20),
 +        )
-+        limit = int(check.get("limit") or 20)
++        expected_pack_id = check.get("expected_pack_id")
++        expected_status = check.get("expected_status")
++        rows = list(snapshot.get("packs") or [])
++        if expected_pack_id:
++            rows = [row for row in rows if row.get("pack_id") == expected_pack_id]
++        if expected_status:
++            rows = [row for row in rows if row.get("status") == expected_status]
 +        return {
 +            "check_type": check_type,
-+            "ok": len(payload.get("pending") or []) <= limit and len(payload.get("history") or []) <= 20,
-+            "payload": payload,
-+            "limit": limit,
++            "ok": bool(rows) if (expected_pack_id or expected_status) else snapshot.get("ok") is True,
++            "snapshot": snapshot,
++            "matched": rows,
++            "expected_pack_id": expected_pack_id,
++            "expected_status": expected_status,
++        }
++
++    if check_type == "story_pack_activation_director_evaluate":
++        evaluation = evaluate_campaign_director_tick(
++            simulation_state,
++            mode=str(check.get("mode") or "idle"),
++            turn_index=int(check.get("turn_index") or 1),
++            arc_id=str(check.get("arc_id") or ""),
++        )
++        expected_eligible_count = check.get("expected_eligible_count")
++        expected_registered_rule_count = check.get("expected_registered_rule_count")
++        ok = True
++        if expected_eligible_count is not None:
++            ok = ok and int(evaluation.get("eligible_count") or 0) == int(expected_eligible_count)
++        if expected_registered_rule_count is not None:
++            ok = ok and int(evaluation.get("registered_rule_count") or 0) == int(expected_registered_rule_count)
++        return {
++            "check_type": check_type,
++            "ok": ok,
++            "evaluation": evaluation,
++            "expected_eligible_count": expected_eligible_count,
++            "expected_registered_rule_count": expected_registered_rule_count,
++        }
++
++    if check_type == "story_pack_activation_director_apply":
++        applied = apply_campaign_director_tick(
++            simulation_state,
++            mode=str(check.get("mode") or "idle"),
++            turn_index=int(check.get("turn_index") or 1),
++            arc_id=str(check.get("arc_id") or ""),
++        )
++        expected_applied_count = check.get("expected_applied_count")
++        ok = True
++        if expected_applied_count is not None:
++            ok = ok and int(applied.get("applied_count") or 0) == int(expected_applied_count)
++        return {
++            "check_type": check_type,
++            "ok": ok,
++            "applied": applied,
++            "expected_applied_count": expected_applied_count,
++        }
++
++    if check_type == "story_pack_activation_approve_authored":
++        proposal = check.get("proposal")
++        llm_text_override = json.dumps(proposal) if isinstance(proposal, dict) else check.get("llm_text_override")
++        draft = draft_story_proposal_for_approval(
++            simulation_state,
++            authoring_goal=str(check.get("authoring_goal") or "Draft activation bridge pack."),
++            llm_text_override=llm_text_override,
++            turn_index=int(check.get("draft_turn_index") or 1),
++        )
++        approve = approve_story_proposal(
++            simulation_state,
++            pending_id=str(draft.get("pending_id") or ""),
++            turn_index=int(check.get("turn_index") or 2),
++            auto_activate=bool(check.get("auto_activate", False)),
++        )
++        expected_reason = check.get("expected_reason")
++        ok = approve.get("ok") is True
++        if expected_reason:
++            ok = ok and approve.get("reason") == expected_reason
++        return {
++            "check_type": check_type,
++            "ok": ok,
++            "draft": draft,
++            "approve": approve,
++            "expected_reason": expected_reason,
 +        }
 +
 +    return {
 +        "check_type": check_type,
 +        "ok": False,
-+        "error": f"unknown_story_authoring_inspector_m40_m42_check_type:{check_type}",
++        "error": f"unknown_story_pack_activation_m43_m45_check_type:{check_type}",
 +    }
 +
 +
-+def run_story_authoring_inspector_m40_m42_checks(
++def run_story_pack_activation_m43_m45_checks(
 +    *,
 +    checks: List[Dict[str, Any]],
 +    result: Dict[str, Any],
 +    session: Dict[str, Any] | None = None,
 +) -> List[Dict[str, Any]]:
 +    return [
-+        run_story_authoring_inspector_m40_m42_check(check=check, result=result, session=session)
++        run_story_pack_activation_m43_m45_check(check=check, result=result, session=session)
 +        for check in checks
 +    ]
 *** End Patch
-8. Patch src/tests/rpg/manual/scenario_execution.py
+13. Patch src/tests/rpg/manual/scenario_setup.py
+
+Add imports:
+
+*** Begin Patch
+*** Update File: src/tests/rpg/manual/scenario_setup.py
+@@
+ from app.rpg.story_authoring.approval import (
+     approve_story_proposal,
+     draft_story_proposal_for_approval,
+     reject_story_proposal,
+ )
++from app.rpg.story_packs.activation import activate_story_pack, deactivate_story_pack
+ from tests.rpg.manual.memory_fixtures import build_manual_memory_event
+*** End Patch
+
+Add setup actions after story pack import / authoring approval setup:
+
+*** Begin Patch
+*** Update File: src/tests/rpg/manual/scenario_setup.py
+@@
+     for action in scenario.get("setup_story_authoring_approval_actions") or []:
+         if isinstance(action, dict):
+@@
+                 reject_story_proposal(
+                     simulation_state,
+                     pending_id=pending_id,
+                     turn_index=int(action.get("turn_index") or scenario.get("setup_turn_index") or 1),
+                     reason=str(action.get("reason") or "gm_rejected"),
+                 )
++
++    for activation in scenario.get("setup_story_pack_activation_actions") or []:
++        if isinstance(activation, dict):
++            action = str(activation.get("action") or "")
++            pack_id = str(activation.get("pack_id") or "")
++            if action == "activate":
++                activate_story_pack(
++                    simulation_state,
++                    pack_id,
++                    turn_index=int(activation.get("turn_index") or scenario.get("setup_turn_index") or 1),
++                    reason=str(activation.get("reason") or "scenario_activate"),
++                )
++            elif action == "deactivate":
++                deactivate_story_pack(
++                    simulation_state,
++                    pack_id,
++                    turn_index=int(activation.get("turn_index") or scenario.get("setup_turn_index") or 1),
++                    reason=str(activation.get("reason") or "scenario_deactivate"),
++                )
+ 
+     for item in scenario.get("setup_story_event_queue") or []:
+         if isinstance(item, dict):
+*** End Patch
+14. Patch src/tests/rpg/manual/scenario_execution.py
 
 Add import:
 
 *** Begin Patch
 *** Update File: src/tests/rpg/manual/scenario_execution.py
 @@
- from tests.rpg.manual.story_authoring_approval_m37_m39_checks import (
-     run_story_authoring_approval_m37_m39_checks,
+ from tests.rpg.manual.story_authoring_inspector_m40_m42_checks import (
+     run_story_authoring_inspector_m40_m42_checks,
  )
-+from tests.rpg.manual.story_authoring_inspector_m40_m42_checks import (
-+    run_story_authoring_inspector_m40_m42_checks,
++from tests.rpg.manual.story_pack_activation_m43_m45_checks import (
++    run_story_pack_activation_m43_m45_checks,
 +)
 *** End Patch
 
-Add check block after M37-M39 approval checks:
+Add check block after M40-M42 checks:
 
 *** Begin Patch
 *** Update File: src/tests/rpg/manual/scenario_execution.py
 @@
-         if story_authoring_approval_m37_m39_checks:
+         if story_authoring_inspector_m40_m42_checks:
              current_session = {}
              try:
                  current_session = _ensure_manual_session(session_id)
@@ -1125,29 +1306,29 @@ Add check block after M37-M39 approval checks:
                          + str(check_result.get("error") or "")
                      )
 +
-+        story_authoring_inspector_m40_m42_checks = [
++        story_pack_activation_m43_m45_checks = [
 +            check
 +            for check in checks
 +            if isinstance(check, dict)
-+            and str(check.get("type") or "").startswith("story_authoring_inspector")
++            and str(check.get("type") or "").startswith("story_pack_activation")
 +        ]
-+        if story_authoring_inspector_m40_m42_checks:
++        if story_pack_activation_m43_m45_checks:
 +            current_session = {}
 +            try:
 +                current_session = _ensure_manual_session(session_id)
 +            except Exception:
 +                current_session = session
 +
-+            story_authoring_inspector_m40_m42_check_results = run_story_authoring_inspector_m40_m42_checks(
-+                checks=story_authoring_inspector_m40_m42_checks,
++            story_pack_activation_m43_m45_check_results = run_story_pack_activation_m43_m45_checks(
++                checks=story_pack_activation_m43_m45_checks,
 +                result=turn_record.get("result") or turn_record,
 +                session=current_session,
 +            )
-+            turn_record["story_authoring_inspector_m40_m42_check_results"] = story_authoring_inspector_m40_m42_check_results
-+            for check_result in story_authoring_inspector_m40_m42_check_results:
++            turn_record["story_pack_activation_m43_m45_check_results"] = story_pack_activation_m43_m45_check_results
++            for check_result in story_pack_activation_m43_m45_check_results:
 +                if not check_result.get("ok"):
 +                    turn_record.setdefault("scenario_warnings", []).append(
-+                        "story_authoring_inspector_m40_m42_check_failed:"
++                        "story_pack_activation_m43_m45_check_failed:"
 +                        + str(scenario_name)
 +                        + ":turn_"
 +                        + str(turn_index)
@@ -1159,306 +1340,358 @@ Add check block after M37-M39 approval checks:
  
          turn_summaries.append(turn_record)
 *** End Patch
-9. Patch src/tests/rpg/manual/summary_sanitizer.py
+15. Patch src/tests/rpg/manual/summary_sanitizer.py
 *** Begin Patch
 *** Update File: src/tests/rpg/manual/summary_sanitizer.py
 @@
-     story_authoring_approval_m37_m39_check_results = turn.get("story_authoring_approval_m37_m39_check_results")
-     if isinstance(story_authoring_approval_m37_m39_check_results, list):
-         sanitized["story_authoring_approval_m37_m39_check_results"] = [
+     story_authoring_inspector_m40_m42_check_results = turn.get("story_authoring_inspector_m40_m42_check_results")
+     if isinstance(story_authoring_inspector_m40_m42_check_results, list):
+         sanitized["story_authoring_inspector_m40_m42_check_results"] = [
 @@
              if isinstance(item, dict)
          ]
 +
-+    story_authoring_inspector_m40_m42_check_results = turn.get("story_authoring_inspector_m40_m42_check_results")
-+    if isinstance(story_authoring_inspector_m40_m42_check_results, list):
-+        sanitized["story_authoring_inspector_m40_m42_check_results"] = [
++    story_pack_activation_m43_m45_check_results = turn.get("story_pack_activation_m43_m45_check_results")
++    if isinstance(story_pack_activation_m43_m45_check_results, list):
++        sanitized["story_pack_activation_m43_m45_check_results"] = [
 +            {
 +                "check_type": item.get("check_type"),
 +                "ok": item.get("ok"),
-+                "payload": item.get("payload"),
-+                "draft_result": item.get("draft_result"),
-+                "approve_result": item.get("approve_result"),
-+                "reject_result": item.get("reject_result"),
-+                "pending_id": item.get("pending_id"),
++                "import_result": item.get("import_result"),
++                "activate_result": item.get("activate_result"),
++                "deactivate_result": item.get("deactivate_result"),
++                "snapshot": item.get("snapshot"),
++                "evaluation": item.get("evaluation"),
++                "applied": item.get("applied"),
++                "draft": item.get("draft"),
++                "approve": item.get("approve"),
 +                "pack_id": item.get("pack_id"),
-+                "imported": item.get("imported"),
-+                "expected_pending_count": item.get("expected_pending_count"),
-+                "expected_proposal_id": item.get("expected_proposal_id"),
-+                "expected_ok": item.get("expected_ok"),
++                "actual_active": item.get("actual_active"),
++                "expected_active": item.get("expected_active"),
++                "expected_eligible_count": item.get("expected_eligible_count"),
++                "expected_registered_rule_count": item.get("expected_registered_rule_count"),
++                "expected_applied_count": item.get("expected_applied_count"),
 +                "expected_reason": item.get("expected_reason"),
-+                "expected_present": item.get("expected_present"),
-+                "limit": item.get("limit"),
 +                "error": item.get("error"),
 +            }
-+            for item in story_authoring_inspector_m40_m42_check_results[:50]
++            for item in story_pack_activation_m43_m45_check_results[:50]
 +            if isinstance(item, dict)
 +        ]
  
      return sanitized
 *** End Patch
-Patch 6 — Manual scenarios
-10. Add src/tests/rpg/manual/scenarios/story_authoring_inspector_m40_m42.py
+Patch 8 — Manual scenarios
+16. Add src/tests/rpg/manual/scenarios/story_pack_activation_m43_m45.py
 *** Begin Patch
-*** Add File: src/tests/rpg/manual/scenarios/story_authoring_inspector_m40_m42.py
+*** Add File: src/tests/rpg/manual/scenarios/story_pack_activation_m43_m45.py
 +from __future__ import annotations
 +
 +from typing import Any, Dict
 +
 +
-+def _valid_inspector_pack(proposal_id: str = "inspector_bandit_pack") -> Dict[str, Any]:
++def _activation_pack(proposal_id: str = "activation_bridge_pack") -> Dict[str, Any]:
 +    return {
 +        "proposal_version": "story_proposal_v1",
 +        "proposal_type": "story_pack",
 +        "proposal_id": proposal_id,
-+        "title": "Inspector Bandit Pack",
++        "title": "Activation Bridge Pack",
 +        "lore_entries": [
 +            {
 +                "lore_id": f"lore:{proposal_id}",
-+                "title": "Inspector Red Sashes",
++                "title": "Activation Bridge Lore",
 +                "truth_status": "rumor",
 +            }
 +        ],
 +        "story_arcs": [
 +            {
 +                "arc_id": f"arc:{proposal_id}",
-+                "title": "Inspector Bandit Pressure",
++                "title": "Activation Bridge Arc",
 +                "status": "active",
 +                "stage": "rumors",
-+                "pressure": 10,
++                "pressure": 60,
 +                "linked_lore": [f"lore:{proposal_id}"],
 +            }
 +        ],
-+        "story_events": [],
-+        "escalation_rules": [],
++        "story_events": [
++            {
++                "event_id": f"event:{proposal_id}",
++                "arc_id": f"arc:{proposal_id}",
++                "kind": "consequence",
++                "summary": "The active story pack escalated.",
++                "effects": [
++                    {"type": "arc_stage_set", "arc_id": f"arc:{proposal_id}", "stage": "escalated"}
++                ],
++            }
++        ],
++        "escalation_rules": [
++            {
++                "rule_id": f"rule:{proposal_id}",
++                "arc_id": f"arc:{proposal_id}",
++                "priority": 90,
++                "conditions": [
++                    {"type": "arc_pressure_at_least", "arc_id": f"arc:{proposal_id}", "minimum": 50},
++                    {"type": "arc_stage", "arc_id": f"arc:{proposal_id}", "stage": "rumors"},
++                ],
++                "event": {"event_id": f"event:{proposal_id}", "arc_id": f"arc:{proposal_id}", "effects": []},
++                "max_applications": 1,
++            }
++        ],
 +    }
 +
 +
-+STORY_AUTHORING_INSPECTOR_M40_M42_SCENARIOS: Dict[str, Dict[str, Any]] = {
-+    "story_authoring_inspector_payload_lists_pending_proposal": {
-+        "setup_story_authoring_approval_actions": [
-+            {
-+                "action": "draft",
-+                "authoring_goal": "Draft an inspector-visible pack.",
-+                "llm_text_override": _valid_inspector_pack(),
-+                "turn_index": 1,
-+            }
-+        ],
-+        "turns": ["I inspect pending authored story proposals."],
++STORY_PACK_ACTIVATION_M43_M45_SCENARIOS: Dict[str, Dict[str, Any]] = {
++    "story_pack_imported_pack_starts_inactive": {
++        "turns": ["I import a story pack and verify it starts inactive."],
 +        "checks": [
 +            {
-+                "type": "story_authoring_inspector_payload",
-+                "expected_pending_count": 1,
-+                "expected_proposal_id": "inspector_bandit_pack",
-+            },
-+            {
-+                "type": "story_authoring_inspector_imported_pack",
-+                "pack_id": "storypack:inspector_bandit_pack",
-+                "expected_present": False,
-+            },
-+        ],
-+    },
-+    "story_authoring_inspector_draft_updates_pending_panel": {
-+        "turns": ["I draft an inspector proposal from the UI-facing wrapper."],
-+        "checks": [
-+            {
-+                "type": "story_authoring_inspector_draft",
-+                "authoring_goal": "Draft an inspector pack.",
-+                "llm_text_override": _valid_inspector_pack("inspector_draft_pack"),
++                "type": "story_pack_activation_import",
++                "proposal": _activation_pack(),
 +                "turn_index": 1,
 +                "expected_ok": True,
-+                "expected_reason": "pending_approval",
 +            },
 +            {
-+                "type": "story_authoring_inspector_payload",
-+                "expected_pending_count": 1,
-+                "expected_proposal_id": "inspector_draft_pack",
++                "type": "story_pack_activation_status",
++                "pack_id": "storypack:activation_bridge_pack",
++                "expected_active": False,
 +            },
 +            {
-+                "type": "story_authoring_inspector_imported_pack",
-+                "pack_id": "storypack:inspector_draft_pack",
-+                "expected_present": False,
++                "type": "story_pack_activation_director_evaluate",
++                "turn_index": 2,
++                "expected_eligible_count": 0,
++                "expected_registered_rule_count": 0,
 +            },
 +        ],
 +    },
-+    "story_authoring_inspector_approve_imports_and_refreshes_panel": {
-+        "setup_story_authoring_approval_actions": [
-+            {
-+                "action": "draft",
-+                "authoring_goal": "Draft an inspector approval pack.",
-+                "llm_text_override": _valid_inspector_pack("inspector_approve_pack"),
-+                "turn_index": 1,
-+            }
-+        ],
-+        "turns": ["I approve the inspector pending proposal."],
++    "story_pack_activation_enables_director_rules": {
++        "turns": ["I activate an imported story pack and verify director rules appear."],
 +        "checks": [
 +            {
-+                "type": "story_authoring_inspector_approve",
++                "type": "story_pack_activation_import",
++                "proposal": _activation_pack(),
++                "turn_index": 1,
++                "expected_ok": True,
++            },
++            {
++                "type": "story_pack_activation_activate",
++                "pack_id": "storypack:activation_bridge_pack",
 +                "turn_index": 2,
 +                "expected_ok": True,
++                "expected_reason": "activated",
++            },
++            {
++                "type": "story_pack_activation_director_evaluate",
++                "turn_index": 3,
++                "expected_eligible_count": 1,
++                "expected_registered_rule_count": 1,
++            },
++        ],
++    },
++    "story_pack_activation_director_applies_active_pack_event": {
++        "turns": ["I activate an imported story pack and let the director apply it."],
++        "checks": [
++            {
++                "type": "story_pack_activation_import",
++                "proposal": _activation_pack(),
++                "turn_index": 1,
++                "expected_ok": True,
++            },
++            {
++                "type": "story_pack_activation_activate",
++                "pack_id": "storypack:activation_bridge_pack",
++                "turn_index": 2,
++                "expected_ok": True,
++            },
++            {
++                "type": "story_pack_activation_director_apply",
++                "turn_index": 3,
++                "expected_applied_count": 1,
++            },
++        ],
++    },
++    "story_pack_deactivation_disables_director_rules": {
++        "turns": ["I activate then deactivate an imported story pack."],
++        "checks": [
++            {
++                "type": "story_pack_activation_import",
++                "proposal": _activation_pack(),
++                "turn_index": 1,
++                "expected_ok": True,
++            },
++            {
++                "type": "story_pack_activation_activate",
++                "pack_id": "storypack:activation_bridge_pack",
++                "turn_index": 2,
++                "expected_ok": True,
++            },
++            {
++                "type": "story_pack_activation_deactivate",
++                "pack_id": "storypack:activation_bridge_pack",
++                "turn_index": 3,
++                "expected_ok": True,
++                "expected_reason": "deactivated",
++            },
++            {
++                "type": "story_pack_activation_director_evaluate",
++                "turn_index": 4,
++                "expected_eligible_count": 0,
++                "expected_registered_rule_count": 0,
++            },
++        ],
++    },
++    "story_pack_activation_missing_pack_rejected": {
++        "turns": ["I try to activate a missing story pack."],
++        "checks": [
++            {
++                "type": "story_pack_activation_activate",
++                "pack_id": "storypack:missing",
++                "turn_index": 1,
++                "expected_ok": False,
++                "expected_reason": "story_pack_not_imported",
++            }
++        ],
++    },
++    "story_authoring_approval_import_without_auto_activate_stays_inactive": {
++        "turns": ["I approve an authored pack without auto activation."],
++        "checks": [
++            {
++                "type": "story_pack_activation_approve_authored",
++                "proposal": _activation_pack("approval_activation_bridge_pack"),
++                "auto_activate": False,
 +                "expected_reason": "approved_imported",
 +            },
 +            {
-+                "type": "story_authoring_inspector_payload",
-+                "expected_pending_count": 0,
++                "type": "story_pack_activation_status",
++                "pack_id": "storypack:approval_activation_bridge_pack",
++                "expected_active": False,
 +            },
 +            {
-+                "type": "story_authoring_inspector_imported_pack",
-+                "pack_id": "storypack:inspector_approve_pack",
-+                "expected_present": True,
-+            },
-+        ],
-+    },
-+    "story_authoring_inspector_reject_removes_without_import": {
-+        "setup_story_authoring_approval_actions": [
-+            {
-+                "action": "draft",
-+                "authoring_goal": "Draft an inspector reject pack.",
-+                "llm_text_override": _valid_inspector_pack("inspector_reject_pack"),
-+                "turn_index": 1,
-+            }
-+        ],
-+        "turns": ["I reject the inspector pending proposal."],
-+        "checks": [
-+            {
-+                "type": "story_authoring_inspector_reject",
-+                "turn_index": 2,
-+                "reason": "needs rewrite",
-+                "expected_ok": True,
-+                "expected_reason": "rejected",
-+            },
-+            {
-+                "type": "story_authoring_inspector_payload",
-+                "expected_pending_count": 0,
-+            },
-+            {
-+                "type": "story_authoring_inspector_imported_pack",
-+                "pack_id": "storypack:inspector_reject_pack",
-+                "expected_present": False,
++                "type": "story_pack_activation_director_evaluate",
++                "turn_index": 3,
++                "expected_eligible_count": 0,
++                "expected_registered_rule_count": 0,
 +            },
 +        ],
 +    },
-+    "story_authoring_inspector_missing_approve_is_safe": {
-+        "turns": ["I try approving a missing inspector proposal."],
++    "story_authoring_approval_auto_activate_bridges_to_director": {
++        "turns": ["I approve an authored pack with auto activation."],
 +        "checks": [
 +            {
-+                "type": "story_authoring_inspector_approve",
-+                "pending_id": "authored_pending:missing",
-+                "turn_index": 1,
-+                "expected_ok": False,
-+                "expected_reason": "pending_proposal_missing",
-+            }
++                "type": "story_pack_activation_approve_authored",
++                "proposal": _activation_pack("approval_auto_activation_bridge_pack"),
++                "auto_activate": True,
++                "expected_reason": "approved_imported_activated",
++            },
++            {
++                "type": "story_pack_activation_status",
++                "pack_id": "storypack:approval_auto_activation_bridge_pack",
++                "expected_active": True,
++            },
++            {
++                "type": "story_pack_activation_director_evaluate",
++                "turn_index": 3,
++                "expected_eligible_count": 1,
++                "expected_registered_rule_count": 1,
++            },
 +        ],
 +    },
-+    "story_authoring_inspector_missing_reject_is_safe": {
-+        "turns": ["I try rejecting a missing inspector proposal."],
++    "story_pack_activation_snapshot_is_bounded": {
++        "turns": ["I inspect bounded story pack activation state."],
 +        "checks": [
++            *[
++                {
++                    "type": "story_pack_activation_import",
++                    "proposal": _activation_pack(f"activation_pack_{i}"),
++                    "turn_index": i,
++                    "expected_ok": True,
++                }
++                for i in range(30)
++            ],
 +            {
-+                "type": "story_authoring_inspector_reject",
-+                "pending_id": "authored_pending:missing",
-+                "turn_index": 1,
-+                "expected_ok": False,
-+                "expected_reason": "pending_proposal_missing",
-+            }
-+        ],
-+    },
-+    "story_authoring_inspector_payload_is_bounded": {
-+        "setup_story_authoring_approval_actions": [
-+            {
-+                "action": "draft",
-+                "authoring_goal": f"Draft inspector pack {i}",
-+                "llm_text_override": _valid_inspector_pack(f"inspector_pack_{i}"),
-+                "turn_index": i,
-+            }
-+            for i in range(70)
-+        ],
-+        "turns": ["I inspect bounded story authoring inspector output."],
-+        "checks": [
-+            {
-+                "type": "story_authoring_inspector_debug_bounded",
++                "type": "story_pack_activation_snapshot",
 +                "limit": 20,
-+            }
++            },
 +        ],
 +    },
 +}
 *** End Patch
-11. Add expected names file
+17. Add expected names file
 *** Begin Patch
-*** Add File: src/tests/rpg/manual/scenarios/expected_story_authoring_inspector_m40_m42_names.py
-+EXPECTED_STORY_AUTHORING_INSPECTOR_M40_M42_SCENARIO_NAMES = {
-+    "story_authoring_inspector_payload_lists_pending_proposal",
-+    "story_authoring_inspector_draft_updates_pending_panel",
-+    "story_authoring_inspector_approve_imports_and_refreshes_panel",
-+    "story_authoring_inspector_reject_removes_without_import",
-+    "story_authoring_inspector_missing_approve_is_safe",
-+    "story_authoring_inspector_missing_reject_is_safe",
-+    "story_authoring_inspector_payload_is_bounded",
+*** Add File: src/tests/rpg/manual/scenarios/expected_story_pack_activation_m43_m45_names.py
++EXPECTED_STORY_PACK_ACTIVATION_M43_M45_SCENARIO_NAMES = {
++    "story_pack_imported_pack_starts_inactive",
++    "story_pack_activation_enables_director_rules",
++    "story_pack_activation_director_applies_active_pack_event",
++    "story_pack_deactivation_disables_director_rules",
++    "story_pack_activation_missing_pack_rejected",
++    "story_authoring_approval_import_without_auto_activate_stays_inactive",
++    "story_authoring_approval_auto_activate_bridges_to_director",
++    "story_pack_activation_snapshot_is_bounded",
 +}
 *** End Patch
-12. Patch src/tests/rpg/manual/scenarios/registry.py
+18. Patch src/tests/rpg/manual/scenarios/registry.py
 *** Begin Patch
 *** Update File: src/tests/rpg/manual/scenarios/registry.py
 @@
- from tests.rpg.manual.scenarios.story_authoring_approval_m37_m39 import (
-     STORY_AUTHORING_APPROVAL_M37_M39_SCENARIOS,
+ from tests.rpg.manual.scenarios.story_authoring_inspector_m40_m42 import (
+     STORY_AUTHORING_INSPECTOR_M40_M42_SCENARIOS,
  )
-+from tests.rpg.manual.scenarios.story_authoring_inspector_m40_m42 import (
-+    STORY_AUTHORING_INSPECTOR_M40_M42_SCENARIOS,
++from tests.rpg.manual.scenarios.story_pack_activation_m43_m45 import (
++    STORY_PACK_ACTIVATION_M43_M45_SCENARIOS,
 +)
 @@
-     scenarios.update(STORY_AUTHORING_APPROVAL_M37_M39_SCENARIOS)
-+    scenarios.update(STORY_AUTHORING_INSPECTOR_M40_M42_SCENARIOS)
+     scenarios.update(STORY_AUTHORING_INSPECTOR_M40_M42_SCENARIOS)
++    scenarios.update(STORY_PACK_ACTIVATION_M43_M45_SCENARIOS)
      return scenarios
 *** End Patch
-13. Patch src/tests/rpg/manual/test_manual_scenario_migration.py
+19. Patch src/tests/rpg/manual/test_manual_scenario_migration.py
 *** Begin Patch
 *** Update File: src/tests/rpg/manual/test_manual_scenario_migration.py
 @@
- from tests.rpg.manual.scenarios.expected_story_authoring_approval_m37_m39_names import (
-     EXPECTED_STORY_AUTHORING_APPROVAL_M37_M39_SCENARIO_NAMES,
+ from tests.rpg.manual.scenarios.expected_story_authoring_inspector_m40_m42_names import (
+     EXPECTED_STORY_AUTHORING_INSPECTOR_M40_M42_SCENARIO_NAMES,
  )
-+from tests.rpg.manual.scenarios.expected_story_authoring_inspector_m40_m42_names import (
-+    EXPECTED_STORY_AUTHORING_INSPECTOR_M40_M42_SCENARIO_NAMES,
++from tests.rpg.manual.scenarios.expected_story_pack_activation_m43_m45_names import (
++    EXPECTED_STORY_PACK_ACTIVATION_M43_M45_SCENARIO_NAMES,
 +)
 @@
- def test_manual_scenario_registry_includes_story_authoring_approval_m37_m39_names():
+ def test_manual_scenario_registry_includes_story_authoring_inspector_m40_m42_names():
      names = set(build_service_scenarios().keys())
-     missing = EXPECTED_STORY_AUTHORING_APPROVAL_M37_M39_SCENARIO_NAMES - names
+     missing = EXPECTED_STORY_AUTHORING_INSPECTOR_M40_M42_SCENARIO_NAMES - names
  
-     assert not missing, f"Missing M37-M39 story authoring approval scenarios: {sorted(missing)}"
+     assert not missing, f"Missing M40-M42 story authoring inspector scenarios: {sorted(missing)}"
 +
 +
-+def test_manual_scenario_registry_includes_story_authoring_inspector_m40_m42_names():
++def test_manual_scenario_registry_includes_story_pack_activation_m43_m45_names():
 +    names = set(build_service_scenarios().keys())
-+    missing = EXPECTED_STORY_AUTHORING_INSPECTOR_M40_M42_SCENARIO_NAMES - names
++    missing = EXPECTED_STORY_PACK_ACTIVATION_M43_M45_SCENARIO_NAMES - names
 +
-+    assert not missing, f"Missing M40-M42 story authoring inspector scenarios: {sorted(missing)}"
++    assert not missing, f"Missing M43-M45 story pack activation scenarios: {sorted(missing)}"
 *** End Patch
-14. Add manual check tests
+20. Add manual check tests
 *** Begin Patch
-*** Add File: src/tests/rpg/manual/test_manual_story_authoring_inspector_m40_m42_checks.py
-+from tests.rpg.manual.story_authoring_inspector_m40_m42_checks import (
-+    run_story_authoring_inspector_m40_m42_checks,
+*** Add File: src/tests/rpg/manual/test_manual_story_pack_activation_m43_m45_checks.py
++from tests.rpg.manual.story_pack_activation_m43_m45_checks import (
++    run_story_pack_activation_m43_m45_checks,
 +)
 +
 +
-+def _valid_pack():
++def _pack():
 +    return {
 +        "proposal_version": "story_proposal_v1",
 +        "proposal_type": "story_pack",
-+        "proposal_id": "manual_inspector_pack",
-+        "title": "Manual Inspector Pack",
++        "proposal_id": "manual_activation_pack",
++        "title": "Manual Activation Pack",
 +        "lore_entries": [
-+            {"lore_id": "lore:manual_inspector", "title": "Manual Inspector", "truth_status": "rumor"}
++            {"lore_id": "lore:manual_activation", "title": "Manual Activation", "truth_status": "rumor"}
 +        ],
 +        "story_arcs": [
 +            {
-+                "arc_id": "arc:manual_inspector",
-+                "title": "Manual Inspector",
++                "arc_id": "arc:manual_activation",
++                "title": "Manual Activation",
 +                "status": "active",
 +                "stage": "rumors",
-+                "pressure": 1,
-+                "linked_lore": ["lore:manual_inspector"],
++                "pressure": 60,
++                "linked_lore": ["lore:manual_activation"],
 +            }
 +        ],
 +        "story_events": [],
@@ -1466,46 +1699,43 @@ Patch 6 — Manual scenarios
 +    }
 +
 +
-+def test_manual_story_authoring_inspector_draft_and_payload_checks():
++def test_manual_story_pack_activation_import_and_status_checks():
 +    session = {"simulation_state": {}}
 +
-+    draft = run_story_authoring_inspector_m40_m42_checks(
++    imported = run_story_pack_activation_m43_m45_checks(
 +        checks=[
 +            {
-+                "type": "story_authoring_inspector_draft",
-+                "authoring_goal": "Draft inspector pack.",
-+                "llm_text_override": _valid_pack(),
++                "type": "story_pack_activation_import",
++                "proposal": _pack(),
 +                "expected_ok": True,
-+                "expected_reason": "pending_approval",
 +            }
 +        ],
 +        result={},
 +        session=session,
 +    )[0]
-+    payload = run_story_authoring_inspector_m40_m42_checks(
++    status = run_story_pack_activation_m43_m45_checks(
 +        checks=[
 +            {
-+                "type": "story_authoring_inspector_payload",
-+                "expected_pending_count": 1,
-+                "expected_proposal_id": "manual_inspector_pack",
++                "type": "story_pack_activation_status",
++                "pack_id": "storypack:manual_activation_pack",
++                "expected_active": False,
 +            }
 +        ],
 +        result={},
 +        session=session,
 +    )[0]
 +
-+    assert draft["ok"] is True
-+    assert payload["ok"] is True
++    assert imported["ok"] is True
++    assert status["ok"] is True
 +
 +
-+def test_manual_story_authoring_inspector_approve_check_imports_pack():
++def test_manual_story_pack_activation_activate_check():
 +    session = {"simulation_state": {}}
-+    run_story_authoring_inspector_m40_m42_checks(
++    run_story_pack_activation_m43_m45_checks(
 +        checks=[
 +            {
-+                "type": "story_authoring_inspector_draft",
-+                "authoring_goal": "Draft inspector pack.",
-+                "llm_text_override": _valid_pack(),
++                "type": "story_pack_activation_import",
++                "proposal": _pack(),
 +                "expected_ok": True,
 +            }
 +        ],
@@ -1513,27 +1743,31 @@ Patch 6 — Manual scenarios
 +        session=session,
 +    )
 +
-+    approved = run_story_authoring_inspector_m40_m42_checks(
++    activated = run_story_pack_activation_m43_m45_checks(
 +        checks=[
 +            {
-+                "type": "story_authoring_inspector_approve",
++                "type": "story_pack_activation_activate",
++                "pack_id": "storypack:manual_activation_pack",
 +                "expected_ok": True,
-+                "expected_reason": "approved_imported",
++                "expected_reason": "activated",
 +            }
 +        ],
 +        result={},
 +        session=session,
 +    )[0]
 +
-+    assert approved["ok"] is True
++    assert activated["ok"] is True
 *** End Patch
 Validation commands
 Compile
+python -m py_compile src/app/rpg/story_packs/activation.py
+python -m py_compile src/app/rpg/story_packs/definition_registries.py
+python -m py_compile src/app/rpg/campaign_director/runtime.py
+python -m py_compile src/app/rpg/story_authoring/approval.py
 python -m py_compile src/app/rpg/story_authoring/inspector.py
-python -m py_compile src/app/rpg/story_authoring/__init__.py
 python -m py_compile src/app/rpg/api/story_authoring.py
-python -m py_compile src/tests/rpg/manual/story_authoring_inspector_m40_m42_checks.py
-python -m py_compile src/tests/rpg/manual/scenarios/story_authoring_inspector_m40_m42.py
-python -m py_compile src/tests/rpg/manual/scenarios/expected_story_authoring_inspector_m40_m42_names.py
+python -m py_compile src/tests/rpg/manual/story_pack_activation_m43_m45_checks.py
+python -m py_compile src/tests/rpg/manual/scenarios/story_pack_activation_m43_m45.py
+python -m py_compile src/tests/rpg/manual/scenarios/expected_story_pack_activation_m43_m45_names.py
 Unit tests
-python -m pytest src/tests/rpg/story_authoring src/tests/rpg/campaign_journal src/tests/rpg/companions src/tests/rpg/npc_runtime_context src/tests/rpg/npc_evolution src/tests/rpg/story_event_queue src/tests/rpg/campaign_director src/tests/rpg/dialogue_context src/tests/rpg/story_packs src/tests/rpg/story_proposals src/tests/rpg/escalation src/tests/rpg/story_events src/tests/rpg/story_arcs src/tests/rpg/lore -q
+python -m pytest src/tests/rpg/story_packs src/tests/rpg/campaign_director src/tests/rpg/story_authoring src/tests/rpg/campaign_journal src/tests/rpg/companions src/tests/rpg/npc_runtime_context src/tests/rpg/npc_evolution src/tests/rpg/story_event_queue src/tests/rpg/dialogue_context src/tests/rpg/story_proposals src/tests/rpg/escalation src/tests/rpg/story_events src/tests/rpg/story_arcs src/tests/rpg/lore -q

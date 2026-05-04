@@ -8,6 +8,7 @@ from app.rpg.story_authoring.approval import (
     list_pending_story_proposals,
     reject_story_proposal,
 )
+from app.rpg.story_packs.activation import build_story_pack_activation_snapshot
 
 MAX_INSPECTOR_PENDING = 20
 MAX_INSPECTOR_HISTORY = 20
@@ -134,11 +135,14 @@ def build_story_authoring_inspector_payload(
         "pending_count": int(listing.get("pending_count") or 0),
         "pending": pending,
         "history": history,
+        "story_pack_activation": build_story_pack_activation_snapshot(simulation_state, limit=limit),
         "actions": {
             "draft": "/api/rpg/story_authoring/draft",
             "pending": "/api/rpg/story_authoring/pending",
             "approve": "/api/rpg/story_authoring/approve",
             "reject": "/api/rpg/story_authoring/reject",
+            "activate_pack": "/api/rpg/story_authoring/packs/activate",
+            "deactivate_pack": "/api/rpg/story_authoring/packs/deactivate",
         },
         "bounded": {
             "limit": limit,
@@ -186,12 +190,14 @@ def approve_story_authoring_inspector_proposal(
     pending_id: str,
     turn_index: int = 0,
     reason: str = "gm_approved",
+    auto_activate: bool = False,
 ) -> Dict[str, Any]:
     approve_result = approve_story_proposal(
         simulation_state,
         pending_id=pending_id,
         turn_index=turn_index,
         reason=reason,
+        auto_activate=auto_activate,
     )
     return {
         "ok": bool(approve_result.get("ok")),

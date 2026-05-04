@@ -5,6 +5,7 @@ import json
 from typing import Any, Dict, List
 
 from app.rpg.story_authoring.runtime import author_story_proposal
+from app.rpg.story_packs.activation import activate_story_pack
 from app.rpg.story_packs.importer import import_story_pack
 from app.rpg.story_proposals.validation import validate_story_proposal
 
@@ -252,6 +253,7 @@ def approve_story_proposal(
     pending_id: str,
     turn_index: int = 0,
     reason: str = "gm_approved",
+    auto_activate: bool = False,
 ) -> Dict[str, Any]:
     pending_id = str(pending_id or "")
     state = ensure_story_authoring_approval_state(simulation_state)
@@ -301,6 +303,16 @@ def approve_story_proposal(
             "import_result": import_result,
         }
 
+    activation_result = None
+    if auto_activate:
+        activation_result = activate_story_pack(
+            simulation_state,
+            str(import_result.get("pack_id") or ""),
+            turn_index=turn_index,
+            reason="approved_auto_activate",
+            metadata={"pending_id": pending_id},
+        )
+
     state = ensure_story_authoring_approval_state(simulation_state)
     state["pending"] = remaining
     simulation_state["story_authoring_approval_state"] = normalize_story_authoring_approval_state(state)
@@ -312,13 +324,19 @@ def approve_story_proposal(
         reason=reason,
         import_ok=True,
         imported_pack_id=str(import_result.get("pack_id") or ""),
-        details={"proposal_id": proposal.get("proposal_id"), "import_result": import_result},
+        details={
+            "proposal_id": proposal.get("proposal_id"),
+            "import_result": import_result,
+            "activation_result": activation_result or {},
+            "auto_activate": auto_activate,
+        },
     )
     return {
         "ok": True,
-        "reason": "approved_imported",
+        "reason": "approved_imported_activated" if activation_result and activation_result.get("ok") else "approved_imported",
         "pending_id": pending_id,
         "import_result": import_result,
+        "activation_result": activation_result,
     }
 
 

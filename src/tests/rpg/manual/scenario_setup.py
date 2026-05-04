@@ -36,6 +36,7 @@ from app.rpg.story_authoring.approval import (
     reject_story_proposal,
 )
 from app.rpg.story_authoring.runtime import author_story_proposal
+from app.rpg.story_packs.activation import activate_story_pack, deactivate_story_pack
 from app.rpg.story_event_queue.queue import (
     enqueue_story_event,
     enqueue_story_event_definition,
@@ -440,6 +441,25 @@ def _apply_manual_scenario_setup(session: Dict[str, Any], scenario: Dict[str, An
                     pending_id=pending_id,
                     turn_index=int(action.get("turn_index") or scenario.get("setup_turn_index") or 1),
                     reason=str(action.get("reason") or "gm_rejected"),
+                )
+
+    for activation in scenario.get("setup_story_pack_activation_actions") or []:
+        if isinstance(activation, dict):
+            action = str(activation.get("action") or "")
+            pack_id = str(activation.get("pack_id") or "")
+            if action == "activate":
+                activate_story_pack(
+                    simulation_state,
+                    pack_id,
+                    turn_index=int(activation.get("turn_index") or scenario.get("setup_turn_index") or 1),
+                    reason=str(activation.get("reason") or "scenario_activate"),
+                )
+            elif action == "deactivate":
+                deactivate_story_pack(
+                    simulation_state,
+                    pack_id,
+                    turn_index=int(activation.get("turn_index") or scenario.get("setup_turn_index") or 1),
+                    reason=str(activation.get("reason") or "scenario_deactivate"),
                 )
 
     for item in scenario.get("setup_story_event_queue") or []:
