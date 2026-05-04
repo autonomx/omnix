@@ -4,6 +4,7 @@ from collections import Counter
 from typing import Any, Dict, List
 
 from tests.rpg.autoplay.progress import no_progress_streak
+from tests.rpg.autoplay.progress_quality import compute_progress_quality_metrics
 
 
 def _safe_dict(value: Any) -> Dict[str, Any]:
@@ -115,6 +116,7 @@ def compute_progress_metrics(
                 action_categories[category] += 1
 
     quest_summary = _safe_dict(latest_context.get("quest_log_summary"))
+    progress_quality_metrics = compute_progress_quality_metrics(transcript)
     return {
         "turn_count": len(transcript),
         "fallback_player_actions": fallback_count,
@@ -131,6 +133,7 @@ def compute_progress_metrics(
         "checkpoint_failure_count": checkpoint_failure_count,
         "state_bound_warning_count": state_bound_warning_count,
         "max_state_size_bytes_seen": max_state_size_bytes_seen,
+        "progress_quality": progress_quality_metrics,
         "suggested_action_category_counts": dict(action_categories),
         "latest_active_objective_count": int(quest_summary.get("active_count") or 0),
         "latest_completed_objective_count": int(quest_summary.get("completed_count") or 0),

@@ -33,6 +33,10 @@ from tests.rpg.autoplay.player_agent import (
     validate_player_action_against_context,
 )
 from tests.rpg.autoplay.progress import classify_progress_delta, state_digest
+from tests.rpg.autoplay.progress_quality import (
+    classify_turn_progress_quality,
+    evaluate_progress_quality_health,
+)
 from tests.rpg.autoplay.provider_adapter import (
     call_provider_text,
     describe_provider_shape,
@@ -214,6 +218,14 @@ def run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
             before_state=before_state,
             after_state=simulation_state,
         )
+        progress_quality = classify_turn_progress_quality(
+            {
+                "progress_delta": progress_delta,
+                "player_action_context": context,
+                "selected_player_action": selected,
+                "player_action": player_action,
+            }
+        )
         state_bounds = collect_state_bounds(
             simulation_state,
             max_state_bytes=int(args.max_state_bytes),
@@ -259,6 +271,7 @@ def run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
             "before_state_digest": before_digest,
             "after_state_digest": state_digest(simulation_state),
             "progress_delta": progress_delta,
+            "progress_quality": progress_quality,
             "state_bounds": state_bounds,
             "save_load_checkpoint": save_load_checkpoint,
         }
@@ -299,6 +312,23 @@ def run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
         fail_on_checkpoint_failure=not args.allow_checkpoint_failures,
         fail_on_state_bound_warnings=not args.allow_state_bound_warnings,
     )
+    progress_quality_health = evaluate_progress_quality_health(
+        transcript,
+        min_meaningful_progress_rate=float(args.min_meaningful_progress_rate),
+        max_churn_only_rate=float(args.max_churn_only_rate),
+        max_churn_only_streak=int(args.max_churn_only_streak),
+        max_objective_target_no_progress_streak=int(args.max_objective_target_no_progress_streak),
+    )
+    health.setdefault("warnings", [])
+    if not progress_quality_health.get("ok"):
+        health["warnings"].extend(
+            [
+                "progress_quality:" + str(warning)
+                for warning in progress_quality_health.get("warnings") or []
+            ]
+        )
+        health["ok"] = False
+    health["progress_quality"] = progress_quality_health
     summary = {
         "ok": bool(health.get("ok")) and not stopped_reason,
         "session_id": session_id,
@@ -311,6 +341,12 @@ def run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
             "max_state_roots": int(args.max_state_roots),
             "max_state_list_length": int(args.max_state_list_length),
             "max_state_dict_keys": int(args.max_state_dict_keys),
+        },
+        "progress_quality_thresholds": {
+            "min_meaningful_progress_rate": float(args.min_meaningful_progress_rate),
+            "max_churn_only_rate": float(args.max_churn_only_rate),
+            "max_churn_only_streak": int(args.max_churn_only_streak),
+            "max_objective_target_no_progress_streak": int(args.max_objective_target_no_progress_streak),
         },
         "seed_result": seed_result,
         "requested_turns": int(args.turns),
@@ -369,6 +405,10 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--max-state-dict-keys", type=int, default=500)
     parser.add_argument("--allow-checkpoint-failures", action="store_true")
     parser.add_argument("--allow-state-bound-warnings", action="store_true")
+    parser.add_argument("--min-meaningful-progress-rate", type=float, default=0.0)
+    parser.add_argument("--max-churn-only-rate", type=float, default=1.0)
+    parser.add_argument("--max-churn-only-streak", type=int, default=0)
+    parser.add_argument("--max-objective-target-no-progress-streak", type=int, default=0)
     return parser
 
 

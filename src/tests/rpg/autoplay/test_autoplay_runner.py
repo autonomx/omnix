@@ -69,6 +69,10 @@ def test_autoplay_runner_fallback_executes_short_campaign(tmp_path: Path, monkey
         max_state_dict_keys=500,
         allow_checkpoint_failures=False,
         allow_state_bound_warnings=False,
+        min_meaningful_progress_rate=0.0,
+        max_churn_only_rate=1.0,
+        max_churn_only_streak=0,
+        max_objective_target_no_progress_streak=0,
     )
 
     summary = run_autoplay_campaign(args)

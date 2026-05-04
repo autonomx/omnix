@@ -35,6 +35,9 @@ def render_autoplay_html(transcript: List[Dict[str, Any]], summary: Dict[str, An
               <div><strong>Progress:</strong>
                 <pre>{html.escape(json.dumps(row.get("progress_delta") or {}, ensure_ascii=False, indent=2, sort_keys=True, default=str))}</pre>
               </div>
+              <div><strong>Progress quality:</strong>
+                <pre>{html.escape(json.dumps(row.get("progress_quality") or {}, ensure_ascii=False, indent=2, sort_keys=True, default=str))}</pre>
+              </div>
               <details>
                 <summary>State bounds</summary>
                 <pre>{html.escape(json.dumps(row.get("state_bounds") or {}, ensure_ascii=False, indent=2, sort_keys=True, default=str))}</pre>

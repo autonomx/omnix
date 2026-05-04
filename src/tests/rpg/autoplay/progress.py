@@ -72,6 +72,41 @@ def _journal_entries(state: Dict[str, Any]) -> List[Dict[str, Any]]:
     ]
 
 
+def _active_objective_ids(state: Dict[str, Any]) -> List[str]:
+    ids: List[str] = []
+    milestone_rows = _milestone_rows(state)
+    for milestone_id, row in milestone_rows.items():
+        status = str(row.get("status") or "active")
+        if status not in {"completed", "failed", "cancelled"}:
+            ids.append(milestone_id)
+    return sorted(ids)
+
+
+def _location_key(state: Dict[str, Any]) -> str:
+    scene = _safe_dict(state.get("scene"))
+    location = _safe_dict(state.get("location"))
+    runtime = _safe_dict(state.get("runtime"))
+    return str(
+        scene.get("scene_id")
+        or scene.get("location")
+        or location.get("location_id")
+        or location.get("name")
+        or runtime.get("location")
+        or state.get("current_location")
+        or ""
+    )
+
+
+def _combat_active(state: Dict[str, Any]) -> bool:
+    combat = _safe_dict(state.get("combat_state"))
+    return bool(combat.get("active") or combat.get("in_combat"))
+
+
+def _event_queue_count(state: Dict[str, Any]) -> int:
+    queue_state = _safe_dict(state.get("story_event_queue_state"))
+    return len(_safe_list(queue_state.get("queue")))
+
+
 def classify_progress_delta(
     *,
     before_state: Dict[str, Any],
@@ -108,16 +143,38 @@ def classify_progress_delta(
         if _safe_dict(before_arcs.get(arc_id)).get("stage") != row.get("stage")
     ]
     new_journal_entries = max(0, len(after_journal) - len(before_journal))
+    before_objectives = set(_active_objective_ids(before_state))
+    after_objectives = set(_active_objective_ids(after_state))
+    added_objectives = sorted(after_objectives - before_objectives)
+    removed_objectives = sorted(before_objectives - after_objectives)
+    location_changed = _location_key(before_state) != _location_key(after_state)
+    combat_started = not _combat_active(before_state) and _combat_active(after_state)
+    combat_ended = _combat_active(before_state) and not _combat_active(after_state)
+    queued_events_delta = _event_queue_count(after_state) - _event_queue_count(before_state)
 
     categories: List[str] = []
     if added_milestones:
         categories.append("milestone_added")
     if completed_milestones:
         categories.append("milestone_completed")
+    if added_objectives:
+        categories.append("objective_added")
+    if removed_objectives or completed_milestones:
+        categories.append("objective_completed")
     if arc_stage_changes:
         categories.append("arc_stage_changed")
     if new_journal_entries:
         categories.append("journal_entry_added")
+    if location_changed:
+        categories.append("location_changed")
+    if combat_started:
+        categories.append("combat_started")
+    if combat_ended:
+        categories.append("combat_ended")
+    if queued_events_delta > 0:
+        categories.append("story_event_queued")
+    if queued_events_delta < 0:
+        categories.append("story_event_resolved")
     if before_digest["hash"] != after_digest["hash"] and not categories:
         categories.append("state_changed")
 
@@ -128,8 +185,14 @@ def classify_progress_delta(
         "after_digest": after_digest,
         "added_milestones": added_milestones,
         "completed_milestones": completed_milestones,
+        "added_objectives": added_objectives,
+        "removed_objectives": removed_objectives,
         "arc_stage_changes": arc_stage_changes,
         "new_journal_entries": new_journal_entries,
+        "location_changed": location_changed,
+        "combat_started": combat_started,
+        "combat_ended": combat_ended,
+        "queued_events_delta": queued_events_delta,
     }
 
 
