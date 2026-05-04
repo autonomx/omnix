@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any, Dict, List
 
 from app.rpg.escalation.rules import normalize_escalation_rule
+from app.rpg.story_packs.activation import list_active_story_pack_ids
 from app.rpg.story_proposals.normalization import normalize_proposal_story_event
 
 MAX_STORY_EVENT_DEFINITIONS = 500
@@ -143,4 +144,36 @@ def list_escalation_rule_definitions(
     if arc_id:
         rows = [row for row in rows if row.get("arc_id") == arc_id]
     rows.sort(key=lambda row: (int(row.get("priority") or 0), str(row.get("rule_id") or "")), reverse=True)
+    return rows
+
+
+def list_active_escalation_rule_definitions(
+    simulation_state: Dict[str, Any],
+    *,
+    arc_id: str = "",
+) -> List[Dict[str, Any]]:
+    """Return escalation rules belonging to active imported story packs only."""
+    active_pack_ids = set(list_active_story_pack_ids(simulation_state))
+    if not active_pack_ids:
+        return []
+
+    # Get all globally registered rules
+    state = ensure_escalation_rule_registry(simulation_state)
+    all_rules = list(state.get("rules", {}).values())
+
+    # Filter by active pack IDs using metadata
+    rows = []
+    for rule in all_rules:
+        if not isinstance(rule, dict):
+            continue
+        metadata = _safe_dict(rule.get("metadata"))
+        rule_pack_id = str(metadata.get("pack_id") or "")
+        if rule_pack_id not in active_pack_ids:
+            continue
+        if arc_id and str(rule.get("arc_id") or "") != arc_id:
+            continue
+        rows.append(rule)
+
+    # Deterministic order: highest priority first, then rule id
+    rows.sort(key=lambda row: (-int(row.get("priority") or 0), str(row.get("rule_id") or "")))
     return rows
