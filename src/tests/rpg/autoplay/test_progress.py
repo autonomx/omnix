@@ -129,3 +129,80 @@ def test_classify_progress_delta_detects_witness_hook_meaningful_progress():
     assert "arc_stage_changed" in delta["categories"]
     assert "journal_entry_added" in delta["categories"]
     assert "story_event_queued" in delta["categories"]
+
+
+def test_classify_progress_delta_detects_added_branch_objective():
+    before = {
+        "story_arc_milestone_state": {
+            "arcs": {
+                "arc:witness_search": {
+                    "milestones": [
+                        {"milestone_id": "milestone:find_witness", "status": "completed"}
+                    ]
+                }
+            }
+        }
+    }
+    after = {
+        "story_arc_milestone_state": {
+            "arcs": {
+                "arc:witness_search": {
+                    "milestones": [
+                        {"milestone_id": "milestone:find_witness", "status": "completed"},
+                        {"milestone_id": "milestone:pursue_bandit_trail", "status": "active"},
+                    ]
+                }
+            }
+        }
+    }
+
+    delta = classify_progress_delta(before_state=before, after_state=after)
+
+    assert "milestone_added" in delta["categories"]
+    assert "objective_added" in delta["categories"]
+
+
+def test_classify_progress_delta_does_not_repeat_completed_branch_when_state_is_preserved():
+    before = {
+        "story_arc_milestone_state": {
+            "arcs": {
+                "arc:witness_search": {
+                    "milestones": [
+                        {"milestone_id": "milestone:find_witness", "status": "completed"},
+                        {"milestone_id": "milestone:pursue_bandit_trail", "status": "completed"},
+                    ]
+                }
+            }
+        },
+        "campaign_journal_state": {
+            "entries": [
+                {"entry_id": "journal:witness:found"},
+                {"entry_id": "journal:witness:bandit_trail"},
+            ]
+        },
+    }
+    after = {
+        "story_arc_milestone_state": {
+            "arcs": {
+                "arc:witness_search": {
+                    "milestones": [
+                        {"milestone_id": "milestone:find_witness", "status": "completed"},
+                        {"milestone_id": "milestone:pursue_bandit_trail", "status": "completed"},
+                    ]
+                }
+            }
+        },
+        "campaign_journal_state": {
+            "entries": [
+                {"entry_id": "journal:witness:found"},
+                {"entry_id": "journal:witness:bandit_trail"},
+            ]
+        },
+    }
+
+    delta = classify_progress_delta(before_state=before, after_state=after)
+
+    assert "milestone_added" not in delta["categories"]
+    assert "milestone_completed" not in delta["categories"]
+    assert "objective_completed" not in delta["categories"]
+    assert "journal_entry_added" not in delta["categories"]
