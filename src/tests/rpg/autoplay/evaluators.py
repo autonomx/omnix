@@ -3,6 +3,8 @@ from __future__ import annotations
 from collections import Counter
 from typing import Any, Dict, List
 
+from tests.rpg.autoplay.progress import no_progress_streak
+
 
 def _safe_dict(value: Any) -> Dict[str, Any]:
     return value if isinstance(value, dict) else {}
@@ -66,6 +68,9 @@ def compute_progress_metrics(
     invalid_player_agent_count = 0
     runtime_error_count = 0
     compatibility_turn_runtime_count = 0
+    real_turn_runtime_count = 0
+    progress_category_counts = Counter()
+
     narration_missing_count = 0
 
     for row in transcript:
@@ -80,8 +85,13 @@ def compute_progress_metrics(
             runtime_error_count += 1
         if _safe_dict(row.get("turn_result")).get("compatibility_turn_runtime"):
             compatibility_turn_runtime_count += 1
+        if _safe_dict(row.get("turn_result")).get("runtime_name"):
+            real_turn_runtime_count += 1
         if not _safe_str(row.get("narration")):
             narration_missing_count += 1
+        for category in _safe_list(_safe_dict(row.get("progress_delta")).get("categories")):
+            if category:
+                progress_category_counts[str(category)] += 1
         for action in _safe_list(_safe_dict(row.get("player_action_context")).get("suggested_actions")):
             category = _safe_str(_safe_dict(action).get("category"))
             if category:
@@ -96,7 +106,10 @@ def compute_progress_metrics(
         "invalid_player_agent_responses": invalid_player_agent_count,
         "runtime_errors": runtime_error_count,
         "compatibility_turn_runtime_count": compatibility_turn_runtime_count,
+        "real_turn_runtime_count": real_turn_runtime_count,
         "narration_missing_count": narration_missing_count,
+        "progress_category_counts": dict(progress_category_counts),
+        "no_progress_streak": no_progress_streak(transcript),
         "suggested_action_category_counts": dict(action_categories),
         "latest_active_objective_count": int(quest_summary.get("active_count") or 0),
         "latest_completed_objective_count": int(quest_summary.get("completed_count") or 0),
@@ -112,6 +125,7 @@ def evaluate_autoplay_health(
     max_runtime_errors: int = 0,
     allow_compatibility_turn_runtime: bool = True,
     max_player_agent_fallback_rate: float = 1.0,
+    max_no_progress_turns: int = 0,
 ) -> Dict[str, Any]:
     loop = detect_repeated_action_loop(
         transcript,
@@ -131,6 +145,8 @@ def evaluate_autoplay_health(
         warnings.append("compatibility_turn_runtime_used")
     if float(metrics.get("fallback_player_action_rate") or 0.0) > float(max_player_agent_fallback_rate):
         warnings.append("player_agent_fallback_rate_exceeded")
+    if max_no_progress_turns > 0 and int(metrics.get("no_progress_streak") or 0) > max_no_progress_turns:
+        warnings.append("no_progress_turn_limit_exceeded")
     if metrics["latest_suggested_action_count"] == 0:
         warnings.append("no_suggested_actions")
 

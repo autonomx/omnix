@@ -1,4 +1,7 @@
-from tests.rpg.autoplay.provider_adapter import call_provider_text, describe_provider_shape
+from tests.rpg.autoplay.provider_adapter import (
+    call_provider_text,
+    describe_provider_shape,
+)
 
 
 class GenerateProvider:

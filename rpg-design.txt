@@ -1,713 +1,246 @@
-Bundle N1-N3 — LLM Autoplay Campaign Runner v1
+Bundle N4-N6 — Autoplay Real Turn Runtime Binding + Progress Evaluator v1
 GOAL:
-Add a new long-run campaign harness where an LLM plays the role of the player.
+Remove the N1-N3 compatibility turn runtime and bind autoplay to the real RPG turn execution path.
 
-This is NOT a replacement for manual_llm_transcript.py.
+This bundle adds:
+- real in-process turn binding to the same runtime used by /api/rpg/session/turn
+- no compatibility runtime in strict mode
+- turn contract extraction
+- narration extraction from real turn result
+- before/after state digests
+- per-turn progress delta classification
+- objective/journal/arc/NPC/location/combat progress metrics
+- no-progress streak detection
+- full-debug artifacts for long-run diagnosis
 
-manual_llm_transcript.py answers:
-- did a known scenario pass?
-
-autoplay_llm_campaign.py answers:
-- can the RPG run as a playable campaign loop?
-- can an LLM player choose grounded actions from player-visible context?
-- does story/objective/journal state progress over many turns?
-- does the game avoid obvious loops?
-- does state remain bounded enough to inspect?
-
-Core rules:
-- The player-agent LLM only sees player_action_context_v1.
-- The player-agent returns JSON only.
-- The player-agent chooses exactly one player action.
-- The player-agent must not narrate outcomes.
-- The player-agent must not invent rewards, XP, gold, loot, deaths, or quest completion.
-- The normal RPG turn runtime resolves the action.
-- Game LLM/narrator remains separate from player-agent role.
-Patch 1 — Add autoplay package
-1. Add src/tests/rpg/autoplay/__init__.py
+Important:
+- Player-agent still only sees player_action_context_v1.
+- Player-agent still uses centralized app provider via app.shared.get_provider().
+- Autoplay does not invent outcomes.
+- Real simulation runtime resolves all actions.
+- Compatibility runtime may remain as emergency fallback, but strict command must fail if it is used.
+Patch 1 — Add real turn runtime adapter
+1. Add src/tests/rpg/autoplay/turn_runtime.py
 *** Begin Patch
-*** Add File: src/tests/rpg/autoplay/__init__.py
-+"""Autoplay campaign harness helpers."""
-*** End Patch
-2. Add src/tests/rpg/autoplay/player_agent.py
-*** Begin Patch
-*** Add File: src/tests/rpg/autoplay/player_agent.py
+*** Add File: src/tests/rpg/autoplay/turn_runtime.py
 +from __future__ import annotations
 +
-+import json
-+import re
-+from typing import Any, Dict, List
-+
-+
-+PLAYER_AGENT_FORMAT_VERSION = "rpg_player_action_v1"
++import inspect
++from typing import Any, Callable, Dict, List, Tuple
 +
 +
 +def _safe_dict(value: Any) -> Dict[str, Any]:
 +    return value if isinstance(value, dict) else {}
 +
 +
-+def _safe_list(value: Any) -> List[Any]:
-+    return value if isinstance(value, list) else []
-+
-+
 +def _safe_str(value: Any) -> str:
 +    return value if isinstance(value, str) else ""
 +
 +
-+def build_player_agent_prompt(
-+    *,
-+    player_action_context: Dict[str, Any],
-+    recent_transcript: List[Dict[str, Any]] | None = None,
-+    strategy: str = "balanced_story_player",
-+) -> str:
-+    """Build the player-agent prompt.
++def _candidate_callables() -> List[Tuple[str, Callable[..., Any]]]:
++    """Discover in-process RPG turn callables.
 +
-+    The prompt intentionally receives player-visible action context, not raw
-+    simulation state. The LLM is only choosing the next action.
++    Keep this as a narrow compatibility ladder. The preferred target is the
++    same implementation behind /api/rpg/session/turn, but project modules have
++    moved across phases, so discovery is centralized here instead of buried in
++    autoplay_llm_campaign.py.
 +    """
-+    recent_transcript = recent_transcript or []
-+    compact_recent = [
-+        {
-+            "turn_index": row.get("turn_index"),
-+            "player_action": row.get("player_action"),
-+            "narration": row.get("narration"),
-+            "selected_action_reason": row.get("selected_action_reason"),
-+        }
-+        for row in recent_transcript[-8:]
-+        if isinstance(row, dict)
++    candidates: List[Tuple[str, Callable[..., Any]]] = []
++
++    module_specs = [
++        ("app.rpg.session_runtime", ["run_player_turn", "apply_player_turn", "process_player_turn"]),
++        ("app.rpg.session", ["run_player_turn", "apply_player_turn", "process_player_turn"]),
++        ("app.rpg.runtime", ["run_player_turn", "apply_player_turn", "process_player_turn"]),
++        ("app.rpg.api.session", ["run_session_turn", "session_turn", "turn"]),
++        ("app.rpg.session_api", ["run_session_turn", "session_turn", "turn"]),
 +    ]
 +
-+    payload = {
-+        "strategy": strategy,
-+        "player_action_context": player_action_context,
-+        "recent_transcript": compact_recent,
-+    }
-+    return (
-+        "You are playing an RPG as the player character.\n"
-+        "Choose exactly one next player action.\n\n"
-+        "Rules:\n"
-+        "- Use only player-visible context.\n"
-+        "- Do not narrate the outcome.\n"
-+        "- Do not decide success or failure.\n"
-+        "- Do not invent rewards, XP, gold, loot, deaths, quest completion, or hidden facts.\n"
-+        "- Prefer actions that pursue active objectives, interact with nearby NPCs, or investigate grounded story leads.\n"
-+        "- Avoid repeating the same action unless there is a clear reason.\n"
-+        "- Return JSON only.\n\n"
-+        "Required JSON format:\n"
-+        "{\n"
-+        '  "format_version": "rpg_player_action_v1",\n'
-+        '  "intent": "short intent",\n'
-+        '  "action": "single player-facing action command",\n'
-+        '  "reason": "why this action was chosen",\n'
-+        '  "risk": "low|medium|high",\n'
-+        '  "goal_id": "optional objective_id"\n'
-+        "}\n\n"
-+        "Context:\n"
-+        + json.dumps(payload, ensure_ascii=False, sort_keys=True, indent=2)
-+    )
++    for module_name, names in module_specs:
++        try:
++            module = __import__(module_name, fromlist=names)
++        except Exception:
++            continue
++        for name in names:
++            value = getattr(module, name, None)
++            if callable(value):
++                candidates.append((f"{module_name}.{name}", value))
++
++    return candidates
 +
 +
-+def _extract_json_object(text: str) -> Dict[str, Any]:
-+    text = str(text or "").strip()
-+    if not text:
-+        raise ValueError("empty_player_agent_response")
++def describe_turn_runtime_candidates() -> List[Dict[str, str]]:
++    rows = []
++    for name, fn in _candidate_callables():
++        try:
++            signature = str(inspect.signature(fn))
++        except Exception:
++            signature = "<uninspectable>"
++        rows.append({"name": name, "signature": signature})
++    return rows
++
++
++def _call_with_supported_kwargs(fn: Callable[..., Any], **kwargs: Any) -> Any:
 +    try:
-+        parsed = json.loads(text)
-+        if isinstance(parsed, dict):
-+            return parsed
++        signature = inspect.signature(fn)
++        supported = {
++            key: value
++            for key, value in kwargs.items()
++            if key in signature.parameters
++        }
++        if supported:
++            return fn(**supported)
 +    except Exception:
 +        pass
 +
-+    match = re.search(r"\{.*\}", text, flags=re.DOTALL)
-+    if not match:
-+        raise ValueError("player_agent_response_missing_json_object")
-+    parsed = json.loads(match.group(0))
-+    if not isinstance(parsed, dict):
-+        raise ValueError("player_agent_response_json_not_object")
-+    return parsed
-+
-+
-+def parse_player_agent_response(text: str) -> Dict[str, Any]:
-+    parsed = _extract_json_object(text)
-+    action = _safe_str(parsed.get("action")).strip()
-+    if not action:
-+        return {
-+            "ok": False,
-+            "reason": "missing_action",
-+            "raw": text,
-+            "parsed": parsed,
-+        }
-+
-+    risk = _safe_str(parsed.get("risk")).lower() or "medium"
-+    if risk not in {"low", "medium", "high"}:
-+        risk = "medium"
-+
-+    return {
-+        "ok": True,
-+        "format_version": PLAYER_AGENT_FORMAT_VERSION,
-+        "intent": _safe_str(parsed.get("intent"))[:240],
-+        "action": action[:1000],
-+        "reason": _safe_str(parsed.get("reason"))[:1000],
-+        "risk": risk,
-+        "goal_id": _safe_str(parsed.get("goal_id"))[:240],
-+        "raw": text,
-+        "parsed": parsed,
-+    }
-+
-+
-+def choose_fallback_player_action(
-+    *,
-+    player_action_context: Dict[str, Any],
-+    recent_transcript: List[Dict[str, Any]] | None = None,
-+) -> Dict[str, Any]:
-+    """Deterministic fallback when the player-agent LLM fails.
-+
-+    Prefer the first suggested action. If there are no suggestions, observe.
-+    """
-+    suggestions = _safe_list(_safe_dict(player_action_context).get("suggested_actions"))
-+    if suggestions:
-+        first = _safe_dict(suggestions[0])
-+        command = _safe_str(first.get("command")) or "I carefully observe my surroundings."
-+        return {
-+            "ok": True,
-+            "format_version": PLAYER_AGENT_FORMAT_VERSION,
-+            "intent": _safe_str(first.get("label")) or "Use suggested action",
-+            "action": command,
-+            "reason": "Deterministic fallback selected the top suggested action.",
-+            "risk": "medium",
-+            "goal_id": _safe_str(first.get("objective_id")),
-+            "fallback": True,
-+            "source_action_id": _safe_str(first.get("action_id")),
-+        }
-+
-+    return {
-+        "ok": True,
-+        "format_version": PLAYER_AGENT_FORMAT_VERSION,
-+        "intent": "Observe surroundings",
-+        "action": "I carefully observe my surroundings for useful details, exits, people, and threats.",
-+        "reason": "Deterministic fallback because no suggested actions were available.",
-+        "risk": "low",
-+        "goal_id": "",
-+        "fallback": True,
-+    }
-+
-+
-+def validate_player_action_against_context(
-+    *,
-+    player_action: Dict[str, Any],
-+    player_action_context: Dict[str, Any],
-+) -> Dict[str, Any]:
-+    action = _safe_str(_safe_dict(player_action).get("action"))
-+    if not action:
-+        return {"ok": False, "reason": "missing_action"}
-+
-+    banned_fragments = [
-+        "i gain ",
-+        "i receive ",
-+        "i complete the quest",
-+        "i kill them instantly",
-+        "i find 100",
-+        "the gm gives me",
-+        "the narrator says",
++    # Common positional fallbacks.
++    positional_shapes = [
++        (
++            kwargs.get("simulation_state"),
++            kwargs.get("player_input"),
++            kwargs.get("turn_index"),
++        ),
++        (
++            kwargs.get("session"),
++            kwargs.get("player_input"),
++        ),
++        (
++            kwargs.get("session_id"),
++            kwargs.get("player_input"),
++        ),
 +    ]
-+    lower = action.lower()
-+    for fragment in banned_fragments:
-+        if fragment in lower:
-+            return {
-+                "ok": False,
-+                "reason": "player_action_appears_to_decide_outcome",
-+                "fragment": fragment,
-+            }
-+
-+    return {"ok": True, "reason": "valid_player_action"}
-*** End Patch
-3. Add src/tests/rpg/autoplay/provider_adapter.py
-*** Begin Patch
-*** Add File: src/tests/rpg/autoplay/provider_adapter.py
-+from __future__ import annotations
-+
-+import json
-+from typing import Any, Dict
++    last_error: Exception | None = None
++    for shape in positional_shapes:
++        try:
++            return fn(*shape)
++        except Exception as exc:
++            last_error = exc
++    if last_error:
++        raise last_error
++    raise RuntimeError("turn_runtime_call_failed")
 +
 +
-+def _safe_str(value: Any) -> str:
-+    return value if isinstance(value, str) else ""
-+
-+
-+def call_provider_text(provider: Any, prompt: str, *, max_tokens: int = 600) -> str:
-+    """Small compatibility wrapper for app providers used in tests.
-+
-+    This intentionally supports several common provider shapes used across the
-+    app without making the autoplay runner depend on one provider implementation.
-+    """
-+    if provider is None:
-+        raise RuntimeError("provider_missing")
-+
-+    if hasattr(provider, "generate_text"):
-+        result = provider.generate_text(prompt, max_tokens=max_tokens)
-+        if isinstance(result, str):
-+            return result
-+        if isinstance(result, dict):
-+            return _safe_str(result.get("text") or result.get("content") or result.get("response"))
-+
-+    if hasattr(provider, "complete"):
-+        result = provider.complete(prompt, max_tokens=max_tokens)
-+        if isinstance(result, str):
-+            return result
-+        if isinstance(result, dict):
-+            return _safe_str(result.get("text") or result.get("content") or result.get("response"))
-+
-+    if hasattr(provider, "chat"):
-+        result = provider.chat(
-+            [
-+                {
-+                    "role": "user",
-+                    "content": prompt,
-+                }
-+            ],
-+            max_tokens=max_tokens,
-+        )
-+        if isinstance(result, str):
-+            return result
-+        if isinstance(result, dict):
-+            return _safe_str(result.get("text") or result.get("content") or result.get("response"))
-+
-+    if callable(provider):
-+        result = provider(prompt)
-+        if isinstance(result, str):
-+            return result
-+        if isinstance(result, dict):
-+            return _safe_str(result.get("text") or result.get("content") or result.get("response"))
-+
-+    raise RuntimeError(f"unsupported_provider_shape:{type(provider).__name__}")
-+
-+
-+def dummy_json_provider_response(action: str) -> str:
-+    return json.dumps(
-+        {
-+            "format_version": "rpg_player_action_v1",
-+            "intent": "test action",
-+            "action": action,
-+            "reason": "dummy provider response",
-+            "risk": "low",
-+            "goal_id": "",
++def _build_session_payload(
++    *,
++    session_id: str,
++    simulation_state: Dict[str, Any],
++    player_input: str,
++    turn_index: int,
++) -> Dict[str, Any]:
++    return {
++        "session_id": session_id,
++        "simulation_state": simulation_state,
++        "player_input": player_input,
++        "input": player_input,
++        "message": player_input,
++        "turn_index": turn_index,
++        "metadata": {
++            "source": "autoplay_llm_campaign",
++            "turn_index": turn_index,
 +        },
-+        sort_keys=True,
-+    )
-*** End Patch
-Patch 2 — Add autoplay metrics/evaluator/reporting
-4. Add src/tests/rpg/autoplay/evaluators.py
-*** Begin Patch
-*** Add File: src/tests/rpg/autoplay/evaluators.py
-+from __future__ import annotations
-+
-+from collections import Counter
-+from typing import Any, Dict, List
-+
-+
-+def _safe_dict(value: Any) -> Dict[str, Any]:
-+    return value if isinstance(value, dict) else {}
-+
-+
-+def _safe_list(value: Any) -> List[Any]:
-+    return value if isinstance(value, list) else []
-+
-+
-+def _safe_str(value: Any) -> str:
-+    return value if isinstance(value, str) else ""
-+
-+
-+def detect_repeated_action_loop(
-+    transcript: List[Dict[str, Any]],
-+    *,
-+    max_repeated_actions: int = 5,
-+) -> Dict[str, Any]:
-+    if max_repeated_actions <= 0:
-+        return {"ok": True, "reason": "disabled"}
-+    actions = [
-+        _safe_str(row.get("player_action")).strip().lower()
-+        for row in transcript
-+        if _safe_str(row.get("player_action")).strip()
-+    ]
-+    if not actions:
-+        return {"ok": True, "reason": "no_actions"}
-+
-+    streak = 1
-+    last = actions[-1]
-+    for previous in reversed(actions[:-1]):
-+        if previous == last:
-+            streak += 1
-+        else:
-+            break
-+    if streak > max_repeated_actions:
-+        return {
-+            "ok": False,
-+            "reason": "repeated_action_loop",
-+            "action": last,
-+            "streak": streak,
-+            "max_repeated_actions": max_repeated_actions,
-+        }
-+    return {
-+        "ok": True,
-+        "reason": "no_repeated_action_loop",
-+        "action": last,
-+        "streak": streak,
 +    }
 +
 +
-+def compute_progress_metrics(
-+    transcript: List[Dict[str, Any]],
-+    *,
-+    latest_context: Dict[str, Any] | None = None,
-+) -> Dict[str, Any]:
-+    latest_context = latest_context or {}
-+    action_categories = Counter()
-+    fallback_count = 0
-+    invalid_player_agent_count = 0
-+    runtime_error_count = 0
-+    narration_missing_count = 0
-+
-+    for row in transcript:
-+        selected = _safe_dict(row.get("selected_player_action"))
-+        if selected.get("fallback"):
-+            fallback_count += 1
-+        if not selected.get("ok"):
-+            invalid_player_agent_count += 1
-+        if row.get("runtime_error"):
-+            runtime_error_count += 1
-+        if not _safe_str(row.get("narration")):
-+            narration_missing_count += 1
-+        for action in _safe_list(_safe_dict(row.get("player_action_context")).get("suggested_actions")):
-+            category = _safe_str(_safe_dict(action).get("category"))
-+            if category:
-+                action_categories[category] += 1
-+
-+    quest_summary = _safe_dict(latest_context.get("quest_log_summary"))
-+    return {
-+        "turn_count": len(transcript),
-+        "fallback_player_actions": fallback_count,
-+        "invalid_player_agent_responses": invalid_player_agent_count,
-+        "runtime_errors": runtime_error_count,
-+        "narration_missing_count": narration_missing_count,
-+        "suggested_action_category_counts": dict(action_categories),
-+        "latest_active_objective_count": int(quest_summary.get("active_count") or 0),
-+        "latest_completed_objective_count": int(quest_summary.get("completed_count") or 0),
-+        "latest_suggested_action_count": len(_safe_list(latest_context.get("suggested_actions"))),
-+    }
-+
-+
-+def evaluate_autoplay_health(
-+    transcript: List[Dict[str, Any]],
-+    *,
-+    latest_context: Dict[str, Any] | None = None,
-+    max_repeated_actions: int = 5,
-+    max_runtime_errors: int = 0,
-+) -> Dict[str, Any]:
-+    loop = detect_repeated_action_loop(
-+        transcript,
-+        max_repeated_actions=max_repeated_actions,
-+    )
-+    metrics = compute_progress_metrics(transcript, latest_context=latest_context)
-+    warnings: List[str] = []
-+
-+    if not loop.get("ok"):
-+        warnings.append(str(loop.get("reason")))
-+    if metrics["runtime_errors"] > max_runtime_errors:
-+        warnings.append("runtime_error_limit_exceeded")
-+    if metrics["latest_suggested_action_count"] == 0:
-+        warnings.append("no_suggested_actions")
-+
-+    return {
-+        "ok": not warnings,
-+        "warnings": warnings,
-+        "loop": loop,
-+        "metrics": metrics,
-+    }
-*** End Patch
-5. Add src/tests/rpg/autoplay/reporting.py
-*** Begin Patch
-*** Add File: src/tests/rpg/autoplay/reporting.py
-+from __future__ import annotations
-+
-+import html
-+import json
-+import zipfile
-+from pathlib import Path
-+from typing import Any, Dict, List
-+
-+
-+def _safe_dict(value: Any) -> Dict[str, Any]:
-+    return value if isinstance(value, dict) else {}
-+
-+
-+def _safe_str(value: Any) -> str:
-+    return value if isinstance(value, str) else ""
-+
-+
-+def write_json(path: Path, payload: Any) -> None:
-+    path.parent.mkdir(parents=True, exist_ok=True)
-+    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
-+
-+
-+def render_autoplay_html(transcript: List[Dict[str, Any]], summary: Dict[str, Any]) -> str:
-+    rows = []
-+    for row in transcript:
-+        context = _safe_dict(row.get("player_action_context"))
-+        suggested = context.get("suggested_actions") if isinstance(context.get("suggested_actions"), list) else []
-+        rows.append(
-+            f"""
-+            <section class="turn">
-+              <h2>Turn {html.escape(str(row.get("turn_index")))} </h2>
-+              <div><strong>Player action:</strong> {html.escape(_safe_str(row.get("player_action")))}</div>
-+              <div><strong>Reason:</strong> {html.escape(_safe_str(row.get("selected_action_reason")))}</div>
-+              <div><strong>Narration:</strong><p>{html.escape(_safe_str(row.get("narration")))}</p></div>
-+              <details>
-+                <summary>Suggested actions shown to player-agent ({len(suggested)})</summary>
-+                <pre>{html.escape(json.dumps(suggested, ensure_ascii=False, indent=2))}</pre>
-+              </details>
-+              <details>
-+                <summary>Raw turn</summary>
-+                <pre>{html.escape(json.dumps(row, ensure_ascii=False, indent=2, sort_keys=True, default=str))}</pre>
-+              </details>
-+            </section>
-+            """
-+        )
-+    return f"""<!doctype html>
-+<html>
-+<head>
-+  <meta charset="utf-8" />
-+  <title>Autoplay Campaign Transcript</title>
-+  <style>
-+    body {{ font-family: system-ui, sans-serif; margin: 24px; line-height: 1.45; background: #111; color: #eee; }}
-+    .summary, .turn {{ border: 1px solid #444; border-radius: 12px; padding: 16px; margin-bottom: 16px; background: #181818; }}
-+    pre {{ white-space: pre-wrap; word-break: break-word; background: #080808; padding: 12px; border-radius: 8px; }}
-+    h1, h2 {{ margin-top: 0; }}
-+  </style>
-+</head>
-+<body>
-+  <h1>Autoplay Campaign Transcript</h1>
-+  <section class="summary">
-+    <h2>Summary</h2>
-+    <pre>{html.escape(json.dumps(summary, ensure_ascii=False, indent=2, sort_keys=True, default=str))}</pre>
-+  </section>
-+  {''.join(rows)}
-+</body>
-+</html>"""
-+
-+
-+def write_autoplay_artifacts(
-+    *,
-+    output_dir: Path,
-+    transcript: List[Dict[str, Any]],
-+    summary: Dict[str, Any],
-+    metrics: Dict[str, Any],
-+    health: Dict[str, Any],
-+    artifact_detail: str = "summary",
-+) -> Dict[str, str]:
-+    output_dir.mkdir(parents=True, exist_ok=True)
-+
-+    summary_path = output_dir / "autoplay-summary.json"
-+    transcript_path = output_dir / "autoplay-transcript.json"
-+    metrics_path = output_dir / "autoplay-progress-metrics.json"
-+    health_path = output_dir / "autoplay-health.json"
-+    html_path = output_dir / "autoplay-transcript.html"
-+    zip_path = output_dir / "autoplay-campaign-results.zip"
-+
-+    write_json(summary_path, summary)
-+    write_json(metrics_path, metrics)
-+    write_json(health_path, health)
-+    if artifact_detail == "full":
-+        write_json(transcript_path, transcript)
-+        html_path.write_text(render_autoplay_html(transcript, summary), encoding="utf-8")
-+
-+    with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as zf:
-+        zf.write(summary_path, summary_path.name)
-+        zf.write(metrics_path, metrics_path.name)
-+        zf.write(health_path, health_path.name)
-+        if artifact_detail == "full":
-+            zf.write(transcript_path, transcript_path.name)
-+            zf.write(html_path, html_path.name)
-+
-+    return {
-+        "summary": str(summary_path),
-+        "metrics": str(metrics_path),
-+        "health": str(health_path),
-+        "transcript": str(transcript_path) if artifact_detail == "full" else "",
-+        "html": str(html_path) if artifact_detail == "full" else "",
-+        "zip": str(zip_path),
-+    }
-*** End Patch
-Patch 3 — Add campaign seed helper
-6. Add src/tests/rpg/autoplay/seeding.py
-*** Begin Patch
-*** Add File: src/tests/rpg/autoplay/seeding.py
-+from __future__ import annotations
-+
-+from typing import Any, Dict
-+
-+from app.rpg.story_arcs.milestones import add_story_arc_milestone
-+from app.rpg.story_arcs.state import start_story_arc
-+
-+
-+def seed_tavern_story_campaign(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
-+    """Small deterministic seed for first autoplay runs.
-+
-+    This is intentionally simple: it gives the player-agent an objective, a
-+    nearby NPC, and a tavern location, without hidden state leaks.
-+    """
-+    simulation_state.setdefault("scene", {})
-+    simulation_state["scene"].update(
-+        {
-+            "scene_id": "scene:rusty_flagon",
-+            "location": "The Rusty Flagon Tavern",
-+            "description": "A busy medieval tavern with travelers, locals, and a wary innkeeper.",
-+            "nearby_npcs": [
-+                {
-+                    "npc_id": "npc:bran",
-+                    "name": "Bran",
-+                    "role": "innkeeper",
-+                }
-+            ],
-+        }
-+    )
-+    start_story_arc(
-+        simulation_state,
-+        "arc:witness_search",
-+        title="Witness Search",
-+        stage="rumors",
-+        pressure=20,
-+    )
-+    add_story_arc_milestone(
-+        simulation_state,
-+        arc_id="arc:witness_search",
-+        milestone_id="milestone:find_witness",
-+        title="Find the witness",
-+        objective_text="Find the witness near the tavern.",
-+        quest_id="quest:witness_search",
-+        priority=80,
-+        turn_index=0,
-+    )
-+    return {
-+        "ok": True,
-+        "seed": "tavern_story_seed",
-+        "scene_id": "scene:rusty_flagon",
-+        "arc_id": "arc:witness_search",
-+        "objective_id": "milestone:find_witness",
-+    }
-+
-+
-+def seed_campaign(simulation_state: Dict[str, Any], seed_name: str) -> Dict[str, Any]:
-+    seed_name = str(seed_name or "tavern_story_seed")
-+    if seed_name in {"", "none"}:
-+        return {"ok": True, "seed": "none"}
-+    if seed_name == "tavern_story_seed":
-+        return seed_tavern_story_campaign(simulation_state)
-+    raise ValueError(f"unknown_autoplay_seed:{seed_name}")
-*** End Patch
-Patch 4 — Add the autoplay runner
-7. Add src/tests/rpg/autoplay_llm_campaign.py
-*** Begin Patch
-*** Add File: src/tests/rpg/autoplay_llm_campaign.py
-+from __future__ import annotations
-+
-+import argparse
-+import os
-+import sys
-+import time
-+import uuid
-+from pathlib import Path
-+from typing import Any, Dict, List
-+
-+from app.rpg.player_action_context.runtime import build_player_action_context
-+from tests.rpg.autoplay.evaluators import compute_progress_metrics, evaluate_autoplay_health
-+from tests.rpg.autoplay.player_agent import (
-+    build_player_agent_prompt,
-+    choose_fallback_player_action,
-+    parse_player_agent_response,
-+    validate_player_action_against_context,
-+)
-+from tests.rpg.autoplay.provider_adapter import call_provider_text
-+from tests.rpg.autoplay.reporting import write_autoplay_artifacts
-+from tests.rpg.autoplay.seeding import seed_campaign
-+
-+
-+def _safe_dict(value: Any) -> Dict[str, Any]:
-+    return value if isinstance(value, dict) else {}
-+
-+
-+def _safe_str(value: Any) -> str:
-+    return value if isinstance(value, str) else ""
-+
-+
-+def _default_output_dir() -> Path:
-+    return Path("resources") / "data" / "test-results" / "autoplay"
-+
-+
-+def _load_provider():
-+    from app.shared import get_provider
-+
-+    return get_provider()
-+
-+
-+def _call_turn_runtime(
++def run_real_rpg_turn(
 +    *,
 +    simulation_state: Dict[str, Any],
 +    session_id: str,
-+    player_action: str,
++    player_input: str,
 +    turn_index: int,
 +) -> Dict[str, Any]:
-+    """Call the in-process RPG turn runtime.
++    """Run one real RPG turn in-process.
 +
-+    This uses a compatibility ladder because the project has evolved across
-+    FastAPI/session/runtime layers. Prefer an in-process function when present;
-+    otherwise fall back to a simple state-preserving record so early harness
-+    tests can still validate the player-agent loop.
++    Returns a normalized envelope:
++      {
++        ok,
++        runtime_name,
++        raw_result,
++        simulation_state,
++        turn_contract,
++        narration,
++      }
 +    """
-+    try:
-+        from app.rpg.session import apply_player_turn  # type: ignore
++    session = _build_session_payload(
++        session_id=session_id,
++        simulation_state=simulation_state,
++        player_input=player_input,
++        turn_index=turn_index,
++    )
 +
-+        return apply_player_turn(
-+            simulation_state=simulation_state,
-+            session_id=session_id,
-+            player_input=player_action,
-+            turn_index=turn_index,
-+        )
-+    except Exception as first_exc:
-+        first_error = first_exc
++    errors: List[str] = []
++    for runtime_name, fn in _candidate_callables():
++        try:
++            result = _call_with_supported_kwargs(
++                fn,
++                simulation_state=simulation_state,
++                state=simulation_state,
++                session=session,
++                session_dict=session,
++                session_id=session_id,
++                player_input=player_input,
++                input_text=player_input,
++                message=player_input,
++                command=player_input,
++                turn_index=turn_index,
++            )
++            normalized = normalize_turn_result(
++                result,
++                fallback_state=simulation_state,
++                runtime_name=runtime_name,
++            )
++            normalized["runtime_name"] = runtime_name
++            return normalized
++        except Exception as exc:
++            errors.append(f"{runtime_name}:{type(exc).__name__}:{exc}")
 +
-+    try:
-+        from app.rpg.session_runtime import run_player_turn  # type: ignore
-+
-+        return run_player_turn(
-+            simulation_state=simulation_state,
-+            session_id=session_id,
-+            player_input=player_action,
-+            turn_index=turn_index,
-+        )
-+    except Exception:
-+        pass
-+
-+    # Last-resort compatibility mode for the first N1-N3 harness. This still
-+    # lets us test player action selection, context generation, artifacts,
-+    # metrics, and loop detection before binding to the exact app turn function.
 +    return {
-+        "ok": True,
-+        "compatibility_turn_runtime": True,
-+        "warning": f"used_compatibility_turn_runtime_after:{type(first_error).__name__}",
-+        "turn_contract": {
-+            "turn_index": turn_index,
-+            "player_action": player_action,
-+        },
-+        "narration": f"You choose to act: {player_action}",
++        "ok": False,
++        "reason": "real_turn_runtime_unavailable",
++        "errors": errors[-20:],
++        "runtime_candidates": describe_turn_runtime_candidates(),
 +        "simulation_state": simulation_state,
++        "turn_contract": {},
++        "narration": "",
 +    }
 +
 +
-+def _extract_narration(turn_result: Dict[str, Any]) -> str:
++def extract_turn_contract(result: Any) -> Dict[str, Any]:
++    result = _safe_dict(result)
 +    candidates = [
-+        turn_result.get("narration"),
-+        _safe_dict(turn_result.get("result")).get("narration"),
-+        _safe_dict(turn_result.get("turn_contract")).get("narration"),
-+        _safe_dict(_safe_dict(turn_result.get("result")).get("turn_contract")).get("narration"),
++        result.get("turn_contract"),
++        _safe_dict(result.get("result")).get("turn_contract"),
++        _safe_dict(result.get("contract")),
++        _safe_dict(_safe_dict(result.get("result")).get("contract")),
++    ]
++    for candidate in candidates:
++        if isinstance(candidate, dict) and candidate:
++            return candidate
++    return {}
++
++
++def extract_simulation_state(result: Any, fallback_state: Dict[str, Any]) -> Dict[str, Any]:
++    result = _safe_dict(result)
++    candidates = [
++        result.get("simulation_state"),
++        _safe_dict(result.get("session")).get("simulation_state"),
++        _safe_dict(result.get("result")).get("simulation_state"),
++        _safe_dict(_safe_dict(result.get("result")).get("session")).get("simulation_state"),
++        _safe_dict(result.get("state")),
++    ]
++    for candidate in candidates:
++        if isinstance(candidate, dict) and candidate:
++            return candidate
++    return fallback_state
++
++
++def extract_narration(result: Any) -> str:
++    result = _safe_dict(result)
++    contract = extract_turn_contract(result)
++    candidates = [
++        result.get("narration"),
++        _safe_dict(result.get("result")).get("narration"),
++        contract.get("narration"),
++        _safe_dict(contract.get("narration")).get("text"),
++        _safe_dict(result.get("llm")).get("narration"),
 +    ]
 +    for candidate in candidates:
 +        if isinstance(candidate, str) and candidate.strip():
@@ -715,401 +248,626 @@ Patch 4 — Add the autoplay runner
 +    return ""
 +
 +
-+def _select_player_action(
++def normalize_turn_result(
++    result: Any,
 +    *,
-+    provider: Any,
-+    player_action_context: Dict[str, Any],
-+    transcript: List[Dict[str, Any]],
-+    strategy: str,
-+    use_llm_player: bool,
-+    max_tokens: int,
++    fallback_state: Dict[str, Any],
++    runtime_name: str = "",
 +) -> Dict[str, Any]:
-+    if not use_llm_player:
-+        return choose_fallback_player_action(
-+            player_action_context=player_action_context,
-+            recent_transcript=transcript,
-+        )
++    raw = result if isinstance(result, dict) else {"value": result}
++    turn_contract = extract_turn_contract(raw)
++    state = extract_simulation_state(raw, fallback_state)
++    narration = extract_narration(raw)
++    return {
++        "ok": bool(_safe_dict(raw).get("ok", True)),
++        "runtime_name": runtime_name,
++        "raw_result": raw,
++        "simulation_state": state,
++        "turn_contract": turn_contract,
++        "narration": narration,
++    }
+*** End Patch
+Patch 2 — Add progress delta evaluator
+2. Add src/tests/rpg/autoplay/progress.py
+*** Begin Patch
+*** Add File: src/tests/rpg/autoplay/progress.py
++from __future__ import annotations
 +
-+    prompt = build_player_agent_prompt(
-+        player_action_context=player_action_context,
-+        recent_transcript=transcript,
-+        strategy=strategy,
-+    )
-+    try:
-+        raw = call_provider_text(provider, prompt, max_tokens=max_tokens)
-+        parsed = parse_player_agent_response(raw)
-+        if not parsed.get("ok"):
-+            fallback = choose_fallback_player_action(
-+                player_action_context=player_action_context,
-+                recent_transcript=transcript,
-+            )
-+            fallback["player_agent_error"] = parsed
-+            return fallback
-+        validation = validate_player_action_against_context(
-+            player_action=parsed,
-+            player_action_context=player_action_context,
-+        )
-+        if not validation.get("ok"):
-+            fallback = choose_fallback_player_action(
-+                player_action_context=player_action_context,
-+                recent_transcript=transcript,
-+            )
-+            fallback["player_agent_validation"] = validation
-+            fallback["raw_player_agent_action"] = parsed
-+            return fallback
-+        return parsed
-+    except Exception as exc:
-+        fallback = choose_fallback_player_action(
-+            player_action_context=player_action_context,
-+            recent_transcript=transcript,
-+        )
-+        fallback["player_agent_exception"] = f"{type(exc).__name__}: {exc}"
-+        return fallback
++import hashlib
++import json
++from typing import Any, Dict, List
 +
 +
-+def run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
-+    session_id = args.session_id or f"autoplay_{uuid.uuid4().hex[:12]}"
-+    simulation_state: Dict[str, Any] = {}
-+    seed_result = seed_campaign(simulation_state, args.scenario_seed)
++def _safe_dict(value: Any) -> Dict[str, Any]:
++    return value if isinstance(value, dict) else {}
 +
-+    provider = _load_provider() if args.player_agent == "llm" else None
-+    transcript: List[Dict[str, Any]] = []
-+    started = time.time()
-+    stopped_reason = ""
 +
-+    for turn_index in range(1, int(args.turns) + 1):
-+        context = build_player_action_context(
-+            simulation_state,
-+            turn_index=turn_index,
-+            limit=args.suggested_action_limit,
-+        )
-+        selected = _select_player_action(
-+            provider=provider,
-+            player_action_context=context,
-+            transcript=transcript,
-+            strategy=args.strategy,
-+            use_llm_player=args.player_agent == "llm",
-+            max_tokens=args.player_agent_max_tokens,
-+        )
-+        player_action = _safe_str(selected.get("action"))
++def _safe_list(value: Any) -> List[Any]:
++    return value if isinstance(value, list) else []
 +
-+        runtime_error = ""
-+        turn_result: Dict[str, Any]
-+        try:
-+            turn_result = _call_turn_runtime(
-+                simulation_state=simulation_state,
-+                session_id=session_id,
-+                player_action=player_action,
-+                turn_index=turn_index,
-+            )
-+            returned_state = _safe_dict(turn_result.get("simulation_state"))
-+            if returned_state:
-+                simulation_state = returned_state
-+        except Exception as exc:
-+            runtime_error = f"{type(exc).__name__}: {exc}"
-+            turn_result = {"ok": False, "error": runtime_error}
 +
-+        narration = _extract_narration(turn_result)
-+        record = {
-+            "turn_index": turn_index,
-+            "session_id": session_id,
-+            "player_action_context": context if args.artifact_detail == "full" else {
-+                "format_version": context.get("format_version"),
-+                "mode": context.get("mode"),
-+                "location": context.get("location"),
-+                "active_objectives": context.get("active_objectives"),
-+                "suggested_actions": context.get("suggested_actions"),
-+            },
-+            "selected_player_action": selected,
-+            "selected_action_reason": selected.get("reason"),
-+            "player_action": player_action,
-+            "turn_result": turn_result if args.artifact_detail == "full" else {
-+                "ok": turn_result.get("ok"),
-+                "warning": turn_result.get("warning"),
-+                "compatibility_turn_runtime": turn_result.get("compatibility_turn_runtime"),
-+            },
-+            "narration": narration,
-+            "runtime_error": runtime_error,
++def _stable_json(value: Any) -> str:
++    return json.dumps(value, ensure_ascii=False, sort_keys=True, default=str)
++
++
++def state_digest(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
++    """Small deterministic digest for before/after comparisons."""
++    state = _safe_dict(simulation_state)
++    selected = {
++        "story_arc_state": state.get("story_arc_state"),
++        "story_arc_milestone_state": state.get("story_arc_milestone_state"),
++        "campaign_journal_state": state.get("campaign_journal_state"),
++        "quest_log_state": state.get("quest_log_state"),
++        "story_event_queue_state": state.get("story_event_queue_state"),
++        "npc_evolution_state": state.get("npc_evolution_state"),
++        "social_state": state.get("social_state"),
++        "combat_state": state.get("combat_state"),
++        "scene": state.get("scene"),
++        "location": state.get("location"),
++        "runtime": state.get("runtime"),
++    }
++    encoded = _stable_json(selected)
++    return {
++        "hash": hashlib.sha1(encoded.encode("utf-8")).hexdigest(),
++        "size_bytes": len(encoded.encode("utf-8")),
++        "counts": {
++            "arcs": len(_safe_dict(_safe_dict(state.get("story_arc_state")).get("arcs"))),
++            "milestone_arcs": len(_safe_dict(_safe_dict(state.get("story_arc_milestone_state")).get("arcs"))),
++            "journal_entries": len(_safe_list(_safe_dict(state.get("campaign_journal_state")).get("entries"))),
++            "queued_events": len(_safe_list(_safe_dict(state.get("story_event_queue_state")).get("queue"))),
++        },
++    }
++
++
++def _milestone_rows(state: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
++    out: Dict[str, Dict[str, Any]] = {}
++    milestone_state = _safe_dict(state.get("story_arc_milestone_state"))
++    for bucket in _safe_dict(milestone_state.get("arcs")).values():
++        for row in _safe_list(_safe_dict(bucket).get("milestones")):
++            if isinstance(row, dict) and row.get("milestone_id"):
++                out[str(row["milestone_id"])] = row
++    return out
++
++
++def _arc_rows(state: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
++    return {
++        str(arc_id): row
++        for arc_id, row in _safe_dict(_safe_dict(state.get("story_arc_state")).get("arcs")).items()
++        if isinstance(row, dict)
++    }
++
++
++def _journal_entries(state: Dict[str, Any]) -> List[Dict[str, Any]]:
++    return [
++        row
++        for row in _safe_list(_safe_dict(state.get("campaign_journal_state")).get("entries"))
++        if isinstance(row, dict)
++    ]
++
++
++def classify_progress_delta(
++    *,
++    before_state: Dict[str, Any],
++    after_state: Dict[str, Any],
++) -> Dict[str, Any]:
++    before_digest = state_digest(before_state)
++    after_digest = state_digest(after_state)
++
++    before_milestones = _milestone_rows(before_state)
++    after_milestones = _milestone_rows(after_state)
++    before_arcs = _arc_rows(before_state)
++    after_arcs = _arc_rows(after_state)
++    before_journal = _journal_entries(before_state)
++    after_journal = _journal_entries(after_state)
++
++    added_milestones = [
++        milestone_id
++        for milestone_id in after_milestones
++        if milestone_id not in before_milestones
++    ]
++    completed_milestones = [
++        milestone_id
++        for milestone_id, row in after_milestones.items()
++        if row.get("status") == "completed"
++        and _safe_dict(before_milestones.get(milestone_id)).get("status") != "completed"
++    ]
++    arc_stage_changes = [
++        {
++            "arc_id": arc_id,
++            "before": _safe_dict(before_arcs.get(arc_id)).get("stage"),
++            "after": row.get("stage"),
 +        }
-+        transcript.append(record)
++        for arc_id, row in after_arcs.items()
++        if _safe_dict(before_arcs.get(arc_id)).get("stage") != row.get("stage")
++    ]
++    new_journal_entries = max(0, len(after_journal) - len(before_journal))
 +
-+        health = evaluate_autoplay_health(
-+            transcript,
-+            latest_context=context,
-+            max_repeated_actions=args.max_repeated_actions,
-+            max_runtime_errors=0 if args.fail_on_runtime_error else 999999,
-+        )
-+        if args.stop_on_loop and health.get("loop", {}).get("ok") is False:
-+            stopped_reason = "repeated_action_loop"
-+            break
-+        if runtime_error and args.fail_on_runtime_error:
-+            stopped_reason = "runtime_error"
-+            break
++    categories: List[str] = []
++    if added_milestones:
++        categories.append("milestone_added")
++    if completed_milestones:
++        categories.append("milestone_completed")
++    if arc_stage_changes:
++        categories.append("arc_stage_changed")
++    if new_journal_entries:
++        categories.append("journal_entry_added")
++    if before_digest["hash"] != after_digest["hash"] and not categories:
++        categories.append("state_changed")
 +
-+    latest_context = (
-+        transcript[-1].get("player_action_context")
-+        if transcript and isinstance(transcript[-1].get("player_action_context"), dict)
-+        else {}
++    return {
++        "changed": before_digest["hash"] != after_digest["hash"],
++        "categories": categories,
++        "before_digest": before_digest,
++        "after_digest": after_digest,
++        "added_milestones": added_milestones,
++        "completed_milestones": completed_milestones,
++        "arc_stage_changes": arc_stage_changes,
++        "new_journal_entries": new_journal_entries,
++    }
++
++
++def no_progress_streak(transcript: List[Dict[str, Any]]) -> int:
++    streak = 0
++    for row in reversed(transcript):
++        progress = _safe_dict(row.get("progress_delta"))
++        if progress.get("changed") or progress.get("categories"):
++            break
++        streak += 1
++    return streak
+*** End Patch
+Patch 3 — Update evaluator metrics
+3. Patch src/tests/rpg/autoplay/evaluators.py
+
+Add progress metrics import:
+
+*** Begin Patch
+*** Update File: src/tests/rpg/autoplay/evaluators.py
+@@
+ from collections import Counter
+ from typing import Any, Dict, List
++
++from tests.rpg.autoplay.progress import no_progress_streak
+*** End Patch
+
+Update compute_progress_metrics(...):
+
+*** Begin Patch
+*** Update File: src/tests/rpg/autoplay/evaluators.py
+@@
+     compatibility_turn_runtime_count = 0
++    real_turn_runtime_count = 0
++    progress_category_counts = Counter()
+ 
+     for row in transcript:
+@@
+         if _safe_dict(row.get("turn_result")).get("compatibility_turn_runtime"):
+             compatibility_turn_runtime_count += 1
++        if _safe_dict(row.get("turn_result")).get("runtime_name"):
++            real_turn_runtime_count += 1
+         if not _safe_str(row.get("narration")):
+             narration_missing_count += 1
++        for category in _safe_list(_safe_dict(row.get("progress_delta")).get("categories")):
++            if category:
++                progress_category_counts[str(category)] += 1
+@@
+         "compatibility_turn_runtime_count": compatibility_turn_runtime_count,
++        "real_turn_runtime_count": real_turn_runtime_count,
+         "narration_missing_count": narration_missing_count,
++        "progress_category_counts": dict(progress_category_counts),
++        "no_progress_streak": no_progress_streak(transcript),
+         "suggested_action_category_counts": dict(action_categories),
+*** End Patch
+
+Update evaluate_autoplay_health(...) signature and warnings:
+
+*** Begin Patch
+*** Update File: src/tests/rpg/autoplay/evaluators.py
+@@
+     allow_compatibility_turn_runtime: bool = True,
+     max_player_agent_fallback_rate: float = 1.0,
++    max_no_progress_turns: int = 0,
+ ) -> Dict[str, Any]:
+@@
+     if float(metrics.get("fallback_player_action_rate") or 0.0) > float(max_player_agent_fallback_rate):
+         warnings.append("player_agent_fallback_rate_exceeded")
++    if max_no_progress_turns > 0 and int(metrics.get("no_progress_streak") or 0) > max_no_progress_turns:
++        warnings.append("no_progress_turn_limit_exceeded")
+*** End Patch
+Patch 4 — Replace compatibility-first runtime in autoplay runner
+4. Patch src/tests/rpg/autoplay_llm_campaign.py
+
+Update imports:
+
+*** Begin Patch
+*** Update File: src/tests/rpg/autoplay_llm_campaign.py
+@@
+ from app.rpg.player_action_context.runtime import build_player_action_context
+ from tests.rpg.autoplay.evaluators import compute_progress_metrics, evaluate_autoplay_health
+@@
+ from tests.rpg.autoplay.reporting import write_autoplay_artifacts
+ from tests.rpg.autoplay.seeding import seed_campaign
++from tests.rpg.autoplay.progress import classify_progress_delta, state_digest
++from tests.rpg.autoplay.turn_runtime import (
++    describe_turn_runtime_candidates,
++    run_real_rpg_turn,
++)
+*** End Patch
+
+Replace _call_turn_runtime(...) entirely:
+
+*** Begin Patch
+*** Update File: src/tests/rpg/autoplay_llm_campaign.py
+@@
+ def _call_turn_runtime(
+     *,
+     simulation_state: Dict[str, Any],
+     session_id: str,
+     player_action: str,
+     turn_index: int,
+ ) -> Dict[str, Any]:
+-    """Call the in-process RPG turn runtime.
+-
+-    This uses a compatibility ladder because the project has evolved across
+-    FastAPI/session/runtime layers. Prefer an in-process function when present;
+-    otherwise fall back to a simple state-preserving record so early harness
+-    tests can still validate the player-agent loop.
+-    """
+-    try:
+-        from app.rpg.session import apply_player_turn  # type: ignore
+-
+-        return apply_player_turn(
+-            simulation_state=simulation_state,
+-            session_id=session_id,
+-            player_input=player_action,
+-            turn_index=turn_index,
+-        )
+-    except Exception as first_exc:
+-        first_error = first_exc
+-
+-    try:
+-        from app.rpg.session_runtime import run_player_turn  # type: ignore
+-
+-        return run_player_turn(
+-            simulation_state=simulation_state,
+-            session_id=session_id,
+-            player_input=player_action,
+-            turn_index=turn_index,
+-        )
+-    except Exception:
+-        pass
+-
+-    # Last-resort compatibility mode for the first N1-N3 harness. This still
+-    # lets us test player action selection, context generation, artifacts,
+-    # metrics, and loop detection before binding to the exact app turn function.
+-    return {
+-        "ok": True,
+-        "compatibility_turn_runtime": True,
+-        "warning": f"used_compatibility_turn_runtime_after:{type(first_error).__name__}",
+-        "turn_contract": {
+-            "turn_index": turn_index,
+-            "player_action": player_action,
+-        },
+-        "narration": f"You choose to act: {player_action}",
+-        "simulation_state": simulation_state,
+-    }
++    result = run_real_rpg_turn(
++        simulation_state=simulation_state,
++        session_id=session_id,
++        player_input=player_action,
++        turn_index=turn_index,
 +    )
-+    metrics = compute_progress_metrics(transcript, latest_context=latest_context)
++    if result.get("ok"):
++        return result
++    return {
++        "ok": False,
++        "compatibility_turn_runtime": True,
++        "warning": "real_turn_runtime_unavailable",
++        "runtime_candidates": describe_turn_runtime_candidates(),
++        "real_turn_runtime_error": result,
++        "turn_contract": {
++            "turn_index": turn_index,
++            "player_action": player_action,
++        },
++        "narration": f"You choose to act: {player_action}",
++        "simulation_state": simulation_state,
++    }
+*** End Patch
+
+Update _extract_narration(...) to include normalized result:
+
+*** Begin Patch
+*** Update File: src/tests/rpg/autoplay_llm_campaign.py
+@@
+     candidates = [
+         turn_result.get("narration"),
++        _safe_dict(turn_result.get("raw_result")).get("narration"),
+         _safe_dict(turn_result.get("result")).get("narration"),
+         _safe_dict(turn_result.get("turn_contract")).get("narration"),
+*** End Patch
+
+Inside run_autoplay_campaign(...), after seeding add runtime candidates:
+
+*** Begin Patch
+*** Update File: src/tests/rpg/autoplay_llm_campaign.py
+@@
+     simulation_state: Dict[str, Any] = {}
+     seed_result = seed_campaign(simulation_state, args.scenario_seed)
++    turn_runtime_candidates = describe_turn_runtime_candidates()
+@@
+     if args.debug_provider_shape and provider_shape:
+         print("Player-agent provider shape:")
+         print(provider_shape)
++    if args.debug_turn_runtime_shape:
++        print("Autoplay turn runtime candidates:")
++        print(turn_runtime_candidates)
+*** End Patch
+
+Before each turn call, capture before state and after progress:
+
+*** Begin Patch
+*** Update File: src/tests/rpg/autoplay_llm_campaign.py
+@@
+         selected = _select_player_action(
+@@
+         player_action = _safe_str(selected.get("action"))
+ 
+         runtime_error = ""
+         turn_result: Dict[str, Any]
++        before_state = simulation_state
++        before_digest = state_digest(before_state)
+         try:
+             turn_result = _call_turn_runtime(
+                 simulation_state=simulation_state,
+                 session_id=session_id,
+                 player_action=player_action,
+                 turn_index=turn_index,
+             )
+             returned_state = _safe_dict(turn_result.get("simulation_state"))
+             if returned_state:
+                 simulation_state = returned_state
+         except Exception as exc:
+             runtime_error = f"{type(exc).__name__}: {exc}"
+             turn_result = {"ok": False, "error": runtime_error}
+ 
++        progress_delta = classify_progress_delta(
++            before_state=before_state,
++            after_state=simulation_state,
++        )
+         narration = _extract_narration(turn_result)
+         record = {
+@@
+             "turn_result": turn_result if args.artifact_detail == "full" else {
+                 "ok": turn_result.get("ok"),
+                 "warning": turn_result.get("warning"),
+                 "compatibility_turn_runtime": turn_result.get("compatibility_turn_runtime"),
++                "runtime_name": turn_result.get("runtime_name"),
+             },
++            "turn_contract": turn_result.get("turn_contract") or {},
+             "narration": narration,
+             "runtime_error": runtime_error,
++            "before_state_digest": before_digest,
++            "after_state_digest": state_digest(simulation_state),
++            "progress_delta": progress_delta,
+         }
+*** End Patch
+
+Pass max_no_progress_turns into both health calls:
+
+*** Begin Patch
+*** Update File: src/tests/rpg/autoplay_llm_campaign.py
+@@
+             max_runtime_errors=0 if args.fail_on_runtime_error else 999999,
+             allow_compatibility_turn_runtime=not args.fail_on_compatibility_turn_runtime,
+             max_player_agent_fallback_rate=args.max_player_agent_fallback_rate,
++            max_no_progress_turns=args.max_no_progress_turns,
+         )
+@@
+         max_runtime_errors=0 if args.fail_on_runtime_error else 999999,
+         allow_compatibility_turn_runtime=not args.fail_on_compatibility_turn_runtime,
+         max_player_agent_fallback_rate=args.max_player_agent_fallback_rate,
++        max_no_progress_turns=args.max_no_progress_turns,
+     )
+*** End Patch
+
+Add runtime candidates to summary:
+
+*** Begin Patch
+*** Update File: src/tests/rpg/autoplay_llm_campaign.py
+@@
+         "provider_shape": provider_shape if args.artifact_detail == "full" else {
+             "type": provider_shape.get("type"),
+             "module": provider_shape.get("module"),
+             "methods": provider_shape.get("methods", [])[:20],
+         },
++        "turn_runtime_candidates": turn_runtime_candidates,
+         "strategy": args.strategy,
+*** End Patch
+
+Add CLI args:
+
+*** Begin Patch
+*** Update File: src/tests/rpg/autoplay_llm_campaign.py
+@@
+     parser.add_argument("--debug-provider-shape", action="store_true")
++    parser.add_argument("--debug-turn-runtime-shape", action="store_true")
+     parser.add_argument("--suggested-action-limit", type=int, default=12)
+@@
+     parser.add_argument("--max-repeated-actions", type=int, default=5)
++    parser.add_argument("--max-no-progress-turns", type=int, default=0)
+     parser.add_argument("--stop-on-loop", action="store_true")
+*** End Patch
+Patch 5 — Update artifact reporting with progress
+5. Patch src/tests/rpg/autoplay/reporting.py
+
+In render_autoplay_html(...), add progress display after narration:
+
+*** Begin Patch
+*** Update File: src/tests/rpg/autoplay/reporting.py
+@@
+               <div><strong>Reason:</strong> {html.escape(_safe_str(row.get("selected_action_reason")))}</div>
+               <div><strong>Narration:</strong><p>{html.escape(_safe_str(row.get("narration")))}</p></div>
++              <div><strong>Progress:</strong>
++                <pre>{html.escape(json.dumps(row.get("progress_delta") or {}, ensure_ascii=False, indent=2, sort_keys=True, default=str))}</pre>
++              </div>
+               <details>
+*** End Patch
+Patch 6 — Add tests
+6. Add src/tests/rpg/autoplay/test_turn_runtime.py
+*** Begin Patch
+*** Add File: src/tests/rpg/autoplay/test_turn_runtime.py
++from tests.rpg.autoplay.turn_runtime import (
++    describe_turn_runtime_candidates,
++    extract_narration,
++    extract_turn_contract,
++    normalize_turn_result,
++)
++
++
++def test_extract_turn_contract_from_result():
++    result = {"turn_contract": {"action": "observe"}}
++
++    assert extract_turn_contract(result)["action"] == "observe"
++
++
++def test_extract_narration_from_result():
++    result = {"narration": "You look around."}
++
++    assert extract_narration(result) == "You look around."
++
++
++def test_normalize_turn_result_keeps_state_contract_and_narration():
++    state = {"x": 1}
++    result = {
++        "ok": True,
++        "simulation_state": {"x": 2},
++        "turn_contract": {"action": "observe"},
++        "narration": "You look around.",
++    }
++
++    normalized = normalize_turn_result(result, fallback_state=state, runtime_name="test")
++
++    assert normalized["ok"] is True
++    assert normalized["runtime_name"] == "test"
++    assert normalized["simulation_state"] == {"x": 2}
++    assert normalized["turn_contract"]["action"] == "observe"
++    assert normalized["narration"] == "You look around."
++
++
++def test_describe_turn_runtime_candidates_returns_list():
++    candidates = describe_turn_runtime_candidates()
++
++    assert isinstance(candidates, list)
+*** End Patch
+7. Add src/tests/rpg/autoplay/test_progress.py
+*** Begin Patch
+*** Add File: src/tests/rpg/autoplay/test_progress.py
++from tests.rpg.autoplay.progress import classify_progress_delta, no_progress_streak, state_digest
++
++
++def test_state_digest_changes_when_selected_state_changes():
++    before = {"story_arc_state": {"arcs": {}}}
++    after = {"story_arc_state": {"arcs": {"arc:x": {"stage": "start"}}}}
++
++    assert state_digest(before)["hash"] != state_digest(after)["hash"]
++
++
++def test_classify_progress_delta_detects_milestone_completion():
++    before = {
++        "story_arc_milestone_state": {
++            "arcs": {
++                "arc:x": {
++                    "milestones": [
++                        {"milestone_id": "milestone:x", "status": "active"}
++                    ]
++                }
++            }
++        }
++    }
++    after = {
++        "story_arc_milestone_state": {
++            "arcs": {
++                "arc:x": {
++                    "milestones": [
++                        {"milestone_id": "milestone:x", "status": "completed"}
++                    ]
++                }
++            }
++        }
++    }
++
++    delta = classify_progress_delta(before_state=before, after_state=after)
++
++    assert delta["changed"] is True
++    assert "milestone_completed" in delta["categories"]
++    assert delta["completed_milestones"] == ["milestone:x"]
++
++
++def test_no_progress_streak_counts_trailing_no_progress_turns():
++    transcript = [
++        {"progress_delta": {"changed": True, "categories": ["state_changed"]}},
++        {"progress_delta": {"changed": False, "categories": []}},
++        {"progress_delta": {"changed": False, "categories": []}},
++    ]
++
++    assert no_progress_streak(transcript) == 2
+*** End Patch
+8. Patch src/tests/rpg/autoplay/test_autoplay_evaluators.py
+
+Add:
+
+*** Begin Patch
+*** Update File: src/tests/rpg/autoplay/test_autoplay_evaluators.py
+@@
+ def test_evaluate_autoplay_health_can_fail_on_fallback_rate():
+@@
+     assert health["ok"] is False
+     assert "player_agent_fallback_rate_exceeded" in health["warnings"]
++
++
++def test_evaluate_autoplay_health_can_fail_on_no_progress_streak():
++    transcript = [
++        {"player_action": "A", "progress_delta": {"changed": False, "categories": []}},
++        {"player_action": "B", "progress_delta": {"changed": False, "categories": []}},
++    ]
++
 +    health = evaluate_autoplay_health(
 +        transcript,
-+        latest_context=latest_context,
-+        max_repeated_actions=args.max_repeated_actions,
-+        max_runtime_errors=0 if args.fail_on_runtime_error else 999999,
++        latest_context={"suggested_actions": [{"x": 1}]},
++        max_no_progress_turns=1,
 +    )
-+    summary = {
-+        "ok": bool(health.get("ok")) and not stopped_reason,
-+        "session_id": session_id,
-+        "scenario_seed": args.scenario_seed,
-+        "seed_result": seed_result,
-+        "requested_turns": int(args.turns),
-+        "turns_executed": len(transcript),
-+        "stopped_reason": stopped_reason,
-+        "player_agent": args.player_agent,
-+        "strategy": args.strategy,
-+        "artifact_detail": args.artifact_detail,
-+        "duration_seconds": round(time.time() - started, 3),
-+        "health": health,
-+    }
-+    paths = write_autoplay_artifacts(
-+        output_dir=Path(args.output_dir),
-+        transcript=transcript,
-+        summary=summary,
-+        metrics=metrics,
-+        health=health,
-+        artifact_detail=args.artifact_detail,
-+    )
-+    summary["artifact_paths"] = paths
-+    return summary
 +
-+
-+def build_arg_parser() -> argparse.ArgumentParser:
-+    parser = argparse.ArgumentParser(description="Run an LLM autoplay RPG campaign.")
-+    parser.add_argument("--turns", type=int, default=25)
-+    parser.add_argument("--session-id", default="")
-+    parser.add_argument("--scenario-seed", default="tavern_story_seed")
-+    parser.add_argument("--player-agent", choices=["llm", "fallback"], default="llm")
-+    parser.add_argument("--strategy", default="balanced_story_player")
-+    parser.add_argument("--player-agent-max-tokens", type=int, default=600)
-+    parser.add_argument("--suggested-action-limit", type=int, default=12)
-+    parser.add_argument("--artifact-detail", choices=["summary", "full"], default="summary")
-+    parser.add_argument("--output-dir", default=str(Path("resources") / "data" / "test-results" / "autoplay"))
-+    parser.add_argument("--max-repeated-actions", type=int, default=5)
-+    parser.add_argument("--stop-on-loop", action="store_true")
-+    parser.add_argument("--fail-on-runtime-error", action="store_true")
-+    parser.add_argument("--fail-on-regression-warnings", action="store_true")
-+    return parser
-+
-+
-+def main(argv: List[str] | None = None) -> int:
-+    parser = build_arg_parser()
-+    args = parser.parse_args(argv)
-+    summary = run_autoplay_campaign(args)
-+
-+    print("Autoplay RPG Campaign Summary")
-+    print(f"session_id: {summary['session_id']}")
-+    print(f"requested_turns: {summary['requested_turns']}")
-+    print(f"turns_executed: {summary['turns_executed']}")
-+    print(f"stopped_reason: {summary['stopped_reason']}")
-+    print(f"ok: {summary['ok']}")
-+    print(f"results_zip: {summary['artifact_paths']['zip']}")
-+
-+    warnings = summary.get("health", {}).get("warnings") or []
-+    if args.fail_on_regression_warnings and warnings:
-+        return 1
-+    if args.fail_on_runtime_error and summary.get("health", {}).get("metrics", {}).get("runtime_errors"):
-+        return 1
-+    if summary.get("stopped_reason"):
-+        return 1
-+    return 0
-+
-+
-+if __name__ == "__main__":
-+    raise SystemExit(main(sys.argv[1:]))
++    assert health["ok"] is False
++    assert "no_progress_turn_limit_exceeded" in health["warnings"]
 *** End Patch
-Patch 5 — Add tests
-8. Add src/tests/rpg/autoplay/test_player_agent.py
+9. Patch src/tests/rpg/autoplay/test_autoplay_runner.py
+
+Update args namespace with the new fields:
+
 *** Begin Patch
-*** Add File: src/tests/rpg/autoplay/test_player_agent.py
-+import json
-+
-+from tests.rpg.autoplay.player_agent import (
-+    build_player_agent_prompt,
-+    choose_fallback_player_action,
-+    parse_player_agent_response,
-+    validate_player_action_against_context,
-+)
-+
-+
-+def test_parse_player_agent_response_accepts_json():
-+    parsed = parse_player_agent_response(
-+        json.dumps(
-+            {
-+                "format_version": "rpg_player_action_v1",
-+                "intent": "ask Bran",
-+                "action": "I ask Bran about the witness.",
-+                "reason": "Nearby NPC may know something.",
-+                "risk": "low",
-+                "goal_id": "milestone:find_witness",
-+            }
-+        )
-+    )
-+
-+    assert parsed["ok"] is True
-+    assert parsed["action"] == "I ask Bran about the witness."
-+
-+
-+def test_fallback_uses_top_suggested_action():
-+    context = {
-+        "suggested_actions": [
-+            {
-+                "action_id": "objective:001",
-+                "command": "I look for the witness.",
-+                "label": "Find witness",
-+                "objective_id": "milestone:find_witness",
-+            }
-+        ]
-+    }
-+
-+    selected = choose_fallback_player_action(player_action_context=context)
-+
-+    assert selected["ok"] is True
-+    assert selected["fallback"] is True
-+    assert selected["action"] == "I look for the witness."
-+
-+
-+def test_player_agent_prompt_includes_schema_and_context():
-+    prompt = build_player_agent_prompt(
-+        player_action_context={
-+            "format_version": "player_action_context_v1",
-+            "suggested_actions": [{"command": "I observe."}],
-+        },
-+        recent_transcript=[],
-+    )
-+
-+    assert "rpg_player_action_v1" in prompt
-+    assert "player_action_context_v1" in prompt
-+    assert "Do not narrate the outcome" in prompt
-+
-+
-+def test_validate_player_action_rejects_outcome_claims():
-+    result = validate_player_action_against_context(
-+        player_action={"action": "I complete the quest and receive 100 gold."},
-+        player_action_context={},
-+    )
-+
-+    assert result["ok"] is False
-+    assert result["reason"] == "player_action_appears_to_decide_outcome"
+*** Update File: src/tests/rpg/autoplay/test_autoplay_runner.py
+@@
+         artifact_detail="full",
+         output_dir=str(tmp_path),
+         max_repeated_actions=5,
++        max_no_progress_turns=0,
+         stop_on_loop=False,
+         fail_on_runtime_error=False,
++        fail_on_compatibility_turn_runtime=False,
++        max_player_agent_fallback_rate=1.0,
+         fail_on_regression_warnings=False,
++        debug_provider_shape=False,
++        debug_turn_runtime_shape=False,
+     )
 *** End Patch
-9. Add src/tests/rpg/autoplay/test_autoplay_evaluators.py
-*** Begin Patch
-*** Add File: src/tests/rpg/autoplay/test_autoplay_evaluators.py
-+from tests.rpg.autoplay.evaluators import (
-+    compute_progress_metrics,
-+    detect_repeated_action_loop,
-+    evaluate_autoplay_health,
-+)
-+
-+
-+def test_detect_repeated_action_loop_flags_streak():
-+    transcript = [{"player_action": "I observe."} for _ in range(6)]
-+
-+    result = detect_repeated_action_loop(transcript, max_repeated_actions=5)
-+
-+    assert result["ok"] is False
-+    assert result["reason"] == "repeated_action_loop"
-+
-+
-+def test_compute_progress_metrics_counts_runtime_errors():
-+    transcript = [
-+        {"player_action": "A", "runtime_error": ""},
-+        {"player_action": "B", "runtime_error": "boom"},
-+    ]
-+
-+    metrics = compute_progress_metrics(transcript)
-+
-+    assert metrics["turn_count"] == 2
-+    assert metrics["runtime_errors"] == 1
-+
-+
-+def test_evaluate_autoplay_health_ok_for_simple_transcript():
-+    transcript = [
-+        {"player_action": "I observe."},
-+        {"player_action": "I talk to Bran."},
-+    ]
-+
-+    health = evaluate_autoplay_health(transcript, latest_context={"suggested_actions": [{"x": 1}]})
-+
-+    assert health["ok"] is True
-*** End Patch
-10. Add src/tests/rpg/autoplay/test_autoplay_runner.py
-*** Begin Patch
-*** Add File: src/tests/rpg/autoplay/test_autoplay_runner.py
-+from argparse import Namespace
-+from pathlib import Path
-+
-+from tests.rpg.autoplay_llm_campaign import run_autoplay_campaign
-+
-+
-+def test_autoplay_runner_fallback_executes_short_campaign(tmp_path: Path):
-+    args = Namespace(
-+        turns=3,
-+        session_id="autoplay_test_session",
-+        scenario_seed="tavern_story_seed",
-+        player_agent="fallback",
-+        strategy="balanced_story_player",
-+        player_agent_max_tokens=200,
-+        suggested_action_limit=12,
-+        artifact_detail="full",
-+        output_dir=str(tmp_path),
-+        max_repeated_actions=5,
-+        stop_on_loop=False,
-+        fail_on_runtime_error=False,
-+        fail_on_regression_warnings=False,
-+    )
-+
-+    summary = run_autoplay_campaign(args)
-+
-+    assert summary["turns_executed"] == 3
-+    assert summary["artifact_paths"]["zip"]
-+    assert Path(summary["artifact_paths"]["zip"]).exists()
-*** End Patch
-Patch 6 — Optional pytest wrapper for CLI smoke
-11. Add src/tests/rpg/autoplay/test_autoplay_cli_smoke.py
-*** Begin Patch
-*** Add File: src/tests/rpg/autoplay/test_autoplay_cli_smoke.py
-+import subprocess
-+import sys
-+from pathlib import Path
-+
-+
-+def test_autoplay_cli_fallback_smoke(tmp_path: Path):
-+    cmd = [
-+        sys.executable,
-+        "src/tests/rpg/autoplay_llm_campaign.py",
-+        "--turns",
-+        "2",
-+        "--player-agent",
-+        "fallback",
-+        "--artifact-detail",
-+        "full",
-+        "--output-dir",
-+        str(tmp_path),
-+    ]
-+    result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
-+
-+    assert result.returncode == 0, result.stdout + "\n" + result.stderr
-+    assert "turns_executed: 2" in result.stdout
-+    assert (tmp_path / "autoplay-campaign-results.zip").exists()
-*** End Patch
+
+If the test already has some of these fields from N1-N3.2, only add missing ones.
+
 Validation commands
 Compile
-python -m py_compile src/tests/rpg/autoplay/player_agent.py
-python -m py_compile src/tests/rpg/autoplay/provider_adapter.py
+python -m py_compile src/tests/rpg/autoplay/turn_runtime.py
+python -m py_compile src/tests/rpg/autoplay/progress.py
 python -m py_compile src/tests/rpg/autoplay/evaluators.py
 python -m py_compile src/tests/rpg/autoplay/reporting.py
-python -m py_compile src/tests/rpg/autoplay/seeding.py
 python -m py_compile src/tests/rpg/autoplay_llm_campaign.py
-Unit/autoplay tests
-python -m pytest src/tests/rpg/autoplay src/tests/rpg/player_action_context src/tests/rpg/quest_log src/tests/rpg/story_arcs src/tests/rpg/story_events src/tests/rpg/campaign_journal -q
+Focused tests
+python -m pytest src/tests/rpg/autoplay/test_turn_runtime.py src/tests/rpg/autoplay/test_progress.py src/tests/rpg/autoplay/test_autoplay_evaluators.py src/tests/rpg/autoplay/test_autoplay_runner.py src/tests/rpg/autoplay/test_player_agent.py src/tests/rpg/autoplay/test_provider_adapter.py -q

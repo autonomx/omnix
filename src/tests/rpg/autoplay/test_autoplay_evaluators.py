@@ -75,3 +75,19 @@ def test_evaluate_autoplay_health_can_fail_on_fallback_rate():
 
     assert health["ok"] is False
     assert "player_agent_fallback_rate_exceeded" in health["warnings"]
+
+
+def test_evaluate_autoplay_health_can_fail_on_no_progress_streak():
+    transcript = [
+        {"player_action": "A", "progress_delta": {"changed": False, "categories": []}},
+        {"player_action": "B", "progress_delta": {"changed": False, "categories": []}},
+    ]
+
+    health = evaluate_autoplay_health(
+        transcript,
+        latest_context={"suggested_actions": [{"x": 1}]},
+        max_no_progress_turns=1,
+    )
+
+    assert health["ok"] is False
+    assert "no_progress_turn_limit_exceeded" in health["warnings"]

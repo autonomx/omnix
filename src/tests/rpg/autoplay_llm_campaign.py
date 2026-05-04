@@ -4,6 +4,7 @@ import argparse
 import os
 import sys
 import time
+import traceback
 import uuid
 from pathlib import Path
 from typing import Any, Dict, List
@@ -16,13 +17,22 @@ from tests.rpg.autoplay.evaluators import (
     compute_progress_metrics,
     evaluate_autoplay_health,
 )
+from tests.rpg.autoplay.manual_turn_driver import (
+    load_autoplay_simulation_state,
+    prepare_autoplay_manual_session,
+    run_autoplay_manual_turn,
+)
 from tests.rpg.autoplay.player_agent import (
     build_player_agent_prompt,
     choose_fallback_player_action,
     parse_player_agent_response,
     validate_player_action_against_context,
 )
-from tests.rpg.autoplay.provider_adapter import call_provider_text, describe_provider_shape
+from tests.rpg.autoplay.progress import classify_progress_delta, state_digest
+from tests.rpg.autoplay.provider_adapter import (
+    call_provider_text,
+    describe_provider_shape,
+)
 from tests.rpg.autoplay.reporting import write_autoplay_artifacts
 from tests.rpg.autoplay.seeding import seed_campaign
 
@@ -39,6 +49,9 @@ def _default_output_dir() -> Path:
     return Path("resources") / "data" / "test-results" / "autoplay"
 
 
+
+
+
 def _load_provider():
     from app.shared import get_provider
 
@@ -47,64 +60,27 @@ def _load_provider():
 
 def _call_turn_runtime(
     *,
-    simulation_state: Dict[str, Any],
     session_id: str,
     player_action: str,
     turn_index: int,
 ) -> Dict[str, Any]:
-    """Call the in-process RPG turn runtime.
-
-    This uses a compatibility ladder because the project has evolved across
-    FastAPI/session/runtime layers. Prefer an in-process function when present;
-    otherwise fall back to a simple state-preserving record so early harness
-    tests can still validate the player-agent loop.
-    """
-    try:
-        from app.rpg.session import apply_player_turn  # type: ignore
-
-        return apply_player_turn(
-            simulation_state=simulation_state,
-            session_id=session_id,
-            player_input=player_action,
-            turn_index=turn_index,
-        )
-    except Exception as first_exc:
-        first_error = first_exc
-
-    try:
-        from app.rpg.session_runtime import run_player_turn  # type: ignore
-
-        return run_player_turn(
-            simulation_state=simulation_state,
-            session_id=session_id,
-            player_input=player_action,
-            turn_index=turn_index,
-        )
-    except Exception:
-        pass
-
-    # Last-resort compatibility mode for the first N1-N3 harness. This still
-    # lets us test player action selection, context generation, artifacts,
-    # metrics, and loop detection before binding to the exact app turn function.
-    return {
-        "ok": True,
-        "compatibility_turn_runtime": True,
-        "warning": f"used_compatibility_turn_runtime_after:{type(first_error).__name__}",
-        "turn_contract": {
-            "turn_index": turn_index,
-            "player_action": player_action,
-        },
-        "narration": f"You choose to act: {player_action}",
-        "simulation_state": simulation_state,
-    }
+    return run_autoplay_manual_turn(
+        session_id=session_id,
+        player_input=player_action,
+        turn_index=turn_index,
+        scenario_name="autoplay_campaign",
+        target_channel="autoplay_runtime",
+        console_llm=False,
+        console_llm_raw=False,
+    )
 
 
 def _extract_narration(turn_result: Dict[str, Any]) -> str:
     candidates = [
         turn_result.get("narration"),
+        _safe_dict(turn_result.get("raw_result")).get("narration"),
         _safe_dict(turn_result.get("result")).get("narration"),
         _safe_dict(turn_result.get("turn_contract")).get("narration"),
-        _safe_dict(_safe_dict(turn_result.get("result")).get("turn_contract")).get("narration"),
     ]
     for candidate in candidates:
         if isinstance(candidate, str) and candidate.strip():
@@ -168,17 +144,25 @@ def run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
     session_id = args.session_id or f"autoplay_{uuid.uuid4().hex[:12]}"
     simulation_state: Dict[str, Any] = {}
     seed_result = seed_campaign(simulation_state, args.scenario_seed)
+    prepare_autoplay_manual_session(
+        session_id=session_id,
+        simulation_state=simulation_state,
+        reset_session_state=True,
+    )
 
     provider = _load_provider() if args.player_agent == "llm" else None
     provider_shape = describe_provider_shape(provider) if provider is not None else {}
     if args.debug_provider_shape and provider_shape:
         print("Player-agent provider shape:")
         print(provider_shape)
+
+
     transcript: List[Dict[str, Any]] = []
     started = time.time()
     stopped_reason = ""
 
     for turn_index in range(1, int(args.turns) + 1):
+        simulation_state = load_autoplay_simulation_state(session_id)
         context = build_player_action_context(
             simulation_state,
             turn_index=turn_index,
@@ -196,9 +180,10 @@ def run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
 
         runtime_error = ""
         turn_result: Dict[str, Any]
+        before_state = simulation_state
+        before_digest = state_digest(before_state)
         try:
             turn_result = _call_turn_runtime(
-                simulation_state=simulation_state,
                 session_id=session_id,
                 player_action=player_action,
                 turn_index=turn_index,
@@ -206,10 +191,24 @@ def run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
             returned_state = _safe_dict(turn_result.get("simulation_state"))
             if returned_state:
                 simulation_state = returned_state
+            else:
+                simulation_state = load_autoplay_simulation_state(session_id)
+            # The manual driver saves the merged state back to the manual
+            # session. Reload here so the next player action context is built
+            # from exactly what the manual runtime persisted.
+            simulation_state = load_autoplay_simulation_state(session_id)
         except Exception as exc:
             runtime_error = f"{type(exc).__name__}: {exc}"
-            turn_result = {"ok": False, "error": runtime_error}
+            turn_result = {
+                "ok": False,
+                "error": runtime_error,
+                "traceback": traceback.format_exc(),
+            }
 
+        progress_delta = classify_progress_delta(
+            before_state=before_state,
+            after_state=simulation_state,
+        )
         narration = _extract_narration(turn_result)
         record = {
             "turn_index": turn_index,
@@ -228,9 +227,14 @@ def run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
                 "ok": turn_result.get("ok"),
                 "warning": turn_result.get("warning"),
                 "compatibility_turn_runtime": turn_result.get("compatibility_turn_runtime"),
+                "runtime_name": turn_result.get("runtime_name"),
             },
+            "turn_contract": turn_result.get("turn_contract") or {},
             "narration": narration,
             "runtime_error": runtime_error,
+            "before_state_digest": before_digest,
+            "after_state_digest": state_digest(simulation_state),
+            "progress_delta": progress_delta,
         }
         transcript.append(record)
 
@@ -241,6 +245,7 @@ def run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
             max_runtime_errors=0 if args.fail_on_runtime_error else 999999,
             allow_compatibility_turn_runtime=not args.fail_on_compatibility_turn_runtime,
             max_player_agent_fallback_rate=args.max_player_agent_fallback_rate,
+            max_no_progress_turns=args.max_no_progress_turns,
         )
         if args.stop_on_loop and health.get("loop", {}).get("ok") is False:
             stopped_reason = "repeated_action_loop"
@@ -262,11 +267,14 @@ def run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
         max_runtime_errors=0 if args.fail_on_runtime_error else 999999,
         allow_compatibility_turn_runtime=not args.fail_on_compatibility_turn_runtime,
         max_player_agent_fallback_rate=args.max_player_agent_fallback_rate,
+        max_no_progress_turns=args.max_no_progress_turns,
     )
     summary = {
         "ok": bool(health.get("ok")) and not stopped_reason,
         "session_id": session_id,
         "scenario_seed": args.scenario_seed,
+        "turn_runtime": "manual_harness",
+        "server_runtime_used": False,
         "seed_result": seed_result,
         "requested_turns": int(args.turns),
         "turns_executed": len(transcript),
@@ -303,10 +311,15 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--strategy", default="balanced_story_player")
     parser.add_argument("--player-agent-max-tokens", type=int, default=600)
     parser.add_argument("--debug-provider-shape", action="store_true")
+    parser.add_argument("--debug-turn-runtime-shape", action="store_true")
     parser.add_argument("--suggested-action-limit", type=int, default=12)
     parser.add_argument("--artifact-detail", choices=["summary", "full"], default="summary")
     parser.add_argument("--output-dir", default=str(Path("resources") / "data" / "test-results" / "autoplay"))
+    parser.add_argument("--base-url", default=os.environ.get("RPG_AUTOPLAY_BASE_URL", "http://127.0.0.1:5000"), help="Ignored by default manual-harness runtime; reserved for optional HTTP smoke tests.")
+    parser.add_argument("--start-app-server", action="store_true", help="Ignored by default manual-harness runtime; reserved for optional HTTP smoke tests.")
+    parser.add_argument("--server-startup-timeout", type=int, default=60, help="Ignored by default manual-harness runtime.")
     parser.add_argument("--max-repeated-actions", type=int, default=5)
+    parser.add_argument("--max-no-progress-turns", type=int, default=0)
     parser.add_argument("--stop-on-loop", action="store_true")
     parser.add_argument("--fail-on-runtime-error", action="store_true")
     parser.add_argument("--fail-on-compatibility-turn-runtime", action="store_true")
@@ -327,6 +340,9 @@ def main(argv: List[str] | None = None) -> int:
     print(f"stopped_reason: {summary['stopped_reason']}")
     print(f"ok: {summary['ok']}")
     print(f"results_zip: {summary['artifact_paths']['zip']}")
+    metrics = summary.get("health", {}).get("metrics", {})
+    print(f"real_turn_runtime_count: {metrics.get('real_turn_runtime_count')}")
+    print(f"compatibility_turn_runtime_count: {metrics.get('compatibility_turn_runtime_count')}")
 
     warnings = summary.get("health", {}).get("warnings") or []
     if args.fail_on_regression_warnings and warnings:
