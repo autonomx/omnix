@@ -36,6 +36,14 @@ def render_autoplay_html(transcript: List[Dict[str, Any]], summary: Dict[str, An
                 <pre>{html.escape(json.dumps(row.get("progress_delta") or {}, ensure_ascii=False, indent=2, sort_keys=True, default=str))}</pre>
               </div>
               <details>
+                <summary>State bounds</summary>
+                <pre>{html.escape(json.dumps(row.get("state_bounds") or {}, ensure_ascii=False, indent=2, sort_keys=True, default=str))}</pre>
+              </details>
+              <details>
+                <summary>Save/load checkpoint</summary>
+                <pre>{html.escape(json.dumps(row.get("save_load_checkpoint") or {}, ensure_ascii=False, indent=2, sort_keys=True, default=str))}</pre>
+              </details>
+              <details>
                 <summary>Suggested actions shown to player-agent ({len(suggested)})</summary>
                 <pre>{html.escape(json.dumps(suggested, ensure_ascii=False, indent=2))}</pre>
               </details>
@@ -101,6 +109,10 @@ def write_autoplay_artifacts(
         if artifact_detail == "full":
             zf.write(transcript_path, transcript_path.name)
             zf.write(html_path, html_path.name)
+            checkpoint_dir = output_dir / "checkpoints"
+            if checkpoint_dir.exists():
+                for checkpoint_path in sorted(checkpoint_dir.glob("*.json")):
+                    zf.write(checkpoint_path, f"checkpoints/{checkpoint_path.name}")
 
     return {
         "summary": str(summary_path),

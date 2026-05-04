@@ -22,6 +22,10 @@ from tests.rpg.autoplay.manual_turn_driver import (
     prepare_autoplay_manual_session,
     run_autoplay_manual_turn,
 )
+from tests.rpg.autoplay.checkpoints import (
+    collect_state_bounds,
+    validate_save_load_checkpoint,
+)
 from tests.rpg.autoplay.player_agent import (
     build_player_agent_prompt,
     choose_fallback_player_action,
@@ -149,6 +153,7 @@ def run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
         simulation_state=simulation_state,
         reset_session_state=True,
     )
+    checkpoint_dir = Path(args.output_dir) / "checkpoints"
 
     provider = _load_provider() if args.player_agent == "llm" else None
     provider_shape = describe_provider_shape(provider) if provider is not None else {}
@@ -209,6 +214,25 @@ def run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
             before_state=before_state,
             after_state=simulation_state,
         )
+        state_bounds = collect_state_bounds(
+            simulation_state,
+            max_state_bytes=int(args.max_state_bytes),
+            max_root_count=int(args.max_state_roots),
+            max_list_length=int(args.max_state_list_length),
+            max_dict_keys=int(args.max_state_dict_keys),
+        )
+        save_load_checkpoint = {}
+        checkpoint_every = int(args.checkpoint_every or 0)
+        if checkpoint_every > 0 and turn_index % checkpoint_every == 0:
+            save_load_checkpoint = validate_save_load_checkpoint(
+                session_id=session_id,
+                turn_index=turn_index,
+                checkpoint_dir=checkpoint_dir,
+                simulation_state=simulation_state,
+            )
+            # Re-load after validation so the next turn context is exactly what
+            # survived save/load.
+            simulation_state = load_autoplay_simulation_state(session_id)
         narration = _extract_narration(turn_result)
         record = {
             "turn_index": turn_index,
@@ -235,6 +259,8 @@ def run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
             "before_state_digest": before_digest,
             "after_state_digest": state_digest(simulation_state),
             "progress_delta": progress_delta,
+            "state_bounds": state_bounds,
+            "save_load_checkpoint": save_load_checkpoint,
         }
         transcript.append(record)
 
@@ -246,6 +272,8 @@ def run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
             allow_compatibility_turn_runtime=not args.fail_on_compatibility_turn_runtime,
             max_player_agent_fallback_rate=args.max_player_agent_fallback_rate,
             max_no_progress_turns=args.max_no_progress_turns,
+            fail_on_checkpoint_failure=not args.allow_checkpoint_failures,
+            fail_on_state_bound_warnings=not args.allow_state_bound_warnings,
         )
         if args.stop_on_loop and health.get("loop", {}).get("ok") is False:
             stopped_reason = "repeated_action_loop"
@@ -268,6 +296,8 @@ def run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
         allow_compatibility_turn_runtime=not args.fail_on_compatibility_turn_runtime,
         max_player_agent_fallback_rate=args.max_player_agent_fallback_rate,
         max_no_progress_turns=args.max_no_progress_turns,
+        fail_on_checkpoint_failure=not args.allow_checkpoint_failures,
+        fail_on_state_bound_warnings=not args.allow_state_bound_warnings,
     )
     summary = {
         "ok": bool(health.get("ok")) and not stopped_reason,
@@ -275,6 +305,13 @@ def run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
         "scenario_seed": args.scenario_seed,
         "turn_runtime": "manual_harness",
         "server_runtime_used": False,
+        "checkpoint_every": int(args.checkpoint_every or 0),
+        "state_bounds_limits": {
+            "max_state_bytes": int(args.max_state_bytes),
+            "max_state_roots": int(args.max_state_roots),
+            "max_state_list_length": int(args.max_state_list_length),
+            "max_state_dict_keys": int(args.max_state_dict_keys),
+        },
         "seed_result": seed_result,
         "requested_turns": int(args.turns),
         "turns_executed": len(transcript),
@@ -325,6 +362,13 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--fail-on-compatibility-turn-runtime", action="store_true")
     parser.add_argument("--max-player-agent-fallback-rate", type=float, default=1.0)
     parser.add_argument("--fail-on-regression-warnings", action="store_true")
+    parser.add_argument("--checkpoint-every", type=int, default=0)
+    parser.add_argument("--max-state-bytes", type=int, default=2_000_000)
+    parser.add_argument("--max-state-roots", type=int, default=80)
+    parser.add_argument("--max-state-list-length", type=int, default=500)
+    parser.add_argument("--max-state-dict-keys", type=int, default=500)
+    parser.add_argument("--allow-checkpoint-failures", action="store_true")
+    parser.add_argument("--allow-state-bound-warnings", action="store_true")
     return parser
 
 
