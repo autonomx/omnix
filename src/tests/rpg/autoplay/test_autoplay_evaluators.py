@@ -91,3 +91,37 @@ def test_evaluate_autoplay_health_can_fail_on_no_progress_streak():
 
     assert health["ok"] is False
     assert "no_progress_turn_limit_exceeded" in health["warnings"]
+
+
+def test_evaluate_autoplay_health_can_fail_on_checkpoint_failure():
+    transcript = [
+        {
+            "player_action": "A",
+            "save_load_checkpoint": {"ok": False},
+        }
+    ]
+
+    health = evaluate_autoplay_health(
+        transcript,
+        latest_context={"suggested_actions": [{"x": 1}]},
+    )
+
+    assert health["ok"] is False
+    assert "save_load_checkpoint_failed" in health["warnings"]
+
+
+def test_evaluate_autoplay_health_can_fail_on_state_bounds_warning():
+    transcript = [
+        {
+            "player_action": "A",
+            "state_bounds": {"warnings": ["state_size_limit_exceeded"]},
+        }
+    ]
+
+    health = evaluate_autoplay_health(
+        transcript,
+        latest_context={"suggested_actions": [{"x": 1}]},
+    )
+
+    assert health["ok"] is False
+    assert "state_bounds_warning" in health["warnings"]

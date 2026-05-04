@@ -27,6 +27,18 @@ def test_autoplay_runner_fallback_executes_short_campaign(tmp_path: Path, monkey
     monkeypatch.setattr("tests.rpg.autoplay_llm_campaign.prepare_autoplay_manual_session", fake_prepare)
     monkeypatch.setattr("tests.rpg.autoplay_llm_campaign.load_autoplay_simulation_state", fake_load_state)
     monkeypatch.setattr("tests.rpg.autoplay_llm_campaign._call_turn_runtime", fake_turn)
+    monkeypatch.setattr(
+        "tests.rpg.autoplay_llm_campaign.validate_save_load_checkpoint",
+        lambda **kwargs: {
+            "ok": True,
+            "turn_index": kwargs["turn_index"],
+            "checkpoint": {"path": str(tmp_path / "fake-checkpoint.json")},
+            "before_digest": {},
+            "loaded_digest": {},
+            "reloaded_digest": {},
+            "root_compare": {"ok": True},
+        },
+    )
 
     args = Namespace(
         turns=3,
@@ -50,6 +62,13 @@ def test_autoplay_runner_fallback_executes_short_campaign(tmp_path: Path, monkey
         fail_on_regression_warnings=False,
         debug_provider_shape=False,
         debug_turn_runtime_shape=False,
+        checkpoint_every=1,
+        max_state_bytes=2_000_000,
+        max_state_roots=80,
+        max_state_list_length=500,
+        max_state_dict_keys=500,
+        allow_checkpoint_failures=False,
+        allow_state_bound_warnings=False,
     )
 
     summary = run_autoplay_campaign(args)
