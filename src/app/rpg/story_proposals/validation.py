@@ -173,6 +173,17 @@ def _validate_effect_references(
         if puzzle_id and not puzzle_id.startswith("puzzle:"):
             errors.append(_err("invalid_puzzle_reference", event_id=event_id, puzzle_id=puzzle_id))
 
+    if effect_type == "milestone_add":
+        arc_id = _safe_str(effect.get("arc_id"))
+        if arc_id and arc_id not in refs["arc_ids"]:
+            errors.append(_err("unknown_arc_reference", event_id=event_id, effect_type=effect_type, arc_id=arc_id))
+        if not str(effect.get("title") or ""):
+            errors.append(_err("missing_milestone_title", event_id=event_id, effect_type=effect_type))
+
+    if effect_type == "milestone_complete":
+        if not str(effect.get("milestone_id") or ""):
+            errors.append(_err("missing_milestone_id", event_id=event_id, effect_type=effect_type))
+
     return errors
 
 

@@ -2,6 +2,10 @@ from __future__ import annotations
 
 from typing import Any, Dict, List
 
+from app.rpg.quest_log.runtime import (
+    build_objective_tracker_payload,
+    build_quest_log_payload,
+)
 from app.rpg.story_authoring.approval import (
     approve_story_proposal,
     draft_story_proposal_for_approval,
@@ -136,6 +140,8 @@ def build_story_authoring_inspector_payload(
         "pending": pending,
         "history": history,
         "story_pack_activation": build_story_pack_activation_snapshot(simulation_state, limit=limit),
+        "quest_log": build_quest_log_payload(simulation_state, limit=limit),
+        "objective_tracker": build_objective_tracker_payload(simulation_state, limit=min(limit, 8)),
         "actions": {
             "draft": "/api/rpg/story_authoring/draft",
             "pending": "/api/rpg/story_authoring/pending",
@@ -143,6 +149,8 @@ def build_story_authoring_inspector_payload(
             "reject": "/api/rpg/story_authoring/reject",
             "activate_pack": "/api/rpg/story_authoring/packs/activate",
             "deactivate_pack": "/api/rpg/story_authoring/packs/deactivate",
+            "quest_log": "/api/rpg/quest_log/payload",
+            "objective_tracker": "/api/rpg/quest_log/tracker",
         },
         "bounded": {
             "limit": limit,

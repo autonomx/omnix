@@ -8,6 +8,10 @@ from app.rpg.npc_evolution.state import apply_npc_evolution_delta, start_npc_arc
 from app.rpg.puzzles.transitions import apply_puzzle_transition
 from app.rpg.quests.transitions import apply_quest_transition
 from app.rpg.social.reputation import apply_social_deltas
+from app.rpg.story_arcs.milestones import (
+    add_story_arc_milestone,
+    complete_story_arc_milestone,
+)
 from app.rpg.story_arcs.state import (
     apply_story_arc_pressure_delta,
     set_story_arc_flag,
@@ -92,6 +96,37 @@ def apply_story_event_effect(
                 str(effect.get("arc_id") or source_event.get("arc_id") or ""),
                 str(effect.get("flag") or ""),
                 effect.get("value", True),
+            ),
+            effect_type=effect_type,
+        )
+
+    if effect_type == "milestone_add":
+        return dict(
+            add_story_arc_milestone(
+                simulation_state,
+                arc_id=str(effect.get("arc_id") or source_event.get("arc_id") or ""),
+                milestone_id=str(effect.get("milestone_id") or ""),
+                title=str(effect.get("title") or ""),
+                summary=str(effect.get("summary") or ""),
+                objective_text=str(effect.get("objective_text") or ""),
+                journal_on_complete=str(effect.get("journal_on_complete") or ""),
+                quest_id=str(effect.get("quest_id") or ""),
+                priority=int(effect.get("priority") or 50),
+                turn_index=turn_index,
+                tags=effect.get("tags") or [],
+                metadata={"source_event_id": source_event.get("event_id")},
+            ),
+            effect_type=effect_type,
+        )
+
+    if effect_type == "milestone_complete":
+        return dict(
+            complete_story_arc_milestone(
+                simulation_state,
+                str(effect.get("milestone_id") or ""),
+                turn_index=turn_index,
+                reason=str(effect.get("reason") or "story_event_effect"),
+                metadata={"source_event_id": source_event.get("event_id")},
             ),
             effect_type=effect_type,
         )

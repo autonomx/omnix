@@ -1,34 +1,60 @@
-Bundle M43-M45 — Runtime Story Pack Activation + Campaign Director Bridge v1
+Bundle M49-M51 — Quest Log UI + Objective Tracker Runtime v1
 GOAL:
-Bridge imported/approved story packs into the runtime campaign director safely.
+Expose the deterministic milestone/objective system as a player-facing Quest Log / Objective Tracker.
 
 This bundle adds:
-- Story pack activation state
-- imported story packs can be inactive by default
-- active story packs expose escalation rules to campaign director
-- inactive packs do not drive escalation
-- approved/imported story packs can be activated explicitly
-- activation/deactivation is deterministic and bounded
-- campaign director evaluates only active story pack rules by default
-- story authoring approval/import flow can optionally auto-activate imported packs
-- inspector/API payload shows active/inactive imported packs
-- manual tests verify inactive packs do not escalate and active packs do
+- objective tracker runtime payload
+- quest log projection from story arc milestones
+- active/completed objective grouping
+- objective pin/unpin state
+- objective visibility/ordering rules
+- player-facing API payload
+- legacy UI quest log/objective tracker panel
+- manual tests validating runtime payloads and bounded output
 
 Important:
-- Importing a story pack does not automatically mean it drives runtime, unless auto_activate is explicitly requested.
-- Campaign director should not consume every imported pack forever without activation gating.
-- Activation state is authoritative deterministic simulation state.
-- LLM cannot activate packs directly.
-Patch 1 — Add story pack activation runtime
-1. Add src/app/rpg/story_packs/activation.py
+- Quest log is derived from authoritative milestone state.
+- Pin/unpin is UI/player preference state only.
+- UI cannot create/complete objectives.
+- LLM cannot create/complete objectives.
+- Completion still only happens through deterministic story event effects or simulation helpers.
+- Quest log must stay bounded and save/load-safe.
+Patch 1 — Add quest log runtime package
+1. Add src/app/rpg/quest_log/__init__.py
 *** Begin Patch
-*** Add File: src/app/rpg/story_packs/activation.py
+*** Add File: src/app/rpg/quest_log/__init__.py
++"""Player-facing quest log and objective tracker projections."""
++
++from app.rpg.quest_log.runtime import (
++    build_objective_tracker_payload,
++    build_quest_log_payload,
++    pin_objective,
++    unpin_objective,
++)
++from app.rpg.quest_log.state import (
++    ensure_quest_log_state,
++    normalize_quest_log_state,
++)
++
++__all__ = [
++    "build_objective_tracker_payload",
++    "build_quest_log_payload",
++    "ensure_quest_log_state",
++    "normalize_quest_log_state",
++    "pin_objective",
++    "unpin_objective",
++]
+*** End Patch
+2. Add src/app/rpg/quest_log/state.py
+*** Begin Patch
+*** Add File: src/app/rpg/quest_log/state.py
 +from __future__ import annotations
 +
 +from typing import Any, Dict, List
 +
 +
-+MAX_STORY_PACK_ACTIVATION_HISTORY = 100
++MAX_PINNED_OBJECTIVES = 10
++MAX_QUEST_LOG_HISTORY = 100
 +
 +
 +def _safe_dict(value: Any) -> Dict[str, Any]:
@@ -50,22 +76,24 @@ Patch 1 — Add story pack activation runtime
 +        return default
 +
 +
-+def _normalize_activation_row(value: Dict[str, Any]) -> Dict[str, Any]:
-+    value = _safe_dict(value)
-+    return {
-+        "pack_id": _safe_str(value.get("pack_id")),
-+        "status": _safe_str(value.get("status")) or "inactive",
-+        "activated_turn": _safe_int(value.get("activated_turn"), 0),
-+        "deactivated_turn": _safe_int(value.get("deactivated_turn"), 0),
-+        "reason": _safe_str(value.get("reason")),
-+        "metadata": dict(_safe_dict(value.get("metadata"))),
-+    }
++def _unique_strings(values: Any, *, limit: int) -> List[str]:
++    seen = set()
++    out: List[str] = []
++    for value in _safe_list(values):
++        text = str(value or "").strip()
++        if not text or text in seen:
++            continue
++        seen.add(text)
++        out.append(text)
++        if len(out) >= limit:
++            break
++    return out
 +
 +
-+def _normalize_history_row(value: Dict[str, Any]) -> Dict[str, Any]:
++def normalize_quest_log_history_item(value: Dict[str, Any]) -> Dict[str, Any]:
 +    value = _safe_dict(value)
 +    return {
-+        "pack_id": _safe_str(value.get("pack_id")),
++        "objective_id": _safe_str(value.get("objective_id")),
 +        "action": _safe_str(value.get("action")),
 +        "turn_index": _safe_int(value.get("turn_index"), 0),
 +        "reason": _safe_str(value.get("reason")),
@@ -73,56 +101,46 @@ Patch 1 — Add story pack activation runtime
 +    }
 +
 +
-+def normalize_story_pack_activation_state(value: Dict[str, Any] | None) -> Dict[str, Any]:
++def normalize_quest_log_state(value: Dict[str, Any] | None) -> Dict[str, Any]:
 +    value = _safe_dict(value)
-+    packs = {}
-+    for pack_id, row in _safe_dict(value.get("packs")).items():
-+        pack_id = str(pack_id or "")
-+        if not pack_id:
-+            continue
-+        normalized = _normalize_activation_row(row)
-+        normalized["pack_id"] = pack_id
-+        if normalized["status"] not in {"active", "inactive"}:
-+            normalized["status"] = "inactive"
-+        packs[pack_id] = normalized
-+
++    pinned = _unique_strings(value.get("pinned_objective_ids"), limit=MAX_PINNED_OBJECTIVES)
 +    history = [
-+        _normalize_history_row(row)
++        normalize_quest_log_history_item(row)
 +        for row in _safe_list(value.get("history"))
 +        if isinstance(row, dict)
-+    ][-MAX_STORY_PACK_ACTIVATION_HISTORY:]
-+
++    ][-MAX_QUEST_LOG_HISTORY:]
 +    return {
 +        "version": 1,
-+        "packs": packs,
++        "pinned_objective_ids": pinned,
 +        "history": history,
-+        "max_history": MAX_STORY_PACK_ACTIVATION_HISTORY,
++        "max_pinned_objectives": MAX_PINNED_OBJECTIVES,
++        "max_history": MAX_QUEST_LOG_HISTORY,
 +    }
 +
 +
-+def ensure_story_pack_activation_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
++def ensure_quest_log_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
 +    if not isinstance(simulation_state, dict):
 +        raise TypeError("simulation_state_must_be_dict")
-+    state = normalize_story_pack_activation_state(simulation_state.get("story_pack_activation_state"))
-+    simulation_state["story_pack_activation_state"] = state
++    state = normalize_quest_log_state(simulation_state.get("quest_log_state"))
++    simulation_state["quest_log_state"] = state
 +    return state
 +
 +
-+def _append_history(
++def append_quest_log_history(
 +    simulation_state: Dict[str, Any],
 +    *,
-+    pack_id: str,
++    objective_id: str,
 +    action: str,
 +    turn_index: int = 0,
 +    reason: str = "",
 +    metadata: Dict[str, Any] | None = None,
-+) -> None:
-+    state = ensure_story_pack_activation_state(simulation_state)
++) -> Dict[str, Any]:
++    state = ensure_quest_log_state(simulation_state)
 +    history = list(state.get("history") or [])
 +    history.append(
-+        _normalize_history_row(
++        normalize_quest_log_history_item(
 +            {
-+                "pack_id": pack_id,
++                "objective_id": objective_id,
 +                "action": action,
 +                "turn_index": turn_index,
 +                "reason": reason,
@@ -130,868 +148,986 @@ Patch 1 — Add story pack activation runtime
 +            }
 +        )
 +    )
-+    state["history"] = history[-MAX_STORY_PACK_ACTIVATION_HISTORY:]
-+    simulation_state["story_pack_activation_state"] = normalize_story_pack_activation_state(state)
++    state["history"] = history[-MAX_QUEST_LOG_HISTORY:]
++    simulation_state["quest_log_state"] = normalize_quest_log_state(state)
++    return {"ok": True, "reason": "quest_log_history_recorded"}
+*** End Patch
+3. Add src/app/rpg/quest_log/runtime.py
+*** Begin Patch
+*** Add File: src/app/rpg/quest_log/runtime.py
++from __future__ import annotations
++
++from typing import Any, Dict, List
++
++from app.rpg.quest_log.state import (
++    MAX_PINNED_OBJECTIVES,
++    append_quest_log_history,
++    ensure_quest_log_state,
++)
++from app.rpg.story_arcs.milestones import build_story_objective_projection
 +
 +
-+def activate_story_pack(
-+    simulation_state: Dict[str, Any],
-+    pack_id: str,
-+    *,
-+    turn_index: int = 0,
-+    reason: str = "activated",
-+    metadata: Dict[str, Any] | None = None,
-+) -> Dict[str, Any]:
-+    pack_id = str(pack_id or "")
-+    if not pack_id:
-+        return {"ok": False, "reason": "missing_pack_id"}
++MAX_QUEST_LOG_OBJECTIVES = 50
++MAX_OBJECTIVE_TRACKER_ITEMS = 8
 +
-+    story_pack_state = _safe_dict(simulation_state.get("story_pack_state"))
-+    imported = _safe_dict(story_pack_state.get("imported_packs"))
-+    if pack_id not in imported:
-+        return {"ok": False, "reason": "story_pack_not_imported", "pack_id": pack_id}
 +
-+    state = ensure_story_pack_activation_state(simulation_state)
-+    current = _safe_dict(state.get("packs", {}).get(pack_id))
-+    if current.get("status") == "active":
-+        return {
-+            "ok": True,
-+            "reason": "already_active",
-+            "pack_id": pack_id,
-+            "activation": current,
-+        }
++def _safe_dict(value: Any) -> Dict[str, Any]:
++    return value if isinstance(value, dict) else {}
 +
-+    row = _normalize_activation_row(
-+        {
-+            "pack_id": pack_id,
-+            "status": "active",
-+            "activated_turn": turn_index,
-+            "deactivated_turn": 0,
-+            "reason": reason,
-+            "metadata": metadata or {},
-+        }
++
++def _safe_list(value: Any) -> List[Any]:
++    return value if isinstance(value, list) else []
++
++
++def _safe_str(value: Any) -> str:
++    return value if isinstance(value, str) else ""
++
++
++def _objective_sort_key(row: Dict[str, Any], pinned_ids: List[str]):
++    objective_id = str(row.get("objective_id") or row.get("milestone_id") or "")
++    pinned_index = pinned_ids.index(objective_id) if objective_id in pinned_ids else 9999
++    return (
++        pinned_index,
++        objective_id not in pinned_ids,
++        -int(row.get("priority") or 0),
++        str(row.get("arc_id") or ""),
++        str(row.get("title") or ""),
++        objective_id,
 +    )
-+    state.setdefault("packs", {})[pack_id] = row
-+    simulation_state["story_pack_activation_state"] = normalize_story_pack_activation_state(state)
-+    _append_history(
-+        simulation_state,
-+        pack_id=pack_id,
-+        action="activate",
-+        turn_index=turn_index,
-+        reason=reason,
-+        metadata=metadata,
-+    )
++
++
++def _normalize_objective_row(row: Dict[str, Any], *, pinned_ids: List[str]) -> Dict[str, Any]:
++    row = _safe_dict(row)
++    objective_id = str(row.get("objective_id") or row.get("milestone_id") or "")
 +    return {
-+        "ok": True,
-+        "reason": "activated",
-+        "pack_id": pack_id,
-+        "activation": ensure_story_pack_activation_state(simulation_state)["packs"][pack_id],
++        "objective_id": objective_id,
++        "milestone_id": str(row.get("milestone_id") or objective_id),
++        "arc_id": str(row.get("arc_id") or ""),
++        "quest_id": str(row.get("quest_id") or ""),
++        "title": str(row.get("title") or row.get("objective_text") or objective_id),
++        "objective_text": str(row.get("objective_text") or row.get("title") or objective_id),
++        "status": str(row.get("status") or "active"),
++        "priority": int(row.get("priority") or 0),
++        "pinned": objective_id in pinned_ids,
 +    }
 +
 +
-+def deactivate_story_pack(
-+    simulation_state: Dict[str, Any],
-+    pack_id: str,
-+    *,
-+    turn_index: int = 0,
-+    reason: str = "deactivated",
-+    metadata: Dict[str, Any] | None = None,
-+) -> Dict[str, Any]:
-+    pack_id = str(pack_id or "")
-+    if not pack_id:
-+        return {"ok": False, "reason": "missing_pack_id"}
-+
-+    state = ensure_story_pack_activation_state(simulation_state)
-+    current = _safe_dict(state.get("packs", {}).get(pack_id))
-+    if current.get("status") != "active":
-+        return {
-+            "ok": True,
-+            "reason": "already_inactive",
-+            "pack_id": pack_id,
-+            "activation": current or {"pack_id": pack_id, "status": "inactive"},
-+        }
-+
-+    row = dict(current)
-+    row["status"] = "inactive"
-+    row["deactivated_turn"] = int(turn_index or 0)
-+    row["reason"] = reason
-+    row["metadata"] = dict(metadata or row.get("metadata") or {})
-+    state.setdefault("packs", {})[pack_id] = _normalize_activation_row(row)
-+    simulation_state["story_pack_activation_state"] = normalize_story_pack_activation_state(state)
-+    _append_history(
-+        simulation_state,
-+        pack_id=pack_id,
-+        action="deactivate",
-+        turn_index=turn_index,
-+        reason=reason,
-+        metadata=metadata,
-+    )
-+    return {
-+        "ok": True,
-+        "reason": "deactivated",
-+        "pack_id": pack_id,
-+        "activation": ensure_story_pack_activation_state(simulation_state)["packs"][pack_id],
-+    }
-+
-+
-+def is_story_pack_active(simulation_state: Dict[str, Any], pack_id: str) -> bool:
-+    state = ensure_story_pack_activation_state(simulation_state)
-+    return _safe_dict(state.get("packs", {}).get(str(pack_id or ""))).get("status") == "active"
-+
-+
-+def list_active_story_pack_ids(simulation_state: Dict[str, Any]) -> List[str]:
-+    state = ensure_story_pack_activation_state(simulation_state)
-+    return [
-+        pack_id
-+        for pack_id, row in _safe_dict(state.get("packs")).items()
-+        if _safe_dict(row).get("status") == "active"
-+    ]
-+
-+
-+def build_story_pack_activation_snapshot(simulation_state: Dict[str, Any], *, limit: int = 20) -> Dict[str, Any]:
-+    limit = max(0, min(50, int(limit or 20)))
-+    state = ensure_story_pack_activation_state(simulation_state)
-+    story_pack_state = _safe_dict(simulation_state.get("story_pack_state"))
-+    imported = _safe_dict(story_pack_state.get("imported_packs"))
-+    rows = []
-+    for pack_id, imported_pack in imported.items():
-+        activation = _safe_dict(state.get("packs", {}).get(pack_id))
-+        proposal = _safe_dict(_safe_dict(imported_pack).get("proposal"))
-+        rows.append(
++def _group_objectives_by_quest(objectives: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
++    groups: Dict[str, Dict[str, Any]] = {}
++    for row in objectives:
++        quest_id = str(row.get("quest_id") or row.get("arc_id") or "story")
++        group = groups.setdefault(
++            quest_id,
 +            {
-+                "pack_id": str(pack_id),
-+                "proposal_id": str(proposal.get("proposal_id") or _safe_dict(imported_pack).get("proposal_id") or ""),
-+                "title": str(proposal.get("title") or _safe_dict(imported_pack).get("title") or ""),
-+                "status": activation.get("status") or "inactive",
-+                "activated_turn": int(activation.get("activated_turn") or 0),
-+                "deactivated_turn": int(activation.get("deactivated_turn") or 0),
-+                "reason": activation.get("reason") or "",
-+                "counts": {
-+                    "lore_entries": len(proposal.get("lore_entries") or []),
-+                    "story_arcs": len(proposal.get("story_arcs") or []),
-+                    "story_events": len(proposal.get("story_events") or []),
-+                    "escalation_rules": len(proposal.get("escalation_rules") or []),
-+                },
-+            }
++                "quest_id": quest_id,
++                "title": quest_id.replace("_", " ").replace(":", " ").title(),
++                "active_objectives": [],
++                "completed_objectives": [],
++            },
 +        )
-+    rows.sort(key=lambda row: (row["status"] != "active", row["pack_id"]))
++        if row.get("status") == "completed":
++            group["completed_objectives"].append(row)
++        else:
++            group["active_objectives"].append(row)
++    out = list(groups.values())
++    out.sort(
++        key=lambda group: (
++            not bool(group.get("active_objectives")),
++            str(group.get("quest_id") or ""),
++        )
++    )
++    return out
++
++
++def build_quest_log_payload(
++    simulation_state: Dict[str, Any],
++    *,
++    limit: int = MAX_QUEST_LOG_OBJECTIVES,
++) -> Dict[str, Any]:
++    limit = max(0, min(MAX_QUEST_LOG_OBJECTIVES, int(limit or MAX_QUEST_LOG_OBJECTIVES)))
++    state = ensure_quest_log_state(simulation_state)
++    pinned_ids = list(state.get("pinned_objective_ids") or [])
++    projection = build_story_objective_projection(simulation_state, limit=limit)
++
++    active = [
++        _normalize_objective_row(row, pinned_ids=pinned_ids)
++        for row in _safe_list(projection.get("active_objectives"))
++        if isinstance(row, dict)
++    ]
++    completed = [
++        _normalize_objective_row(row, pinned_ids=pinned_ids)
++        for row in _safe_list(projection.get("completed_milestones"))
++        if isinstance(row, dict)
++    ]
++    active.sort(key=lambda row: _objective_sort_key(row, pinned_ids))
++    completed.sort(key=lambda row: (str(row.get("arc_id") or ""), str(row.get("objective_id") or "")))
++
++    active = active[:limit]
++    completed = completed[:limit]
++    groups = _group_objectives_by_quest(active + completed)
++
 +    return {
 +        "ok": True,
-+        "format_version": "story_pack_activation_snapshot_v1",
-+        "packs": rows[:limit],
-+        "active_pack_ids": list_active_story_pack_ids(simulation_state)[:limit],
++        "format_version": "quest_log_v1",
++        "pinned_objective_ids": pinned_ids,
++        "active_objectives": active,
++        "completed_objectives": completed,
++        "quest_groups": groups[:limit],
 +        "history": list(state.get("history") or [])[-limit:],
++        "actions": {
++            "payload": "/api/rpg/quest_log/payload",
++            "tracker": "/api/rpg/quest_log/tracker",
++            "pin": "/api/rpg/quest_log/pin",
++            "unpin": "/api/rpg/quest_log/unpin",
++        },
++        "rules": [
++            "Quest log is derived from deterministic milestone state.",
++            "Pinning only changes display preference.",
++            "The UI cannot create or complete objectives.",
++        ],
 +        "bounded": {
 +            "limit": limit,
-+            "max_history": MAX_STORY_PACK_ACTIVATION_HISTORY,
++            "max_objectives": MAX_QUEST_LOG_OBJECTIVES,
++            "max_pinned_objectives": MAX_PINNED_OBJECTIVES,
 +        },
 +    }
-*** End Patch
-2. Patch src/app/rpg/story_packs/__init__.py
-
-If the file exists, add exports:
-
-*** Begin Patch
-*** Update File: src/app/rpg/story_packs/__init__.py
-@@
-+from app.rpg.story_packs.activation import (
-+    activate_story_pack,
-+    build_story_pack_activation_snapshot,
-+    deactivate_story_pack,
-+    ensure_story_pack_activation_state,
-+    is_story_pack_active,
-+    list_active_story_pack_ids,
-+    normalize_story_pack_activation_state,
-+)
-+
-+__all__ = [
-+    "activate_story_pack",
-+    "build_story_pack_activation_snapshot",
-+    "deactivate_story_pack",
-+    "ensure_story_pack_activation_state",
-+    "is_story_pack_active",
-+    "list_active_story_pack_ids",
-+    "normalize_story_pack_activation_state",
-+]
-*** End Patch
-
-If __all__ already exists, merge these names into it instead of replacing existing exports.
-
-Patch 2 — Bridge active packs into campaign director
-3. Patch src/app/rpg/story_packs/definition_registries.py
-
-Add helper to resolve rules by active story packs. This assumes imported pack records retain proposal and existing registry stores rules globally.
-
-*** Begin Patch
-*** Update File: src/app/rpg/story_packs/definition_registries.py
-@@
- from __future__ import annotations
- 
- from typing import Any, Dict, List
-+from app.rpg.story_packs.activation import list_active_story_pack_ids
-@@
- def list_escalation_rule_definitions(
-     simulation_state: Dict[str, Any],
-     *,
-     arc_id: str = "",
- ) -> List[Dict[str, Any]]:
-@@
-     return rows
 +
 +
-+def list_active_escalation_rule_definitions(
++def build_objective_tracker_payload(
 +    simulation_state: Dict[str, Any],
 +    *,
-+    arc_id: str = "",
-+) -> List[Dict[str, Any]]:
-+    """Return escalation rules belonging to active imported story packs only.
-+
-+    Rules imported before activation support may not have source_pack_id metadata.
-+    In that case, this function falls back to proposal escalation_rules stored
-+    on each active imported story pack.
-+    """
-+    active_pack_ids = set(list_active_story_pack_ids(simulation_state))
-+    if not active_pack_ids:
-+        return []
-+
-+    story_pack_state = simulation_state.get("story_pack_state") if isinstance(simulation_state, dict) else {}
-+    imported_packs = story_pack_state.get("imported_packs") if isinstance(story_pack_state, dict) else {}
-+    rows: List[Dict[str, Any]] = []
-+    for pack_id in sorted(active_pack_ids):
-+        imported = imported_packs.get(pack_id) if isinstance(imported_packs, dict) else None
-+        if not isinstance(imported, dict):
-+            continue
-+        proposal = imported.get("proposal") if isinstance(imported.get("proposal"), dict) else {}
-+        for rule in proposal.get("escalation_rules") or []:
-+            if not isinstance(rule, dict):
-+                continue
-+            if arc_id and str(rule.get("arc_id") or "") != arc_id:
-+                continue
-+            copied = dict(rule)
-+            copied.setdefault("source_pack_id", pack_id)
-+            rows.append(copied)
-+
-+    # Deterministic order: highest priority first, then rule id.
-+    rows.sort(key=lambda row: (-int(row.get("priority") or 0), str(row.get("rule_id") or "")))
-+    return rows
-*** End Patch
-
-If the file already has import ordering rules, move the new import with other app imports.
-
-4. Patch src/app/rpg/campaign_director/runtime.py
-
-Switch director rule resolution to active rules by default.
-
-*** Begin Patch
-*** Update File: src/app/rpg/campaign_director/runtime.py
-@@
- from app.rpg.story_packs.definition_registries import (
-     get_story_event_definition,
-+    list_active_escalation_rule_definitions,
-     list_escalation_rule_definitions,
- )
-@@
- def _resolve_registered_rules(
-     simulation_state: Dict[str, Any],
-     *,
-     arc_id: str = "",
-+    active_only: bool = True,
- ) -> List[Dict[str, Any]]:
-+    if active_only:
-+        return list_active_escalation_rule_definitions(simulation_state, arc_id=arc_id)
-     return list_escalation_rule_definitions(simulation_state, arc_id=arc_id)
-@@
- def evaluate_campaign_director_tick(
-     simulation_state: Dict[str, Any],
-     *,
-     mode: str = "idle",
-     turn_index: int = 0,
-     arc_id: str = "",
-+    active_packs_only: bool = True,
-     max_pressure_items: int = MAX_DIRECTOR_PRESSURE_ITEMS,
- ) -> Dict[str, Any]:
-@@
--    registered_rules = _resolve_registered_rules(simulation_state, arc_id=arc_id)
-+    registered_rules = _resolve_registered_rules(
-+        simulation_state,
-+        arc_id=arc_id,
-+        active_only=active_packs_only,
-+    )
-@@
-         "registered_rule_count": len(registered_rules),
-+        "active_packs_only": active_packs_only,
-         "eligible": evaluation.get("eligible") or [],
-@@
- def apply_campaign_director_tick(
-     simulation_state: Dict[str, Any],
-     *,
-     mode: str = "idle",
-     turn_index: int = 0,
-     arc_id: str = "",
-     max_applications: int = MAX_DIRECTOR_APPLICATIONS_PER_TICK,
-+    active_packs_only: bool = True,
- ) -> Dict[str, Any]:
-@@
-         mode=mode,
-         turn_index=turn_index,
-         arc_id=arc_id,
-+        active_packs_only=active_packs_only,
-     )
-@@
- def build_campaign_director_snapshot(
-     simulation_state: Dict[str, Any],
-     *,
-     mode: str = "idle",
-     turn_index: int = 0,
-     arc_id: str = "",
-+    active_packs_only: bool = True,
- ) -> Dict[str, Any]:
-@@
-         mode=mode,
-         turn_index=turn_index,
-         arc_id=arc_id,
-+        active_packs_only=active_packs_only,
-     )
-@@
-         "registered_rule_count": evaluation.get("registered_rule_count") or 0,
-+        "active_packs_only": active_packs_only,
-*** End Patch
-
-This intentionally changes the default: imported packs are not runtime-active until activated.
-
-Patch 3 — Auto-activate option from approval/import flows
-5. Patch src/app/rpg/story_authoring/approval.py
-
-Add import:
-
-*** Begin Patch
-*** Update File: src/app/rpg/story_authoring/approval.py
-@@
- from app.rpg.story_packs.importer import import_story_pack
-+from app.rpg.story_packs.activation import activate_story_pack
- from app.rpg.story_proposals.validation import validate_story_proposal
-*** End Patch
-
-Update approve_story_proposal signature and activate if requested:
-
-*** Begin Patch
-*** Update File: src/app/rpg/story_authoring/approval.py
-@@
- def approve_story_proposal(
-     simulation_state: Dict[str, Any],
-     *,
-     pending_id: str,
-     turn_index: int = 0,
-     reason: str = "gm_approved",
-+    auto_activate: bool = False,
- ) -> Dict[str, Any]:
-@@
-     import_result = import_story_pack(simulation_state, proposal, turn_index=turn_index)
-@@
--    state = ensure_story_authoring_approval_state(simulation_state)
-+    activation_result = None
-+    if auto_activate:
-+        activation_result = activate_story_pack(
-+            simulation_state,
-+            str(import_result.get("pack_id") or ""),
-+            turn_index=turn_index,
-+            reason="approved_auto_activate",
-+            metadata={"pending_id": pending_id},
-+        )
-+
-+    state = ensure_story_authoring_approval_state(simulation_state)
-@@
-         imported_pack_id=str(import_result.get("pack_id") or ""),
--        details={"proposal_id": proposal.get("proposal_id"), "import_result": import_result},
-+        details={
-+            "proposal_id": proposal.get("proposal_id"),
-+            "import_result": import_result,
-+            "activation_result": activation_result or {},
-+            "auto_activate": auto_activate,
++    limit: int = MAX_OBJECTIVE_TRACKER_ITEMS,
++) -> Dict[str, Any]:
++    limit = max(0, min(MAX_OBJECTIVE_TRACKER_ITEMS, int(limit or MAX_OBJECTIVE_TRACKER_ITEMS)))
++    quest_log = build_quest_log_payload(simulation_state, limit=MAX_QUEST_LOG_OBJECTIVES)
++    active = list(quest_log.get("active_objectives") or [])
++    pinned = [row for row in active if row.get("pinned")]
++    unpinned = [row for row in active if not row.get("pinned")]
++    tracker = (pinned + unpinned)[:limit]
++    return {
++        "ok": True,
++        "format_version": "objective_tracker_v1",
++        "objectives": tracker,
++        "pinned_objective_ids": list(quest_log.get("pinned_objective_ids") or []),
++        "active_count": len(active),
++        "completed_count": len(quest_log.get("completed_objectives") or []),
++        "bounded": {
++            "limit": limit,
++            "max_tracker_items": MAX_OBJECTIVE_TRACKER_ITEMS,
 +        },
-     )
++    }
++
++
++def pin_objective(
++    simulation_state: Dict[str, Any],
++    objective_id: str,
++    *,
++    turn_index: int = 0,
++    reason: str = "player_pinned",
++) -> Dict[str, Any]:
++    objective_id = str(objective_id or "")
++    if not objective_id:
++        return {"ok": False, "reason": "missing_objective_id"}
++
++    projection = build_story_objective_projection(simulation_state, limit=MAX_QUEST_LOG_OBJECTIVES)
++    active_ids = {
++        str(row.get("objective_id") or "")
++        for row in _safe_list(projection.get("active_objectives"))
++        if isinstance(row, dict)
++    }
++    if objective_id not in active_ids:
++        return {
++            "ok": False,
++            "reason": "objective_not_active",
++            "objective_id": objective_id,
++        }
++
++    state = ensure_quest_log_state(simulation_state)
++    pinned = list(state.get("pinned_objective_ids") or [])
++    if objective_id in pinned:
++        return {
++            "ok": True,
++            "reason": "already_pinned",
++            "objective_id": objective_id,
++            "pinned_objective_ids": pinned,
++        }
++    if len(pinned) >= MAX_PINNED_OBJECTIVES:
++        return {
++            "ok": False,
++            "reason": "pinned_objective_limit_reached",
++            "objective_id": objective_id,
++            "max_pinned_objectives": MAX_PINNED_OBJECTIVES,
++        }
++    pinned.append(objective_id)
++    state["pinned_objective_ids"] = pinned
++    simulation_state["quest_log_state"] = state
++    append_quest_log_history(
++        simulation_state,
++        objective_id=objective_id,
++        action="pin",
++        turn_index=turn_index,
++        reason=reason,
++    )
++    return {
++        "ok": True,
++        "reason": "pinned",
++        "objective_id": objective_id,
++        "pinned_objective_ids": ensure_quest_log_state(simulation_state).get("pinned_objective_ids") or [],
++    }
++
++
++def unpin_objective(
++    simulation_state: Dict[str, Any],
++    objective_id: str,
++    *,
++    turn_index: int = 0,
++    reason: str = "player_unpinned",
++) -> Dict[str, Any]:
++    objective_id = str(objective_id or "")
++    if not objective_id:
++        return {"ok": False, "reason": "missing_objective_id"}
++    state = ensure_quest_log_state(simulation_state)
++    pinned = list(state.get("pinned_objective_ids") or [])
++    if objective_id not in pinned:
++        return {
++            "ok": True,
++            "reason": "already_unpinned",
++            "objective_id": objective_id,
++            "pinned_objective_ids": pinned,
++        }
++    pinned = [item for item in pinned if item != objective_id]
++    state["pinned_objective_ids"] = pinned
++    simulation_state["quest_log_state"] = state
++    append_quest_log_history(
++        simulation_state,
++        objective_id=objective_id,
++        action="unpin",
++        turn_index=turn_index,
++        reason=reason,
++    )
++    return {
++        "ok": True,
++        "reason": "unpinned",
++        "objective_id": objective_id,
++        "pinned_objective_ids": ensure_quest_log_state(simulation_state).get("pinned_objective_ids") or [],
++    }
+*** End Patch
+Patch 2 — Add quest log to campaign recap and inspector payload
+4. Patch src/app/rpg/campaign_journal/journal.py
+
+Add import:
+
+*** Begin Patch
+*** Update File: src/app/rpg/campaign_journal/journal.py
+@@
+ from app.rpg.story_arcs.milestones import build_story_objective_projection
++from app.rpg.quest_log.runtime import build_objective_tracker_payload
+*** End Patch
+
+Add tracker to build_player_story_recap(...) return:
+
+*** Begin Patch
+*** Update File: src/app/rpg/campaign_journal/journal.py
+@@
      return {
          "ok": True,
--        "reason": "approved_imported",
-+        "reason": "approved_imported_activated" if activation_result and activation_result.get("ok") else "approved_imported",
-         "pending_id": pending_id,
-         "import_result": import_result,
-+        "activation_result": activation_result,
-     }
-*** End Patch
-6. Patch src/app/rpg/story_authoring/inspector.py
-
-Add auto_activate option through inspector approval wrapper.
-
-*** Begin Patch
-*** Update File: src/app/rpg/story_authoring/inspector.py
+         "format_version": "campaign_story_recap_v1",
+         "turn_index": int(turn_index or 0),
 @@
- def approve_story_authoring_inspector_proposal(
-     simulation_state: Dict[str, Any],
-     *,
-     pending_id: str,
-     turn_index: int = 0,
-     reason: str = "gm_approved",
-+    auto_activate: bool = False,
- ) -> Dict[str, Any]:
-     approve_result = approve_story_proposal(
-         simulation_state,
-         pending_id=pending_id,
-         turn_index=turn_index,
-         reason=reason,
-+        auto_activate=auto_activate,
-     )
-*** End Patch
-Patch 4 — API endpoints for activation
-7. Patch src/app/rpg/api/story_authoring.py
-
-Add imports:
-
-*** Begin Patch
-*** Update File: src/app/rpg/api/story_authoring.py
+         "objectives": dict(journal.get("objectives") or {}),
++        "objective_tracker": build_objective_tracker_payload(simulation_state, limit=min(max_items, 8)),
+         "recent_events": recent_events,
 @@
- from app.rpg.story_authoring.inspector import (
-     approve_story_authoring_inspector_proposal,
-     build_story_authoring_inspector_payload,
-     draft_story_authoring_inspector_proposal,
-     reject_story_authoring_inspector_proposal,
- )
-+from app.rpg.story_packs.activation import (
-+    activate_story_pack,
-+    build_story_pack_activation_snapshot,
-+    deactivate_story_pack,
-+)
+             "active_objectives": list(
+                 dict(journal.get("objectives") or {}).get("active_objectives") or []
+             )[:max_items],
++            "objective_tracker": build_objective_tracker_payload(simulation_state, limit=min(max_items, 8)).get("objectives") or [],
+             "known_rumors": [
 *** End Patch
 
-Add request model:
+This is intentionally derived payload only. It does not mutate story state.
 
-*** Begin Patch
-*** Update File: src/app/rpg/api/story_authoring.py
-@@
- class StoryAuthoringApprovalRequest(BaseModel):
-     session_id: str
-     pending_id: str
-     turn_index: int = 0
-     reason: str = ""
-+    auto_activate: bool = False
-+
-+
-+class StoryPackActivationRequest(BaseModel):
-+    session_id: str
-+    pack_id: str
-+    turn_index: int = 0
-+    reason: str = ""
-+
-+
-+class StoryPackActivationListRequest(BaseModel):
-+    session_id: str
-+    limit: int = Field(default=20, ge=0, le=50)
-*** End Patch
-
-Patch approve endpoints to pass auto_activate:
-
-*** Begin Patch
-*** Update File: src/app/rpg/api/story_authoring.py
-@@
- def approve_story_authoring_proposal(request: StoryAuthoringApprovalRequest) -> Dict[str, Any]:
-@@
-         pending_id=request.pending_id,
-         turn_index=request.turn_index,
-         reason=request.reason or "gm_approved",
-+        auto_activate=request.auto_activate,
-     )
-@@
- def approve_story_authoring_inspector(request: StoryAuthoringApprovalRequest) -> Dict[str, Any]:
-@@
-         pending_id=request.pending_id,
-         turn_index=request.turn_index,
-         reason=request.reason or "gm_approved",
-+        auto_activate=request.auto_activate,
-     )
-*** End Patch
-
-Add activation endpoints:
-
-*** Begin Patch
-*** Update File: src/app/rpg/api/story_authoring.py
-@@
- @router.post("/inspector/reject")
- def reject_story_authoring_inspector(request: StoryAuthoringApprovalRequest) -> Dict[str, Any]:
-@@
-     return reject_story_authoring_inspector_proposal(
-         simulation_state,
-         pending_id=request.pending_id,
-         turn_index=request.turn_index,
-         reason=request.reason or "gm_rejected",
-     )
-+
-+
-+@router.post("/packs/activation")
-+def story_pack_activation_snapshot(request: StoryPackActivationListRequest) -> Dict[str, Any]:
-+    simulation_state = _simulation_state_for_session(request.session_id)
-+    return build_story_pack_activation_snapshot(simulation_state, limit=request.limit)
-+
-+
-+@router.post("/packs/activate")
-+def activate_imported_story_pack(request: StoryPackActivationRequest) -> Dict[str, Any]:
-+    simulation_state = _simulation_state_for_session(request.session_id)
-+    result = activate_story_pack(
-+        simulation_state,
-+        request.pack_id,
-+        turn_index=request.turn_index,
-+        reason=request.reason or "gm_activated",
-+    )
-+    return {
-+        **result,
-+        "activation": build_story_pack_activation_snapshot(simulation_state),
-+    }
-+
-+
-+@router.post("/packs/deactivate")
-+def deactivate_imported_story_pack(request: StoryPackActivationRequest) -> Dict[str, Any]:
-+    simulation_state = _simulation_state_for_session(request.session_id)
-+    result = deactivate_story_pack(
-+        simulation_state,
-+        request.pack_id,
-+        turn_index=request.turn_index,
-+        reason=request.reason or "gm_deactivated",
-+    )
-+    return {
-+        **result,
-+        "activation": build_story_pack_activation_snapshot(simulation_state),
-+    }
-*** End Patch
-Patch 5 — Inspector payload includes activation snapshot
-8. Patch src/app/rpg/story_authoring/inspector.py
+5. Patch src/app/rpg/story_authoring/inspector.py
 
 Add import:
 
 *** Begin Patch
 *** Update File: src/app/rpg/story_authoring/inspector.py
 @@
- from app.rpg.story_authoring.approval import (
-@@
- )
-+from app.rpg.story_packs.activation import build_story_pack_activation_snapshot
+ from app.rpg.story_packs.activation import build_story_pack_activation_snapshot
++from app.rpg.quest_log.runtime import build_objective_tracker_payload, build_quest_log_payload
 *** End Patch
 
-Add activation snapshot to inspector payload:
+Add quest log/tracker to inspector payload:
 
 *** Begin Patch
 *** Update File: src/app/rpg/story_authoring/inspector.py
 @@
-     return {
-         "ok": True,
-         "format_version": "story_authoring_inspector_v1",
-         "pending_count": int(listing.get("pending_count") or 0),
-         "pending": pending,
          "history": history,
-+        "story_pack_activation": build_story_pack_activation_snapshot(simulation_state, limit=limit),
+         "story_pack_activation": build_story_pack_activation_snapshot(simulation_state, limit=limit),
++        "quest_log": build_quest_log_payload(simulation_state, limit=limit),
++        "objective_tracker": build_objective_tracker_payload(simulation_state, limit=min(limit, 8)),
          "actions": {
              "draft": "/api/rpg/story_authoring/draft",
              "pending": "/api/rpg/story_authoring/pending",
              "approve": "/api/rpg/story_authoring/approve",
              "reject": "/api/rpg/story_authoring/reject",
-+            "activate_pack": "/api/rpg/story_authoring/packs/activate",
-+            "deactivate_pack": "/api/rpg/story_authoring/packs/deactivate",
+             "activate_pack": "/api/rpg/story_authoring/packs/activate",
+             "deactivate_pack": "/api/rpg/story_authoring/packs/deactivate",
++            "quest_log": "/api/rpg/quest_log/payload",
++            "objective_tracker": "/api/rpg/quest_log/tracker",
          },
 *** End Patch
-Patch 6 — Unit tests
-9. Add src/tests/rpg/story_packs/test_story_pack_activation.py
+Patch 3 — Add API endpoints
+6. Add src/app/rpg/api/quest_log.py
 *** Begin Patch
-*** Add File: src/tests/rpg/story_packs/test_story_pack_activation.py
-+from app.rpg.story_packs.activation import (
-+    activate_story_pack,
-+    build_story_pack_activation_snapshot,
-+    deactivate_story_pack,
-+    is_story_pack_active,
-+    list_active_story_pack_ids,
-+)
-+from app.rpg.story_packs.importer import import_story_pack
-+
-+
-+def _pack():
-+    return {
-+        "proposal_version": "story_proposal_v1",
-+        "proposal_type": "story_pack",
-+        "proposal_id": "activation_pack",
-+        "title": "Activation Pack",
-+        "lore_entries": [{"lore_id": "lore:activation", "title": "Activation", "truth_status": "rumor"}],
-+        "story_arcs": [
-+            {
-+                "arc_id": "arc:activation",
-+                "title": "Activation",
-+                "status": "active",
-+                "stage": "rumors",
-+                "pressure": 60,
-+                "linked_lore": ["lore:activation"],
-+            }
-+        ],
-+        "story_events": [],
-+        "escalation_rules": [],
-+    }
-+
-+
-+def test_imported_story_pack_starts_inactive():
-+    simulation_state = {}
-+    result = import_story_pack(simulation_state, _pack(), turn_index=1)
-+
-+    assert result["ok"] is True
-+    assert is_story_pack_active(simulation_state, result["pack_id"]) is False
-+
-+
-+def test_activate_and_deactivate_story_pack():
-+    simulation_state = {}
-+    imported = import_story_pack(simulation_state, _pack(), turn_index=1)
-+
-+    activated = activate_story_pack(simulation_state, imported["pack_id"], turn_index=2)
-+    deactivated = deactivate_story_pack(simulation_state, imported["pack_id"], turn_index=3)
-+
-+    assert activated["ok"] is True
-+    assert activated["reason"] == "activated"
-+    assert deactivated["ok"] is True
-+    assert deactivated["reason"] == "deactivated"
-+    assert is_story_pack_active(simulation_state, imported["pack_id"]) is False
-+
-+
-+def test_activate_missing_story_pack_rejected():
-+    result = activate_story_pack({}, "storypack:missing", turn_index=1)
-+
-+    assert result["ok"] is False
-+    assert result["reason"] == "story_pack_not_imported"
-+
-+
-+def test_list_active_story_pack_ids():
-+    simulation_state = {}
-+    imported = import_story_pack(simulation_state, _pack(), turn_index=1)
-+    activate_story_pack(simulation_state, imported["pack_id"], turn_index=2)
-+
-+    assert list_active_story_pack_ids(simulation_state) == [imported["pack_id"]]
-+
-+
-+def test_story_pack_activation_snapshot_lists_status():
-+    simulation_state = {}
-+    imported = import_story_pack(simulation_state, _pack(), turn_index=1)
-+
-+    snapshot = build_story_pack_activation_snapshot(simulation_state)
-+
-+    assert snapshot["ok"] is True
-+    assert snapshot["packs"][0]["pack_id"] == imported["pack_id"]
-+    assert snapshot["packs"][0]["status"] == "inactive"
-*** End Patch
-10. Add src/tests/rpg/campaign_director/test_campaign_director_active_packs.py
-*** Begin Patch
-*** Add File: src/tests/rpg/campaign_director/test_campaign_director_active_packs.py
-+from app.rpg.campaign_director.runtime import (
-+    apply_campaign_director_tick,
-+    evaluate_campaign_director_tick,
-+)
-+from app.rpg.story_arcs.state import get_story_arc
-+from app.rpg.story_packs.activation import activate_story_pack, deactivate_story_pack
-+from app.rpg.story_packs.importer import import_story_pack
-+
-+
-+def _pack():
-+    return {
-+        "proposal_version": "story_proposal_v1",
-+        "proposal_type": "story_pack",
-+        "proposal_id": "director_activation_pack",
-+        "title": "Director Activation Pack",
-+        "lore_entries": [{"lore_id": "lore:director_activation", "title": "Director Activation", "truth_status": "rumor"}],
-+        "story_arcs": [
-+            {
-+                "arc_id": "arc:director_activation",
-+                "title": "Director Activation",
-+                "status": "active",
-+                "stage": "rumors",
-+                "pressure": 60,
-+                "linked_lore": ["lore:director_activation"],
-+            }
-+        ],
-+        "story_events": [
-+            {
-+                "event_id": "event:director_activation",
-+                "arc_id": "arc:director_activation",
-+                "kind": "consequence",
-+                "summary": "The active story pack escalated.",
-+                "effects": [
-+                    {"type": "arc_stage_set", "arc_id": "arc:director_activation", "stage": "active_escalation"}
-+                ],
-+            }
-+        ],
-+        "escalation_rules": [
-+            {
-+                "rule_id": "rule:director_activation",
-+                "arc_id": "arc:director_activation",
-+                "priority": 90,
-+                "conditions": [
-+                    {"type": "arc_pressure_at_least", "arc_id": "arc:director_activation", "minimum": 50},
-+                    {"type": "arc_stage", "arc_id": "arc:director_activation", "stage": "rumors"},
-+                ],
-+                "event": {"event_id": "event:director_activation", "arc_id": "arc:director_activation", "effects": []},
-+                "max_applications": 1,
-+            }
-+        ],
-+    }
-+
-+
-+def test_campaign_director_ignores_inactive_imported_pack_rules():
-+    simulation_state = {}
-+    import_story_pack(simulation_state, _pack(), turn_index=1)
-+
-+    result = evaluate_campaign_director_tick(simulation_state, mode="idle", turn_index=2)
-+
-+    assert result["ok"] is True
-+    assert result["eligible_count"] == 0
-+    assert result["registered_rule_count"] == 0
-+
-+
-+def test_campaign_director_uses_active_pack_rules():
-+    simulation_state = {}
-+    imported = import_story_pack(simulation_state, _pack(), turn_index=1)
-+    activate_story_pack(simulation_state, imported["pack_id"], turn_index=2)
-+
-+    result = evaluate_campaign_director_tick(simulation_state, mode="idle", turn_index=3)
-+
-+    assert result["eligible_count"] == 1
-+    assert result["registered_rule_count"] == 1
-+
-+
-+def test_campaign_director_applies_active_pack_event():
-+    simulation_state = {}
-+    imported = import_story_pack(simulation_state, _pack(), turn_index=1)
-+    activate_story_pack(simulation_state, imported["pack_id"], turn_index=2)
-+
-+    result = apply_campaign_director_tick(simulation_state, mode="idle", turn_index=3)
-+
-+    assert result["applied_count"] == 1
-+    assert get_story_arc(simulation_state, "arc:director_activation")["stage"] == "active_escalation"
-+
-+
-+def test_campaign_director_stops_after_pack_deactivation():
-+    simulation_state = {}
-+    imported = import_story_pack(simulation_state, _pack(), turn_index=1)
-+    activate_story_pack(simulation_state, imported["pack_id"], turn_index=2)
-+    deactivate_story_pack(simulation_state, imported["pack_id"], turn_index=3)
-+
-+    result = evaluate_campaign_director_tick(simulation_state, mode="idle", turn_index=4)
-+
-+    assert result["eligible_count"] == 0
-+    assert result["registered_rule_count"] == 0
-*** End Patch
-11. Add src/tests/rpg/story_authoring/test_story_authoring_activation_bridge.py
-*** Begin Patch
-*** Add File: src/tests/rpg/story_authoring/test_story_authoring_activation_bridge.py
-+import json
-+
-+from app.rpg.campaign_director.runtime import evaluate_campaign_director_tick
-+from app.rpg.story_authoring.approval import (
-+    approve_story_proposal,
-+    draft_story_proposal_for_approval,
-+)
-+from app.rpg.story_packs.activation import is_story_pack_active
-+
-+
-+def _pack():
-+    return {
-+        "proposal_version": "story_proposal_v1",
-+        "proposal_type": "story_pack",
-+        "proposal_id": "approval_activation_pack",
-+        "title": "Approval Activation Pack",
-+        "lore_entries": [{"lore_id": "lore:approval_activation", "title": "Approval Activation", "truth_status": "rumor"}],
-+        "story_arcs": [
-+            {
-+                "arc_id": "arc:approval_activation",
-+                "title": "Approval Activation",
-+                "status": "active",
-+                "stage": "rumors",
-+                "pressure": 60,
-+                "linked_lore": ["lore:approval_activation"],
-+            }
-+        ],
-+        "story_events": [
-+            {
-+                "event_id": "event:approval_activation",
-+                "arc_id": "arc:approval_activation",
-+                "kind": "consequence",
-+                "summary": "Approval activated pack escalated.",
-+                "effects": [],
-+            }
-+        ],
-+        "escalation_rules": [
-+            {
-+                "rule_id": "rule:approval_activation",
-+                "arc_id": "arc:approval_activation",
-+                "priority": 90,
-+                "conditions": [
-+                    {"type": "arc_pressure_at_least", "arc_id": "arc:approval_activation", "minimum": 50}
-+                ],
-+                "event": {"event_id": "event:approval_activation", "arc_id": "arc:approval_activation", "effects": []},
-+            }
-+        ],
-+    }
-+
-+
-+def test_approve_without_auto_activate_imports_but_director_ignores():
-+    simulation_state = {}
-+    draft = draft_story_proposal_for_approval(
-+        simulation_state,
-+        authoring_goal="Draft activation pack.",
-+        llm_text_override=json.dumps(_pack()),
-+        turn_index=1,
-+    )
-+    approved = approve_story_proposal(
-+        simulation_state,
-+        pending_id=draft["pending_id"],
-+        turn_index=2,
-+        auto_activate=False,
-+    )
-+    evaluation = evaluate_campaign_director_tick(simulation_state, mode="idle", turn_index=3)
-+
-+    assert approved["ok"] is True
-+    assert is_story_pack_active(simulation_state, "storypack:approval_activation_pack") is False
-+    assert evaluation["eligible_count"] == 0
-+
-+
-+def test_approve_with_auto_activate_bridges_to_director():
-+    simulation_state = {}
-+    draft = draft_story_proposal_for_approval(
-+        simulation_state,
-+        authoring_goal="Draft activation pack.",
-+        llm_text_override=json.dumps(_pack()),
-+        turn_index=1,
-+    )
-+    approved = approve_story_proposal(
-+        simulation_state,
-+        pending_id=draft["pending_id"],
-+        turn_index=2,
-+        auto_activate=True,
-+    )
-+    evaluation = evaluate_campaign_director_tick(simulation_state, mode="idle", turn_index=3)
-+
-+    assert approved["ok"] is True
-+    assert approved["reason"] == "approved_imported_activated"
-+    assert is_story_pack_active(simulation_state, "storypack:approval_activation_pack") is True
-+    assert evaluation["eligible_count"] == 1
-*** End Patch
-Patch 7 — Manual checks/setup
-12. Add src/tests/rpg/manual/story_pack_activation_m43_m45_checks.py
-*** Begin Patch
-*** Add File: src/tests/rpg/manual/story_pack_activation_m43_m45_checks.py
+*** Add File: src/app/rpg/api/quest_log.py
 +from __future__ import annotations
 +
++from typing import Any, Dict
++
++from fastapi import APIRouter
++from pydantic import BaseModel, Field
++
++from app.rpg.quest_log.runtime import (
++    build_objective_tracker_payload,
++    build_quest_log_payload,
++    pin_objective,
++    unpin_objective,
++)
++from app.rpg.session_store import get_session
++
++
++router = APIRouter(prefix="/api/rpg/quest_log", tags=["rpg-quest-log"])
++
++
++class QuestLogPayloadRequest(BaseModel):
++    session_id: str
++    limit: int = Field(default=50, ge=0, le=50)
++
++
++class ObjectiveTrackerRequest(BaseModel):
++    session_id: str
++    limit: int = Field(default=8, ge=0, le=8)
++
++
++class ObjectivePinRequest(BaseModel):
++    session_id: str
++    objective_id: str
++    turn_index: int = 0
++    reason: str = ""
++
++
++def _simulation_state_for_session(session_id: str) -> Dict[str, Any]:
++    session = get_session(session_id)
++    if not isinstance(session, dict):
++        raise KeyError(f"session_not_found:{session_id}")
++    return session.setdefault("simulation_state", {})
++
++
++@router.post("/payload")
++def quest_log_payload(request: QuestLogPayloadRequest) -> Dict[str, Any]:
++    simulation_state = _simulation_state_for_session(request.session_id)
++    return build_quest_log_payload(simulation_state, limit=request.limit)
++
++
++@router.post("/tracker")
++def objective_tracker_payload(request: ObjectiveTrackerRequest) -> Dict[str, Any]:
++    simulation_state = _simulation_state_for_session(request.session_id)
++    return build_objective_tracker_payload(simulation_state, limit=request.limit)
++
++
++@router.post("/pin")
++def pin_quest_log_objective(request: ObjectivePinRequest) -> Dict[str, Any]:
++    simulation_state = _simulation_state_for_session(request.session_id)
++    result = pin_objective(
++        simulation_state,
++        request.objective_id,
++        turn_index=request.turn_index,
++        reason=request.reason or "player_pinned",
++    )
++    return {
++        **result,
++        "quest_log": build_quest_log_payload(simulation_state),
++        "tracker": build_objective_tracker_payload(simulation_state),
++    }
++
++
++@router.post("/unpin")
++def unpin_quest_log_objective(request: ObjectivePinRequest) -> Dict[str, Any]:
++    simulation_state = _simulation_state_for_session(request.session_id)
++    result = unpin_objective(
++        simulation_state,
++        request.objective_id,
++        turn_index=request.turn_index,
++        reason=request.reason or "player_unpinned",
++    )
++    return {
++        **result,
++        "quest_log": build_quest_log_payload(simulation_state),
++        "tracker": build_objective_tracker_payload(simulation_state),
++    }
+*** End Patch
+7. Register router in active FastAPI app
+
+Patch the active app bootstrap file that already includes RPG routers, commonly one of:
+
+src/app/main.py
+src/app/server.py
+src/app/api.py
+
+Add:
+
+*** Begin Patch
+*** Update File: src/app/main.py
+@@
++from app.rpg.api.quest_log import router as rpg_quest_log_router
+@@
+ app.include_router(...)
++app.include_router(rpg_quest_log_router)
+*** End Patch
+
+If your actual active app file is not src/app/main.py, apply this to the file that registers existing /api/rpg/... routers.
+
+Patch 4 — Legacy UI objective tracker / quest log panel
+8. Patch src/static/rpg.js
+
+Add near the existing story authoring inspector block or other RPG panel helpers:
+
+*** Begin Patch
+*** Update File: src/static/rpg.js
+@@
++// ---------------------------------------------------------------------------
++// Quest Log / Objective Tracker
++// ---------------------------------------------------------------------------
++
++function rpgGetSessionIdForQuestLog() {
++    if (window.RPG_SESSION_ID) return window.RPG_SESSION_ID;
++    if (window.rpgSessionId) return window.rpgSessionId;
++    const input = document.querySelector('[name="session_id"], #session_id, #rpg-session-id');
++    if (input && input.value) return input.value;
++    return "";
++}
++
++function ensureQuestLogPanel() {
++    let panel = document.getElementById("quest-log-panel");
++    if (panel) return panel;
++
++    const host =
++        document.getElementById("rpg-top-panels") ||
++        document.getElementById("rpg-inspector-panel") ||
++        document.getElementById("rpg-debug-panel") ||
++        document.body;
++
++    panel = document.createElement("section");
++    panel.id = "quest-log-panel";
++    panel.className = "quest-log-panel";
++    panel.innerHTML = `
++        <div class="quest-log-header">
++            <div>
++                <h3>Quest Log</h3>
++                <div class="quest-log-subtitle">Objective tracker</div>
++            </div>
++            <button type="button" id="quest-log-refresh-btn">Refresh</button>
++        </div>
++        <div id="objective-tracker-list" class="objective-tracker-list"></div>
++        <details class="quest-log-details">
++            <summary>Full quest log</summary>
++            <div id="quest-log-groups"></div>
++        </details>
++        <div id="quest-log-status" class="quest-log-status"></div>
++    `;
++    host.appendChild(panel);
++
++    document.getElementById("quest-log-refresh-btn")?.addEventListener("click", () => {
++        refreshQuestLogPanel();
++    });
++    return panel;
++}
++
++function setQuestLogStatus(message, isError = false) {
++    const el = document.getElementById("quest-log-status");
++    if (!el) return;
++    el.textContent = message || "";
++    el.classList.toggle("error", Boolean(isError));
++}
++
++async function postQuestLog(endpoint, payload) {
++    const response = await fetch(endpoint, {
++        method: "POST",
++        headers: {"Content-Type": "application/json"},
++        body: JSON.stringify(payload),
++    });
++    const text = await response.text();
++    let data = {};
++    try {
++        data = text ? JSON.parse(text) : {};
++    } catch (err) {
++        throw new Error(`Invalid JSON from ${endpoint}: ${text.slice(0, 200)}`);
++    }
++    if (!response.ok) {
++        throw new Error(data?.detail || data?.error || data?.reason || `HTTP ${response.status}`);
++    }
++    return data;
++}
++
++function renderObjectiveTracker(payload) {
++    const target = document.getElementById("objective-tracker-list");
++    if (!target) return;
++    const objectives = Array.isArray(payload?.objectives) ? payload.objectives : [];
++    if (!objectives.length) {
++        target.innerHTML = `<div class="quest-log-empty">No active objectives.</div>`;
++        return;
++    }
++    target.innerHTML = objectives.map((objective) => {
++        const pinned = Boolean(objective.pinned);
++        return `
++            <article class="objective-tracker-item ${pinned ? "pinned" : ""}" data-objective-id="${rpgEscapeHtml(objective.objective_id)}">
++                <div class="objective-tracker-title">${rpgEscapeHtml(objective.title || objective.objective_id)}</div>
++                <div class="objective-tracker-text">${rpgEscapeHtml(objective.objective_text || "")}</div>
++                <div class="objective-tracker-meta">
++                    <span>${rpgEscapeHtml(objective.arc_id || "")}</span>
++                    <span>${rpgEscapeHtml(objective.status || "active")}</span>
++                    ${pinned ? "<span>pinned</span>" : ""}
++                </div>
++                <div class="objective-tracker-actions">
++                    <button type="button" data-quest-action="${pinned ? "unpin" : "pin"}" data-objective-id="${rpgEscapeHtml(objective.objective_id)}">
++                        ${pinned ? "Unpin" : "Pin"}
++                    </button>
++                </div>
++            </article>
++        `;
++    }).join("");
++
++    target.querySelectorAll("[data-quest-action]").forEach((button) => {
++        button.addEventListener("click", async () => {
++            const action = button.getAttribute("data-quest-action");
++            const objectiveId = button.getAttribute("data-objective-id");
++            if (action === "pin") {
++                await pinQuestObjectiveFromUI(objectiveId);
++            } else if (action === "unpin") {
++                await unpinQuestObjectiveFromUI(objectiveId);
++            }
++        });
++    });
++}
++
++function renderQuestLogGroups(payload) {
++    const target = document.getElementById("quest-log-groups");
++    if (!target) return;
++    const groups = Array.isArray(payload?.quest_groups) ? payload.quest_groups : [];
++    if (!groups.length) {
++        target.innerHTML = `<div class="quest-log-empty">No quest entries.</div>`;
++        return;
++    }
++    target.innerHTML = groups.map((group) => {
++        const active = Array.isArray(group.active_objectives) ? group.active_objectives : [];
++        const completed = Array.isArray(group.completed_objectives) ? group.completed_objectives : [];
++        return `
++            <section class="quest-log-group">
++                <h4>${rpgEscapeHtml(group.title || group.quest_id)}</h4>
++                <div class="quest-log-group-meta">${rpgEscapeHtml(group.quest_id || "")}</div>
++                <div class="quest-log-objective-section">
++                    <strong>Active</strong>
++                    ${active.map(row => `<div class="quest-log-objective active">${rpgEscapeHtml(row.objective_text || row.title)}</div>`).join("") || `<div class="quest-log-empty">None</div>`}
++                </div>
++                <div class="quest-log-objective-section">
++                    <strong>Completed</strong>
++                    ${completed.map(row => `<div class="quest-log-objective completed">${rpgEscapeHtml(row.objective_text || row.title)}</div>`).join("") || `<div class="quest-log-empty">None</div>`}
++                </div>
++            </section>
++        `;
++    }).join("");
++}
++
++async function refreshQuestLogPanel() {
++    ensureQuestLogPanel();
++    const sessionId = rpgGetSessionIdForQuestLog();
++    if (!sessionId) {
++        setQuestLogStatus("No RPG session id available.", true);
++        return;
++    }
++    setQuestLogStatus("Loading quest log...");
++    try {
++        const tracker = await postQuestLog("/api/rpg/quest_log/tracker", {
++            session_id: sessionId,
++            limit: 8,
++        });
++        const questLog = await postQuestLog("/api/rpg/quest_log/payload", {
++            session_id: sessionId,
++            limit: 50,
++        });
++        renderObjectiveTracker(tracker);
++        renderQuestLogGroups(questLog);
++        setQuestLogStatus(`Active objectives: ${tracker.active_count || 0}`);
++    } catch (err) {
++        console.error("[RPG][quest-log] refresh failed", err);
++        setQuestLogStatus(String(err.message || err), true);
++    }
++}
++
++async function pinQuestObjectiveFromUI(objectiveId) {
++    const sessionId = rpgGetSessionIdForQuestLog();
++    setQuestLogStatus("Pinning objective...");
++    try {
++        const payload = await postQuestLog("/api/rpg/quest_log/pin", {
++            session_id: sessionId,
++            objective_id: objectiveId,
++            turn_index: 0,
++            reason: "ui_pin",
++        });
++        renderObjectiveTracker(payload.tracker || {});
++        renderQuestLogGroups(payload.quest_log || {});
++        setQuestLogStatus(payload.ok ? "Objective pinned." : `Pin failed: ${payload.reason}`);
++    } catch (err) {
++        console.error("[RPG][quest-log] pin failed", err);
++        setQuestLogStatus(String(err.message || err), true);
++    }
++}
++
++async function unpinQuestObjectiveFromUI(objectiveId) {
++    const sessionId = rpgGetSessionIdForQuestLog();
++    setQuestLogStatus("Unpinning objective...");
++    try {
++        const payload = await postQuestLog("/api/rpg/quest_log/unpin", {
++            session_id: sessionId,
++            objective_id: objectiveId,
++            turn_index: 0,
++            reason: "ui_unpin",
++        });
++        renderObjectiveTracker(payload.tracker || {});
++        renderQuestLogGroups(payload.quest_log || {});
++        setQuestLogStatus(payload.ok ? "Objective unpinned." : `Unpin failed: ${payload.reason}`);
++    } catch (err) {
++        console.error("[RPG][quest-log] unpin failed", err);
++        setQuestLogStatus(String(err.message || err), true);
++    }
++}
++
++window.refreshQuestLogPanel = refreshQuestLogPanel;
++window.renderObjectiveTracker = renderObjectiveTracker;
++window.renderQuestLogGroups = renderQuestLogGroups;
++
++document.addEventListener("DOMContentLoaded", () => {
++    ensureQuestLogPanel();
++    refreshQuestLogPanel();
++});
+*** End Patch
+
+This assumes rpgEscapeHtml(...) already exists from the prior inspector bundle. If it does not, add the same helper used in M40-M42.
+
+9. Patch src/static/rpg.css
+*** Begin Patch
+*** Update File: src/static/rpg.css
+@@
++.quest-log-panel {
++    border: 1px solid rgba(255, 255, 255, 0.14);
++    border-radius: 12px;
++    padding: 12px;
++    margin: 10px 0;
++    background: rgba(8, 10, 18, 0.72);
++    color: #f2efe7;
++    max-height: 520px;
++    overflow: auto;
++}
++
++.quest-log-header {
++    display: flex;
++    justify-content: space-between;
++    gap: 10px;
++    align-items: center;
++    margin-bottom: 10px;
++}
++
++.quest-log-header h3 {
++    margin: 0;
++    font-size: 16px;
++}
++
++.quest-log-subtitle,
++.quest-log-status,
++.objective-tracker-meta,
++.quest-log-group-meta {
++    color: rgba(242, 239, 231, 0.72);
++    font-size: 12px;
++}
++
++.quest-log-status.error {
++    color: #ff9b9b;
++}
++
++.objective-tracker-list {
++    display: grid;
++    gap: 8px;
++}
++
++.objective-tracker-item {
++    border: 1px solid rgba(255, 255, 255, 0.12);
++    border-radius: 10px;
++    padding: 10px;
++    background: rgba(255, 255, 255, 0.045);
++}
++
++.objective-tracker-item.pinned {
++    background: rgba(255, 255, 255, 0.08);
++}
++
++.objective-tracker-title {
++    font-weight: 700;
++    margin-bottom: 4px;
++}
++
++.objective-tracker-text {
++    font-size: 13px;
++}
++
++.objective-tracker-meta,
++.objective-tracker-actions {
++    display: flex;
++    flex-wrap: wrap;
++    gap: 8px;
++    margin-top: 6px;
++}
++
++.quest-log-panel button {
++    border-radius: 8px;
++    border: 1px solid rgba(255, 255, 255, 0.18);
++    background: rgba(255, 255, 255, 0.10);
++    color: #f2efe7;
++    padding: 7px 10px;
++    cursor: pointer;
++}
++
++.quest-log-panel button:hover {
++    background: rgba(255, 255, 255, 0.18);
++}
++
++.quest-log-details {
++    margin-top: 10px;
++}
++
++.quest-log-group {
++    border-top: 1px solid rgba(255, 255, 255, 0.10);
++    padding-top: 10px;
++    margin-top: 10px;
++}
++
++.quest-log-group h4 {
++    margin: 0 0 4px;
++    font-size: 14px;
++}
++
++.quest-log-objective-section {
++    margin-top: 8px;
++    font-size: 12px;
++}
++
++.quest-log-objective {
++    border-radius: 8px;
++    margin-top: 4px;
++    padding: 6px 8px;
++    background: rgba(0, 0, 0, 0.16);
++}
++
++.quest-log-objective.completed {
++    color: rgba(242, 239, 231, 0.62);
++    text-decoration: line-through;
++}
++
++.quest-log-empty {
++    color: rgba(242, 239, 231, 0.62);
++    font-size: 12px;
++    padding: 8px;
++}
+*** End Patch
+Patch 5 — Unit tests
+10. Add src/tests/rpg/quest_log/test_quest_log_runtime.py
+*** Begin Patch
+*** Add File: src/tests/rpg/quest_log/test_quest_log_runtime.py
++from app.rpg.quest_log.runtime import (
++    build_objective_tracker_payload,
++    build_quest_log_payload,
++    pin_objective,
++    unpin_objective,
++)
++from app.rpg.story_arcs.milestones import add_story_arc_milestone, complete_story_arc_milestone
++from app.rpg.story_arcs.state import start_story_arc
++
++
++def _state_with_objectives():
++    simulation_state = {}
++    start_story_arc(simulation_state, "arc:x", title="X", stage="start")
++    add_story_arc_milestone(
++        simulation_state,
++        arc_id="arc:x",
++        milestone_id="milestone:a",
++        title="Find the witness",
++        objective_text="Find the witness near the tavern.",
++        quest_id="quest:witness",
++        priority=80,
++    )
++    add_story_arc_milestone(
++        simulation_state,
++        arc_id="arc:x",
++        milestone_id="milestone:b",
++        title="Inspect the road",
++        objective_text="Inspect the road outside town.",
++        quest_id="quest:witness",
++        priority=50,
++    )
++    return simulation_state
++
++
++def test_quest_log_payload_projects_active_objectives():
++    simulation_state = _state_with_objectives()
++
++    payload = build_quest_log_payload(simulation_state)
++
++    assert payload["ok"] is True
++    assert payload["format_version"] == "quest_log_v1"
++    assert [row["objective_id"] for row in payload["active_objectives"]] == [
++        "milestone:a",
++        "milestone:b",
++    ]
++    assert payload["quest_groups"][0]["quest_id"] == "quest:witness"
++
++
++def test_objective_tracker_is_bounded():
++    simulation_state = {}
++    start_story_arc(simulation_state, "arc:x", title="X", stage="start")
++    for i in range(20):
++        add_story_arc_milestone(
++            simulation_state,
++            arc_id="arc:x",
++            milestone_id=f"milestone:{i}",
++            title=f"Objective {i}",
++            priority=i,
++        )
++
++    tracker = build_objective_tracker_payload(simulation_state, limit=8)
++
++    assert tracker["ok"] is True
++    assert len(tracker["objectives"]) <= 8
++
++
++def test_pin_objective_moves_it_to_tracker_top():
++    simulation_state = _state_with_objectives()
++
++    result = pin_objective(simulation_state, "milestone:b", turn_index=2)
++    tracker = build_objective_tracker_payload(simulation_state, limit=8)
++
++    assert result["ok"] is True
++    assert result["reason"] == "pinned"
++    assert tracker["objectives"][0]["objective_id"] == "milestone:b"
++    assert tracker["objectives"][0]["pinned"] is True
++
++
++def test_unpin_objective_removes_pin():
++    simulation_state = _state_with_objectives()
++    pin_objective(simulation_state, "milestone:b", turn_index=2)
++
++    result = unpin_objective(simulation_state, "milestone:b", turn_index=3)
++    tracker = build_objective_tracker_payload(simulation_state, limit=8)
++
++    assert result["ok"] is True
++    assert result["reason"] == "unpinned"
++    assert all(row["pinned"] is False for row in tracker["objectives"])
++
++
++def test_pin_missing_or_completed_objective_rejected():
++    simulation_state = _state_with_objectives()
++    complete_story_arc_milestone(simulation_state, "milestone:a", turn_index=4)
++
++    completed = pin_objective(simulation_state, "milestone:a")
++    missing = pin_objective(simulation_state, "milestone:missing")
++
++    assert completed["ok"] is False
++    assert completed["reason"] == "objective_not_active"
++    assert missing["ok"] is False
++    assert missing["reason"] == "objective_not_active"
++
++
++def test_completed_objectives_appear_in_quest_log_completed_section():
++    simulation_state = _state_with_objectives()
++    complete_story_arc_milestone(simulation_state, "milestone:a", turn_index=4)
++
++    payload = build_quest_log_payload(simulation_state)
++
++    assert [row["objective_id"] for row in payload["active_objectives"]] == ["milestone:b"]
++    assert [row["objective_id"] for row in payload["completed_objectives"]] == ["milestone:a"]
+*** End Patch
+11. Add src/tests/rpg/quest_log/test_quest_log_state.py
+*** Begin Patch
+*** Add File: src/tests/rpg/quest_log/test_quest_log_state.py
 +import json
++
++from app.rpg.quest_log.runtime import pin_objective
++from app.rpg.quest_log.state import normalize_quest_log_state
++from app.rpg.story_arcs.milestones import add_story_arc_milestone
++from app.rpg.story_arcs.state import start_story_arc
++
++
++def test_quest_log_state_json_roundtrip():
++    simulation_state = {}
++    start_story_arc(simulation_state, "arc:x", title="X", stage="start")
++    add_story_arc_milestone(simulation_state, arc_id="arc:x", milestone_id="milestone:x", title="X")
++    pin_objective(simulation_state, "milestone:x")
++
++    encoded = json.dumps(simulation_state["quest_log_state"], sort_keys=True)
++    decoded = json.loads(encoded)
++    normalized = normalize_quest_log_state(decoded)
++
++    assert normalized["pinned_objective_ids"] == ["milestone:x"]
++
++
++def test_quest_log_pinned_objectives_are_bounded():
++    raw = {"pinned_objective_ids": [f"milestone:{i}" for i in range(30)]}
++
++    normalized = normalize_quest_log_state(raw)
++
++    assert len(normalized["pinned_objective_ids"]) == 10
+*** End Patch
+12. Add src/tests/rpg/campaign_journal/test_campaign_recap_objective_tracker.py
+*** Begin Patch
+*** Add File: src/tests/rpg/campaign_journal/test_campaign_recap_objective_tracker.py
++from app.rpg.campaign_journal.journal import build_player_story_recap
++from app.rpg.quest_log.runtime import pin_objective
++from app.rpg.story_arcs.milestones import add_story_arc_milestone
++from app.rpg.story_arcs.state import start_story_arc
++
++
++def test_campaign_recap_includes_objective_tracker():
++    simulation_state = {}
++    start_story_arc(simulation_state, "arc:x", title="X", stage="start")
++    add_story_arc_milestone(
++        simulation_state,
++        arc_id="arc:x",
++        milestone_id="milestone:x",
++        title="Find the witness",
++        objective_text="Find the witness near the tavern.",
++    )
++    pin_objective(simulation_state, "milestone:x")
++
++    recap = build_player_story_recap(simulation_state, turn_index=2)
++
++    assert recap["objective_tracker"]["objectives"][0]["objective_id"] == "milestone:x"
++    assert recap["narrator_context"]["objective_tracker"][0]["pinned"] is True
+*** End Patch
+Patch 6 — Manual checks/setup
+13. Add src/tests/rpg/manual/quest_log_m49_m51_checks.py
+*** Begin Patch
+*** Add File: src/tests/rpg/manual/quest_log_m49_m51_checks.py
++from __future__ import annotations
++
 +from typing import Any, Dict, List
 +
-+from app.rpg.campaign_director.runtime import apply_campaign_director_tick, evaluate_campaign_director_tick
-+from app.rpg.story_authoring.approval import approve_story_proposal, draft_story_proposal_for_approval
-+from app.rpg.story_packs.activation import (
-+    activate_story_pack,
-+    build_story_pack_activation_snapshot,
-+    deactivate_story_pack,
-+    is_story_pack_active,
++from app.rpg.campaign_journal.journal import build_player_story_recap
++from app.rpg.quest_log.runtime import (
++    build_objective_tracker_payload,
++    build_quest_log_payload,
++    pin_objective,
++    unpin_objective,
 +)
-+from app.rpg.story_packs.importer import import_story_pack
 +
 +
 +def _safe_dict(value: Any) -> Dict[str, Any]:
@@ -1024,15 +1160,14 @@ Patch 7 — Manual checks/setup
 +        if candidate and not first_non_empty:
 +            first_non_empty = candidate
 +        if (
-+            isinstance(candidate.get("story_pack_activation_state"), dict)
-+            or isinstance(candidate.get("story_pack_state"), dict)
-+            or isinstance(candidate.get("campaign_director_state"), dict)
++            isinstance(candidate.get("quest_log_state"), dict)
++            or isinstance(candidate.get("story_arc_milestone_state"), dict)
 +        ):
 +            return candidate
 +    return first_non_empty
 +
 +
-+def run_story_pack_activation_m43_m45_check(
++def run_quest_log_m49_m51_check(
 +    *,
 +    check: Dict[str, Any],
 +    result: Dict[str, Any],
@@ -1041,263 +1176,228 @@ Patch 7 — Manual checks/setup
 +    simulation_state = _extract_simulation_state(result=result, session=session)
 +    check_type = str(check.get("type") or "")
 +
-+    if check_type == "story_pack_activation_import":
-+        proposal = _safe_dict(check.get("proposal"))
-+        import_result = import_story_pack(
-+            simulation_state,
-+            proposal,
-+            turn_index=int(check.get("turn_index") or 1),
-+        )
-+        expected_ok = check.get("expected_ok")
-+        ok = True
-+        if expected_ok is not None:
-+            ok = ok and import_result.get("ok") is bool(expected_ok)
++    if check_type == "quest_log_payload":
++        payload = build_quest_log_payload(simulation_state, limit=int(check.get("limit") or 50))
++        expected_active_objective_id = check.get("expected_active_objective_id")
++        expected_completed_objective_id = check.get("expected_completed_objective_id")
++        expected_active_count = check.get("expected_active_count")
++        ok = payload.get("ok") is True
++        if expected_active_objective_id:
++            ok = ok and expected_active_objective_id in [
++                row.get("objective_id") for row in payload.get("active_objectives") or []
++            ]
++        if expected_completed_objective_id:
++            ok = ok and expected_completed_objective_id in [
++                row.get("objective_id") for row in payload.get("completed_objectives") or []
++            ]
++        if expected_active_count is not None:
++            ok = ok and len(payload.get("active_objectives") or []) == int(expected_active_count)
 +        return {
 +            "check_type": check_type,
 +            "ok": ok,
-+            "import_result": import_result,
-+            "expected_ok": expected_ok,
++            "payload": payload,
++            "expected_active_objective_id": expected_active_objective_id,
++            "expected_completed_objective_id": expected_completed_objective_id,
++            "expected_active_count": expected_active_count,
 +        }
 +
-+    if check_type == "story_pack_activation_activate":
-+        pack_id = str(check.get("pack_id") or "")
-+        activate_result = activate_story_pack(
++    if check_type == "objective_tracker_payload":
++        payload = build_objective_tracker_payload(simulation_state, limit=int(check.get("limit") or 8))
++        expected_objective_id = check.get("expected_objective_id")
++        expected_first_objective_id = check.get("expected_first_objective_id")
++        ok = payload.get("ok") is True
++        objectives = payload.get("objectives") or []
++        if expected_objective_id:
++            ok = ok and expected_objective_id in [row.get("objective_id") for row in objectives]
++        if expected_first_objective_id:
++            ok = ok and bool(objectives) and objectives[0].get("objective_id") == expected_first_objective_id
++        return {
++            "check_type": check_type,
++            "ok": ok,
++            "payload": payload,
++            "expected_objective_id": expected_objective_id,
++            "expected_first_objective_id": expected_first_objective_id,
++        }
++
++    if check_type == "quest_log_pin":
++        pin_result = pin_objective(
 +            simulation_state,
-+            pack_id,
++            str(check.get("objective_id") or ""),
 +            turn_index=int(check.get("turn_index") or 1),
-+            reason=str(check.get("reason") or "manual_activate"),
++            reason=str(check.get("reason") or "manual_pin"),
 +        )
 +        expected_ok = check.get("expected_ok")
 +        expected_reason = check.get("expected_reason")
 +        ok = True
 +        if expected_ok is not None:
-+            ok = ok and activate_result.get("ok") is bool(expected_ok)
++            ok = ok and pin_result.get("ok") is bool(expected_ok)
 +        if expected_reason:
-+            ok = ok and activate_result.get("reason") == expected_reason
++            ok = ok and pin_result.get("reason") == expected_reason
 +        return {
 +            "check_type": check_type,
 +            "ok": ok,
-+            "activate_result": activate_result,
++            "pin_result": pin_result,
 +            "expected_ok": expected_ok,
 +            "expected_reason": expected_reason,
 +        }
 +
-+    if check_type == "story_pack_activation_deactivate":
-+        pack_id = str(check.get("pack_id") or "")
-+        deactivate_result = deactivate_story_pack(
++    if check_type == "quest_log_unpin":
++        unpin_result = unpin_objective(
 +            simulation_state,
-+            pack_id,
++            str(check.get("objective_id") or ""),
 +            turn_index=int(check.get("turn_index") or 1),
-+            reason=str(check.get("reason") or "manual_deactivate"),
++            reason=str(check.get("reason") or "manual_unpin"),
 +        )
 +        expected_ok = check.get("expected_ok")
 +        expected_reason = check.get("expected_reason")
 +        ok = True
 +        if expected_ok is not None:
-+            ok = ok and deactivate_result.get("ok") is bool(expected_ok)
++            ok = ok and unpin_result.get("ok") is bool(expected_ok)
 +        if expected_reason:
-+            ok = ok and deactivate_result.get("reason") == expected_reason
++            ok = ok and unpin_result.get("reason") == expected_reason
 +        return {
 +            "check_type": check_type,
 +            "ok": ok,
-+            "deactivate_result": deactivate_result,
++            "unpin_result": unpin_result,
 +            "expected_ok": expected_ok,
 +            "expected_reason": expected_reason,
 +        }
 +
-+    if check_type == "story_pack_activation_status":
-+        pack_id = str(check.get("pack_id") or "")
-+        expected_active = bool(check.get("expected_active", True))
-+        actual = is_story_pack_active(simulation_state, pack_id)
-+        return {
-+            "check_type": check_type,
-+            "ok": actual is expected_active,
-+            "pack_id": pack_id,
-+            "actual_active": actual,
-+            "expected_active": expected_active,
-+            "snapshot": build_story_pack_activation_snapshot(simulation_state),
-+        }
-+
-+    if check_type == "story_pack_activation_snapshot":
-+        snapshot = build_story_pack_activation_snapshot(
++    if check_type == "campaign_recap_objective_tracker":
++        recap = build_player_story_recap(
 +            simulation_state,
-+            limit=int(check.get("limit") or 20),
-+        )
-+        expected_pack_id = check.get("expected_pack_id")
-+        expected_status = check.get("expected_status")
-+        rows = list(snapshot.get("packs") or [])
-+        if expected_pack_id:
-+            rows = [row for row in rows if row.get("pack_id") == expected_pack_id]
-+        if expected_status:
-+            rows = [row for row in rows if row.get("status") == expected_status]
-+        return {
-+            "check_type": check_type,
-+            "ok": bool(rows) if (expected_pack_id or expected_status) else snapshot.get("ok") is True,
-+            "snapshot": snapshot,
-+            "matched": rows,
-+            "expected_pack_id": expected_pack_id,
-+            "expected_status": expected_status,
-+        }
-+
-+    if check_type == "story_pack_activation_director_evaluate":
-+        evaluation = evaluate_campaign_director_tick(
-+            simulation_state,
-+            mode=str(check.get("mode") or "idle"),
 +            turn_index=int(check.get("turn_index") or 1),
-+            arc_id=str(check.get("arc_id") or ""),
++            max_items=int(check.get("max_items") or 25),
 +        )
-+        expected_eligible_count = check.get("expected_eligible_count")
-+        expected_registered_rule_count = check.get("expected_registered_rule_count")
++        expected_objective_id = check.get("expected_objective_id")
++        objectives = _safe_dict(recap.get("objective_tracker")).get("objectives") or []
++        narrator_tracker = _safe_dict(recap.get("narrator_context")).get("objective_tracker") or []
 +        ok = True
-+        if expected_eligible_count is not None:
-+            ok = ok and int(evaluation.get("eligible_count") or 0) == int(expected_eligible_count)
-+        if expected_registered_rule_count is not None:
-+            ok = ok and int(evaluation.get("registered_rule_count") or 0) == int(expected_registered_rule_count)
++        if expected_objective_id:
++            ok = ok and expected_objective_id in [row.get("objective_id") for row in objectives]
++            ok = ok and expected_objective_id in [row.get("objective_id") for row in narrator_tracker]
 +        return {
 +            "check_type": check_type,
 +            "ok": ok,
-+            "evaluation": evaluation,
-+            "expected_eligible_count": expected_eligible_count,
-+            "expected_registered_rule_count": expected_registered_rule_count,
++            "recap": recap,
++            "expected_objective_id": expected_objective_id,
 +        }
 +
-+    if check_type == "story_pack_activation_director_apply":
-+        applied = apply_campaign_director_tick(
-+            simulation_state,
-+            mode=str(check.get("mode") or "idle"),
-+            turn_index=int(check.get("turn_index") or 1),
-+            arc_id=str(check.get("arc_id") or ""),
-+        )
-+        expected_applied_count = check.get("expected_applied_count")
-+        ok = True
-+        if expected_applied_count is not None:
-+            ok = ok and int(applied.get("applied_count") or 0) == int(expected_applied_count)
++    if check_type == "quest_log_debug_bounded":
++        quest_log = build_quest_log_payload(simulation_state, limit=int(check.get("limit") or 50))
++        tracker = build_objective_tracker_payload(simulation_state, limit=int(check.get("tracker_limit") or 8))
 +        return {
 +            "check_type": check_type,
-+            "ok": ok,
-+            "applied": applied,
-+            "expected_applied_count": expected_applied_count,
-+        }
-+
-+    if check_type == "story_pack_activation_approve_authored":
-+        proposal = check.get("proposal")
-+        llm_text_override = json.dumps(proposal) if isinstance(proposal, dict) else check.get("llm_text_override")
-+        draft = draft_story_proposal_for_approval(
-+            simulation_state,
-+            authoring_goal=str(check.get("authoring_goal") or "Draft activation bridge pack."),
-+            llm_text_override=llm_text_override,
-+            turn_index=int(check.get("draft_turn_index") or 1),
-+        )
-+        approve = approve_story_proposal(
-+            simulation_state,
-+            pending_id=str(draft.get("pending_id") or ""),
-+            turn_index=int(check.get("turn_index") or 2),
-+            auto_activate=bool(check.get("auto_activate", False)),
-+        )
-+        expected_reason = check.get("expected_reason")
-+        ok = approve.get("ok") is True
-+        if expected_reason:
-+            ok = ok and approve.get("reason") == expected_reason
-+        return {
-+            "check_type": check_type,
-+            "ok": ok,
-+            "draft": draft,
-+            "approve": approve,
-+            "expected_reason": expected_reason,
++            "ok": (
++                len(quest_log.get("active_objectives") or []) <= int(check.get("limit") or 50)
++                and len(tracker.get("objectives") or []) <= int(check.get("tracker_limit") or 8)
++            ),
++            "quest_log": quest_log,
++            "tracker": tracker,
++            "limit": check.get("limit") or 50,
++            "tracker_limit": check.get("tracker_limit") or 8,
 +        }
 +
 +    return {
 +        "check_type": check_type,
 +        "ok": False,
-+        "error": f"unknown_story_pack_activation_m43_m45_check_type:{check_type}",
++        "error": f"unknown_quest_log_m49_m51_check_type:{check_type}",
 +    }
 +
 +
-+def run_story_pack_activation_m43_m45_checks(
++def run_quest_log_m49_m51_checks(
 +    *,
 +    checks: List[Dict[str, Any]],
 +    result: Dict[str, Any],
 +    session: Dict[str, Any] | None = None,
 +) -> List[Dict[str, Any]]:
-+    return [
-+        run_story_pack_activation_m43_m45_check(check=check, result=result, session=session)
-+        for check in checks
-+    ]
++    results: List[Dict[str, Any]] = []
++    for check in checks:
++        check_type = str(_safe_dict(check).get("type") or "")
++        try:
++            check_result = run_quest_log_m49_m51_check(
++                check=_safe_dict(check),
++                result=result,
++                session=session,
++            )
++        except Exception as exc:
++            check_result = {
++                "check_type": check_type,
++                "ok": False,
++                "error": f"{type(exc).__name__}: {exc}",
++            }
++        results.append(check_result)
++    return results
 *** End Patch
-13. Patch src/tests/rpg/manual/scenario_setup.py
+14. Patch src/tests/rpg/manual/scenario_setup.py
 
 Add imports:
 
 *** Begin Patch
 *** Update File: src/tests/rpg/manual/scenario_setup.py
 @@
- from app.rpg.story_authoring.approval import (
-     approve_story_proposal,
-     draft_story_proposal_for_approval,
-     reject_story_proposal,
- )
-+from app.rpg.story_packs.activation import activate_story_pack, deactivate_story_pack
+ from app.rpg.story_arcs.milestones import add_story_arc_milestone, complete_story_arc_milestone
++from app.rpg.quest_log.runtime import pin_objective, unpin_objective
  from tests.rpg.manual.memory_fixtures import build_manual_memory_event
 *** End Patch
 
-Add setup actions after story pack import / authoring approval setup:
+Add setup block after milestone setup:
 
 *** Begin Patch
 *** Update File: src/tests/rpg/manual/scenario_setup.py
 @@
-     for action in scenario.get("setup_story_authoring_approval_actions") or []:
-         if isinstance(action, dict):
-@@
-                 reject_story_proposal(
-                     simulation_state,
-                     pending_id=pending_id,
-                     turn_index=int(action.get("turn_index") or scenario.get("setup_turn_index") or 1),
-                     reason=str(action.get("reason") or "gm_rejected"),
-                 )
+     for milestone in scenario.get("setup_complete_story_arc_milestones") or []:
+         if isinstance(milestone, dict):
+             complete_story_arc_milestone(
+                 simulation_state,
+                 str(milestone.get("milestone_id") or ""),
+                 turn_index=int(milestone.get("turn_index") or scenario.get("setup_turn_index") or 1),
+                 reason=str(milestone.get("reason") or "scenario_setup"),
+             )
 +
-+    for activation in scenario.get("setup_story_pack_activation_actions") or []:
-+        if isinstance(activation, dict):
-+            action = str(activation.get("action") or "")
-+            pack_id = str(activation.get("pack_id") or "")
-+            if action == "activate":
-+                activate_story_pack(
++    for action in scenario.get("setup_quest_log_actions") or []:
++        if isinstance(action, dict):
++            kind = str(action.get("action") or "")
++            objective_id = str(action.get("objective_id") or "")
++            if kind == "pin":
++                pin_objective(
 +                    simulation_state,
-+                    pack_id,
-+                    turn_index=int(activation.get("turn_index") or scenario.get("setup_turn_index") or 1),
-+                    reason=str(activation.get("reason") or "scenario_activate"),
++                    objective_id,
++                    turn_index=int(action.get("turn_index") or scenario.get("setup_turn_index") or 1),
++                    reason=str(action.get("reason") or "scenario_pin"),
 +                )
-+            elif action == "deactivate":
-+                deactivate_story_pack(
++            elif kind == "unpin":
++                unpin_objective(
 +                    simulation_state,
-+                    pack_id,
-+                    turn_index=int(activation.get("turn_index") or scenario.get("setup_turn_index") or 1),
-+                    reason=str(activation.get("reason") or "scenario_deactivate"),
++                    objective_id,
++                    turn_index=int(action.get("turn_index") or scenario.get("setup_turn_index") or 1),
++                    reason=str(action.get("reason") or "scenario_unpin"),
 +                )
  
      for item in scenario.get("setup_story_event_queue") or []:
          if isinstance(item, dict):
 *** End Patch
-14. Patch src/tests/rpg/manual/scenario_execution.py
+15. Patch src/tests/rpg/manual/scenario_execution.py
 
 Add import:
 
 *** Begin Patch
 *** Update File: src/tests/rpg/manual/scenario_execution.py
 @@
- from tests.rpg.manual.story_authoring_inspector_m40_m42_checks import (
-     run_story_authoring_inspector_m40_m42_checks,
+ from tests.rpg.manual.story_arc_milestones_m46_m48_checks import (
+     run_story_arc_milestones_m46_m48_checks,
  )
-+from tests.rpg.manual.story_pack_activation_m43_m45_checks import (
-+    run_story_pack_activation_m43_m45_checks,
++from tests.rpg.manual.quest_log_m49_m51_checks import (
++    run_quest_log_m49_m51_checks,
 +)
 *** End Patch
 
-Add check block after M40-M42 checks:
+Add check block after M46-M48 checks:
 
 *** Begin Patch
 *** Update File: src/tests/rpg/manual/scenario_execution.py
 @@
-         if story_authoring_inspector_m40_m42_checks:
+         if story_arc_milestones_m46_m48_checks:
              current_session = {}
              try:
                  current_session = _ensure_manual_session(session_id)
@@ -1306,29 +1406,33 @@ Add check block after M40-M42 checks:
                          + str(check_result.get("error") or "")
                      )
 +
-+        story_pack_activation_m43_m45_checks = [
++        quest_log_m49_m51_checks = [
 +            check
 +            for check in checks
 +            if isinstance(check, dict)
-+            and str(check.get("type") or "").startswith("story_pack_activation")
++            and (
++                str(check.get("type") or "").startswith("quest_log")
++                or str(check.get("type") or "").startswith("objective_tracker")
++                or str(check.get("type") or "") == "campaign_recap_objective_tracker"
++            )
 +        ]
-+        if story_pack_activation_m43_m45_checks:
++        if quest_log_m49_m51_checks:
 +            current_session = {}
 +            try:
 +                current_session = _ensure_manual_session(session_id)
 +            except Exception:
 +                current_session = session
 +
-+            story_pack_activation_m43_m45_check_results = run_story_pack_activation_m43_m45_checks(
-+                checks=story_pack_activation_m43_m45_checks,
++            quest_log_m49_m51_check_results = run_quest_log_m49_m51_checks(
++                checks=quest_log_m49_m51_checks,
 +                result=turn_record.get("result") or turn_record,
 +                session=current_session,
 +            )
-+            turn_record["story_pack_activation_m43_m45_check_results"] = story_pack_activation_m43_m45_check_results
-+            for check_result in story_pack_activation_m43_m45_check_results:
++            turn_record["quest_log_m49_m51_check_results"] = quest_log_m49_m51_check_results
++            for check_result in quest_log_m49_m51_check_results:
 +                if not check_result.get("ok"):
 +                    turn_record.setdefault("scenario_warnings", []).append(
-+                        "story_pack_activation_m43_m45_check_failed:"
++                        "quest_log_m49_m51_check_failed:"
 +                        + str(scenario_name)
 +                        + ":turn_"
 +                        + str(turn_index)
@@ -1340,434 +1444,406 @@ Add check block after M40-M42 checks:
  
          turn_summaries.append(turn_record)
 *** End Patch
-15. Patch src/tests/rpg/manual/summary_sanitizer.py
+16. Patch src/tests/rpg/manual/summary_sanitizer.py
 *** Begin Patch
 *** Update File: src/tests/rpg/manual/summary_sanitizer.py
 @@
-     story_authoring_inspector_m40_m42_check_results = turn.get("story_authoring_inspector_m40_m42_check_results")
-     if isinstance(story_authoring_inspector_m40_m42_check_results, list):
-         sanitized["story_authoring_inspector_m40_m42_check_results"] = [
+     story_arc_milestones_m46_m48_check_results = turn.get("story_arc_milestones_m46_m48_check_results")
+     if isinstance(story_arc_milestones_m46_m48_check_results, list):
+         sanitized["story_arc_milestones_m46_m48_check_results"] = [
 @@
              if isinstance(item, dict)
          ]
 +
-+    story_pack_activation_m43_m45_check_results = turn.get("story_pack_activation_m43_m45_check_results")
-+    if isinstance(story_pack_activation_m43_m45_check_results, list):
-+        sanitized["story_pack_activation_m43_m45_check_results"] = [
++    quest_log_m49_m51_check_results = turn.get("quest_log_m49_m51_check_results")
++    if isinstance(quest_log_m49_m51_check_results, list):
++        sanitized["quest_log_m49_m51_check_results"] = [
 +            {
 +                "check_type": item.get("check_type"),
 +                "ok": item.get("ok"),
-+                "import_result": item.get("import_result"),
-+                "activate_result": item.get("activate_result"),
-+                "deactivate_result": item.get("deactivate_result"),
-+                "snapshot": item.get("snapshot"),
-+                "evaluation": item.get("evaluation"),
-+                "applied": item.get("applied"),
-+                "draft": item.get("draft"),
-+                "approve": item.get("approve"),
-+                "pack_id": item.get("pack_id"),
-+                "actual_active": item.get("actual_active"),
-+                "expected_active": item.get("expected_active"),
-+                "expected_eligible_count": item.get("expected_eligible_count"),
-+                "expected_registered_rule_count": item.get("expected_registered_rule_count"),
-+                "expected_applied_count": item.get("expected_applied_count"),
++                "payload": item.get("payload"),
++                "pin_result": item.get("pin_result"),
++                "unpin_result": item.get("unpin_result"),
++                "recap": item.get("recap"),
++                "quest_log": item.get("quest_log"),
++                "tracker": item.get("tracker"),
++                "expected_active_objective_id": item.get("expected_active_objective_id"),
++                "expected_completed_objective_id": item.get("expected_completed_objective_id"),
++                "expected_active_count": item.get("expected_active_count"),
++                "expected_objective_id": item.get("expected_objective_id"),
++                "expected_first_objective_id": item.get("expected_first_objective_id"),
++                "expected_ok": item.get("expected_ok"),
 +                "expected_reason": item.get("expected_reason"),
++                "limit": item.get("limit"),
++                "tracker_limit": item.get("tracker_limit"),
 +                "error": item.get("error"),
 +            }
-+            for item in story_pack_activation_m43_m45_check_results[:50]
++            for item in quest_log_m49_m51_check_results[:50]
 +            if isinstance(item, dict)
 +        ]
  
      return sanitized
 *** End Patch
-Patch 8 — Manual scenarios
-16. Add src/tests/rpg/manual/scenarios/story_pack_activation_m43_m45.py
+Patch 7 — Manual scenarios
+17. Add src/tests/rpg/manual/scenarios/quest_log_m49_m51.py
 *** Begin Patch
-*** Add File: src/tests/rpg/manual/scenarios/story_pack_activation_m43_m45.py
+*** Add File: src/tests/rpg/manual/scenarios/quest_log_m49_m51.py
 +from __future__ import annotations
 +
 +from typing import Any, Dict
 +
 +
-+def _activation_pack(proposal_id: str = "activation_bridge_pack") -> Dict[str, Any]:
++def _arc_setup() -> Dict[str, Any]:
 +    return {
-+        "proposal_version": "story_proposal_v1",
-+        "proposal_type": "story_pack",
-+        "proposal_id": proposal_id,
-+        "title": "Activation Bridge Pack",
-+        "lore_entries": [
++        "setup_story_arc_transitions": [
 +            {
-+                "lore_id": f"lore:{proposal_id}",
-+                "title": "Activation Bridge Lore",
-+                "truth_status": "rumor",
-+            }
-+        ],
-+        "story_arcs": [
-+            {
-+                "arc_id": f"arc:{proposal_id}",
-+                "title": "Activation Bridge Arc",
-+                "status": "active",
++                "action": "start",
++                "arc_id": "arc:witness_search",
++                "title": "Witness Search",
 +                "stage": "rumors",
-+                "pressure": 60,
-+                "linked_lore": [f"lore:{proposal_id}"],
++                "pressure": 20,
 +            }
 +        ],
-+        "story_events": [
++        "setup_story_arc_milestones": [
 +            {
-+                "event_id": f"event:{proposal_id}",
-+                "arc_id": f"arc:{proposal_id}",
-+                "kind": "consequence",
-+                "summary": "The active story pack escalated.",
-+                "effects": [
-+                    {"type": "arc_stage_set", "arc_id": f"arc:{proposal_id}", "stage": "escalated"}
-+                ],
-+            }
-+        ],
-+        "escalation_rules": [
++                "arc_id": "arc:witness_search",
++                "milestone_id": "milestone:find_witness",
++                "title": "Find the witness",
++                "objective_text": "Find the witness near the tavern.",
++                "quest_id": "quest:witness_search",
++                "priority": 80,
++            },
 +            {
-+                "rule_id": f"rule:{proposal_id}",
-+                "arc_id": f"arc:{proposal_id}",
-+                "priority": 90,
-+                "conditions": [
-+                    {"type": "arc_pressure_at_least", "arc_id": f"arc:{proposal_id}", "minimum": 50},
-+                    {"type": "arc_stage", "arc_id": f"arc:{proposal_id}", "stage": "rumors"},
-+                ],
-+                "event": {"event_id": f"event:{proposal_id}", "arc_id": f"arc:{proposal_id}", "effects": []},
-+                "max_applications": 1,
-+            }
++                "arc_id": "arc:witness_search",
++                "milestone_id": "milestone:inspect_road",
++                "title": "Inspect the road",
++                "objective_text": "Inspect the road outside town.",
++                "quest_id": "quest:witness_search",
++                "priority": 40,
++            },
 +        ],
 +    }
 +
 +
-+STORY_PACK_ACTIVATION_M43_M45_SCENARIOS: Dict[str, Dict[str, Any]] = {
-+    "story_pack_imported_pack_starts_inactive": {
-+        "turns": ["I import a story pack and verify it starts inactive."],
++QUEST_LOG_M49_M51_SCENARIOS: Dict[str, Dict[str, Any]] = {
++    "quest_log_payload_lists_active_objectives": {
++        **_arc_setup(),
++        "turns": ["I inspect the quest log."],
 +        "checks": [
 +            {
-+                "type": "story_pack_activation_import",
-+                "proposal": _activation_pack(),
-+                "turn_index": 1,
-+                "expected_ok": True,
++                "type": "quest_log_payload",
++                "expected_active_objective_id": "milestone:find_witness",
 +            },
 +            {
-+                "type": "story_pack_activation_status",
-+                "pack_id": "storypack:activation_bridge_pack",
-+                "expected_active": False,
-+            },
-+            {
-+                "type": "story_pack_activation_director_evaluate",
-+                "turn_index": 2,
-+                "expected_eligible_count": 0,
-+                "expected_registered_rule_count": 0,
++                "type": "objective_tracker_payload",
++                "expected_objective_id": "milestone:find_witness",
 +            },
 +        ],
 +    },
-+    "story_pack_activation_enables_director_rules": {
-+        "turns": ["I activate an imported story pack and verify director rules appear."],
++    "quest_log_pin_moves_objective_to_tracker_top": {
++        **_arc_setup(),
++        "turns": ["I pin an objective in the quest log."],
 +        "checks": [
 +            {
-+                "type": "story_pack_activation_import",
-+                "proposal": _activation_pack(),
-+                "turn_index": 1,
-+                "expected_ok": True,
-+            },
-+            {
-+                "type": "story_pack_activation_activate",
-+                "pack_id": "storypack:activation_bridge_pack",
++                "type": "quest_log_pin",
++                "objective_id": "milestone:inspect_road",
 +                "turn_index": 2,
 +                "expected_ok": True,
-+                "expected_reason": "activated",
++                "expected_reason": "pinned",
 +            },
 +            {
-+                "type": "story_pack_activation_director_evaluate",
-+                "turn_index": 3,
-+                "expected_eligible_count": 1,
-+                "expected_registered_rule_count": 1,
++                "type": "objective_tracker_payload",
++                "expected_first_objective_id": "milestone:inspect_road",
 +            },
 +        ],
 +    },
-+    "story_pack_activation_director_applies_active_pack_event": {
-+        "turns": ["I activate an imported story pack and let the director apply it."],
++    "quest_log_unpin_removes_pin": {
++        **_arc_setup(),
++        "setup_quest_log_actions": [
++            {"action": "pin", "objective_id": "milestone:inspect_road", "turn_index": 2}
++        ],
++        "turns": ["I unpin an objective in the quest log."],
 +        "checks": [
 +            {
-+                "type": "story_pack_activation_import",
-+                "proposal": _activation_pack(),
-+                "turn_index": 1,
-+                "expected_ok": True,
-+            },
-+            {
-+                "type": "story_pack_activation_activate",
-+                "pack_id": "storypack:activation_bridge_pack",
-+                "turn_index": 2,
-+                "expected_ok": True,
-+            },
-+            {
-+                "type": "story_pack_activation_director_apply",
++                "type": "quest_log_unpin",
++                "objective_id": "milestone:inspect_road",
 +                "turn_index": 3,
-+                "expected_applied_count": 1,
++                "expected_ok": True,
++                "expected_reason": "unpinned",
++            },
++            {
++                "type": "objective_tracker_payload",
++                "expected_first_objective_id": "milestone:find_witness",
 +            },
 +        ],
 +    },
-+    "story_pack_deactivation_disables_director_rules": {
-+        "turns": ["I activate then deactivate an imported story pack."],
-+        "checks": [
++    "quest_log_completed_objective_moves_to_completed_section": {
++        **_arc_setup(),
++        "setup_complete_story_arc_milestones": [
 +            {
-+                "type": "story_pack_activation_import",
-+                "proposal": _activation_pack(),
-+                "turn_index": 1,
-+                "expected_ok": True,
-+            },
-+            {
-+                "type": "story_pack_activation_activate",
-+                "pack_id": "storypack:activation_bridge_pack",
-+                "turn_index": 2,
-+                "expected_ok": True,
-+            },
-+            {
-+                "type": "story_pack_activation_deactivate",
-+                "pack_id": "storypack:activation_bridge_pack",
-+                "turn_index": 3,
-+                "expected_ok": True,
-+                "expected_reason": "deactivated",
-+            },
-+            {
-+                "type": "story_pack_activation_director_evaluate",
++                "milestone_id": "milestone:find_witness",
 +                "turn_index": 4,
-+                "expected_eligible_count": 0,
-+                "expected_registered_rule_count": 0,
++                "reason": "manual_completion",
++            }
++        ],
++        "turns": ["I inspect completed quest log objectives."],
++        "checks": [
++            {
++                "type": "quest_log_payload",
++                "expected_completed_objective_id": "milestone:find_witness",
++            },
++            {
++                "type": "quest_log_payload",
++                "expected_active_objective_id": "milestone:inspect_road",
 +            },
 +        ],
 +    },
-+    "story_pack_activation_missing_pack_rejected": {
-+        "turns": ["I try to activate a missing story pack."],
++    "quest_log_pin_missing_or_completed_rejected": {
++        **_arc_setup(),
++        "setup_complete_story_arc_milestones": [
++            {
++                "milestone_id": "milestone:find_witness",
++                "turn_index": 4,
++                "reason": "manual_completion",
++            }
++        ],
++        "turns": ["I try to pin invalid quest log objectives."],
 +        "checks": [
 +            {
-+                "type": "story_pack_activation_activate",
-+                "pack_id": "storypack:missing",
-+                "turn_index": 1,
++                "type": "quest_log_pin",
++                "objective_id": "milestone:find_witness",
 +                "expected_ok": False,
-+                "expected_reason": "story_pack_not_imported",
++                "expected_reason": "objective_not_active",
++            },
++            {
++                "type": "quest_log_pin",
++                "objective_id": "milestone:missing",
++                "expected_ok": False,
++                "expected_reason": "objective_not_active",
++            },
++        ],
++    },
++    "campaign_recap_includes_objective_tracker": {
++        **_arc_setup(),
++        "setup_quest_log_actions": [
++            {"action": "pin", "objective_id": "milestone:find_witness", "turn_index": 2}
++        ],
++        "turns": ["I inspect the campaign recap objective tracker."],
++        "checks": [
++            {
++                "type": "campaign_recap_objective_tracker",
++                "expected_objective_id": "milestone:find_witness",
 +            }
 +        ],
 +    },
-+    "story_authoring_approval_import_without_auto_activate_stays_inactive": {
-+        "turns": ["I approve an authored pack without auto activation."],
++    "objective_tracker_output_is_bounded": {
++        "setup_story_arc_transitions": [
++            {
++                "action": "start",
++                "arc_id": "arc:bounded_objectives",
++                "title": "Bounded Objectives",
++                "stage": "start",
++            }
++        ],
++        "setup_story_arc_milestones": [
++            {
++                "arc_id": "arc:bounded_objectives",
++                "milestone_id": f"milestone:{i}",
++                "title": f"Objective {i}",
++                "objective_text": f"Objective {i}",
++                "priority": i,
++            }
++            for i in range(30)
++        ],
++        "turns": ["I inspect bounded objective tracker output."],
 +        "checks": [
 +            {
-+                "type": "story_pack_activation_approve_authored",
-+                "proposal": _activation_pack("approval_activation_bridge_pack"),
-+                "auto_activate": False,
-+                "expected_reason": "approved_imported",
-+            },
-+            {
-+                "type": "story_pack_activation_status",
-+                "pack_id": "storypack:approval_activation_bridge_pack",
-+                "expected_active": False,
-+            },
-+            {
-+                "type": "story_pack_activation_director_evaluate",
-+                "turn_index": 3,
-+                "expected_eligible_count": 0,
-+                "expected_registered_rule_count": 0,
-+            },
++                "type": "quest_log_debug_bounded",
++                "limit": 50,
++                "tracker_limit": 8,
++            }
 +        ],
 +    },
-+    "story_authoring_approval_auto_activate_bridges_to_director": {
-+        "turns": ["I approve an authored pack with auto activation."],
++    "quest_log_payload_empty_when_no_objectives": {
++        "turns": ["I inspect the quest log when there are no objectives."],
 +        "checks": [
 +            {
-+                "type": "story_pack_activation_approve_authored",
-+                "proposal": _activation_pack("approval_auto_activation_bridge_pack"),
-+                "auto_activate": True,
-+                "expected_reason": "approved_imported_activated",
++                "type": "quest_log_payload",
++                "expected_active_count": 0,
 +            },
 +            {
-+                "type": "story_pack_activation_status",
-+                "pack_id": "storypack:approval_auto_activation_bridge_pack",
-+                "expected_active": True,
-+            },
-+            {
-+                "type": "story_pack_activation_director_evaluate",
-+                "turn_index": 3,
-+                "expected_eligible_count": 1,
-+                "expected_registered_rule_count": 1,
-+            },
-+        ],
-+    },
-+    "story_pack_activation_snapshot_is_bounded": {
-+        "turns": ["I inspect bounded story pack activation state."],
-+        "checks": [
-+            *[
-+                {
-+                    "type": "story_pack_activation_import",
-+                    "proposal": _activation_pack(f"activation_pack_{i}"),
-+                    "turn_index": i,
-+                    "expected_ok": True,
-+                }
-+                for i in range(30)
-+            ],
-+            {
-+                "type": "story_pack_activation_snapshot",
-+                "limit": 20,
++                "type": "objective_tracker_payload",
 +            },
 +        ],
 +    },
 +}
 *** End Patch
-17. Add expected names file
+18. Add expected names file
 *** Begin Patch
-*** Add File: src/tests/rpg/manual/scenarios/expected_story_pack_activation_m43_m45_names.py
-+EXPECTED_STORY_PACK_ACTIVATION_M43_M45_SCENARIO_NAMES = {
-+    "story_pack_imported_pack_starts_inactive",
-+    "story_pack_activation_enables_director_rules",
-+    "story_pack_activation_director_applies_active_pack_event",
-+    "story_pack_deactivation_disables_director_rules",
-+    "story_pack_activation_missing_pack_rejected",
-+    "story_authoring_approval_import_without_auto_activate_stays_inactive",
-+    "story_authoring_approval_auto_activate_bridges_to_director",
-+    "story_pack_activation_snapshot_is_bounded",
+*** Add File: src/tests/rpg/manual/scenarios/expected_quest_log_m49_m51_names.py
++EXPECTED_QUEST_LOG_M49_M51_SCENARIO_NAMES = {
++    "quest_log_payload_lists_active_objectives",
++    "quest_log_pin_moves_objective_to_tracker_top",
++    "quest_log_unpin_removes_pin",
++    "quest_log_completed_objective_moves_to_completed_section",
++    "quest_log_pin_missing_or_completed_rejected",
++    "campaign_recap_includes_objective_tracker",
++    "objective_tracker_output_is_bounded",
++    "quest_log_payload_empty_when_no_objectives",
 +}
 *** End Patch
-18. Patch src/tests/rpg/manual/scenarios/registry.py
+19. Patch src/tests/rpg/manual/scenarios/registry.py
 *** Begin Patch
 *** Update File: src/tests/rpg/manual/scenarios/registry.py
 @@
- from tests.rpg.manual.scenarios.story_authoring_inspector_m40_m42 import (
-     STORY_AUTHORING_INSPECTOR_M40_M42_SCENARIOS,
+ from tests.rpg.manual.scenarios.story_arc_milestones_m46_m48 import (
+     STORY_ARC_MILESTONES_M46_M48_SCENARIOS,
  )
-+from tests.rpg.manual.scenarios.story_pack_activation_m43_m45 import (
-+    STORY_PACK_ACTIVATION_M43_M45_SCENARIOS,
++from tests.rpg.manual.scenarios.quest_log_m49_m51 import (
++    QUEST_LOG_M49_M51_SCENARIOS,
 +)
 @@
-     scenarios.update(STORY_AUTHORING_INSPECTOR_M40_M42_SCENARIOS)
-+    scenarios.update(STORY_PACK_ACTIVATION_M43_M45_SCENARIOS)
+     scenarios.update(STORY_ARC_MILESTONES_M46_M48_SCENARIOS)
++    scenarios.update(QUEST_LOG_M49_M51_SCENARIOS)
      return scenarios
 *** End Patch
-19. Patch src/tests/rpg/manual/test_manual_scenario_migration.py
+20. Patch src/tests/rpg/manual/test_manual_scenario_migration.py
 *** Begin Patch
 *** Update File: src/tests/rpg/manual/test_manual_scenario_migration.py
 @@
- from tests.rpg.manual.scenarios.expected_story_authoring_inspector_m40_m42_names import (
-     EXPECTED_STORY_AUTHORING_INSPECTOR_M40_M42_SCENARIO_NAMES,
+ from tests.rpg.manual.scenarios.expected_story_arc_milestones_m46_m48_names import (
+     EXPECTED_STORY_ARC_MILESTONES_M46_M48_SCENARIO_NAMES,
  )
-+from tests.rpg.manual.scenarios.expected_story_pack_activation_m43_m45_names import (
-+    EXPECTED_STORY_PACK_ACTIVATION_M43_M45_SCENARIO_NAMES,
++from tests.rpg.manual.scenarios.expected_quest_log_m49_m51_names import (
++    EXPECTED_QUEST_LOG_M49_M51_SCENARIO_NAMES,
 +)
 @@
- def test_manual_scenario_registry_includes_story_authoring_inspector_m40_m42_names():
+ def test_manual_scenario_registry_includes_story_arc_milestones_m46_m48_names():
      names = set(build_service_scenarios().keys())
-     missing = EXPECTED_STORY_AUTHORING_INSPECTOR_M40_M42_SCENARIO_NAMES - names
+     missing = EXPECTED_STORY_ARC_MILESTONES_M46_M48_SCENARIO_NAMES - names
  
-     assert not missing, f"Missing M40-M42 story authoring inspector scenarios: {sorted(missing)}"
+     assert not missing, f"Missing M46-M48 story arc milestone scenarios: {sorted(missing)}"
 +
 +
-+def test_manual_scenario_registry_includes_story_pack_activation_m43_m45_names():
++def test_manual_scenario_registry_includes_quest_log_m49_m51_names():
 +    names = set(build_service_scenarios().keys())
-+    missing = EXPECTED_STORY_PACK_ACTIVATION_M43_M45_SCENARIO_NAMES - names
++    missing = EXPECTED_QUEST_LOG_M49_M51_SCENARIO_NAMES - names
 +
-+    assert not missing, f"Missing M43-M45 story pack activation scenarios: {sorted(missing)}"
++    assert not missing, f"Missing M49-M51 quest log scenarios: {sorted(missing)}"
 *** End Patch
-20. Add manual check tests
+21. Add manual check tests
 *** Begin Patch
-*** Add File: src/tests/rpg/manual/test_manual_story_pack_activation_m43_m45_checks.py
-+from tests.rpg.manual.story_pack_activation_m43_m45_checks import (
-+    run_story_pack_activation_m43_m45_checks,
-+)
+*** Add File: src/tests/rpg/manual/test_manual_quest_log_m49_m51_checks.py
++from app.rpg.story_arcs.milestones import add_story_arc_milestone
++from app.rpg.story_arcs.state import start_story_arc
++from tests.rpg.manual.quest_log_m49_m51_checks import run_quest_log_m49_m51_checks
 +
 +
-+def _pack():
-+    return {
-+        "proposal_version": "story_proposal_v1",
-+        "proposal_type": "story_pack",
-+        "proposal_id": "manual_activation_pack",
-+        "title": "Manual Activation Pack",
-+        "lore_entries": [
-+            {"lore_id": "lore:manual_activation", "title": "Manual Activation", "truth_status": "rumor"}
-+        ],
-+        "story_arcs": [
-+            {
-+                "arc_id": "arc:manual_activation",
-+                "title": "Manual Activation",
-+                "status": "active",
-+                "stage": "rumors",
-+                "pressure": 60,
-+                "linked_lore": ["lore:manual_activation"],
-+            }
-+        ],
-+        "story_events": [],
-+        "escalation_rules": [],
-+    }
-+
-+
-+def test_manual_story_pack_activation_import_and_status_checks():
++def test_manual_quest_log_payload_check_reads_objectives():
 +    session = {"simulation_state": {}}
-+
-+    imported = run_story_pack_activation_m43_m45_checks(
-+        checks=[
-+            {
-+                "type": "story_pack_activation_import",
-+                "proposal": _pack(),
-+                "expected_ok": True,
-+            }
-+        ],
-+        result={},
-+        session=session,
-+    )[0]
-+    status = run_story_pack_activation_m43_m45_checks(
-+        checks=[
-+            {
-+                "type": "story_pack_activation_status",
-+                "pack_id": "storypack:manual_activation_pack",
-+                "expected_active": False,
-+            }
-+        ],
-+        result={},
-+        session=session,
-+    )[0]
-+
-+    assert imported["ok"] is True
-+    assert status["ok"] is True
-+
-+
-+def test_manual_story_pack_activation_activate_check():
-+    session = {"simulation_state": {}}
-+    run_story_pack_activation_m43_m45_checks(
-+        checks=[
-+            {
-+                "type": "story_pack_activation_import",
-+                "proposal": _pack(),
-+                "expected_ok": True,
-+            }
-+        ],
-+        result={},
-+        session=session,
++    start_story_arc(session["simulation_state"], "arc:x", title="X", stage="start")
++    add_story_arc_milestone(
++        session["simulation_state"],
++        arc_id="arc:x",
++        milestone_id="milestone:x",
++        title="Find the witness",
 +    )
 +
-+    activated = run_story_pack_activation_m43_m45_checks(
++    result = run_quest_log_m49_m51_checks(
 +        checks=[
 +            {
-+                "type": "story_pack_activation_activate",
-+                "pack_id": "storypack:manual_activation_pack",
-+                "expected_ok": True,
-+                "expected_reason": "activated",
++                "type": "quest_log_payload",
++                "expected_active_objective_id": "milestone:x",
 +            }
 +        ],
 +        result={},
 +        session=session,
 +    )[0]
 +
-+    assert activated["ok"] is True
++    assert result["ok"] is True
++
++
++def test_manual_quest_log_pin_check():
++    session = {"simulation_state": {}}
++    start_story_arc(session["simulation_state"], "arc:x", title="X", stage="start")
++    add_story_arc_milestone(
++        session["simulation_state"],
++        arc_id="arc:x",
++        milestone_id="milestone:x",
++        title="Find the witness",
++    )
++
++    result = run_quest_log_m49_m51_checks(
++        checks=[
++            {
++                "type": "quest_log_pin",
++                "objective_id": "milestone:x",
++                "expected_ok": True,
++                "expected_reason": "pinned",
++            }
++        ],
++        result={},
++        session=session,
++    )[0]
++
++    assert result["ok"] is True
+*** End Patch
+Patch 8 — Routing regression tests
+22. Add src/tests/rpg/manual/test_manual_quest_log_m49_m51_routing.py
+*** Begin Patch
+*** Add File: src/tests/rpg/manual/test_manual_quest_log_m49_m51_routing.py
++from tests.rpg.manual.scenarios.registry import build_service_scenarios
++
++
++def _m46_m48_filter(check):
++    check_type = str(check.get("type") or "")
++    return (
++        check_type.startswith("story_arc_milestone")
++        or check_type.startswith("story_objective")
++        or check_type == "story_event_apply_for_milestone"
++        or check_type == "campaign_journal_objective_contains"
++        or check_type == "campaign_recap_objective"
++    )
++
++
++def _m49_m51_filter(check):
++    check_type = str(check.get("type") or "")
++    return (
++        check_type.startswith("quest_log")
++        or check_type.startswith("objective_tracker")
++        or check_type == "campaign_recap_objective_tracker"
++    )
++
++
++def test_quest_log_checks_do_not_route_to_m46_m48():
++    scenarios = build_service_scenarios()
++    names = [
++        "quest_log_payload_lists_active_objectives",
++        "quest_log_pin_moves_objective_to_tracker_top",
++        "quest_log_unpin_removes_pin",
++        "quest_log_completed_objective_moves_to_completed_section",
++        "quest_log_pin_missing_or_completed_rejected",
++        "campaign_recap_includes_objective_tracker",
++        "objective_tracker_output_is_bounded",
++        "quest_log_payload_empty_when_no_objectives",
++    ]
++
++    for name in names:
++        checks = scenarios[name]["checks"]
++        m49 = [check for check in checks if isinstance(check, dict) and _m49_m51_filter(check)]
++        bad_m46 = [check for check in checks if isinstance(check, dict) and _m46_m48_filter(check)]
++        assert m49, name
++        assert bad_m46 == [], f"{name} has checks that would route to M46-M48: {bad_m46}"
 *** End Patch
 Validation commands
 Compile
-python -m py_compile src/app/rpg/story_packs/activation.py
-python -m py_compile src/app/rpg/story_packs/definition_registries.py
-python -m py_compile src/app/rpg/campaign_director/runtime.py
-python -m py_compile src/app/rpg/story_authoring/approval.py
+python -m py_compile src/app/rpg/quest_log/state.py
+python -m py_compile src/app/rpg/quest_log/runtime.py
+python -m py_compile src/app/rpg/api/quest_log.py
+python -m py_compile src/app/rpg/campaign_journal/journal.py
 python -m py_compile src/app/rpg/story_authoring/inspector.py
-python -m py_compile src/app/rpg/api/story_authoring.py
-python -m py_compile src/tests/rpg/manual/story_pack_activation_m43_m45_checks.py
-python -m py_compile src/tests/rpg/manual/scenarios/story_pack_activation_m43_m45.py
-python -m py_compile src/tests/rpg/manual/scenarios/expected_story_pack_activation_m43_m45_names.py
+python -m py_compile src/tests/rpg/manual/quest_log_m49_m51_checks.py
+python -m py_compile src/tests/rpg/manual/scenarios/quest_log_m49_m51.py
+python -m py_compile src/tests/rpg/manual/scenarios/expected_quest_log_m49_m51_names.py
 Unit tests
-python -m pytest src/tests/rpg/story_packs src/tests/rpg/campaign_director src/tests/rpg/story_authoring src/tests/rpg/campaign_journal src/tests/rpg/companions src/tests/rpg/npc_runtime_context src/tests/rpg/npc_evolution src/tests/rpg/story_event_queue src/tests/rpg/dialogue_context src/tests/rpg/story_proposals src/tests/rpg/escalation src/tests/rpg/story_events src/tests/rpg/story_arcs src/tests/rpg/lore -q
+python -m pytest src/tests/rpg/quest_log src/tests/rpg/story_arcs src/tests/rpg/story_events src/tests/rpg/campaign_journal src/tests/rpg/story_packs src/tests/rpg/campaign_director src/tests/rpg/story_authoring src/tests/rpg/companions src/tests/rpg/npc_runtime_context src/tests/rpg/npc_evolution src/tests/rpg/story_event_queue src/tests/rpg/dialogue_context src/tests/rpg/story_proposals src/tests/rpg/escalation src/tests/rpg/lore -q

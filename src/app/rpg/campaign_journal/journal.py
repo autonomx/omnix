@@ -11,6 +11,9 @@ from app.rpg.campaign_journal.state import (
 )
 from app.rpg.lore.state import get_lore_entry
 from app.rpg.npc_evolution.state import ensure_npc_evolution_state
+from app.rpg.quest_log.runtime import build_objective_tracker_payload
+from app.rpg.story_arcs.milestones import build_story_objective_projection
+from app.rpg.story_arcs.state import get_story_arc
 
 
 def _safe_dict(value: Any) -> Dict[str, Any]:
@@ -277,6 +280,7 @@ def build_campaign_journal(
         "entries": entries,
         "known_lore": _known_lore_rows(simulation_state),
         "active_arcs": _active_arc_rows(simulation_state),
+        "objectives": build_story_objective_projection(simulation_state, limit=max_entries),
         "recent_events": _recent_applied_event_rows(simulation_state),
         "pending_consequences": _pending_queue_rows(simulation_state),
         "npc_evolution": _npc_evolution_rows(simulation_state),
@@ -304,6 +308,8 @@ def build_player_story_recap(
         "latest_journal_entries": latest_entries,
         "known_lore": list(journal.get("known_lore") or [])[:max_items],
         "active_arcs": list(journal.get("active_arcs") or [])[:max_items],
+        "objectives": dict(journal.get("objectives") or {}),
+        "objective_tracker": build_objective_tracker_payload(simulation_state, limit=min(max_items, 8)),
         "recent_events": recent_events,
         "pending_consequences": list(journal.get("pending_consequences") or [])[:max_items],
         "npc_evolution": list(journal.get("npc_evolution") or [])[:max_items],
@@ -317,6 +323,10 @@ def build_player_story_recap(
             ],
             "story_so_far": latest_entries,
             "current_arcs": list(journal.get("active_arcs") or [])[:max_items],
+            "active_objectives": list(
+                dict(journal.get("objectives") or {}).get("active_objectives") or []
+            )[:max_items],
+            "objective_tracker": build_objective_tracker_payload(simulation_state, limit=min(max_items, 8)).get("objectives") or [],
             "known_rumors": [
                 row
                 for row in list(journal.get("known_lore") or [])

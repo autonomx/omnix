@@ -878,6 +878,35 @@ def sanitize_turn_for_summary(
             if isinstance(item, dict)
         ]
 
+    story_arc_milestones_m46_m48_check_results = turn.get("story_arc_milestones_m46_m48_check_results")
+    if isinstance(story_arc_milestones_m46_m48_check_results, list):
+        sanitized["story_arc_milestones_m46_m48_check_results"] = [
+            {
+                "check_type": item.get("check_type"),
+                "ok": item.get("ok"),
+                "add_result": item.get("add_result"),
+                "complete_result": item.get("complete_result"),
+                "milestone_id": item.get("milestone_id"),
+                "milestone": item.get("milestone"),
+                "projection": item.get("projection"),
+                "applied": item.get("applied"),
+                "journal": item.get("journal"),
+                "recap": item.get("recap"),
+                "matched": item.get("matched"),
+                "count": item.get("count"),
+                "expected_status": item.get("expected_status"),
+                "expected_objective_id": item.get("expected_objective_id"),
+                "expected_active_count": item.get("expected_active_count"),
+                "expected_ok": item.get("expected_ok"),
+                "expected_reason": item.get("expected_reason"),
+                "expected_summary_contains": item.get("expected_summary_contains"),
+                "expected_max": item.get("expected_max"),
+                "error": item.get("error"),
+            }
+            for item in story_arc_milestones_m46_m48_check_results[:50]
+            if isinstance(item, dict)
+        ]
+
     return sanitized
 
 

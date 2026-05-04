@@ -7213,6 +7213,222 @@
         refreshStoryAuthoringInspector();
     });
 
+    // ---------------------------------------------------------------------------
+    // Quest Log / Objective Tracker
+    // ---------------------------------------------------------------------------
+
+    function rpgGetSessionIdForQuestLog() {
+        if (window.RPG_SESSION_ID) return window.RPG_SESSION_ID;
+        if (window.rpgSessionId) return window.rpgSessionId;
+        const input = document.querySelector('[name="session_id"], #session_id, #rpg-session-id');
+        if (input && input.value) return input.value;
+        return "";
+    }
+
+    function ensureQuestLogPanel() {
+        let panel = document.getElementById("quest-log-panel");
+        if (panel) return panel;
+
+        const host =
+            document.getElementById("rpg-top-panels") ||
+            document.getElementById("rpg-inspector-panel") ||
+            document.getElementById("rpg-debug-panel") ||
+            document.body;
+
+        panel = document.createElement("section");
+        panel.id = "quest-log-panel";
+        panel.className = "quest-log-panel";
+        panel.innerHTML = `
+            <div class="quest-log-header">
+                <div>
+                    <h3>Quest Log</h3>
+                    <div class="quest-log-subtitle">Objective tracker</div>
+                </div>
+                <button type="button" id="quest-log-refresh-btn">Refresh</button>
+            </div>
+            <div id="objective-tracker-list" class="objective-tracker-list"></div>
+            <details class="quest-log-details">
+                <summary>Full quest log</summary>
+                <div id="quest-log-groups"></div>
+            </details>
+            <div id="quest-log-status" class="quest-log-status"></div>
+        `;
+        host.appendChild(panel);
+
+        document.getElementById("quest-log-refresh-btn")?.addEventListener("click", () => {
+            refreshQuestLogPanel();
+        });
+        return panel;
+    }
+
+    function setQuestLogStatus(message, isError = false) {
+        const el = document.getElementById("quest-log-status");
+        if (!el) return;
+        el.textContent = message || "";
+        el.classList.toggle("error", Boolean(isError));
+    }
+
+    async function postQuestLog(endpoint, payload) {
+        const response = await fetch(endpoint, {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify(payload),
+        });
+        const text = await response.text();
+        let data = {};
+        try {
+            data = text ? JSON.parse(text) : {};
+        } catch (err) {
+            throw new Error(`Invalid JSON from ${endpoint}: ${text.slice(0, 200)}`);
+        }
+        if (!response.ok) {
+            throw new Error(data?.detail || data?.error || data?.reason || `HTTP ${response.status}`);
+        }
+        return data;
+    }
+
+    function renderObjectiveTracker(payload) {
+        const target = document.getElementById("objective-tracker-list");
+        if (!target) return;
+        const objectives = Array.isArray(payload?.objectives) ? payload.objectives : [];
+        if (!objectives.length) {
+            target.innerHTML = `<div class="quest-log-empty">No active objectives.</div>`;
+            return;
+        }
+        target.innerHTML = objectives.map((objective) => {
+            const pinned = Boolean(objective.pinned);
+            return `
+                <article class="objective-tracker-item ${pinned ? "pinned" : ""}" data-objective-id="${rpgEscapeHtml(objective.objective_id)}">
+                    <div class="objective-tracker-title">${rpgEscapeHtml(objective.title || objective.objective_id)}</div>
+                    <div class="objective-tracker-text">${rpgEscapeHtml(objective.objective_text || "")}</div>
+                    <div class="objective-tracker-meta">
+                        <span>${rpgEscapeHtml(objective.arc_id || "")}</span>
+                        <span>${rpgEscapeHtml(objective.status || "active")}</span>
+                        ${pinned ? "<span>pinned</span>" : ""}
+                    </div>
+                    <div class="objective-tracker-actions">
+                        <button type="button" data-quest-action="${pinned ? "unpin" : "pin"}" data-objective-id="${rpgEscapeHtml(objective.objective_id)}">
+                            ${pinned ? "Unpin" : "Pin"}
+                        </button>
+                    </div>
+                </article>
+            `;
+        }).join("");
+
+        target.querySelectorAll("[data-quest-action]").forEach((button) => {
+            button.addEventListener("click", async () => {
+                const action = button.getAttribute("data-quest-action");
+                const objectiveId = button.getAttribute("data-objective-id");
+                if (action === "pin") {
+                    await pinQuestObjectiveFromUI(objectiveId);
+                } else if (action === "unpin") {
+                    await unpinQuestObjectiveFromUI(objectiveId);
+                }
+            });
+        });
+    }
+
+    function renderQuestLogGroups(payload) {
+        const target = document.getElementById("quest-log-groups");
+        if (!target) return;
+        const groups = Array.isArray(payload?.quest_groups) ? payload.quest_groups : [];
+        if (!groups.length) {
+            target.innerHTML = `<div class="quest-log-empty">No quest entries.</div>`;
+            return;
+        }
+        target.innerHTML = groups.map((group) => {
+            const active = Array.isArray(group.active_objectives) ? group.active_objectives : [];
+            const completed = Array.isArray(group.completed_objectives) ? group.completed_objectives : [];
+            return `
+                <section class="quest-log-group">
+                    <h4>${rpgEscapeHtml(group.title || group.quest_id)}</h4>
+                    <div class="quest-log-group-meta">${rpgEscapeHtml(group.quest_id || "")}</div>
+                    <div class="quest-log-objective-section">
+                        <strong>Active</strong>
+                        ${active.map(row => `<div class="quest-log-objective active">${rpgEscapeHtml(row.objective_text || row.title)}</div>`).join("") || `<div class="quest-log-empty">None</div>`}
+                    </div>
+                    <div class="quest-log-objective-section">
+                        <strong>Completed</strong>
+                        ${completed.map(row => `<div class="quest-log-objective completed">${rpgEscapeHtml(row.objective_text || row.title)}</div>`).join("") || `<div class="quest-log-empty">None</div>`}
+                    </div>
+                </section>
+            `;
+        }).join("");
+    }
+
+    async function refreshQuestLogPanel() {
+        ensureQuestLogPanel();
+        const sessionId = rpgGetSessionIdForQuestLog();
+        if (!sessionId) {
+            setQuestLogStatus("No RPG session id available.", true);
+            return;
+        }
+        setQuestLogStatus("Loading quest log...");
+        try {
+            const tracker = await postQuestLog("/api/rpg/quest_log/tracker", {
+                session_id: sessionId,
+                limit: 8,
+            });
+            const questLog = await postQuestLog("/api/rpg/quest_log/payload", {
+                session_id: sessionId,
+                limit: 50,
+            });
+            renderObjectiveTracker(tracker);
+            renderQuestLogGroups(questLog);
+            setQuestLogStatus(`Active objectives: ${tracker.active_count || 0}`);
+        } catch (err) {
+            console.error("[RPG][quest-log] refresh failed", err);
+            setQuestLogStatus(String(err.message || err), true);
+        }
+    }
+
+    async function pinQuestObjectiveFromUI(objectiveId) {
+        const sessionId = rpgGetSessionIdForQuestLog();
+        setQuestLogStatus("Pinning objective...");
+        try {
+            const payload = await postQuestLog("/api/rpg/quest_log/pin", {
+                session_id: sessionId,
+                objective_id: objectiveId,
+                turn_index: 0,
+                reason: "ui_pin",
+            });
+            renderObjectiveTracker(payload.tracker || {});
+            renderQuestLogGroups(payload.quest_log || {});
+            setQuestLogStatus(payload.ok ? "Objective pinned." : `Pin failed: ${payload.reason}`);
+        } catch (err) {
+            console.error("[RPG][quest-log] pin failed", err);
+            setQuestLogStatus(String(err.message || err), true);
+        }
+    }
+
+    async function unpinQuestObjectiveFromUI(objectiveId) {
+        const sessionId = rpgGetSessionIdForQuestLog();
+        setQuestLogStatus("Unpinning objective...");
+        try {
+            const payload = await postQuestLog("/api/rpg/quest_log/unpin", {
+                session_id: sessionId,
+                objective_id: objectiveId,
+                turn_index: 0,
+                reason: "ui_unpin",
+            });
+            renderObjectiveTracker(payload.tracker || {});
+            renderQuestLogGroups(payload.quest_log || {});
+            setQuestLogStatus(payload.ok ? "Objective unpinned." : `Unpin failed: ${payload.reason}`);
+        } catch (err) {
+            console.error("[RPG][quest-log] unpin failed", err);
+            setQuestLogStatus(String(err.message || err), true);
+        }
+    }
+
+    window.refreshQuestLogPanel = refreshQuestLogPanel;
+    window.renderObjectiveTracker = renderObjectiveTracker;
+    window.renderQuestLogGroups = renderQuestLogGroups;
+
+    document.addEventListener("DOMContentLoaded", () => {
+        ensureQuestLogPanel();
+        refreshQuestLogPanel();
+    });
+
     // Defer until after all other scripts have initialised
     document.addEventListener('DOMContentLoaded', function () { setTimeout(init, INIT_DELAY_MS); });
 

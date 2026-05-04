@@ -3,8 +3,14 @@ from __future__ import annotations
 import json
 from typing import Any, Dict, List
 
-from app.rpg.campaign_director.runtime import apply_campaign_director_tick, evaluate_campaign_director_tick
-from app.rpg.story_authoring.approval import approve_story_proposal, draft_story_proposal_for_approval
+from app.rpg.campaign_director.runtime import (
+    apply_campaign_director_tick,
+    evaluate_campaign_director_tick,
+)
+from app.rpg.story_authoring.approval import (
+    approve_story_proposal,
+    draft_story_proposal_for_approval,
+)
 from app.rpg.story_packs.activation import (
     activate_story_pack,
     build_story_pack_activation_snapshot,

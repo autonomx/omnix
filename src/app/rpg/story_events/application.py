@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any, Dict, List
 
 from app.rpg.campaign_journal.journal import record_campaign_journal_entry
+from app.rpg.story_arcs.milestones import get_story_arc_milestone
 from app.rpg.story_events.effects import apply_story_event_effect
 from app.rpg.story_events.state import (
     has_story_event_been_applied,
@@ -88,6 +89,38 @@ def apply_story_event(
         source_id=event_id,
         metadata={"source": "apply_story_event"},
     )
+    for effect_result in effect_results or []:
+        if not isinstance(effect_result, dict):
+            continue
+        result_payload = effect_result.get("result") if isinstance(effect_result.get("result"), dict) else effect_result
+        if result_payload.get("reason") not in {"completed", "already_completed"}:
+            continue
+        milestone = result_payload.get("milestone")
+        if not isinstance(milestone, dict):
+            milestone = get_story_arc_milestone(
+                simulation_state,
+                str(result_payload.get("milestone_id") or ""),
+            )
+        if not isinstance(milestone, dict):
+            continue
+        summary = milestone.get("journal_on_complete") or milestone.get("summary") or milestone.get("title")
+        if not summary:
+            continue
+        record_campaign_journal_entry(
+            simulation_state,
+            kind="objective",
+            title=str(milestone.get("title") or "Objective Updated"),
+            summary=str(summary),
+            turn_index=turn_index,
+            visibility="player",
+            fact_status="confirmed",
+            arc_ids=[str(milestone.get("arc_id") or "")] if milestone.get("arc_id") else [],
+            event_ids=[event_id],
+            quest_ids=[str(milestone.get("quest_id") or "")] if milestone.get("quest_id") else [],
+            tags=["objective", "milestone"],
+            source_id=str(milestone.get("milestone_id") or ""),
+            metadata={"source": "milestone_complete"},
+        )
     return {
         "ok": True,
         "reason": "applied",

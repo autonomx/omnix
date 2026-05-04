@@ -17,6 +17,7 @@ from app.rpg.memory.observation import (
 )
 from app.rpg.npc_evolution.transitions import apply_npc_evolution_transition
 from app.rpg.puzzles.transitions import apply_puzzle_transition
+from app.rpg.quest_log.runtime import pin_objective, unpin_objective
 from app.rpg.quests.transitions import apply_quest_transition
 from app.rpg.social.leverage import add_social_leverage
 from app.rpg.social.reputation import (
@@ -29,6 +30,10 @@ from app.rpg.social.resolution import (
 )
 from app.rpg.social.state import ensure_social_state, normalize_social_profile
 from app.rpg.spatial.serialization import normalize_spatial_graph
+from app.rpg.story_arcs.milestones import (
+    add_story_arc_milestone,
+    complete_story_arc_milestone,
+)
 from app.rpg.story_arcs.transitions import apply_story_arc_transition
 from app.rpg.story_authoring.approval import (
     approve_story_proposal,
@@ -36,13 +41,13 @@ from app.rpg.story_authoring.approval import (
     reject_story_proposal,
 )
 from app.rpg.story_authoring.runtime import author_story_proposal
-from app.rpg.story_packs.activation import activate_story_pack, deactivate_story_pack
 from app.rpg.story_event_queue.queue import (
     enqueue_story_event,
     enqueue_story_event_definition,
     process_story_event_queue,
 )
 from app.rpg.story_events.application import apply_story_event
+from app.rpg.story_packs.activation import activate_story_pack, deactivate_story_pack
 from app.rpg.story_packs.importer import import_story_pack
 from tests.rpg.manual.memory_fixtures import build_manual_memory_event
 from tests.rpg.manual.safe import _safe_dict, _safe_list
@@ -460,6 +465,50 @@ def _apply_manual_scenario_setup(session: Dict[str, Any], scenario: Dict[str, An
                     pack_id,
                     turn_index=int(activation.get("turn_index") or scenario.get("setup_turn_index") or 1),
                     reason=str(activation.get("reason") or "scenario_deactivate"),
+                )
+
+    for milestone in scenario.get("setup_story_arc_milestones") or []:
+        if isinstance(milestone, dict):
+            add_story_arc_milestone(
+                simulation_state,
+                arc_id=str(milestone.get("arc_id") or ""),
+                milestone_id=str(milestone.get("milestone_id") or ""),
+                title=str(milestone.get("title") or ""),
+                summary=str(milestone.get("summary") or ""),
+                objective_text=str(milestone.get("objective_text") or ""),
+                journal_on_complete=str(milestone.get("journal_on_complete") or ""),
+                quest_id=str(milestone.get("quest_id") or ""),
+                priority=int(milestone.get("priority") or 50),
+                turn_index=int(milestone.get("turn_index") or scenario.get("setup_turn_index") or 1),
+                tags=milestone.get("tags") or [],
+            )
+
+    for milestone in scenario.get("setup_complete_story_arc_milestones") or []:
+        if isinstance(milestone, dict):
+            complete_story_arc_milestone(
+                simulation_state,
+                str(milestone.get("milestone_id") or ""),
+                turn_index=int(milestone.get("turn_index") or scenario.get("setup_turn_index") or 1),
+                reason=str(milestone.get("reason") or "scenario_setup"),
+            )
+
+    for action in scenario.get("setup_quest_log_actions") or []:
+        if isinstance(action, dict):
+            kind = str(action.get("action") or "")
+            objective_id = str(action.get("objective_id") or "")
+            if kind == "pin":
+                pin_objective(
+                    simulation_state,
+                    objective_id,
+                    turn_index=int(action.get("turn_index") or scenario.get("setup_turn_index") or 1),
+                    reason=str(action.get("reason") or "scenario_pin"),
+                )
+            elif kind == "unpin":
+                unpin_objective(
+                    simulation_state,
+                    objective_id,
+                    turn_index=int(action.get("turn_index") or scenario.get("setup_turn_index") or 1),
+                    reason=str(action.get("reason") or "scenario_unpin"),
                 )
 
     for item in scenario.get("setup_story_event_queue") or []:
