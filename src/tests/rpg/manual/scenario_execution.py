@@ -21,6 +21,9 @@ from tests.rpg.manual.output_state import (
     _REGRESSION_WARNING_ROWS,
     _REGRESSION_WARNINGS,
 )
+from tests.rpg.manual.player_action_context_m52_m54_checks import (
+    run_player_action_context_m52_m54_checks,
+)
 from tests.rpg.manual.quest_log_m49_m51_checks import (
     run_quest_log_m49_m51_checks,
 )
@@ -823,6 +826,41 @@ def _run_one_service_scenario(
                 if not check_result.get("ok"):
                     turn_record.setdefault("scenario_warnings", []).append(
                         "quest_log_m49_m51_check_failed:"
+                        + str(scenario_name)
+                        + ":turn_"
+                        + str(turn_index)
+                        + ":"
+                        + str(check_result.get("check_type"))
+                        + ":"
+                        + str(check_result.get("error") or "")
+                    )
+
+        player_action_context_m52_m54_checks = [
+            check
+            for check in checks
+            if isinstance(check, dict)
+            and (
+                str(check.get("type") or "").startswith("player_action_context")
+                or str(check.get("type") or "") == "suggested_actions"
+            )
+        ]
+        if player_action_context_m52_m54_checks:
+            current_session = {}
+            try:
+                current_session = _ensure_manual_session(session_id)
+            except Exception:
+                current_session = session
+
+            player_action_context_m52_m54_check_results = run_player_action_context_m52_m54_checks(
+                checks=player_action_context_m52_m54_checks,
+                result=turn_record.get("result") or turn_record,
+                session=current_session,
+            )
+            turn_record["player_action_context_m52_m54_check_results"] = player_action_context_m52_m54_check_results
+            for check_result in player_action_context_m52_m54_check_results:
+                if not check_result.get("ok"):
+                    turn_record.setdefault("scenario_warnings", []).append(
+                        "player_action_context_m52_m54_check_failed:"
                         + str(scenario_name)
                         + ":turn_"
                         + str(turn_index)
