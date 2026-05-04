@@ -2,18 +2,23 @@ from __future__ import annotations
 
 from typing import Any, Dict
 
+from app.rpg.session_store import get_session
 from fastapi import APIRouter
 from pydantic import BaseModel, Field
 
-from app.rpg.session_store import get_session
-from app.shared import get_provider
 from app.rpg.story_authoring.approval import (
     approve_story_proposal,
     draft_story_proposal_for_approval,
     list_pending_story_proposals,
     reject_story_proposal,
 )
-
+from app.rpg.story_authoring.inspector import (
+    approve_story_authoring_inspector_proposal,
+    build_story_authoring_inspector_payload,
+    draft_story_authoring_inspector_proposal,
+    reject_story_authoring_inspector_proposal,
+)
+from app.shared import get_provider
 
 router = APIRouter(prefix="/api/rpg/story_authoring", tags=["rpg-story-authoring"])
 
@@ -69,6 +74,47 @@ def draft_story_authoring_proposal(request: StoryAuthoringDraftRequest) -> Dict[
 def pending_story_authoring_proposals(request: StoryAuthoringListRequest) -> Dict[str, Any]:
     simulation_state = _simulation_state_for_session(request.session_id)
     return list_pending_story_proposals(simulation_state, limit=request.limit)
+
+
+@router.post("/inspector")
+def story_authoring_inspector(request: StoryAuthoringListRequest) -> Dict[str, Any]:
+    simulation_state = _simulation_state_for_session(request.session_id)
+    return build_story_authoring_inspector_payload(simulation_state, limit=request.limit)
+
+
+@router.post("/inspector/draft")
+def draft_story_authoring_inspector(request: StoryAuthoringDraftRequest) -> Dict[str, Any]:
+    simulation_state = _simulation_state_for_session(request.session_id)
+    return draft_story_authoring_inspector_proposal(
+        simulation_state,
+        authoring_goal=request.authoring_goal,
+        app_context=_AppContext(),
+        turn_index=request.turn_index,
+        llm_text_override=request.llm_text_override,
+        repair_once=request.repair_once,
+    )
+
+
+@router.post("/inspector/approve")
+def approve_story_authoring_inspector(request: StoryAuthoringApprovalRequest) -> Dict[str, Any]:
+    simulation_state = _simulation_state_for_session(request.session_id)
+    return approve_story_authoring_inspector_proposal(
+        simulation_state,
+        pending_id=request.pending_id,
+        turn_index=request.turn_index,
+        reason=request.reason or "gm_approved",
+    )
+
+
+@router.post("/inspector/reject")
+def reject_story_authoring_inspector(request: StoryAuthoringApprovalRequest) -> Dict[str, Any]:
+    simulation_state = _simulation_state_for_session(request.session_id)
+    return reject_story_authoring_inspector_proposal(
+        simulation_state,
+        pending_id=request.pending_id,
+        turn_index=request.turn_index,
+        reason=request.reason or "gm_rejected",
+    )
 
 
 @router.post("/approve")

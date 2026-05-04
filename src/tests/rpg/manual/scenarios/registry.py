@@ -167,6 +167,13 @@ try:
 except Exception:
     STORY_AUTHORING_APPROVAL_M37_M39_SCENARIOS = {}
 
+try:
+    from tests.rpg.manual.scenarios.story_authoring_inspector_m40_m42 import (
+        STORY_AUTHORING_INSPECTOR_M40_M42_SCENARIOS,
+    )
+except Exception:
+    STORY_AUTHORING_INSPECTOR_M40_M42_SCENARIOS = {}
+
 
 def build_service_scenarios(
     legacy_scenarios: Dict[str, Dict[str, Any]] | None = None,
@@ -203,6 +210,7 @@ def build_service_scenarios(
         CAMPAIGN_JOURNAL_M31_M33_SCENARIOS,
         STORY_AUTHORING_M34_M36_SCENARIOS,
         STORY_AUTHORING_APPROVAL_M37_M39_SCENARIOS,
+        STORY_AUTHORING_INSPECTOR_M40_M42_SCENARIOS,
     ]:
         overlap = set(scenarios).intersection(group)
         if overlap:

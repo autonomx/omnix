@@ -5,7 +5,6 @@ from typing import Any, Dict
 
 from app.rpg.campaign_journal.journal import build_player_story_recap
 
-
 STORY_AUTHORING_SYSTEM_PROMPT = """You are an RPG campaign story authoring assistant.
 
 You must output only valid JSON.

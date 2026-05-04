@@ -6,12 +6,6 @@ from typing import Any, Dict
 
 from app.rpg.campaign_director.runtime import apply_campaign_director_tick
 from app.rpg.campaign_journal.journal import record_campaign_journal_entry
-from app.rpg.story_authoring.approval import (
-    approve_story_proposal,
-    draft_story_proposal_for_approval,
-    reject_story_proposal,
-)
-from app.rpg.story_authoring.runtime import author_story_proposal
 from app.rpg.companions.offers import accept_companion_offer, refuse_companion_offer
 from app.rpg.dialogue_context.rumors import propagate_rumor
 from app.rpg.escalation.rules import apply_escalation_rule
@@ -36,6 +30,12 @@ from app.rpg.social.resolution import (
 from app.rpg.social.state import ensure_social_state, normalize_social_profile
 from app.rpg.spatial.serialization import normalize_spatial_graph
 from app.rpg.story_arcs.transitions import apply_story_arc_transition
+from app.rpg.story_authoring.approval import (
+    approve_story_proposal,
+    draft_story_proposal_for_approval,
+    reject_story_proposal,
+)
+from app.rpg.story_authoring.runtime import author_story_proposal
 from app.rpg.story_event_queue.queue import (
     enqueue_story_event,
     enqueue_story_event_definition,

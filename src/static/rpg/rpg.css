@@ -401,3 +401,129 @@
   opacity: 0.45;
   cursor: not-allowed;
 }
+
+
+.story-authoring-inspector-panel {
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    border-radius: 12px;
+    padding: 12px;
+    margin: 10px 0;
+    background: rgba(8, 10, 18, 0.72);
+    color: #f2efe7;
+    max-height: 520px;
+    overflow: auto;
+}
+
+.story-authoring-header {
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+    align-items: center;
+    margin-bottom: 10px;
+}
+
+.story-authoring-header h3 {
+    margin: 0;
+    font-size: 16px;
+}
+
+.story-authoring-subtitle,
+.story-authoring-meta,
+.story-authoring-status,
+.story-authoring-goal {
+    color: rgba(242, 239, 231, 0.72);
+    font-size: 12px;
+}
+
+.story-authoring-status.error {
+    color: #ff9b9b;
+}
+
+.story-authoring-draft-row {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 10px;
+}
+
+.story-authoring-draft-row input {
+    flex: 1;
+    min-width: 0;
+    border-radius: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    background: rgba(255, 255, 255, 0.06);
+    color: #f2efe7;
+    padding: 8px;
+}
+
+.story-authoring-inspector-panel button {
+    border-radius: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    background: rgba(255, 255, 255, 0.10);
+    color: #f2efe7;
+    padding: 7px 10px;
+    cursor: pointer;
+}
+
+.story-authoring-inspector-panel button:hover {
+    background: rgba(255, 255, 255, 0.18);
+}
+
+.story-authoring-pending-list {
+    display: grid;
+    gap: 10px;
+}
+
+.story-authoring-card {
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 10px;
+    padding: 10px;
+    background: rgba(255, 255, 255, 0.045);
+}
+
+.story-authoring-card-title {
+    font-weight: 700;
+    margin-bottom: 4px;
+}
+
+.story-authoring-meta,
+.story-authoring-counts,
+.story-authoring-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin: 6px 0;
+}
+
+.story-authoring-counts span {
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.08);
+    padding: 2px 8px;
+    font-size: 12px;
+}
+
+.story-authoring-preview-block {
+    margin-top: 8px;
+    padding: 8px;
+    border-radius: 8px;
+    background: rgba(0, 0, 0, 0.18);
+    font-size: 12px;
+}
+
+.story-authoring-empty {
+    color: rgba(242, 239, 231, 0.62);
+    font-size: 12px;
+    padding: 8px;
+}
+
+.story-authoring-history-wrap {
+    margin-top: 10px;
+}
+
+.story-authoring-history-item {
+    display: grid;
+    grid-template-columns: 90px 1fr 1fr 1fr;
+    gap: 8px;
+    padding: 6px 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    font-size: 12px;
+}

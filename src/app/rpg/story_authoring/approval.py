@@ -8,7 +8,6 @@ from app.rpg.story_authoring.runtime import author_story_proposal
 from app.rpg.story_packs.importer import import_story_pack
 from app.rpg.story_proposals.validation import validate_story_proposal
 
-
 MAX_PENDING_AUTHORED_PROPOSALS = 50
 MAX_AUTHORING_APPROVAL_HISTORY = 100
 
