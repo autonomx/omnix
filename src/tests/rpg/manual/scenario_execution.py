@@ -21,6 +21,9 @@ from tests.rpg.manual.output_state import (
     _REGRESSION_WARNING_ROWS,
     _REGRESSION_WARNINGS,
 )
+from tests.rpg.manual.quest_log_m49_m51_checks import (
+    run_quest_log_m49_m51_checks,
+)
 from tests.rpg.manual.quest_puzzle_checks import run_quest_puzzle_checks
 from tests.rpg.manual.safe import _compact_json, _safe_dict, _safe_list
 from tests.rpg.manual.scenario_setup import (
@@ -43,14 +46,14 @@ from tests.rpg.manual.session_helpers import (
 )
 from tests.rpg.manual.social_checks import run_social_checks
 from tests.rpg.manual.spatial_checks import run_spatial_checks
+from tests.rpg.manual.story_arc_milestones_m46_m48_checks import (
+    run_story_arc_milestones_m46_m48_checks,
+)
 from tests.rpg.manual.story_authoring_approval_m37_m39_checks import (
     run_story_authoring_approval_m37_m39_checks,
 )
 from tests.rpg.manual.story_authoring_inspector_m40_m42_checks import (
     run_story_authoring_inspector_m40_m42_checks,
-)
-from tests.rpg.manual.story_pack_activation_m43_m45_checks import (
-    run_story_pack_activation_m43_m45_checks,
 )
 from tests.rpg.manual.story_authoring_m34_m36_checks import (
     run_story_authoring_m34_m36_checks,
@@ -60,6 +63,9 @@ from tests.rpg.manual.story_event_queue_m25_m27_checks import (
     run_story_event_queue_m25_m27_checks,
 )
 from tests.rpg.manual.story_m1_m3_checks import run_story_m1_m3_checks
+from tests.rpg.manual.story_pack_activation_m43_m45_checks import (
+    run_story_pack_activation_m43_m45_checks,
+)
 from tests.rpg.manual.story_pack_m13_m15_checks import run_story_pack_m13_m15_checks
 from tests.rpg.manual.story_proposal_m10_m12_checks import (
     run_story_proposal_m10_m12_checks,
@@ -318,7 +324,12 @@ def _run_one_service_scenario(
 
         quest_puzzle_checks = [
             check for check in checks
-            if isinstance(check, dict) and (str(check.get("type") or "").startswith("quest_") or str(check.get("type") or "").startswith("puzzle_"))
+            if isinstance(check, dict) and (
+                str(check.get("type") or "") in {
+                    "quest_stage", "quest_objective", "quest_condition", "quest_reward_payload",
+                    "puzzle_state", "puzzle_flag", "puzzle_condition"
+                }
+            )
         ]
         if quest_puzzle_checks:
             current_session = {}
@@ -337,10 +348,19 @@ def _run_one_service_scenario(
                         + str(check_result.get("check_type")) + ":" + str(check_result.get("error") or "")
                     )
 
-        story_m1_m3_checks = [
-            check for check in checks
-            if isinstance(check, dict) and (str(check.get("type") or "").startswith("lore_") or str(check.get("type") or "").startswith("story_arc"))
-        ]
+        story_m1_m3_checks = []
+        for check in checks:
+            if not isinstance(check, dict):
+                continue
+            check_type = str(check.get("type") or "")
+            if check_type.startswith("story_arc_milestone"):
+                continue
+            if check_type.startswith("story_objective"):
+                continue
+            if check_type == "story_event_apply_for_milestone":
+                continue
+            if check_type.startswith("lore_") or check_type.startswith("story_arc"):
+                story_m1_m3_checks.append(check)
         if story_m1_m3_checks:
             current_session = {}
             try:
@@ -358,14 +378,18 @@ def _run_one_service_scenario(
                         + str(check_result.get("check_type")) + ":" + str(check_result.get("error") or "")
                     )
 
-        story_event_m4_m6_checks = [
-            check for check in checks
+        story_event_m4_m6_checks = []
+        for check in checks:
+            if not isinstance(check, dict):
+                continue
+            check_type = str(check.get("type") or "")
+            if check_type == "story_event_apply_for_milestone":
+                continue
             if (
-                isinstance(check, dict)
-                and str(check.get("type") or "").startswith("story_event_")
-                and not str(check.get("type") or "").startswith("story_event_queue_")
-            )
-        ]
+                check_type.startswith("story_event_")
+                and not check_type.startswith("story_event_queue_")
+            ):
+                story_event_m4_m6_checks.append(check)
         if story_event_m4_m6_checks:
             current_session = {}
             try:
@@ -568,15 +592,18 @@ def _run_one_service_scenario(
                         + str(check_result.get("error") or "")
                     )
 
-        campaign_journal_m31_m33_checks = [
-            check
-            for check in checks
-            if isinstance(check, dict)
-            and (
-                str(check.get("type") or "").startswith("campaign_journal")
-                or str(check.get("type") or "").startswith("campaign_story_recap")
-            )
-        ]
+        campaign_journal_m31_m33_checks = []
+        for check in checks:
+            if not isinstance(check, dict):
+                continue
+            check_type = str(check.get("type") or "")
+            if check_type == "campaign_journal_objective_contains":
+                continue
+            if (
+                check_type.startswith("campaign_journal")
+                or check_type.startswith("campaign_story_recap")
+            ):
+                campaign_journal_m31_m33_checks.append(check)
         if campaign_journal_m31_m33_checks:
             current_session = {}
             try:
@@ -722,6 +749,80 @@ def _run_one_service_scenario(
                 if not check_result.get("ok"):
                     turn_record.setdefault("scenario_warnings", []).append(
                         "story_pack_activation_m43_m45_check_failed:"
+                        + str(scenario_name)
+                        + ":turn_"
+                        + str(turn_index)
+                        + ":"
+                        + str(check_result.get("check_type"))
+                        + ":"
+                        + str(check_result.get("error") or "")
+                    )
+
+        story_arc_milestones_m46_m48_checks = [
+            check
+            for check in checks
+            if isinstance(check, dict)
+            and (
+                str(check.get("type") or "").startswith("story_arc_milestone")
+                or str(check.get("type") or "").startswith("story_objective")
+                or str(check.get("type") or "") == "story_event_apply_for_milestone"
+                or str(check.get("type") or "") == "campaign_journal_objective_contains"
+                or str(check.get("type") or "") == "campaign_recap_objective"
+            )
+        ]
+        if story_arc_milestones_m46_m48_checks:
+            current_session = {}
+            try:
+                current_session = _ensure_manual_session(session_id)
+            except Exception:
+                current_session = session
+
+            story_arc_milestones_m46_m48_check_results = run_story_arc_milestones_m46_m48_checks(
+                checks=story_arc_milestones_m46_m48_checks,
+                result=turn_record.get("result") or turn_record,
+                session=current_session,
+            )
+            turn_record["story_arc_milestones_m46_m48_check_results"] = story_arc_milestones_m46_m48_check_results
+            for check_result in story_arc_milestones_m46_m48_check_results:
+                if not check_result.get("ok"):
+                    turn_record.setdefault("scenario_warnings", []).append(
+                        "story_arc_milestones_m46_m48_check_failed:"
+                        + str(scenario_name)
+                        + ":turn_"
+                        + str(turn_index)
+                        + ":"
+                        + str(check_result.get("check_type"))
+                        + ":"
+                        + str(check_result.get("error") or "")
+                    )
+
+        quest_log_m49_m51_checks = [
+            check
+            for check in checks
+            if isinstance(check, dict)
+            and (
+                str(check.get("type") or "").startswith("quest_log")
+                or str(check.get("type") or "").startswith("objective_tracker")
+                or str(check.get("type") or "") == "campaign_recap_objective_tracker"
+            )
+        ]
+        if quest_log_m49_m51_checks:
+            current_session = {}
+            try:
+                current_session = _ensure_manual_session(session_id)
+            except Exception:
+                current_session = session
+
+            quest_log_m49_m51_check_results = run_quest_log_m49_m51_checks(
+                checks=quest_log_m49_m51_checks,
+                result=turn_record.get("result") or turn_record,
+                session=current_session,
+            )
+            turn_record["quest_log_m49_m51_check_results"] = quest_log_m49_m51_check_results
+            for check_result in quest_log_m49_m51_check_results:
+                if not check_result.get("ok"):
+                    turn_record.setdefault("scenario_warnings", []).append(
+                        "quest_log_m49_m51_check_failed:"
                         + str(scenario_name)
                         + ":turn_"
                         + str(turn_index)

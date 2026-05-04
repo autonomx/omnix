@@ -22,6 +22,8 @@ ALLOWED_STORY_EVENT_EFFECT_TYPES = {
     "social_delta",
     "npc_evolution",
     "world_event_emit",
+    "milestone_add",
+    "milestone_complete",
 }
 
 
@@ -145,6 +147,31 @@ def validate_story_event_effect(
                     "field": str(key),
                     "value": value,
                 }
+
+    if effect_type == "milestone_add":
+        arc_id = str(effect.get("arc_id") or "")
+        if arc_id and not get_story_arc(simulation_state, arc_id):
+            return {
+                "ok": False,
+                "reason": "arc_missing",
+                "effect_type": effect_type,
+                "arc_id": arc_id,
+            }
+        if not str(effect.get("title") or ""):
+            return {
+                "ok": False,
+                "reason": "missing_milestone_title",
+                "effect_type": effect_type,
+            }
+
+    if effect_type == "milestone_complete":
+        milestone_id = str(effect.get("milestone_id") or "")
+        if not milestone_id:
+            return {
+                "ok": False,
+                "reason": "missing_milestone_id",
+                "effect_type": effect_type,
+            }
 
     return {
         "ok": True,

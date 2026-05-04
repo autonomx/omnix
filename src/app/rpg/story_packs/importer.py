@@ -6,6 +6,7 @@ from typing import Any, Dict, List
 
 from app.rpg.lore.state import get_lore_entry, upsert_lore_entry
 from app.rpg.quests.transitions import apply_quest_transition
+from app.rpg.story_arcs.milestones import add_story_arc_milestone
 from app.rpg.story_arcs.state import get_story_arc, start_story_arc
 from app.rpg.story_packs.definition_registries import (
     register_escalation_rule_definition,
@@ -113,6 +114,42 @@ def _import_story_arcs(
     return {"ok": all(row.get("ok") for row in results), "results": results, "arc_ids": arc_ids}
 
 
+def _import_story_arc_milestones(
+    simulation_state: Dict[str, Any],
+    story_arcs: List[Dict[str, Any]],
+    *,
+    turn_index: int = 0,
+) -> Dict[str, Any]:
+    results = []
+    milestone_ids = []
+    for arc in story_arcs:
+        arc_id = str(arc.get("arc_id") or "")
+        for index, milestone in enumerate(arc.get("milestones") or []):
+            if isinstance(milestone, dict):
+                result = add_story_arc_milestone(
+                    simulation_state,
+                    arc_id=arc_id,
+                    milestone_id=str(milestone.get("milestone_id") or ""),
+                    title=str(milestone.get("title") or ""),
+                    summary=str(milestone.get("summary") or ""),
+                    objective_text=str(milestone.get("objective_text") or ""),
+                    journal_on_complete=str(milestone.get("journal_on_complete") or ""),
+                    quest_id=str(milestone.get("quest_id") or ""),
+                    priority=int(milestone.get("priority") or 50),
+                    turn_index=turn_index,
+                    tags=milestone.get("tags") or [],
+                    metadata={
+                        "source": "story_pack_import",
+                        "proposal_id": str(arc.get("proposal_id") or ""),
+                        "index": index,
+                    },
+                )
+                results.append(result)
+                if result.get("ok"):
+                    milestone_ids.append(str(milestone.get("milestone_id") or ""))
+    return {"ok": all(row.get("ok") for row in results), "results": results, "milestone_ids": milestone_ids}
+
+
 def _import_story_events(
     simulation_state: Dict[str, Any],
     story_events: List[Dict[str, Any]],
@@ -214,6 +251,24 @@ def import_story_pack(
             "results": {"lore": lore_result, "story_arcs": arc_result},
         }
 
+    milestone_result = _import_story_arc_milestones(
+        simulation_state,
+        proposal.get("story_arcs") or [],
+        turn_index=turn_index,
+    )
+    if not milestone_result.get("ok"):
+        return {
+            "ok": False,
+            "reason": "milestone_import_failed",
+            "pack_id": pack_id,
+            "validation": validation,
+            "results": {
+                "lore": lore_result,
+                "story_arcs": arc_result,
+                "milestones": milestone_result,
+            },
+        }
+
     event_result = _import_story_events(
         simulation_state,
         normalized.get("story_events") or [],
@@ -281,6 +336,7 @@ def import_story_pack(
         event_ids=event_result.get("event_ids") or [],
         rule_ids=rule_result.get("rule_ids") or [],
         quest_ids=quest_result.get("quest_ids") or [],
+        milestone_ids=milestone_result.get("milestone_ids") or [],
         turn_index=turn_index,
         metadata={"source": "story_pack_importer_v1"},
     )
@@ -293,6 +349,7 @@ def import_story_pack(
         "results": {
             "lore": lore_result,
             "story_arcs": arc_result,
+            "milestones": milestone_result,
             "story_events": event_result,
             "escalation_rules": rule_result,
             "starter_quests": quest_result,

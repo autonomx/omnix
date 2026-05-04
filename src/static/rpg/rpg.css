@@ -527,3 +527,123 @@
     border-bottom: 1px solid rgba(255, 255, 255, 0.08);
     font-size: 12px;
 }
+
+.quest-log-panel {
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    border-radius: 12px;
+    padding: 12px;
+    margin: 10px 0;
+    background: rgba(8, 10, 18, 0.72);
+    color: #f2efe7;
+    max-height: 520px;
+    overflow: auto;
+}
+
+.quest-log-header {
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+    align-items: center;
+    margin-bottom: 10px;
+}
+
+.quest-log-header h3 {
+    margin: 0;
+    font-size: 16px;
+}
+
+.quest-log-subtitle,
+.quest-log-status,
+.objective-tracker-meta,
+.quest-log-group-meta {
+    color: rgba(242, 239, 231, 0.72);
+    font-size: 12px;
+}
+
+.quest-log-status.error {
+    color: #ff9b9b;
+}
+
+.objective-tracker-list {
+    display: grid;
+    gap: 8px;
+}
+
+.objective-tracker-item {
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 10px;
+    padding: 10px;
+    background: rgba(255, 255, 255, 0.045);
+}
+
+.objective-tracker-item.pinned {
+    background: rgba(255, 255, 255, 0.08);
+}
+
+.objective-tracker-title {
+    font-weight: 700;
+    margin-bottom: 4px;
+}
+
+.objective-tracker-text {
+    font-size: 13px;
+}
+
+.objective-tracker-meta,
+.objective-tracker-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 6px;
+}
+
+.quest-log-panel button {
+    border-radius: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    background: rgba(255, 255, 255, 0.10);
+    color: #f2efe7;
+    padding: 7px 10px;
+    cursor: pointer;
+}
+
+.quest-log-panel button:hover {
+    background: rgba(255, 255, 255, 0.18);
+}
+
+.quest-log-details {
+    margin-top: 10px;
+}
+
+.quest-log-group {
+    border-top: 1px solid rgba(255, 255, 255, 0.10);
+    padding-top: 10px;
+    margin-top: 10px;
+}
+
+.quest-log-group h4 {
+    margin: 0 0 4px;
+    font-size: 14px;
+}
+
+.quest-log-objective-section {
+    margin-top: 8px;
+    font-size: 12px;
+}
+
+.quest-log-objective {
+    border-radius: 8px;
+    margin-top: 4px;
+    padding: 6px 8px;
+    background: rgba(0, 0, 0, 0.16);
+}
+
+.quest-log-objective.completed {
+    color: rgba(242, 239, 231, 0.62);
+    text-decoration: line-through;
+}
+
+.quest-log-empty {
+    color: rgba(242, 239, 231, 0.62);
+    font-size: 12px;
+    padding: 8px;
+}

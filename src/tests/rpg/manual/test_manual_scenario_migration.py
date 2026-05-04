@@ -28,6 +28,9 @@ from tests.rpg.manual.scenarios.expected_quest_puzzle_l13_l15_names import (
 from tests.rpg.manual.scenarios.expected_social_l10_l12_names import (
     EXPECTED_SOCIAL_L10_L12_SCENARIO_NAMES,
 )
+from tests.rpg.manual.scenarios.expected_story_arc_milestones_m46_m48_names import (
+    EXPECTED_STORY_ARC_MILESTONES_M46_M48_SCENARIO_NAMES,
+)
 from tests.rpg.manual.scenarios.expected_story_authoring_approval_m37_m39_names import (
     EXPECTED_STORY_AUTHORING_APPROVAL_M37_M39_SCENARIO_NAMES,
 )
@@ -61,7 +64,7 @@ def test_manual_scenario_migration_audit():
     new_names = set(new_scenarios.keys())
 
     # All scenarios should be present (updated count after campaign journal M31-M33 integration)
-    assert len(new_names) == 290, f"Expected 290 scenarios, found {len(new_names)}"
+    assert len(new_names) == 327, f"Expected 327 scenarios, found {len(new_names)}"
 
     # Check that Bundle A scenarios have been successfully ported
     bundle_a_scenarios = {"lodging_success", "shop_success", "blocked_purchase", "paid_info"}
@@ -264,3 +267,10 @@ def test_manual_scenario_registry_includes_story_authoring_approval_m37_m39_name
     missing = EXPECTED_STORY_AUTHORING_APPROVAL_M37_M39_SCENARIO_NAMES - names
 
     assert not missing, f"Missing M37-M39 story authoring approval scenarios: {sorted(missing)}"
+
+
+def test_manual_scenario_registry_includes_story_arc_milestones_m46_m48_names():
+    names = set(build_service_scenarios().keys())
+    missing = EXPECTED_STORY_ARC_MILESTONES_M46_M48_SCENARIO_NAMES - names
+
+    assert not missing, f"Missing M46-M48 story arc milestone scenarios: {sorted(missing)}"

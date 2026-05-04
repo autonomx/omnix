@@ -63,6 +63,11 @@ def normalize_imported_story_pack(value: Dict[str, Any], *, pack_id: str = "") -
             for item in _safe_list(value.get("quest_ids"))
             if str(item)
         ][:200],
+        "milestone_ids": [
+            str(item)
+            for item in _safe_list(value.get("milestone_ids"))
+            if str(item)
+        ][:200],
         "idempotent": _safe_bool(value.get("idempotent"), True),
         "metadata": dict(_safe_dict(value.get("metadata"))),
     }
@@ -122,6 +127,7 @@ def mark_story_pack_imported(
     event_ids: List[str] | None = None,
     rule_ids: List[str] | None = None,
     quest_ids: List[str] | None = None,
+    milestone_ids: List[str] | None = None,
     turn_index: int = 0,
     metadata: Dict[str, Any] | None = None,
 ) -> Dict[str, Any]:
@@ -131,6 +137,7 @@ def mark_story_pack_imported(
 
     row = normalize_imported_story_pack(
         {
+
             "pack_id": pack_id,
             "proposal_id": proposal_id,
             "title": title or pack_id,
@@ -139,7 +146,10 @@ def mark_story_pack_imported(
             "arc_ids": arc_ids or [],
             "event_ids": event_ids or [],
             "rule_ids": rule_ids or [],
+            "event_ids": event_ids or [],
+            "rule_ids": rule_ids or [],
             "quest_ids": quest_ids or [],
+            "milestone_ids": milestone_ids or [],
             "idempotent": True,
             "metadata": metadata or {},
         },
