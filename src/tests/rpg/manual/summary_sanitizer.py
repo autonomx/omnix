@@ -884,19 +884,13 @@ def sanitize_turn_for_summary(
             {
                 "check_type": item.get("check_type"),
                 "ok": item.get("ok"),
-                "add_result": item.get("add_result"),
-                "complete_result": item.get("complete_result"),
-                "milestone_id": item.get("milestone_id"),
-                "milestone": item.get("milestone"),
-                "projection": item.get("projection"),
-                "applied": item.get("applied"),
-                "journal": item.get("journal"),
-                "recap": item.get("recap"),
-                "matched": item.get("matched"),
-                "count": item.get("count"),
-                "expected_status": item.get("expected_status"),
+                "payload": item.get("payload"),
+                "actions": item.get("actions"),
+                "expected_mode": item.get("expected_mode"),
                 "expected_objective_id": item.get("expected_objective_id"),
-                "expected_active_count": item.get("expected_active_count"),
+                "expected_action_category": item.get("expected_action_category"),
+                "expected_category": item.get("expected_category"),
+                "expected_objective_ids": item.get("expected_objective_ids"),
                 "expected_ok": item.get("expected_ok"),
                 "expected_reason": item.get("expected_reason"),
                 "expected_summary_contains": item.get("expected_summary_contains"),
@@ -904,6 +898,27 @@ def sanitize_turn_for_summary(
                 "error": item.get("error"),
             }
             for item in story_arc_milestones_m46_m48_check_results[:50]
+            if isinstance(item, dict)
+        ]
+
+    player_action_context_m52_m54_check_results = turn.get("player_action_context_m52_m54_check_results")
+    if isinstance(player_action_context_m52_m54_check_results, list):
+        sanitized["player_action_context_m52_m54_check_results"] = [
+            {
+                "check_type": item.get("check_type"),
+                "ok": item.get("ok"),
+                "payload": item.get("payload"),
+                "actions": item.get("actions"),
+                "expected_mode": item.get("expected_mode"),
+                "expected_objective_id": item.get("expected_objective_id"),
+                "expected_action_category": item.get("expected_action_category"),
+                "expected_category": item.get("expected_category"),
+                "expected_first_objective_id": item.get("expected_first_objective_id"),
+                "must_not_contain": item.get("must_not_contain"),
+                "limit": item.get("limit"),
+                "error": item.get("error"),
+            }
+            for item in player_action_context_m52_m54_check_results[:50]
             if isinstance(item, dict)
         ]
 

@@ -81,6 +81,7 @@ from app.image.api import router as image_router
 from app.image.chat_hooks import maybe_enqueue_chat_image
 from app.image.story_hooks import maybe_enqueue_story_scene_image
 from app.providers.base import ChatMessage
+from app.rpg.api.player_action_context import router as rpg_player_action_context_router
 from app.rpg.api.quest_log import router as rpg_quest_log_router
 from app.rpg.api.rpg_adventure_routes import rpg_adventure_bp
 from app.rpg.api.rpg_game_routes import rpg_game_bp
@@ -524,6 +525,7 @@ app.include_router(rpg_game_bp)
 app.include_router(rpg_session_bp)
 app.include_router(rpg_story_authoring_router)
 app.include_router(rpg_quest_log_router)
+app.include_router(rpg_player_action_context_router)
 app.include_router(image_router)
 
 # Import and register remaining RPG routers

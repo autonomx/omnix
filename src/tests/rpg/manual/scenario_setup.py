@@ -511,6 +511,24 @@ def _apply_manual_scenario_setup(session: Dict[str, Any], scenario: Dict[str, An
                     reason=str(action.get("reason") or "scenario_unpin"),
                 )
 
+    if isinstance(scenario.get("setup_scene"), dict):
+        simulation_state["scene"] = {
+            **dict(simulation_state.get("scene") or {}),
+            **dict(scenario.get("setup_scene") or {}),
+        }
+
+    if isinstance(scenario.get("setup_combat_state"), dict):
+        simulation_state["combat_state"] = {
+            **dict(simulation_state.get("combat_state") or {}),
+            **dict(scenario.get("setup_combat_state") or {}),
+        }
+
+    if isinstance(scenario.get("setup_runtime"), dict):
+        simulation_state["runtime"] = {
+            **dict(simulation_state.get("runtime") or {}),
+            **dict(scenario.get("setup_runtime") or {}),
+        }
+
     for item in scenario.get("setup_story_event_queue") or []:
         if isinstance(item, dict):
             if item.get("definition_event_id"):

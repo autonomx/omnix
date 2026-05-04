@@ -195,6 +195,13 @@ try:
 except Exception:
     STORY_QUEST_LOG_M49_M51_SCENARIOS = {}
 
+try:
+    from tests.rpg.manual.scenarios.player_action_context_m52_m54 import (
+        PLAYER_ACTION_CONTEXT_M52_M54_SCENARIOS,
+    )
+except Exception:
+    PLAYER_ACTION_CONTEXT_M52_M54_SCENARIOS = {}
+
 
 def build_service_scenarios(
     legacy_scenarios: Dict[str, Dict[str, Any]] | None = None,
@@ -235,6 +242,7 @@ def build_service_scenarios(
         STORY_PACK_ACTIVATION_M43_M45_SCENARIOS,
         STORY_ARC_MILESTONES_M46_M48_SCENARIOS,
         STORY_QUEST_LOG_M49_M51_SCENARIOS,
+        PLAYER_ACTION_CONTEXT_M52_M54_SCENARIOS,
     ]:
         overlap = set(scenarios).intersection(group)
         if overlap:

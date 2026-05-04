@@ -434,5 +434,158 @@
     `;
   }
 
+  // ---------------------------------------------------------------------------
+  // Player Action Context / Suggested Actions
+  // ---------------------------------------------------------------------------
+
+  function rpgGetSessionIdForPlayerActionContext() {
+    if (window.RPG_SESSION_ID) return window.RPG_SESSION_ID;
+    if (window.rpgSessionId) return window.rpgSessionId;
+    const input = document.querySelector('[name="session_id"], #session_id, #rpg-session-id');
+    if (input && input.value) return input.value;
+    return "";
+  }
+
+  function ensurePlayerActionContextPanel() {
+    let panel = document.getElementById("player-action-context-panel");
+    if (panel) return panel;
+
+    const host =
+        document.getElementById("rpg-top-panels") ||
+        document.getElementById("rpg-inspector-panel") ||
+        document.getElementById("rpg-debug-panel") ||
+        document.body;
+
+    panel = document.createElement("section");
+    panel.id = "player-action-context-panel";
+    panel.className = "player-action-context-panel";
+    panel.innerHTML = `
+      <div class="player-action-context-header">
+        <div>
+          <h3>Suggested Actions</h3>
+          <div id="player-action-context-meta" class="player-action-context-meta"></div>
+        </div>
+        <button type="button" id="player-action-context-refresh-btn">Refresh</button>
+      </div>
+      <div id="player-action-context-actions" class="player-action-context-actions"></div>
+      <details class="player-action-context-details">
+        <summary>Player-visible context</summary>
+        <pre id="player-action-context-json"></pre>
+      </details>
+      <div id="player-action-context-status" class="player-action-context-status"></div>
+    `;
+    host.appendChild(panel);
+
+    document.getElementById("player-action-context-refresh-btn")?.addEventListener("click", () => {
+      refreshPlayerActionContextPanel();
+    });
+    return panel;
+  }
+
+  function setPlayerActionContextStatus(message, isError = false) {
+    const el = document.getElementById("player-action-context-status");
+    if (!el) return;
+    el.textContent = message || "";
+    el.classList.toggle("error", Boolean(isError));
+  }
+
+  async function postPlayerActionContext(endpoint, payload) {
+    const response = await fetch(endpoint, {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify(payload),
+    });
+    const text = await response.text();
+    let data = {};
+    try {
+      data = text ? JSON.parse(text) : {};
+    } catch (err) {
+      throw new Error(`Invalid JSON from ${endpoint}: ${text.slice(0, 200)}`);
+    }
+    if (!response.ok) {
+      throw new Error(data?.detail || data?.error || data?.reason || `HTTP ${response.status}`);
+    }
+    return data;
+  }
+
+  function renderPlayerActionContext(payload) {
+    ensurePlayerActionContextPanel();
+    const meta = document.getElementById("player-action-context-meta");
+    const actionsTarget = document.getElementById("player-action-context-actions");
+    const jsonTarget = document.getElementById("player-action-context-json");
+    if (!actionsTarget || !jsonTarget) return;
+
+    if (meta) {
+      const location = payload?.location?.location || "current location";
+      meta.textContent = `${payload?.mode || "unknown"} · ${location}`;
+    }
+
+    const actions = Array.isArray(payload?.suggested_actions) ? payload.suggested_actions : [];
+    if (!actions.length) {
+      actionsTarget.innerHTML = `<div class="player-action-context-empty">No suggested actions.</div>`;
+    } else {
+      actionsTarget.innerHTML = actions.map((action) => `
+        <article class="player-action-suggestion" data-command="${escapeHtml(action.command || "")}">
+          <div class="player-action-suggestion-title">${escapeHtml(action.label || action.command)}</div>
+          <div class="player-action-suggestion-command">${escapeHtml(action.command || "")}</div>
+          <div class="player-action-suggestion-meta">
+            <span>${escapeHtml(action.category || "")}</span>
+            <span>priority ${escapeHtml(action.priority ?? "")}</span>
+            ${action.objective_id ? `<span>${escapeHtml(action.objective_id)}</span>` : ""}
+          </div>
+          <div class="player-action-suggestion-reason">${escapeHtml(action.reason || "")}</div>
+          <button type="button" data-player-action-command="${escapeHtml(action.command || "")}">Use Action</button>
+        </article>
+      `).join("");
+    }
+
+    actionsTarget.querySelectorAll("[data-player-action-command]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const command = button.getAttribute("data-player-action-command") || "";
+        const input =
+          document.getElementById("rpg-command-input") ||
+          document.getElementById("message-input") ||
+          document.querySelector("textarea, input[type='text']");
+        if (input) {
+          input.value = command;
+          input.dispatchEvent(new Event("input", {bubbles: true}));
+          input.focus();
+        }
+      });
+    });
+
+    jsonTarget.textContent = JSON.stringify(payload, null, 2);
+  }
+
+  async function refreshPlayerActionContextPanel() {
+    ensurePlayerActionContextPanel();
+    const sessionId = rpgGetSessionIdForPlayerActionContext();
+    if (!sessionId) {
+      setPlayerActionContextStatus("No RPG session id available.", true);
+      return;
+    }
+    setPlayerActionContextStatus("Loading suggested actions...");
+    try {
+      const payload = await postPlayerActionContext("/api/rpg/player_action_context/payload", {
+        session_id: sessionId,
+        turn_index: 0,
+        limit: 12,
+      });
+      renderPlayerActionContext(payload);
+      setPlayerActionContextStatus(`Suggested actions: ${(payload.suggested_actions || []).length}`);
+    } catch (err) {
+      console.error("[RPG][player-action-context] refresh failed", err);
+      setPlayerActionContextStatus(String(err.message || err), true);
+    }
+  }
+
+  window.refreshPlayerActionContextPanel = refreshPlayerActionContextPanel;
+  window.renderPlayerActionContext = renderPlayerActionContext;
+
+  document.addEventListener("DOMContentLoaded", () => {
+    ensurePlayerActionContextPanel();
+    refreshPlayerActionContextPanel();
+  });
+
   window.RpgLivingWorldInspector = { render };
 })();

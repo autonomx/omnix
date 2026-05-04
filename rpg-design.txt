@@ -1,60 +1,58 @@
-Bundle M49-M51 — Quest Log UI + Objective Tracker Runtime v1
+Bundle M52-M54 — Player Action Context + Suggested Actions v1
 GOAL:
-Expose the deterministic milestone/objective system as a player-facing Quest Log / Objective Tracker.
+Create a deterministic player-facing action context that can power:
+- UI suggested actions
+- future autoplay player-agent prompts
+- manual/debug inspection
+- long-run campaign evaluation
 
 This bundle adds:
-- objective tracker runtime payload
-- quest log projection from story arc milestones
-- active/completed objective grouping
-- objective pin/unpin state
-- objective visibility/ordering rules
-- player-facing API payload
-- legacy UI quest log/objective tracker panel
-- manual tests validating runtime payloads and bounded output
+- player action context runtime payload
+- suggested action generation from current mode/state
+- objective-aware suggestions
+- NPC/social suggestions
+- quest log/tracker suggestions
+- story arc/campaign director suggestions
+- combat/service/travel fallback suggestions
+- bounded output
+- player-visible only context
+- manual tests with full debug
 
 Important:
-- Quest log is derived from authoritative milestone state.
-- Pin/unpin is UI/player preference state only.
-- UI cannot create/complete objectives.
-- LLM cannot create/complete objectives.
-- Completion still only happens through deterministic story event effects or simulation helpers.
-- Quest log must stay bounded and save/load-safe.
-Patch 1 — Add quest log runtime package
-1. Add src/app/rpg/quest_log/__init__.py
+- Suggested actions are not authoritative outcomes.
+- Suggested actions are player-facing affordances only.
+- UI/LLM can choose an action, but simulation still resolves it.
+- Hidden lore/secret state must not appear.
+- The LLM player-agent should eventually receive this payload instead of raw simulation state.
+Patch 1 — Add player action context package
+1. Add src/app/rpg/player_action_context/__init__.py
 *** Begin Patch
-*** Add File: src/app/rpg/quest_log/__init__.py
-+"""Player-facing quest log and objective tracker projections."""
+*** Add File: src/app/rpg/player_action_context/__init__.py
++"""Player-facing action context and suggested action generation."""
 +
-+from app.rpg.quest_log.runtime import (
-+    build_objective_tracker_payload,
-+    build_quest_log_payload,
-+    pin_objective,
-+    unpin_objective,
-+)
-+from app.rpg.quest_log.state import (
-+    ensure_quest_log_state,
-+    normalize_quest_log_state,
++from app.rpg.player_action_context.runtime import (
++    build_player_action_context,
++    build_suggested_actions,
 +)
 +
 +__all__ = [
-+    "build_objective_tracker_payload",
-+    "build_quest_log_payload",
-+    "ensure_quest_log_state",
-+    "normalize_quest_log_state",
-+    "pin_objective",
-+    "unpin_objective",
++    "build_player_action_context",
++    "build_suggested_actions",
 +]
 *** End Patch
-2. Add src/app/rpg/quest_log/state.py
+2. Add src/app/rpg/player_action_context/runtime.py
 *** Begin Patch
-*** Add File: src/app/rpg/quest_log/state.py
+*** Add File: src/app/rpg/player_action_context/runtime.py
 +from __future__ import annotations
 +
 +from typing import Any, Dict, List
 +
++from app.rpg.campaign_journal.journal import build_player_story_recap
++from app.rpg.quest_log.runtime import build_objective_tracker_payload, build_quest_log_payload
 +
-+MAX_PINNED_OBJECTIVES = 10
-+MAX_QUEST_LOG_HISTORY = 100
++
++MAX_SUGGESTED_ACTIONS = 12
++MAX_CONTEXT_ITEMS = 12
 +
 +
 +def _safe_dict(value: Any) -> Dict[str, Any]:
@@ -69,419 +67,429 @@ Patch 1 — Add quest log runtime package
 +    return value if isinstance(value, str) else ""
 +
 +
-+def _safe_int(value: Any, default: int = 0) -> int:
-+    try:
-+        return int(value)
-+    except Exception:
-+        return default
++def _unique_action_id(prefix: str, index: int) -> str:
++    return f"{prefix}:{int(index or 0):03d}"
 +
 +
-+def _unique_strings(values: Any, *, limit: int) -> List[str]:
++def _append_action(
++    actions: List[Dict[str, Any]],
++    *,
++    action_id: str,
++    label: str,
++    command: str,
++    category: str,
++    priority: int = 50,
++    reason: str = "",
++    objective_id: str = "",
++    npc_id: str = "",
++    mode: str = "",
++    metadata: Dict[str, Any] | None = None,
++) -> None:
++    label = str(label or "").strip()
++    command = str(command or "").strip()
++    if not label or not command:
++        return
++    existing = {row.get("command") for row in actions}
++    if command in existing:
++        return
++    actions.append(
++        {
++            "action_id": action_id,
++            "label": label,
++            "command": command,
++            "category": category,
++            "priority": max(0, min(100, int(priority or 0))),
++            "reason": reason,
++            "objective_id": objective_id,
++            "npc_id": npc_id,
++            "mode": mode,
++            "metadata": metadata or {},
++        }
++    )
++
++
++def _derive_mode(simulation_state: Dict[str, Any]) -> str:
++    runtime = _safe_dict(simulation_state.get("runtime"))
++    combat_state = _safe_dict(simulation_state.get("combat_state"))
++    service_state = _safe_dict(simulation_state.get("service_state"))
++    travel_state = _safe_dict(simulation_state.get("travel_state"))
++
++    if combat_state.get("active") or combat_state.get("in_combat"):
++        return "combat"
++    if service_state.get("active") or service_state.get("pending_service"):
++        return "service"
++    if travel_state.get("active") or travel_state.get("pending_travel"):
++        return "travel"
++    return _safe_str(runtime.get("mode")) or "exploration"
++
++
++def _derive_location(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
++    scene = _safe_dict(simulation_state.get("scene"))
++    location = _safe_dict(simulation_state.get("location"))
++    world = _safe_dict(simulation_state.get("world_state"))
++    current_location = (
++        _safe_str(scene.get("location"))
++        or _safe_str(location.get("name"))
++        or _safe_str(world.get("current_location"))
++        or _safe_str(simulation_state.get("current_location"))
++        or "current location"
++    )
++    scene_id = (
++        _safe_str(scene.get("scene_id"))
++        or _safe_str(location.get("location_id"))
++        or _safe_str(simulation_state.get("scene_id"))
++        or ""
++    )
++    return {
++        "scene_id": scene_id,
++        "location": current_location,
++        "description": _safe_str(scene.get("description")) or _safe_str(location.get("description")),
++    }
++
++
++def _visible_npcs(simulation_state: Dict[str, Any]) -> List[Dict[str, Any]]:
++    scene = _safe_dict(simulation_state.get("scene"))
++    npcs = []
++    raw_scene_npcs = scene.get("nearby_npcs") or scene.get("npcs") or []
++    for item in _safe_list(raw_scene_npcs):
++        if isinstance(item, str):
++            npcs.append({"npc_id": item, "name": item, "role": ""})
++        elif isinstance(item, dict):
++            npc_id = _safe_str(item.get("npc_id")) or _safe_str(item.get("id")) or _safe_str(item.get("name"))
++            name = _safe_str(item.get("name")) or npc_id
++            if npc_id or name:
++                npcs.append(
++                    {
++                        "npc_id": npc_id,
++                        "name": name,
++                        "role": _safe_str(item.get("role")),
++                        "relationship": _safe_str(item.get("relationship")),
++                    }
++                )
++
++    # Fallback for older tests/fixtures that keep visible NPCs in session/runtime state.
++    runtime = _safe_dict(simulation_state.get("runtime"))
++    for item in _safe_list(runtime.get("nearby_npcs")):
++        if isinstance(item, str):
++            npcs.append({"npc_id": item, "name": item, "role": ""})
++        elif isinstance(item, dict):
++            npc_id = _safe_str(item.get("npc_id")) or _safe_str(item.get("id")) or _safe_str(item.get("name"))
++            name = _safe_str(item.get("name")) or npc_id
++            if npc_id or name:
++                npcs.append({"npc_id": npc_id, "name": name, "role": _safe_str(item.get("role"))})
++
 +    seen = set()
-+    out: List[str] = []
-+    for value in _safe_list(values):
-+        text = str(value or "").strip()
-+        if not text or text in seen:
++    out = []
++    for row in npcs:
++        key = row.get("npc_id") or row.get("name")
++        if not key or key in seen:
 +            continue
-+        seen.add(text)
-+        out.append(text)
-+        if len(out) >= limit:
++        seen.add(key)
++        out.append(row)
++        if len(out) >= MAX_CONTEXT_ITEMS:
 +            break
 +    return out
 +
 +
-+def normalize_quest_log_history_item(value: Dict[str, Any]) -> Dict[str, Any]:
-+    value = _safe_dict(value)
-+    return {
-+        "objective_id": _safe_str(value.get("objective_id")),
-+        "action": _safe_str(value.get("action")),
-+        "turn_index": _safe_int(value.get("turn_index"), 0),
-+        "reason": _safe_str(value.get("reason")),
-+        "metadata": dict(_safe_dict(value.get("metadata"))),
-+    }
-+
-+
-+def normalize_quest_log_state(value: Dict[str, Any] | None) -> Dict[str, Any]:
-+    value = _safe_dict(value)
-+    pinned = _unique_strings(value.get("pinned_objective_ids"), limit=MAX_PINNED_OBJECTIVES)
-+    history = [
-+        normalize_quest_log_history_item(row)
-+        for row in _safe_list(value.get("history"))
++def _active_objectives(simulation_state: Dict[str, Any]) -> List[Dict[str, Any]]:
++    tracker = build_objective_tracker_payload(simulation_state, limit=8)
++    return [
++        dict(row)
++        for row in _safe_list(tracker.get("objectives"))
 +        if isinstance(row, dict)
-+    ][-MAX_QUEST_LOG_HISTORY:]
-+    return {
-+        "version": 1,
-+        "pinned_objective_ids": pinned,
-+        "history": history,
-+        "max_pinned_objectives": MAX_PINNED_OBJECTIVES,
-+        "max_history": MAX_QUEST_LOG_HISTORY,
-+    }
++    ][:8]
 +
 +
-+def ensure_quest_log_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
-+    if not isinstance(simulation_state, dict):
-+        raise TypeError("simulation_state_must_be_dict")
-+    state = normalize_quest_log_state(simulation_state.get("quest_log_state"))
-+    simulation_state["quest_log_state"] = state
-+    return state
-+
-+
-+def append_quest_log_history(
-+    simulation_state: Dict[str, Any],
-+    *,
-+    objective_id: str,
-+    action: str,
-+    turn_index: int = 0,
-+    reason: str = "",
-+    metadata: Dict[str, Any] | None = None,
-+) -> Dict[str, Any]:
-+    state = ensure_quest_log_state(simulation_state)
-+    history = list(state.get("history") or [])
-+    history.append(
-+        normalize_quest_log_history_item(
++def _known_lore_rows(recap: Dict[str, Any]) -> List[Dict[str, Any]]:
++    rows = []
++    for row in _safe_list(recap.get("known_lore")):
++        if not isinstance(row, dict):
++            continue
++        truth_status = _safe_str(row.get("truth_status"))
++        if truth_status == "secret" and not row.get("revealed_to_player"):
++            continue
++        rows.append(
 +            {
-+                "objective_id": objective_id,
-+                "action": action,
-+                "turn_index": turn_index,
-+                "reason": reason,
-+                "metadata": metadata or {},
++                "lore_id": _safe_str(row.get("lore_id")),
++                "title": _safe_str(row.get("title")),
++                "truth_status": truth_status or "unknown",
++                "summary": _safe_str(row.get("summary")),
 +            }
 +        )
-+    )
-+    state["history"] = history[-MAX_QUEST_LOG_HISTORY:]
-+    simulation_state["quest_log_state"] = normalize_quest_log_state(state)
-+    return {"ok": True, "reason": "quest_log_history_recorded"}
-*** End Patch
-3. Add src/app/rpg/quest_log/runtime.py
-*** Begin Patch
-*** Add File: src/app/rpg/quest_log/runtime.py
-+from __future__ import annotations
-+
-+from typing import Any, Dict, List
-+
-+from app.rpg.quest_log.state import (
-+    MAX_PINNED_OBJECTIVES,
-+    append_quest_log_history,
-+    ensure_quest_log_state,
-+)
-+from app.rpg.story_arcs.milestones import build_story_objective_projection
++        if len(rows) >= MAX_CONTEXT_ITEMS:
++            break
++    return rows
 +
 +
-+MAX_QUEST_LOG_OBJECTIVES = 50
-+MAX_OBJECTIVE_TRACKER_ITEMS = 8
-+
-+
-+def _safe_dict(value: Any) -> Dict[str, Any]:
-+    return value if isinstance(value, dict) else {}
-+
-+
-+def _safe_list(value: Any) -> List[Any]:
-+    return value if isinstance(value, list) else []
-+
-+
-+def _safe_str(value: Any) -> str:
-+    return value if isinstance(value, str) else ""
-+
-+
-+def _objective_sort_key(row: Dict[str, Any], pinned_ids: List[str]):
-+    objective_id = str(row.get("objective_id") or row.get("milestone_id") or "")
-+    pinned_index = pinned_ids.index(objective_id) if objective_id in pinned_ids else 9999
-+    return (
-+        pinned_index,
-+        objective_id not in pinned_ids,
-+        -int(row.get("priority") or 0),
-+        str(row.get("arc_id") or ""),
-+        str(row.get("title") or ""),
-+        objective_id,
-+    )
-+
-+
-+def _normalize_objective_row(row: Dict[str, Any], *, pinned_ids: List[str]) -> Dict[str, Any]:
-+    row = _safe_dict(row)
-+    objective_id = str(row.get("objective_id") or row.get("milestone_id") or "")
-+    return {
-+        "objective_id": objective_id,
-+        "milestone_id": str(row.get("milestone_id") or objective_id),
-+        "arc_id": str(row.get("arc_id") or ""),
-+        "quest_id": str(row.get("quest_id") or ""),
-+        "title": str(row.get("title") or row.get("objective_text") or objective_id),
-+        "objective_text": str(row.get("objective_text") or row.get("title") or objective_id),
-+        "status": str(row.get("status") or "active"),
-+        "priority": int(row.get("priority") or 0),
-+        "pinned": objective_id in pinned_ids,
-+    }
-+
-+
-+def _group_objectives_by_quest(objectives: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-+    groups: Dict[str, Dict[str, Any]] = {}
-+    for row in objectives:
-+        quest_id = str(row.get("quest_id") or row.get("arc_id") or "story")
-+        group = groups.setdefault(
-+            quest_id,
++def _active_arc_rows(recap: Dict[str, Any]) -> List[Dict[str, Any]]:
++    rows = []
++    for row in _safe_list(recap.get("active_arcs")):
++        if not isinstance(row, dict):
++            continue
++        rows.append(
 +            {
-+                "quest_id": quest_id,
-+                "title": quest_id.replace("_", " ").replace(":", " ").title(),
-+                "active_objectives": [],
-+                "completed_objectives": [],
-+            },
++                "arc_id": _safe_str(row.get("arc_id")),
++                "title": _safe_str(row.get("title")),
++                "stage": _safe_str(row.get("stage")),
++                "pressure": int(row.get("pressure") or 0),
++            }
 +        )
-+        if row.get("status") == "completed":
-+            group["completed_objectives"].append(row)
-+        else:
-+            group["active_objectives"].append(row)
-+    out = list(groups.values())
-+    out.sort(
-+        key=lambda group: (
-+            not bool(group.get("active_objectives")),
-+            str(group.get("quest_id") or ""),
++        if len(rows) >= MAX_CONTEXT_ITEMS:
++            break
++    return rows
++
++
++def _objective_actions(objectives: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
++    actions: List[Dict[str, Any]] = []
++    for index, objective in enumerate(objectives[:5]):
++        objective_id = _safe_str(objective.get("objective_id"))
++        text = _safe_str(objective.get("objective_text")) or _safe_str(objective.get("title"))
++        title = _safe_str(objective.get("title")) or text
++        if not text:
++            continue
++        _append_action(
++            actions,
++            action_id=_unique_action_id("objective", index),
++            label=f"Pursue objective: {title}",
++            command=f"I focus on the objective: {text}",
++            category="objective",
++            priority=95 - index,
++            reason="Active objective from quest log.",
++            objective_id=objective_id,
 +        )
++    return actions
++
++
++def _npc_actions(npcs: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
++    actions: List[Dict[str, Any]] = []
++    for index, npc in enumerate(npcs[:5]):
++        name = _safe_str(npc.get("name")) or _safe_str(npc.get("npc_id"))
++        npc_id = _safe_str(npc.get("npc_id")) or name
++        if not name:
++            continue
++        _append_action(
++            actions,
++            action_id=_unique_action_id("npc_talk", index),
++            label=f"Talk to {name}",
++            command=f"I talk to {name} and ask what they know.",
++            category="social",
++            priority=72 - index,
++            reason="Nearby NPC is available for conversation.",
++            npc_id=npc_id,
++        )
++        _append_action(
++            actions,
++            action_id=_unique_action_id("npc_ask_objective", index),
++            label=f"Ask {name} about current objectives",
++            command=f"I ask {name} if they know anything that can help with my current objective.",
++            category="social",
++            priority=65 - index,
++            reason="NPC may provide grounded context or rumors.",
++            npc_id=npc_id,
++        )
++    return actions
++
++
++def _mode_actions(mode: str, location: Dict[str, Any]) -> List[Dict[str, Any]]:
++    actions: List[Dict[str, Any]] = []
++    place = _safe_str(location.get("location")) or "the area"
++
++    if mode == "combat":
++        _append_action(
++            actions,
++            action_id="mode:combat_attack",
++            label="Make a cautious attack",
++            command="I make a cautious attack against the nearest hostile enemy.",
++            category="combat",
++            priority=90,
++            reason="Combat is active.",
++            mode=mode,
++        )
++        _append_action(
++            actions,
++            action_id="mode:combat_defend",
++            label="Defend and assess enemies",
++            command="I defend myself and look for the safest tactical opening.",
++            category="combat",
++            priority=85,
++            reason="Combat is active.",
++            mode=mode,
++        )
++        return actions
++
++    if mode == "service":
++        _append_action(
++            actions,
++            action_id="mode:service_confirm",
++            label="Confirm available service",
++            command="I ask what services are available and what they cost.",
++            category="service",
++            priority=80,
++            reason="Service interaction appears available.",
++            mode=mode,
++        )
++        return actions
++
++    if mode == "travel":
++        _append_action(
++            actions,
++            action_id="mode:travel_continue",
++            label="Continue travel carefully",
++            command="I continue traveling carefully while watching for danger.",
++            category="travel",
++            priority=80,
++            reason="Travel appears active.",
++            mode=mode,
++        )
++        return actions
++
++    _append_action(
++        actions,
++        action_id="mode:observe",
++        label=f"Observe {place}",
++        command=f"I carefully observe {place} for useful details, exits, people, and threats.",
++        category="exploration",
++        priority=60,
++        reason="General exploration fallback.",
++        mode=mode,
 +    )
-+    return out
++    _append_action(
++        actions,
++        action_id="mode:listen",
++        label="Listen for rumors or trouble",
++        command="I listen for rumors, signs of danger, or anything connected to my current objectives.",
++        category="exploration",
++        priority=55,
++        reason="General story discovery fallback.",
++        mode=mode,
++    )
++    _append_action(
++        actions,
++        action_id="mode:quest_log",
++        label="Review quest log",
++        command="I review my quest log and decide what objective to pursue next.",
++        category="quest_log",
++        priority=50,
++        reason="Quest log can guide next action.",
++        mode=mode,
++    )
++    return actions
 +
 +
-+def build_quest_log_payload(
++def _arc_actions(arcs: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
++    actions: List[Dict[str, Any]] = []
++    for index, arc in enumerate(arcs[:4]):
++        title = _safe_str(arc.get("title")) or _safe_str(arc.get("arc_id"))
++        stage = _safe_str(arc.get("stage"))
++        if not title:
++            continue
++        _append_action(
++            actions,
++            action_id=_unique_action_id("arc", index),
++            label=f"Investigate story arc: {title}",
++            command=f"I look for a grounded way to make progress on {title}.",
++            category="story_arc",
++            priority=62 - index,
++            reason=f"Active story arc stage: {stage}",
++            metadata={"arc_id": arc.get("arc_id"), "stage": stage},
++        )
++    return actions
++
++
++def build_suggested_actions(
 +    simulation_state: Dict[str, Any],
 +    *,
-+    limit: int = MAX_QUEST_LOG_OBJECTIVES,
++    limit: int = MAX_SUGGESTED_ACTIONS,
++    turn_index: int = 0,
++) -> List[Dict[str, Any]]:
++    limit = max(0, min(MAX_SUGGESTED_ACTIONS, int(limit or MAX_SUGGESTED_ACTIONS)))
++    recap = build_player_story_recap(simulation_state, turn_index=turn_index, max_items=MAX_CONTEXT_ITEMS)
++    objectives = _active_objectives(simulation_state)
++    npcs = _visible_npcs(simulation_state)
++    location = _derive_location(simulation_state)
++    mode = _derive_mode(simulation_state)
++    arcs = _active_arc_rows(recap)
++
++    actions: List[Dict[str, Any]] = []
++    for row in _objective_actions(objectives):
++        actions.append(row)
++    for row in _npc_actions(npcs):
++        actions.append(row)
++    for row in _arc_actions(arcs):
++        actions.append(row)
++    for row in _mode_actions(mode, location):
++        actions.append(row)
++
++    actions.sort(
++        key=lambda row: (
++            -int(row.get("priority") or 0),
++            str(row.get("category") or ""),
++            str(row.get("action_id") or ""),
++        )
++    )
++    return actions[:limit]
++
++
++def build_player_action_context(
++    simulation_state: Dict[str, Any],
++    *,
++    turn_index: int = 0,
++    limit: int = MAX_SUGGESTED_ACTIONS,
 +) -> Dict[str, Any]:
-+    limit = max(0, min(MAX_QUEST_LOG_OBJECTIVES, int(limit or MAX_QUEST_LOG_OBJECTIVES)))
-+    state = ensure_quest_log_state(simulation_state)
-+    pinned_ids = list(state.get("pinned_objective_ids") or [])
-+    projection = build_story_objective_projection(simulation_state, limit=limit)
-+
-+    active = [
-+        _normalize_objective_row(row, pinned_ids=pinned_ids)
-+        for row in _safe_list(projection.get("active_objectives"))
-+        if isinstance(row, dict)
-+    ]
-+    completed = [
-+        _normalize_objective_row(row, pinned_ids=pinned_ids)
-+        for row in _safe_list(projection.get("completed_milestones"))
-+        if isinstance(row, dict)
-+    ]
-+    active.sort(key=lambda row: _objective_sort_key(row, pinned_ids))
-+    completed.sort(key=lambda row: (str(row.get("arc_id") or ""), str(row.get("objective_id") or "")))
-+
-+    active = active[:limit]
-+    completed = completed[:limit]
-+    groups = _group_objectives_by_quest(active + completed)
++    limit = max(0, min(MAX_SUGGESTED_ACTIONS, int(limit or MAX_SUGGESTED_ACTIONS)))
++    recap = build_player_story_recap(simulation_state, turn_index=turn_index, max_items=MAX_CONTEXT_ITEMS)
++    quest_log = build_quest_log_payload(simulation_state, limit=MAX_CONTEXT_ITEMS)
++    tracker = build_objective_tracker_payload(simulation_state, limit=8)
++    location = _derive_location(simulation_state)
++    mode = _derive_mode(simulation_state)
++    npcs = _visible_npcs(simulation_state)
++    suggested_actions = build_suggested_actions(
++        simulation_state,
++        limit=limit,
++        turn_index=turn_index,
++    )
 +
 +    return {
 +        "ok": True,
-+        "format_version": "quest_log_v1",
-+        "pinned_objective_ids": pinned_ids,
-+        "active_objectives": active,
-+        "completed_objectives": completed,
-+        "quest_groups": groups[:limit],
-+        "history": list(state.get("history") or [])[-limit:],
-+        "actions": {
-+            "payload": "/api/rpg/quest_log/payload",
-+            "tracker": "/api/rpg/quest_log/tracker",
-+            "pin": "/api/rpg/quest_log/pin",
-+            "unpin": "/api/rpg/quest_log/unpin",
++        "format_version": "player_action_context_v1",
++        "turn_index": int(turn_index or 0),
++        "mode": mode,
++        "location": location,
++        "nearby_npcs": npcs,
++        "active_objectives": list(tracker.get("objectives") or [])[:8],
++        "quest_log_summary": {
++            "active_count": len(quest_log.get("active_objectives") or []),
++            "completed_count": len(quest_log.get("completed_objectives") or []),
++            "pinned_objective_ids": list(quest_log.get("pinned_objective_ids") or []),
 +        },
-+        "rules": [
-+            "Quest log is derived from deterministic milestone state.",
-+            "Pinning only changes display preference.",
-+            "The UI cannot create or complete objectives.",
++        "known_lore": _known_lore_rows(recap),
++        "active_arcs": _active_arc_rows(recap),
++        "suggested_actions": suggested_actions,
++        "restrictions": [
++            "Choose an action; do not decide the outcome.",
++            "Do not invent rewards, XP, gold, loot, deaths, or quest completion.",
++            "Do not reveal hidden or secret lore.",
++            "The simulation resolves success, failure, costs, and consequences.",
 +        ],
++        "player_agent_schema": {
++            "format_version": "rpg_player_action_v1",
++            "intent": "short intent",
++            "action": "single player-facing action command",
++            "reason": "why this action was chosen",
++            "risk": "low|medium|high",
++            "goal_id": "optional objective_id",
++        },
 +        "bounded": {
-+            "limit": limit,
-+            "max_objectives": MAX_QUEST_LOG_OBJECTIVES,
-+            "max_pinned_objectives": MAX_PINNED_OBJECTIVES,
++            "suggested_action_limit": limit,
++            "max_context_items": MAX_CONTEXT_ITEMS,
++            "max_suggested_actions": MAX_SUGGESTED_ACTIONS,
 +        },
 +    }
-+
-+
-+def build_objective_tracker_payload(
-+    simulation_state: Dict[str, Any],
-+    *,
-+    limit: int = MAX_OBJECTIVE_TRACKER_ITEMS,
-+) -> Dict[str, Any]:
-+    limit = max(0, min(MAX_OBJECTIVE_TRACKER_ITEMS, int(limit or MAX_OBJECTIVE_TRACKER_ITEMS)))
-+    quest_log = build_quest_log_payload(simulation_state, limit=MAX_QUEST_LOG_OBJECTIVES)
-+    active = list(quest_log.get("active_objectives") or [])
-+    pinned = [row for row in active if row.get("pinned")]
-+    unpinned = [row for row in active if not row.get("pinned")]
-+    tracker = (pinned + unpinned)[:limit]
-+    return {
-+        "ok": True,
-+        "format_version": "objective_tracker_v1",
-+        "objectives": tracker,
-+        "pinned_objective_ids": list(quest_log.get("pinned_objective_ids") or []),
-+        "active_count": len(active),
-+        "completed_count": len(quest_log.get("completed_objectives") or []),
-+        "bounded": {
-+            "limit": limit,
-+            "max_tracker_items": MAX_OBJECTIVE_TRACKER_ITEMS,
-+        },
-+    }
-+
-+
-+def pin_objective(
-+    simulation_state: Dict[str, Any],
-+    objective_id: str,
-+    *,
-+    turn_index: int = 0,
-+    reason: str = "player_pinned",
-+) -> Dict[str, Any]:
-+    objective_id = str(objective_id or "")
-+    if not objective_id:
-+        return {"ok": False, "reason": "missing_objective_id"}
-+
-+    projection = build_story_objective_projection(simulation_state, limit=MAX_QUEST_LOG_OBJECTIVES)
-+    active_ids = {
-+        str(row.get("objective_id") or "")
-+        for row in _safe_list(projection.get("active_objectives"))
-+        if isinstance(row, dict)
-+    }
-+    if objective_id not in active_ids:
-+        return {
-+            "ok": False,
-+            "reason": "objective_not_active",
-+            "objective_id": objective_id,
-+        }
-+
-+    state = ensure_quest_log_state(simulation_state)
-+    pinned = list(state.get("pinned_objective_ids") or [])
-+    if objective_id in pinned:
-+        return {
-+            "ok": True,
-+            "reason": "already_pinned",
-+            "objective_id": objective_id,
-+            "pinned_objective_ids": pinned,
-+        }
-+    if len(pinned) >= MAX_PINNED_OBJECTIVES:
-+        return {
-+            "ok": False,
-+            "reason": "pinned_objective_limit_reached",
-+            "objective_id": objective_id,
-+            "max_pinned_objectives": MAX_PINNED_OBJECTIVES,
-+        }
-+    pinned.append(objective_id)
-+    state["pinned_objective_ids"] = pinned
-+    simulation_state["quest_log_state"] = state
-+    append_quest_log_history(
-+        simulation_state,
-+        objective_id=objective_id,
-+        action="pin",
-+        turn_index=turn_index,
-+        reason=reason,
-+    )
-+    return {
-+        "ok": True,
-+        "reason": "pinned",
-+        "objective_id": objective_id,
-+        "pinned_objective_ids": ensure_quest_log_state(simulation_state).get("pinned_objective_ids") or [],
-+    }
-+
-+
-+def unpin_objective(
-+    simulation_state: Dict[str, Any],
-+    objective_id: str,
-+    *,
-+    turn_index: int = 0,
-+    reason: str = "player_unpinned",
-+) -> Dict[str, Any]:
-+    objective_id = str(objective_id or "")
-+    if not objective_id:
-+        return {"ok": False, "reason": "missing_objective_id"}
-+    state = ensure_quest_log_state(simulation_state)
-+    pinned = list(state.get("pinned_objective_ids") or [])
-+    if objective_id not in pinned:
-+        return {
-+            "ok": True,
-+            "reason": "already_unpinned",
-+            "objective_id": objective_id,
-+            "pinned_objective_ids": pinned,
-+        }
-+    pinned = [item for item in pinned if item != objective_id]
-+    state["pinned_objective_ids"] = pinned
-+    simulation_state["quest_log_state"] = state
-+    append_quest_log_history(
-+        simulation_state,
-+        objective_id=objective_id,
-+        action="unpin",
-+        turn_index=turn_index,
-+        reason=reason,
-+    )
-+    return {
-+        "ok": True,
-+        "reason": "unpinned",
-+        "objective_id": objective_id,
-+        "pinned_objective_ids": ensure_quest_log_state(simulation_state).get("pinned_objective_ids") or [],
-+    }
 *** End Patch
-Patch 2 — Add quest log to campaign recap and inspector payload
-4. Patch src/app/rpg/campaign_journal/journal.py
-
-Add import:
-
+Patch 2 — Add API endpoint
+3. Add src/app/rpg/api/player_action_context.py
 *** Begin Patch
-*** Update File: src/app/rpg/campaign_journal/journal.py
-@@
- from app.rpg.story_arcs.milestones import build_story_objective_projection
-+from app.rpg.quest_log.runtime import build_objective_tracker_payload
-*** End Patch
-
-Add tracker to build_player_story_recap(...) return:
-
-*** Begin Patch
-*** Update File: src/app/rpg/campaign_journal/journal.py
-@@
-     return {
-         "ok": True,
-         "format_version": "campaign_story_recap_v1",
-         "turn_index": int(turn_index or 0),
-@@
-         "objectives": dict(journal.get("objectives") or {}),
-+        "objective_tracker": build_objective_tracker_payload(simulation_state, limit=min(max_items, 8)),
-         "recent_events": recent_events,
-@@
-             "active_objectives": list(
-                 dict(journal.get("objectives") or {}).get("active_objectives") or []
-             )[:max_items],
-+            "objective_tracker": build_objective_tracker_payload(simulation_state, limit=min(max_items, 8)).get("objectives") or [],
-             "known_rumors": [
-*** End Patch
-
-This is intentionally derived payload only. It does not mutate story state.
-
-5. Patch src/app/rpg/story_authoring/inspector.py
-
-Add import:
-
-*** Begin Patch
-*** Update File: src/app/rpg/story_authoring/inspector.py
-@@
- from app.rpg.story_packs.activation import build_story_pack_activation_snapshot
-+from app.rpg.quest_log.runtime import build_objective_tracker_payload, build_quest_log_payload
-*** End Patch
-
-Add quest log/tracker to inspector payload:
-
-*** Begin Patch
-*** Update File: src/app/rpg/story_authoring/inspector.py
-@@
-         "history": history,
-         "story_pack_activation": build_story_pack_activation_snapshot(simulation_state, limit=limit),
-+        "quest_log": build_quest_log_payload(simulation_state, limit=limit),
-+        "objective_tracker": build_objective_tracker_payload(simulation_state, limit=min(limit, 8)),
-         "actions": {
-             "draft": "/api/rpg/story_authoring/draft",
-             "pending": "/api/rpg/story_authoring/pending",
-             "approve": "/api/rpg/story_authoring/approve",
-             "reject": "/api/rpg/story_authoring/reject",
-             "activate_pack": "/api/rpg/story_authoring/packs/activate",
-             "deactivate_pack": "/api/rpg/story_authoring/packs/deactivate",
-+            "quest_log": "/api/rpg/quest_log/payload",
-+            "objective_tracker": "/api/rpg/quest_log/tracker",
-         },
-*** End Patch
-Patch 3 — Add API endpoints
-6. Add src/app/rpg/api/quest_log.py
-*** Begin Patch
-*** Add File: src/app/rpg/api/quest_log.py
+*** Add File: src/app/rpg/api/player_action_context.py
 +from __future__ import annotations
 +
 +from typing import Any, Dict
@@ -489,33 +497,17 @@ Patch 3 — Add API endpoints
 +from fastapi import APIRouter
 +from pydantic import BaseModel, Field
 +
-+from app.rpg.quest_log.runtime import (
-+    build_objective_tracker_payload,
-+    build_quest_log_payload,
-+    pin_objective,
-+    unpin_objective,
-+)
++from app.rpg.player_action_context.runtime import build_player_action_context
 +from app.rpg.session_store import get_session
 +
 +
-+router = APIRouter(prefix="/api/rpg/quest_log", tags=["rpg-quest-log"])
++router = APIRouter(prefix="/api/rpg/player_action_context", tags=["rpg-player-action-context"])
 +
 +
-+class QuestLogPayloadRequest(BaseModel):
++class PlayerActionContextRequest(BaseModel):
 +    session_id: str
-+    limit: int = Field(default=50, ge=0, le=50)
-+
-+
-+class ObjectiveTrackerRequest(BaseModel):
-+    session_id: str
-+    limit: int = Field(default=8, ge=0, le=8)
-+
-+
-+class ObjectivePinRequest(BaseModel):
-+    session_id: str
-+    objective_id: str
 +    turn_index: int = 0
-+    reason: str = ""
++    limit: int = Field(default=12, ge=0, le=12)
 +
 +
 +def _simulation_state_for_session(session_id: str) -> Dict[str, Any]:
@@ -526,49 +518,15 @@ Patch 3 — Add API endpoints
 +
 +
 +@router.post("/payload")
-+def quest_log_payload(request: QuestLogPayloadRequest) -> Dict[str, Any]:
++def player_action_context_payload(request: PlayerActionContextRequest) -> Dict[str, Any]:
 +    simulation_state = _simulation_state_for_session(request.session_id)
-+    return build_quest_log_payload(simulation_state, limit=request.limit)
-+
-+
-+@router.post("/tracker")
-+def objective_tracker_payload(request: ObjectiveTrackerRequest) -> Dict[str, Any]:
-+    simulation_state = _simulation_state_for_session(request.session_id)
-+    return build_objective_tracker_payload(simulation_state, limit=request.limit)
-+
-+
-+@router.post("/pin")
-+def pin_quest_log_objective(request: ObjectivePinRequest) -> Dict[str, Any]:
-+    simulation_state = _simulation_state_for_session(request.session_id)
-+    result = pin_objective(
++    return build_player_action_context(
 +        simulation_state,
-+        request.objective_id,
 +        turn_index=request.turn_index,
-+        reason=request.reason or "player_pinned",
++        limit=request.limit,
 +    )
-+    return {
-+        **result,
-+        "quest_log": build_quest_log_payload(simulation_state),
-+        "tracker": build_objective_tracker_payload(simulation_state),
-+    }
-+
-+
-+@router.post("/unpin")
-+def unpin_quest_log_objective(request: ObjectivePinRequest) -> Dict[str, Any]:
-+    simulation_state = _simulation_state_for_session(request.session_id)
-+    result = unpin_objective(
-+        simulation_state,
-+        request.objective_id,
-+        turn_index=request.turn_index,
-+        reason=request.reason or "player_unpinned",
-+    )
-+    return {
-+        **result,
-+        "quest_log": build_quest_log_payload(simulation_state),
-+        "tracker": build_objective_tracker_payload(simulation_state),
-+    }
 *** End Patch
-7. Register router in active FastAPI app
+4. Register router in active FastAPI app
 
 Patch the active app bootstrap file that already includes RPG routers, commonly one of:
 
@@ -581,27 +539,56 @@ Add:
 *** Begin Patch
 *** Update File: src/app/main.py
 @@
-+from app.rpg.api.quest_log import router as rpg_quest_log_router
++from app.rpg.api.player_action_context import router as rpg_player_action_context_router
 @@
  app.include_router(...)
-+app.include_router(rpg_quest_log_router)
++app.include_router(rpg_player_action_context_router)
 *** End Patch
 
-If your actual active app file is not src/app/main.py, apply this to the file that registers existing /api/rpg/... routers.
+If your app bootstrap is not src/app/main.py, apply this to the file that registers existing /api/rpg/... routers.
 
-Patch 4 — Legacy UI objective tracker / quest log panel
-8. Patch src/static/rpg.js
+Patch 3 — Add context to campaign recap / inspector
+5. Patch src/app/rpg/story_authoring/inspector.py
 
-Add near the existing story authoring inspector block or other RPG panel helpers:
+Add import:
+
+*** Begin Patch
+*** Update File: src/app/rpg/story_authoring/inspector.py
+@@
+ from app.rpg.quest_log.runtime import build_objective_tracker_payload, build_quest_log_payload
++from app.rpg.player_action_context.runtime import build_player_action_context
+*** End Patch
+
+Add to payload:
+
+*** Begin Patch
+*** Update File: src/app/rpg/story_authoring/inspector.py
+@@
+         "quest_log": build_quest_log_payload(simulation_state, limit=limit),
+         "objective_tracker": build_objective_tracker_payload(simulation_state, limit=min(limit, 8)),
++        "player_action_context": build_player_action_context(simulation_state, limit=min(limit, 12)),
+         "actions": {
+@@
+             "objective_tracker": "/api/rpg/quest_log/tracker",
++            "player_action_context": "/api/rpg/player_action_context/payload",
+         },
+*** End Patch
+
+This gives the inspector a single payload that can show “what the AI player would see.”
+
+Patch 4 — Legacy UI suggested actions panel
+6. Patch src/static/rpg.js
+
+Add this block near the quest log panel or inspector helpers:
 
 *** Begin Patch
 *** Update File: src/static/rpg.js
 @@
 +// ---------------------------------------------------------------------------
-+// Quest Log / Objective Tracker
++// Player Action Context / Suggested Actions
 +// ---------------------------------------------------------------------------
 +
-+function rpgGetSessionIdForQuestLog() {
++function rpgGetSessionIdForPlayerActionContext() {
 +    if (window.RPG_SESSION_ID) return window.RPG_SESSION_ID;
 +    if (window.rpgSessionId) return window.rpgSessionId;
 +    const input = document.querySelector('[name="session_id"], #session_id, #rpg-session-id');
@@ -609,8 +596,8 @@ Add near the existing story authoring inspector block or other RPG panel helpers
 +    return "";
 +}
 +
-+function ensureQuestLogPanel() {
-+    let panel = document.getElementById("quest-log-panel");
++function ensurePlayerActionContextPanel() {
++    let panel = document.getElementById("player-action-context-panel");
 +    if (panel) return panel;
 +
 +    const host =
@@ -620,39 +607,39 @@ Add near the existing story authoring inspector block or other RPG panel helpers
 +        document.body;
 +
 +    panel = document.createElement("section");
-+    panel.id = "quest-log-panel";
-+    panel.className = "quest-log-panel";
++    panel.id = "player-action-context-panel";
++    panel.className = "player-action-context-panel";
 +    panel.innerHTML = `
-+        <div class="quest-log-header">
++        <div class="player-action-context-header">
 +            <div>
-+                <h3>Quest Log</h3>
-+                <div class="quest-log-subtitle">Objective tracker</div>
++                <h3>Suggested Actions</h3>
++                <div id="player-action-context-meta" class="player-action-context-meta"></div>
 +            </div>
-+            <button type="button" id="quest-log-refresh-btn">Refresh</button>
++            <button type="button" id="player-action-context-refresh-btn">Refresh</button>
 +        </div>
-+        <div id="objective-tracker-list" class="objective-tracker-list"></div>
-+        <details class="quest-log-details">
-+            <summary>Full quest log</summary>
-+            <div id="quest-log-groups"></div>
++        <div id="player-action-context-actions" class="player-action-context-actions"></div>
++        <details class="player-action-context-details">
++            <summary>Player-visible context</summary>
++            <pre id="player-action-context-json"></pre>
 +        </details>
-+        <div id="quest-log-status" class="quest-log-status"></div>
++        <div id="player-action-context-status" class="player-action-context-status"></div>
 +    `;
 +    host.appendChild(panel);
 +
-+    document.getElementById("quest-log-refresh-btn")?.addEventListener("click", () => {
-+        refreshQuestLogPanel();
++    document.getElementById("player-action-context-refresh-btn")?.addEventListener("click", () => {
++        refreshPlayerActionContextPanel();
 +    });
 +    return panel;
 +}
 +
-+function setQuestLogStatus(message, isError = false) {
-+    const el = document.getElementById("quest-log-status");
++function setPlayerActionContextStatus(message, isError = false) {
++    const el = document.getElementById("player-action-context-status");
 +    if (!el) return;
 +    el.textContent = message || "";
 +    el.classList.toggle("error", Boolean(isError));
 +}
 +
-+async function postQuestLog(endpoint, payload) {
++async function postPlayerActionContext(endpoint, payload) {
 +    const response = await fetch(endpoint, {
 +        method: "POST",
 +        headers: {"Content-Type": "application/json"},
@@ -671,156 +658,93 @@ Add near the existing story authoring inspector block or other RPG panel helpers
 +    return data;
 +}
 +
-+function renderObjectiveTracker(payload) {
-+    const target = document.getElementById("objective-tracker-list");
-+    if (!target) return;
-+    const objectives = Array.isArray(payload?.objectives) ? payload.objectives : [];
-+    if (!objectives.length) {
-+        target.innerHTML = `<div class="quest-log-empty">No active objectives.</div>`;
-+        return;
-+    }
-+    target.innerHTML = objectives.map((objective) => {
-+        const pinned = Boolean(objective.pinned);
-+        return `
-+            <article class="objective-tracker-item ${pinned ? "pinned" : ""}" data-objective-id="${rpgEscapeHtml(objective.objective_id)}">
-+                <div class="objective-tracker-title">${rpgEscapeHtml(objective.title || objective.objective_id)}</div>
-+                <div class="objective-tracker-text">${rpgEscapeHtml(objective.objective_text || "")}</div>
-+                <div class="objective-tracker-meta">
-+                    <span>${rpgEscapeHtml(objective.arc_id || "")}</span>
-+                    <span>${rpgEscapeHtml(objective.status || "active")}</span>
-+                    ${pinned ? "<span>pinned</span>" : ""}
-+                </div>
-+                <div class="objective-tracker-actions">
-+                    <button type="button" data-quest-action="${pinned ? "unpin" : "pin"}" data-objective-id="${rpgEscapeHtml(objective.objective_id)}">
-+                        ${pinned ? "Unpin" : "Pin"}
-+                    </button>
-+                </div>
-+            </article>
-+        `;
-+    }).join("");
++function renderPlayerActionContext(payload) {
++    ensurePlayerActionContextPanel();
++    const meta = document.getElementById("player-action-context-meta");
++    const actionsTarget = document.getElementById("player-action-context-actions");
++    const jsonTarget = document.getElementById("player-action-context-json");
++    if (!actionsTarget || !jsonTarget) return;
 +
-+    target.querySelectorAll("[data-quest-action]").forEach((button) => {
-+        button.addEventListener("click", async () => {
-+            const action = button.getAttribute("data-quest-action");
-+            const objectiveId = button.getAttribute("data-objective-id");
-+            if (action === "pin") {
-+                await pinQuestObjectiveFromUI(objectiveId);
-+            } else if (action === "unpin") {
-+                await unpinQuestObjectiveFromUI(objectiveId);
++    if (meta) {
++        const location = payload?.location?.location || "current location";
++        meta.textContent = `${payload?.mode || "unknown"} · ${location}`;
++    }
++
++    const actions = Array.isArray(payload?.suggested_actions) ? payload.suggested_actions : [];
++    if (!actions.length) {
++        actionsTarget.innerHTML = `<div class="player-action-context-empty">No suggested actions.</div>`;
++    } else {
++        actionsTarget.innerHTML = actions.map((action) => `
++            <article class="player-action-suggestion" data-command="${rpgEscapeHtml(action.command || "")}">
++                <div class="player-action-suggestion-title">${rpgEscapeHtml(action.label || action.command)}</div>
++                <div class="player-action-suggestion-command">${rpgEscapeHtml(action.command || "")}</div>
++                <div class="player-action-suggestion-meta">
++                    <span>${rpgEscapeHtml(action.category || "")}</span>
++                    <span>priority ${rpgEscapeHtml(action.priority ?? "")}</span>
++                    ${action.objective_id ? `<span>${rpgEscapeHtml(action.objective_id)}</span>` : ""}
++                </div>
++                <div class="player-action-suggestion-reason">${rpgEscapeHtml(action.reason || "")}</div>
++                <button type="button" data-player-action-command="${rpgEscapeHtml(action.command || "")}">Use Action</button>
++            </article>
++        `).join("");
++    }
++
++    actionsTarget.querySelectorAll("[data-player-action-command]").forEach((button) => {
++        button.addEventListener("click", () => {
++            const command = button.getAttribute("data-player-action-command") || "";
++            const input =
++                document.getElementById("rpg-command-input") ||
++                document.getElementById("message-input") ||
++                document.querySelector("textarea, input[type='text']");
++            if (input) {
++                input.value = command;
++                input.dispatchEvent(new Event("input", {bubbles: true}));
++                input.focus();
 +            }
 +        });
 +    });
++
++    jsonTarget.textContent = JSON.stringify(payload, null, 2);
 +}
 +
-+function renderQuestLogGroups(payload) {
-+    const target = document.getElementById("quest-log-groups");
-+    if (!target) return;
-+    const groups = Array.isArray(payload?.quest_groups) ? payload.quest_groups : [];
-+    if (!groups.length) {
-+        target.innerHTML = `<div class="quest-log-empty">No quest entries.</div>`;
-+        return;
-+    }
-+    target.innerHTML = groups.map((group) => {
-+        const active = Array.isArray(group.active_objectives) ? group.active_objectives : [];
-+        const completed = Array.isArray(group.completed_objectives) ? group.completed_objectives : [];
-+        return `
-+            <section class="quest-log-group">
-+                <h4>${rpgEscapeHtml(group.title || group.quest_id)}</h4>
-+                <div class="quest-log-group-meta">${rpgEscapeHtml(group.quest_id || "")}</div>
-+                <div class="quest-log-objective-section">
-+                    <strong>Active</strong>
-+                    ${active.map(row => `<div class="quest-log-objective active">${rpgEscapeHtml(row.objective_text || row.title)}</div>`).join("") || `<div class="quest-log-empty">None</div>`}
-+                </div>
-+                <div class="quest-log-objective-section">
-+                    <strong>Completed</strong>
-+                    ${completed.map(row => `<div class="quest-log-objective completed">${rpgEscapeHtml(row.objective_text || row.title)}</div>`).join("") || `<div class="quest-log-empty">None</div>`}
-+                </div>
-+            </section>
-+        `;
-+    }).join("");
-+}
-+
-+async function refreshQuestLogPanel() {
-+    ensureQuestLogPanel();
-+    const sessionId = rpgGetSessionIdForQuestLog();
++async function refreshPlayerActionContextPanel() {
++    ensurePlayerActionContextPanel();
++    const sessionId = rpgGetSessionIdForPlayerActionContext();
 +    if (!sessionId) {
-+        setQuestLogStatus("No RPG session id available.", true);
++        setPlayerActionContextStatus("No RPG session id available.", true);
 +        return;
 +    }
-+    setQuestLogStatus("Loading quest log...");
++    setPlayerActionContextStatus("Loading suggested actions...");
 +    try {
-+        const tracker = await postQuestLog("/api/rpg/quest_log/tracker", {
++        const payload = await postPlayerActionContext("/api/rpg/player_action_context/payload", {
 +            session_id: sessionId,
-+            limit: 8,
-+        });
-+        const questLog = await postQuestLog("/api/rpg/quest_log/payload", {
-+            session_id: sessionId,
-+            limit: 50,
-+        });
-+        renderObjectiveTracker(tracker);
-+        renderQuestLogGroups(questLog);
-+        setQuestLogStatus(`Active objectives: ${tracker.active_count || 0}`);
-+    } catch (err) {
-+        console.error("[RPG][quest-log] refresh failed", err);
-+        setQuestLogStatus(String(err.message || err), true);
-+    }
-+}
-+
-+async function pinQuestObjectiveFromUI(objectiveId) {
-+    const sessionId = rpgGetSessionIdForQuestLog();
-+    setQuestLogStatus("Pinning objective...");
-+    try {
-+        const payload = await postQuestLog("/api/rpg/quest_log/pin", {
-+            session_id: sessionId,
-+            objective_id: objectiveId,
 +            turn_index: 0,
-+            reason: "ui_pin",
++            limit: 12,
 +        });
-+        renderObjectiveTracker(payload.tracker || {});
-+        renderQuestLogGroups(payload.quest_log || {});
-+        setQuestLogStatus(payload.ok ? "Objective pinned." : `Pin failed: ${payload.reason}`);
++        renderPlayerActionContext(payload);
++        setPlayerActionContextStatus(`Suggested actions: ${(payload.suggested_actions || []).length}`);
 +    } catch (err) {
-+        console.error("[RPG][quest-log] pin failed", err);
-+        setQuestLogStatus(String(err.message || err), true);
++        console.error("[RPG][player-action-context] refresh failed", err);
++        setPlayerActionContextStatus(String(err.message || err), true);
 +    }
 +}
 +
-+async function unpinQuestObjectiveFromUI(objectiveId) {
-+    const sessionId = rpgGetSessionIdForQuestLog();
-+    setQuestLogStatus("Unpinning objective...");
-+    try {
-+        const payload = await postQuestLog("/api/rpg/quest_log/unpin", {
-+            session_id: sessionId,
-+            objective_id: objectiveId,
-+            turn_index: 0,
-+            reason: "ui_unpin",
-+        });
-+        renderObjectiveTracker(payload.tracker || {});
-+        renderQuestLogGroups(payload.quest_log || {});
-+        setQuestLogStatus(payload.ok ? "Objective unpinned." : `Unpin failed: ${payload.reason}`);
-+    } catch (err) {
-+        console.error("[RPG][quest-log] unpin failed", err);
-+        setQuestLogStatus(String(err.message || err), true);
-+    }
-+}
-+
-+window.refreshQuestLogPanel = refreshQuestLogPanel;
-+window.renderObjectiveTracker = renderObjectiveTracker;
-+window.renderQuestLogGroups = renderQuestLogGroups;
++window.refreshPlayerActionContextPanel = refreshPlayerActionContextPanel;
++window.renderPlayerActionContext = renderPlayerActionContext;
 +
 +document.addEventListener("DOMContentLoaded", () => {
-+    ensureQuestLogPanel();
-+    refreshQuestLogPanel();
++    ensurePlayerActionContextPanel();
++    refreshPlayerActionContextPanel();
 +});
 *** End Patch
 
-This assumes rpgEscapeHtml(...) already exists from the prior inspector bundle. If it does not, add the same helper used in M40-M42.
+This assumes rpgEscapeHtml(...) exists from earlier UI bundles. If not, add the helper from M40-M42.
 
-9. Patch src/static/rpg.css
+7. Patch src/static/rpg.css
 *** Begin Patch
 *** Update File: src/static/rpg.css
 @@
-+.quest-log-panel {
++.player-action-context-panel {
 +    border: 1px solid rgba(255, 255, 255, 0.14);
 +    border-radius: 12px;
 +    padding: 12px;
@@ -831,7 +755,7 @@ This assumes rpgEscapeHtml(...) already exists from the prior inspector bundle. 
 +    overflow: auto;
 +}
 +
-+.quest-log-header {
++.player-action-context-header {
 +    display: flex;
 +    justify-content: space-between;
 +    gap: 10px;
@@ -839,57 +763,53 @@ This assumes rpgEscapeHtml(...) already exists from the prior inspector bundle. 
 +    margin-bottom: 10px;
 +}
 +
-+.quest-log-header h3 {
++.player-action-context-header h3 {
 +    margin: 0;
 +    font-size: 16px;
 +}
 +
-+.quest-log-subtitle,
-+.quest-log-status,
-+.objective-tracker-meta,
-+.quest-log-group-meta {
++.player-action-context-meta,
++.player-action-context-status,
++.player-action-suggestion-meta,
++.player-action-suggestion-reason {
 +    color: rgba(242, 239, 231, 0.72);
 +    font-size: 12px;
 +}
 +
-+.quest-log-status.error {
++.player-action-context-status.error {
 +    color: #ff9b9b;
 +}
 +
-+.objective-tracker-list {
++.player-action-context-actions {
 +    display: grid;
 +    gap: 8px;
 +}
 +
-+.objective-tracker-item {
++.player-action-suggestion {
 +    border: 1px solid rgba(255, 255, 255, 0.12);
 +    border-radius: 10px;
 +    padding: 10px;
 +    background: rgba(255, 255, 255, 0.045);
 +}
 +
-+.objective-tracker-item.pinned {
-+    background: rgba(255, 255, 255, 0.08);
-+}
-+
-+.objective-tracker-title {
++.player-action-suggestion-title {
 +    font-weight: 700;
 +    margin-bottom: 4px;
 +}
 +
-+.objective-tracker-text {
++.player-action-suggestion-command {
 +    font-size: 13px;
++    margin-bottom: 6px;
 +}
 +
-+.objective-tracker-meta,
-+.objective-tracker-actions {
++.player-action-suggestion-meta {
 +    display: flex;
 +    flex-wrap: wrap;
 +    gap: 8px;
-+    margin-top: 6px;
++    margin-bottom: 4px;
 +}
 +
-+.quest-log-panel button {
++.player-action-context-panel button {
 +    border-radius: 8px;
 +    border: 1px solid rgba(255, 255, 255, 0.18);
 +    background: rgba(255, 255, 255, 0.10);
@@ -898,104 +818,74 @@ This assumes rpgEscapeHtml(...) already exists from the prior inspector bundle. 
 +    cursor: pointer;
 +}
 +
-+.quest-log-panel button:hover {
++.player-action-context-panel button:hover {
 +    background: rgba(255, 255, 255, 0.18);
 +}
 +
-+.quest-log-details {
++.player-action-context-details {
 +    margin-top: 10px;
 +}
 +
-+.quest-log-group {
-+    border-top: 1px solid rgba(255, 255, 255, 0.10);
-+    padding-top: 10px;
-+    margin-top: 10px;
-+}
-+
-+.quest-log-group h4 {
-+    margin: 0 0 4px;
-+    font-size: 14px;
-+}
-+
-+.quest-log-objective-section {
-+    margin-top: 8px;
-+    font-size: 12px;
-+}
-+
-+.quest-log-objective {
++.player-action-context-details pre {
++    white-space: pre-wrap;
++    word-break: break-word;
++    max-height: 260px;
++    overflow: auto;
++    padding: 8px;
 +    border-radius: 8px;
-+    margin-top: 4px;
-+    padding: 6px 8px;
-+    background: rgba(0, 0, 0, 0.16);
++    background: rgba(0, 0, 0, 0.22);
++    font-size: 11px;
 +}
 +
-+.quest-log-objective.completed {
-+    color: rgba(242, 239, 231, 0.62);
-+    text-decoration: line-through;
-+}
-+
-+.quest-log-empty {
++.player-action-context-empty {
 +    color: rgba(242, 239, 231, 0.62);
 +    font-size: 12px;
 +    padding: 8px;
 +}
 *** End Patch
 Patch 5 — Unit tests
-10. Add src/tests/rpg/quest_log/test_quest_log_runtime.py
+8. Add src/tests/rpg/player_action_context/test_player_action_context_runtime.py
 *** Begin Patch
-*** Add File: src/tests/rpg/quest_log/test_quest_log_runtime.py
-+from app.rpg.quest_log.runtime import (
-+    build_objective_tracker_payload,
-+    build_quest_log_payload,
-+    pin_objective,
-+    unpin_objective,
+*** Add File: src/tests/rpg/player_action_context/test_player_action_context_runtime.py
++from app.rpg.player_action_context.runtime import (
++    build_player_action_context,
++    build_suggested_actions,
 +)
-+from app.rpg.story_arcs.milestones import add_story_arc_milestone, complete_story_arc_milestone
++from app.rpg.quest_log.runtime import pin_objective
++from app.rpg.story_arcs.milestones import add_story_arc_milestone
 +from app.rpg.story_arcs.state import start_story_arc
 +
 +
-+def _state_with_objectives():
++def _state_with_objective():
 +    simulation_state = {}
-+    start_story_arc(simulation_state, "arc:x", title="X", stage="start")
++    start_story_arc(simulation_state, "arc:witness", title="Witness Search", stage="rumors", pressure=20)
 +    add_story_arc_milestone(
 +        simulation_state,
-+        arc_id="arc:x",
-+        milestone_id="milestone:a",
++        arc_id="arc:witness",
++        milestone_id="milestone:find_witness",
 +        title="Find the witness",
 +        objective_text="Find the witness near the tavern.",
 +        quest_id="quest:witness",
 +        priority=80,
 +    )
-+    add_story_arc_milestone(
-+        simulation_state,
-+        arc_id="arc:x",
-+        milestone_id="milestone:b",
-+        title="Inspect the road",
-+        objective_text="Inspect the road outside town.",
-+        quest_id="quest:witness",
-+        priority=50,
-+    )
 +    return simulation_state
 +
 +
-+def test_quest_log_payload_projects_active_objectives():
-+    simulation_state = _state_with_objectives()
++def test_player_action_context_includes_active_objective_and_suggestions():
++    simulation_state = _state_with_objective()
 +
-+    payload = build_quest_log_payload(simulation_state)
++    context = build_player_action_context(simulation_state, turn_index=2)
 +
-+    assert payload["ok"] is True
-+    assert payload["format_version"] == "quest_log_v1"
-+    assert [row["objective_id"] for row in payload["active_objectives"]] == [
-+        "milestone:a",
-+        "milestone:b",
-+    ]
-+    assert payload["quest_groups"][0]["quest_id"] == "quest:witness"
++    assert context["ok"] is True
++    assert context["format_version"] == "player_action_context_v1"
++    assert context["active_objectives"][0]["objective_id"] == "milestone:find_witness"
++    assert any(row["category"] == "objective" for row in context["suggested_actions"])
 +
 +
-+def test_objective_tracker_is_bounded():
++def test_suggested_actions_are_bounded():
 +    simulation_state = {}
 +    start_story_arc(simulation_state, "arc:x", title="X", stage="start")
-+    for i in range(20):
++    for i in range(30):
 +        add_story_arc_milestone(
 +            simulation_state,
 +            arc_id="arc:x",
@@ -1004,130 +894,89 @@ Patch 5 — Unit tests
 +            priority=i,
 +        )
 +
-+    tracker = build_objective_tracker_payload(simulation_state, limit=8)
++    actions = build_suggested_actions(simulation_state, limit=12)
 +
-+    assert tracker["ok"] is True
-+    assert len(tracker["objectives"]) <= 8
-+
-+
-+def test_pin_objective_moves_it_to_tracker_top():
-+    simulation_state = _state_with_objectives()
-+
-+    result = pin_objective(simulation_state, "milestone:b", turn_index=2)
-+    tracker = build_objective_tracker_payload(simulation_state, limit=8)
-+
-+    assert result["ok"] is True
-+    assert result["reason"] == "pinned"
-+    assert tracker["objectives"][0]["objective_id"] == "milestone:b"
-+    assert tracker["objectives"][0]["pinned"] is True
++    assert len(actions) <= 12
 +
 +
-+def test_unpin_objective_removes_pin():
-+    simulation_state = _state_with_objectives()
-+    pin_objective(simulation_state, "milestone:b", turn_index=2)
-+
-+    result = unpin_objective(simulation_state, "milestone:b", turn_index=3)
-+    tracker = build_objective_tracker_payload(simulation_state, limit=8)
-+
-+    assert result["ok"] is True
-+    assert result["reason"] == "unpinned"
-+    assert all(row["pinned"] is False for row in tracker["objectives"])
-+
-+
-+def test_pin_missing_or_completed_objective_rejected():
-+    simulation_state = _state_with_objectives()
-+    complete_story_arc_milestone(simulation_state, "milestone:a", turn_index=4)
-+
-+    completed = pin_objective(simulation_state, "milestone:a")
-+    missing = pin_objective(simulation_state, "milestone:missing")
-+
-+    assert completed["ok"] is False
-+    assert completed["reason"] == "objective_not_active"
-+    assert missing["ok"] is False
-+    assert missing["reason"] == "objective_not_active"
-+
-+
-+def test_completed_objectives_appear_in_quest_log_completed_section():
-+    simulation_state = _state_with_objectives()
-+    complete_story_arc_milestone(simulation_state, "milestone:a", turn_index=4)
-+
-+    payload = build_quest_log_payload(simulation_state)
-+
-+    assert [row["objective_id"] for row in payload["active_objectives"]] == ["milestone:b"]
-+    assert [row["objective_id"] for row in payload["completed_objectives"]] == ["milestone:a"]
-*** End Patch
-11. Add src/tests/rpg/quest_log/test_quest_log_state.py
-*** Begin Patch
-*** Add File: src/tests/rpg/quest_log/test_quest_log_state.py
-+import json
-+
-+from app.rpg.quest_log.runtime import pin_objective
-+from app.rpg.quest_log.state import normalize_quest_log_state
-+from app.rpg.story_arcs.milestones import add_story_arc_milestone
-+from app.rpg.story_arcs.state import start_story_arc
-+
-+
-+def test_quest_log_state_json_roundtrip():
-+    simulation_state = {}
-+    start_story_arc(simulation_state, "arc:x", title="X", stage="start")
-+    add_story_arc_milestone(simulation_state, arc_id="arc:x", milestone_id="milestone:x", title="X")
-+    pin_objective(simulation_state, "milestone:x")
-+
-+    encoded = json.dumps(simulation_state["quest_log_state"], sort_keys=True)
-+    decoded = json.loads(encoded)
-+    normalized = normalize_quest_log_state(decoded)
-+
-+    assert normalized["pinned_objective_ids"] == ["milestone:x"]
-+
-+
-+def test_quest_log_pinned_objectives_are_bounded():
-+    raw = {"pinned_objective_ids": [f"milestone:{i}" for i in range(30)]}
-+
-+    normalized = normalize_quest_log_state(raw)
-+
-+    assert len(normalized["pinned_objective_ids"]) == 10
-*** End Patch
-12. Add src/tests/rpg/campaign_journal/test_campaign_recap_objective_tracker.py
-*** Begin Patch
-*** Add File: src/tests/rpg/campaign_journal/test_campaign_recap_objective_tracker.py
-+from app.rpg.campaign_journal.journal import build_player_story_recap
-+from app.rpg.quest_log.runtime import pin_objective
-+from app.rpg.story_arcs.milestones import add_story_arc_milestone
-+from app.rpg.story_arcs.state import start_story_arc
-+
-+
-+def test_campaign_recap_includes_objective_tracker():
-+    simulation_state = {}
-+    start_story_arc(simulation_state, "arc:x", title="X", stage="start")
++def test_player_action_context_prefers_pinned_objective():
++    simulation_state = _state_with_objective()
 +    add_story_arc_milestone(
 +        simulation_state,
-+        arc_id="arc:x",
-+        milestone_id="milestone:x",
-+        title="Find the witness",
-+        objective_text="Find the witness near the tavern.",
++        arc_id="arc:witness",
++        milestone_id="milestone:inspect_road",
++        title="Inspect the road",
++        objective_text="Inspect the road outside town.",
++        quest_id="quest:witness",
++        priority=10,
 +    )
-+    pin_objective(simulation_state, "milestone:x")
++    pin_objective(simulation_state, "milestone:inspect_road")
 +
-+    recap = build_player_story_recap(simulation_state, turn_index=2)
++    context = build_player_action_context(simulation_state, turn_index=2)
 +
-+    assert recap["objective_tracker"]["objectives"][0]["objective_id"] == "milestone:x"
-+    assert recap["narrator_context"]["objective_tracker"][0]["pinned"] is True
++    assert context["active_objectives"][0]["objective_id"] == "milestone:inspect_road"
++    assert context["suggested_actions"][0]["objective_id"] == "milestone:inspect_road"
++
++
++def test_player_action_context_excludes_secret_unrevealed_lore():
++    simulation_state = _state_with_objective()
++    simulation_state["lore_state"] = {
++        "entries": {
++            "lore:secret": {
++                "lore_id": "lore:secret",
++                "title": "Secret Debt",
++                "truth_status": "secret",
++                "revealed_to_player": False,
++                "summary": "Bran secretly owes the Red Sashes.",
++            }
++        }
++    }
++
++    context = build_player_action_context(simulation_state, turn_index=2)
++    encoded = str(context)
++
++    assert "Bran secretly owes the Red Sashes" not in encoded
++
++
++def test_player_action_context_combat_mode_suggests_combat_actions():
++    simulation_state = {"combat_state": {"active": True}}
++
++    context = build_player_action_context(simulation_state, turn_index=2)
++
++    assert context["mode"] == "combat"
++    assert any(row["category"] == "combat" for row in context["suggested_actions"])
+*** End Patch
+9. Add src/tests/rpg/player_action_context/test_player_action_context_schema.py
+*** Begin Patch
+*** Add File: src/tests/rpg/player_action_context/test_player_action_context_schema.py
++from app.rpg.player_action_context.runtime import build_player_action_context
++
++
++def test_player_action_context_has_player_agent_schema_and_restrictions():
++    context = build_player_action_context({}, turn_index=1)
++
++    assert context["player_agent_schema"]["format_version"] == "rpg_player_action_v1"
++    assert "action" in context["player_agent_schema"]
++    assert any("do not decide the outcome" in row.lower() for row in context["restrictions"])
++    assert any("simulation resolves" in row.lower() for row in context["restrictions"])
++
++
++def test_player_action_context_empty_state_has_fallback_actions():
++    context = build_player_action_context({}, turn_index=1)
++
++    assert context["ok"] is True
++    assert context["suggested_actions"]
++    assert any(row["category"] == "exploration" for row in context["suggested_actions"])
 *** End Patch
 Patch 6 — Manual checks/setup
-13. Add src/tests/rpg/manual/quest_log_m49_m51_checks.py
+10. Add src/tests/rpg/manual/player_action_context_m52_m54_checks.py
 *** Begin Patch
-*** Add File: src/tests/rpg/manual/quest_log_m49_m51_checks.py
+*** Add File: src/tests/rpg/manual/player_action_context_m52_m54_checks.py
 +from __future__ import annotations
 +
 +from typing import Any, Dict, List
 +
-+from app.rpg.campaign_journal.journal import build_player_story_recap
-+from app.rpg.quest_log.runtime import (
-+    build_objective_tracker_payload,
-+    build_quest_log_payload,
-+    pin_objective,
-+    unpin_objective,
-+)
++from app.rpg.player_action_context.runtime import build_player_action_context, build_suggested_actions
 +
 +
 +def _safe_dict(value: Any) -> Dict[str, Any]:
@@ -1160,14 +1009,16 @@ Patch 6 — Manual checks/setup
 +        if candidate and not first_non_empty:
 +            first_non_empty = candidate
 +        if (
-+            isinstance(candidate.get("quest_log_state"), dict)
-+            or isinstance(candidate.get("story_arc_milestone_state"), dict)
++            isinstance(candidate.get("story_arc_milestone_state"), dict)
++            or isinstance(candidate.get("quest_log_state"), dict)
++            or isinstance(candidate.get("combat_state"), dict)
++            or isinstance(candidate.get("scene"), dict)
 +        ):
 +            return candidate
 +    return first_non_empty
 +
 +
-+def run_quest_log_m49_m51_check(
++def run_player_action_context_m52_m54_check(
 +    *,
 +    check: Dict[str, Any],
 +    result: Dict[str, Any],
@@ -1176,136 +1027,86 @@ Patch 6 — Manual checks/setup
 +    simulation_state = _extract_simulation_state(result=result, session=session)
 +    check_type = str(check.get("type") or "")
 +
-+    if check_type == "quest_log_payload":
-+        payload = build_quest_log_payload(simulation_state, limit=int(check.get("limit") or 50))
-+        expected_active_objective_id = check.get("expected_active_objective_id")
-+        expected_completed_objective_id = check.get("expected_completed_objective_id")
-+        expected_active_count = check.get("expected_active_count")
++    if check_type == "player_action_context_payload":
++        payload = build_player_action_context(
++            simulation_state,
++            turn_index=int(check.get("turn_index") or 1),
++            limit=int(check.get("limit") or 12),
++        )
++        expected_mode = check.get("expected_mode")
++        expected_objective_id = check.get("expected_objective_id")
++        expected_action_category = check.get("expected_action_category")
++        must_not_contain = str(check.get("must_not_contain") or "")
 +        ok = payload.get("ok") is True
-+        if expected_active_objective_id:
-+            ok = ok and expected_active_objective_id in [
++        if expected_mode:
++            ok = ok and payload.get("mode") == expected_mode
++        if expected_objective_id:
++            ok = ok and expected_objective_id in [
 +                row.get("objective_id") for row in payload.get("active_objectives") or []
 +            ]
-+        if expected_completed_objective_id:
-+            ok = ok and expected_completed_objective_id in [
-+                row.get("objective_id") for row in payload.get("completed_objectives") or []
++        if expected_action_category:
++            ok = ok and expected_action_category in [
++                row.get("category") for row in payload.get("suggested_actions") or []
 +            ]
-+        if expected_active_count is not None:
-+            ok = ok and len(payload.get("active_objectives") or []) == int(expected_active_count)
++        if must_not_contain:
++            ok = ok and must_not_contain not in str(payload)
 +        return {
 +            "check_type": check_type,
 +            "ok": ok,
 +            "payload": payload,
-+            "expected_active_objective_id": expected_active_objective_id,
-+            "expected_completed_objective_id": expected_completed_objective_id,
-+            "expected_active_count": expected_active_count,
++            "expected_mode": expected_mode,
++            "expected_objective_id": expected_objective_id,
++            "expected_action_category": expected_action_category,
++            "must_not_contain": must_not_contain,
 +        }
 +
-+    if check_type == "objective_tracker_payload":
-+        payload = build_objective_tracker_payload(simulation_state, limit=int(check.get("limit") or 8))
++    if check_type == "suggested_actions":
++        actions = build_suggested_actions(
++            simulation_state,
++            turn_index=int(check.get("turn_index") or 1),
++            limit=int(check.get("limit") or 12),
++        )
++        expected_category = check.get("expected_category")
 +        expected_objective_id = check.get("expected_objective_id")
 +        expected_first_objective_id = check.get("expected_first_objective_id")
-+        ok = payload.get("ok") is True
-+        objectives = payload.get("objectives") or []
++        ok = True
++        if expected_category:
++            ok = ok and expected_category in [row.get("category") for row in actions]
 +        if expected_objective_id:
-+            ok = ok and expected_objective_id in [row.get("objective_id") for row in objectives]
++            ok = ok and expected_objective_id in [row.get("objective_id") for row in actions]
 +        if expected_first_objective_id:
-+            ok = ok and bool(objectives) and objectives[0].get("objective_id") == expected_first_objective_id
++            ok = ok and bool(actions) and actions[0].get("objective_id") == expected_first_objective_id
 +        return {
 +            "check_type": check_type,
 +            "ok": ok,
-+            "payload": payload,
++            "actions": actions,
++            "expected_category": expected_category,
 +            "expected_objective_id": expected_objective_id,
 +            "expected_first_objective_id": expected_first_objective_id,
 +        }
 +
-+    if check_type == "quest_log_pin":
-+        pin_result = pin_objective(
-+            simulation_state,
-+            str(check.get("objective_id") or ""),
-+            turn_index=int(check.get("turn_index") or 1),
-+            reason=str(check.get("reason") or "manual_pin"),
-+        )
-+        expected_ok = check.get("expected_ok")
-+        expected_reason = check.get("expected_reason")
-+        ok = True
-+        if expected_ok is not None:
-+            ok = ok and pin_result.get("ok") is bool(expected_ok)
-+        if expected_reason:
-+            ok = ok and pin_result.get("reason") == expected_reason
-+        return {
-+            "check_type": check_type,
-+            "ok": ok,
-+            "pin_result": pin_result,
-+            "expected_ok": expected_ok,
-+            "expected_reason": expected_reason,
-+        }
-+
-+    if check_type == "quest_log_unpin":
-+        unpin_result = unpin_objective(
-+            simulation_state,
-+            str(check.get("objective_id") or ""),
-+            turn_index=int(check.get("turn_index") or 1),
-+            reason=str(check.get("reason") or "manual_unpin"),
-+        )
-+        expected_ok = check.get("expected_ok")
-+        expected_reason = check.get("expected_reason")
-+        ok = True
-+        if expected_ok is not None:
-+            ok = ok and unpin_result.get("ok") is bool(expected_ok)
-+        if expected_reason:
-+            ok = ok and unpin_result.get("reason") == expected_reason
-+        return {
-+            "check_type": check_type,
-+            "ok": ok,
-+            "unpin_result": unpin_result,
-+            "expected_ok": expected_ok,
-+            "expected_reason": expected_reason,
-+        }
-+
-+    if check_type == "campaign_recap_objective_tracker":
-+        recap = build_player_story_recap(
++    if check_type == "player_action_context_bounded":
++        payload = build_player_action_context(
 +            simulation_state,
 +            turn_index=int(check.get("turn_index") or 1),
-+            max_items=int(check.get("max_items") or 25),
++            limit=int(check.get("limit") or 12),
 +        )
-+        expected_objective_id = check.get("expected_objective_id")
-+        objectives = _safe_dict(recap.get("objective_tracker")).get("objectives") or []
-+        narrator_tracker = _safe_dict(recap.get("narrator_context")).get("objective_tracker") or []
-+        ok = True
-+        if expected_objective_id:
-+            ok = ok and expected_objective_id in [row.get("objective_id") for row in objectives]
-+            ok = ok and expected_objective_id in [row.get("objective_id") for row in narrator_tracker]
++        limit = int(check.get("limit") or 12)
 +        return {
 +            "check_type": check_type,
-+            "ok": ok,
-+            "recap": recap,
-+            "expected_objective_id": expected_objective_id,
-+        }
-+
-+    if check_type == "quest_log_debug_bounded":
-+        quest_log = build_quest_log_payload(simulation_state, limit=int(check.get("limit") or 50))
-+        tracker = build_objective_tracker_payload(simulation_state, limit=int(check.get("tracker_limit") or 8))
-+        return {
-+            "check_type": check_type,
-+            "ok": (
-+                len(quest_log.get("active_objectives") or []) <= int(check.get("limit") or 50)
-+                and len(tracker.get("objectives") or []) <= int(check.get("tracker_limit") or 8)
-+            ),
-+            "quest_log": quest_log,
-+            "tracker": tracker,
-+            "limit": check.get("limit") or 50,
-+            "tracker_limit": check.get("tracker_limit") or 8,
++            "ok": len(payload.get("suggested_actions") or []) <= limit,
++            "payload": payload,
++            "limit": limit,
 +        }
 +
 +    return {
 +        "check_type": check_type,
 +        "ok": False,
-+        "error": f"unknown_quest_log_m49_m51_check_type:{check_type}",
++        "error": f"unknown_player_action_context_m52_m54_check_type:{check_type}",
 +    }
 +
 +
-+def run_quest_log_m49_m51_checks(
++def run_player_action_context_m52_m54_checks(
 +    *,
 +    checks: List[Dict[str, Any]],
 +    result: Dict[str, Any],
@@ -1315,7 +1116,7 @@ Patch 6 — Manual checks/setup
 +    for check in checks:
 +        check_type = str(_safe_dict(check).get("type") or "")
 +        try:
-+            check_result = run_quest_log_m49_m51_check(
++            check_result = run_player_action_context_m52_m54_check(
 +                check=_safe_dict(check),
 +                result=result,
 +                session=session,
@@ -1329,75 +1130,65 @@ Patch 6 — Manual checks/setup
 +        results.append(check_result)
 +    return results
 *** End Patch
-14. Patch src/tests/rpg/manual/scenario_setup.py
+11. Patch src/tests/rpg/manual/scenario_setup.py
 
-Add imports:
-
-*** Begin Patch
-*** Update File: src/tests/rpg/manual/scenario_setup.py
-@@
- from app.rpg.story_arcs.milestones import add_story_arc_milestone, complete_story_arc_milestone
-+from app.rpg.quest_log.runtime import pin_objective, unpin_objective
- from tests.rpg.manual.memory_fixtures import build_manual_memory_event
-*** End Patch
-
-Add setup block after milestone setup:
+Add support for simple scene/NPC/combat fixtures if missing. This is intentionally generic and safe.
 
 *** Begin Patch
 *** Update File: src/tests/rpg/manual/scenario_setup.py
 @@
-     for milestone in scenario.get("setup_complete_story_arc_milestones") or []:
-         if isinstance(milestone, dict):
-             complete_story_arc_milestone(
-                 simulation_state,
-                 str(milestone.get("milestone_id") or ""),
-                 turn_index=int(milestone.get("turn_index") or scenario.get("setup_turn_index") or 1),
-                 reason=str(milestone.get("reason") or "scenario_setup"),
-             )
+     for action in scenario.get("setup_quest_log_actions") or []:
+         if isinstance(action, dict):
+@@
+                 unpin_objective(
+                     simulation_state,
+                     objective_id,
+                     turn_index=int(action.get("turn_index") or scenario.get("setup_turn_index") or 1),
+                     reason=str(action.get("reason") or "scenario_unpin"),
+                 )
 +
-+    for action in scenario.get("setup_quest_log_actions") or []:
-+        if isinstance(action, dict):
-+            kind = str(action.get("action") or "")
-+            objective_id = str(action.get("objective_id") or "")
-+            if kind == "pin":
-+                pin_objective(
-+                    simulation_state,
-+                    objective_id,
-+                    turn_index=int(action.get("turn_index") or scenario.get("setup_turn_index") or 1),
-+                    reason=str(action.get("reason") or "scenario_pin"),
-+                )
-+            elif kind == "unpin":
-+                unpin_objective(
-+                    simulation_state,
-+                    objective_id,
-+                    turn_index=int(action.get("turn_index") or scenario.get("setup_turn_index") or 1),
-+                    reason=str(action.get("reason") or "scenario_unpin"),
-+                )
++    if isinstance(scenario.get("setup_scene"), dict):
++        simulation_state["scene"] = {
++            **dict(simulation_state.get("scene") or {}),
++            **dict(scenario.get("setup_scene") or {}),
++        }
++
++    if isinstance(scenario.get("setup_combat_state"), dict):
++        simulation_state["combat_state"] = {
++            **dict(simulation_state.get("combat_state") or {}),
++            **dict(scenario.get("setup_combat_state") or {}),
++        }
++
++    if isinstance(scenario.get("setup_runtime"), dict):
++        simulation_state["runtime"] = {
++            **dict(simulation_state.get("runtime") or {}),
++            **dict(scenario.get("setup_runtime") or {}),
++        }
  
      for item in scenario.get("setup_story_event_queue") or []:
          if isinstance(item, dict):
 *** End Patch
-15. Patch src/tests/rpg/manual/scenario_execution.py
+12. Patch src/tests/rpg/manual/scenario_execution.py
 
 Add import:
 
 *** Begin Patch
 *** Update File: src/tests/rpg/manual/scenario_execution.py
 @@
- from tests.rpg.manual.story_arc_milestones_m46_m48_checks import (
-     run_story_arc_milestones_m46_m48_checks,
+ from tests.rpg.manual.quest_log_m49_m51_checks import (
+     run_quest_log_m49_m51_checks,
  )
-+from tests.rpg.manual.quest_log_m49_m51_checks import (
-+    run_quest_log_m49_m51_checks,
++from tests.rpg.manual.player_action_context_m52_m54_checks import (
++    run_player_action_context_m52_m54_checks,
 +)
 *** End Patch
 
-Add check block after M46-M48 checks:
+Add check block after M49-M51 checks:
 
 *** Begin Patch
 *** Update File: src/tests/rpg/manual/scenario_execution.py
 @@
-         if story_arc_milestones_m46_m48_checks:
+         if quest_log_m49_m51_checks:
              current_session = {}
              try:
                  current_session = _ensure_manual_session(session_id)
@@ -1406,33 +1197,32 @@ Add check block after M46-M48 checks:
                          + str(check_result.get("error") or "")
                      )
 +
-+        quest_log_m49_m51_checks = [
++        player_action_context_m52_m54_checks = [
 +            check
 +            for check in checks
 +            if isinstance(check, dict)
 +            and (
-+                str(check.get("type") or "").startswith("quest_log")
-+                or str(check.get("type") or "").startswith("objective_tracker")
-+                or str(check.get("type") or "") == "campaign_recap_objective_tracker"
++                str(check.get("type") or "").startswith("player_action_context")
++                or str(check.get("type") or "") == "suggested_actions"
 +            )
 +        ]
-+        if quest_log_m49_m51_checks:
++        if player_action_context_m52_m54_checks:
 +            current_session = {}
 +            try:
 +                current_session = _ensure_manual_session(session_id)
 +            except Exception:
 +                current_session = session
 +
-+            quest_log_m49_m51_check_results = run_quest_log_m49_m51_checks(
-+                checks=quest_log_m49_m51_checks,
++            player_action_context_m52_m54_check_results = run_player_action_context_m52_m54_checks(
++                checks=player_action_context_m52_m54_checks,
 +                result=turn_record.get("result") or turn_record,
 +                session=current_session,
 +            )
-+            turn_record["quest_log_m49_m51_check_results"] = quest_log_m49_m51_check_results
-+            for check_result in quest_log_m49_m51_check_results:
++            turn_record["player_action_context_m52_m54_check_results"] = player_action_context_m52_m54_check_results
++            for check_result in player_action_context_m52_m54_check_results:
 +                if not check_result.get("ok"):
 +                    turn_record.setdefault("scenario_warnings", []).append(
-+                        "quest_log_m49_m51_check_failed:"
++                        "player_action_context_m52_m54_check_failed:"
 +                        + str(scenario_name)
 +                        + ":turn_"
 +                        + str(turn_index)
@@ -1444,56 +1234,50 @@ Add check block after M46-M48 checks:
  
          turn_summaries.append(turn_record)
 *** End Patch
-16. Patch src/tests/rpg/manual/summary_sanitizer.py
+13. Patch src/tests/rpg/manual/summary_sanitizer.py
 *** Begin Patch
 *** Update File: src/tests/rpg/manual/summary_sanitizer.py
 @@
-     story_arc_milestones_m46_m48_check_results = turn.get("story_arc_milestones_m46_m48_check_results")
-     if isinstance(story_arc_milestones_m46_m48_check_results, list):
-         sanitized["story_arc_milestones_m46_m48_check_results"] = [
+     quest_log_m49_m51_check_results = turn.get("quest_log_m49_m51_check_results")
+     if isinstance(quest_log_m49_m51_check_results, list):
+         sanitized["quest_log_m49_m51_check_results"] = [
 @@
              if isinstance(item, dict)
          ]
 +
-+    quest_log_m49_m51_check_results = turn.get("quest_log_m49_m51_check_results")
-+    if isinstance(quest_log_m49_m51_check_results, list):
-+        sanitized["quest_log_m49_m51_check_results"] = [
++    player_action_context_m52_m54_check_results = turn.get("player_action_context_m52_m54_check_results")
++    if isinstance(player_action_context_m52_m54_check_results, list):
++        sanitized["player_action_context_m52_m54_check_results"] = [
 +            {
 +                "check_type": item.get("check_type"),
 +                "ok": item.get("ok"),
 +                "payload": item.get("payload"),
-+                "pin_result": item.get("pin_result"),
-+                "unpin_result": item.get("unpin_result"),
-+                "recap": item.get("recap"),
-+                "quest_log": item.get("quest_log"),
-+                "tracker": item.get("tracker"),
-+                "expected_active_objective_id": item.get("expected_active_objective_id"),
-+                "expected_completed_objective_id": item.get("expected_completed_objective_id"),
-+                "expected_active_count": item.get("expected_active_count"),
++                "actions": item.get("actions"),
++                "expected_mode": item.get("expected_mode"),
 +                "expected_objective_id": item.get("expected_objective_id"),
++                "expected_action_category": item.get("expected_action_category"),
++                "expected_category": item.get("expected_category"),
 +                "expected_first_objective_id": item.get("expected_first_objective_id"),
-+                "expected_ok": item.get("expected_ok"),
-+                "expected_reason": item.get("expected_reason"),
++                "must_not_contain": item.get("must_not_contain"),
 +                "limit": item.get("limit"),
-+                "tracker_limit": item.get("tracker_limit"),
 +                "error": item.get("error"),
 +            }
-+            for item in quest_log_m49_m51_check_results[:50]
++            for item in player_action_context_m52_m54_check_results[:50]
 +            if isinstance(item, dict)
 +        ]
  
      return sanitized
 *** End Patch
 Patch 7 — Manual scenarios
-17. Add src/tests/rpg/manual/scenarios/quest_log_m49_m51.py
+14. Add src/tests/rpg/manual/scenarios/player_action_context_m52_m54.py
 *** Begin Patch
-*** Add File: src/tests/rpg/manual/scenarios/quest_log_m49_m51.py
+*** Add File: src/tests/rpg/manual/scenarios/player_action_context_m52_m54.py
 +from __future__ import annotations
 +
 +from typing import Any, Dict
 +
 +
-+def _arc_setup() -> Dict[str, Any]:
++def _objective_setup() -> Dict[str, Any]:
 +    return {
 +        "setup_story_arc_transitions": [
 +            {
@@ -1525,129 +1309,113 @@ Patch 7 — Manual scenarios
 +    }
 +
 +
-+QUEST_LOG_M49_M51_SCENARIOS: Dict[str, Dict[str, Any]] = {
-+    "quest_log_payload_lists_active_objectives": {
-+        **_arc_setup(),
-+        "turns": ["I inspect the quest log."],
++PLAYER_ACTION_CONTEXT_M52_M54_SCENARIOS: Dict[str, Dict[str, Any]] = {
++    "player_action_context_includes_active_objectives": {
++        **_objective_setup(),
++        "turns": ["I inspect my player action context."],
 +        "checks": [
 +            {
-+                "type": "quest_log_payload",
-+                "expected_active_objective_id": "milestone:find_witness",
-+            },
-+            {
-+                "type": "objective_tracker_payload",
++                "type": "player_action_context_payload",
 +                "expected_objective_id": "milestone:find_witness",
-+            },
++                "expected_action_category": "objective",
++            }
 +        ],
 +    },
-+    "quest_log_pin_moves_objective_to_tracker_top": {
-+        **_arc_setup(),
-+        "turns": ["I pin an objective in the quest log."],
-+        "checks": [
-+            {
-+                "type": "quest_log_pin",
-+                "objective_id": "milestone:inspect_road",
-+                "turn_index": 2,
-+                "expected_ok": True,
-+                "expected_reason": "pinned",
-+            },
-+            {
-+                "type": "objective_tracker_payload",
-+                "expected_first_objective_id": "milestone:inspect_road",
-+            },
-+        ],
-+    },
-+    "quest_log_unpin_removes_pin": {
-+        **_arc_setup(),
++    "suggested_actions_prioritize_pinned_objective": {
++        **_objective_setup(),
 +        "setup_quest_log_actions": [
 +            {"action": "pin", "objective_id": "milestone:inspect_road", "turn_index": 2}
 +        ],
-+        "turns": ["I unpin an objective in the quest log."],
++        "turns": ["I inspect suggested actions after pinning an objective."],
 +        "checks": [
 +            {
-+                "type": "quest_log_unpin",
-+                "objective_id": "milestone:inspect_road",
-+                "turn_index": 3,
-+                "expected_ok": True,
-+                "expected_reason": "unpinned",
++                "type": "suggested_actions",
++                "expected_first_objective_id": "milestone:inspect_road",
 +            },
 +            {
-+                "type": "objective_tracker_payload",
-+                "expected_first_objective_id": "milestone:find_witness",
++                "type": "player_action_context_payload",
++                "expected_objective_id": "milestone:inspect_road",
++                "expected_action_category": "objective",
 +            },
 +        ],
 +    },
-+    "quest_log_completed_objective_moves_to_completed_section": {
-+        **_arc_setup(),
-+        "setup_complete_story_arc_milestones": [
++    "player_action_context_includes_nearby_npc_social_actions": {
++        "setup_scene": {
++            "location": "The Rusty Flagon",
++            "nearby_npcs": [
++                {"npc_id": "npc:bran", "name": "Bran", "role": "innkeeper"}
++            ],
++        },
++        "turns": ["I inspect social suggested actions."],
++        "checks": [
 +            {
-+                "milestone_id": "milestone:find_witness",
-+                "turn_index": 4,
-+                "reason": "manual_completion",
++                "type": "player_action_context_payload",
++                "expected_action_category": "social",
++            },
++            {
++                "type": "suggested_actions",
++                "expected_category": "social",
++            },
++        ],
++    },
++    "player_action_context_combat_mode_suggests_combat_actions": {
++        "setup_combat_state": {"active": True},
++        "turns": ["I inspect combat suggested actions."],
++        "checks": [
++            {
++                "type": "player_action_context_payload",
++                "expected_mode": "combat",
++                "expected_action_category": "combat",
 +            }
 +        ],
-+        "turns": ["I inspect completed quest log objectives."],
++    },
++    "player_action_context_empty_state_has_exploration_fallbacks": {
++        "turns": ["I inspect fallback suggested actions."],
 +        "checks": [
 +            {
-+                "type": "quest_log_payload",
-+                "expected_completed_objective_id": "milestone:find_witness",
++                "type": "player_action_context_payload",
++                "expected_mode": "exploration",
++                "expected_action_category": "exploration",
 +            },
 +            {
-+                "type": "quest_log_payload",
-+                "expected_active_objective_id": "milestone:inspect_road",
++                "type": "suggested_actions",
++                "expected_category": "exploration",
 +            },
 +        ],
 +    },
-+    "quest_log_pin_missing_or_completed_rejected": {
-+        **_arc_setup(),
-+        "setup_complete_story_arc_milestones": [
++    "player_action_context_excludes_unrevealed_secret_lore": {
++        **_objective_setup(),
++        "setup_lore_transitions": [
 +            {
-+                "milestone_id": "milestone:find_witness",
-+                "turn_index": 4,
-+                "reason": "manual_completion",
++                "action": "upsert",
++                "lore_id": "lore:secret_debt",
++                "title": "Secret Debt",
++                "truth_status": "secret",
++                "revealed_to_player": False,
++                "summary": "Bran secretly owes the Red Sashes.",
 +            }
 +        ],
-+        "turns": ["I try to pin invalid quest log objectives."],
++        "turns": ["I inspect action context for leaked secret lore."],
 +        "checks": [
 +            {
-+                "type": "quest_log_pin",
-+                "objective_id": "milestone:find_witness",
-+                "expected_ok": False,
-+                "expected_reason": "objective_not_active",
-+            },
-+            {
-+                "type": "quest_log_pin",
-+                "objective_id": "milestone:missing",
-+                "expected_ok": False,
-+                "expected_reason": "objective_not_active",
-+            },
-+        ],
-+    },
-+    "campaign_recap_includes_objective_tracker": {
-+        **_arc_setup(),
-+        "setup_quest_log_actions": [
-+            {"action": "pin", "objective_id": "milestone:find_witness", "turn_index": 2}
-+        ],
-+        "turns": ["I inspect the campaign recap objective tracker."],
-+        "checks": [
-+            {
-+                "type": "campaign_recap_objective_tracker",
++                "type": "player_action_context_payload",
 +                "expected_objective_id": "milestone:find_witness",
++                "must_not_contain": "Bran secretly owes the Red Sashes",
 +            }
 +        ],
 +    },
-+    "objective_tracker_output_is_bounded": {
++    "player_action_context_output_is_bounded": {
 +        "setup_story_arc_transitions": [
 +            {
 +                "action": "start",
-+                "arc_id": "arc:bounded_objectives",
-+                "title": "Bounded Objectives",
++                "arc_id": "arc:bounded_actions",
++                "title": "Bounded Actions",
 +                "stage": "start",
 +            }
 +        ],
 +        "setup_story_arc_milestones": [
 +            {
-+                "arc_id": "arc:bounded_objectives",
++                "arc_id": "arc:bounded_actions",
 +                "milestone_id": f"milestone:{i}",
 +                "title": f"Objective {i}",
 +                "objective_text": f"Objective {i}",
@@ -1655,91 +1423,89 @@ Patch 7 — Manual scenarios
 +            }
 +            for i in range(30)
 +        ],
-+        "turns": ["I inspect bounded objective tracker output."],
++        "turns": ["I inspect bounded action context output."],
 +        "checks": [
 +            {
-+                "type": "quest_log_debug_bounded",
-+                "limit": 50,
-+                "tracker_limit": 8,
++                "type": "player_action_context_bounded",
++                "limit": 12,
 +            }
 +        ],
 +    },
-+    "quest_log_payload_empty_when_no_objectives": {
-+        "turns": ["I inspect the quest log when there are no objectives."],
++    "player_action_context_contains_player_agent_schema": {
++        "turns": ["I inspect the player-agent action schema."],
 +        "checks": [
 +            {
-+                "type": "quest_log_payload",
-+                "expected_active_count": 0,
-+            },
-+            {
-+                "type": "objective_tracker_payload",
-+            },
++                "type": "player_action_context_payload",
++                "expected_action_category": "exploration",
++            }
 +        ],
 +    },
 +}
 *** End Patch
-18. Add expected names file
+15. Add expected names file
 *** Begin Patch
-*** Add File: src/tests/rpg/manual/scenarios/expected_quest_log_m49_m51_names.py
-+EXPECTED_QUEST_LOG_M49_M51_SCENARIO_NAMES = {
-+    "quest_log_payload_lists_active_objectives",
-+    "quest_log_pin_moves_objective_to_tracker_top",
-+    "quest_log_unpin_removes_pin",
-+    "quest_log_completed_objective_moves_to_completed_section",
-+    "quest_log_pin_missing_or_completed_rejected",
-+    "campaign_recap_includes_objective_tracker",
-+    "objective_tracker_output_is_bounded",
-+    "quest_log_payload_empty_when_no_objectives",
+*** Add File: src/tests/rpg/manual/scenarios/expected_player_action_context_m52_m54_names.py
++EXPECTED_PLAYER_ACTION_CONTEXT_M52_M54_SCENARIO_NAMES = {
++    "player_action_context_includes_active_objectives",
++    "suggested_actions_prioritize_pinned_objective",
++    "player_action_context_includes_nearby_npc_social_actions",
++    "player_action_context_combat_mode_suggests_combat_actions",
++    "player_action_context_empty_state_has_exploration_fallbacks",
++    "player_action_context_excludes_unrevealed_secret_lore",
++    "player_action_context_output_is_bounded",
++    "player_action_context_contains_player_agent_schema",
 +}
 *** End Patch
-19. Patch src/tests/rpg/manual/scenarios/registry.py
+16. Patch src/tests/rpg/manual/scenarios/registry.py
 *** Begin Patch
 *** Update File: src/tests/rpg/manual/scenarios/registry.py
 @@
- from tests.rpg.manual.scenarios.story_arc_milestones_m46_m48 import (
-     STORY_ARC_MILESTONES_M46_M48_SCENARIOS,
+ from tests.rpg.manual.scenarios.quest_log_m49_m51 import (
+     QUEST_LOG_M49_M51_SCENARIOS,
  )
-+from tests.rpg.manual.scenarios.quest_log_m49_m51 import (
-+    QUEST_LOG_M49_M51_SCENARIOS,
++from tests.rpg.manual.scenarios.player_action_context_m52_m54 import (
++    PLAYER_ACTION_CONTEXT_M52_M54_SCENARIOS,
 +)
 @@
-     scenarios.update(STORY_ARC_MILESTONES_M46_M48_SCENARIOS)
-+    scenarios.update(QUEST_LOG_M49_M51_SCENARIOS)
+     scenarios.update(QUEST_LOG_M49_M51_SCENARIOS)
++    scenarios.update(PLAYER_ACTION_CONTEXT_M52_M54_SCENARIOS)
      return scenarios
 *** End Patch
-20. Patch src/tests/rpg/manual/test_manual_scenario_migration.py
+17. Patch src/tests/rpg/manual/test_manual_scenario_migration.py
 *** Begin Patch
 *** Update File: src/tests/rpg/manual/test_manual_scenario_migration.py
 @@
- from tests.rpg.manual.scenarios.expected_story_arc_milestones_m46_m48_names import (
-     EXPECTED_STORY_ARC_MILESTONES_M46_M48_SCENARIO_NAMES,
+ from tests.rpg.manual.scenarios.expected_quest_log_m49_m51_names import (
+     EXPECTED_QUEST_LOG_M49_M51_SCENARIO_NAMES,
  )
-+from tests.rpg.manual.scenarios.expected_quest_log_m49_m51_names import (
-+    EXPECTED_QUEST_LOG_M49_M51_SCENARIO_NAMES,
++from tests.rpg.manual.scenarios.expected_player_action_context_m52_m54_names import (
++    EXPECTED_PLAYER_ACTION_CONTEXT_M52_M54_SCENARIO_NAMES,
 +)
 @@
- def test_manual_scenario_registry_includes_story_arc_milestones_m46_m48_names():
+ def test_manual_scenario_registry_includes_quest_log_m49_m51_names():
      names = set(build_service_scenarios().keys())
-     missing = EXPECTED_STORY_ARC_MILESTONES_M46_M48_SCENARIO_NAMES - names
+     missing = EXPECTED_QUEST_LOG_M49_M51_SCENARIO_NAMES - names
  
-     assert not missing, f"Missing M46-M48 story arc milestone scenarios: {sorted(missing)}"
+     assert not missing, f"Missing M49-M51 quest log scenarios: {sorted(missing)}"
 +
 +
-+def test_manual_scenario_registry_includes_quest_log_m49_m51_names():
++def test_manual_scenario_registry_includes_player_action_context_m52_m54_names():
 +    names = set(build_service_scenarios().keys())
-+    missing = EXPECTED_QUEST_LOG_M49_M51_SCENARIO_NAMES - names
++    missing = EXPECTED_PLAYER_ACTION_CONTEXT_M52_M54_SCENARIO_NAMES - names
 +
-+    assert not missing, f"Missing M49-M51 quest log scenarios: {sorted(missing)}"
++    assert not missing, f"Missing M52-M54 player action context scenarios: {sorted(missing)}"
 *** End Patch
-21. Add manual check tests
+18. Add manual check tests
 *** Begin Patch
-*** Add File: src/tests/rpg/manual/test_manual_quest_log_m49_m51_checks.py
+*** Add File: src/tests/rpg/manual/test_manual_player_action_context_m52_m54_checks.py
 +from app.rpg.story_arcs.milestones import add_story_arc_milestone
 +from app.rpg.story_arcs.state import start_story_arc
-+from tests.rpg.manual.quest_log_m49_m51_checks import run_quest_log_m49_m51_checks
++from tests.rpg.manual.player_action_context_m52_m54_checks import (
++    run_player_action_context_m52_m54_checks,
++)
 +
 +
-+def test_manual_quest_log_payload_check_reads_objectives():
++def test_manual_player_action_context_payload_check_reads_objectives():
 +    session = {"simulation_state": {}}
 +    start_story_arc(session["simulation_state"], "arc:x", title="X", stage="start")
 +    add_story_arc_milestone(
@@ -1749,11 +1515,12 @@ Patch 7 — Manual scenarios
 +        title="Find the witness",
 +    )
 +
-+    result = run_quest_log_m49_m51_checks(
++    result = run_player_action_context_m52_m54_checks(
 +        checks=[
 +            {
-+                "type": "quest_log_payload",
-+                "expected_active_objective_id": "milestone:x",
++                "type": "player_action_context_payload",
++                "expected_objective_id": "milestone:x",
++                "expected_action_category": "objective",
 +            }
 +        ],
 +        result={},
@@ -1763,23 +1530,14 @@ Patch 7 — Manual scenarios
 +    assert result["ok"] is True
 +
 +
-+def test_manual_quest_log_pin_check():
++def test_manual_suggested_actions_check_reads_categories():
 +    session = {"simulation_state": {}}
-+    start_story_arc(session["simulation_state"], "arc:x", title="X", stage="start")
-+    add_story_arc_milestone(
-+        session["simulation_state"],
-+        arc_id="arc:x",
-+        milestone_id="milestone:x",
-+        title="Find the witness",
-+    )
 +
-+    result = run_quest_log_m49_m51_checks(
++    result = run_player_action_context_m52_m54_checks(
 +        checks=[
 +            {
-+                "type": "quest_log_pin",
-+                "objective_id": "milestone:x",
-+                "expected_ok": True,
-+                "expected_reason": "pinned",
++                "type": "suggested_actions",
++                "expected_category": "exploration",
 +            }
 +        ],
 +        result={},
@@ -1789,21 +1547,10 @@ Patch 7 — Manual scenarios
 +    assert result["ok"] is True
 *** End Patch
 Patch 8 — Routing regression tests
-22. Add src/tests/rpg/manual/test_manual_quest_log_m49_m51_routing.py
+19. Add src/tests/rpg/manual/test_manual_player_action_context_m52_m54_routing.py
 *** Begin Patch
-*** Add File: src/tests/rpg/manual/test_manual_quest_log_m49_m51_routing.py
+*** Add File: src/tests/rpg/manual/test_manual_player_action_context_m52_m54_routing.py
 +from tests.rpg.manual.scenarios.registry import build_service_scenarios
-+
-+
-+def _m46_m48_filter(check):
-+    check_type = str(check.get("type") or "")
-+    return (
-+        check_type.startswith("story_arc_milestone")
-+        or check_type.startswith("story_objective")
-+        or check_type == "story_event_apply_for_milestone"
-+        or check_type == "campaign_journal_objective_contains"
-+        or check_type == "campaign_recap_objective"
-+    )
 +
 +
 +def _m49_m51_filter(check):
@@ -1815,35 +1562,42 @@ Patch 8 — Routing regression tests
 +    )
 +
 +
-+def test_quest_log_checks_do_not_route_to_m46_m48():
++def _m52_m54_filter(check):
++    check_type = str(check.get("type") or "")
++    return (
++        check_type.startswith("player_action_context")
++        or check_type == "suggested_actions"
++    )
++
++
++def test_player_action_context_checks_do_not_route_to_m49_m51():
 +    scenarios = build_service_scenarios()
 +    names = [
-+        "quest_log_payload_lists_active_objectives",
-+        "quest_log_pin_moves_objective_to_tracker_top",
-+        "quest_log_unpin_removes_pin",
-+        "quest_log_completed_objective_moves_to_completed_section",
-+        "quest_log_pin_missing_or_completed_rejected",
-+        "campaign_recap_includes_objective_tracker",
-+        "objective_tracker_output_is_bounded",
-+        "quest_log_payload_empty_when_no_objectives",
++        "player_action_context_includes_active_objectives",
++        "suggested_actions_prioritize_pinned_objective",
++        "player_action_context_includes_nearby_npc_social_actions",
++        "player_action_context_combat_mode_suggests_combat_actions",
++        "player_action_context_empty_state_has_exploration_fallbacks",
++        "player_action_context_excludes_unrevealed_secret_lore",
++        "player_action_context_output_is_bounded",
++        "player_action_context_contains_player_agent_schema",
 +    ]
 +
 +    for name in names:
 +        checks = scenarios[name]["checks"]
-+        m49 = [check for check in checks if isinstance(check, dict) and _m49_m51_filter(check)]
-+        bad_m46 = [check for check in checks if isinstance(check, dict) and _m46_m48_filter(check)]
-+        assert m49, name
-+        assert bad_m46 == [], f"{name} has checks that would route to M46-M48: {bad_m46}"
++        m52 = [check for check in checks if isinstance(check, dict) and _m52_m54_filter(check)]
++        bad_m49 = [check for check in checks if isinstance(check, dict) and _m49_m51_filter(check)]
++        assert m52, name
++        assert bad_m49 == [], f"{name} has checks that would route to M49-M51: {bad_m49}"
 *** End Patch
 Validation commands
 Compile
-python -m py_compile src/app/rpg/quest_log/state.py
-python -m py_compile src/app/rpg/quest_log/runtime.py
-python -m py_compile src/app/rpg/api/quest_log.py
-python -m py_compile src/app/rpg/campaign_journal/journal.py
+python -m py_compile src/app/rpg/player_action_context/runtime.py
+python -m py_compile src/app/rpg/player_action_context/__init__.py
+python -m py_compile src/app/rpg/api/player_action_context.py
 python -m py_compile src/app/rpg/story_authoring/inspector.py
-python -m py_compile src/tests/rpg/manual/quest_log_m49_m51_checks.py
-python -m py_compile src/tests/rpg/manual/scenarios/quest_log_m49_m51.py
-python -m py_compile src/tests/rpg/manual/scenarios/expected_quest_log_m49_m51_names.py
+python -m py_compile src/tests/rpg/manual/player_action_context_m52_m54_checks.py
+python -m py_compile src/tests/rpg/manual/scenarios/player_action_context_m52_m54.py
+python -m py_compile src/tests/rpg/manual/scenarios/expected_player_action_context_m52_m54_names.py
 Unit tests
-python -m pytest src/tests/rpg/quest_log src/tests/rpg/story_arcs src/tests/rpg/story_events src/tests/rpg/campaign_journal src/tests/rpg/story_packs src/tests/rpg/campaign_director src/tests/rpg/story_authoring src/tests/rpg/companions src/tests/rpg/npc_runtime_context src/tests/rpg/npc_evolution src/tests/rpg/story_event_queue src/tests/rpg/dialogue_context src/tests/rpg/story_proposals src/tests/rpg/escalation src/tests/rpg/lore -q
+python -m pytest src/tests/rpg/player_action_context src/tests/rpg/quest_log src/tests/rpg/story_arcs src/tests/rpg/story_events src/tests/rpg/campaign_journal src/tests/rpg/story_packs src/tests/rpg/campaign_director src/tests/rpg/story_authoring src/tests/rpg/companions src/tests/rpg/npc_runtime_context src/tests/rpg/npc_evolution src/tests/rpg/story_event_queue src/tests/rpg/dialogue_context src/tests/rpg/story_proposals src/tests/rpg/escalation src/tests/rpg/lore -q
