@@ -32,6 +32,9 @@ def render_autoplay_html(transcript: List[Dict[str, Any]], summary: Dict[str, An
               <div><strong>Player action:</strong> {html.escape(_safe_str(row.get("player_action")))}</div>
               <div><strong>Reason:</strong> {html.escape(_safe_str(row.get("selected_action_reason")))}</div>
               <div><strong>Narration:</strong><p>{html.escape(_safe_str(row.get("narration")))}</p></div>
+              <div><strong>Progress:</strong>
+                <pre>{html.escape(json.dumps(row.get("progress_delta") or {}, ensure_ascii=False, indent=2, sort_keys=True, default=str))}</pre>
+              </div>
               <details>
                 <summary>Suggested actions shown to player-agent ({len(suggested)})</summary>
                 <pre>{html.escape(json.dumps(suggested, ensure_ascii=False, indent=2))}</pre>

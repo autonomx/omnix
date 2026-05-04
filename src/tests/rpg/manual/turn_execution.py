@@ -55,6 +55,7 @@ def _run_one_manual_turn(
     console_llm_raw: bool = True,
     console_llm_max_chars: int = 1200,
     story_event_queue_checks: list | None = None,
+    include_raw_result: bool = False,
 ) -> Dict[str, Any]:
     """Run a single turn for a manual scenario."""
     raw_turn = turn
@@ -125,8 +126,27 @@ def _run_one_manual_turn(
             "story_event_queue_checks": story_event_queue_check_results,
         }
 
+        if include_raw_result:
+            turn_summary["raw_result"] = result
+            turn_summary["raw_narration"] = _extract_narration(result)
+            turn_summary["raw_turn_contract"] = _safe_dict(
+                result.get("turn_contract")
+                or _safe_dict(result.get("result")).get("turn_contract")
+            )
+
         # Apply sanitization for summary output
         turn_summary = sanitize_turn_for_summary(turn_summary)
+
+        if include_raw_result:
+            # The sanitizer is designed for compact manual scenario summaries.
+            # Autoplay needs the raw apply_turn result for diagnostics and
+            # progress evaluation, so restore these fields after sanitization.
+            turn_summary["raw_result"] = result
+            turn_summary["raw_narration"] = _extract_narration(result)
+            turn_summary["raw_turn_contract"] = _safe_dict(
+                result.get("turn_contract")
+                or _safe_dict(result.get("result")).get("turn_contract")
+            )
 
         return turn_summary
 
