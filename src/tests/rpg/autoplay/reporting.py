@@ -39,6 +39,18 @@ def render_autoplay_html(transcript: List[Dict[str, Any]], summary: Dict[str, An
                 <pre>{html.escape(json.dumps(row.get("progress_quality") or {}, ensure_ascii=False, indent=2, sort_keys=True, default=str))}</pre>
               </div>
               <details>
+                <summary>Story hook result</summary>
+                <pre>{html.escape(json.dumps(row.get("story_hook_result") or {}, ensure_ascii=False, indent=2, sort_keys=True, default=str))}</pre>
+              </details>
+              <details>
+                <summary>Strategy guidance</summary>
+                <pre>{html.escape(json.dumps(row.get("strategy_guidance") or {}, ensure_ascii=False, indent=2, sort_keys=True, default=str))}</pre>
+              </details>
+              <details>
+                <summary>Action diversity before turn</summary>
+                <pre>{html.escape(json.dumps(row.get("action_diversity_before_turn") or {}, ensure_ascii=False, indent=2, sort_keys=True, default=str))}</pre>
+              </details>
+              <details>
                 <summary>State bounds</summary>
                 <pre>{html.escape(json.dumps(row.get("state_bounds") or {}, ensure_ascii=False, indent=2, sort_keys=True, default=str))}</pre>
               </details>
@@ -114,7 +126,9 @@ def write_autoplay_artifacts(
             zf.write(html_path, html_path.name)
             checkpoint_dir = output_dir / "checkpoints"
             if checkpoint_dir.exists():
-                for checkpoint_path in sorted(checkpoint_dir.glob("*.json")):
+                session_id = str(summary.get("session_id") or "")
+                pattern = f"{session_id}_turn_*.json" if session_id else "*.json"
+                for checkpoint_path in sorted(checkpoint_dir.glob(pattern)):
                     zf.write(checkpoint_path, f"checkpoints/{checkpoint_path.name}")
 
     return {

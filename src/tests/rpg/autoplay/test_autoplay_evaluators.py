@@ -125,3 +125,20 @@ def test_evaluate_autoplay_health_can_fail_on_state_bounds_warning():
 
     assert health["ok"] is False
     assert "state_bounds_warning" in health["warnings"]
+
+
+def test_evaluate_autoplay_health_can_fail_on_action_diversity():
+    transcript = [
+        {"player_action": "I observe."},
+        {"player_action": "I observe."},
+        {"player_action": "I observe."},
+    ]
+
+    health = evaluate_autoplay_health(
+        transcript,
+        latest_context={"suggested_actions": [{"x": 1}]},
+        min_action_diversity_rate=0.75,
+    )
+
+    assert health["ok"] is False
+    assert "action_diversity_rate_below_threshold" in health["warnings"]

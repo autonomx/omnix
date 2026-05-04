@@ -78,11 +78,15 @@ def test_player_agent_prompt_includes_schema_and_context():
             "suggested_actions": [{"command": "I observe."}],
         },
         recent_transcript=[],
+        progress_quality_metrics={"churn_only_streak": 4},
+        diversity_metrics={"action_diversity_rate": 0.5},
     )
 
     assert "rpg_player_action_v1" in prompt
     assert "player_action_context_v1" in prompt
     assert "Do not narrate the outcome" in prompt
+    assert "strategy_guidance" in prompt
+    assert "anti_stall" in prompt
 
 
 def test_validate_player_action_rejects_outcome_claims():

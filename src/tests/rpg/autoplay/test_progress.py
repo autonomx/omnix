@@ -78,3 +78,54 @@ def test_classify_progress_delta_detects_combat_started():
     delta = classify_progress_delta(before_state=before, after_state=after)
 
     assert "combat_started" in delta["categories"]
+
+
+def test_classify_progress_delta_detects_witness_hook_meaningful_progress():
+    before = {
+        "story_arc_state": {
+            "arcs": {
+                "arc:witness_search": {"stage": "rumors"}
+            }
+        },
+        "story_arc_milestone_state": {
+            "arcs": {
+                "arc:witness_search": {
+                    "milestones": [
+                        {"milestone_id": "milestone:find_witness", "status": "active"}
+                    ]
+                }
+            }
+        },
+        "campaign_journal_state": {"entries": []},
+        "story_event_queue_state": {"queue": []},
+    }
+    after = {
+        "story_arc_state": {
+            "arcs": {
+                "arc:witness_search": {"stage": "witness_found"}
+            }
+        },
+        "story_arc_milestone_state": {
+            "arcs": {
+                "arc:witness_search": {
+                    "milestones": [
+                        {"milestone_id": "milestone:find_witness", "status": "completed"}
+                    ]
+                }
+            }
+        },
+        "campaign_journal_state": {
+            "entries": [{"entry_id": "journal:witness:found"}]
+        },
+        "story_event_queue_state": {
+            "queue": [{"event_id": "event:witness:found"}]
+        },
+    }
+
+    delta = classify_progress_delta(before_state=before, after_state=after)
+
+    assert "milestone_completed" in delta["categories"]
+    assert "objective_completed" in delta["categories"]
+    assert "arc_stage_changed" in delta["categories"]
+    assert "journal_entry_added" in delta["categories"]
+    assert "story_event_queued" in delta["categories"]

@@ -35,6 +35,7 @@ AUTHORITATIVE_ROOTS_TO_VALIDATE = [
     "social_state",
     "combat_state",
     "memory_state",
+    "autoplay_story_hook_state",
 ]
 
 
