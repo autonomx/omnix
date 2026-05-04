@@ -2,12 +2,11 @@ from __future__ import annotations
 
 from typing import Any, Dict
 
+from app.rpg.session_store import get_session
 from fastapi import APIRouter
 from pydantic import BaseModel, Field
 
 from app.rpg.player_action_context.runtime import build_player_action_context
-from app.rpg.session_store import get_session
-
 
 router = APIRouter(prefix="/api/rpg/player_action_context", tags=["rpg-player-action-context"])
 

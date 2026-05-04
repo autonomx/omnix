@@ -2,7 +2,10 @@ from __future__ import annotations
 
 from typing import Any, Dict, List
 
-from app.rpg.player_action_context.runtime import build_player_action_context, build_suggested_actions
+from app.rpg.player_action_context.runtime import (
+    build_player_action_context,
+    build_suggested_actions,
+)
 
 
 def _safe_dict(value: Any) -> Dict[str, Any]:
