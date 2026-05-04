@@ -1,668 +1,355 @@
-Bundle N16-N18 — Autoplay Story Advancement Hooks + Objective Resolution Test Seeds v1
+Bundle N19-N21 — Post-Objective Progress Quality + Arc Branching v1
 GOAL:
-N13-N15 proved autoplay can:
-- run through manual_harness._run_one_manual_turn
-- use centralized provider
-- preserve state through save/load
-- detect churn-only story stall
-- activate anti-stall strategy guidance
-- pivot player actions when progress quality is poor
+N16-N18 proved deterministic story hooks can advance and complete the seeded witness objective.
 
-Current limitation:
-- the seeded witness objective never meaningfully advances
-- progress_quality remains churn-only
-- strict anti-stall diagnostics fail correctly, but there is no deterministic path for success
+Current issue:
+- objective completes correctly
+- arc stage changes correctly
+- story events are queued correctly
+- checkpoints/state bounds remain clean
+- but after objective completion, later turns may still count as meaningful because generic journal entries appear every turn
 
-N16-N18 adds:
-- deterministic autoplay story advancement hooks
-- objective-resolution test seed for witness investigation
-- grounded trigger matching from player actions
-- story event/journal/milestone updates from simulation-side hooks
-- no LLM outcome authority
-- no server runtime
-- no compatibility runtime
-- progression only when action matches seeded, visible, deterministic hook
+N19-N21 adds:
+1. Post-objective progress quality refinement.
+2. Branching deterministic follow-up arc after witness_found.
+3. Stronger distinction between:
+   - real arc/objective/story progression
+   - generic journal churn
+   - memory/presentation churn
+4. New post-completion objectives:
+   - report witness findings to Bran
+   - decide whether to pursue bandit trail
+5. Branch hooks:
+   - report_to_bran branch
+   - pursue_bandit_trail branch
+   - ignore/escalation branch
+6. Tests proving completed objective does not produce false meaningful progress forever.
 
 Core rule:
-The LLM/player-agent may choose actions, but cannot decide success.
-The simulation hook decides whether an action advances the story.
-Patch 1 — Add deterministic autoplay story hook module
+The player-agent may choose actions.
+The deterministic simulation hooks decide whether story branches advance.
+LLM output remains presentation/action-selection only.
+Patch 1 — Refine progress quality so generic journal churn is not always meaningful
 
-Add:
+Patch:
+
+src/tests/rpg/autoplay/progress_quality.py
+1A. Add weak/generic progress categories
+
+Find:
+
+MEANINGFUL_PROGRESS_CATEGORIES = {
+
+Replace that block with:
+
+*** Begin Patch
+*** Update File: src/tests/rpg/autoplay/progress_quality.py
+@@
+ MEANINGFUL_PROGRESS_CATEGORIES = {
+     "milestone_added",
+     "milestone_completed",
+     "arc_stage_changed",
+-    "journal_entry_added",
+     "objective_added",
+     "objective_completed",
+     "quest_log_changed",
+     "location_changed",
+     "npc_relationship_changed",
+@@
+     "story_event_queued",
+     "story_event_resolved",
+ }
++
++
++WEAK_PROGRESS_CATEGORIES = {
++    # A journal entry can be meaningful when paired with arc/objective/event
++    # progress, but generic per-turn journal/memory entries must not make a
++    # stalled post-objective run look healthy forever.
++    "journal_entry_added",
++}
+*** End Patch
+1B. Update classifier logic
+
+Find inside classify_turn_progress_quality(...):
+
+meaningful = sorted([c for c in categories if c in MEANINGFUL_PROGRESS_CATEGORIES])
+churn_only = sorted([c for c in categories if c in CHURN_ONLY_CATEGORIES])
+unknown = sorted(
+
+Replace with:
+
+*** Begin Patch
+*** Update File: src/tests/rpg/autoplay/progress_quality.py
+@@
+-    meaningful = sorted([c for c in categories if c in MEANINGFUL_PROGRESS_CATEGORIES])
++    strong_meaningful = sorted([c for c in categories if c in MEANINGFUL_PROGRESS_CATEGORIES])
++    weak_progress = sorted([c for c in categories if c in WEAK_PROGRESS_CATEGORIES])
++    meaningful = list(strong_meaningful)
++    if strong_meaningful and weak_progress:
++        meaningful.extend(weak_progress)
+     churn_only = sorted([c for c in categories if c in CHURN_ONLY_CATEGORIES])
+     unknown = sorted(
+         [
+             c
+             for c in categories
+-            if c not in MEANINGFUL_PROGRESS_CATEGORIES and c not in CHURN_ONLY_CATEGORIES
++            if c not in MEANINGFUL_PROGRESS_CATEGORIES
++            and c not in WEAK_PROGRESS_CATEGORIES
++            and c not in CHURN_ONLY_CATEGORIES
+         ]
+     )
+@@
+-    if meaningful:
++    if strong_meaningful:
+         quality = "meaningful_progress"
++    elif weak_progress:
++        quality = "weak_progress"
+     elif categories and all(c in CHURN_ONLY_CATEGORIES for c in categories):
+         quality = "churn_only"
+@@
+         "meaningful": meaningful,
++        "strong_meaningful": strong_meaningful,
++        "weak_progress": weak_progress,
+         "churn_only": churn_only,
+*** End Patch
+1C. Count weak progress separately
+
+Find in compute_progress_quality_metrics(...):
+
+unknown_category_counts = Counter()
+targeted_objective_turns = 0
+
+Replace with:
+
+*** Begin Patch
+*** Update File: src/tests/rpg/autoplay/progress_quality.py
+@@
+     churn_category_counts = Counter()
++    weak_category_counts = Counter()
+     unknown_category_counts = Counter()
+     targeted_objective_turns = 0
+@@
+         for category in _safe_list(quality.get("churn_only")):
+             churn_category_counts[str(category)] += 1
++        for category in _safe_list(quality.get("weak_progress")):
++            weak_category_counts[str(category)] += 1
+         for category in _safe_list(quality.get("unknown")):
+             unknown_category_counts[str(category)] += 1
+@@
+     churn_turns = int(quality_counts.get("churn_only") or 0)
++    weak_turns = int(quality_counts.get("weak_progress") or 0)
+     no_change_turns = int(quality_counts.get("no_change") or 0)
+@@
+         "churn_only_turns": churn_turns,
++        "weak_progress_turns": weak_turns,
+         "no_change_turns": no_change_turns,
+         "meaningful_progress_rate": (meaningful_turns / turn_count) if turn_count else 0.0,
+         "churn_only_rate": (churn_turns / turn_count) if turn_count else 0.0,
++        "weak_progress_rate": (weak_turns / turn_count) if turn_count else 0.0,
+@@
+         "churn_category_counts": dict(churn_category_counts),
++        "weak_category_counts": dict(weak_category_counts),
+         "unknown_category_counts": dict(unknown_category_counts),
+*** End Patch
+Patch 2 — Add post-objective branch hooks
+
+Patch:
 
 src/tests/rpg/autoplay/story_hooks.py
+2A. Add helper to add milestone
+
+Add after _set_milestone_status(...):
+
 *** Begin Patch
-*** Add File: src/tests/rpg/autoplay/story_hooks.py
-+from __future__ import annotations
-+
-+import re
-+from copy import deepcopy
-+from typing import Any, Dict, List
-+
-+
-+def _safe_dict(value: Any) -> Dict[str, Any]:
-+    return value if isinstance(value, dict) else {}
+*** Update File: src/tests/rpg/autoplay/story_hooks.py
+@@
+ def _set_milestone_status(
+@@
+     return True
 +
 +
-+def _safe_list(value: Any) -> List[Any]:
-+    return value if isinstance(value, list) else []
-+
-+
-+def _safe_str(value: Any) -> str:
-+    return value if isinstance(value, str) else ""
-+
-+
-+def _norm(text: str) -> str:
-+    return " ".join(str(text or "").lower().strip().split())
-+
-+
-+def _contains_any(text: str, words: List[str]) -> bool:
-+    text = _norm(text)
-+    return any(word in text for word in words)
-+
-+
-+def _ensure_root(state: Dict[str, Any], key: str) -> Dict[str, Any]:
-+    value = state.get(key)
-+    if not isinstance(value, dict):
-+        value = {}
-+        state[key] = value
-+    return value
-+
-+
-+def _ensure_arc_state(state: Dict[str, Any]) -> Dict[str, Any]:
-+    root = _ensure_root(state, "story_arc_state")
-+    root.setdefault("arcs", {})
-+    return root
-+
-+
-+def _ensure_milestone_state(state: Dict[str, Any]) -> Dict[str, Any]:
-+    root = _ensure_root(state, "story_arc_milestone_state")
-+    root.setdefault("arcs", {})
-+    return root
-+
-+
-+def _ensure_journal_state(state: Dict[str, Any]) -> Dict[str, Any]:
-+    root = _ensure_root(state, "campaign_journal_state")
-+    root.setdefault("entries", [])
-+    return root
-+
-+
-+def _ensure_event_queue_state(state: Dict[str, Any]) -> Dict[str, Any]:
-+    root = _ensure_root(state, "story_event_queue_state")
-+    root.setdefault("queue", [])
-+    return root
-+
-+
-+def _find_milestone(state: Dict[str, Any], milestone_id: str) -> Dict[str, Any] | None:
-+    milestone_state = _ensure_milestone_state(state)
-+    for arc_bucket in _safe_dict(milestone_state.get("arcs")).values():
-+        milestones = _safe_list(_safe_dict(arc_bucket).get("milestones"))
-+        for row in milestones:
-+            if isinstance(row, dict) and row.get("milestone_id") == milestone_id:
-+                return row
-+    return None
-+
-+
-+def _set_milestone_status(
-+    state: Dict[str, Any],
-+    *,
-+    milestone_id: str,
-+    status: str,
-+    turn_index: int,
-+) -> bool:
-+    row = _find_milestone(state, milestone_id)
-+    if not row:
-+        return False
-+    if row.get("status") == status:
-+        return False
-+    row["status"] = status
-+    row["updated_turn_index"] = int(turn_index)
-+    if status == "completed":
-+        row["completed_turn_index"] = int(turn_index)
-+    return True
-+
-+
-+def _set_arc_stage(
++def _add_milestone_once(
 +    state: Dict[str, Any],
 +    *,
 +    arc_id: str,
-+    stage: str,
-+    turn_index: int,
-+) -> bool:
-+    arc_state = _ensure_arc_state(state)
-+    arcs = _safe_dict(arc_state.setdefault("arcs", {}))
-+    arc = _safe_dict(arcs.setdefault(arc_id, {"arc_id": arc_id}))
-+    before = arc.get("stage")
-+    if before == stage:
-+        return False
-+    arc["stage"] = stage
-+    arc["updated_turn_index"] = int(turn_index)
-+    arcs[arc_id] = arc
-+    return True
-+
-+
-+def _append_journal_once(
-+    state: Dict[str, Any],
-+    *,
-+    entry_id: str,
++    milestone_id: str,
 +    title: str,
-+    text: str,
++    objective_text: str,
 +    turn_index: int,
-+    tags: List[str] | None = None,
++    priority: int = 70,
 +) -> bool:
-+    journal = _ensure_journal_state(state)
-+    entries = _safe_list(journal.setdefault("entries", []))
-+    if any(_safe_dict(row).get("entry_id") == entry_id for row in entries):
++    milestone_state = _ensure_milestone_state(state)
++    arcs = _safe_dict(milestone_state.setdefault("arcs", {}))
++    bucket = _safe_dict(arcs.setdefault(arc_id, {"arc_id": arc_id, "milestones": []}))
++    milestones = _safe_list(bucket.setdefault("milestones", []))
++    if any(_safe_dict(row).get("milestone_id") == milestone_id for row in milestones):
 +        return False
-+    entries.append(
++    milestones.append(
 +        {
-+            "entry_id": entry_id,
++            "milestone_id": milestone_id,
 +            "title": title,
-+            "text": text,
-+            "turn_index": int(turn_index),
-+            "tags": tags or [],
++            "objective_text": objective_text,
++            "status": "active",
++            "priority": int(priority),
++            "created_turn_index": int(turn_index),
++            "updated_turn_index": int(turn_index),
 +        }
 +    )
-+    journal["entries"] = entries
++    bucket["milestones"] = milestones
++    arcs[arc_id] = bucket
++    milestone_state["arcs"] = arcs
 +    return True
-+
-+
-+def _queue_event_once(
-+    state: Dict[str, Any],
-+    *,
-+    event_id: str,
-+    title: str,
-+    summary: str,
-+    turn_index: int,
-+    severity: str = "low",
-+) -> bool:
-+    queue_state = _ensure_event_queue_state(state)
-+    queue = _safe_list(queue_state.setdefault("queue", []))
-+    if any(_safe_dict(row).get("event_id") == event_id for row in queue):
-+        return False
-+    queue.append(
+*** End Patch
+2B. Add post-objective hooks to seed
+
+Inside seed_witness_resolution_hooks(...), find the root["hooks"] = [ list. After the existing hook:witness:find_witness dict, add these hooks before the closing ]:
+
+*** Begin Patch
+*** Update File: src/tests/rpg/autoplay/story_hooks.py
+@@
+         {
+             "hook_id": "hook:witness:find_witness",
+@@
+                 "queue_event_summary": "The witness search objective has been resolved by a grounded investigation action.",
+             },
+         },
 +        {
-+            "event_id": event_id,
-+            "title": title,
-+            "summary": summary,
-+            "turn_index": int(turn_index),
-+            "severity": severity,
-+            "source": "autoplay_story_hook",
-+        }
-+    )
-+    queue_state["queue"] = queue
-+    return True
-+
-+
-+def _mark_hook_fired(state: Dict[str, Any], hook_id: str, turn_index: int) -> None:
-+    root = _ensure_root(state, "autoplay_story_hook_state")
-+    fired = _safe_dict(root.setdefault("fired_hooks", {}))
-+    fired[hook_id] = {"hook_id": hook_id, "turn_index": int(turn_index)}
-+    root["fired_hooks"] = fired
-+
-+
-+def _hook_already_fired(state: Dict[str, Any], hook_id: str) -> bool:
-+    root = _safe_dict(state.get("autoplay_story_hook_state"))
-+    fired = _safe_dict(root.get("fired_hooks"))
-+    return hook_id in fired
-+
-+
-+def seed_witness_resolution_hooks(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
-+    """Attach deterministic action hooks to the seeded tavern witness campaign.
-+
-+    These are player-visible and test-only. They allow autoplay to prove story
-+    progression can occur when the LLM player takes grounded investigation
-+    actions. The LLM still cannot invent success; the hook decides progress.
-+    """
-+    state = simulation_state
-+    root = _ensure_root(state, "autoplay_story_hook_state")
-+    root["enabled"] = True
-+    root.setdefault("fired_hooks", {})
-+    root["hooks"] = [
-+        {
-+            "hook_id": "hook:witness:ask_bran",
++            "hook_id": "hook:witness:report_to_bran",
 +            "arc_id": "arc:witness_search",
-+            "milestone_id": "milestone:find_witness",
-+            "kind": "lead_discovery",
-+            "description": "Asking Bran or tavern patrons about the witness reveals a cloaked traveler lead.",
-+            "requires_any": ["bran", "innkeeper", "patron", "traveler", "witness", "rumor"],
-+            "action_keywords": ["ask", "talk", "question", "rumor", "witness", "traveler"],
++            "milestone_id": "milestone:report_findings_to_bran",
++            "kind": "post_objective_report",
++            "description": "After finding the witness lead, reporting the findings to Bran opens a response branch.",
++            "requires_any": ["bran", "innkeeper", "report", "tell", "return", "findings", "witness"],
++            "action_keywords": ["tell", "report", "return", "explain", "share", "ask", "talk"],
++            "requires_prior_hooks_any": ["hook:witness:find_witness"],
 +            "effect": {
-+                "journal_entry_id": "journal:witness:cloaked_traveler_lead",
-+                "journal_title": "A Cloaked Traveler",
-+                "journal_text": "Questions in the tavern point toward a cloaked traveler who may have seen what happened.",
-+                "arc_stage": "lead_found",
-+                "queue_event_id": "event:witness:lead_found",
-+                "queue_event_title": "Witness Lead Found",
-+                "queue_event_summary": "The investigation now points toward a cloaked traveler near the tavern.",
-+            },
-+        },
-+        {
-+            "hook_id": "hook:witness:inspect_tavern",
-+            "arc_id": "arc:witness_search",
-+            "milestone_id": "milestone:find_witness",
-+            "kind": "clue_confirmation",
-+            "description": "Inspecting the tavern, street, bar, or immediate surroundings confirms where the witness went.",
-+            "requires_any": ["tavern", "bar", "street", "outside", "surroundings", "cloak", "tracks", "clue"],
-+            "action_keywords": ["inspect", "look", "search", "observe", "scan", "examine", "follow"],
-+            "effect": {
-+                "journal_entry_id": "journal:witness:street_trace",
-+                "journal_title": "Trace Outside the Tavern",
-+                "journal_text": "A grounded inspection finds signs that the cloaked traveler moved toward the street outside.",
-+                "arc_stage": "witness_trace_found",
-+                "queue_event_id": "event:witness:trace_found",
-+                "queue_event_title": "Witness Trace Found",
-+                "queue_event_summary": "A clue outside the tavern narrows the search for the witness.",
-+            },
-+        },
-+        {
-+            "hook_id": "hook:witness:find_witness",
-+            "arc_id": "arc:witness_search",
-+            "milestone_id": "milestone:find_witness",
-+            "kind": "milestone_completion",
-+            "description": "Following the witness lead outside or down the street resolves the seeded witness objective.",
-+            "requires_any": ["street", "outside", "road", "follow", "cloaked", "traveler", "witness"],
-+            "action_keywords": ["follow", "approach", "find", "search", "walk", "track", "look"],
-+            "requires_prior_hooks_any": [
-+                "hook:witness:ask_bran",
-+                "hook:witness:inspect_tavern",
-+            ],
-+            "effect": {
-+                "journal_entry_id": "journal:witness:found",
-+                "journal_title": "Witness Found",
-+                "journal_text": "The search turns up the witness lead and resolves the immediate objective.",
-+                "arc_stage": "witness_found",
++                "journal_entry_id": "journal:witness:reported_to_bran",
++                "journal_title": "Reported to Bran",
++                "journal_text": "The witness findings are reported back to Bran, turning the investigation toward what comes next.",
++                "arc_stage": "reported_to_bran",
++                "add_milestone": {
++                    "milestone_id": "milestone:pursue_bandit_trail",
++                    "title": "Pursue the bandit trail",
++                    "objective_text": "Follow the trail suggested by the witness report.",
++                    "priority": 75,
++                },
 +                "complete_milestone": True,
-+                "queue_event_id": "event:witness:found",
-+                "queue_event_title": "Witness Objective Resolved",
-+                "queue_event_summary": "The witness search objective has been resolved by a grounded investigation action.",
++                "queue_event_id": "event:witness:reported_to_bran",
++                "queue_event_title": "Findings Reported",
++                "queue_event_summary": "Bran now knows the witness findings and points toward a possible bandit trail.",
 +            },
 +        },
-+    ]
-+    return {
-+        "ok": True,
-+        "hook_count": len(root["hooks"]),
-+        "hook_ids": [row["hook_id"] for row in root["hooks"]],
-+    }
++        {
++            "hook_id": "hook:witness:pursue_bandit_trail",
++            "arc_id": "arc:witness_search",
++            "milestone_id": "milestone:pursue_bandit_trail",
++            "kind": "branch_pursuit",
++            "description": "Following the bandit trail after reporting to Bran advances the arc into pursuit.",
++            "requires_any": ["bandit", "trail", "road", "outside", "tracks", "follow", "pursue"],
++            "action_keywords": ["follow", "pursue", "track", "walk", "search", "leave", "travel"],
++            "requires_prior_hooks_any": ["hook:witness:report_to_bran"],
++            "effect": {
++                "journal_entry_id": "journal:witness:bandit_trail",
++                "journal_title": "The Bandit Trail",
++                "journal_text": "The investigation branches toward a bandit trail beyond the tavern.",
++                "arc_stage": "bandit_trail",
++                "complete_milestone": True,
++                "queue_event_id": "event:witness:bandit_trail",
++                "queue_event_title": "Bandit Trail Pursued",
++                "queue_event_summary": "The witness arc now points toward a bandit trail outside the tavern.",
++            },
++        },
+*** End Patch
+2C. Apply add_milestone effect
+
+Inside apply_autoplay_story_hooks(...), after the milestone completion block:
+
+if effect.get("complete_milestone") and milestone_id:
+    ...
+
+add:
+
+*** Begin Patch
+*** Update File: src/tests/rpg/autoplay/story_hooks.py
+@@
+         if effect.get("complete_milestone") and milestone_id:
+             if _set_milestone_status(
+                 state,
+                 milestone_id=milestone_id,
+                 status="completed",
+                 turn_index=turn_index,
+             ):
+                 changed_parts.append("milestone_completed")
 +
-+
-+def _hook_matches_action(
-+    hook: Dict[str, Any],
-+    *,
-+    player_action: str,
-+    state: Dict[str, Any],
-+) -> bool:
-+    text = _norm(player_action)
-+    if not text:
-+        return False
-+
-+    prior_any = _safe_list(hook.get("requires_prior_hooks_any"))
-+    if prior_any and not any(_hook_already_fired(state, str(hook_id)) for hook_id in prior_any):
-+        return False
-+
-+    requires_any = [str(x).lower() for x in _safe_list(hook.get("requires_any"))]
-+    action_keywords = [str(x).lower() for x in _safe_list(hook.get("action_keywords"))]
-+    if requires_any and not _contains_any(text, requires_any):
-+        return False
-+    if action_keywords and not _contains_any(text, action_keywords):
-+        return False
-+    return True
-+
-+
-+def apply_autoplay_story_hooks(
-+    *,
-+    simulation_state: Dict[str, Any],
-+    player_action: str,
-+    turn_index: int,
-+) -> Dict[str, Any]:
-+    """Apply deterministic story advancement hooks after a real turn.
-+
-+    The returned state is a merged copy. Hooks are one-shot and only fire when
-+    their grounded trigger matches the player's action.
-+    """
-+    before_state = deepcopy(_safe_dict(simulation_state))
-+    state = deepcopy(before_state)
-+    root = _safe_dict(state.get("autoplay_story_hook_state"))
-+    if not root.get("enabled"):
-+        return {
-+            "ok": True,
-+            "changed": False,
-+            "fired_hooks": [],
-+            "simulation_state": state,
-+            "reason": "hooks_disabled",
-+        }
-+
-+    fired_hooks: List[Dict[str, Any]] = []
-+    for hook in _safe_list(root.get("hooks")):
-+        hook = _safe_dict(hook)
-+        hook_id = _safe_str(hook.get("hook_id"))
-+        if not hook_id or _hook_already_fired(state, hook_id):
-+            continue
-+        if not _hook_matches_action(hook, player_action=player_action, state=state):
-+            continue
-+
-+        effect = _safe_dict(hook.get("effect"))
-+        arc_id = _safe_str(hook.get("arc_id"))
-+        milestone_id = _safe_str(hook.get("milestone_id"))
-+        changed_parts: List[str] = []
-+
-+        if effect.get("arc_stage") and arc_id:
-+            if _set_arc_stage(
++        add_milestone = _safe_dict(effect.get("add_milestone"))
++        if add_milestone and arc_id:
++            if _add_milestone_once(
 +                state,
 +                arc_id=arc_id,
-+                stage=_safe_str(effect.get("arc_stage")),
++                milestone_id=_safe_str(add_milestone.get("milestone_id")),
++                title=_safe_str(add_milestone.get("title")),
++                objective_text=_safe_str(add_milestone.get("objective_text")),
++                priority=int(add_milestone.get("priority") or 70),
 +                turn_index=turn_index,
 +            ):
-+                changed_parts.append("arc_stage")
-+
-+        if effect.get("complete_milestone") and milestone_id:
-+            if _set_milestone_status(
-+                state,
-+                milestone_id=milestone_id,
-+                status="completed",
-+                turn_index=turn_index,
-+            ):
-+                changed_parts.append("milestone_completed")
-+
-+        if effect.get("journal_entry_id"):
-+            if _append_journal_once(
-+                state,
-+                entry_id=_safe_str(effect.get("journal_entry_id")),
-+                title=_safe_str(effect.get("journal_title")),
-+                text=_safe_str(effect.get("journal_text")),
-+                turn_index=turn_index,
-+                tags=["autoplay", "witness_search", _safe_str(hook.get("kind"))],
-+            ):
-+                changed_parts.append("journal_entry")
-+
-+        if effect.get("queue_event_id"):
-+            if _queue_event_once(
-+                state,
-+                event_id=_safe_str(effect.get("queue_event_id")),
-+                title=_safe_str(effect.get("queue_event_title")),
-+                summary=_safe_str(effect.get("queue_event_summary")),
-+                turn_index=turn_index,
-+            ):
-+                changed_parts.append("story_event_queued")
-+
-+        _mark_hook_fired(state, hook_id, turn_index)
-+        changed_parts.append("hook_fired")
-+        fired_hooks.append(
-+            {
-+                "hook_id": hook_id,
-+                "kind": _safe_str(hook.get("kind")),
-+                "changed_parts": changed_parts,
-+            }
-+        )
-+
-+    return {
-+        "ok": True,
-+        "changed": bool(fired_hooks),
-+        "fired_hooks": fired_hooks,
-+        "simulation_state": state,
-+        "reason": "hooks_applied" if fired_hooks else "no_matching_hook",
-+    }
++                changed_parts.append("milestone_added")
 *** End Patch
-Patch 2 — Enable hooks in tavern seed
+Patch 3 — Prevent generic journal-only progress from being called meaningful
 
 Patch:
 
-src/tests/rpg/autoplay/seeding.py
+src/tests/rpg/autoplay/progress.py
 
-Add import:
+This file should still emit journal_entry_added when journal entries appear. Keep that. The quality classifier now downgrades journal-only changes to weak_progress.
 
-*** Begin Patch
-*** Update File: src/tests/rpg/autoplay/seeding.py
-@@
- from app.rpg.story_arcs.milestones import add_story_arc_milestone
- from app.rpg.story_arcs.state import start_story_arc
-+from tests.rpg.autoplay.story_hooks import seed_witness_resolution_hooks
-*** End Patch
+No patch needed here.
 
-In seed_tavern_story_campaign(...), before return, add:
-
-*** Begin Patch
-*** Update File: src/tests/rpg/autoplay/seeding.py
-@@
-     add_story_arc_milestone(
-         simulation_state,
-         arc_id="arc:witness_search",
-         milestone_id="milestone:find_witness",
-@@
-         priority=80,
-         turn_index=0,
-     )
-+    hook_result = seed_witness_resolution_hooks(simulation_state)
-     return {
-         "ok": True,
-         "seed": "tavern_story_seed",
-         "scene_id": "scene:rusty_flagon",
-         "arc_id": "arc:witness_search",
-         "objective_id": "milestone:find_witness",
-+        "story_hooks": hook_result,
-     }
-*** End Patch
-Patch 3 — Apply story hooks after manual turn
+Patch 4 — Add hook hints for post-objective branches
 
 Patch:
 
-src/tests/rpg/autoplay_llm_campaign.py
+src/tests/rpg/autoplay/story_hooks.py
 
-Add imports:
+The existing autoplay_story_hook_player_hints(...) already filters prior hooks, so once hook:witness:find_witness fires, hook:witness:report_to_bran becomes visible; once report fires, hook:witness:pursue_bandit_trail becomes visible.
 
-*** Begin Patch
-*** Update File: src/tests/rpg/autoplay_llm_campaign.py
-@@
- from tests.rpg.autoplay.strategy_profiles import (
-     action_diversity_metrics,
-     build_strategy_guidance,
-     rerank_suggested_actions_for_strategy,
- )
-+from tests.rpg.autoplay.story_hooks import apply_autoplay_story_hooks
-+from tests.rpg.autoplay.manual_turn_driver import prepare_autoplay_manual_session
-*** End Patch
+No patch needed if Patch 2 is applied.
 
-If prepare_autoplay_manual_session is already imported from manual_turn_driver, do not duplicate it. Just add:
-
-from tests.rpg.autoplay.story_hooks import apply_autoplay_story_hooks
-
-Inside the turn loop, after the real manual turn returns and after simulation_state = load_autoplay_simulation_state(session_id), add:
-
-*** Begin Patch
-*** Update File: src/tests/rpg/autoplay_llm_campaign.py
-@@
-             # The manual driver saves the merged state back to the manual
-             # session. Reload here so the next player action context is built
-             # from exactly what the manual runtime persisted.
-             simulation_state = load_autoplay_simulation_state(session_id)
-+            story_hook_result = apply_autoplay_story_hooks(
-+                simulation_state=simulation_state,
-+                player_action=player_action,
-+                turn_index=turn_index,
-+            )
-+            if story_hook_result.get("changed"):
-+                simulation_state = _safe_dict(story_hook_result.get("simulation_state"))
-+                prepare_autoplay_manual_session(
-+                    session_id=session_id,
-+                    simulation_state=simulation_state,
-+                    reset_session_state=False,
-+                )
-+                simulation_state = load_autoplay_simulation_state(session_id)
-         except Exception as exc:
-             runtime_error = f"{type(exc).__name__}: {exc}"
-             turn_result = {
-                 "ok": False,
-                 "error": runtime_error,
-                 "traceback": traceback.format_exc(),
-             }
-+            story_hook_result = {}
-*** End Patch
-
-Then in the turn record, add:
-
-*** Begin Patch
-*** Update File: src/tests/rpg/autoplay_llm_campaign.py
-@@
-             "progress_quality": progress_quality,
-+            "story_hook_result": story_hook_result,
-             "state_bounds": state_bounds,
-             "save_load_checkpoint": save_load_checkpoint,
-         }
-*** End Patch
-
-Important: make sure story_hook_result = {} is initialized before the try block so it always exists.
-
-Add before try::
-
-*** Begin Patch
-*** Update File: src/tests/rpg/autoplay_llm_campaign.py
-@@
-         runtime_error = ""
-         turn_result: Dict[str, Any]
-         before_state = simulation_state
-         before_digest = state_digest(before_state)
-+        story_hook_result: Dict[str, Any] = {}
-         try:
-*** End Patch
-Patch 4 — Progress delta should classify hook-driven updates
-
-The existing classify_progress_delta(...) should already detect:
-
-arc_stage_changed
-milestone_completed
-journal_entry_added
-story_event_queued
-objective_completed
-
-No change required.
-
-But add hook counts to metrics.
+Patch 5 — Update metrics for weak progress
 
 Patch:
 
 src/tests/rpg/autoplay/evaluators.py
 
-In compute_progress_metrics(...), initialize:
+No structural patch needed if compute_progress_quality_metrics(...) is already embedded under:
 
-*** Begin Patch
-*** Update File: src/tests/rpg/autoplay/evaluators.py
-@@
-     state_bound_warning_count = 0
-     max_state_size_bytes_seen = 0
-+    story_hook_fire_count = 0
-+    story_hook_ids = []
-@@
-         bounds = _safe_dict(row.get("state_bounds"))
-         if bounds:
-@@
-             if bounds.get("warnings"):
-                 state_bound_warning_count += 1
-+        hook_result = _safe_dict(row.get("story_hook_result"))
-+        for fired in _safe_list(hook_result.get("fired_hooks")):
-+            fired = _safe_dict(fired)
-+            story_hook_fire_count += 1
-+            if fired.get("hook_id"):
-+                story_hook_ids.append(str(fired.get("hook_id")))
-@@
-         "max_state_size_bytes_seen": max_state_size_bytes_seen,
-+        "story_hook_fire_count": story_hook_fire_count,
-+        "story_hook_ids": story_hook_ids,
-         "progress_quality": progress_quality_metrics,
-*** End Patch
-Patch 5 — Add story hook details to HTML report
+"progress_quality": progress_quality_metrics
+
+But this now includes:
+
+weak_progress_turns
+weak_progress_rate
+weak_category_counts
+
+No patch required.
+
+Patch 6 — Add tests for post-objective branch hooks
 
 Patch:
 
-src/tests/rpg/autoplay/reporting.py
-
-After progress quality section, add:
-
-*** Begin Patch
-*** Update File: src/tests/rpg/autoplay/reporting.py
-@@
-               <div><strong>Progress quality:</strong>
-                 <pre>{html.escape(json.dumps(row.get("progress_quality") or {}, ensure_ascii=False, indent=2, sort_keys=True, default=str))}</pre>
-               </div>
-+              <details>
-+                <summary>Story hook result</summary>
-+                <pre>{html.escape(json.dumps(row.get("story_hook_result") or {}, ensure_ascii=False, indent=2, sort_keys=True, default=str))}</pre>
-+              </details>
-               <details>
-                 <summary>Strategy guidance</summary>
-*** End Patch
-Patch 6 — Add story hook tests
+src/tests/rpg/autoplay/test_story_hooks.py
 
 Add:
 
-src/tests/rpg/autoplay/test_story_hooks.py
 *** Begin Patch
-*** Add File: src/tests/rpg/autoplay/test_story_hooks.py
-+from tests.rpg.autoplay.seeding import seed_tavern_story_campaign
-+from tests.rpg.autoplay.story_hooks import (
-+    apply_autoplay_story_hooks,
-+    seed_witness_resolution_hooks,
-+)
+*** Update File: src/tests/rpg/autoplay/test_story_hooks.py
+@@
+ def test_hooks_are_one_shot():
+@@
+     assert first["changed"] is True
+     assert second["changed"] is False
 +
 +
-+def test_seed_witness_resolution_hooks_adds_hooks():
-+    state = {}
-+
-+    result = seed_witness_resolution_hooks(state)
-+
-+    assert result["ok"] is True
-+    assert result["hook_count"] == 3
-+    assert state["autoplay_story_hook_state"]["enabled"] is True
-+
-+
-+def test_ask_bran_hook_adds_journal_and_arc_stage():
-+    state = {}
-+    seed_tavern_story_campaign(state)
-+
-+    result = apply_autoplay_story_hooks(
-+        simulation_state=state,
-+        player_action="I ask Bran about the witness.",
-+        turn_index=1,
-+    )
-+
-+    after = result["simulation_state"]
-+    assert result["changed"] is True
-+    assert result["fired_hooks"][0]["hook_id"] == "hook:witness:ask_bran"
-+    assert after["story_arc_state"]["arcs"]["arc:witness_search"]["stage"] == "lead_found"
-+    assert after["campaign_journal_state"]["entries"]
-+    assert after["story_event_queue_state"]["queue"]
-+
-+
-+def test_find_witness_hook_requires_prior_hook():
-+    state = {}
-+    seed_tavern_story_campaign(state)
-+
-+    first = apply_autoplay_story_hooks(
-+        simulation_state=state,
-+        player_action="I walk outside and find the witness.",
-+        turn_index=1,
-+    )
-+
-+    assert first["changed"] is False
-+
-+    second = apply_autoplay_story_hooks(
-+        simulation_state=state,
-+        player_action="I ask Bran about the witness.",
-+        turn_index=2,
-+    )
-+    third = apply_autoplay_story_hooks(
-+        simulation_state=second["simulation_state"],
-+        player_action="I walk outside and follow the cloaked traveler to find the witness.",
-+        turn_index=3,
-+    )
-+
-+    after = third["simulation_state"]
-+    milestone = after["story_arc_milestone_state"]["arcs"]["arc:witness_search"]["milestones"][0]
-+    assert third["changed"] is True
-+    assert milestone["status"] == "completed"
-+    assert after["story_arc_state"]["arcs"]["arc:witness_search"]["stage"] == "witness_found"
-+
-+
-+def test_hooks_are_one_shot():
++def test_report_to_bran_adds_next_branch_objective():
 +    state = {}
 +    seed_tavern_story_campaign(state)
 +
@@ -673,14 +360,101 @@ src/tests/rpg/autoplay/test_story_hooks.py
 +    )
 +    second = apply_autoplay_story_hooks(
 +        simulation_state=first["simulation_state"],
-+        player_action="I ask Bran about the witness again.",
++        player_action="I walk outside and follow the cloaked traveler to find the witness.",
 +        turn_index=2,
 +    )
++    third = apply_autoplay_story_hooks(
++        simulation_state=second["simulation_state"],
++        player_action="I return to Bran and report the witness findings.",
++        turn_index=3,
++    )
 +
-+    assert first["changed"] is True
-+    assert second["changed"] is False
++    after = third["simulation_state"]
++    milestones = after["story_arc_milestone_state"]["arcs"]["arc:witness_search"]["milestones"]
++    milestone_by_id = {row["milestone_id"]: row for row in milestones}
++
++    assert third["changed"] is True
++    assert after["story_arc_state"]["arcs"]["arc:witness_search"]["stage"] == "reported_to_bran"
++    assert milestone_by_id["milestone:report_findings_to_bran"]["status"] == "completed"
++    assert milestone_by_id["milestone:pursue_bandit_trail"]["status"] == "active"
++
++
++def test_pursue_bandit_trail_completes_branch_objective():
++    state = {}
++    seed_tavern_story_campaign(state)
++
++    state = apply_autoplay_story_hooks(
++        simulation_state=state,
++        player_action="I ask Bran about the witness.",
++        turn_index=1,
++    )["simulation_state"]
++    state = apply_autoplay_story_hooks(
++        simulation_state=state,
++        player_action="I walk outside and follow the cloaked traveler to find the witness.",
++        turn_index=2,
++    )["simulation_state"]
++    state = apply_autoplay_story_hooks(
++        simulation_state=state,
++        player_action="I return to Bran and report the witness findings.",
++        turn_index=3,
++    )["simulation_state"]
++    result = apply_autoplay_story_hooks(
++        simulation_state=state,
++        player_action="I leave the tavern and pursue the bandit trail along the road.",
++        turn_index=4,
++    )
++
++    after = result["simulation_state"]
++    milestones = after["story_arc_milestone_state"]["arcs"]["arc:witness_search"]["milestones"]
++    milestone_by_id = {row["milestone_id"]: row for row in milestones}
++
++    assert result["changed"] is True
++    assert after["story_arc_state"]["arcs"]["arc:witness_search"]["stage"] == "bandit_trail"
++    assert milestone_by_id["milestone:pursue_bandit_trail"]["status"] == "completed"
 *** End Patch
-Patch 7 — Add progress-quality integration test for hook-driven progress
+Patch 7 — Add tests for weak journal progress
+
+Patch:
+
+src/tests/rpg/autoplay/test_progress_quality.py
+
+Add:
+
+*** Begin Patch
+*** Update File: src/tests/rpg/autoplay/test_progress_quality.py
+@@
+ def test_classify_turn_progress_quality_churn_only():
+@@
+     assert quality["quality"] == "churn_only"
+     assert quality["churn_only"] == ["state_changed"]
++
++
++def test_classify_turn_progress_quality_journal_only_is_weak_progress():
++    row = {
++        "progress_delta": {"categories": ["journal_entry_added"]},
++        "player_action": "I write down what happened.",
++    }
++
++    quality = classify_turn_progress_quality(row)
++
++    assert quality["quality"] == "weak_progress"
++    assert quality["weak_progress"] == ["journal_entry_added"]
++    assert quality["meaningful"] == []
++
++
++def test_classify_turn_progress_quality_journal_plus_arc_is_meaningful():
++    row = {
++        "progress_delta": {"categories": ["journal_entry_added", "arc_stage_changed"]},
++        "player_action": "I report the findings.",
++    }
++
++    quality = classify_turn_progress_quality(row)
++
++    assert quality["quality"] == "meaningful_progress"
++    assert "arc_stage_changed" in quality["meaningful"]
++    assert "journal_entry_added" in quality["meaningful"]
+*** End Patch
+Patch 8 — Add progress delta test for new branch objective
 
 Patch:
 
@@ -691,36 +465,13 @@ Add:
 *** Begin Patch
 *** Update File: src/tests/rpg/autoplay/test_progress.py
 @@
- def test_classify_progress_delta_detects_combat_started():
+ def test_classify_progress_delta_detects_witness_hook_meaningful_progress():
 @@
-     assert "combat_started" in delta["categories"]
+     assert "story_event_queued" in delta["categories"]
 +
 +
-+def test_classify_progress_delta_detects_witness_hook_meaningful_progress():
++def test_classify_progress_delta_detects_added_branch_objective():
 +    before = {
-+        "story_arc_state": {
-+            "arcs": {
-+                "arc:witness_search": {"stage": "rumors"}
-+            }
-+        },
-+        "story_arc_milestone_state": {
-+            "arcs": {
-+                "arc:witness_search": {
-+                    "milestones": [
-+                        {"milestone_id": "milestone:find_witness", "status": "active"}
-+                    ]
-+                }
-+            }
-+        },
-+        "campaign_journal_state": {"entries": []},
-+        "story_event_queue_state": {"queue": []},
-+    }
-+    after = {
-+        "story_arc_state": {
-+            "arcs": {
-+                "arc:witness_search": {"stage": "witness_found"}
-+            }
-+        },
 +        "story_arc_milestone_state": {
 +            "arcs": {
 +                "arc:witness_search": {
@@ -729,122 +480,151 @@ Add:
 +                    ]
 +                }
 +            }
-+        },
-+        "campaign_journal_state": {
-+            "entries": [{"entry_id": "journal:witness:found"}]
-+        },
-+        "story_event_queue_state": {
-+            "queue": [{"event_id": "event:witness:found"}]
-+        },
++        }
++    }
++    after = {
++        "story_arc_milestone_state": {
++            "arcs": {
++                "arc:witness_search": {
++                    "milestones": [
++                        {"milestone_id": "milestone:find_witness", "status": "completed"},
++                        {"milestone_id": "milestone:pursue_bandit_trail", "status": "active"},
++                    ]
++                }
++            }
++        }
 +    }
 +
 +    delta = classify_progress_delta(before_state=before, after_state=after)
 +
-+    assert "milestone_completed" in delta["categories"]
-+    assert "objective_completed" in delta["categories"]
-+    assert "arc_stage_changed" in delta["categories"]
-+    assert "journal_entry_added" in delta["categories"]
-+    assert "story_event_queued" in delta["categories"]
++    assert "milestone_added" in delta["categories"]
++    assert "objective_added" in delta["categories"]
 *** End Patch
-Patch 8 — Add strategy prompt hint for hooks via visible context
+Patch 9 — Add optional strict post-objective no-false-progress flag
 
-This is optional, but helpful. Since hooks are test-only deterministic visible leads, expose them through the player action context.
+This makes the diagnostic explicit without making normal runs brittle.
 
 Patch:
 
-src/tests/rpg/autoplay/story_hooks.py
+src/tests/rpg/autoplay/progress_quality.py
 
-Add:
+Add helper at end:
 
 *** Begin Patch
-*** Update File: src/tests/rpg/autoplay/story_hooks.py
+*** Update File: src/tests/rpg/autoplay/progress_quality.py
 @@
- def apply_autoplay_story_hooks(
+ def evaluate_progress_quality_health(
 @@
      return {
-         "ok": True,
-         "changed": bool(fired_hooks),
-         "fired_hooks": fired_hooks,
-         "simulation_state": state,
-         "reason": "hooks_applied" if fired_hooks else "no_matching_hook",
+         "ok": not warnings,
+         "warnings": warnings,
+         "metrics": metrics,
      }
 +
 +
-+def autoplay_story_hook_player_hints(simulation_state: Dict[str, Any]) -> List[Dict[str, Any]]:
-+    root = _safe_dict(simulation_state.get("autoplay_story_hook_state"))
-+    if not root.get("enabled"):
-+        return []
-+    hints = []
-+    for hook in _safe_list(root.get("hooks")):
-+        hook = _safe_dict(hook)
-+        hook_id = _safe_str(hook.get("hook_id"))
-+        if not hook_id or _hook_already_fired(simulation_state, hook_id):
-+            continue
-+        prior_any = _safe_list(hook.get("requires_prior_hooks_any"))
-+        if prior_any and not any(_hook_already_fired(simulation_state, str(hook_id)) for hook_id in prior_any):
-+            continue
-+        hints.append(
-+            {
-+                "hook_id": hook_id,
-+                "kind": _safe_str(hook.get("kind")),
-+                "description": _safe_str(hook.get("description")),
-+            }
-+        )
-+    return hints[:5]
++def post_objective_false_progress_warnings(transcript: List[Dict[str, Any]]) -> List[str]:
++    """Warn if only weak journal progress happens after all objectives complete."""
++    warnings: List[str] = []
++    seen_no_active_objectives = False
++    weak_after_completion = 0
++    meaningful_after_completion = 0
++
++    for row in transcript:
++        context = _safe_dict(row.get("player_action_context"))
++        active = _safe_list(context.get("active_objectives"))
++        quality = _safe_dict(row.get("progress_quality"))
++        if not active:
++            seen_no_active_objectives = True
++            if quality.get("quality") == "weak_progress":
++                weak_after_completion += 1
++            if quality.get("quality") == "meaningful_progress":
++                meaningful_after_completion += 1
++
++    if seen_no_active_objectives and weak_after_completion > 0 and meaningful_after_completion == 0:
++        warnings.append("post_objective_weak_progress_only")
++    return warnings
 *** End Patch
 
-Patch src/tests/rpg/autoplay_llm_campaign.py import:
+Patch runner import:
+
+src/tests/rpg/autoplay_llm_campaign.py
+*** Begin Patch
+*** Update File: src/tests/rpg/autoplay_llm_campaign.py
+@@
+ from tests.rpg.autoplay.progress_quality import (
+     classify_turn_progress_quality,
+     compute_progress_quality_metrics,
+     evaluate_progress_quality_health,
++    post_objective_false_progress_warnings,
+ )
+*** End Patch
+
+After progress_quality_health = evaluate_progress_quality_health(...), add:
 
 *** Begin Patch
 *** Update File: src/tests/rpg/autoplay_llm_campaign.py
 @@
--from tests.rpg.autoplay.story_hooks import apply_autoplay_story_hooks
-+from tests.rpg.autoplay.story_hooks import (
-+    apply_autoplay_story_hooks,
-+    autoplay_story_hook_player_hints,
-+)
+     progress_quality_health = evaluate_progress_quality_health(
+         transcript,
+         min_meaningful_progress_rate=float(args.min_meaningful_progress_rate),
+         max_churn_only_rate=float(args.max_churn_only_rate),
+         max_churn_only_streak=int(args.max_churn_only_streak),
+         max_objective_target_no_progress_streak=int(args.max_objective_target_no_progress_streak),
+     )
++    if args.fail_on_post_objective_weak_progress:
++        post_objective_warnings = post_objective_false_progress_warnings(transcript)
++        if post_objective_warnings:
++            progress_quality_health.setdefault("warnings", [])
++            progress_quality_health["warnings"].extend(post_objective_warnings)
++            progress_quality_health["ok"] = False
 *** End Patch
 
-After context creation, before reranking:
+Add CLI flag:
 
 *** Begin Patch
 *** Update File: src/tests/rpg/autoplay_llm_campaign.py
 @@
-         context = build_player_action_context(
-             simulation_state,
-             turn_index=turn_index,
-             limit=args.suggested_action_limit,
-         )
-+        context["story_hook_hints"] = autoplay_story_hook_player_hints(simulation_state)
+     parser.add_argument("--max-churn-only-streak", type=int, default=0)
+     parser.add_argument("--max-objective-target-no-progress-streak", type=int, default=0)
++    parser.add_argument("--fail-on-post-objective-weak-progress", action="store_true")
+     parser.add_argument("--action-diversity-window", type=int, default=12)
 *** End Patch
 
-These hints are still deterministic and player-visible for the autoplay test seed.
+Add to summary thresholds:
 
-Patch 9 — Update checkpoint authoritative roots
+*** Begin Patch
+*** Update File: src/tests/rpg/autoplay_llm_campaign.py
+@@
+             "max_churn_only_rate": float(args.max_churn_only_rate),
+             "max_churn_only_streak": int(args.max_churn_only_streak),
+             "max_objective_target_no_progress_streak": int(args.max_objective_target_no_progress_streak),
++            "fail_on_post_objective_weak_progress": bool(args.fail_on_post_objective_weak_progress),
+         },
+*** End Patch
+Patch 10 — Update runner test Namespace
 
 Patch:
 
-src/tests/rpg/autoplay/checkpoints.py
+src/tests/rpg/autoplay/test_autoplay_runner.py
 
-Add hook state to roots:
+Add field:
 
 *** Begin Patch
-*** Update File: src/tests/rpg/autoplay/checkpoints.py
+*** Update File: src/tests/rpg/autoplay/test_autoplay_runner.py
 @@
-     "combat_state",
-     "memory_state",
-+    "autoplay_story_hook_state",
- ]
+         max_churn_only_rate=1.0,
+         max_churn_only_streak=0,
+         max_objective_target_no_progress_streak=0,
++        fail_on_post_objective_weak_progress=False,
+         action_diversity_window=12,
 *** End Patch
-Patch 10 — Validation commands
+Validation commands
 Compile
 python -m py_compile src/tests/rpg/autoplay/story_hooks.py
-python -m py_compile src/tests/rpg/autoplay/seeding.py
+python -m py_compile src/tests/rpg/autoplay/progress_quality.py
 python -m py_compile src/tests/rpg/autoplay_llm_campaign.py
-python -m py_compile src/tests/rpg/autoplay/evaluators.py
-python -m py_compile src/tests/rpg/autoplay/reporting.py
-python -m py_compile src/tests/rpg/autoplay/checkpoints.py
 python -m py_compile src/tests/rpg/autoplay/test_story_hooks.py
+python -m py_compile src/tests/rpg/autoplay/test_progress_quality.py
 python -m py_compile src/tests/rpg/autoplay/test_progress.py
+python -m py_compile src/tests/rpg/autoplay/test_autoplay_runner.py
 Focused tests
-python -m pytest src/tests/rpg/autoplay/test_story_hooks.py src/tests/rpg/autoplay/test_progress.py src/tests/rpg/autoplay/test_progress_quality.py src/tests/rpg/autoplay/test_strategy_profiles.py src/tests/rpg/autoplay/test_checkpoints.py src/tests/rpg/autoplay/test_manual_turn_driver.py src/tests/rpg/autoplay/test_autoplay_runner.py src/tests/rpg/autoplay/test_player_agent.py src/tests/rpg/autoplay/test_provider_adapter.py -q

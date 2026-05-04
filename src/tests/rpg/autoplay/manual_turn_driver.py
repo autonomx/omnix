@@ -37,6 +37,136 @@ AUTOPLAY_PRESERVED_SIMULATION_ROOTS = {
 }
 
 
+def _merge_list_by_id(
+    before_items: Any,
+    returned_items: Any,
+    *,
+    id_key: str,
+) -> list:
+    before_list = before_items if isinstance(before_items, list) else []
+    returned_list = returned_items if isinstance(returned_items, list) else []
+    merged_by_id = {}
+    order = []
+
+    for item in before_list:
+        if not isinstance(item, dict):
+            continue
+        item_id = item.get(id_key)
+        if not item_id:
+            continue
+        if item_id not in merged_by_id:
+            order.append(item_id)
+        merged_by_id[item_id] = deepcopy(item)
+
+    for item in returned_list:
+        if not isinstance(item, dict):
+            continue
+        item_id = item.get(id_key)
+        if not item_id:
+            continue
+        if item_id not in merged_by_id:
+            order.append(item_id)
+            merged_by_id[item_id] = deepcopy(item)
+            continue
+        merged = deepcopy(merged_by_id[item_id])
+        merged.update(deepcopy(item))
+        merged_by_id[item_id] = merged
+
+    return [merged_by_id[item_id] for item_id in order]
+
+
+def _merge_campaign_journal_state(before: Any, returned: Any) -> Dict[str, Any]:
+    before = deepcopy(_safe_dict(before))
+    returned = deepcopy(_safe_dict(returned))
+    merged = deepcopy(before)
+    merged.update(returned)
+    before_entries = _safe_dict(before).get("entries", [])
+    returned_entries = _safe_dict(returned).get("entries", [])
+    merged["entries"] = _merge_list_by_id(
+        before_entries,
+        returned_entries,
+        id_key="entry_id",
+    )
+    return merged
+
+
+def _merge_story_event_queue_state(before: Any, returned: Any) -> Dict[str, Any]:
+    before = deepcopy(_safe_dict(before))
+    returned = deepcopy(_safe_dict(returned))
+    merged = deepcopy(before)
+    merged.update(returned)
+    merged["queue"] = _merge_list_by_id(
+        before.get("queue", []),
+        returned.get("queue", []),
+        id_key="event_id",
+    )
+    return merged
+
+
+def _merge_story_arc_state(before: Any, returned: Any) -> Dict[str, Any]:
+    before = deepcopy(_safe_dict(before))
+    returned = deepcopy(_safe_dict(returned))
+    merged = deepcopy(before)
+    merged.update(returned)
+    before_arcs = _safe_dict(before.get("arcs"))
+    returned_arcs = _safe_dict(returned.get("arcs"))
+    arcs = deepcopy(before_arcs)
+    for arc_id, returned_arc in returned_arcs.items():
+        if not isinstance(returned_arc, dict):
+            continue
+        existing = deepcopy(_safe_dict(arcs.get(arc_id)))
+        existing.update(deepcopy(returned_arc))
+        arcs[arc_id] = existing
+    merged["arcs"] = arcs
+    return merged
+
+
+def _merge_story_arc_milestone_state(before: Any, returned: Any) -> Dict[str, Any]:
+    before = deepcopy(_safe_dict(before))
+    returned = deepcopy(_safe_dict(returned))
+    merged = deepcopy(before)
+    merged.update(returned)
+
+    before_arcs = _safe_dict(before.get("arcs"))
+    returned_arcs = _safe_dict(returned.get("arcs"))
+    arcs = deepcopy(before_arcs)
+
+    for arc_id, returned_bucket in returned_arcs.items():
+        if not isinstance(returned_bucket, dict):
+            continue
+        existing_bucket = deepcopy(_safe_dict(arcs.get(arc_id)))
+        existing_bucket.update(deepcopy(returned_bucket))
+        existing_bucket["milestones"] = _merge_list_by_id(
+            _safe_dict(arcs.get(arc_id)).get("milestones", []),
+            returned_bucket.get("milestones", []),
+            id_key="milestone_id",
+        )
+        arcs[arc_id] = existing_bucket
+
+    merged["arcs"] = arcs
+    return merged
+
+
+def _merge_preserved_root(key: str, before_value: Any, returned_value: Any) -> Any:
+    if key == "campaign_journal_state":
+        return _merge_campaign_journal_state(before_value, returned_value)
+    if key == "story_event_queue_state":
+        return _merge_story_event_queue_state(before_value, returned_value)
+    if key == "story_arc_state":
+        return _merge_story_arc_state(before_value, returned_value)
+    if key == "story_arc_milestone_state":
+        return _merge_story_arc_milestone_state(before_value, returned_value)
+
+    if isinstance(before_value, dict) and isinstance(returned_value, dict):
+        if before_value and not returned_value:
+            return deepcopy(before_value)
+        merged = deepcopy(before_value)
+        merged.update(deepcopy(returned_value))
+        return merged
+
+    return deepcopy(returned_value if returned_value is not None else before_value)
+
+
 def merge_autoplay_simulation_state(
     *,
     before_state: Dict[str, Any],
@@ -55,15 +185,16 @@ def merge_autoplay_simulation_state(
 
     for key, value in returned_state.items():
         if key in AUTOPLAY_PRESERVED_SIMULATION_ROOTS:
-            if isinstance(value, dict) and value:
-                merged[key] = value
-            elif key not in merged:
-                merged[key] = value
+            merged[key] = _merge_preserved_root(
+                key,
+                before_state.get(key),
+                value,
+            )
             continue
-        merged[key] = value
+        merged[key] = deepcopy(value)
 
     for key in AUTOPLAY_PRESERVED_SIMULATION_ROOTS:
-        if key in before_state and key not in merged:
+        if key in before_state and key not in returned_state:
             merged[key] = deepcopy(before_state[key])
 
     return merged
@@ -159,6 +290,9 @@ def run_autoplay_manual_turn(
     console_llm_max_chars: int = 10_000,
 ) -> Dict[str, Any]:
     """Run one autoplay turn through the manual harness turn function."""
+    pre_turn_session = load_autoplay_manual_session(session_id)
+    pre_turn_state = deepcopy(_safe_dict(pre_turn_session.get("simulation_state")))
+
     turn_summary = _run_one_manual_turn(
         session_id=session_id,
         turn=player_input,
@@ -172,17 +306,16 @@ def run_autoplay_manual_turn(
         include_raw_result=True,
     )
 
-    before_session = load_autoplay_manual_session(session_id)
-    before_state = _safe_dict(before_session.get("simulation_state"))
-    after_session = before_session
-    fallback_after_state = _safe_dict(after_session.get("simulation_state"))
+    post_turn_session = load_autoplay_manual_session(session_id)
+    post_turn_state = _safe_dict(post_turn_session.get("simulation_state"))
+    after_session = post_turn_session
     raw_result = _safe_dict(turn_summary.get("raw_result"))
     returned_after_state = _extract_simulation_state_from_raw_result(
         raw_result,
-        fallback_after_state,
+        post_turn_state,
     )
     after_state = merge_autoplay_simulation_state(
-        before_state=before_state,
+        before_state=pre_turn_state,
         returned_state=returned_after_state,
     )
     after_session["simulation_state"] = after_state

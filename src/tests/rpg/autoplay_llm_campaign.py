@@ -6,6 +6,7 @@ import sys
 import time
 import traceback
 import uuid
+from copy import deepcopy
 from pathlib import Path
 from typing import Any, Dict, List
 
@@ -19,6 +20,7 @@ from tests.rpg.autoplay.evaluators import (
 )
 from tests.rpg.autoplay.manual_turn_driver import (
     load_autoplay_simulation_state,
+    merge_autoplay_simulation_state,
     prepare_autoplay_manual_session,
     run_autoplay_manual_turn,
 )
@@ -37,6 +39,7 @@ from tests.rpg.autoplay.progress_quality import (
     classify_turn_progress_quality,
     compute_progress_quality_metrics,
     evaluate_progress_quality_health,
+    post_objective_false_progress_warnings,
 )
 from tests.rpg.autoplay.strategy_profiles import (
     action_diversity_metrics,
@@ -59,8 +62,52 @@ def _safe_dict(value: Any) -> Dict[str, Any]:
     return value if isinstance(value, dict) else {}
 
 
+def _digest_counts(value: Dict[str, Any]) -> Dict[str, int]:
+    return _safe_dict(state_digest(_safe_dict(value)).get("counts"))
+
+
+def _baseline_mismatch_warning(
+    *,
+    expected_state: Dict[str, Any],
+    actual_before_state: Dict[str, Any],
+) -> Dict[str, Any]:
+    expected_counts = _digest_counts(expected_state)
+    actual_counts = _digest_counts(actual_before_state)
+    mismatch_keys = sorted(
+        key
+        for key in set(expected_counts) | set(actual_counts)
+        if expected_counts.get(key) != actual_counts.get(key)
+    )
+    return {
+        "ok": not mismatch_keys,
+        "mismatch_keys": mismatch_keys,
+        "expected_counts": expected_counts,
+        "actual_counts": actual_counts,
+    }
+
+
 def _safe_str(value: Any) -> str:
     return value if isinstance(value, str) else ""
+
+
+def _commit_authoritative_state(
+    *,
+    session_id: str,
+    authoritative_state: Dict[str, Any],
+) -> Dict[str, Any]:
+    """Persist and return the runner-owned authoritative autoplay state.
+
+    Manual/app turn paths may write partial session roots. The runner state is
+    canonical for autoplay progress comparison, so commits must never reload
+    and replace it from the manual session.
+    """
+    committed = deepcopy(_safe_dict(authoritative_state))
+    prepare_autoplay_manual_session(
+        session_id=session_id,
+        simulation_state=committed,
+        reset_session_state=False,
+    )
+    return committed
 
 
 def _default_output_dir() -> Path:
@@ -173,11 +220,12 @@ def run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
     session_id = args.session_id or f"autoplay_{uuid.uuid4().hex[:12]}"
     simulation_state: Dict[str, Any] = {}
     seed_result = seed_campaign(simulation_state, args.scenario_seed)
-    prepare_autoplay_manual_session(
+    authoritative_state: Dict[str, Any] = deepcopy(simulation_state)
+    authoritative_state = _commit_authoritative_state(
         session_id=session_id,
-        simulation_state=simulation_state,
-        reset_session_state=True,
+        authoritative_state=authoritative_state,
     )
+    last_committed_state: Dict[str, Any] = deepcopy(authoritative_state)
     checkpoint_dir = Path(args.output_dir) / "checkpoints"
 
     provider = _load_provider() if args.player_agent == "llm" else None
@@ -192,9 +240,17 @@ def run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
     stopped_reason = ""
 
     for turn_index in range(1, int(args.turns) + 1):
-        simulation_state = load_autoplay_simulation_state(session_id)
+        # The previous turn's committed state is the only valid baseline.
+        # Never derive the next before_state from manual session reloads.
+        expected_baseline_state = deepcopy(last_committed_state)
+        authoritative_state = deepcopy(last_committed_state)
+        authoritative_state = _commit_authoritative_state(
+            session_id=session_id,
+            authoritative_state=authoritative_state,
+        )
+        simulation_state = deepcopy(authoritative_state)
         context = build_player_action_context(
-            simulation_state,
+            authoritative_state,
             turn_index=turn_index,
             limit=args.suggested_action_limit,
         )
@@ -230,8 +286,12 @@ def run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
 
         runtime_error = ""
         turn_result: Dict[str, Any]
-        before_state = simulation_state
+        before_state = deepcopy(expected_baseline_state)
         before_digest = state_digest(before_state)
+        baseline_check = _baseline_mismatch_warning(
+            expected_state=expected_baseline_state,
+            actual_before_state=before_state,
+        )
         story_hook_result: Dict[str, Any] = {}
         try:
             turn_result = _call_turn_runtime(
@@ -241,26 +301,27 @@ def run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
             )
             returned_state = _safe_dict(turn_result.get("simulation_state"))
             if returned_state:
-                simulation_state = returned_state
-            else:
-                simulation_state = load_autoplay_simulation_state(session_id)
-            # The manual driver saves the merged state back to the manual
-            # session. Reload here so the next player action context is built
-            # from exactly what the manual runtime persisted.
-            simulation_state = load_autoplay_simulation_state(session_id)
+                authoritative_state = merge_autoplay_simulation_state(
+                    before_state=authoritative_state,
+                    returned_state=returned_state,
+                )
+            simulation_state = deepcopy(authoritative_state)
             story_hook_result = apply_autoplay_story_hooks(
-                simulation_state=simulation_state,
+                simulation_state=authoritative_state,
                 player_action=player_action,
                 turn_index=turn_index,
             )
             if story_hook_result.get("changed"):
-                simulation_state = _safe_dict(story_hook_result.get("simulation_state"))
-                prepare_autoplay_manual_session(
-                    session_id=session_id,
-                    simulation_state=simulation_state,
-                    reset_session_state=False,
+                authoritative_state = merge_autoplay_simulation_state(
+                    before_state=authoritative_state,
+                    returned_state=_safe_dict(story_hook_result.get("simulation_state")),
                 )
-                simulation_state = load_autoplay_simulation_state(session_id)
+                authoritative_state = _commit_authoritative_state(
+                    session_id=session_id,
+                    authoritative_state=authoritative_state,
+                )
+                simulation_state = deepcopy(authoritative_state)
+
         except Exception as exc:
             runtime_error = f"{type(exc).__name__}: {exc}"
             turn_result = {
@@ -270,10 +331,31 @@ def run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
             }
             story_hook_result = {}
 
+        # Final turn commit. This is the state that the next turn must use as
+        # before_state. Do not reload from the manual session here.
+        authoritative_state = _commit_authoritative_state(
+            session_id=session_id,
+            authoritative_state=authoritative_state,
+        )
+        final_turn_state = deepcopy(authoritative_state)
         progress_delta = classify_progress_delta(
             before_state=before_state,
-            after_state=simulation_state,
+            after_state=final_turn_state,
         )
+        after_digest = state_digest(final_turn_state)
+        state_preservation_debug = {
+            "baseline_source": "runner_authoritative_state",
+            "commit_policy": "no_manual_reload_after_turn_start",
+            "next_turn_baseline_source": "last_committed_state",
+            "baseline_check": baseline_check,
+            "before_counts": before_digest.get("counts", {}),
+            "after_counts": after_digest.get("counts", {}),
+            "committed_counts": after_digest.get("counts", {}),
+            "journal_entries_delta": (
+                after_digest.get("counts", {}).get("journal_entries", 0)
+                - before_digest.get("counts", {}).get("journal_entries", 0)
+            ),
+        }
         progress_quality = classify_turn_progress_quality(
             {
                 "progress_delta": progress_delta,
@@ -283,7 +365,7 @@ def run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
             }
         )
         state_bounds = collect_state_bounds(
-            simulation_state,
+            final_turn_state,
             max_state_bytes=int(args.max_state_bytes),
             max_root_count=int(args.max_state_roots),
             max_list_length=int(args.max_state_list_length),
@@ -296,11 +378,14 @@ def run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
                 session_id=session_id,
                 turn_index=turn_index,
                 checkpoint_dir=checkpoint_dir,
-                simulation_state=simulation_state,
+                simulation_state=final_turn_state,
             )
-            # Re-load after validation so the next turn context is exactly what
-            # survived save/load.
-            simulation_state = load_autoplay_simulation_state(session_id)
+            # validate_save_load_checkpoint() already verifies checkpoint
+            # rehydration. Do not make the checkpoint reload the live baseline;
+            # the runner-owned authoritative_state remains canonical.
+            simulation_state = deepcopy(final_turn_state)
+        last_committed_state = deepcopy(final_turn_state)
+        simulation_state = deepcopy(final_turn_state)
         narration = _extract_narration(turn_result)
         record = {
             "turn_index": turn_index,
@@ -328,8 +413,11 @@ def run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
             "narration": narration,
             "runtime_error": runtime_error,
             "before_state_digest": before_digest,
-            "after_state_digest": state_digest(simulation_state),
+            "after_state_digest": after_digest,
             "progress_delta": progress_delta,
+            "state_preservation_debug": state_preservation_debug,
+            "authoritative_state_digest": after_digest,
+            "committed_next_turn_digest": state_digest(last_committed_state),
             "progress_quality": progress_quality,
             "state_bounds": state_bounds,
             "save_load_checkpoint": save_load_checkpoint,
@@ -391,6 +479,12 @@ def run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
                 for warning in progress_quality_health.get("warnings") or []
             ]
         )
+    if args.fail_on_post_objective_weak_progress:
+        post_objective_warnings = post_objective_false_progress_warnings(transcript)
+        if post_objective_warnings:
+            progress_quality_health.setdefault("warnings", [])
+            progress_quality_health["warnings"].extend(post_objective_warnings)
+            progress_quality_health["ok"] = False
         health["ok"] = False
     health["progress_quality"] = progress_quality_health
     summary = {
@@ -411,6 +505,7 @@ def run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
             "max_churn_only_rate": float(args.max_churn_only_rate),
             "max_churn_only_streak": int(args.max_churn_only_streak),
             "max_objective_target_no_progress_streak": int(args.max_objective_target_no_progress_streak),
+            "fail_on_post_objective_weak_progress": bool(args.fail_on_post_objective_weak_progress),
         },
         "strategy_profile": args.strategy,
         "action_diversity_thresholds": {
@@ -479,6 +574,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--max-churn-only-rate", type=float, default=1.0)
     parser.add_argument("--max-churn-only-streak", type=int, default=0)
     parser.add_argument("--max-objective-target-no-progress-streak", type=int, default=0)
+    parser.add_argument("--fail-on-post-objective-weak-progress", action="store_true")
     parser.add_argument("--action-diversity-window", type=int, default=12)
     parser.add_argument("--min-action-diversity-rate", type=float, default=0.0)
     parser.add_argument("--min-category-diversity-rate", type=float, default=0.0)

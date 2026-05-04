@@ -45,6 +45,16 @@ def seed_tavern_story_campaign(simulation_state: Dict[str, Any]) -> Dict[str, An
         priority=80,
         turn_index=0,
     )
+    add_story_arc_milestone(
+        simulation_state,
+        arc_id="arc:witness_search",
+        milestone_id="milestone:report_findings_to_bran",
+        title="Report findings to Bran",
+        objective_text="Report the witness findings to Bran.",
+        quest_id="quest:witness_search",
+        priority=70,
+        turn_index=0,
+    )
     hook_result = seed_witness_resolution_hooks(simulation_state)
     return {
         "ok": True,

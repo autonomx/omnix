@@ -31,6 +31,32 @@ def test_classify_turn_progress_quality_churn_only():
     assert quality["churn_only"] == ["state_changed"]
 
 
+def test_classify_turn_progress_quality_journal_only_is_weak_progress():
+    row = {
+        "progress_delta": {"categories": ["journal_entry_added"]},
+        "player_action": "I write down what happened.",
+    }
+
+    quality = classify_turn_progress_quality(row)
+
+    assert quality["quality"] == "weak_progress"
+    assert quality["weak_progress"] == ["journal_entry_added"]
+    assert quality["meaningful"] == []
+
+
+def test_classify_turn_progress_quality_journal_plus_arc_is_meaningful():
+    row = {
+        "progress_delta": {"categories": ["journal_entry_added", "arc_stage_changed"]},
+        "player_action": "I report the findings.",
+    }
+
+    quality = classify_turn_progress_quality(row)
+
+    assert quality["quality"] == "meaningful_progress"
+    assert "arc_stage_changed" in quality["meaningful"]
+    assert "journal_entry_added" in quality["meaningful"]
+
+
 def test_classify_turn_progress_quality_objective_targeted_from_goal_id():
     row = {
         "progress_delta": {"categories": ["state_changed"]},

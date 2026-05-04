@@ -8,7 +8,6 @@ MEANINGFUL_PROGRESS_CATEGORIES = {
     "milestone_added",
     "milestone_completed",
     "arc_stage_changed",
-    "journal_entry_added",
     "objective_added",
     "objective_completed",
     "quest_log_changed",
@@ -20,6 +19,14 @@ MEANINGFUL_PROGRESS_CATEGORIES = {
     "service_completed",
     "story_event_queued",
     "story_event_resolved",
+}
+
+
+WEAK_PROGRESS_CATEGORIES = {
+    # A journal entry can be meaningful when paired with arc/objective/story
+    # progress, but generic per-turn journal/memory entries must not make a
+    # stalled post-objective run look healthy forever.
+    "journal_entry_added",
 }
 
 
@@ -59,13 +66,19 @@ def classify_turn_progress_quality(row: Dict[str, Any]) -> Dict[str, Any]:
         for category in _safe_list(progress_delta.get("categories"))
         if category
     ]
-    meaningful = sorted([c for c in categories if c in MEANINGFUL_PROGRESS_CATEGORIES])
+    strong_meaningful = sorted([c for c in categories if c in MEANINGFUL_PROGRESS_CATEGORIES])
+    weak_progress = sorted([c for c in categories if c in WEAK_PROGRESS_CATEGORIES])
+    meaningful = list(strong_meaningful)
+    if strong_meaningful and weak_progress:
+        meaningful.extend(weak_progress)
     churn_only = sorted([c for c in categories if c in CHURN_ONLY_CATEGORIES])
     unknown = sorted(
         [
             c
             for c in categories
-            if c not in MEANINGFUL_PROGRESS_CATEGORIES and c not in CHURN_ONLY_CATEGORIES
+            if c not in MEANINGFUL_PROGRESS_CATEGORIES
+            and c not in WEAK_PROGRESS_CATEGORIES
+            and c not in CHURN_ONLY_CATEGORIES
         ]
     )
 
@@ -80,8 +93,10 @@ def classify_turn_progress_quality(row: Dict[str, Any]) -> Dict[str, Any]:
         for objective_id in active_objective_ids
     )
 
-    if meaningful:
+    if strong_meaningful:
         quality = "meaningful_progress"
+    elif weak_progress:
+        quality = "weak_progress"
     elif categories and all(c in CHURN_ONLY_CATEGORIES for c in categories):
         quality = "churn_only"
     elif categories:
@@ -92,6 +107,8 @@ def classify_turn_progress_quality(row: Dict[str, Any]) -> Dict[str, Any]:
     return {
         "quality": quality,
         "meaningful": meaningful,
+        "strong_meaningful": strong_meaningful,
+        "weak_progress": weak_progress,
         "churn_only": churn_only,
         "unknown": unknown,
         "categories": categories,
@@ -148,6 +165,7 @@ def compute_progress_quality_metrics(transcript: List[Dict[str, Any]]) -> Dict[s
     quality_counts = Counter()
     meaningful_category_counts = Counter()
     churn_category_counts = Counter()
+    weak_category_counts = Counter()
     unknown_category_counts = Counter()
     targeted_objective_turns = 0
     targeted_objective_meaningful_turns = 0
@@ -161,6 +179,8 @@ def compute_progress_quality_metrics(transcript: List[Dict[str, Any]]) -> Dict[s
             meaningful_category_counts[str(category)] += 1
         for category in _safe_list(quality.get("churn_only")):
             churn_category_counts[str(category)] += 1
+        for category in _safe_list(quality.get("weak_progress")):
+            weak_category_counts[str(category)] += 1
         for category in _safe_list(quality.get("unknown")):
             unknown_category_counts[str(category)] += 1
         if quality.get("objective_targeted"):
@@ -171,6 +191,7 @@ def compute_progress_quality_metrics(transcript: List[Dict[str, Any]]) -> Dict[s
     turn_count = len(transcript)
     meaningful_turns = int(quality_counts.get("meaningful_progress") or 0)
     churn_turns = int(quality_counts.get("churn_only") or 0)
+    weak_turns = int(quality_counts.get("weak_progress") or 0)
     no_change_turns = int(quality_counts.get("no_change") or 0)
 
     return {
@@ -178,9 +199,11 @@ def compute_progress_quality_metrics(transcript: List[Dict[str, Any]]) -> Dict[s
         "quality_counts": dict(quality_counts),
         "meaningful_turns": meaningful_turns,
         "churn_only_turns": churn_turns,
+        "weak_progress_turns": weak_turns,
         "no_change_turns": no_change_turns,
         "meaningful_progress_rate": (meaningful_turns / turn_count) if turn_count else 0.0,
         "churn_only_rate": (churn_turns / turn_count) if turn_count else 0.0,
+        "weak_progress_rate": (weak_turns / turn_count) if turn_count else 0.0,
         "targeted_objective_turns": targeted_objective_turns,
         "targeted_objective_meaningful_turns": targeted_objective_meaningful_turns,
         "targeted_objective_meaningful_rate": (
@@ -190,6 +213,7 @@ def compute_progress_quality_metrics(transcript: List[Dict[str, Any]]) -> Dict[s
         ),
         "meaningful_category_counts": dict(meaningful_category_counts),
         "churn_category_counts": dict(churn_category_counts),
+        "weak_category_counts": dict(weak_category_counts),
         "unknown_category_counts": dict(unknown_category_counts),
         "repeated_action_streak": repeated_action_streak(transcript),
         "objective_target_no_meaningful_progress_streak": objective_target_no_meaningful_progress_streak(transcript),
@@ -235,3 +259,26 @@ def evaluate_progress_quality_health(
         "warnings": warnings,
         "metrics": metrics,
     }
+
+
+def post_objective_false_progress_warnings(transcript: List[Dict[str, Any]]) -> List[str]:
+    """Warn if only weak journal progress happens after all objectives complete."""
+    warnings: List[str] = []
+    seen_no_active_objectives = False
+    weak_after_completion = 0
+    meaningful_after_completion = 0
+
+    for row in transcript:
+        context = _safe_dict(row.get("player_action_context"))
+        active = _safe_list(context.get("active_objectives"))
+        quality = _safe_dict(row.get("progress_quality"))
+        if not active:
+            seen_no_active_objectives = True
+            if quality.get("quality") == "weak_progress":
+                weak_after_completion += 1
+            if quality.get("quality") == "meaningful_progress":
+                meaningful_after_completion += 1
+
+    if seen_no_active_objectives and weak_after_completion > 0 and meaningful_after_completion == 0:
+        warnings.append("post_objective_weak_progress_only")
+    return warnings
