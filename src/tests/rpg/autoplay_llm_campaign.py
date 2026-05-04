@@ -35,11 +35,21 @@ from tests.rpg.autoplay.player_agent import (
 from tests.rpg.autoplay.progress import classify_progress_delta, state_digest
 from tests.rpg.autoplay.progress_quality import (
     classify_turn_progress_quality,
+    compute_progress_quality_metrics,
     evaluate_progress_quality_health,
+)
+from tests.rpg.autoplay.strategy_profiles import (
+    action_diversity_metrics,
+    build_strategy_guidance,
+    rerank_suggested_actions_for_strategy,
 )
 from tests.rpg.autoplay.provider_adapter import (
     call_provider_text,
     describe_provider_shape,
+)
+from tests.rpg.autoplay.story_hooks import (
+    apply_autoplay_story_hooks,
+    autoplay_story_hook_player_hints,
 )
 from tests.rpg.autoplay.reporting import write_autoplay_artifacts
 from tests.rpg.autoplay.seeding import seed_campaign
@@ -104,6 +114,8 @@ def _select_player_action(
     strategy: str,
     use_llm_player: bool,
     max_tokens: int,
+    progress_quality_metrics: Dict[str, Any] | None = None,
+    diversity_metrics: Dict[str, Any] | None = None,
 ) -> Dict[str, Any]:
     if not use_llm_player:
         return choose_fallback_player_action(
@@ -115,6 +127,8 @@ def _select_player_action(
         player_action_context=player_action_context,
         recent_transcript=transcript,
         strategy=strategy,
+        progress_quality_metrics=progress_quality_metrics,
+        diversity_metrics=diversity_metrics,
     )
     try:
         raw = call_provider_text(provider, prompt, max_tokens=max_tokens)
@@ -138,6 +152,13 @@ def _select_player_action(
             fallback["player_agent_validation"] = validation
             fallback["raw_player_agent_action"] = parsed
             return fallback
+        parsed["strategy"] = strategy
+        parsed["strategy_guidance"] = build_strategy_guidance(
+            strategy=strategy,
+            progress_quality_metrics=progress_quality_metrics,
+            diversity_metrics=diversity_metrics,
+            recent_transcript=transcript,
+        )
         return parsed
     except Exception as exc:
         fallback = choose_fallback_player_action(
@@ -177,6 +198,24 @@ def run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
             turn_index=turn_index,
             limit=args.suggested_action_limit,
         )
+        context["story_hook_hints"] = autoplay_story_hook_player_hints(simulation_state)
+        current_progress_quality_metrics = compute_progress_quality_metrics(transcript)
+        current_diversity_metrics = action_diversity_metrics(
+            transcript,
+            window=int(args.action_diversity_window),
+        )
+        context["suggested_actions"] = rerank_suggested_actions_for_strategy(
+            list(context.get("suggested_actions") or []),
+            strategy=args.strategy,
+            recent_transcript=transcript,
+            progress_quality_metrics=current_progress_quality_metrics,
+        )
+        context["strategy_guidance"] = build_strategy_guidance(
+            strategy=args.strategy,
+            progress_quality_metrics=current_progress_quality_metrics,
+            diversity_metrics=current_diversity_metrics,
+            recent_transcript=transcript,
+        )
         selected = _select_player_action(
             provider=provider,
             player_action_context=context,
@@ -184,6 +223,8 @@ def run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
             strategy=args.strategy,
             use_llm_player=args.player_agent == "llm",
             max_tokens=args.player_agent_max_tokens,
+            progress_quality_metrics=current_progress_quality_metrics,
+            diversity_metrics=current_diversity_metrics,
         )
         player_action = _safe_str(selected.get("action"))
 
@@ -191,6 +232,7 @@ def run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
         turn_result: Dict[str, Any]
         before_state = simulation_state
         before_digest = state_digest(before_state)
+        story_hook_result: Dict[str, Any] = {}
         try:
             turn_result = _call_turn_runtime(
                 session_id=session_id,
@@ -206,6 +248,19 @@ def run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
             # session. Reload here so the next player action context is built
             # from exactly what the manual runtime persisted.
             simulation_state = load_autoplay_simulation_state(session_id)
+            story_hook_result = apply_autoplay_story_hooks(
+                simulation_state=simulation_state,
+                player_action=player_action,
+                turn_index=turn_index,
+            )
+            if story_hook_result.get("changed"):
+                simulation_state = _safe_dict(story_hook_result.get("simulation_state"))
+                prepare_autoplay_manual_session(
+                    session_id=session_id,
+                    simulation_state=simulation_state,
+                    reset_session_state=False,
+                )
+                simulation_state = load_autoplay_simulation_state(session_id)
         except Exception as exc:
             runtime_error = f"{type(exc).__name__}: {exc}"
             turn_result = {
@@ -213,6 +268,7 @@ def run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
                 "error": runtime_error,
                 "traceback": traceback.format_exc(),
             }
+            story_hook_result = {}
 
         progress_delta = classify_progress_delta(
             before_state=before_state,
@@ -258,6 +314,9 @@ def run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
             },
             "selected_player_action": selected,
             "selected_action_reason": selected.get("reason"),
+            "strategy_guidance": context.get("strategy_guidance") or selected.get("strategy_guidance") or {},
+            "action_diversity_before_turn": current_diversity_metrics,
+            "progress_quality_before_turn": current_progress_quality_metrics,
             "player_action": player_action,
             "turn_result": turn_result if args.artifact_detail == "full" else {
                 "ok": turn_result.get("ok"),
@@ -274,6 +333,7 @@ def run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
             "progress_quality": progress_quality,
             "state_bounds": state_bounds,
             "save_load_checkpoint": save_load_checkpoint,
+            "story_hook_result": story_hook_result,
         }
         transcript.append(record)
 
@@ -287,6 +347,8 @@ def run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
             max_no_progress_turns=args.max_no_progress_turns,
             fail_on_checkpoint_failure=not args.allow_checkpoint_failures,
             fail_on_state_bound_warnings=not args.allow_state_bound_warnings,
+            min_action_diversity_rate=float(args.min_action_diversity_rate),
+            min_category_diversity_rate=float(args.min_category_diversity_rate),
         )
         if args.stop_on_loop and health.get("loop", {}).get("ok") is False:
             stopped_reason = "repeated_action_loop"
@@ -311,6 +373,8 @@ def run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
         max_no_progress_turns=args.max_no_progress_turns,
         fail_on_checkpoint_failure=not args.allow_checkpoint_failures,
         fail_on_state_bound_warnings=not args.allow_state_bound_warnings,
+        min_action_diversity_rate=float(args.min_action_diversity_rate),
+        min_category_diversity_rate=float(args.min_category_diversity_rate),
     )
     progress_quality_health = evaluate_progress_quality_health(
         transcript,
@@ -347,6 +411,12 @@ def run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
             "max_churn_only_rate": float(args.max_churn_only_rate),
             "max_churn_only_streak": int(args.max_churn_only_streak),
             "max_objective_target_no_progress_streak": int(args.max_objective_target_no_progress_streak),
+        },
+        "strategy_profile": args.strategy,
+        "action_diversity_thresholds": {
+            "action_diversity_window": int(args.action_diversity_window),
+            "min_action_diversity_rate": float(args.min_action_diversity_rate),
+            "min_category_diversity_rate": float(args.min_category_diversity_rate),
         },
         "seed_result": seed_result,
         "requested_turns": int(args.turns),
@@ -409,6 +479,9 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--max-churn-only-rate", type=float, default=1.0)
     parser.add_argument("--max-churn-only-streak", type=int, default=0)
     parser.add_argument("--max-objective-target-no-progress-streak", type=int, default=0)
+    parser.add_argument("--action-diversity-window", type=int, default=12)
+    parser.add_argument("--min-action-diversity-rate", type=float, default=0.0)
+    parser.add_argument("--min-category-diversity-rate", type=float, default=0.0)
     return parser
 
 

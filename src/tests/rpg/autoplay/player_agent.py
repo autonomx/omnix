@@ -4,6 +4,8 @@ import json
 import re
 from typing import Any, Dict, List
 
+from tests.rpg.autoplay.strategy_profiles import build_strategy_guidance
+
 PLAYER_AGENT_FORMAT_VERSION = "rpg_player_action_v1"
 
 
@@ -24,6 +26,8 @@ def build_player_agent_prompt(
     player_action_context: Dict[str, Any],
     recent_transcript: List[Dict[str, Any]] | None = None,
     strategy: str = "balanced_story_player",
+    progress_quality_metrics: Dict[str, Any] | None = None,
+    diversity_metrics: Dict[str, Any] | None = None,
 ) -> str:
     """Build the player-agent prompt.
 
@@ -44,6 +48,12 @@ def build_player_agent_prompt(
 
     payload = {
         "strategy": strategy,
+        "strategy_guidance": build_strategy_guidance(
+            strategy=strategy,
+            progress_quality_metrics=progress_quality_metrics,
+            diversity_metrics=diversity_metrics,
+            recent_transcript=recent_transcript,
+        ),
         "player_action_context": player_action_context,
         "recent_transcript": compact_recent,
     }
@@ -57,6 +67,8 @@ def build_player_agent_prompt(
         "- Do not invent rewards, XP, gold, loot, deaths, quest completion, or hidden facts.\n"
         "- Prefer actions that pursue active objectives, interact with nearby NPCs, or investigate grounded story leads.\n"
         "- Avoid repeating the same action unless there is a clear reason.\n"
+        "- If the strategy guidance says anti-stall is active, choose a meaningfully different approach from recent actions.\n"
+        "- If objective-focused turns are not advancing, try a different grounded route: inspect, ask someone else, travel, review clues, or change the question.\n"
         "- Return JSON only.\n\n"
         "Required JSON format:\n"
         "{\n"

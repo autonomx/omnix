@@ -5,6 +5,7 @@ from typing import Any, Dict, List
 
 from tests.rpg.autoplay.progress import no_progress_streak
 from tests.rpg.autoplay.progress_quality import compute_progress_quality_metrics
+from tests.rpg.autoplay.strategy_profiles import action_diversity_metrics
 
 
 def _safe_dict(value: Any) -> Dict[str, Any]:
@@ -75,6 +76,8 @@ def compute_progress_metrics(
     checkpoint_failure_count = 0
     state_bound_warning_count = 0
     max_state_size_bytes_seen = 0
+    story_hook_fire_count = 0
+    story_hook_ids = []
 
     narration_missing_count = 0
 
@@ -110,6 +113,12 @@ def compute_progress_metrics(
             )
             if bounds.get("warnings"):
                 state_bound_warning_count += 1
+        hook_result = _safe_dict(row.get("story_hook_result"))
+        for fired in _safe_list(hook_result.get("fired_hooks")):
+            fired = _safe_dict(fired)
+            story_hook_fire_count += 1
+            if fired.get("hook_id"):
+                story_hook_ids.append(str(fired.get("hook_id")))
         for action in _safe_list(_safe_dict(row.get("player_action_context")).get("suggested_actions")):
             category = _safe_str(_safe_dict(action).get("category"))
             if category:
@@ -117,6 +126,7 @@ def compute_progress_metrics(
 
     quest_summary = _safe_dict(latest_context.get("quest_log_summary"))
     progress_quality_metrics = compute_progress_quality_metrics(transcript)
+    diversity_metrics = action_diversity_metrics(transcript)
     return {
         "turn_count": len(transcript),
         "fallback_player_actions": fallback_count,
@@ -133,7 +143,10 @@ def compute_progress_metrics(
         "checkpoint_failure_count": checkpoint_failure_count,
         "state_bound_warning_count": state_bound_warning_count,
         "max_state_size_bytes_seen": max_state_size_bytes_seen,
+        "story_hook_fire_count": story_hook_fire_count,
+        "story_hook_ids": story_hook_ids,
         "progress_quality": progress_quality_metrics,
+        "action_diversity": diversity_metrics,
         "suggested_action_category_counts": dict(action_categories),
         "latest_active_objective_count": int(quest_summary.get("active_count") or 0),
         "latest_completed_objective_count": int(quest_summary.get("completed_count") or 0),
@@ -152,6 +165,8 @@ def evaluate_autoplay_health(
     max_no_progress_turns: int = 0,
     fail_on_checkpoint_failure: bool = True,
     fail_on_state_bound_warnings: bool = True,
+    min_action_diversity_rate: float = 0.0,
+    min_category_diversity_rate: float = 0.0,
 ) -> Dict[str, Any]:
     loop = detect_repeated_action_loop(
         transcript,
@@ -177,6 +192,17 @@ def evaluate_autoplay_health(
         warnings.append("save_load_checkpoint_failed")
     if fail_on_state_bound_warnings and int(metrics.get("state_bound_warning_count") or 0) > 0:
         warnings.append("state_bounds_warning")
+    diversity = _safe_dict(metrics.get("action_diversity"))
+    if (
+        min_action_diversity_rate > 0
+        and float(diversity.get("action_diversity_rate") or 0.0) < min_action_diversity_rate
+    ):
+        warnings.append("action_diversity_rate_below_threshold")
+    if (
+        min_category_diversity_rate > 0
+        and float(diversity.get("category_diversity_rate") or 0.0) < min_category_diversity_rate
+    ):
+        warnings.append("category_diversity_rate_below_threshold")
     if metrics["latest_suggested_action_count"] == 0:
         warnings.append("no_suggested_actions")
 

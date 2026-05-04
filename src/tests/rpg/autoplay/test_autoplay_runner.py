@@ -73,6 +73,9 @@ def test_autoplay_runner_fallback_executes_short_campaign(tmp_path: Path, monkey
         max_churn_only_rate=1.0,
         max_churn_only_streak=0,
         max_objective_target_no_progress_streak=0,
+        action_diversity_window=12,
+        min_action_diversity_rate=0.0,
+        min_category_diversity_rate=0.0,
     )
 
     summary = run_autoplay_campaign(args)

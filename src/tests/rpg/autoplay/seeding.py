@@ -4,6 +4,7 @@ from typing import Any, Dict
 
 from app.rpg.story_arcs.milestones import add_story_arc_milestone
 from app.rpg.story_arcs.state import start_story_arc
+from tests.rpg.autoplay.story_hooks import seed_witness_resolution_hooks
 
 
 def seed_tavern_story_campaign(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
@@ -44,12 +45,14 @@ def seed_tavern_story_campaign(simulation_state: Dict[str, Any]) -> Dict[str, An
         priority=80,
         turn_index=0,
     )
+    hook_result = seed_witness_resolution_hooks(simulation_state)
     return {
         "ok": True,
         "seed": "tavern_story_seed",
         "scene_id": "scene:rusty_flagon",
         "arc_id": "arc:witness_search",
         "objective_id": "milestone:find_witness",
+        "story_hooks": hook_result,
     }
 
 
