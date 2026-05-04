@@ -51,3 +51,30 @@ def test_no_progress_streak_counts_trailing_no_progress_turns():
     ]
 
     assert no_progress_streak(transcript) == 2
+
+
+def test_classify_progress_delta_detects_location_change():
+    before = {"scene": {"location": "Tavern"}}
+    after = {"scene": {"location": "Road"}}
+
+    delta = classify_progress_delta(before_state=before, after_state=after)
+
+    assert "location_changed" in delta["categories"]
+
+
+def test_classify_progress_delta_detects_story_event_queue_added():
+    before = {"story_event_queue_state": {"queue": []}}
+    after = {"story_event_queue_state": {"queue": [{"event_id": "event:x"}]}}
+
+    delta = classify_progress_delta(before_state=before, after_state=after)
+
+    assert "story_event_queued" in delta["categories"]
+
+
+def test_classify_progress_delta_detects_combat_started():
+    before = {"combat_state": {"active": False}}
+    after = {"combat_state": {"active": True}}
+
+    delta = classify_progress_delta(before_state=before, after_state=after)
+
+    assert "combat_started" in delta["categories"]

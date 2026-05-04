@@ -1,281 +1,73 @@
-Bundle N4-N6 — Autoplay Real Turn Runtime Binding + Progress Evaluator v1
-GOAL:
-Remove the N1-N3 compatibility turn runtime and bind autoplay to the real RPG turn execution path.
+Below is a literal apply-this-patch diff spec for:
 
-This bundle adds:
-- real in-process turn binding to the same runtime used by /api/rpg/session/turn
-- no compatibility runtime in strict mode
-- turn contract extraction
-- narration extraction from real turn result
-- before/after state digests
-- per-turn progress delta classification
-- objective/journal/arc/NPC/location/combat progress metrics
-- no-progress streak detection
-- full-debug artifacts for long-run diagnosis
+N10-N12 — Autoplay Progress Quality + Anti-Stall Evaluator v1
+
+All autoplay commands include:
+
+--artifact-detail full
+Bundle N10-N12 — Autoplay Progress Quality + Anti-Stall Evaluator v1
+GOAL:
+N7-N9 proved long-run state bounds and save/load checkpoints work.
+
+Current limitation:
+- autoplay turns run successfully
+- state changes each turn
+- checkpoints pass
+- but progress_category_counts is only:
+    {"state_changed": N}
+- latest_active_objective_count remains 1
+- latest_completed_objective_count remains 0
+
+N10-N12 adds:
+- meaningful progress classification
+- churn vs progress separation
+- anti-stall scoring
+- repeated objective/action intent detection
+- objective no-progress streak tracking
+- story/journal/arc/quest/NPC/location/combat progress quality metrics
+- health warnings for long runs that only churn memory/presentation state
 
 Important:
-- Player-agent still only sees player_action_context_v1.
-- Player-agent still uses centralized app provider via app.shared.get_provider().
-- Autoplay does not invent outcomes.
-- Real simulation runtime resolves all actions.
-- Compatibility runtime may remain as emergency fallback, but strict command must fail if it is used.
-Patch 1 — Add real turn runtime adapter
-1. Add src/tests/rpg/autoplay/turn_runtime.py
+- This bundle should not require story objective completion yet.
+- It should detect when the run is technically healthy but narratively stalled.
+- It should not fail short smoke tests by default unless strict flags are used.
+Patch 1 — Add progress quality evaluator
+
+Add:
+
+src/tests/rpg/autoplay/progress_quality.py
 *** Begin Patch
-*** Add File: src/tests/rpg/autoplay/turn_runtime.py
+*** Add File: src/tests/rpg/autoplay/progress_quality.py
 +from __future__ import annotations
 +
-+import inspect
-+from typing import Any, Callable, Dict, List, Tuple
-+
-+
-+def _safe_dict(value: Any) -> Dict[str, Any]:
-+    return value if isinstance(value, dict) else {}
-+
-+
-+def _safe_str(value: Any) -> str:
-+    return value if isinstance(value, str) else ""
-+
-+
-+def _candidate_callables() -> List[Tuple[str, Callable[..., Any]]]:
-+    """Discover in-process RPG turn callables.
-+
-+    Keep this as a narrow compatibility ladder. The preferred target is the
-+    same implementation behind /api/rpg/session/turn, but project modules have
-+    moved across phases, so discovery is centralized here instead of buried in
-+    autoplay_llm_campaign.py.
-+    """
-+    candidates: List[Tuple[str, Callable[..., Any]]] = []
-+
-+    module_specs = [
-+        ("app.rpg.session_runtime", ["run_player_turn", "apply_player_turn", "process_player_turn"]),
-+        ("app.rpg.session", ["run_player_turn", "apply_player_turn", "process_player_turn"]),
-+        ("app.rpg.runtime", ["run_player_turn", "apply_player_turn", "process_player_turn"]),
-+        ("app.rpg.api.session", ["run_session_turn", "session_turn", "turn"]),
-+        ("app.rpg.session_api", ["run_session_turn", "session_turn", "turn"]),
-+    ]
-+
-+    for module_name, names in module_specs:
-+        try:
-+            module = __import__(module_name, fromlist=names)
-+        except Exception:
-+            continue
-+        for name in names:
-+            value = getattr(module, name, None)
-+            if callable(value):
-+                candidates.append((f"{module_name}.{name}", value))
-+
-+    return candidates
-+
-+
-+def describe_turn_runtime_candidates() -> List[Dict[str, str]]:
-+    rows = []
-+    for name, fn in _candidate_callables():
-+        try:
-+            signature = str(inspect.signature(fn))
-+        except Exception:
-+            signature = "<uninspectable>"
-+        rows.append({"name": name, "signature": signature})
-+    return rows
-+
-+
-+def _call_with_supported_kwargs(fn: Callable[..., Any], **kwargs: Any) -> Any:
-+    try:
-+        signature = inspect.signature(fn)
-+        supported = {
-+            key: value
-+            for key, value in kwargs.items()
-+            if key in signature.parameters
-+        }
-+        if supported:
-+            return fn(**supported)
-+    except Exception:
-+        pass
-+
-+    # Common positional fallbacks.
-+    positional_shapes = [
-+        (
-+            kwargs.get("simulation_state"),
-+            kwargs.get("player_input"),
-+            kwargs.get("turn_index"),
-+        ),
-+        (
-+            kwargs.get("session"),
-+            kwargs.get("player_input"),
-+        ),
-+        (
-+            kwargs.get("session_id"),
-+            kwargs.get("player_input"),
-+        ),
-+    ]
-+    last_error: Exception | None = None
-+    for shape in positional_shapes:
-+        try:
-+            return fn(*shape)
-+        except Exception as exc:
-+            last_error = exc
-+    if last_error:
-+        raise last_error
-+    raise RuntimeError("turn_runtime_call_failed")
-+
-+
-+def _build_session_payload(
-+    *,
-+    session_id: str,
-+    simulation_state: Dict[str, Any],
-+    player_input: str,
-+    turn_index: int,
-+) -> Dict[str, Any]:
-+    return {
-+        "session_id": session_id,
-+        "simulation_state": simulation_state,
-+        "player_input": player_input,
-+        "input": player_input,
-+        "message": player_input,
-+        "turn_index": turn_index,
-+        "metadata": {
-+            "source": "autoplay_llm_campaign",
-+            "turn_index": turn_index,
-+        },
-+    }
-+
-+
-+def run_real_rpg_turn(
-+    *,
-+    simulation_state: Dict[str, Any],
-+    session_id: str,
-+    player_input: str,
-+    turn_index: int,
-+) -> Dict[str, Any]:
-+    """Run one real RPG turn in-process.
-+
-+    Returns a normalized envelope:
-+      {
-+        ok,
-+        runtime_name,
-+        raw_result,
-+        simulation_state,
-+        turn_contract,
-+        narration,
-+      }
-+    """
-+    session = _build_session_payload(
-+        session_id=session_id,
-+        simulation_state=simulation_state,
-+        player_input=player_input,
-+        turn_index=turn_index,
-+    )
-+
-+    errors: List[str] = []
-+    for runtime_name, fn in _candidate_callables():
-+        try:
-+            result = _call_with_supported_kwargs(
-+                fn,
-+                simulation_state=simulation_state,
-+                state=simulation_state,
-+                session=session,
-+                session_dict=session,
-+                session_id=session_id,
-+                player_input=player_input,
-+                input_text=player_input,
-+                message=player_input,
-+                command=player_input,
-+                turn_index=turn_index,
-+            )
-+            normalized = normalize_turn_result(
-+                result,
-+                fallback_state=simulation_state,
-+                runtime_name=runtime_name,
-+            )
-+            normalized["runtime_name"] = runtime_name
-+            return normalized
-+        except Exception as exc:
-+            errors.append(f"{runtime_name}:{type(exc).__name__}:{exc}")
-+
-+    return {
-+        "ok": False,
-+        "reason": "real_turn_runtime_unavailable",
-+        "errors": errors[-20:],
-+        "runtime_candidates": describe_turn_runtime_candidates(),
-+        "simulation_state": simulation_state,
-+        "turn_contract": {},
-+        "narration": "",
-+    }
-+
-+
-+def extract_turn_contract(result: Any) -> Dict[str, Any]:
-+    result = _safe_dict(result)
-+    candidates = [
-+        result.get("turn_contract"),
-+        _safe_dict(result.get("result")).get("turn_contract"),
-+        _safe_dict(result.get("contract")),
-+        _safe_dict(_safe_dict(result.get("result")).get("contract")),
-+    ]
-+    for candidate in candidates:
-+        if isinstance(candidate, dict) and candidate:
-+            return candidate
-+    return {}
-+
-+
-+def extract_simulation_state(result: Any, fallback_state: Dict[str, Any]) -> Dict[str, Any]:
-+    result = _safe_dict(result)
-+    candidates = [
-+        result.get("simulation_state"),
-+        _safe_dict(result.get("session")).get("simulation_state"),
-+        _safe_dict(result.get("result")).get("simulation_state"),
-+        _safe_dict(_safe_dict(result.get("result")).get("session")).get("simulation_state"),
-+        _safe_dict(result.get("state")),
-+    ]
-+    for candidate in candidates:
-+        if isinstance(candidate, dict) and candidate:
-+            return candidate
-+    return fallback_state
-+
-+
-+def extract_narration(result: Any) -> str:
-+    result = _safe_dict(result)
-+    contract = extract_turn_contract(result)
-+    candidates = [
-+        result.get("narration"),
-+        _safe_dict(result.get("result")).get("narration"),
-+        contract.get("narration"),
-+        _safe_dict(contract.get("narration")).get("text"),
-+        _safe_dict(result.get("llm")).get("narration"),
-+    ]
-+    for candidate in candidates:
-+        if isinstance(candidate, str) and candidate.strip():
-+            return candidate.strip()
-+    return ""
-+
-+
-+def normalize_turn_result(
-+    result: Any,
-+    *,
-+    fallback_state: Dict[str, Any],
-+    runtime_name: str = "",
-+) -> Dict[str, Any]:
-+    raw = result if isinstance(result, dict) else {"value": result}
-+    turn_contract = extract_turn_contract(raw)
-+    state = extract_simulation_state(raw, fallback_state)
-+    narration = extract_narration(raw)
-+    return {
-+        "ok": bool(_safe_dict(raw).get("ok", True)),
-+        "runtime_name": runtime_name,
-+        "raw_result": raw,
-+        "simulation_state": state,
-+        "turn_contract": turn_contract,
-+        "narration": narration,
-+    }
-*** End Patch
-Patch 2 — Add progress delta evaluator
-2. Add src/tests/rpg/autoplay/progress.py
-*** Begin Patch
-*** Add File: src/tests/rpg/autoplay/progress.py
-+from __future__ import annotations
-+
-+import hashlib
-+import json
++from collections import Counter
 +from typing import Any, Dict, List
++
++
++MEANINGFUL_PROGRESS_CATEGORIES = {
++    "milestone_added",
++    "milestone_completed",
++    "arc_stage_changed",
++    "journal_entry_added",
++    "objective_added",
++    "objective_completed",
++    "quest_log_changed",
++    "location_changed",
++    "npc_relationship_changed",
++    "npc_arc_changed",
++    "combat_started",
++    "combat_ended",
++    "service_completed",
++    "story_event_queued",
++    "story_event_resolved",
++}
++
++
++CHURN_ONLY_CATEGORIES = {
++    "state_changed",
++    "memory_changed",
++    "presentation_changed",
++}
 +
 +
 +def _safe_dict(value: Any) -> Dict[str, Any]:
@@ -286,588 +78,679 @@ Patch 2 — Add progress delta evaluator
 +    return value if isinstance(value, list) else []
 +
 +
-+def _stable_json(value: Any) -> str:
-+    return json.dumps(value, ensure_ascii=False, sort_keys=True, default=str)
++def _safe_str(value: Any) -> str:
++    return value if isinstance(value, str) else ""
 +
 +
-+def state_digest(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
-+    """Small deterministic digest for before/after comparisons."""
-+    state = _safe_dict(simulation_state)
-+    selected = {
-+        "story_arc_state": state.get("story_arc_state"),
-+        "story_arc_milestone_state": state.get("story_arc_milestone_state"),
-+        "campaign_journal_state": state.get("campaign_journal_state"),
-+        "quest_log_state": state.get("quest_log_state"),
-+        "story_event_queue_state": state.get("story_event_queue_state"),
-+        "npc_evolution_state": state.get("npc_evolution_state"),
-+        "social_state": state.get("social_state"),
-+        "combat_state": state.get("combat_state"),
-+        "scene": state.get("scene"),
-+        "location": state.get("location"),
-+        "runtime": state.get("runtime"),
-+    }
-+    encoded = _stable_json(selected)
-+    return {
-+        "hash": hashlib.sha1(encoded.encode("utf-8")).hexdigest(),
-+        "size_bytes": len(encoded.encode("utf-8")),
-+        "counts": {
-+            "arcs": len(_safe_dict(_safe_dict(state.get("story_arc_state")).get("arcs"))),
-+            "milestone_arcs": len(_safe_dict(_safe_dict(state.get("story_arc_milestone_state")).get("arcs"))),
-+            "journal_entries": len(_safe_list(_safe_dict(state.get("campaign_journal_state")).get("entries"))),
-+            "queued_events": len(_safe_list(_safe_dict(state.get("story_event_queue_state")).get("queue"))),
-+        },
-+    }
++def _objective_ids_from_context(context: Dict[str, Any]) -> List[str]:
++    ids = []
++    for row in _safe_list(_safe_dict(context).get("active_objectives")):
++        row = _safe_dict(row)
++        objective_id = _safe_str(row.get("objective_id"))
++        if objective_id:
++            ids.append(objective_id)
++    return ids
 +
 +
-+def _milestone_rows(state: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
-+    out: Dict[str, Dict[str, Any]] = {}
-+    milestone_state = _safe_dict(state.get("story_arc_milestone_state"))
-+    for bucket in _safe_dict(milestone_state.get("arcs")).values():
-+        for row in _safe_list(_safe_dict(bucket).get("milestones")):
-+            if isinstance(row, dict) and row.get("milestone_id"):
-+                out[str(row["milestone_id"])] = row
-+    return out
-+
-+
-+def _arc_rows(state: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
-+    return {
-+        str(arc_id): row
-+        for arc_id, row in _safe_dict(_safe_dict(state.get("story_arc_state")).get("arcs")).items()
-+        if isinstance(row, dict)
-+    }
-+
-+
-+def _journal_entries(state: Dict[str, Any]) -> List[Dict[str, Any]]:
-+    return [
-+        row
-+        for row in _safe_list(_safe_dict(state.get("campaign_journal_state")).get("entries"))
-+        if isinstance(row, dict)
++def classify_turn_progress_quality(row: Dict[str, Any]) -> Dict[str, Any]:
++    progress_delta = _safe_dict(row.get("progress_delta"))
++    categories = [
++        str(category)
++        for category in _safe_list(progress_delta.get("categories"))
++        if category
 +    ]
++    meaningful = sorted([c for c in categories if c in MEANINGFUL_PROGRESS_CATEGORIES])
++    churn_only = sorted([c for c in categories if c in CHURN_ONLY_CATEGORIES])
++    unknown = sorted(
++        [
++            c
++            for c in categories
++            if c not in MEANINGFUL_PROGRESS_CATEGORIES and c not in CHURN_ONLY_CATEGORIES
++        ]
++    )
 +
++    context = _safe_dict(row.get("player_action_context"))
++    selected = _safe_dict(row.get("selected_player_action"))
++    player_action = _safe_str(row.get("player_action")).strip()
++    goal_id = _safe_str(selected.get("goal_id")) or _safe_str(selected.get("objective_id"))
++    active_objective_ids = _objective_ids_from_context(context)
 +
-+def classify_progress_delta(
-+    *,
-+    before_state: Dict[str, Any],
-+    after_state: Dict[str, Any],
-+) -> Dict[str, Any]:
-+    before_digest = state_digest(before_state)
-+    after_digest = state_digest(after_state)
++    objective_targeted = bool(goal_id) or any(
++        objective_id and objective_id in player_action
++        for objective_id in active_objective_ids
++    )
 +
-+    before_milestones = _milestone_rows(before_state)
-+    after_milestones = _milestone_rows(after_state)
-+    before_arcs = _arc_rows(before_state)
-+    after_arcs = _arc_rows(after_state)
-+    before_journal = _journal_entries(before_state)
-+    after_journal = _journal_entries(after_state)
-+
-+    added_milestones = [
-+        milestone_id
-+        for milestone_id in after_milestones
-+        if milestone_id not in before_milestones
-+    ]
-+    completed_milestones = [
-+        milestone_id
-+        for milestone_id, row in after_milestones.items()
-+        if row.get("status") == "completed"
-+        and _safe_dict(before_milestones.get(milestone_id)).get("status") != "completed"
-+    ]
-+    arc_stage_changes = [
-+        {
-+            "arc_id": arc_id,
-+            "before": _safe_dict(before_arcs.get(arc_id)).get("stage"),
-+            "after": row.get("stage"),
-+        }
-+        for arc_id, row in after_arcs.items()
-+        if _safe_dict(before_arcs.get(arc_id)).get("stage") != row.get("stage")
-+    ]
-+    new_journal_entries = max(0, len(after_journal) - len(before_journal))
-+
-+    categories: List[str] = []
-+    if added_milestones:
-+        categories.append("milestone_added")
-+    if completed_milestones:
-+        categories.append("milestone_completed")
-+    if arc_stage_changes:
-+        categories.append("arc_stage_changed")
-+    if new_journal_entries:
-+        categories.append("journal_entry_added")
-+    if before_digest["hash"] != after_digest["hash"] and not categories:
-+        categories.append("state_changed")
++    if meaningful:
++        quality = "meaningful_progress"
++    elif categories and all(c in CHURN_ONLY_CATEGORIES for c in categories):
++        quality = "churn_only"
++    elif categories:
++        quality = "uncategorized_change"
++    else:
++        quality = "no_change"
 +
 +    return {
-+        "changed": before_digest["hash"] != after_digest["hash"],
++        "quality": quality,
++        "meaningful": meaningful,
++        "churn_only": churn_only,
++        "unknown": unknown,
 +        "categories": categories,
-+        "before_digest": before_digest,
-+        "after_digest": after_digest,
-+        "added_milestones": added_milestones,
-+        "completed_milestones": completed_milestones,
-+        "arc_stage_changes": arc_stage_changes,
-+        "new_journal_entries": new_journal_entries,
++        "objective_targeted": objective_targeted,
++        "goal_id": goal_id,
++        "active_objective_ids": active_objective_ids,
++        "player_action": player_action,
 +    }
 +
 +
-+def no_progress_streak(transcript: List[Dict[str, Any]]) -> int:
++def _normalized_action(row: Dict[str, Any]) -> str:
++    return " ".join(_safe_str(row.get("player_action")).lower().split())
++
++
++def repeated_action_streak(transcript: List[Dict[str, Any]]) -> int:
++    actions = [_normalized_action(row) for row in transcript if _normalized_action(row)]
++    if not actions:
++        return 0
++    last = actions[-1]
++    streak = 0
++    for action in reversed(actions):
++        if action == last:
++            streak += 1
++        else:
++            break
++    return streak
++
++
++def objective_target_no_meaningful_progress_streak(transcript: List[Dict[str, Any]]) -> int:
 +    streak = 0
 +    for row in reversed(transcript):
-+        progress = _safe_dict(row.get("progress_delta"))
-+        if progress.get("changed") or progress.get("categories"):
++        quality = _safe_dict(row.get("progress_quality"))
++        if quality.get("meaningful"):
 +            break
-+        streak += 1
++        if quality.get("objective_targeted"):
++            streak += 1
++            continue
++        break
 +    return streak
-*** End Patch
-Patch 3 — Update evaluator metrics
-3. Patch src/tests/rpg/autoplay/evaluators.py
-
-Add progress metrics import:
-
-*** Begin Patch
-*** Update File: src/tests/rpg/autoplay/evaluators.py
-@@
- from collections import Counter
- from typing import Any, Dict, List
 +
-+from tests.rpg.autoplay.progress import no_progress_streak
-*** End Patch
-
-Update compute_progress_metrics(...):
-
-*** Begin Patch
-*** Update File: src/tests/rpg/autoplay/evaluators.py
-@@
-     compatibility_turn_runtime_count = 0
-+    real_turn_runtime_count = 0
-+    progress_category_counts = Counter()
- 
-     for row in transcript:
-@@
-         if _safe_dict(row.get("turn_result")).get("compatibility_turn_runtime"):
-             compatibility_turn_runtime_count += 1
-+        if _safe_dict(row.get("turn_result")).get("runtime_name"):
-+            real_turn_runtime_count += 1
-         if not _safe_str(row.get("narration")):
-             narration_missing_count += 1
-+        for category in _safe_list(_safe_dict(row.get("progress_delta")).get("categories")):
-+            if category:
-+                progress_category_counts[str(category)] += 1
-@@
-         "compatibility_turn_runtime_count": compatibility_turn_runtime_count,
-+        "real_turn_runtime_count": real_turn_runtime_count,
-         "narration_missing_count": narration_missing_count,
-+        "progress_category_counts": dict(progress_category_counts),
-+        "no_progress_streak": no_progress_streak(transcript),
-         "suggested_action_category_counts": dict(action_categories),
-*** End Patch
-
-Update evaluate_autoplay_health(...) signature and warnings:
-
-*** Begin Patch
-*** Update File: src/tests/rpg/autoplay/evaluators.py
-@@
-     allow_compatibility_turn_runtime: bool = True,
-     max_player_agent_fallback_rate: float = 1.0,
-+    max_no_progress_turns: int = 0,
- ) -> Dict[str, Any]:
-@@
-     if float(metrics.get("fallback_player_action_rate") or 0.0) > float(max_player_agent_fallback_rate):
-         warnings.append("player_agent_fallback_rate_exceeded")
-+    if max_no_progress_turns > 0 and int(metrics.get("no_progress_streak") or 0) > max_no_progress_turns:
-+        warnings.append("no_progress_turn_limit_exceeded")
-*** End Patch
-Patch 4 — Replace compatibility-first runtime in autoplay runner
-4. Patch src/tests/rpg/autoplay_llm_campaign.py
-
-Update imports:
-
-*** Begin Patch
-*** Update File: src/tests/rpg/autoplay_llm_campaign.py
-@@
- from app.rpg.player_action_context.runtime import build_player_action_context
- from tests.rpg.autoplay.evaluators import compute_progress_metrics, evaluate_autoplay_health
-@@
- from tests.rpg.autoplay.reporting import write_autoplay_artifacts
- from tests.rpg.autoplay.seeding import seed_campaign
-+from tests.rpg.autoplay.progress import classify_progress_delta, state_digest
-+from tests.rpg.autoplay.turn_runtime import (
-+    describe_turn_runtime_candidates,
-+    run_real_rpg_turn,
-+)
-*** End Patch
-
-Replace _call_turn_runtime(...) entirely:
-
-*** Begin Patch
-*** Update File: src/tests/rpg/autoplay_llm_campaign.py
-@@
- def _call_turn_runtime(
-     *,
-     simulation_state: Dict[str, Any],
-     session_id: str,
-     player_action: str,
-     turn_index: int,
- ) -> Dict[str, Any]:
--    """Call the in-process RPG turn runtime.
--
--    This uses a compatibility ladder because the project has evolved across
--    FastAPI/session/runtime layers. Prefer an in-process function when present;
--    otherwise fall back to a simple state-preserving record so early harness
--    tests can still validate the player-agent loop.
--    """
--    try:
--        from app.rpg.session import apply_player_turn  # type: ignore
--
--        return apply_player_turn(
--            simulation_state=simulation_state,
--            session_id=session_id,
--            player_input=player_action,
--            turn_index=turn_index,
--        )
--    except Exception as first_exc:
--        first_error = first_exc
--
--    try:
--        from app.rpg.session_runtime import run_player_turn  # type: ignore
--
--        return run_player_turn(
--            simulation_state=simulation_state,
--            session_id=session_id,
--            player_input=player_action,
--            turn_index=turn_index,
--        )
--    except Exception:
--        pass
--
--    # Last-resort compatibility mode for the first N1-N3 harness. This still
--    # lets us test player action selection, context generation, artifacts,
--    # metrics, and loop detection before binding to the exact app turn function.
--    return {
--        "ok": True,
--        "compatibility_turn_runtime": True,
--        "warning": f"used_compatibility_turn_runtime_after:{type(first_error).__name__}",
--        "turn_contract": {
--            "turn_index": turn_index,
--            "player_action": player_action,
--        },
--        "narration": f"You choose to act: {player_action}",
--        "simulation_state": simulation_state,
--    }
-+    result = run_real_rpg_turn(
-+        simulation_state=simulation_state,
-+        session_id=session_id,
-+        player_input=player_action,
-+        turn_index=turn_index,
-+    )
-+    if result.get("ok"):
-+        return result
++
++def churn_only_streak(transcript: List[Dict[str, Any]]) -> int:
++    streak = 0
++    for row in reversed(transcript):
++        quality = _safe_dict(row.get("progress_quality"))
++        if quality.get("quality") == "churn_only":
++            streak += 1
++            continue
++        break
++    return streak
++
++
++def compute_progress_quality_metrics(transcript: List[Dict[str, Any]]) -> Dict[str, Any]:
++    quality_counts = Counter()
++    meaningful_category_counts = Counter()
++    churn_category_counts = Counter()
++    unknown_category_counts = Counter()
++    targeted_objective_turns = 0
++    targeted_objective_meaningful_turns = 0
++
++    for row in transcript:
++        quality = _safe_dict(row.get("progress_quality"))
++        if not quality:
++            quality = classify_turn_progress_quality(row)
++        quality_counts[str(quality.get("quality") or "unknown")] += 1
++        for category in _safe_list(quality.get("meaningful")):
++            meaningful_category_counts[str(category)] += 1
++        for category in _safe_list(quality.get("churn_only")):
++            churn_category_counts[str(category)] += 1
++        for category in _safe_list(quality.get("unknown")):
++            unknown_category_counts[str(category)] += 1
++        if quality.get("objective_targeted"):
++            targeted_objective_turns += 1
++            if quality.get("meaningful"):
++                targeted_objective_meaningful_turns += 1
++
++    turn_count = len(transcript)
++    meaningful_turns = int(quality_counts.get("meaningful_progress") or 0)
++    churn_turns = int(quality_counts.get("churn_only") or 0)
++    no_change_turns = int(quality_counts.get("no_change") or 0)
++
 +    return {
-+        "ok": False,
-+        "compatibility_turn_runtime": True,
-+        "warning": "real_turn_runtime_unavailable",
-+        "runtime_candidates": describe_turn_runtime_candidates(),
-+        "real_turn_runtime_error": result,
-+        "turn_contract": {
-+            "turn_index": turn_index,
-+            "player_action": player_action,
-+        },
-+        "narration": f"You choose to act: {player_action}",
-+        "simulation_state": simulation_state,
++        "turn_count": turn_count,
++        "quality_counts": dict(quality_counts),
++        "meaningful_turns": meaningful_turns,
++        "churn_only_turns": churn_turns,
++        "no_change_turns": no_change_turns,
++        "meaningful_progress_rate": (meaningful_turns / turn_count) if turn_count else 0.0,
++        "churn_only_rate": (churn_turns / turn_count) if turn_count else 0.0,
++        "targeted_objective_turns": targeted_objective_turns,
++        "targeted_objective_meaningful_turns": targeted_objective_meaningful_turns,
++        "targeted_objective_meaningful_rate": (
++            targeted_objective_meaningful_turns / targeted_objective_turns
++            if targeted_objective_turns
++            else 0.0
++        ),
++        "meaningful_category_counts": dict(meaningful_category_counts),
++        "churn_category_counts": dict(churn_category_counts),
++        "unknown_category_counts": dict(unknown_category_counts),
++        "repeated_action_streak": repeated_action_streak(transcript),
++        "objective_target_no_meaningful_progress_streak": objective_target_no_meaningful_progress_streak(transcript),
++        "churn_only_streak": churn_only_streak(transcript),
++    }
++
++
++def evaluate_progress_quality_health(
++    transcript: List[Dict[str, Any]],
++    *,
++    min_meaningful_progress_rate: float = 0.0,
++    max_churn_only_rate: float = 1.0,
++    max_churn_only_streak: int = 0,
++    max_objective_target_no_progress_streak: int = 0,
++) -> Dict[str, Any]:
++    metrics = compute_progress_quality_metrics(transcript)
++    warnings: List[str] = []
++
++    if (
++        min_meaningful_progress_rate > 0
++        and float(metrics.get("meaningful_progress_rate") or 0.0) < min_meaningful_progress_rate
++    ):
++        warnings.append("meaningful_progress_rate_below_threshold")
++    if (
++        max_churn_only_rate < 1.0
++        and float(metrics.get("churn_only_rate") or 0.0) > max_churn_only_rate
++    ):
++        warnings.append("churn_only_rate_exceeded")
++    if (
++        max_churn_only_streak > 0
++        and int(metrics.get("churn_only_streak") or 0) > max_churn_only_streak
++    ):
++        warnings.append("churn_only_streak_exceeded")
++    if (
++        max_objective_target_no_progress_streak > 0
++        and int(metrics.get("objective_target_no_meaningful_progress_streak") or 0)
++        > max_objective_target_no_progress_streak
++    ):
++        warnings.append("objective_target_no_progress_streak_exceeded")
++
++    return {
++        "ok": not warnings,
++        "warnings": warnings,
++        "metrics": metrics,
 +    }
 *** End Patch
+Patch 2 — Improve progress delta classification
 
-Update _extract_narration(...) to include normalized result:
+Patch:
+
+src/tests/rpg/autoplay/progress.py
+2A. Add helper extractors
+
+Add after _journal_entries(...):
 
 *** Begin Patch
-*** Update File: src/tests/rpg/autoplay_llm_campaign.py
+*** Update File: src/tests/rpg/autoplay/progress.py
 @@
-     candidates = [
-         turn_result.get("narration"),
-+        _safe_dict(turn_result.get("raw_result")).get("narration"),
-         _safe_dict(turn_result.get("result")).get("narration"),
-         _safe_dict(turn_result.get("turn_contract")).get("narration"),
+ def _journal_entries(state: Dict[str, Any]) -> List[Dict[str, Any]]:
+@@
+     return [
+         row
+         for row in _safe_list(_safe_dict(state.get("campaign_journal_state")).get("entries"))
+         if isinstance(row, dict)
+     ]
++
++
++def _active_objective_ids(state: Dict[str, Any]) -> List[str]:
++    ids: List[str] = []
++    milestone_rows = _milestone_rows(state)
++    for milestone_id, row in milestone_rows.items():
++        status = str(row.get("status") or "active")
++        if status not in {"completed", "failed", "cancelled"}:
++            ids.append(milestone_id)
++    return sorted(ids)
++
++
++def _location_key(state: Dict[str, Any]) -> str:
++    scene = _safe_dict(state.get("scene"))
++    location = _safe_dict(state.get("location"))
++    runtime = _safe_dict(state.get("runtime"))
++    return str(
++        scene.get("scene_id")
++        or scene.get("location")
++        or location.get("location_id")
++        or location.get("name")
++        or runtime.get("location")
++        or state.get("current_location")
++        or ""
++    )
++
++
++def _combat_active(state: Dict[str, Any]) -> bool:
++    combat = _safe_dict(state.get("combat_state"))
++    return bool(combat.get("active") or combat.get("in_combat"))
++
++
++def _event_queue_count(state: Dict[str, Any]) -> int:
++    queue_state = _safe_dict(state.get("story_event_queue_state"))
++    return len(_safe_list(queue_state.get("queue")))
 *** End Patch
+2B. Extend classify_progress_delta(...)
 
-Inside run_autoplay_campaign(...), after seeding add runtime candidates:
+Find the current categories section:
+
+    categories: List[str] = []
+    if added_milestones:
+        categories.append("milestone_added")
+    if completed_milestones:
+        categories.append("milestone_completed")
+    if arc_stage_changes:
+        categories.append("arc_stage_changed")
+    if new_journal_entries:
+        categories.append("journal_entry_added")
+    if before_digest["hash"] != after_digest["hash"] and not categories:
+        categories.append("state_changed")
+
+Replace with:
 
 *** Begin Patch
-*** Update File: src/tests/rpg/autoplay_llm_campaign.py
+*** Update File: src/tests/rpg/autoplay/progress.py
 @@
-     simulation_state: Dict[str, Any] = {}
-     seed_result = seed_campaign(simulation_state, args.scenario_seed)
-+    turn_runtime_candidates = describe_turn_runtime_candidates()
+     new_journal_entries = max(0, len(after_journal) - len(before_journal))
++    before_objectives = set(_active_objective_ids(before_state))
++    after_objectives = set(_active_objective_ids(after_state))
++    added_objectives = sorted(after_objectives - before_objectives)
++    removed_objectives = sorted(before_objectives - after_objectives)
++    location_changed = _location_key(before_state) != _location_key(after_state)
++    combat_started = not _combat_active(before_state) and _combat_active(after_state)
++    combat_ended = _combat_active(before_state) and not _combat_active(after_state)
++    queued_events_delta = _event_queue_count(after_state) - _event_queue_count(before_state)
+ 
+     categories: List[str] = []
+     if added_milestones:
+         categories.append("milestone_added")
+     if completed_milestones:
+         categories.append("milestone_completed")
++    if added_objectives:
++        categories.append("objective_added")
++    if removed_objectives or completed_milestones:
++        categories.append("objective_completed")
+     if arc_stage_changes:
+         categories.append("arc_stage_changed")
+     if new_journal_entries:
+         categories.append("journal_entry_added")
++    if location_changed:
++        categories.append("location_changed")
++    if combat_started:
++        categories.append("combat_started")
++    if combat_ended:
++        categories.append("combat_ended")
++    if queued_events_delta > 0:
++        categories.append("story_event_queued")
++    if queued_events_delta < 0:
++        categories.append("story_event_resolved")
+     if before_digest["hash"] != after_digest["hash"] and not categories:
+         categories.append("state_changed")
 @@
-     if args.debug_provider_shape and provider_shape:
-         print("Player-agent provider shape:")
-         print(provider_shape)
-+    if args.debug_turn_runtime_shape:
-+        print("Autoplay turn runtime candidates:")
-+        print(turn_runtime_candidates)
+         "completed_milestones": completed_milestones,
++        "added_objectives": added_objectives,
++        "removed_objectives": removed_objectives,
+         "arc_stage_changes": arc_stage_changes,
+         "new_journal_entries": new_journal_entries,
++        "location_changed": location_changed,
++        "combat_started": combat_started,
++        "combat_ended": combat_ended,
++        "queued_events_delta": queued_events_delta,
+     }
 *** End Patch
+Patch 3 — Integrate progress quality into autoplay runner
 
-Before each turn call, capture before state and after progress:
+Patch:
+
+src/tests/rpg/autoplay_llm_campaign.py
+3A. Import progress quality
+*** Begin Patch
+*** Update File: src/tests/rpg/autoplay_llm_campaign.py
+@@
+ from tests.rpg.autoplay.progress import classify_progress_delta, state_digest
++from tests.rpg.autoplay.progress_quality import (
++    classify_turn_progress_quality,
++    evaluate_progress_quality_health,
++)
+*** End Patch
+3B. Add progress quality per turn
+
+After progress_delta = classify_progress_delta(...), add:
 
 *** Begin Patch
 *** Update File: src/tests/rpg/autoplay_llm_campaign.py
 @@
-         selected = _select_player_action(
-@@
-         player_action = _safe_str(selected.get("action"))
- 
-         runtime_error = ""
-         turn_result: Dict[str, Any]
-+        before_state = simulation_state
-+        before_digest = state_digest(before_state)
-         try:
-             turn_result = _call_turn_runtime(
-                 simulation_state=simulation_state,
-                 session_id=session_id,
-                 player_action=player_action,
-                 turn_index=turn_index,
-             )
-             returned_state = _safe_dict(turn_result.get("simulation_state"))
-             if returned_state:
-                 simulation_state = returned_state
-         except Exception as exc:
-             runtime_error = f"{type(exc).__name__}: {exc}"
-             turn_result = {"ok": False, "error": runtime_error}
- 
-+        progress_delta = classify_progress_delta(
-+            before_state=before_state,
-+            after_state=simulation_state,
+         progress_delta = classify_progress_delta(
+             before_state=before_state,
+             after_state=simulation_state,
+         )
++        progress_quality = classify_turn_progress_quality(
++            {
++                "progress_delta": progress_delta,
++                "player_action_context": context,
++                "selected_player_action": selected,
++                "player_action": player_action,
++            }
 +        )
-         narration = _extract_narration(turn_result)
-         record = {
+         state_bounds = collect_state_bounds(
+             simulation_state,
 @@
-             "turn_result": turn_result if args.artifact_detail == "full" else {
-                 "ok": turn_result.get("ok"),
-                 "warning": turn_result.get("warning"),
-                 "compatibility_turn_runtime": turn_result.get("compatibility_turn_runtime"),
-+                "runtime_name": turn_result.get("runtime_name"),
-             },
-+            "turn_contract": turn_result.get("turn_contract") or {},
-             "narration": narration,
-             "runtime_error": runtime_error,
-+            "before_state_digest": before_digest,
-+            "after_state_digest": state_digest(simulation_state),
-+            "progress_delta": progress_delta,
+             "after_state_digest": state_digest(simulation_state),
+             "progress_delta": progress_delta,
++            "progress_quality": progress_quality,
+             "state_bounds": state_bounds,
+             "save_load_checkpoint": save_load_checkpoint,
          }
 *** End Patch
+3C. Add quality health to final summary
 
-Pass max_no_progress_turns into both health calls:
+After final health = evaluate_autoplay_health(...), add:
 
 *** Begin Patch
 *** Update File: src/tests/rpg/autoplay_llm_campaign.py
 @@
-             max_runtime_errors=0 if args.fail_on_runtime_error else 999999,
-             allow_compatibility_turn_runtime=not args.fail_on_compatibility_turn_runtime,
-             max_player_agent_fallback_rate=args.max_player_agent_fallback_rate,
-+            max_no_progress_turns=args.max_no_progress_turns,
-         )
-@@
+     health = evaluate_autoplay_health(
+         transcript,
+         latest_context=latest_context,
+         max_repeated_actions=args.max_repeated_actions,
          max_runtime_errors=0 if args.fail_on_runtime_error else 999999,
-         allow_compatibility_turn_runtime=not args.fail_on_compatibility_turn_runtime,
-         max_player_agent_fallback_rate=args.max_player_agent_fallback_rate,
-+        max_no_progress_turns=args.max_no_progress_turns,
+@@
+         fail_on_checkpoint_failure=not args.allow_checkpoint_failures,
+         fail_on_state_bound_warnings=not args.allow_state_bound_warnings,
      )
-*** End Patch
++    progress_quality_health = evaluate_progress_quality_health(
++        transcript,
++        min_meaningful_progress_rate=float(args.min_meaningful_progress_rate),
++        max_churn_only_rate=float(args.max_churn_only_rate),
++        max_churn_only_streak=int(args.max_churn_only_streak),
++        max_objective_target_no_progress_streak=int(args.max_objective_target_no_progress_streak),
++    )
++    health.setdefault("warnings", [])
++    if not progress_quality_health.get("ok"):
++        health["warnings"].extend(
++            [
++                "progress_quality:" + str(warning)
++                for warning in progress_quality_health.get("warnings") or []
++            ]
++        )
++        health["ok"] = False
++    health["progress_quality"] = progress_quality_health
 
-Add runtime candidates to summary:
+Also add the same logic to the inside-loop health check if you want early stopping later, but for N10-N12 final summary is enough.
+
+3D. Add progress quality settings to summary
+
+In summary construction, add:
 
 *** Begin Patch
 *** Update File: src/tests/rpg/autoplay_llm_campaign.py
 @@
-         "provider_shape": provider_shape if args.artifact_detail == "full" else {
-             "type": provider_shape.get("type"),
-             "module": provider_shape.get("module"),
-             "methods": provider_shape.get("methods", [])[:20],
+         "state_bounds_limits": {
+             "max_state_bytes": int(args.max_state_bytes),
+             "max_state_roots": int(args.max_state_roots),
+             "max_state_list_length": int(args.max_state_list_length),
+             "max_state_dict_keys": int(args.max_state_dict_keys),
          },
-+        "turn_runtime_candidates": turn_runtime_candidates,
-         "strategy": args.strategy,
++        "progress_quality_thresholds": {
++            "min_meaningful_progress_rate": float(args.min_meaningful_progress_rate),
++            "max_churn_only_rate": float(args.max_churn_only_rate),
++            "max_churn_only_streak": int(args.max_churn_only_streak),
++            "max_objective_target_no_progress_streak": int(args.max_objective_target_no_progress_streak),
++        },
+         "seed_result": seed_result,
 *** End Patch
+3E. Add CLI flags
 
-Add CLI args:
+Patch build_arg_parser():
 
 *** Begin Patch
 *** Update File: src/tests/rpg/autoplay_llm_campaign.py
 @@
-     parser.add_argument("--debug-provider-shape", action="store_true")
-+    parser.add_argument("--debug-turn-runtime-shape", action="store_true")
-     parser.add_argument("--suggested-action-limit", type=int, default=12)
-@@
-     parser.add_argument("--max-repeated-actions", type=int, default=5)
-+    parser.add_argument("--max-no-progress-turns", type=int, default=0)
+     parser.add_argument("--allow-checkpoint-failures", action="store_true")
+     parser.add_argument("--allow-state-bound-warnings", action="store_true")
++    parser.add_argument("--min-meaningful-progress-rate", type=float, default=0.0)
++    parser.add_argument("--max-churn-only-rate", type=float, default=1.0)
++    parser.add_argument("--max-churn-only-streak", type=int, default=0)
++    parser.add_argument("--max-objective-target-no-progress-streak", type=int, default=0)
      parser.add_argument("--stop-on-loop", action="store_true")
 *** End Patch
-Patch 5 — Update artifact reporting with progress
-5. Patch src/tests/rpg/autoplay/reporting.py
+Patch 4 — Add progress quality to metrics
 
-In render_autoplay_html(...), add progress display after narration:
+Patch:
+
+src/tests/rpg/autoplay/evaluators.py
+
+Add import:
+
+*** Begin Patch
+*** Update File: src/tests/rpg/autoplay/evaluators.py
+@@
+ from tests.rpg.autoplay.progress import no_progress_streak
++from tests.rpg.autoplay.progress_quality import compute_progress_quality_metrics
+*** End Patch
+
+At the end of compute_progress_metrics(...), before return, compute quality metrics:
+
+*** Begin Patch
+*** Update File: src/tests/rpg/autoplay/evaluators.py
+@@
+     quest_summary = _safe_dict(latest_context.get("quest_log_summary"))
++    progress_quality_metrics = compute_progress_quality_metrics(transcript)
+     return {
+@@
+         "max_state_size_bytes_seen": max_state_size_bytes_seen,
++        "progress_quality": progress_quality_metrics,
+         "suggested_action_category_counts": dict(action_categories),
+*** End Patch
+Patch 5 — Add progress quality to HTML
+
+Patch:
+
+src/tests/rpg/autoplay/reporting.py
+
+After the progress section, add:
 
 *** Begin Patch
 *** Update File: src/tests/rpg/autoplay/reporting.py
 @@
-               <div><strong>Reason:</strong> {html.escape(_safe_str(row.get("selected_action_reason")))}</div>
-               <div><strong>Narration:</strong><p>{html.escape(_safe_str(row.get("narration")))}</p></div>
-+              <div><strong>Progress:</strong>
-+                <pre>{html.escape(json.dumps(row.get("progress_delta") or {}, ensure_ascii=False, indent=2, sort_keys=True, default=str))}</pre>
+               <div><strong>Progress:</strong>
+                 <pre>{html.escape(json.dumps(row.get("progress_delta") or {}, ensure_ascii=False, indent=2, sort_keys=True, default=str))}</pre>
+               </div>
++              <div><strong>Progress quality:</strong>
++                <pre>{html.escape(json.dumps(row.get("progress_quality") or {}, ensure_ascii=False, indent=2, sort_keys=True, default=str))}</pre>
 +              </div>
                <details>
 *** End Patch
-Patch 6 — Add tests
-6. Add src/tests/rpg/autoplay/test_turn_runtime.py
+Patch 6 — Tests for progress quality
+
+Add:
+
+src/tests/rpg/autoplay/test_progress_quality.py
 *** Begin Patch
-*** Add File: src/tests/rpg/autoplay/test_turn_runtime.py
-+from tests.rpg.autoplay.turn_runtime import (
-+    describe_turn_runtime_candidates,
-+    extract_narration,
-+    extract_turn_contract,
-+    normalize_turn_result,
+*** Add File: src/tests/rpg/autoplay/test_progress_quality.py
++from tests.rpg.autoplay.progress_quality import (
++    churn_only_streak,
++    classify_turn_progress_quality,
++    compute_progress_quality_metrics,
++    evaluate_progress_quality_health,
++    objective_target_no_meaningful_progress_streak,
 +)
 +
 +
-+def test_extract_turn_contract_from_result():
-+    result = {"turn_contract": {"action": "observe"}}
-+
-+    assert extract_turn_contract(result)["action"] == "observe"
-+
-+
-+def test_extract_narration_from_result():
-+    result = {"narration": "You look around."}
-+
-+    assert extract_narration(result) == "You look around."
-+
-+
-+def test_normalize_turn_result_keeps_state_contract_and_narration():
-+    state = {"x": 1}
-+    result = {
-+        "ok": True,
-+        "simulation_state": {"x": 2},
-+        "turn_contract": {"action": "observe"},
-+        "narration": "You look around.",
++def test_classify_turn_progress_quality_meaningful():
++    row = {
++        "progress_delta": {"categories": ["milestone_completed"]},
++        "player_action": "I find the witness.",
 +    }
 +
-+    normalized = normalize_turn_result(result, fallback_state=state, runtime_name="test")
++    quality = classify_turn_progress_quality(row)
 +
-+    assert normalized["ok"] is True
-+    assert normalized["runtime_name"] == "test"
-+    assert normalized["simulation_state"] == {"x": 2}
-+    assert normalized["turn_contract"]["action"] == "observe"
-+    assert normalized["narration"] == "You look around."
++    assert quality["quality"] == "meaningful_progress"
++    assert quality["meaningful"] == ["milestone_completed"]
 +
 +
-+def test_describe_turn_runtime_candidates_returns_list():
-+    candidates = describe_turn_runtime_candidates()
-+
-+    assert isinstance(candidates, list)
-*** End Patch
-7. Add src/tests/rpg/autoplay/test_progress.py
-*** Begin Patch
-*** Add File: src/tests/rpg/autoplay/test_progress.py
-+from tests.rpg.autoplay.progress import classify_progress_delta, no_progress_streak, state_digest
-+
-+
-+def test_state_digest_changes_when_selected_state_changes():
-+    before = {"story_arc_state": {"arcs": {}}}
-+    after = {"story_arc_state": {"arcs": {"arc:x": {"stage": "start"}}}}
-+
-+    assert state_digest(before)["hash"] != state_digest(after)["hash"]
-+
-+
-+def test_classify_progress_delta_detects_milestone_completion():
-+    before = {
-+        "story_arc_milestone_state": {
-+            "arcs": {
-+                "arc:x": {
-+                    "milestones": [
-+                        {"milestone_id": "milestone:x", "status": "active"}
-+                    ]
-+                }
-+            }
-+        }
-+    }
-+    after = {
-+        "story_arc_milestone_state": {
-+            "arcs": {
-+                "arc:x": {
-+                    "milestones": [
-+                        {"milestone_id": "milestone:x", "status": "completed"}
-+                    ]
-+                }
-+            }
-+        }
++def test_classify_turn_progress_quality_churn_only():
++    row = {
++        "progress_delta": {"categories": ["state_changed"]},
++        "player_action": "I ask Bran again.",
 +    }
 +
-+    delta = classify_progress_delta(before_state=before, after_state=after)
++    quality = classify_turn_progress_quality(row)
 +
-+    assert delta["changed"] is True
-+    assert "milestone_completed" in delta["categories"]
-+    assert delta["completed_milestones"] == ["milestone:x"]
++    assert quality["quality"] == "churn_only"
++    assert quality["churn_only"] == ["state_changed"]
 +
 +
-+def test_no_progress_streak_counts_trailing_no_progress_turns():
++def test_classify_turn_progress_quality_objective_targeted_from_goal_id():
++    row = {
++        "progress_delta": {"categories": ["state_changed"]},
++        "selected_player_action": {"goal_id": "milestone:find_witness"},
++        "player_action_context": {
++            "active_objectives": [
++                {"objective_id": "milestone:find_witness"},
++            ]
++        },
++        "player_action": "I focus on the witness.",
++    }
++
++    quality = classify_turn_progress_quality(row)
++
++    assert quality["objective_targeted"] is True
++
++
++def test_compute_progress_quality_metrics_counts_quality():
 +    transcript = [
-+        {"progress_delta": {"changed": True, "categories": ["state_changed"]}},
-+        {"progress_delta": {"changed": False, "categories": []}},
-+        {"progress_delta": {"changed": False, "categories": []}},
++        {"progress_quality": {"quality": "meaningful_progress", "meaningful": ["journal_entry_added"]}},
++        {"progress_quality": {"quality": "churn_only", "churn_only": ["state_changed"]}},
 +    ]
 +
-+    assert no_progress_streak(transcript) == 2
++    metrics = compute_progress_quality_metrics(transcript)
++
++    assert metrics["meaningful_turns"] == 1
++    assert metrics["churn_only_turns"] == 1
++    assert metrics["meaningful_progress_rate"] == 0.5
++
++
++def test_churn_only_streak_counts_trailing_churn():
++    transcript = [
++        {"progress_quality": {"quality": "meaningful_progress"}},
++        {"progress_quality": {"quality": "churn_only"}},
++        {"progress_quality": {"quality": "churn_only"}},
++    ]
++
++    assert churn_only_streak(transcript) == 2
++
++
++def test_objective_target_no_meaningful_progress_streak_counts_trailing_targeted_churn():
++    transcript = [
++        {"progress_quality": {"objective_targeted": True, "meaningful": ["journal_entry_added"]}},
++        {"progress_quality": {"objective_targeted": True, "meaningful": []}},
++        {"progress_quality": {"objective_targeted": True, "meaningful": []}},
++    ]
++
++    assert objective_target_no_meaningful_progress_streak(transcript) == 2
++
++
++def test_evaluate_progress_quality_health_can_warn_on_low_meaningful_rate():
++    transcript = [
++        {"progress_quality": {"quality": "churn_only", "churn_only": ["state_changed"]}},
++        {"progress_quality": {"quality": "churn_only", "churn_only": ["state_changed"]}},
++    ]
++
++    health = evaluate_progress_quality_health(
++        transcript,
++        min_meaningful_progress_rate=0.25,
++    )
++
++    assert health["ok"] is False
++    assert "meaningful_progress_rate_below_threshold" in health["warnings"]
++
++
++def test_evaluate_progress_quality_health_can_warn_on_churn_streak():
++    transcript = [
++        {"progress_quality": {"quality": "churn_only", "churn_only": ["state_changed"]}},
++        {"progress_quality": {"quality": "churn_only", "churn_only": ["state_changed"]}},
++    ]
++
++    health = evaluate_progress_quality_health(
++        transcript,
++        max_churn_only_streak=1,
++    )
++
++    assert health["ok"] is False
++    assert "churn_only_streak_exceeded" in health["warnings"]
 *** End Patch
-8. Patch src/tests/rpg/autoplay/test_autoplay_evaluators.py
+Patch 7 — Tests for improved progress delta categories
+
+Patch:
+
+src/tests/rpg/autoplay/test_progress.py
 
 Add:
 
 *** Begin Patch
-*** Update File: src/tests/rpg/autoplay/test_autoplay_evaluators.py
+*** Update File: src/tests/rpg/autoplay/test_progress.py
 @@
- def test_evaluate_autoplay_health_can_fail_on_fallback_rate():
+ def test_no_progress_streak_counts_trailing_no_progress_turns():
 @@
-     assert health["ok"] is False
-     assert "player_agent_fallback_rate_exceeded" in health["warnings"]
+     assert no_progress_streak(transcript) == 2
 +
 +
-+def test_evaluate_autoplay_health_can_fail_on_no_progress_streak():
-+    transcript = [
-+        {"player_action": "A", "progress_delta": {"changed": False, "categories": []}},
-+        {"player_action": "B", "progress_delta": {"changed": False, "categories": []}},
-+    ]
++def test_classify_progress_delta_detects_location_change():
++    before = {"scene": {"location": "Tavern"}}
++    after = {"scene": {"location": "Road"}}
 +
-+    health = evaluate_autoplay_health(
-+        transcript,
-+        latest_context={"suggested_actions": [{"x": 1}]},
-+        max_no_progress_turns=1,
-+    )
++    delta = classify_progress_delta(before_state=before, after_state=after)
 +
-+    assert health["ok"] is False
-+    assert "no_progress_turn_limit_exceeded" in health["warnings"]
++    assert "location_changed" in delta["categories"]
++
++
++def test_classify_progress_delta_detects_story_event_queue_added():
++    before = {"story_event_queue_state": {"queue": []}}
++    after = {"story_event_queue_state": {"queue": [{"event_id": "event:x"}]}}
++
++    delta = classify_progress_delta(before_state=before, after_state=after)
++
++    assert "story_event_queued" in delta["categories"]
++
++
++def test_classify_progress_delta_detects_combat_started():
++    before = {"combat_state": {"active": False}}
++    after = {"combat_state": {"active": True}}
++
++    delta = classify_progress_delta(before_state=before, after_state=after)
++
++    assert "combat_started" in delta["categories"]
 *** End Patch
-9. Patch src/tests/rpg/autoplay/test_autoplay_runner.py
+Patch 8 — Update runner test Namespace
 
-Update args namespace with the new fields:
+Patch:
+
+src/tests/rpg/autoplay/test_autoplay_runner.py
+
+Add fields to Namespace(...):
 
 *** Begin Patch
 *** Update File: src/tests/rpg/autoplay/test_autoplay_runner.py
 @@
-         artifact_detail="full",
-         output_dir=str(tmp_path),
-         max_repeated_actions=5,
-+        max_no_progress_turns=0,
+         allow_checkpoint_failures=False,
+         allow_state_bound_warnings=False,
++        min_meaningful_progress_rate=0.0,
++        max_churn_only_rate=1.0,
++        max_churn_only_streak=0,
++        max_objective_target_no_progress_streak=0,
          stop_on_loop=False,
-         fail_on_runtime_error=False,
-+        fail_on_compatibility_turn_runtime=False,
-+        max_player_agent_fallback_rate=1.0,
-         fail_on_regression_warnings=False,
-+        debug_provider_shape=False,
-+        debug_turn_runtime_shape=False,
-     )
 *** End Patch
-
-If the test already has some of these fields from N1-N3.2, only add missing ones.
-
 Validation commands
 Compile
-python -m py_compile src/tests/rpg/autoplay/turn_runtime.py
+python -m py_compile src/tests/rpg/autoplay/progress_quality.py
 python -m py_compile src/tests/rpg/autoplay/progress.py
 python -m py_compile src/tests/rpg/autoplay/evaluators.py
 python -m py_compile src/tests/rpg/autoplay/reporting.py
 python -m py_compile src/tests/rpg/autoplay_llm_campaign.py
+python -m py_compile src/tests/rpg/autoplay/test_progress_quality.py
+python -m py_compile src/tests/rpg/autoplay/test_progress.py
+python -m py_compile src/tests/rpg/autoplay/test_autoplay_runner.py
 Focused tests
-python -m pytest src/tests/rpg/autoplay/test_turn_runtime.py src/tests/rpg/autoplay/test_progress.py src/tests/rpg/autoplay/test_autoplay_evaluators.py src/tests/rpg/autoplay/test_autoplay_runner.py src/tests/rpg/autoplay/test_player_agent.py src/tests/rpg/autoplay/test_provider_adapter.py -q
+python -m pytest src/tests/rpg/autoplay/test_progress_quality.py src/tests/rpg/autoplay/test_progress.py src/tests/rpg/autoplay/test_autoplay_evaluators.py src/tests/rpg/autoplay/test_autoplay_runner.py src/tests/rpg/autoplay/test_checkpoints.py src/tests/rpg/autoplay/test_manual_turn_driver.py src/tests/rpg/autoplay/test_player_agent.py src/tests/rpg/autoplay/test_provider_adapter.py -q
