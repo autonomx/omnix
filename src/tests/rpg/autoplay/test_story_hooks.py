@@ -210,3 +210,30 @@ def test_pursue_bandit_trail_adds_followup_preparation_objective():
     by_id = {row["milestone_id"]: row for row in milestones}
 
     assert by_id["milestone:prepare_for_bandit_road"]["status"] == "active"
+
+
+def test_tavern_story_seed_gives_player_starter_inventory():
+    state = {}
+    seed_tavern_story_campaign(state)
+
+    inventory = state["player_state"]["inventory"]
+
+    assert inventory["currency"]["gold"] == 15
+    assert any(item["item_id"] == "item:iron_dagger" for item in inventory["items"])
+    assert state["inventory_state"]["currency"]["gold"] == 15
+
+
+def test_all_campaign_seed_variants_have_director_lore_npcs_and_arc():
+    from tests.rpg.autoplay.seeding import available_campaign_seeds, seed_campaign
+
+    for seed_name in available_campaign_seeds():
+        state = {}
+        result = seed_campaign(state, seed_name)
+
+        assert result["ok"] is True
+        assert state["campaign_director_state"]["campaign_title"]
+        assert state["lore_state"]["entries"]
+        assert state["npc_profile_state"]["profiles"]
+        assert state["story_arc_state"]["arcs"]
+        assert state["story_arc_milestone_state"]["arcs"]
+        assert state["player_state"]["inventory"]["items"]

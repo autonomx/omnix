@@ -1,47 +1,916 @@
-Bundle N28-N30 — Real Runtime Narration Contract Binding for Session Turns v1
+Below is a literal apply-this-patch diff spec for:
+
+N34-N36 — Campaign Seed Variants + Story Variety Metrics v1
+
+This adds multiple deterministic campaign seeds, reproducible random seed selection, and report metrics proving whether autoplay runs are actually producing different stories.
+
+Bundle N34-N36 — Campaign Seed Variants + Story Variety Metrics v1
 GOAL:
-Normal RPG session turns should return a real structured narration payload.
+Stop every autoplay campaign from feeling like the same Rusty Flagon witness story.
 
-Current accepted state:
-- Autoplay report now shows useful non-hook dialogue through deterministic autoplay base responses.
-- Campaign report is honest that this is not true runtime narration.
-- Real session turns still often return:
-    narration == player_action
-    npc: {}
-    raw_narration_payload: {}
-    llm_called: false
+Current problem:
+- --scenario-seed tavern_story_seed always loads the same setup.
+- story_hooks.py progresses through the same fixed witness branch.
+- LLM player phrasing varies, but story structure is mostly identical.
+- This is good for regression testing, but bad for measuring RPG story variety.
 
-N28-N30 adds:
-1. A runtime narration contract adapter for real session turns.
-2. Structured narration payload attached to turn result.
-3. Provider-backed narration through centralized app provider when available.
-4. Deterministic safe fallback when provider is unavailable/invalid.
-5. Strict no-authority rules:
-   - narration cannot award XP
-   - narration cannot complete objectives
-   - narration cannot invent items/rewards
-   - narration cannot mutate simulation state
-6. Manual/autoplay harness extraction of the real runtime payload.
-7. Tests proving normal non-hook turns produce:
-   - narration_payload.format_version == rpg_narration_v2
-   - narration text not equal to player action
-   - npc speaker/line for social turns
-   - llm provider path is central when enabled
-Patch 1 — Add runtime narration contract module
+This bundle adds:
+1. Multiple deterministic campaign seeds.
+2. --scenario-seed random.
+3. --random-seed for reproducible random selection.
+4. Seed metadata in summary/report.
+5. Story variety metrics.
+6. Report section explaining campaign seed, premise, NPCs, locations, objectives, and branch signature.
+7. Tests proving different seeds produce different arcs/lore/NPCs/objectives.
+Design
+
+Keep the current Rusty Flagon seed as the regression default:
+
+tavern_story_seed
+
+Add new seeds:
+
+caravan_ambush_seed
+missing_apprentice_seed
+haunted_mill_seed
+noble_blackmail_seed
+
+For v1, these seeds can reuse the existing generic runtime systems and define their own:
+
+campaign_director_state
+lore_state
+npc_profile_state
+npc_progression_state
+player_state
+inventory_state
+story_arc_state
+story_arc_milestone_state
+campaign_journal_state
+story_event_queue_state
+autoplay_story_hook_state
+
+The new seeds do not need full custom hook chains yet. They should still produce different report setup, story arcs, NPCs, locations, and initial objectives. N37-N39 can make the director dynamically plan branches.
+
+Patch 1 — Add seed registry and random selection
+
+Patch:
+
+src/tests/rpg/autoplay/seeding.py
+
+Add imports near top:
+
+*** Begin Patch
+*** Update File: src/tests/rpg/autoplay/seeding.py
+@@
+ from __future__ import annotations
+ 
++import random
+ from typing import Any, Dict
+*** End Patch
+
+Add registry constants near top-level:
+
+*** Begin Patch
+*** Update File: src/tests/rpg/autoplay/seeding.py
+@@
++DEFAULT_CAMPAIGN_SEED = "tavern_story_seed"
++
++
++CAMPAIGN_SEED_NAMES = [
++    "tavern_story_seed",
++    "caravan_ambush_seed",
++    "missing_apprentice_seed",
++    "haunted_mill_seed",
++    "noble_blackmail_seed",
++]
++
++
++def available_campaign_seeds() -> list[str]:
++    return list(CAMPAIGN_SEED_NAMES)
++
++
++def resolve_campaign_seed_name(
++    requested_seed: str,
++    *,
++    random_seed: int | None = None,
++) -> Dict[str, Any]:
++    requested = (requested_seed or DEFAULT_CAMPAIGN_SEED).strip()
++    if requested == "random":
++        rng = random.Random(random_seed)
++        resolved = rng.choice(CAMPAIGN_SEED_NAMES)
++        return {
++            "requested_seed": requested,
++            "resolved_seed": resolved,
++            "random_seed": random_seed,
++            "available_seeds": available_campaign_seeds(),
++            "randomized": True,
++        }
++    if requested not in CAMPAIGN_SEED_NAMES:
++        raise ValueError(
++            f"unknown_campaign_seed:{requested}; available={','.join(CAMPAIGN_SEED_NAMES)}"
++        )
++    return {
++        "requested_seed": requested,
++        "resolved_seed": requested,
++        "random_seed": random_seed,
++        "available_seeds": available_campaign_seeds(),
++        "randomized": False,
++    }
++
+*** End Patch
+Patch 2 — Add reusable seed helpers
+
+Patch:
+
+src/tests/rpg/autoplay/seeding.py
+
+Add helpers before existing seed_tavern_story_campaign(...):
+
+*** Begin Patch
+*** Update File: src/tests/rpg/autoplay/seeding.py
+@@
++def _reset_seed_roots(simulation_state: Dict[str, Any]) -> None:
++    for key in [
++        "campaign_director_state",
++        "campaign_journal_state",
++        "inventory_state",
++        "lore_state",
++        "npc_profile_state",
++        "npc_progression_state",
++        "player_state",
++        "story_arc_state",
++        "story_arc_milestone_state",
++        "story_event_queue_state",
++        "autoplay_story_hook_state",
++    ]:
++        simulation_state.pop(key, None)
++
++
++def _seed_common_player(
++    simulation_state: Dict[str, Any],
++    *,
++    gold: int = 15,
++    silver: int = 8,
++) -> None:
++    simulation_state.setdefault("player_state", {}).update(
++        {
++            "character_id": "player",
++            "name": "The Player",
++            "level": 1,
++            "experience": 0,
++            "experience_to_next_level": 100,
++            "inventory": {
++                "currency": {
++                    "gold": gold,
++                    "silver": silver,
++                },
++                "items": [
++                    {
++                        "item_id": "item:travelers_cloak",
++                        "name": "Traveler's Cloak",
++                        "quantity": 1,
++                        "type": "gear",
++                        "description": "A weathered cloak suitable for road travel.",
++                    },
++                    {
++                        "item_id": "item:iron_dagger",
++                        "name": "Iron Dagger",
++                        "quantity": 1,
++                        "type": "weapon",
++                        "description": "A simple backup blade.",
++                    },
++                    {
++                        "item_id": "item:rations",
++                        "name": "Trail Rations",
++                        "quantity": 3,
++                        "type": "consumable",
++                        "description": "Basic food for short travel.",
++                    },
++                    {
++                        "item_id": "item:waterskin",
++                        "name": "Waterskin",
++                        "quantity": 1,
++                        "type": "gear",
++                        "description": "A filled waterskin.",
++                    },
++                    {
++                        "item_id": "item:journal",
++                        "name": "Plain Journal",
++                        "quantity": 1,
++                        "type": "tool",
++                        "description": "A small book for notes, rumors, and leads.",
++                    },
++                ],
++            },
++            "stats": {
++                "strength": 10,
++                "dexterity": 10,
++                "constitution": 10,
++                "intelligence": 11,
++                "wisdom": 12,
++                "charisma": 10,
++            },
++            "progression_log": [
++                {
++                    "turn_index": 0,
++                    "type": "campaign_start",
++                    "summary": "The player begins as a level 1 adventurer with basic travel gear.",
++                }
++            ],
++        }
++    )
++    simulation_state.setdefault("inventory_state", {}).update(
++        simulation_state.get("player_state", {}).get("inventory", {})
++    )
++
++
++def _seed_arc(
++    simulation_state: Dict[str, Any],
++    *,
++    arc_id: str,
++    title: str,
++    stage: str,
++    milestones: list[Dict[str, Any]],
++    pressure: int = 35,
++) -> None:
++    simulation_state.setdefault("story_arc_state", {}).setdefault("arcs", {})[arc_id] = {
++        "arc_id": arc_id,
++        "title": title,
++        "stage": stage,
++        "status": "active",
++        "pressure": pressure,
++    }
++    simulation_state.setdefault("story_arc_milestone_state", {}).setdefault("arcs", {})[
++        arc_id
++    ] = {
++        "milestones": milestones,
++    }
++
++
++def _seed_initial_journal(
++    simulation_state: Dict[str, Any],
++    *,
++    entry_id: str,
++    title: str,
++    text: str,
++    tags: list[str] | None = None,
++) -> None:
++    simulation_state.setdefault("campaign_journal_state", {}).setdefault("entries", []).append(
++        {
++            "entry_id": entry_id,
++            "turn_index": 0,
++            "title": title,
++            "text": text,
++            "tags": tags or ["campaign_start"],
++        }
++    )
++
++
++def _seed_event(
++    simulation_state: Dict[str, Any],
++    *,
++    event_id: str,
++    title: str,
++    summary: str,
++    severity: str = "medium",
++) -> None:
++    simulation_state.setdefault("story_event_queue_state", {}).setdefault("queue", []).append(
++        {
++            "event_id": event_id,
++            "turn_index": 0,
++            "title": title,
++            "summary": summary,
++            "severity": severity,
++        }
++    )
++
++
++def _seed_npc_profiles(
++    simulation_state: Dict[str, Any],
++    profiles: Dict[str, Dict[str, Any]],
++) -> None:
++    simulation_state.setdefault("npc_profile_state", {}).setdefault("profiles", {}).update(profiles)
++    progression = simulation_state.setdefault("npc_progression_state", {}).setdefault("npcs", {})
++    for profile in profiles.values():
++        name = profile.get("name") or profile.get("npc_id") or "Unknown NPC"
++        progression.setdefault(
++            name,
++            {
++                "name": name,
++                "level": 1,
++                "disposition": profile.get("disposition", "neutral"),
++                "trust": 0,
++                "growth_stage": profile.get("growth_stage", "introduced"),
++                "progression_log": [
++                    {
++                        "turn_index": 0,
++                        "summary": profile.get("growth")
++                        or profile.get("biography")
++                        or f"{name} is introduced to the campaign.",
++                    }
++                ],
++            },
++        )
++
+*** End Patch
+Patch 3 — Refactor tavern seed to use common player helper
+
+Patch:
+
+src/tests/rpg/autoplay/seeding.py
+
+Inside seed_tavern_story_campaign(...), replace the large player_state block you recently added with:
+
+*** Begin Patch
+*** Update File: src/tests/rpg/autoplay/seeding.py
+@@
+-    simulation_state.setdefault("player_state", {}).update(
+-        {
+-            "character_id": "player",
+-            "name": "The Player",
+-            "level": 1,
+-            "experience": 0,
+-            "experience_to_next_level": 100,
+-            "inventory": {
+-                "currency": {
+-                    "gold": 15,
+-                    "silver": 8,
+-                },
+-                "items": [
+-                    ...
+-                ],
+-            },
+-            "stats": {
+-                "strength": 10,
+-                "dexterity": 10,
+-                "constitution": 10,
+-                "intelligence": 11,
+-                "wisdom": 12,
+-                "charisma": 10,
+-            },
+-            "progression_log": [
+-                {
+-                    "turn_index": 0,
+-                    "type": "campaign_start",
+-                    "summary": "The player begins as a level 1 adventurer investigating rumors at the Rusty Flagon.",
+-                }
+-            ],
+-        }
+-    )
+-    simulation_state.setdefault("inventory_state", {}).update(
+-        simulation_state.get("player_state", {}).get("inventory", {})
+-    )
++    _seed_common_player(simulation_state)
++    simulation_state["player_state"]["progression_log"][0][
++        "summary"
++    ] = "The player begins as a level 1 adventurer investigating rumors at the Rusty Flagon."
+*** End Patch
+
+If applying this manually is awkward due to the large block, keep the existing block and skip this patch. The new seeds still work either way.
+
+Patch 4 — Add new campaign seed functions
+
+Patch:
+
+src/tests/rpg/autoplay/seeding.py
+
+Add after seed_tavern_story_campaign(...):
+
+*** Begin Patch
+*** Update File: src/tests/rpg/autoplay/seeding.py
+@@
+ def seed_tavern_story_campaign(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
+@@
+     return {
+         "ok": True,
+         "seed": "tavern_story_seed",
+         "hook_result": hook_result,
+     }
++
++
++def seed_caravan_ambush_campaign(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
++    _reset_seed_roots(simulation_state)
++    _seed_common_player(simulation_state, gold=12, silver=5)
++    simulation_state["campaign_director_state"] = {
++        "campaign_title": "Ash on the Trade Road",
++        "premise": "The player reaches a trade road shortly after a merchant caravan is ambushed and left burning near a dry ravine.",
++        "dramatic_question": "Can the player identify who attacked the caravan before survivors scatter and evidence is lost?",
++        "opening_tension": "Merchants fear the attack was too coordinated to be ordinary banditry.",
++        "director_goals": [
++            "Introduce a road encounter with immediate stakes.",
++            "Offer investigation, rescue, and pursuit paths.",
++            "Reveal whether the ambush points to bandits, mercenaries, or an inside betrayal.",
++        ],
++        "stakes": [
++            "Survivors may die without aid.",
++            "Trade through the region may collapse.",
++            "The attackers may strike the next caravan.",
++        ],
++    }
++    simulation_state["lore_state"] = {
++        "entries": [
++            {
++                "id": "lore:trade_road",
++                "title": "The Old Trade Road",
++                "text": "A long road connecting market towns, exposed ravines, and isolated caravan stops.",
++            },
++            {
++                "id": "lore:ember_ravine",
++                "title": "Ember Ravine",
++                "text": "A dry ravine where smoke lingers after the caravan attack and tracks are difficult to read.",
++            },
++        ]
++    }
++    _seed_npc_profiles(
++        simulation_state,
++        {
++            "npc:Selka": {
++                "npc_id": "npc:Selka",
++                "name": "Selka",
++                "role": "Caravan Guard",
++                "history": "Selka survived the ambush but lost most of her company.",
++                "biography": "A disciplined guard trying to hide panic behind procedure.",
++                "growth": "Begins defensive and suspicious; may become an ally if survivors are protected.",
++                "growth_stage": "wounded_guard",
++            },
++            "npc:Orren": {
++                "npc_id": "npc:Orren",
++                "name": "Orren",
++                "role": "Merchant Factor",
++                "history": "Orren managed the caravan's contracts and knows what cargo mattered most.",
++                "biography": "A nervous merchant whose fear may conceal useful details.",
++                "growth": "Begins evasive; may reveal the cargo was targeted.",
++                "growth_stage": "fearful_merchant",
++            },
++        },
++    )
++    _seed_arc(
++        simulation_state,
++        arc_id="arc:caravan_ambush",
++        title="Caravan Ambush",
++        stage="aftermath",
++        pressure=55,
++        milestones=[
++            {
++                "milestone_id": "milestone:aid_survivors",
++                "title": "Aid the survivors",
++                "objective_text": "Stabilize survivors and learn what happened during the ambush.",
++                "status": "active",
++                "priority": 90,
++            },
++            {
++                "milestone_id": "milestone:inspect_wreckage",
++                "title": "Inspect the wreckage",
++                "objective_text": "Search the burned wagons and ravine for evidence.",
++                "status": "active",
++                "priority": 80,
++            },
++            {
++                "milestone_id": "milestone:identify_attackers",
++                "title": "Identify the attackers",
++                "objective_text": "Determine whether the attack was banditry, mercenary work, or betrayal.",
++                "status": "active",
++                "priority": 70,
++            },
++        ],
++    )
++    _seed_initial_journal(
++        simulation_state,
++        entry_id="journal:caravan_ambush:start",
++        title="Smoke on the Trade Road",
++        text="A caravan has been ambushed near Ember Ravine. Survivors and evidence remain at risk.",
++    )
++    _seed_event(
++        simulation_state,
++        event_id="event:caravan_ambush:aftermath",
++        title="Caravan Ambush Aftermath",
++        summary="The player arrives after a coordinated attack on a merchant caravan.",
++        severity="high",
++    )
++    return {"ok": True, "seed": "caravan_ambush_seed", "hook_result": {"ok": True}}
++
++
++def seed_missing_apprentice_campaign(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
++    _reset_seed_roots(simulation_state)
++    _seed_common_player(simulation_state, gold=10, silver=12)
++    simulation_state["campaign_director_state"] = {
++        "campaign_title": "The Missing Apprentice",
++        "premise": "A village apothecary begs for help after an apprentice vanishes while gathering herbs near the old standing stones.",
++        "dramatic_question": "Can the player find the apprentice before fear turns the village against the wrong suspect?",
++        "opening_tension": "The village is split between superstition, suspicion, and practical urgency.",
++        "director_goals": [
++            "Introduce a village mystery with social pressure.",
++            "Create suspects with partial truths.",
++            "Branch toward rescue, accusation, or supernatural investigation.",
++        ],
++        "stakes": [
++            "The apprentice may still be alive.",
++            "A false accusation could tear the village apart.",
++            "The standing stones may hide a larger danger.",
++        ],
++    }
++    simulation_state["lore_state"] = {
++        "entries": [
++            {
++                "id": "lore:greenhollow",
++                "title": "Greenhollow Village",
++                "text": "A small herb-growing village where everyone knows each other's secrets.",
++            },
++            {
++                "id": "lore:standing_stones",
++                "title": "The Old Standing Stones",
++                "text": "Ancient stones outside the village, avoided after sunset and blamed for disappearances.",
++            },
++        ]
++    }
++    _seed_npc_profiles(
++        simulation_state,
++        {
++            "npc:Maela": {
++                "npc_id": "npc:Maela",
++                "name": "Maela",
++                "role": "Apothecary",
++                "history": "Maela trained the missing apprentice and feels responsible.",
++                "biography": "A practical healer fighting panic with work.",
++                "growth": "Begins desperate; may become a grounded source of village truth.",
++                "growth_stage": "desperate_mentor",
++            },
++            "npc:Tovin": {
++                "npc_id": "npc:Tovin",
++                "name": "Tovin",
++                "role": "Miller's Son",
++                "history": "Tovin argued with the apprentice before the disappearance.",
++                "biography": "Defensive, frightened, and hiding something small that looks larger than it is.",
++                "growth": "Begins as a suspect; may become a witness.",
++                "growth_stage": "suspect",
++            },
++        },
++    )
++    _seed_arc(
++        simulation_state,
++        arc_id="arc:missing_apprentice",
++        title="Missing Apprentice",
++        stage="village_alarm",
++        pressure=45,
++        milestones=[
++            {
++                "milestone_id": "milestone:question_maela",
++                "title": "Question Maela",
++                "objective_text": "Learn where the apprentice was last seen.",
++                "status": "active",
++                "priority": 90,
++            },
++            {
++                "milestone_id": "milestone:search_herb_path",
++                "title": "Search the herb path",
++                "objective_text": "Follow the route toward the standing stones.",
++                "status": "active",
++                "priority": 80,
++            },
++            {
++                "milestone_id": "milestone:separate_truth_from_rumor",
++                "title": "Separate truth from rumor",
++                "objective_text": "Resolve which village rumors are backed by evidence.",
++                "status": "active",
++                "priority": 70,
++            },
++        ],
++    )
++    _seed_initial_journal(
++        simulation_state,
++        entry_id="journal:missing_apprentice:start",
++        title="A Vanished Apprentice",
++        text="An apprentice disappeared while gathering herbs near the old standing stones.",
++    )
++    _seed_event(
++        simulation_state,
++        event_id="event:missing_apprentice:village_alarm",
++        title="Village Alarm",
++        summary="Greenhollow is frightened after the apprentice vanishes.",
++        severity="medium",
++    )
++    return {"ok": True, "seed": "missing_apprentice_seed", "hook_result": {"ok": True}}
++
++
++def seed_haunted_mill_campaign(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
++    _reset_seed_roots(simulation_state)
++    _seed_common_player(simulation_state, gold=9, silver=14)
++    simulation_state["campaign_director_state"] = {
++        "campaign_title": "The Haunted Mill",
++        "premise": "A riverside mill has gone silent after three nights of strange lights and impossible knocking from inside the locked wheelhouse.",
++        "dramatic_question": "Can the player discover whether the haunting is real, staged, or something worse?",
++        "opening_tension": "The mill feeds the town, and every silent day pushes the town closer to panic.",
++        "director_goals": [
++            "Introduce a gothic investigation location.",
++            "Create ambiguity between supernatural and human causes.",
++            "Branch toward exorcism, exposure, or rescue.",
++        ],
++        "stakes": [
++            "The town's food supply is threatened.",
++            "Fear may turn into violence.",
++            "Someone may be trapped or hiding inside the mill.",
++        ],
++    }
++    simulation_state["lore_state"] = {
++        "entries": [
++            {
++                "id": "lore:graywater_mill",
++                "title": "Graywater Mill",
++                "text": "A river mill whose locked wheelhouse has become the center of local fear.",
++            },
++            {
++                "id": "lore:mill_ghost",
++                "title": "The Miller's Ghost",
++                "text": "A local legend claiming a drowned miller knocks from beneath the wheel when debts go unpaid.",
++            },
++        ]
++    }
++    _seed_npc_profiles(
++        simulation_state,
++        {
++            "npc:Elian": {
++                "npc_id": "npc:Elian",
++                "name": "Elian",
++                "role": "Miller",
++                "history": "Elian locked the mill after hearing knocking from inside.",
++                "biography": "A proud worker shaken by fear and public blame.",
++                "growth": "Begins ashamed and afraid; may regain courage if the truth is found.",
++                "growth_stage": "frightened_miller",
++            },
++            "npc:Sister Vale": {
++                "npc_id": "npc:SisterVale",
++                "name": "Sister Vale",
++                "role": "Village Priest",
++                "history": "Sister Vale has been asked to bless the mill but doubts the simple ghost story.",
++                "biography": "Calm, observant, and careful about superstition.",
++                "growth": "Begins cautious; may support either spiritual or practical resolution.",
++                "growth_stage": "careful_priest",
++            },
++        },
++    )
++    _seed_arc(
++        simulation_state,
++        arc_id="arc:haunted_mill",
++        title="Haunted Mill",
++        stage="locked_wheelhouse",
++        pressure=50,
++        milestones=[
++            {
++                "milestone_id": "milestone:enter_mill",
++                "title": "Enter the mill",
++                "objective_text": "Find a safe way into Graywater Mill.",
++                "status": "active",
++                "priority": 90,
++            },
++            {
++                "milestone_id": "milestone:investigate_knocking",
++                "title": "Investigate the knocking",
++                "objective_text": "Determine what is making sounds inside the wheelhouse.",
++                "status": "active",
++                "priority": 80,
++            },
++            {
++                "milestone_id": "milestone:restore_mill",
++                "title": "Restore the mill",
++                "objective_text": "Resolve the threat so the town's mill can work again.",
++                "status": "active",
++                "priority": 70,
++            },
++        ],
++    )
++    _seed_initial_journal(
++        simulation_state,
++        entry_id="journal:haunted_mill:start",
++        title="The Silent Mill",
++        text="Graywater Mill has stopped, and the town fears a haunting.",
++    )
++    _seed_event(
++        simulation_state,
++        event_id="event:haunted_mill:silent_wheel",
++        title="Silent Wheel",
++        summary="The town's mill has stopped after strange lights and knocking.",
++        severity="medium",
++    )
++    return {"ok": True, "seed": "haunted_mill_seed", "hook_result": {"ok": True}}
++
++
++def seed_noble_blackmail_campaign(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
++    _reset_seed_roots(simulation_state)
++    _seed_common_player(simulation_state, gold=20, silver=4)
++    simulation_state["campaign_director_state"] = {
++        "campaign_title": "Letters Beneath the Seal",
++        "premise": "A minor noble hires the player after blackmail letters threaten to expose a secret before the midsummer court.",
++        "dramatic_question": "Can the player uncover the blackmailer without becoming a pawn in court politics?",
++        "opening_tension": "Every suspect has something to gain, and every truth carries social cost.",
++        "director_goals": [
++            "Introduce intrigue instead of wilderness investigation.",
++            "Create social choices with reputation consequences.",
++            "Branch toward loyalty, exposure, or double-cross.",
++        ],
++        "stakes": [
++            "A household may collapse.",
++            "An innocent servant may be blamed.",
++            "The player may gain or lose noble favor.",
++        ],
++    }
++    simulation_state["lore_state"] = {
++        "entries": [
++            {
++                "id": "lore:midsummer_court",
++                "title": "Midsummer Court",
++                "text": "A seasonal gathering where alliances, marriages, debts, and scandals become weapons.",
++            },
++            {
++                "id": "lore:wax_seals",
++                "title": "Wax Seals and Secret Letters",
++                "text": "Among minor nobles, forged seals and intercepted letters can ruin families faster than swords.",
++            },
++        ]
++    }
++    _seed_npc_profiles(
++        simulation_state,
++        {
++            "npc:LadyArven": {
++                "npc_id": "npc:LadyArven",
++                "name": "Lady Arven",
++                "role": "Minor Noble",
++                "history": "Lady Arven received blackmail letters before court.",
++                "biography": "Composed in public but privately cornered.",
++                "growth": "Begins controlling and guarded; may learn to trust or manipulate the player.",
++                "growth_stage": "cornered_patron",
++            },
++            "npc:Perrin": {
++                "npc_id": "npc:Perrin",
++                "name": "Perrin",
++                "role": "House Steward",
++                "history": "Perrin manages household correspondence and knows who handles seals.",
++                "biography": "Precise, loyal, and possibly too knowledgeable.",
++                "growth": "Begins formal; may become ally, suspect, or scapegoat.",
++                "growth_stage": "formal_steward",
++            },
++        },
++    )
++    _seed_arc(
++        simulation_state,
++        arc_id="arc:noble_blackmail",
++        title="Noble Blackmail",
++        stage="sealed_threat",
++        pressure=60,
++        milestones=[
++            {
++                "milestone_id": "milestone:inspect_letters",
++                "title": "Inspect the letters",
++                "objective_text": "Examine the blackmail letters, seals, handwriting, and delivery method.",
++                "status": "active",
++                "priority": 90,
++            },
++            {
++                "milestone_id": "milestone:question_household",
++                "title": "Question the household",
++                "objective_text": "Interview servants, stewards, and visitors without causing scandal.",
++                "status": "active",
++                "priority": 80,
++            },
++            {
++                "milestone_id": "milestone:identify_blackmailer",
++                "title": "Identify the blackmailer",
++                "objective_text": "Find who is using the secret and decide what to do with the truth.",
++                "status": "active",
++                "priority": 70,
++            },
++        ],
++    )
++    _seed_initial_journal(
++        simulation_state,
++        entry_id="journal:noble_blackmail:start",
++        title="Letters Beneath the Seal",
++        text="Lady Arven is being blackmailed before midsummer court.",
++    )
++    _seed_event(
++        simulation_state,
++        event_id="event:noble_blackmail:sealed_threat",
++        title="Sealed Threat",
++        summary="Blackmail letters threaten a noble household before court.",
++        severity="high",
++    )
++    return {"ok": True, "seed": "noble_blackmail_seed", "hook_result": {"ok": True}}
+*** End Patch
+Patch 5 — Update seed_campaign(...)
+
+Patch:
+
+src/tests/rpg/autoplay/seeding.py
+
+Find seed_campaign(...). Replace it with:
+
+*** Begin Patch
+*** Update File: src/tests/rpg/autoplay/seeding.py
+@@
+ def seed_campaign(simulation_state: Dict[str, Any], scenario_seed: str) -> Dict[str, Any]:
+-    if scenario_seed == "tavern_story_seed":
+-        return seed_tavern_story_campaign(simulation_state)
+-    raise ValueError(f"unknown_campaign_seed:{scenario_seed}")
++    if scenario_seed == "tavern_story_seed":
++        return seed_tavern_story_campaign(simulation_state)
++    if scenario_seed == "caravan_ambush_seed":
++        return seed_caravan_ambush_campaign(simulation_state)
++    if scenario_seed == "missing_apprentice_seed":
++        return seed_missing_apprentice_campaign(simulation_state)
++    if scenario_seed == "haunted_mill_seed":
++        return seed_haunted_mill_campaign(simulation_state)
++    if scenario_seed == "noble_blackmail_seed":
++        return seed_noble_blackmail_campaign(simulation_state)
++    raise ValueError(
++        f"unknown_campaign_seed:{scenario_seed}; available={','.join(CAMPAIGN_SEED_NAMES)}"
++    )
+*** End Patch
+Patch 6 — Add random seed CLI support
+
+Patch:
+
+src/tests/rpg/autoplay_llm_campaign.py
+
+Update imports:
+
+*** Begin Patch
+*** Update File: src/tests/rpg/autoplay_llm_campaign.py
+@@
+-from tests.rpg.autoplay.seeding import seed_campaign
++from tests.rpg.autoplay.seeding import (
++    available_campaign_seeds,
++    resolve_campaign_seed_name,
++    seed_campaign,
++)
+*** End Patch
+
+Add CLI args near --scenario-seed:
+
+*** Begin Patch
+*** Update File: src/tests/rpg/autoplay_llm_campaign.py
+@@
+     parser.add_argument("--scenario-seed", default="tavern_story_seed")
++    parser.add_argument("--random-seed", type=int, default=None)
++    parser.add_argument("--list-scenario-seeds", action="store_true")
+*** End Patch
+
+Where main() parses args, before running campaign, add:
+
+*** Begin Patch
+*** Update File: src/tests/rpg/autoplay_llm_campaign.py
+@@
+ def main() -> int:
+     args = build_parser().parse_args()
++    if getattr(args, "list_scenario_seeds", False):
++        for name in available_campaign_seeds():
++            print(name)
++        return 0
+     summary = run_autoplay_campaign(args)
+*** End Patch
+
+Inside run_autoplay_campaign(...), replace:
+
+seed_result = seed_campaign(simulation_state, args.scenario_seed)
+
+with:
+
+*** Begin Patch
+*** Update File: src/tests/rpg/autoplay_llm_campaign.py
+@@
+     simulation_state: Dict[str, Any] = {}
+-    seed_result = seed_campaign(simulation_state, args.scenario_seed)
++    seed_resolution = resolve_campaign_seed_name(
++        args.scenario_seed,
++        random_seed=args.random_seed,
++    )
++    seed_result = seed_campaign(simulation_state, seed_resolution["resolved_seed"])
++    seed_result["seed_resolution"] = seed_resolution
+*** End Patch
+
+In summary dict, add:
+
+*** Begin Patch
+*** Update File: src/tests/rpg/autoplay_llm_campaign.py
+@@
+         "scenario_seed": args.scenario_seed,
++        "resolved_scenario_seed": seed_resolution["resolved_seed"],
++        "seed_resolution": seed_resolution,
+         "seed_result": seed_result,
+*** End Patch
+
+If summary is built in a different location, add those fields there.
+
+Patch 7 — Add story variety metrics module
 
 Add:
 
-src/app/rpg/narration/runtime_narration_contract.py
+src/tests/rpg/autoplay/story_variety.py
 *** Begin Patch
-*** Add File: src/app/rpg/narration/runtime_narration_contract.py
+*** Add File: src/tests/rpg/autoplay/story_variety.py
 +from __future__ import annotations
 +
++import hashlib
 +import json
-+import re
 +from typing import Any, Dict, List
-+
-+
-+NARRATION_FORMAT_VERSION = "rpg_narration_v2"
 +
 +
 +def _safe_dict(value: Any) -> Dict[str, Any]:
@@ -56,838 +925,361 @@ src/app/rpg/narration/runtime_narration_contract.py
 +    return value if isinstance(value, str) else ""
 +
 +
-+def _norm(value: Any) -> str:
-+    return " ".join(str(value or "").lower().strip().split())
++def _hash(value: Any) -> str:
++    text = json.dumps(value, ensure_ascii=False, sort_keys=True, default=str)
++    return hashlib.sha256(text.encode("utf-8")).hexdigest()[:16]
 +
 +
-+def is_echo_narration(*, player_action: str, narration: str) -> bool:
-+    action = _norm(player_action)
-+    text = _norm(narration)
-+    return bool(action and text and (text == action or text == action.rstrip(".") or text == action + "."))
++def extract_story_signature_from_state(state: Dict[str, Any]) -> Dict[str, Any]:
++    director = _safe_dict(state.get("campaign_director_state"))
++    lore_entries = _safe_list(_safe_dict(state.get("lore_state")).get("entries"))
++    npc_profiles = _safe_dict(_safe_dict(state.get("npc_profile_state")).get("profiles"))
++    arcs = _safe_dict(_safe_dict(state.get("story_arc_state")).get("arcs"))
++    milestones_by_arc = _safe_dict(_safe_dict(state.get("story_arc_milestone_state")).get("arcs"))
 +
++    milestone_titles = []
++    for bucket in milestones_by_arc.values():
++        for milestone in _safe_list(_safe_dict(bucket).get("milestones")):
++            milestone = _safe_dict(milestone)
++            title = _safe_str(milestone.get("title") or milestone.get("milestone_id"))
++            if title:
++                milestone_titles.append(title)
 +
-+def classify_player_action(player_action: str) -> str:
-+    text = _norm(player_action)
-+    if any(word in text for word in ["ask", "talk", "tell", "speak", "question", "report", "explain", "share", "approach", "convince", "persuade"]):
-+        return "social"
-+    if any(word in text for word in ["look", "inspect", "search", "observe", "scan", "examine", "listen"]):
-+        return "exploration"
-+    if any(word in text for word in ["walk", "travel", "leave", "follow", "pursue", "road", "outside"]):
-+        return "travel"
-+    if any(word in text for word in ["attack", "strike", "hit", "shoot", "cast", "defend"]):
-+        return "combat"
-+    if any(word in text for word in ["buy", "sell", "rent", "room", "drink", "meal", "service"]):
-+        return "service"
-+    return "general"
-+
-+
-+def infer_npc_speaker(player_action: str, simulation_state: Dict[str, Any] | None = None) -> str:
-+    text = _norm(player_action)
-+    aliases = {
-+        "bran": "Bran",
-+        "innkeeper": "Bran",
-+        "mira": "Mira",
-+        "cloaked traveler": "Cloaked Traveler",
-+        "traveler": "Cloaked Traveler",
-+        "patron": "Local Patron",
-+        "guard": "Guard",
-+        "merchant": "Merchant",
++    signature = {
++        "campaign_title": director.get("campaign_title"),
++        "premise": director.get("premise"),
++        "dramatic_question": director.get("dramatic_question"),
++        "lore_titles": sorted(
++            _safe_str(row.get("title") or row.get("id"))
++            for row in lore_entries
++            if _safe_str(row.get("title") or row.get("id"))
++        ),
++        "npc_names": sorted(
++            _safe_str(profile.get("name") or key)
++            for key, profile in npc_profiles.items()
++            if _safe_str(_safe_dict(profile).get("name") or key)
++        ),
++        "arc_titles": sorted(
++            _safe_str(arc.get("title") or arc_id)
++            for arc_id, arc in arcs.items()
++            if _safe_str(_safe_dict(arc).get("title") or arc_id)
++        ),
++        "milestone_titles": sorted(milestone_titles),
 +    }
-+    for key, value in aliases.items():
-+        if key in text:
-+            return value
-+
-+    simulation_state = _safe_dict(simulation_state)
-+    profiles = _safe_dict(_safe_dict(simulation_state.get("npc_profile_state")).get("profiles"))
-+    for profile in profiles.values():
-+        profile = _safe_dict(profile)
-+        name = _safe_str(profile.get("name"))
-+        if name and _norm(name) in text:
-+            return name
-+    return ""
++    signature["signature_hash"] = _hash(signature)
++    return signature
 +
 +
-+def _fallback_npc_line(*, speaker: str, player_action: str, action_type: str) -> str:
-+    text = _norm(player_action)
-+    if not speaker:
-+        return ""
-+    if speaker == "Bran":
-+        if "bandit" in text or "road" in text:
-+            return "If the road is involved, then this is bigger than tavern gossip. Be careful how loudly you ask."
-+        if "witness" in text or "traveler" in text or "found" in text:
-+            return "Slow down and tell me what you know. Around here, one witness can change the whole story."
-+        if "room" in text or "rent" in text:
-+            return "I have rooms, but tonight I am more worried about what followed people here than where they sleep."
-+        return "Say what you need to say. I am listening, even if the rest of the room is pretending not to."
-+    if speaker == "Mira":
-+        return "I notice the things people try to hide. Ask plainly, and I will tell you what I saw."
-+    if speaker == "Cloaked Traveler":
-+        return "I did not want to be noticed. That should tell you enough about how dangerous this is."
-+    if speaker == "Local Patron":
-+        return "People saw more than they are admitting. Fear has a way of keeping mugs close and mouths shut."
-+    return "The reply comes cautiously, shaped by the pressure in the room."
-+
-+
-+def build_deterministic_narration_payload(
++def compute_story_variety_metrics(
 +    *,
-+    player_action: str,
-+    simulation_state: Dict[str, Any] | None = None,
-+    turn_contract: Dict[str, Any] | None = None,
++    summary: Dict[str, Any],
++    state: Dict[str, Any],
++    transcript: List[Dict[str, Any]],
 +) -> Dict[str, Any]:
-+    """Build a safe presentation-only narration payload.
-+
-+    This is a fallback, not a simulation authority. It describes only that the
-+    moment responds to the player's action. It does not award, complete, mutate,
-+    or invent authoritative facts.
-+    """
-+    simulation_state = _safe_dict(simulation_state)
-+    turn_contract = _safe_dict(turn_contract)
-+    action_type = classify_player_action(player_action)
-+    speaker = infer_npc_speaker(player_action, simulation_state)
-+
-+    if action_type == "social":
-+        speaker = speaker or "Local Patron"
-+        narration = f"{speaker} reacts to the question, and the surrounding noise seems to thin as the conversation draws attention."
-+        npc_line = _fallback_npc_line(speaker=speaker, player_action=player_action, action_type=action_type)
-+    elif action_type == "exploration":
-+        narration = "The search draws out grounded details from the scene: small marks, watchful faces, and signs of recent tension."
-+        npc_line = ""
-+    elif action_type == "travel":
-+        narration = "The scene shifts with the movement, carrying the pressure of the current lead into the space ahead."
-+        npc_line = ""
-+    elif action_type == "combat":
-+        narration = "The hostile motion sharpens the moment, but the actual outcome remains bound to the combat result."
-+        npc_line = ""
-+    elif action_type == "service":
-+        speaker = speaker or "Bran"
-+        narration = "The practical request lands against the unease of the room, making ordinary business feel less ordinary."
-+        npc_line = _fallback_npc_line(speaker=speaker, player_action=player_action, action_type=action_type)
-+    else:
-+        narration = "The moment responds without producing a major new consequence."
-+        npc_line = ""
-+
-+    if is_echo_narration(player_action=player_action, narration=narration):
-+        narration = "The scene responds with a grounded beat rather than merely repeating the attempted action."
-+
-+    return {
-+        "format_version": NARRATION_FORMAT_VERSION,
-+        "narration": narration,
-+        "action": _safe_str(turn_contract.get("summary") or turn_contract.get("action") or "The action is acknowledged by the scene."),
-+        "npc": {
-+            "speaker": speaker if npc_line else "",
-+            "line": npc_line,
-+        },
-+        "reward": "",
-+        "followup_hooks": [],
-+        "source": "deterministic_runtime_narration_fallback",
-+        "authoritative_changes": False,
-+    }
-+
-+
-+def _extract_json_object(text: str) -> Dict[str, Any]:
-+    text = _safe_str(text).strip()
-+    if not text:
-+        return {}
-+    try:
-+        value = json.loads(text)
-+        return value if isinstance(value, dict) else {}
-+    except Exception:
-+        pass
-+    match = re.search(r"\{.*\}", text, flags=re.DOTALL)
-+    if not match:
-+        return {}
-+    try:
-+        value = json.loads(match.group(0))
-+        return value if isinstance(value, dict) else {}
-+    except Exception:
-+        return {}
-+
-+
-+def _call_provider_text(provider: Any, prompt: str, *, max_tokens: int = 320) -> str:
-+    if provider is None:
-+        return ""
-+    for method_name in ("chat", "complete", "generate", "invoke"):
-+        method = getattr(provider, method_name, None)
-+        if not callable(method):
-+            continue
-+        try:
-+            if method_name == "chat":
-+                response = method(
-+                    [
-+                        {
-+                            "role": "system",
-+                            "content": (
-+                                "You are the presentation-only narration layer for a deterministic RPG. "
-+                                "Return JSON only."
-+                            ),
-+                        },
-+                        {"role": "user", "content": prompt},
-+                    ],
-+                    max_tokens=max_tokens,
-+                )
-+            else:
-+                response = method(prompt, max_tokens=max_tokens)
-+            if isinstance(response, str):
-+                return response
-+            if isinstance(response, dict):
-+                return _safe_str(response.get("content") or response.get("text") or response.get("response"))
-+            content = getattr(response, "content", "")
-+            if content:
-+                return str(content)
-+        except Exception:
-+            continue
-+    return ""
-+
-+
-+def validate_narration_payload(
-+    payload: Dict[str, Any],
-+    *,
-+    player_action: str,
-+) -> Dict[str, Any]:
-+    payload = _safe_dict(payload)
-+    errors: List[str] = []
-+
-+    if payload.get("format_version") != NARRATION_FORMAT_VERSION:
-+        errors.append("invalid_format_version")
-+    narration = _safe_str(payload.get("narration"))
-+    if not narration:
-+        errors.append("missing_narration")
-+    if is_echo_narration(player_action=player_action, narration=narration):
-+        errors.append("echoed_player_action")
-+    npc = _safe_dict(payload.get("npc"))
-+    if not isinstance(payload.get("npc"), dict):
-+        errors.append("npc_not_object")
-+    if payload.get("reward") not in ("", None):
-+        errors.append("reward_not_empty")
-+    hooks = payload.get("followup_hooks")
-+    if hooks not in ([], None):
-+        errors.append("followup_hooks_not_empty")
-+    if payload.get("authoritative_changes") not in (False, None):
-+        errors.append("authoritative_changes_not_false")
-+
-+    normalized = {
-+        "format_version": NARRATION_FORMAT_VERSION,
-+        "narration": narration,
-+        "action": _safe_str(payload.get("action")),
-+        "npc": {
-+            "speaker": _safe_str(npc.get("speaker")),
-+            "line": _safe_str(npc.get("line")),
-+        },
-+        "reward": "",
-+        "followup_hooks": [],
-+        "source": _safe_str(payload.get("source") or "runtime_narration"),
-+        "authoritative_changes": False,
++    signature = extract_story_signature_from_state(state)
++    hook_ids = []
++    dialogue_sources = []
++    for row in transcript:
++        for hook in _safe_list(row.get("story_hook_result", {}).get("fired_hooks")):
++            hook = _safe_dict(hook)
++            if hook.get("hook_id"):
++                hook_ids.append(str(hook.get("hook_id")))
++        if row.get("dialogue_source"):
++            dialogue_sources.append(str(row.get("dialogue_source")))
++    branch_path = {
++        "hook_ids": hook_ids,
++        "dialogue_sources": dialogue_sources,
 +    }
 +    return {
-+        "ok": not errors,
-+        "errors": errors,
-+        "payload": normalized,
++        "requested_seed": summary.get("scenario_seed"),
++        "resolved_seed": summary.get("resolved_scenario_seed") or summary.get("scenario_seed"),
++        "random_seed": _safe_dict(summary.get("seed_resolution")).get("random_seed"),
++        "randomized": _safe_dict(summary.get("seed_resolution")).get("randomized", False),
++        "story_signature": signature,
++        "branch_path": branch_path,
++        "branch_signature_hash": _hash(branch_path),
++        "story_variety_key": _hash(
++            {
++                "seed": summary.get("resolved_scenario_seed") or summary.get("scenario_seed"),
++                "story_signature_hash": signature.get("signature_hash"),
++                "branch_signature_hash": _hash(branch_path),
++            }
++        ),
 +    }
-+
-+
-+def build_provider_narration_payload(
-+    *,
-+    provider: Any,
-+    player_action: str,
-+    simulation_state: Dict[str, Any] | None = None,
-+    turn_contract: Dict[str, Any] | None = None,
-+    max_tokens: int = 320,
-+) -> Dict[str, Any]:
-+    simulation_state = _safe_dict(simulation_state)
-+    turn_contract = _safe_dict(turn_contract)
-+    action_type = classify_player_action(player_action)
-+    target_npc = infer_npc_speaker(player_action, simulation_state)
-+
-+    prompt = {
-+        "task": "Produce structured RPG narration for a completed deterministic turn.",
-+        "schema": {
-+            "format_version": NARRATION_FORMAT_VERSION,
-+            "narration": "2-5 sentences describing how the scene responds. Do not repeat the player input.",
-+            "action": "Result/acknowledgement of the action, not the original action text.",
-+            "npc": {"speaker": "NPC name or empty", "line": "NPC line or empty"},
-+            "reward": "",
-+            "followup_hooks": [],
-+        },
-+        "rules": [
-+            "Simulation is authoritative. You cannot award XP, gold, items, damage, quest completion, or story outcomes.",
-+            "Do not invent rewards.",
-+            "Do not mutate state.",
-+            "Do not say 'the player'.",
-+            "Do not repeat the player input.",
-+            "If the action addresses an NPC, include a grounded npc.speaker and npc.line.",
-+            "Return JSON only.",
-+        ],
-+        "player_action": player_action,
-+        "action_type": action_type,
-+        "target_npc": target_npc,
-+        "turn_contract": turn_contract,
-+        "bounded_state_summary": {
-+            "scene": simulation_state.get("scene"),
-+            "location": simulation_state.get("location"),
-+            "story_arc_state": simulation_state.get("story_arc_state"),
-+            "campaign_journal_state": simulation_state.get("campaign_journal_state"),
-+            "npc_profile_state": simulation_state.get("npc_profile_state"),
-+        },
-+    }
-+    raw = _call_provider_text(provider, json.dumps(prompt, ensure_ascii=False), max_tokens=max_tokens)
-+    parsed = _extract_json_object(raw)
-+    if parsed:
-+        parsed["source"] = "provider_runtime_narration"
-+    parsed["_raw_provider_response"] = raw
-+    return parsed
-+
-+
-+def build_runtime_narration_payload(
-+    *,
-+    provider: Any = None,
-+    player_action: str,
-+    simulation_state: Dict[str, Any] | None = None,
-+    turn_contract: Dict[str, Any] | None = None,
-+    prefer_provider: bool = True,
-+    max_tokens: int = 320,
-+) -> Dict[str, Any]:
-+    if prefer_provider and provider is not None:
-+        provider_payload = build_provider_narration_payload(
-+            provider=provider,
-+            player_action=player_action,
-+            simulation_state=simulation_state,
-+            turn_contract=turn_contract,
-+            max_tokens=max_tokens,
-+        )
-+        validated = validate_narration_payload(provider_payload, player_action=player_action)
-+        if validated["ok"]:
-+            payload = validated["payload"]
-+            payload["raw_provider_response"] = _safe_str(provider_payload.get("_raw_provider_response"))
-+            return payload
-+
-+    fallback = build_deterministic_narration_payload(
-+        player_action=player_action,
-+        simulation_state=simulation_state,
-+        turn_contract=turn_contract,
-+    )
-+    return validate_narration_payload(fallback, player_action=player_action)["payload"]
 *** End Patch
-Patch 2 — Add provider adapter helper
-
-You need one central way to access app.shared.get_provider() without breaking tests.
-
-Add:
-
-src/app/rpg/narration/runtime_provider.py
-*** Begin Patch
-*** Add File: src/app/rpg/narration/runtime_provider.py
-+from __future__ import annotations
-+
-+from typing import Any
-+
-+
-+def get_runtime_llm_provider() -> Any:
-+    """Return the centralized app LLM provider if available.
-+
-+    Keep this tiny and defensive so tests can monkeypatch it easily.
-+    """
-+    try:
-+        from app import shared  # type: ignore
-+
-+        getter = getattr(shared, "get_provider", None)
-+        if callable(getter):
-+            return getter()
-+    except Exception:
-+        return None
-+    return None
-*** End Patch
-Patch 3 — Bind narration payload into session turn result
-
-This is the integration point. The exact file may differ in your tree, but based on earlier bundles you likely have an apply_turn/session turn runtime under one of these:
-
-src/app/rpg/session_runtime.py
-src/app/rpg/session/turn_runtime.py
-src/app/rpg/runtime/session_turn.py
-src/app/rpg/api/session.py
-
-Use the file that owns the return dict for /api/rpg/session/turn and manual harness _get_apply_turn().
-
-For this spec, patch the module that defines apply_turn(...).
-
-Add imports at top:
-
-*** Begin Patch
-*** Update File: src/app/rpg/session_runtime.py
-@@
-+from app.rpg.narration.runtime_narration_contract import build_runtime_narration_payload
-+from app.rpg.narration.runtime_provider import get_runtime_llm_provider
-*** End Patch
-
-If your actual file is not session_runtime.py, apply this import to the real apply-turn module.
-
-Inside apply_turn(...), after the deterministic simulation result / turn contract is built and before the final return result, add:
-
-*** Begin Patch
-*** Update File: src/app/rpg/session_runtime.py
-@@
-+    turn_contract = result.get("turn_contract") or result.get("turnContract") or {}
-+    simulation_state = (
-+        result.get("simulation_state")
-+        or result.get("state")
-+        or result.get("session", {}).get("simulation_state")
-+        or session.get("simulation_state")
-+        or {}
-+    )
-+    narration_payload = build_runtime_narration_payload(
-+        provider=get_runtime_llm_provider(),
-+        player_action=player_input,
-+        simulation_state=simulation_state,
-+        turn_contract=turn_contract,
-+        prefer_provider=True,
-+    )
-+    result["narration_payload"] = narration_payload
-+    result["structured_narration"] = narration_payload
-+    result["npc"] = narration_payload.get("npc") or {}
-+    if narration_payload.get("narration"):
-+        result["narration"] = narration_payload["narration"]
-+    result["llm_called"] = narration_payload.get("source") == "provider_runtime_narration"
-*** End Patch
-If your result object is built as a literal return
-
-If the code currently does:
-
-return {
-    "ok": True,
-    "session": session,
-    "turn_contract": turn_contract,
-    "narration": narration,
-}
-
-replace with:
-
-result = {
-    "ok": True,
-    "session": session,
-    "turn_contract": turn_contract,
-    "narration": narration,
-}
-narration_payload = build_runtime_narration_payload(
-    provider=get_runtime_llm_provider(),
-    player_action=player_input,
-    simulation_state=session.get("simulation_state") or {},
-    turn_contract=turn_contract,
-    prefer_provider=True,
-)
-result["narration_payload"] = narration_payload
-result["structured_narration"] = narration_payload
-result["npc"] = narration_payload.get("npc") or {}
-result["narration"] = narration_payload.get("narration") or result.get("narration") or ""
-result["llm_called"] = narration_payload.get("source") == "provider_runtime_narration"
-return result
-If you already have a narration call
-
-Do not create a second independent narration path. Instead, wrap the existing provider output through:
-
-validate_narration_payload(...)
-
-and normalize to the same result fields.
-
-Patch 4 — Manual harness should preserve these fields
-
-Patch:
-
-src/tests/rpg/manual/turn_execution.py
-
-You already added raw_npc and raw_narration_payload. Make extraction more complete.
-
-Find both include_raw_result blocks and make sure this exact extraction is used:
-
-*** Begin Patch
-*** Update File: src/tests/rpg/manual/turn_execution.py
-@@
-             turn_summary["raw_npc"] = _safe_dict(
-                 result.get("npc")
-                 or _safe_dict(result.get("result")).get("npc")
-                 or _safe_dict(result.get("turn_contract")).get("npc")
-             )
-             turn_summary["raw_narration_payload"] = _safe_dict(
-                 result.get("narration_payload")
-                 or result.get("structured_narration")
-                 or result.get("narration_result")
-+                or _safe_dict(result.get("result")).get("narration_payload")
-+                or _safe_dict(result.get("result")).get("structured_narration")
-+                or _safe_dict(result.get("session")).get("last_narration_payload")
-+                or _safe_dict(result.get("session")).get("narration_payload")
-+            )
-+            turn_summary["llm_called"] = bool(
-+                result.get("llm_called")
-+                or _safe_dict(result.get("result")).get("llm_called")
-+                or _safe_dict(turn_summary["raw_narration_payload"]).get("source") == "provider_runtime_narration"
-+            )
-*** End Patch
-
-Apply the same addition to the second include_raw_result block if the function has pre/post sanitizer duplicates.
-
-Patch 5 — Campaign report should classify real runtime narration separately
-
-Patch:
-
-src/tests/rpg/autoplay/campaign_report.py
-
-Update classify_dialogue_source(...).
-
-Find:
-
-if _safe_dict(ai_payload.get("npc")).get("line"):
-    return "raw_ai_payload"
-
-Replace with:
-
-*** Begin Patch
-*** Update File: src/tests/rpg/autoplay/campaign_report.py
-@@
-     ai_payload = extract_turn_ai_payload(row)
-     if _safe_dict(ai_payload.get("npc")).get("line"):
-+        if _safe_str(ai_payload.get("source")) == "provider_runtime_narration":
-+            return "real_runtime_provider"
-+        if _safe_str(ai_payload.get("source")) == "deterministic_runtime_narration_fallback":
-+            return "real_runtime_fallback"
-         return "raw_ai_payload"
-*** End Patch
-
-Update compute_dialogue_coverage(...).
-
-Find base runtime set:
-
-{
-    "raw_ai_payload",
-    "raw_npc",
-    "conversation_beat",
-    "base_runtime_deterministic",
-    "base_runtime_provider",
-}
-
-Replace with:
-
-*** Begin Patch
-*** Update File: src/tests/rpg/autoplay/campaign_report.py
-@@
-         in {
-             "raw_ai_payload",
-             "raw_npc",
-             "conversation_beat",
-+            "real_runtime_provider",
-+            "real_runtime_fallback",
-             "base_runtime_deterministic",
-             "base_runtime_provider",
-         }
-*** End Patch
-
-Add a “real runtime narration” metric in returned coverage:
-
-*** Begin Patch
-*** Update File: src/tests/rpg/autoplay/campaign_report.py
-@@
-     return {
-@@
-         "hook_dialogue_turn_count": len(hook_dialogue_turns),
-         "base_runtime_dialogue_turn_count": len(base_dialogue_turns),
-+        "real_runtime_dialogue_turn_count": int(source_counts.get("real_runtime_provider") or 0)
-+        + int(source_counts.get("real_runtime_fallback") or 0),
-+        "real_runtime_provider_dialogue_turn_count": int(source_counts.get("real_runtime_provider") or 0),
-+        "real_runtime_fallback_dialogue_turn_count": int(source_counts.get("real_runtime_fallback") or 0),
-         "missing_social_turns": [
-*** End Patch
-
-Update HTML Dialogue Coverage section to include real runtime counts:
-
-*** Begin Patch
-*** Update File: src/tests/rpg/autoplay/campaign_report.py
-@@
-       <div class="metric"><div class="value">{_esc(_safe_dict(model.get("dialogue_coverage")).get("hook_dialogue_turn_count"))}</div><div>Hook Dialogue Turns</div></div>
-       <div class="metric"><div class="value">{_esc(_safe_dict(model.get("dialogue_coverage")).get("base_runtime_dialogue_turn_count"))}</div><div>Base Runtime Dialogue Turns</div></div>
-+      <div class="metric"><div class="value">{_esc(_safe_dict(model.get("dialogue_coverage")).get("real_runtime_dialogue_turn_count"))}</div><div>Real Runtime Dialogue Turns</div></div>
-+      <div class="metric"><div class="value">{_esc(_safe_dict(model.get("dialogue_coverage")).get("real_runtime_provider_dialogue_turn_count"))}</div><div>Provider Runtime Dialogue Turns</div></div>
-       <div class="metric"><div class="value">{_esc(_safe_dict(model.get("dialogue_coverage")).get("echoed_narration_turn_count"))}</div><div>Echoed Narration Turns</div></div>
-*** End Patch
-Patch 6 — Autoplay base response should not mask real runtime narration
-
-Now that real session turns can produce runtime narration, autoplay deterministic base response should only fill gaps.
+Patch 8 — Wire story variety metrics into runner
 
 Patch:
 
 src/tests/rpg/autoplay_llm_campaign.py
 
-Find where base_response_payload is built:
-
-base_response_payload: Dict[str, Any] = {}
-if args.autoplay_base_response != "off":
-    base_response_payload = build_autoplay_base_response(...)
-
-Replace with:
+Add import:
 
 *** Begin Patch
 *** Update File: src/tests/rpg/autoplay_llm_campaign.py
 @@
-         base_response_payload: Dict[str, Any] = {}
--        if args.autoplay_base_response != "off":
-+        raw_payload = _safe_dict(
-+            _safe_dict(turn_result.get("manual_turn_summary")).get("raw_narration_payload")
-+        )
-+        raw_npc = _safe_dict(
-+            _safe_dict(turn_result.get("manual_turn_summary")).get("raw_npc")
-+        )
-+        runtime_has_dialogue = bool(
-+            _safe_str(raw_payload.get("narration"))
-+            and (
-+                _safe_dict(raw_payload.get("npc")).get("line")
-+                or raw_npc.get("line")
-+                or classify_player_action_for_report(player_action) != "social"
-+            )
-+        )
-+        if args.autoplay_base_response != "off" and not runtime_has_dialogue:
-             base_response_payload = build_autoplay_base_response(
-                 provider=provider,
-                 player_action=player_action,
-                 simulation_state=authoritative_state,
-                 turn_index=turn_index,
+ from tests.rpg.autoplay.performance import (
+     elapsed_ms,
+     now_perf,
+     summarize_performance,
+     timed_stage,
+ )
++from tests.rpg.autoplay.story_variety import compute_story_variety_metrics
 *** End Patch
 
-You need a tiny local helper or import. Simpler: add this local helper near _safe_dict(...):
+After performance_metrics / before artifact writing, add to metrics:
 
 *** Begin Patch
 *** Update File: src/tests/rpg/autoplay_llm_campaign.py
 @@
- def _safe_dict(value: Any) -> Dict[str, Any]:
-     return value if isinstance(value, dict) else {}
-+
-+
-+def _autoplay_report_action_type(player_action: str) -> str:
-+    text = " ".join(str(player_action or "").lower().strip().split())
-+    if any(word in text for word in ["ask", "talk", "tell", "speak", "question", "report", "explain", "share", "approach"]):
-+        return "social"
-+    return "other"
+     metrics["performance"] = summarize_performance(
+         transcript=transcript,
+         campaign_wall_ms=elapsed_ms(campaign_perf_start),
+         artifact_write_ms=0.0,
+     )
++    metrics["story_variety"] = compute_story_variety_metrics(
++        summary=summary,
++        state=last_committed_state,
++        transcript=transcript,
++    )
+     summary["performance"] = metrics["performance"]
++    summary["story_variety"] = metrics["story_variety"]
 *** End Patch
 
-Then use:
+Also update the later recomputation after artifact timing:
 
 *** Begin Patch
 *** Update File: src/tests/rpg/autoplay_llm_campaign.py
 @@
--                or classify_player_action_for_report(player_action) != "social"
-+                or _autoplay_report_action_type(player_action) != "social"
+     metrics["performance"] = summarize_performance(
+         transcript=transcript,
+         campaign_wall_ms=elapsed_ms(campaign_perf_start),
+         artifact_write_ms=artifact_write_ms,
+     )
++    metrics["story_variety"] = compute_story_variety_metrics(
++        summary=summary,
++        state=last_committed_state,
++        transcript=transcript,
++    )
+     summary["performance"] = metrics["performance"]
++    summary["story_variety"] = metrics["story_variety"]
 *** End Patch
-
-This way the report shows real_runtime_provider / real_runtime_fallback when the actual turn runtime produced the payload, and only uses base_runtime_deterministic when the runtime failed.
-
-Patch 7 — Add narration contract unit tests
-
-Add:
-
-src/tests/rpg/narration/test_runtime_narration_contract.py
-*** Begin Patch
-*** Add File: src/tests/rpg/narration/test_runtime_narration_contract.py
-+from app.rpg.narration.runtime_narration_contract import (
-+    NARRATION_FORMAT_VERSION,
-+    build_deterministic_narration_payload,
-+    build_runtime_narration_payload,
-+    is_echo_narration,
-+    validate_narration_payload,
-+)
-+
-+
-+class FakeProvider:
-+    def chat(self, messages, max_tokens=320):
-+        return {
-+            "content": (
-+                '{"format_version":"rpg_narration_v2",'
-+                '"narration":"Bran studies the question before lowering his voice.",'
-+                '"action":"The question draws a guarded answer.",'
-+                '"npc":{"speaker":"Bran","line":"Tell me exactly what you found."},'
-+                '"reward":"",'
-+                '"followup_hooks":[]}'
-+            )
-+        }
-+
-+
-+class EchoProvider:
-+    def chat(self, messages, max_tokens=320):
-+        return {
-+            "content": (
-+                '{"format_version":"rpg_narration_v2",'
-+                '"narration":"I ask Bran about the witness.",'
-+                '"action":"",'
-+                '"npc":{"speaker":"Bran","line":"Ok."},'
-+                '"reward":"",'
-+                '"followup_hooks":[]}'
-+            )
-+        }
-+
-+
-+def test_deterministic_narration_payload_for_social_turn_has_npc_line():
-+    payload = build_deterministic_narration_payload(
-+        player_action="I ask Bran about the witness.",
-+        simulation_state={},
-+        turn_contract={},
-+    )
-+
-+    assert payload["format_version"] == NARRATION_FORMAT_VERSION
-+    assert payload["npc"]["speaker"] == "Bran"
-+    assert payload["npc"]["line"]
-+    assert payload["reward"] == ""
-+    assert payload["followup_hooks"] == []
-+    assert payload["authoritative_changes"] is False
-+
-+
-+def test_validate_narration_payload_rejects_echo_and_rewards():
-+    result = validate_narration_payload(
-+        {
-+            "format_version": "rpg_narration_v2",
-+            "narration": "I ask Bran about the witness.",
-+            "action": "",
-+            "npc": {},
-+            "reward": "100 gold",
-+            "followup_hooks": [],
-+        },
-+        player_action="I ask Bran about the witness.",
-+    )
-+
-+    assert result["ok"] is False
-+    assert "echoed_player_action" in result["errors"]
-+    assert "reward_not_empty" in result["errors"]
-+
-+
-+def test_provider_runtime_narration_payload_accepts_valid_provider_json():
-+    payload = build_runtime_narration_payload(
-+        provider=FakeProvider(),
-+        player_action="I ask Bran about the witness.",
-+        simulation_state={},
-+        turn_contract={},
-+        prefer_provider=True,
-+    )
-+
-+    assert payload["source"] == "provider_runtime_narration"
-+    assert payload["npc"]["speaker"] == "Bran"
-+    assert payload["npc"]["line"] == "Tell me exactly what you found."
-+
-+
-+def test_runtime_narration_falls_back_when_provider_echoes_player_action():
-+    payload = build_runtime_narration_payload(
-+        provider=EchoProvider(),
-+        player_action="I ask Bran about the witness.",
-+        simulation_state={},
-+        turn_contract={},
-+        prefer_provider=True,
-+    )
-+
-+    assert payload["source"] == "deterministic_runtime_narration_fallback"
-+    assert not is_echo_narration(
-+        player_action="I ask Bran about the witness.",
-+        narration=payload["narration"],
-+    )
-*** End Patch
-Patch 8 — Add runtime integration test with monkeypatch
-
-Add:
-
-src/tests/rpg/narration/test_session_turn_narration_binding.py
-
-This test depends on your actual apply_turn location. If the function is importable through manual turn execution, test through _run_one_manual_turn.
-
-*** Begin Patch
-*** Add File: src/tests/rpg/narration/test_session_turn_narration_binding.py
-+from tests.rpg.manual import turn_execution
-+
-+
-+def test_manual_turn_preserves_real_runtime_narration_payload(monkeypatch):
-+    def fake_apply_turn(*, session_id, player_input):
-+        return {
-+            "ok": True,
-+            "narration": "Bran studies the question before lowering his voice.",
-+            "narration_payload": {
-+                "format_version": "rpg_narration_v2",
-+                "narration": "Bran studies the question before lowering his voice.",
-+                "action": "The question draws a guarded answer.",
-+                "npc": {
-+                    "speaker": "Bran",
-+                    "line": "Tell me exactly what you found.",
-+                },
-+                "reward": "",
-+                "followup_hooks": [],
-+                "source": "provider_runtime_narration",
-+                "authoritative_changes": False,
-+            },
-+            "npc": {
-+                "speaker": "Bran",
-+                "line": "Tell me exactly what you found.",
-+            },
-+            "turn_contract": {"player_action": player_input},
-+            "llm_called": True,
-+        }
-+
-+    monkeypatch.setattr(turn_execution, "_get_apply_turn", lambda: fake_apply_turn)
-+    monkeypatch.setattr(turn_execution, "_record_token_usage", lambda **kwargs: None)
-+    monkeypatch.setattr(turn_execution.output_artifacts, "_emit", lambda *args, **kwargs: None)
-+
-+    result = turn_execution._run_one_manual_turn(
-+        session_id="runtime_narration_binding_test",
-+        turn="I ask Bran about the witness.",
-+        turn_index=1,
-+        scenario_name="runtime_narration_binding_test",
-+        target_channel="test",
-+        console_llm=False,
-+        console_llm_raw=False,
-+        include_raw_result=True,
-+    )
-+
-+    assert result["raw_narration_payload"]["format_version"] == "rpg_narration_v2"
-+    assert result["raw_narration_payload"]["source"] == "provider_runtime_narration"
-+    assert result["raw_npc"]["speaker"] == "Bran"
-+    assert result["raw_npc"]["line"] == "Tell me exactly what you found."
-+    assert result["llm_called"] is True
-*** End Patch
-Patch 9 — Add report test for real runtime source
+Patch 9 — Add story variety to campaign report
 
 Patch:
 
-src/tests/rpg/autoplay/test_campaign_report.py
+src/tests/rpg/autoplay/campaign_report.py
+
+In render_campaign_report_html(...), near:
+
+performance = _safe_dict(metrics.get("performance"))
+
+add:
+
+*** Begin Patch
+*** Update File: src/tests/rpg/autoplay/campaign_report.py
+@@
+     performance = _safe_dict(metrics.get("performance"))
++    story_variety = _safe_dict(metrics.get("story_variety"))
+     latest_state = _safe_dict(model.get("latest_state"))
+*** End Patch
+
+Add nav link:
+
+*** Begin Patch
+*** Update File: src/tests/rpg/autoplay/campaign_report.py
+@@
+     <a href="#locations">Locations</a>
++    <a href="#variety">Variety</a>
+     <a href="#npcs">NPCs</a>
+*** End Patch
+
+Add report section after Location Journey:
+
+*** Begin Patch
+*** Update File: src/tests/rpg/autoplay/campaign_report.py
+@@
+   <section id="locations">
+@@
+     {_render_json_details("Location journey JSON", model.get("location_journey"))}
+   </section>
++
++  <section id="variety">
++    <h2>Story Variety</h2>
++    <p class="section-lede">Identifies which campaign seed ran and gives stable signatures for comparing story setups across multiple autoplay runs.</p>
++    <div class="grid">
++      <div class="metric"><div class="value">{_esc(story_variety.get("resolved_seed"))}</div><div>Resolved Seed</div></div>
++      <div class="metric"><div class="value">{_esc(story_variety.get("randomized"))}</div><div>Randomized</div></div>
++      <div class="metric"><div class="value">{_esc(_safe_dict(story_variety.get("story_signature")).get("signature_hash"))}</div><div>Story Signature</div></div>
++      <div class="metric"><div class="value">{_esc(story_variety.get("branch_signature_hash"))}</div><div>Branch Signature</div></div>
++    </div>
++    {_render_json_details("Story variety JSON", story_variety)}
++  </section>
+ 
+   <section id="journal">
+*** End Patch
+Patch 10 — Write story variety standalone JSON
+
+Patch:
+
+src/tests/rpg/autoplay/reporting.py
+
+In write_autoplay_artifacts(...), after performance JSON:
+
+*** Begin Patch
+*** Update File: src/tests/rpg/autoplay/reporting.py
+@@
+     performance_path = output_dir / "autoplay-performance.json"
+     performance_path.write_text(
+         json.dumps(metrics.get("performance") or {}, ensure_ascii=False, indent=2, sort_keys=True, default=str),
+         encoding="utf-8",
+     )
++    story_variety_path = output_dir / "autoplay-story-variety.json"
++    story_variety_path.write_text(
++        json.dumps(metrics.get("story_variety") or {}, ensure_ascii=False, indent=2, sort_keys=True, default=str),
++        encoding="utf-8",
++    )
+@@
+         "performance": str(performance_path),
++        "story_variety": str(story_variety_path),
+*** End Patch
+
+In zip writing:
+
+*** Begin Patch
+*** Update File: src/tests/rpg/autoplay/reporting.py
+@@
+         zf.write(metrics_path, metrics_path.name)
+         zf.write(performance_path, performance_path.name)
++        zf.write(story_variety_path, story_variety_path.name)
+         zf.write(health_path, health_path.name)
+*** End Patch
+Patch 11 — Add story variety tests
+
+Add:
+
+src/tests/rpg/autoplay/test_story_variety.py
+*** Begin Patch
+*** Add File: src/tests/rpg/autoplay/test_story_variety.py
++from tests.rpg.autoplay.seeding import (
++    available_campaign_seeds,
++    resolve_campaign_seed_name,
++    seed_campaign,
++)
++from tests.rpg.autoplay.story_variety import (
++    compute_story_variety_metrics,
++    extract_story_signature_from_state,
++)
++
++
++def test_available_campaign_seeds_include_variants():
++    seeds = available_campaign_seeds()
++
++    assert "tavern_story_seed" in seeds
++    assert "caravan_ambush_seed" in seeds
++    assert "missing_apprentice_seed" in seeds
++    assert "haunted_mill_seed" in seeds
++    assert "noble_blackmail_seed" in seeds
++
++
++def test_random_campaign_seed_is_reproducible():
++    first = resolve_campaign_seed_name("random", random_seed=123)
++    second = resolve_campaign_seed_name("random", random_seed=123)
++
++    assert first["resolved_seed"] == second["resolved_seed"]
++    assert first["randomized"] is True
++
++
++def test_different_campaign_seeds_produce_different_story_signatures():
++    tavern_state = {}
++    caravan_state = {}
++
++    seed_campaign(tavern_state, "tavern_story_seed")
++    seed_campaign(caravan_state, "caravan_ambush_seed")
++
++    tavern_signature = extract_story_signature_from_state(tavern_state)
++    caravan_signature = extract_story_signature_from_state(caravan_state)
++
++    assert tavern_signature["campaign_title"] != caravan_signature["campaign_title"]
++    assert tavern_signature["signature_hash"] != caravan_signature["signature_hash"]
++    assert "Bran" in tavern_signature["npc_names"]
++    assert "Selka" in caravan_signature["npc_names"]
++
++
++def test_story_variety_metrics_include_seed_and_hashes():
++    state = {}
++    seed_campaign(state, "haunted_mill_seed")
++
++    metrics = compute_story_variety_metrics(
++        summary={
++            "scenario_seed": "haunted_mill_seed",
++            "resolved_scenario_seed": "haunted_mill_seed",
++            "seed_resolution": {"random_seed": None, "randomized": False},
++        },
++        state=state,
++        transcript=[],
++    )
++
++    assert metrics["resolved_seed"] == "haunted_mill_seed"
++    assert metrics["story_signature"]["campaign_title"] == "The Haunted Mill"
++    assert metrics["story_variety_key"]
+*** End Patch
+Patch 12 — Add seeding tests for each seed
+
+Patch:
+
+src/tests/rpg/autoplay/test_story_hooks.py
 
 Add:
 
 *** Begin Patch
-*** Update File: src/tests/rpg/autoplay/test_campaign_report.py
+*** Update File: src/tests/rpg/autoplay/test_story_hooks.py
 @@
- def test_dialogue_coverage_counts_base_runtime_dialogue():
+ def test_tavern_story_seed_gives_player_starter_inventory():
 @@
-     assert coverage["base_runtime_dialogue_turn_count"] == 1
-     assert coverage["social_turn_missing_npc_response_count"] == 0
+     assert any(item["item_id"] == "item:iron_dagger" for item in inventory["items"])
+     assert state["inventory_state"]["currency"]["gold"] == 15
 +
 +
-+def test_report_classifies_real_runtime_provider_dialogue():
-+    row = {
-+        "turn_result": {
-+            "manual_turn_summary": {
-+                "raw_narration_payload": {
-+                    "format_version": "rpg_narration_v2",
-+                    "source": "provider_runtime_narration",
-+                    "narration": "Bran lowers his voice.",
-+                    "npc": {
-+                        "speaker": "Bran",
-+                        "line": "Tell me exactly what you found.",
-+                    },
-+                    "reward": "",
-+                    "followup_hooks": [],
-+                }
-+            }
-+        }
-+    }
++def test_all_campaign_seed_variants_have_director_lore_npcs_and_arc():
++    from tests.rpg.autoplay.seeding import available_campaign_seeds, seed_campaign
 +
-+    assert classify_dialogue_source(row) == "real_runtime_provider"
++    for seed_name in available_campaign_seeds():
++        state = {}
++        result = seed_campaign(state, seed_name)
++
++        assert result["ok"] is True
++        assert state["campaign_director_state"]["campaign_title"]
++        assert state["lore_state"]["entries"]
++        assert state["npc_profile_state"]["profiles"]
++        assert state["story_arc_state"]["arcs"]
++        assert state["story_arc_milestone_state"]["arcs"]
++        assert state["player_state"]["inventory"]["items"]
+*** End Patch
+Patch 13 — Update test runner Namespace for new args
+
+Patch:
+
+src/tests/rpg/autoplay/test_autoplay_runner.py
+
+Where test Namespace includes scenario_seed, add:
+
+*** Begin Patch
+*** Update File: src/tests/rpg/autoplay/test_autoplay_runner.py
+@@
+         scenario_seed="tavern_story_seed",
++        random_seed=None,
++        list_scenario_seeds=False,
 *** End Patch
 Validation commands
 Compile
-python -m py_compile src/app/rpg/narration/runtime_narration_contract.py
-python -m py_compile src/app/rpg/narration/runtime_provider.py
-python -m py_compile src/tests/rpg/manual/turn_execution.py
-python -m py_compile src/tests/rpg/autoplay/campaign_report.py
+python -m py_compile src/tests/rpg/autoplay/seeding.py
+python -m py_compile src/tests/rpg/autoplay/story_variety.py
 python -m py_compile src/tests/rpg/autoplay_llm_campaign.py
-python -m py_compile src/tests/rpg/narration/test_runtime_narration_contract.py
-python -m py_compile src/tests/rpg/narration/test_session_turn_narration_binding.py
-python -m py_compile src/tests/rpg/autoplay/test_campaign_report.py
+python -m py_compile src/tests/rpg/autoplay/reporting.py
+python -m py_compile src/tests/rpg/autoplay/campaign_report.py
+python -m py_compile src/tests/rpg/autoplay/test_story_variety.py
+python -m py_compile src/tests/rpg/autoplay/test_story_hooks.py
+python -m py_compile src/tests/rpg/autoplay/test_autoplay_runner.py
 Focused tests
-python -m pytest src/tests/rpg/narration/test_runtime_narration_contract.py src/tests/rpg/narration/test_session_turn_narration_binding.py src/tests/rpg/autoplay/test_campaign_report.py src/tests/rpg/autoplay/test_base_runtime_response.py src/tests/rpg/autoplay/test_autoplay_runner.py src/tests/rpg/autoplay/test_story_hooks.py src/tests/rpg/autoplay/test_manual_turn_driver.py src/tests/rpg/autoplay/test_progress.py src/tests/rpg/autoplay/test_progress_quality.py src/tests/rpg/autoplay/test_strategy_profiles.py src/tests/rpg/autoplay/test_checkpoints.py src/tests/rpg/autoplay/test_player_agent.py src/tests/rpg/autoplay/test_provider_adapter.py -q
+python -m pytest src/tests/rpg/autoplay/test_story_variety.py src/tests/rpg/autoplay/test_campaign_report.py src/tests/rpg/autoplay/test_story_hooks.py src/tests/rpg/narration/test_runtime_narration_contract.py src/tests/rpg/narration/test_session_turn_narration_binding.py src/tests/rpg/autoplay/test_performance.py src/tests/rpg/autoplay/test_base_runtime_response.py src/tests/rpg/autoplay/test_autoplay_runner.py src/tests/rpg/autoplay/test_manual_turn_driver.py src/tests/rpg/autoplay/test_progress.py src/tests/rpg/autoplay/test_progress_quality.py src/tests/rpg/autoplay/test_strategy_profiles.py src/tests/rpg/autoplay/test_checkpoints.py src/tests/rpg/autoplay/test_player_agent.py src/tests/rpg/autoplay/test_provider_adapter.py -q

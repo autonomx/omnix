@@ -27,6 +27,7 @@ AUTHORITATIVE_ROOTS_TO_VALIDATE = [
     "story_arc_milestone_state",
     "quest_log_state",
     "campaign_journal_state",
+    "inventory_state",
     "story_event_queue_state",
     "story_pack_state",
     "campaign_director_state",

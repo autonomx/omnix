@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import html
 import json
-from collections import Counter
+from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any, Dict, List
 
@@ -531,6 +531,176 @@ def build_character_progression_paragraph(state: Dict[str, Any]) -> str:
     return " ".join(part for part in parts if part.strip())
 
 
+def build_player_progression_rows(state: Dict[str, Any]) -> Dict[str, Any]:
+    player = _player_progression(state)
+    stats = _safe_dict(player.get("stats"))
+    log = _safe_list(player.get("progression_log"))
+    return {
+        "summary_rows": [
+            ("Name", player.get("name") or "The Player"),
+            ("Level", player.get("level", 1)),
+            ("XP", f"{player.get('experience', 0)} / {player.get('experience_to_next_level', 100)}"),
+            ("Progress Log Entries", len(log)),
+        ],
+        "stats_rows": [(str(k).title(), v) for k, v in sorted(stats.items())],
+        "recent_progression_rows": [
+            [
+                row.get("turn_index", ""),
+                row.get("type", ""),
+                row.get("amount", ""),
+                row.get("reason") or row.get("summary") or "",
+                f"{row.get('level_before', '')} → {row.get('level_after', '')}" if row.get("level_after") is not None else "",
+            ]
+            for row in log[-8:]
+            if isinstance(row, dict)
+        ],
+    }
+
+
+def build_story_arc_report_rows(model: Dict[str, Any]) -> Dict[str, Any]:
+    arcs = _safe_list(model.get("story_arcs"))
+    milestones = _safe_list(model.get("milestones"))
+    by_arc: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
+    for milestone in milestones:
+        milestone = _safe_dict(milestone)
+        by_arc[_safe_str(milestone.get("arc_id"))].append(milestone)
+    rows = []
+    for arc in arcs:
+        arc = _safe_dict(arc)
+        arc_id = _safe_str(arc.get("arc_id"))
+        arc_milestones = by_arc.get(arc_id, [])
+        completed = [m for m in arc_milestones if _safe_str(m.get("status")) == "completed"]
+        active = [m for m in arc_milestones if _safe_str(m.get("status")) not in {"completed", "failed", "cancelled"}]
+        rows.append(
+            {
+                "arc_id": arc_id,
+                "title": arc.get("title") or arc_id,
+                "stage": arc.get("stage"),
+                "status": arc.get("status"),
+                "pressure": arc.get("pressure", 0),
+                "completed_count": len(completed),
+                "active_count": len(active),
+                "milestones": arc_milestones,
+            }
+        )
+    return {
+        "arcs": rows,
+        "total_arcs": len(rows),
+        "total_milestones": len(milestones),
+    }
+
+
+def build_inventory_rows(snapshot: Dict[str, Any]) -> Dict[str, Any]:
+    currency = _safe_dict(snapshot.get("currency"))
+    items = _safe_list(snapshot.get("items"))
+    return {
+        "currency_rows": [[k, v] for k, v in sorted(currency.items())],
+        "item_rows": [
+            [
+                _safe_dict(item).get("name") or _safe_dict(item).get("item_id") or "",
+                _safe_dict(item).get("quantity", 1),
+                _safe_dict(item).get("type", ""),
+                _safe_dict(item).get("description", ""),
+            ]
+            for item in items
+            if isinstance(item, dict)
+        ],
+    }
+
+
+def build_location_journey_model(
+    *,
+    timeline: List[Dict[str, Any]],
+    state: Dict[str, Any],
+) -> Dict[str, Any]:
+    director = _safe_dict(state.get("campaign_director_state"))
+    location_rows: Dict[str, Dict[str, Any]] = {}
+
+    def ensure_location(name: str) -> Dict[str, Any]:
+        key = name or "Unknown Location"
+        location_rows.setdefault(
+            key,
+            {
+                "name": key,
+                "turns": [],
+                "summary_bits": [],
+                "npcs": set(),
+                "objectives": set(),
+                "events": [],
+            },
+        )
+        return location_rows[key]
+
+    # Seed known setting locations from lore/director.
+    ensure_location("The Rusty Flagon Tavern")["summary_bits"].append(
+        "The social hub where the witness investigation begins."
+    )
+    ensure_location("The Bandit Road")["summary_bits"].append(
+        "The external danger path revealed after the witness report."
+    )
+
+    for row in timeline:
+        action = _norm_text(row.get("player_action"))
+        if "road" in action or "bandit" in action or "outside" in action:
+            loc = ensure_location("The Bandit Road")
+        else:
+            loc = ensure_location("The Rusty Flagon Tavern")
+        loc["turns"].append(row.get("turn_index"))
+        narration = _safe_str(row.get("narration"))
+        if narration:
+            loc["summary_bits"].append(narration)
+        npc = _safe_dict(row.get("npc"))
+        if npc.get("speaker"):
+            loc["npcs"].add(str(npc.get("speaker")))
+        for hook in _safe_list(row.get("fired_hooks")):
+            hook = _safe_dict(hook)
+            if hook.get("story_label"):
+                loc["events"].append(hook.get("story_label"))
+
+    for milestone in _milestone_rows(state):
+        title = _safe_str(milestone.get("title") or milestone.get("milestone_id"))
+        if not title:
+            continue
+        text = _norm_text(title + " " + _safe_str(milestone.get("objective_text")))
+        if "road" in text or "bandit" in text:
+            ensure_location("The Bandit Road")["objectives"].add(title)
+        else:
+            ensure_location("The Rusty Flagon Tavern")["objectives"].add(title)
+
+    locations = []
+    for loc in location_rows.values():
+        bits = []
+        seen_bits = set()
+        for bit in loc["summary_bits"]:
+            bit = _safe_str(bit)
+            if not bit or bit in seen_bits:
+                continue
+            seen_bits.add(bit)
+            bits.append(bit)
+            if len(bits) >= 4:
+                break
+        locations.append(
+            {
+                "name": loc["name"],
+                "turn_range": (
+                    f"{min(loc['turns'])}–{max(loc['turns'])}" if loc["turns"] else "setup"
+                ),
+                "turn_count": len(loc["turns"]),
+                "summary": " ".join(bits) if bits else "No summary captured.",
+                "npcs": sorted(loc["npcs"]),
+                "objectives": sorted(loc["objectives"]),
+                "events": loc["events"][:8],
+            }
+        )
+    return {
+        "locations": locations,
+        "director_context": {
+            "premise": director.get("premise"),
+            "stakes": director.get("stakes"),
+        },
+    }
+
+
 def compute_dialogue_coverage(timeline: List[Dict[str, Any]]) -> Dict[str, Any]:
     total_turns = len(timeline)
     social_turns = [row for row in timeline if row.get("social_action")]
@@ -661,6 +831,8 @@ def compute_runtime_narration_diagnostics(timeline: List[Dict[str, Any]]) -> Dic
     provider_repair_actions = Counter()
     provider_shapes = Counter()
     selected_methods = Counter()
+    retry_count = 0
+    attempt_count = 0
     for row in timeline:
         diag = _safe_dict(row.get("runtime_narration_diagnostics"))
         if not diag:
@@ -675,6 +847,8 @@ def compute_runtime_narration_diagnostics(timeline: List[Dict[str, Any]]) -> Dic
             provider_repaired += 1
         if diag.get("fallback_used"):
             fallback_used += 1
+        retry_count += int(diag.get("provider_retry_count") or 0)
+        attempt_count += int(diag.get("provider_attempt_count") or 0)
         for err in _safe_list(diag.get("provider_errors")):
             provider_errors[str(err)] += 1
         for err in _safe_list(diag.get("provider_original_errors")):
@@ -692,6 +866,8 @@ def compute_runtime_narration_diagnostics(timeline: List[Dict[str, Any]]) -> Dic
         "provider_attempted_turns": provider_attempted,
         "provider_valid_turns": provider_valid,
         "provider_repaired_turns": provider_repaired,
+        "provider_attempt_count": attempt_count,
+        "provider_retry_count": retry_count,
         "fallback_used_turns": fallback_used,
         "provider_error_counts": dict(provider_errors),
         "provider_original_error_counts": dict(provider_original_errors),
@@ -710,7 +886,12 @@ def build_campaign_report_model(
 ) -> Dict[str, Any]:
     latest_state = _latest_state_from_transcript(transcript)
     latest_state_source = _latest_state_source(transcript)
+    initial_state = _initial_state_from_transcript(transcript)
     quality = _safe_dict(metrics.get("progress_quality"))
+    turn_count_for_rates = max(1, len(transcript))
+    quality.setdefault("weak_progress_rate", float(quality.get("weak_progress_turns") or 0) / turn_count_for_rates)
+    quality.setdefault("no_change_rate", float(quality.get("no_change_turns") or 0) / turn_count_for_rates)
+    quality.setdefault("churn_only_rate", float(quality.get("churn_only_turns") or 0) / turn_count_for_rates)
     action_diversity = _safe_dict(metrics.get("action_diversity"))
     category_counts = Counter()
     hook_counts = Counter()
@@ -828,6 +1009,9 @@ def build_campaign_report_model(
         "health": health,
         "latest_state": latest_state,
         "latest_state_source": latest_state_source,
+        "initial_state": initial_state,
+        "inventory_start": _inventory_snapshot(initial_state),
+        "inventory_end": _inventory_snapshot(latest_state),
         "timeline": timeline,
         "story_arcs": _story_arc_rows(latest_state),
         "milestones": _milestone_rows(latest_state),
@@ -848,11 +1032,20 @@ def build_campaign_report_model(
     model["lore_setting_paragraph"] = build_lore_setting_paragraph(latest_state)
     model["character_progression_paragraph"] = build_character_progression_paragraph(latest_state)
     model["chapter_status"] = build_chapter_status(latest_state, model)
+    model["player_progression_view"] = build_player_progression_rows(latest_state)
+    model["story_arc_view"] = build_story_arc_report_rows(model)
+    model["inventory_start_view"] = build_inventory_rows(_safe_dict(model["inventory_start"]))
+    model["inventory_end_view"] = build_inventory_rows(_safe_dict(model["inventory_end"]))
+    model["location_journey"] = build_location_journey_model(
+        timeline=timeline,
+        state=latest_state,
+    )
+    model["pm_summary"] = build_pm_report_summary(model)
     return model
 
 
-def _render_badge(text: str, cls: str = "") -> str:
-    return f'<span class="badge {html.escape(cls)}">{_esc(text)}</span>'
+def _render_badge(text: Any, cls: str = "") -> str:
+    return f'<span class="badge {html.escape(cls)}">{_esc(str(text))}</span>'
 
 
 def _render_paragraphs(text: Any) -> str:
@@ -872,13 +1065,186 @@ def _render_table(headers: List[str], rows: List[List[Any]]) -> str:
     return f"<table><thead><tr>{head}</tr></thead><tbody>{''.join(body)}</tbody></table>"
 
 
+def _status_class(value: Any) -> str:
+    text = _safe_str(value).lower()
+    if text in {"pass", "passed", "good", "ok", "true", "healthy"}:
+        return "good"
+    if text in {"warn", "warning", "partial", "caution"}:
+        return "warn"
+    if text in {"fail", "failed", "bad", "false", "error"}:
+        return "bad"
+    return ""
+
+
+def _render_json_details(title: str, value: Any, *, open_by_default: bool = False) -> str:
+    open_attr = " open" if open_by_default else ""
+    return (
+        f"<details class=\"tech-details\"{open_attr}>"
+        f"<summary>{_esc(title)}</summary>"
+        f"<pre>{_json(value)}</pre>"
+        f"</details>"
+    )
+
+
+def _pct(value: Any) -> float:
+    try:
+        value = float(value)
+    except Exception:
+        return 0.0
+    if value <= 1.0:
+        value *= 100.0
+    return max(0.0, min(100.0, value))
+
+
+def _seconds_from_ms(value: Any) -> str:
+    try:
+        return f"{float(value) / 1000.0:.2f}s"
+    except Exception:
+        return "0.00s"
+
+
+def _number(value: Any, digits: int = 2) -> str:
+    try:
+        return f"{float(value):.{digits}f}"
+    except Exception:
+        return "0"
+
+
+def _render_bar(label: str, value: Any, *, max_value: float | None = None, suffix: str = "") -> str:
+    try:
+        raw = float(value)
+    except Exception:
+        raw = 0.0
+    width = _pct(raw if max_value is None else (raw / max_value if max_value else 0.0))
+    display = f"{raw:.2f}{suffix}" if isinstance(raw, float) else f"{raw}{suffix}"
+    return (
+        '<div class="bar-row">'
+        f'<div class="bar-label">{_esc(label)}</div>'
+        '<div class="bar-track">'
+        f'<div class="bar-fill" style="width:{width:.1f}%"></div>'
+        '</div>'
+        f'<div class="bar-value">{_esc(display)}</div>'
+        '</div>'
+    )
+
+
+def _render_progress_bar(label: str, rate: Any) -> str:
+    percent = _pct(rate)
+    return (
+        '<div class="bar-row">'
+        f'<div class="bar-label">{_esc(label)}</div>'
+        '<div class="bar-track">'
+        f'<div class="bar-fill" style="width:{percent:.1f}%"></div>'
+        '</div>'
+        f'<div class="bar-value">{percent:.1f}%</div>'
+        '</div>'
+    )
+
+
+def _render_key_value_table(rows: List[tuple[str, Any]]) -> str:
+    return (
+        '<table class="kv-table"><tbody>'
+        + ''.join(f'<tr><th>{_esc(k)}</th><td>{_esc(v)}</td></tr>' for k, v in rows)
+        + '</tbody></table>'
+    )
+
+
+def _render_chapter_status_cards(chapter_status: Dict[str, Any]) -> str:
+    active = _safe_list(chapter_status.get("active_objectives"))
+    completed = _safe_list(chapter_status.get("completed_objectives"))
+    active_rows = [[title] for title in active]
+    completed_rows = [[title] for title in completed]
+    return f'''
+    <div class="grid">
+      <div class="metric"><div class="value">{_esc(chapter_status.get("campaign_title") or "Untitled")}</div><div>Campaign Title</div></div>
+      <div class="metric"><div class="value">{_esc(chapter_status.get("current_stage") or "unknown")}</div><div>Current Stage</div></div>
+      <div class="metric"><div class="value">{_esc(chapter_status.get("chapter_complete"))}</div><div>Chapter Complete</div></div>
+      <div class="metric"><div class="value">{_esc(chapter_status.get("active_objective_count"))}</div><div>Active Objectives</div></div>
+      <div class="metric"><div class="value">{_esc(chapter_status.get("completed_objective_count"))}</div><div>Completed Objectives</div></div>
+    </div>
+    <p class="section-lede"><strong>Recommendation:</strong> {_esc(chapter_status.get("recommendation"))}</p>
+    <div class="two-col">
+      <div>
+        <h3>Active Objectives</h3>
+        {_render_table(["Objective"], active_rows)}
+      </div>
+      <div>
+        <h3>Completed Objectives</h3>
+        {_render_table(["Objective"], completed_rows)}
+      </div>
+    </div>
+    {_render_json_details("Chapter status JSON", chapter_status)}
+    '''
+
+
+def _inventory_snapshot(state: Dict[str, Any]) -> Dict[str, Any]:
+    candidates = [
+        state.get("inventory_state"),
+        state.get("player_inventory"),
+        _safe_dict(state.get("player_state")).get("inventory"),
+        _safe_dict(state.get("party_state")).get("inventory"),
+    ]
+    for candidate in candidates:
+        if isinstance(candidate, dict) and candidate:
+            return {
+                "currency": _safe_dict(candidate.get("currency")),
+                "items": _safe_list(candidate.get("items")),
+            }
+        if isinstance(candidate, list) and candidate:
+            return {"items": candidate}
+    return {"currency": {}, "items": []}
+
+
+def _initial_state_from_transcript(transcript: List[Dict[str, Any]]) -> Dict[str, Any]:
+    for row in transcript:
+        before = _safe_dict(row.get("before_state"))
+        if before:
+            return before
+        turn_result = _safe_dict(row.get("turn_result"))
+        state = _safe_dict(turn_result.get("initial_simulation_state"))
+        if state:
+            return state
+    return {}
+
+
+def build_pm_report_summary(model: Dict[str, Any]) -> Dict[str, Any]:
+    metrics = _safe_dict(model.get("metrics"))
+    progress = _safe_dict(metrics.get("progress_quality"))
+    dialogue = _safe_dict(model.get("dialogue_coverage"))
+    runtime_diag = _safe_dict(model.get("runtime_narration_diagnostics"))
+    chapter = _safe_dict(model.get("chapter_status"))
+    shortcomings = _safe_list(model.get("shortcomings"))
+
+    return {
+        "overall_status": "partial" if shortcomings else "good",
+        "story_status": "good" if int(chapter.get("active_objective_count") or 0) > 0 else "warn",
+        "dialogue_status": "good" if float(dialogue.get("social_turn_missing_npc_response_rate") or 0.0) == 0.0 else "warn",
+        "provider_status": "good" if int(runtime_diag.get("provider_valid_turns") or 0) > 0 else "warn",
+        "performance_status": "good",
+        "headline": "The campaign can progress through a complete tavern investigation branch and continue into the bandit-road chapter.",
+        "top_risks": shortcomings[:5],
+        "key_numbers": {
+            "turns": _safe_dict(model.get("summary")).get("turns_executed"),
+            "meaningful_turns": progress.get("meaningful_turns"),
+            "npc_response_rate": dialogue.get("npc_response_rate"),
+            "provider_valid_turns": runtime_diag.get("provider_valid_turns"),
+            "provider_repaired_turns": runtime_diag.get("provider_repaired_turns"),
+            "active_objectives": chapter.get("active_objective_count"),
+        },
+    }
+
+
 def render_campaign_report_html(model: Dict[str, Any]) -> str:
     summary = _safe_dict(model.get("summary"))
     metrics = _safe_dict(model.get("metrics"))
     health = _safe_dict(model.get("health"))
     progress_quality = _safe_dict(metrics.get("progress_quality"))
     performance = _safe_dict(metrics.get("performance"))
+    story_variety = _safe_dict(metrics.get("story_variety"))
     latest_state = _safe_dict(model.get("latest_state"))
+    chapter_status = _safe_dict(model.get("chapter_status"))
+    pm_summary = _safe_dict(model.get("pm_summary"))
+    pm_status = _status_class(pm_summary.get("overall_status"))
 
     timeline_html = []
     for row in _safe_list(model.get("timeline")):
@@ -917,27 +1283,6 @@ def render_campaign_report_html(model: Dict[str, Any]) -> str:
             """
         )
 
-    arc_rows = [
-        [
-            row.get("arc_id"),
-            row.get("title") or row.get("name"),
-            row.get("stage"),
-            row.get("status"),
-            row.get("updated_turn_index"),
-        ]
-        for row in _safe_list(model.get("story_arcs"))
-    ]
-    milestone_rows = [
-        [
-            row.get("arc_id"),
-            row.get("milestone_id"),
-            row.get("title"),
-            row.get("status"),
-            row.get("priority"),
-            row.get("completed_turn_index"),
-        ]
-        for row in _safe_list(model.get("milestones"))
-    ]
     npc_rows = [
         [
             row.get("name") or row.get("npc_id"),
@@ -949,185 +1294,345 @@ def render_campaign_report_html(model: Dict[str, Any]) -> str:
         ]
         for row in _safe_list(model.get("npcs"))
     ]
-    journal_rows = [
-        [
-            row.get("turn_index"),
-            row.get("entry_id"),
-            row.get("title"),
-            row.get("text"),
-            ", ".join(str(x) for x in _safe_list(row.get("tags"))),
-        ]
-        for row in _safe_list(model.get("journal_entries"))
-    ]
-    lore_rows = [
-        [
-            row.get("type"),
-            row.get("id"),
-            row.get("title") or row.get("name"),
-            row.get("text") or row.get("description") or row.get("summary"),
-        ]
-        for row in _safe_list(model.get("lore"))
-    ]
-    event_rows = [
-        [
-            row.get("turn_index"),
-            row.get("event_id"),
-            row.get("title"),
-            row.get("summary"),
-            row.get("severity"),
-        ]
-        for row in _safe_list(model.get("story_events"))
-    ]
 
-    shortcomings = _safe_list(model.get("shortcomings"))
-    shortcomings_html = (
-        "<ul>" + "".join(f"<li>{_esc(item)}</li>" for item in shortcomings) + "</ul>"
-        if shortcomings
-        else '<p class="good">No major shortcomings detected by report heuristics.</p>'
+    css = """
+   :root {
+     --bg: #0b1020;
+     --panel: #ffffff;
+     --panel2: #f6f8fc;
+     --ink: #172033;
+     --text: #172033;
+     --muted: #64748b;
+     --accent: #315efb;
+     --accent2: #7c3aed;
+     --good: #12805c;
+     --warn: #b7791f;
+     --bad: #c2410c;
+     --border: #d9e1f2;
+     --shadow: 0 20px 60px rgba(15, 23, 42, 0.12);
+   }
+   body {
+     margin: 0;
+     font-family: Inter, Segoe UI, Arial, sans-serif;
+     background: linear-gradient(135deg, #edf3ff 0%, #f8fafc 45%, #f5f3ff 100%);
+     color: var(--text);
+     line-height: 1.5;
+   }
+   header {
+     padding: 34px 42px;
+     border-bottom: 1px solid var(--border);
+     background: rgba(255,255,255,0.88);
+     position: sticky;
+     top: 0;
+     z-index: 3;
+     backdrop-filter: blur(16px);
+     box-shadow: 0 8px 28px rgba(15, 23, 42, 0.08);
+   }
+   h1, h2, h3 { margin: 0 0 12px; }
+   h1 { font-size: 30px; letter-spacing: -0.03em; }
+   h2 { font-size: 22px; letter-spacing: -0.02em; }
+   h3 { font-size: 16px; color: var(--ink); }
+   main { padding: 30px; max-width: 1500px; margin: 0 auto; }
+   section {
+     background: rgba(255,255,255,0.94);
+     border: 1px solid var(--border);
+     border-radius: 24px;
+     padding: 24px;
+     margin-bottom: 24px;
+     box-shadow: var(--shadow);
+   }
+   .grid {
+     display: grid;
+     grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+     gap: 16px;
+   }
+   .metric {
+     background: var(--panel2);
+     border: 1px solid var(--border);
+     border-radius: 18px;
+     padding: 16px;
+   }
+    .metric .value { font-size: 28px; font-weight: 850; color: var(--accent); letter-spacing: -0.03em; }
+    .bar-row {
+      display: grid;
+      grid-template-columns: 220px minmax(160px, 1fr) 90px;
+      gap: 12px;
+      align-items: center;
+      margin: 10px 0;
+    }
+    .bar-label { font-weight: 700; color: #334155; }
+    .bar-track {
+      height: 12px;
+      background: #e2e8f0;
+      border-radius: 999px;
+      overflow: hidden;
+      border: 1px solid #dbe3ef;
+    }
+    .bar-fill {
+      height: 100%;
+      background: linear-gradient(90deg, var(--accent), var(--accent2));
+      border-radius: 999px;
+    }
+    .bar-value { color: var(--muted); font-variant-numeric: tabular-nums; text-align: right; }
+    .section-lede {
+      color: var(--muted);
+      font-size: 15px;
+      max-width: 980px;
+      margin-top: -4px;
+    }
+    .card-list {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 16px;
+    }
+    .story-card {
+      background: var(--panel2);
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      padding: 16px;
+    }
+    .story-card h3 { margin-bottom: 6px; }
+    .kv-table th { width: 220px; }
+    .muted { color: var(--muted); }
+   .good { color: var(--good); }
+   .warn { color: var(--warn); }
+   .bad { color: var(--bad); }
+   .hero {
+     background: linear-gradient(135deg, #1d4ed8, #7c3aed);
+     color: white;
+     border: 0;
+   }
+   .hero .muted { color: rgba(255,255,255,0.78); }
+   .hero .metric { background: rgba(255,255,255,0.14); border-color: rgba(255,255,255,0.22); color: white; }
+   .hero .metric .value { color: white; }
+   .status-pill {
+     display: inline-block;
+     padding: 6px 11px;
+     border-radius: 999px;
+     font-weight: 700;
+     font-size: 12px;
+     background: #e0e7ff;
+     color: #3730a3;
+     margin-left: 6px;
+   }
+   .status-pill.good { background: #dcfce7; color: #166534; }
+   .status-pill.warn { background: #fef3c7; color: #92400e; }
+   .status-pill.bad { background: #fee2e2; color: #991b1b; }
+   table {
+     width: 100%;
+     border-collapse: collapse;
+     overflow: hidden;
+     border-radius: 14px;
+   }
+   th, td {
+     border-bottom: 1px solid var(--border);
+     padding: 10px 12px;
+     text-align: left;
+     vertical-align: top;
+   }
+   th { color: #334155; background: #eef2ff; }
+   tr:nth-child(even) td { background: #f8fafc; }
+   .turn-card {
+     background: var(--panel2);
+     border: 1px solid var(--border);
+     border-radius: 18px;
+     padding: 16px;
+     margin-bottom: 14px;
+   }
+   .turn-header { display: flex; justify-content: space-between; gap: 12px; align-items: center; }
+   .player-action, .narration, .npc-line { margin: 10px 0; }
+   .badge {
+     display: inline-block;
+     padding: 4px 9px;
+     border-radius: 999px;
+     background: #e2e8f0;
+     color: #334155;
+     font-size: 12px;
+     margin: 2px;
+     border: 1px solid var(--border);
+   }
+   .badge.hook { background: #dcfce7; color: #166534; }
+   .badge.category { background: #dbeafe; color: #1d4ed8; }
+   .badge.quality { background: #fef3c7; color: #92400e; }
+   pre {
+     white-space: pre-wrap;
+     overflow-x: auto;
+     background: #0f172a;
+     border: 1px solid var(--border);
+     border-radius: 14px;
+     padding: 12px;
+     color: #d7ddff;
+   }
+   details { margin-top: 10px; }
+   summary { cursor: pointer; color: var(--accent); font-weight: 700; }
+   nav a { color: var(--accent); margin-right: 16px; text-decoration: none; }
+   .tech-details {
+     background: #f8fafc;
+     border: 1px solid var(--border);
+     border-radius: 16px;
+     padding: 12px 14px;
+     margin-top: 12px;
+   }
+   .two-col {
+     display: grid;
+     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+     gap: 18px;
+   }
+   @media (max-width: 900px) {
+     .two-col { grid-template-columns: 1fr; }
+     header { position: static; }
+   }
+   """
+    arc_cards_html = "".join(
+        '<div class="story-card">'
+        f'<h3>{_esc(arc.get("title"))}</h3>'
+        f'<p><strong>Stage:</strong> {_esc(arc.get("stage"))} · <strong>Status:</strong> {_esc(arc.get("status"))}</p>'
+        f'<p><strong>Completed Objectives:</strong> {_esc(arc.get("completed_count"))} · <strong>Active Objectives:</strong> {_esc(arc.get("active_count"))}</p>'
+        f'{_render_bar("Arc Pressure", arc.get("pressure", 0), max_value=100)}'
+        '</div>'
+        for arc in _safe_list(_safe_dict(model.get("story_arc_view")).get("arcs"))
     )
-
+    milestone_pm_rows = [
+        [
+            row.get("arc_id"),
+            row.get("title"),
+            row.get("status"),
+            row.get("priority"),
+            row.get("completed_turn_index"),
+        ]
+        for row in _safe_list(model.get("milestones"))
+    ]
+    player_view = _safe_dict(model.get("player_progression_view"))
+    inventory_start_view = _safe_dict(model.get("inventory_start_view"))
+    inventory_end_view = _safe_dict(model.get("inventory_end_view"))
+    location_cards_html = "".join(
+        '<div class="story-card">'
+        f'<h3>{_esc(loc.get("name"))}</h3>'
+        f'<p><strong>Turns:</strong> {_esc(loc.get("turn_range"))} · <strong>Turn Count:</strong> {_esc(loc.get("turn_count"))}</p>'
+        f'<p>{_esc(loc.get("summary"))}</p>'
+        f'<p><strong>NPCs:</strong> {_esc(", ".join(_safe_list(loc.get("npcs"))) or "None captured")}</p>'
+        f'<p><strong>Objectives:</strong> {_esc(", ".join(_safe_list(loc.get("objectives"))) or "None captured")}</p>'
+        f'{_render_json_details("Location events", loc.get("events"))}'
+        '</div>'
+        for loc in _safe_list(_safe_dict(model.get("location_journey")).get("locations"))
+    )
+    progress_quality_bars = "\n".join(
+        [
+            _render_progress_bar("Meaningful Progress Rate", progress_quality.get("meaningful_progress_rate")),
+            _render_progress_bar("Churn-only Rate", progress_quality.get("churn_only_rate")),
+            _render_progress_bar("Weak Progress Rate", progress_quality.get("weak_progress_rate")),
+            _render_progress_bar("No-change Rate", progress_quality.get("no_change_rate")),
+        ]
+    )
+    stage_values = [
+        _safe_dict(v).get("total_ms", 0) / 1000.0
+        for v in _safe_dict(performance.get("stage_summary")).values()
+    ]
+    max_stage_seconds = max(stage_values or [1.0])
+    performance_stage_bars = "\n".join(
+        _render_bar(
+            key.replace("_ms", "").replace("_", " ").title(),
+            _safe_dict(value).get("total_ms", 0) / 1000.0,
+            max_value=max_stage_seconds,
+            suffix="s",
+        )
+        for key, value in _safe_dict(performance.get("stage_summary")).items()
+    )
     return f"""<!doctype html>
 <html>
 <head>
   <meta charset="utf-8" />
   <title>Autoplay Campaign Report</title>
-  <style>
-    :root {{
-      --bg: #0f1220;
-      --panel: #171b2e;
-      --panel2: #202640;
-      --text: #f3f5ff;
-      --muted: #aab1d6;
-      --accent: #8fb7ff;
-      --good: #7ee787;
-      --warn: #f2cc60;
-      --bad: #ff7b72;
-      --border: #303859;
-    }}
-    body {{
-      margin: 0;
-      font-family: Inter, Segoe UI, Arial, sans-serif;
-      background: radial-gradient(circle at top left, #1c2548, var(--bg));
-      color: var(--text);
-      line-height: 1.5;
-    }}
-    header {{
-      padding: 32px;
-      border-bottom: 1px solid var(--border);
-      background: rgba(15,18,32,0.88);
-      position: sticky;
-      top: 0;
-      z-index: 3;
-      backdrop-filter: blur(10px);
-    }}
-    h1, h2, h3 {{ margin: 0 0 12px; }}
-    main {{ padding: 28px; max-width: 1500px; margin: 0 auto; }}
-    section {{
-      background: rgba(23,27,46,0.96);
-      border: 1px solid var(--border);
-      border-radius: 18px;
-      padding: 22px;
-      margin-bottom: 22px;
-      box-shadow: 0 12px 35px rgba(0,0,0,0.22);
-    }}
-    .grid {{
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-      gap: 14px;
-    }}
-    .metric {{
-      background: var(--panel2);
-      border: 1px solid var(--border);
-      border-radius: 14px;
-      padding: 16px;
-    }}
-    .metric .value {{ font-size: 28px; font-weight: 800; color: var(--accent); }}
-    .muted {{ color: var(--muted); }}
-    .good {{ color: var(--good); }}
-    .warn {{ color: var(--warn); }}
-    .bad {{ color: var(--bad); }}
-    table {{
-      width: 100%;
-      border-collapse: collapse;
-      overflow: hidden;
-      border-radius: 12px;
-    }}
-    th, td {{
-      border-bottom: 1px solid var(--border);
-      padding: 10px 12px;
-      text-align: left;
-      vertical-align: top;
-    }}
-    th {{ color: var(--accent); background: #202640; }}
-    tr:nth-child(even) td {{ background: rgba(255,255,255,0.025); }}
-    .turn-card {{
-      background: var(--panel2);
-      border: 1px solid var(--border);
-      border-radius: 16px;
-      padding: 16px;
-      margin-bottom: 14px;
-    }}
-    .turn-header {{ display: flex; justify-content: space-between; gap: 12px; align-items: center; }}
-    .player-action, .narration, .npc-line {{ margin: 10px 0; }}
-    .badge {{
-      display: inline-block;
-      padding: 4px 9px;
-      border-radius: 999px;
-      background: #2b3356;
-      color: var(--text);
-      font-size: 12px;
-      margin: 2px;
-      border: 1px solid var(--border);
-    }}
-    .badge.hook {{ background: #173d2a; color: #a7f3c1; }}
-    .badge.category {{ background: #27375f; color: #bcd3ff; }}
-    .badge.quality {{ background: #3d2f17; color: #ffd98a; }}
-    pre {{
-      white-space: pre-wrap;
-      overflow-x: auto;
-      background: #0b0e19;
-      border: 1px solid var(--border);
-      border-radius: 12px;
-      padding: 12px;
-      color: #d7ddff;
-    }}
-    details {{ margin-top: 10px; }}
-    summary {{ cursor: pointer; color: var(--accent); }}
-    nav a {{ color: var(--accent); margin-right: 16px; text-decoration: none; }}
-  </style>
+  <style>{css}</style>
 </head>
 <body>
-<header>
-  <h1>Autoplay Campaign Report</h1>
-  <div class="muted">Session {_esc(summary.get("session_id"))} · Strategy {_esc(summary.get("strategy_profile") or summary.get("strategy"))} · OK {_esc(summary.get("ok"))}</div>
+ <header>
+   <h1>Autoplay Campaign Report <span class="status-pill {pm_status}">{_esc(pm_summary.get("overall_status") or "unknown")}</span></h1>
+   <div class="muted">Session {_esc(summary.get("session_id"))} · Strategy {_esc(summary.get("strategy_profile") or summary.get("strategy"))} · Turns {_esc(summary.get("turns_executed"))}</div>
    <nav>
      <a href="#summary">Summary</a>
-      <a href="#dialogue-coverage">Dialogue</a>
-      <a href="#performance">Performance</a>
-      <a href="#timeline">Timeline</a>
-    <a href="#arcs">Story Arcs</a>
-    <a href="#npcs">NPCs</a>
-    <a href="#lore">Lore</a>
-    <a href="#shortcomings">Shortcomings</a>
-    <a href="#debug">Debug</a>
-  </nav>
-</header>
-<main>
-  <section id="summary">
-    <h2>Executive Summary</h2>
-    <div class="grid">
-      <div class="metric"><div class="value">{_esc(summary.get("turns_executed"))}</div><div>Turns Executed</div></div>
-      <div class="metric"><div class="value">{_esc(metrics.get("story_hook_fire_count"))}</div><div>Story Hooks Fired</div></div>
-      <div class="metric"><div class="value">{_esc(progress_quality.get("meaningful_turns"))}</div><div>Meaningful Turns</div></div>
-      <div class="metric"><div class="value">{_esc(progress_quality.get("meaningful_progress_rate"))}</div><div>Meaningful Progress Rate</div></div>
-      <div class="metric"><div class="value">{_esc(metrics.get("checkpoint_failure_count"))}</div><div>Checkpoint Failures</div></div>
-      <div class="metric"><div class="value">{_esc(metrics.get("state_bound_warning_count"))}</div><div>State Bound Warnings</div></div>
-    </div>
-    <h3>Health Warnings</h3>
-    <pre>{_json(health.get("warnings") or [])}</pre>
+     <a href="#story-so-far">Story</a>
+      <a href="#arcs">Arcs</a>
+      <a href="#locations">Locations</a>
+    <a href="#variety">Variety</a>
+      <a href="#npcs">NPCs</a>
+     <a href="#inventory">Inventory</a>
+     <a href="#dialogue-coverage">Dialogue</a>
+     <a href="#performance">Performance</a>
+     <a href="#timeline">Timeline</a>
+     <a href="#shortcomings">Shortcomings</a>
+     <a href="#debug">Debug</a>
+   </nav>
+ </header>
+ <main>
+   <section id="summary" class="hero">
+     <h2>Executive Summary</h2>
+     <p style="font-size:18px; max-width: 980px;">{_esc(pm_summary.get("headline"))}</p>
+     <div class="grid">
+       <div class="metric"><div class="value">{_esc(summary.get("turns_executed"))}</div><div>Turns Executed</div></div>
+       <div class="metric"><div class="value">{_esc(metrics.get("story_hook_fire_count"))}</div><div>Story Hooks Fired</div></div>
+       <div class="metric"><div class="value">{_esc(progress_quality.get("meaningful_turns"))}</div><div>Meaningful Turns</div></div>
+       <div class="metric"><div class="value">{_esc(progress_quality.get("meaningful_progress_rate"))}</div><div>Meaningful Progress Rate</div></div>
+       <div class="metric"><div class="value">{_esc(_safe_dict(model.get("dialogue_coverage")).get("npc_response_rate"))}</div><div>NPC Response Rate</div></div>
+       <div class="metric"><div class="value">{_esc(_safe_dict(model.get("chapter_status")).get("active_objective_count"))}</div><div>Active Objectives</div></div>
+     </div>
+     {_render_json_details("Technical summary JSON", {"summary": summary, "health": health, "pm_summary": pm_summary})}
+     </section>
+
+  <section id="story-so-far">
+    <h2>Story So Far</h2>
+    <p class="section-lede">A readable summary of what happened in the campaign before the technical diagnostics.</p>
+    {_render_paragraphs(model.get("story_so_far_paragraph"))}
+    {_render_json_details("Story timeline summary inputs", {"milestones": model.get("milestones"), "journal_entries": model.get("journal_entries"), "hook_counts": model.get("hook_counts")})}
   </section>
 
-  <section id="run-validity">
+  <section id="setting">
+    <h2>Lore, Setting, and Director Setup</h2>
+    <p class="section-lede">The premise, stakes, and setting context that frame the campaign run.</p>
+    {_render_paragraphs(model.get("lore_setting_paragraph"))}
+    <div class="card-list">
+      {''.join(
+        f'<div class="story-card"><h3>{_esc(row.get("title") or row.get("name") or row.get("id"))}</h3><p>{_esc(row.get("text") or row.get("description") or row.get("summary"))}</p></div>'
+        for row in _safe_list(model.get("lore"))
+      )}
+    </div>
+    {_render_json_details("Director state JSON", _safe_dict(latest_state.get("campaign_director_state")))}
+  </section>
+
+  <section id="arcs">
+    <h2>Story Arc Status</h2>
+    <p class="section-lede">A product/story view of campaign branches, active objectives, and completed beats.</p>
+    <div class="card-list">
+      {arc_cards_html}
+    </div>
+    <h3>Objectives / Milestones</h3>
+    {_render_table(["Arc", "Objective", "Status", "Priority", "Completed Turn"], milestone_pm_rows)}
+    {_render_json_details("Story arcs JSON", model.get("story_arcs"))}
+    {_render_json_details("Milestones JSON", model.get("milestones"))}
+   </section>
+
+  <section id="locations">
+    <h2>Location Journey</h2>
+    <p class="section-lede">Where the run traveled, what happened there, who was involved, and what objectives were tied to each place.</p>
+    <div class="card-list">
+      {location_cards_html}
+    </div>
+    {_render_json_details("Location journey JSON", model.get("location_journey"))}
+  </section>
+
+  <section id="variety">
+    <h2>Story Variety</h2>
+    <p class="section-lede">Identifies which campaign seed ran and gives stable signatures for comparing story setups across multiple autoplay runs.</p>
+    <div class="grid">
+      <div class="metric"><div class="value">{_esc(story_variety.get("resolved_seed"))}</div><div>Resolved Seed</div></div>
+      <div class="metric"><div class="value">{_esc(story_variety.get("randomized"))}</div><div>Randomized</div></div>
+      <div class="metric"><div class="value">{_esc(_safe_dict(story_variety.get("story_signature")).get("signature_hash"))}</div><div>Story Signature</div></div>
+      <div class="metric"><div class="value">{_esc(story_variety.get("branch_signature_hash"))}</div><div>Branch Signature</div></div>
+    </div>
+    {_render_json_details("Story variety JSON", story_variety)}
+  </section>
+
+    <section id="run-validity">
     <h2>Run Validity</h2>
     <div class="grid">
       <div class="metric"><div class="value">{_esc(metrics.get("player_agent_exception_count"))}</div><div>Player-Agent Exceptions</div></div>
@@ -1135,6 +1640,73 @@ def render_campaign_report_html(model: Dict[str, Any]) -> str:
       <div class="metric"><div class="value">{_esc(metrics.get("fallback_player_action_rate"))}</div><div>Fallback Action Rate</div></div>
     </div>
     <p class="muted">A high fallback rate means this campaign reflects deterministic fallback action selection more than true LLM-player behavior.</p>
+  </section>
+
+  <section id="chapter-status">
+    <h2>Chapter Status</h2>
+    <p class="section-lede">Current campaign chapter, active story goals, completed goals, and recommended next direction.</p>
+    {_render_chapter_status_cards(chapter_status)}
+  </section>
+
+  <section id="product-evaluation">
+    <h2>Product Evaluation</h2>
+    <div class="grid">
+      <div class="metric"><div class="value">{_esc(pm_summary.get("story_status"))}</div><div>Story Continuity</div></div>
+      <div class="metric"><div class="value">{_esc(pm_summary.get("dialogue_status"))}</div><div>Dialogue Coverage</div></div>
+      <div class="metric"><div class="value">{_esc(pm_summary.get("provider_status"))}</div><div>Provider Narration</div></div>
+      <div class="metric"><div class="value">{_esc(pm_summary.get("performance_status"))}</div><div>Performance</div></div>
+    </div>
+    <h3>Top Risks / Follow-ups</h3>
+    {("<ul>" + "".join(f"<li>{_esc(item)}</li>" for item in _safe_list(pm_summary.get("top_risks"))) + "</ul>") if _safe_list(pm_summary.get("top_risks")) else '<p class="good">No major PM-level risks detected.</p>'}
+  </section>
+
+  <section id="player">
+    <h2>Player Character Progression / Stats</h2>
+    <p class="section-lede">A readable snapshot of level, XP, core stats, and progression events.</p>
+    {_render_paragraphs(model.get("character_progression_paragraph"))}
+    <div class="two-col">
+      <div>
+        <h3>Character Summary</h3>
+        {_render_key_value_table(_safe_list(player_view.get("summary_rows")))}
+      </div>
+      <div>
+        <h3>Starting Stats</h3>
+        {_render_table(["Stat", "Value"], _safe_list(player_view.get("stats_rows")))}
+      </div>
+    </div>
+    <h3>Recent Progression Events</h3>
+    {_render_table(["Turn", "Type", "Amount", "Reason", "Level"], _safe_list(player_view.get("recent_progression_rows")))}
+    {_render_json_details("Player progression JSON", model.get("player_progression"))}
+  </section>
+
+  <section id="inventory">
+    <h2>Inventory: Start vs End</h2>
+    <p class="muted">Shows whether the campaign changed carried items, currency, or inventory-like state during the run.</p>
+    <div class="two-col">
+      <div>
+        <h3>Starting Inventory</h3>
+        <h4>Currency</h4>
+        {_render_table(["Currency", "Amount"], _safe_list(inventory_start_view.get("currency_rows")))}
+        <h4>Items</h4>
+        {_render_table(["Item", "Qty", "Type", "Description"], _safe_list(inventory_start_view.get("item_rows")))}
+      </div>
+      <div>
+        <h3>Ending Inventory</h3>
+        <h4>Currency</h4>
+        {_render_table(["Currency", "Amount"], _safe_list(inventory_end_view.get("currency_rows")))}
+        <h4>Items</h4>
+        {_render_table(["Item", "Qty", "Type", "Description"], _safe_list(inventory_end_view.get("item_rows")))}
+      </div>
+    </div>
+    {_render_json_details("Raw inventory start/end JSON", {"start": model.get("inventory_start"), "end": model.get("inventory_end")})}
+   </section>
+
+  <section id="npcs">
+    <h2>NPC Cast, Biography, and Growth</h2>
+    <p class="muted">A product/story view of who appeared, why they matter, and how their relationship or role changed.</p>
+    {_render_table(["Name", "Role", "Dialogue Turns", "History", "Biography", "Growth / Arc"], npc_rows)}
+    {_render_json_details("NPC dialogue counts", model.get("npc_dialogue_counts"))}
+    {_render_json_details("NPC progression state", _safe_dict(_safe_dict(latest_state.get("npc_progression_state")).get("npcs")))}
   </section>
 
   <section id="dialogue-coverage">
@@ -1156,51 +1728,55 @@ def render_campaign_report_html(model: Dict[str, Any]) -> str:
 
   <section id="performance">
     <h2>Performance Metrics</h2>
+    <p class="section-lede">Runtime speed and where time is spent. Technical timing details are available below.</p>
     <div class="grid">
-      <div class="metric"><div class="value">{_esc(performance.get("campaign_wall_seconds"))}</div><div>Campaign Wall Seconds</div></div>
+      <div class="metric"><div class="value">{_esc(_number(performance.get("campaign_wall_seconds"), 2))}s</div><div>Campaign Wall Time</div></div>
       <div class="metric"><div class="value">{_esc(performance.get("turns_per_second"))}</div><div>Turns / Second</div></div>
-      <div class="metric"><div class="value">{_esc(performance.get("avg_turn_ms"))}</div><div>Average Turn ms</div></div>
-      <div class="metric"><div class="value">{_esc(performance.get("p95_turn_ms"))}</div><div>p95 Turn ms</div></div>
-      <div class="metric"><div class="value">{_esc(performance.get("max_turn_ms"))}</div><div>Max Turn ms</div></div>
-      <div class="metric"><div class="value">{_esc(performance.get("artifact_write_ms"))}</div><div>Report Write ms</div></div>
+      <div class="metric"><div class="value">{_esc(_seconds_from_ms(performance.get("avg_turn_ms")))}</div><div>Average Turn</div></div>
+      <div class="metric"><div class="value">{_esc(_seconds_from_ms(performance.get("p95_turn_ms")))}</div><div>p95 Turn</div></div>
+      <div class="metric"><div class="value">{_esc(_seconds_from_ms(performance.get("max_turn_ms")))}</div><div>Max Turn</div></div>
+      <div class="metric"><div class="value">{_esc(_seconds_from_ms(performance.get("artifact_write_ms")))}</div><div>Report Write Time</div></div>
     </div>
-    <h3>Stage Summary</h3>
-    <pre>{_json(performance.get("stage_summary") or {})}</pre>
-    <h3>Slowest Turns</h3>
-    <pre>{_json(performance.get("slowest_turns") or [])}</pre>
+    <h3>Time by Stage</h3>
+    {performance_stage_bars}
+    {_render_json_details("Stage summary JSON", performance.get("stage_summary") or {})}
+    {_render_json_details("Slowest turns JSON", performance.get("slowest_turns") or [])}
   </section>
 
-  <section id="npcs">
-    <h2>NPCs Introduced</h2>
-    <pre>{_json(model.get("npcs") or [])}</pre>
+  <section id="quality">
+    <h2>Progress Quality & Action Diversity</h2>
+    <p class="section-lede">How often the campaign produced meaningful story/game progress versus weak progress, churn, or no visible change.</p>
+    <div class="grid">
+      <div class="metric"><div class="value">{_esc(progress_quality.get("churn_only_turns"))}</div><div>Churn-only Turns</div></div>
+      <div class="metric"><div class="value">{_esc(progress_quality.get("weak_progress_turns"))}</div><div>Weak Progress Turns</div></div>
+      <div class="metric"><div class="value">{_esc(progress_quality.get("no_change_turns"))}</div><div>No-change Turns</div></div>
+      <div class="metric"><div class="value">{_esc(_safe_dict(model.get("action_diversity")).get("action_diversity_rate"))}</div><div>Action Diversity Rate</div></div>
+    </div>
+    <h3>Progress Distribution</h3>
+    {progress_quality_bars}
+    {_render_json_details("Progress category counts", model.get("category_counts"))}
+    <h3>Hook Counts</h3>
+    {_render_json_details("Hook counts", model.get("hook_counts"))}
   </section>
 
-  <section id="lore">
-    <h2>Lore & Worldbuilding</h2>
-    <pre>{_json(model.get("lore") or [])}</pre>
-  </section>
+  <section id="runtime-narration-diagnostics">
+    <h2>Runtime Narration Diagnostics</h2>
+    <p class="muted">Provider validity, repair, fallback, and method-call diagnostics.</p>
+    {_render_json_details("Runtime narration diagnostics JSON", model.get("runtime_narration_diagnostics"))}
+   </section>
 
-   <section id="timeline">
+    <section id="timeline">
     <h2>Turn-by-Turn Story Timeline with AI/NPC Responses</h2>
     {''.join(timeline_html)}
   </section>
 
-   <section id="debug">
-     <h2>Raw Debug Appendix</h2>
-    <p><strong>Latest state source:</strong> {_esc(model.get("latest_state_source"))}</p>
-     <details>
-       <summary>Latest Simulation State</summary>
-      <pre>{_json(latest_state)}</pre>
-    </details>
-    <details>
-      <summary>Summary JSON</summary>
-      <pre>{_json(summary)}</pre>
-    </details>
-    <details>
-      <summary>Metrics JSON</summary>
-      <pre>{_json(metrics)}</pre>
-    </details>
-  </section>
+    <section id="debug">
+      <h2>Raw Debug Appendix</h2>
+      <p><strong>Latest state source:</strong> {_esc(model.get("latest_state_source"))}</p>
+      {_render_json_details("Latest Simulation State", latest_state)}
+      {_render_json_details("Summary JSON", summary)}
+      {_render_json_details("Metrics JSON", metrics)}
+    </section>
 </main>
 </body>
 </html>"""

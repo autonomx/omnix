@@ -18,12 +18,6 @@ from tests.rpg.autoplay.base_runtime_response import (
     build_autoplay_base_response,
 )
 from tests.rpg.autoplay.campaign_report import write_campaign_report
-from tests.rpg.autoplay.performance import (
-    elapsed_ms,
-    now_perf,
-    summarize_performance,
-    timed_stage,
-)
 from tests.rpg.autoplay.checkpoints import (
     collect_state_bounds,
     validate_save_load_checkpoint,
@@ -36,6 +30,12 @@ from tests.rpg.autoplay.manual_turn_driver import (
     merge_autoplay_simulation_state,
     prepare_autoplay_manual_session,
     run_autoplay_manual_turn,
+)
+from tests.rpg.autoplay.performance import (
+    elapsed_ms,
+    now_perf,
+    summarize_performance,
+    timed_stage,
 )
 from tests.rpg.autoplay.player_agent import (
     build_player_agent_prompt,
@@ -55,11 +55,16 @@ from tests.rpg.autoplay.provider_adapter import (
     describe_provider_shape,
 )
 from tests.rpg.autoplay.reporting import write_autoplay_artifacts
-from tests.rpg.autoplay.seeding import seed_campaign
+from tests.rpg.autoplay.seeding import (
+    available_campaign_seeds,
+    resolve_campaign_seed_name,
+    seed_campaign,
+)
 from tests.rpg.autoplay.story_hooks import (
     apply_autoplay_story_hooks,
     autoplay_story_hook_player_hints,
 )
+from tests.rpg.autoplay.story_variety import compute_story_variety_metrics
 from tests.rpg.autoplay.strategy_profiles import (
     action_diversity_metrics,
     build_strategy_guidance,
@@ -237,7 +242,12 @@ def run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
     artifact_write_ms = 0.0
     session_id = args.session_id or f"autoplay_{uuid.uuid4().hex[:12]}"
     simulation_state: Dict[str, Any] = {}
-    seed_result = seed_campaign(simulation_state, args.scenario_seed)
+    seed_resolution = resolve_campaign_seed_name(
+        args.scenario_seed,
+        random_seed=args.random_seed,
+    )
+    seed_result = seed_campaign(simulation_state, seed_resolution["resolved_seed"])
+    seed_result["seed_resolution"] = seed_resolution
     authoritative_state: Dict[str, Any] = deepcopy(simulation_state)
     authoritative_state = _commit_authoritative_state(
         session_id=session_id,
@@ -420,7 +430,7 @@ def run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
             state_bounds = collect_state_bounds(
                 final_turn_state,
                 max_state_bytes=int(args.max_state_bytes),
-                max_root_count=int(args.max_state_roots),
+                max_root_count=int(args.max_roots),
                 max_list_length=int(args.max_state_list_length),
                 max_dict_keys=int(args.max_state_dict_keys),
             )
@@ -471,9 +481,10 @@ def run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
             "after_state_digest": after_digest,
             "progress_delta": progress_delta,
              "state_preservation_debug": state_preservation_debug,
-             "authoritative_state_digest": after_digest,
-             "committed_next_turn_digest": state_digest(last_committed_state),
-             "final_authoritative_state": final_turn_state,
+            "authoritative_state_digest": after_digest,
+            "committed_next_turn_digest": state_digest(last_committed_state),
+            "before_state": before_state if args.artifact_detail == "full" else {},
+            "final_authoritative_state": final_turn_state,
              "progress_quality": progress_quality,
             "state_bounds": state_bounds,
             "save_load_checkpoint": save_load_checkpoint,
@@ -553,18 +564,20 @@ def run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
             progress_quality_health.setdefault("warnings", [])
             progress_quality_health["warnings"].extend(post_objective_warnings)
             progress_quality_health["ok"] = False
-        health["ok"] = False
+            health["ok"] = False
     health["progress_quality"] = progress_quality_health
     summary = {
         "ok": bool(health.get("ok")) and not stopped_reason,
         "session_id": session_id,
         "scenario_seed": args.scenario_seed,
+        "resolved_scenario_seed": seed_resolution["resolved_seed"],
+        "seed_resolution": seed_resolution,
         "turn_runtime": "manual_harness",
         "server_runtime_used": False,
         "checkpoint_every": int(args.checkpoint_every or 0),
         "state_bounds_limits": {
             "max_state_bytes": int(args.max_state_bytes),
-            "max_state_roots": int(args.max_state_roots),
+            "max_roots": int(args.max_roots),
             "max_state_list_length": int(args.max_state_list_length),
             "max_state_dict_keys": int(args.max_state_dict_keys),
         },
@@ -607,7 +620,13 @@ def run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
         campaign_wall_ms=elapsed_ms(campaign_perf_start),
         artifact_write_ms=0.0,
     )
+    metrics["story_variety"] = compute_story_variety_metrics(
+        summary=summary,
+        state=last_committed_state,
+        transcript=transcript,
+    )
     summary["performance"] = metrics["performance"]
+    summary["story_variety"] = metrics["story_variety"]
 
     # Write the campaign report once for human-readable output.
     if args.artifact_detail == "full":
@@ -627,7 +646,13 @@ def run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
         campaign_wall_ms=elapsed_ms(campaign_perf_start),
         artifact_write_ms=artifact_write_ms,
     )
+    metrics["story_variety"] = compute_story_variety_metrics(
+        summary=summary,
+        state=last_committed_state,
+        transcript=transcript,
+    )
     summary["performance"] = metrics["performance"]
+    summary["story_variety"] = metrics["story_variety"]
 
     # Rewrite the report with final performance metrics so the HTML/JSON report
     # agrees with autoplay-performance.json.
@@ -659,6 +684,8 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--turns", type=int, default=25)
     parser.add_argument("--session-id", default="")
     parser.add_argument("--scenario-seed", default="tavern_story_seed")
+    parser.add_argument("--random-seed", type=int, default=None)
+    parser.add_argument("--list-scenario-seeds", action="store_true")
     parser.add_argument("--player-agent", choices=["llm", "fallback"], default="llm")
     parser.add_argument("--strategy", default="balanced_story_player")
     parser.add_argument("--player-agent-max-tokens", type=int, default=600)
@@ -679,7 +706,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--fail-on-regression-warnings", action="store_true")
     parser.add_argument("--checkpoint-every", type=int, default=0)
     parser.add_argument("--max-state-bytes", type=int, default=2_000_000)
-    parser.add_argument("--max-state-roots", type=int, default=80)
+    parser.add_argument("--max-roots", type=int, default=80)
     parser.add_argument("--max-state-list-length", type=int, default=500)
     parser.add_argument("--max-state-dict-keys", type=int, default=500)
     parser.add_argument("--allow-checkpoint-failures", action="store_true")
@@ -701,6 +728,10 @@ def build_arg_parser() -> argparse.ArgumentParser:
 def main(argv: List[str] | None = None) -> int:
     parser = build_arg_parser()
     args = parser.parse_args(argv)
+    if getattr(args, "list_scenario_seeds", False):
+        for name in available_campaign_seeds():
+            print(name)
+        return 0
     summary = run_autoplay_campaign(args)
 
     print("Autoplay RPG Campaign Summary")

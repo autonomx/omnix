@@ -98,7 +98,50 @@ class ChatCompletionToDictProvider:
         }
 
 
-def test_deterministic_narration_payload_for_social_turn_has_npc_line():
+class RetryThenValidProvider:
+    def __init__(self):
+        self.calls = 0
+
+    def chat_completion(self, messages, max_tokens=320):
+        self.calls += 1
+        if self.calls == 1:
+            content = (
+                '{"format_version":"rpg_narration_v2",'
+                '"narration":"Bran answers carefully.",'
+                '"action":"The question receives an answer.",'
+                '"npc":{"speaker":"Bran","line":"Tell me more."},'
+                '"reward":"",'
+                '"followup_hooks":["bad"]}'
+            )
+        else:
+            content = (
+                '{"format_version":"rpg_narration_v2",'
+                '"narration":"Bran answers carefully.",'
+                '"action":"The question receives an answer.",'
+                '"npc":{"speaker":"Bran","line":"Tell me more."},'
+                '"reward":"",'
+                '"followup_hooks":[]}'
+            )
+        return {"choices": [{"message": {"content": content}}]}
+
+
+def test_runtime_narration_retries_provider_before_repair():
+    provider = RetryThenValidProvider()
+    payload = build_runtime_narration_payload(
+        provider=provider,
+        player_action="I ask Bran about the witness.",
+        simulation_state={},
+        turn_contract={"summary": "Bran considers the question."},
+        prefer_provider=True,
+        max_provider_attempts=2,
+    )
+
+    diagnostics = payload["runtime_narration_diagnostics"]
+    assert provider.calls == 2
+    assert payload["source"] == "provider_runtime_narration"
+    assert diagnostics["provider_valid"] is True
+    assert diagnostics["provider_repaired"] is False
+    assert diagnostics["provider_retry_count"] == 1
     payload = build_deterministic_narration_payload(
         player_action="I ask Bran about the witness.",
         simulation_state={},

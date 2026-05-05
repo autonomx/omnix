@@ -115,6 +115,7 @@ def write_autoplay_artifacts(
     transcript_path = output_dir / "autoplay-transcript.json"
     metrics_path = output_dir / "autoplay-progress-metrics.json"
     performance_path = output_dir / "autoplay-performance.json"
+    story_variety_path = output_dir / "autoplay-story-variety.json"
     health_path = output_dir / "autoplay-health.json"
     html_path = output_dir / "autoplay-transcript.html"
     zip_path = output_dir / "autoplay-campaign-results.zip"
@@ -122,6 +123,7 @@ def write_autoplay_artifacts(
     write_json(summary_path, summary)
     write_json(metrics_path, metrics)
     write_json(performance_path, metrics.get("performance") or {})
+    write_json(story_variety_path, metrics.get("story_variety") or {})
     write_json(health_path, health)
     if artifact_detail == "full":
         write_json(transcript_path, transcript)
@@ -131,6 +133,7 @@ def write_autoplay_artifacts(
         zf.write(summary_path, summary_path.name)
         zf.write(metrics_path, metrics_path.name)
         zf.write(performance_path, performance_path.name)
+        zf.write(story_variety_path, story_variety_path.name)
         zf.write(health_path, health_path.name)
         if artifact_detail == "full":
             zf.write(transcript_path, transcript_path.name)
@@ -152,6 +155,7 @@ def write_autoplay_artifacts(
         "summary": str(summary_path),
         "metrics": str(metrics_path),
         "performance": str(performance_path),
+        "story_variety": str(story_variety_path),
         "health": str(health_path),
         "transcript": str(transcript_path) if artifact_detail == "full" else "",
         "html": str(html_path) if artifact_detail == "full" else "",
