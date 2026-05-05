@@ -1,3 +1,4 @@
+import json
 from argparse import Namespace
 from pathlib import Path
 
@@ -8,21 +9,32 @@ from tests.rpg.autoplay_llm_campaign import run_autoplay_campaign
 def test_autoplay_runner_fallback_executes_short_campaign(tmp_path: Path, monkeypatch):
     state_holder = {"state": {}}
 
-    def fake_prepare(*, session_id, simulation_state, reset_session_state=True):
+    def fake_prepare(*, session_id, simulation_state, reset_session_state=True, **kwargs):
         state_holder["state"] = dict(simulation_state)
         return {"session_id": session_id, "simulation_state": state_holder["state"]}
 
     def fake_load_state(session_id):
         return dict(state_holder["state"])
 
-    def fake_turn(*, session_id, player_action, turn_index):
+    def fake_turn(*, session_id, player_action, turn_index, **kwargs):
         state_holder["state"]["turns"] = int(state_holder["state"].get("turns") or 0) + 1
         return {
             "ok": True,
             "runtime_name": "manual_harness._run_one_manual_turn",
+            "turn_runtime": {
+                "name": "manual_harness._run_one_manual_turn",
+                "kind": "real",
+                "compatibility": False,
+            },
+            "runtime": {
+                "name": "manual_harness._run_one_manual_turn",
+                "kind": "real",
+                "compatibility": False,
+            },
+            "raw_result_keys": ["ok", "result", "session", "turn_contract"],
             "simulation_state": dict(state_holder["state"]),
             "turn_contract": {"player_action": player_action},
-            "narration": "You continue the objective.",
+            "narration": "You continue.",
         }
 
     monkeypatch.setattr("tests.rpg.autoplay_llm_campaign.prepare_autoplay_manual_session", fake_prepare)
@@ -83,6 +95,11 @@ def test_autoplay_runner_fallback_executes_short_campaign(tmp_path: Path, monkey
         action_diversity_window=12,
         min_action_diversity_rate=0.0,
         min_category_diversity_rate=0.0,
+        latency_profile="evaluation",
+        narration_mode="blocking",
+        checkpoint_mode="blocking",
+        background_workers=2,
+        provider_workers=1,
     )
 
     args = Namespace(
@@ -127,6 +144,11 @@ def test_autoplay_runner_fallback_executes_short_campaign(tmp_path: Path, monkey
         action_diversity_window=12,
         min_action_diversity_rate=0.0,
         min_category_diversity_rate=0.0,
+        latency_profile="evaluation",
+        narration_mode="blocking",
+        checkpoint_mode="blocking",
+        background_workers=2,
+        provider_workers=1,
     )
 
     summary = run_autoplay_campaign(args)
@@ -359,7 +381,7 @@ def test_commit_authoritative_state_preserves_next_turn_baseline(monkeypatch):
 
     saved = {}
 
-    def fake_prepare(*, session_id, simulation_state, reset_session_state=False):
+    def fake_prepare(*, session_id, simulation_state, reset_session_state=False, runtime_narration="blocking"):
         saved["session_id"] = session_id
         saved["simulation_state"] = simulation_state
         saved["reset_session_state"] = reset_session_state
@@ -460,14 +482,14 @@ def test_post_objective_flag_does_not_fail_without_warnings(tmp_path: Path, monk
         }
     }
 
-    def fake_prepare(*, session_id, simulation_state, reset_session_state=True):
+    def fake_prepare(*, session_id, simulation_state, reset_session_state=True, **kwargs):
         state_holder["state"] = dict(simulation_state)
         return {"session_id": session_id, "simulation_state": state_holder["state"]}
 
     def fake_load_state(session_id):
         return dict(state_holder["state"])
 
-    def fake_turn(*, session_id, player_action, turn_index):
+    def fake_turn(*, session_id, player_action, turn_index, **kwargs):
         state_holder["state"]["turns"] = int(state_holder["state"].get("turns") or 0) + 1
         return {
             "ok": True,
@@ -539,9 +561,126 @@ def test_post_objective_flag_does_not_fail_without_warnings(tmp_path: Path, monk
         action_diversity_window=12,
         min_action_diversity_rate=0.0,
         min_category_diversity_rate=0.0,
+        latency_profile="evaluation",
+        narration_mode="blocking",
+        checkpoint_mode="blocking",
+        background_workers=2,
+        provider_workers=1,
     )
 
     summary = run_autoplay_campaign(args)
 
     assert summary["health"]["ok"] is True
     assert summary["health"]["progress_quality"]["ok"] is True
+
+
+def test_deferred_narration_mode_does_not_leave_provider_source_in_blocking_turn(tmp_path: Path, monkeypatch):
+    state_holder = {"state": {}}
+    runtime_modes = []
+
+    def fake_prepare(*, session_id, simulation_state, reset_session_state=True, runtime_narration="blocking", **kwargs):
+        runtime_modes.append(runtime_narration)
+        state_holder["state"] = dict(simulation_state)
+        return {
+            "session_id": session_id,
+            "simulation_state": state_holder["state"],
+            "runtime_state": {
+                "autoplay_deferred_narration": runtime_narration == "deferred",
+                "performance": {
+                    "enable_live_narration_llm": runtime_narration != "deferred",
+                },
+            },
+        }
+
+    def fake_load_state(session_id):
+        return dict(state_holder["state"])
+
+    def fake_turn(*, session_id, player_action, turn_index, runtime_narration="blocking", **kwargs):
+        runtime_modes.append(runtime_narration)
+        state_holder["state"]["turns"] = int(state_holder["state"].get("turns") or 0) + 1
+        source = (
+            "deferred_runtime_narration_pending"
+            if runtime_narration == "deferred"
+            else "provider_runtime_narration"
+        )
+        return {
+            "ok": True,
+            "runtime_name": "manual_harness._run_one_manual_turn",
+            "simulation_state": dict(state_holder["state"]),
+            "turn_contract": {"player_action": player_action},
+            "narration": "Narration is being prepared...",
+            "narration_payload": {
+                "format_version": "rpg_narration_v2",
+                "source": source,
+                "narration": "Narration is being prepared...",
+                "action": "The action is resolved.",
+                "npc": {"speaker": "", "line": ""},
+                "reward": "",
+                "followup_hooks": [],
+            },
+        }
+
+    monkeypatch.setattr("tests.rpg.autoplay_llm_campaign.prepare_autoplay_manual_session", fake_prepare)
+    monkeypatch.setattr("tests.rpg.autoplay.manual_turn_driver.load_autoplay_simulation_state", fake_load_state)
+    monkeypatch.setattr("tests.rpg.autoplay_llm_campaign._call_turn_runtime", fake_turn)
+    monkeypatch.setattr(
+        "tests.rpg.autoplay_llm_campaign.validate_save_load_checkpoint",
+        lambda **kwargs: {"ok": True, "turn_index": kwargs["turn_index"]},
+    )
+
+    args = Namespace(
+        turns=1,
+        session_id="autoplay_deferred_regression_test",
+        scenario_seed="tavern_story_seed",
+        random_seed=None,
+        list_scenario_seeds=False,
+        player_agent="fallback",
+        strategy="balanced_story_player",
+        player_agent_max_tokens=200,
+        suggested_action_limit=12,
+        artifact_detail="full",
+        latency_profile="playable",
+        narration_mode="deferred",
+        checkpoint_mode="background",
+        background_workers=1,
+        provider_workers=1,
+        output_dir=str(tmp_path),
+        base_url="http://127.0.0.1:5000",
+        start_app_server=False,
+        server_startup_timeout=1,
+        max_repeated_actions=5,
+        max_no_progress_turns=0,
+        stop_on_loop=False,
+        fail_on_runtime_error=True,
+        fail_on_compatibility_turn_runtime=True,
+        max_player_agent_fallback_rate=1.0,
+        fail_on_regression_warnings=True,
+        debug_provider_shape=False,
+        debug_turn_runtime_shape=False,
+        checkpoint_every=0,
+        max_state_bytes=2_000_000,
+        max_roots=80,
+        max_state_list_length=500,
+        max_state_dict_keys=500,
+        allow_checkpoint_failures=False,
+        allow_state_bound_warnings=False,
+        min_meaningful_progress_rate=0.0,
+        max_churn_only_rate=1.0,
+        max_churn_only_streak=0,
+        max_objective_target_no_progress_streak=0,
+        fail_on_post_objective_weak_progress=False,
+        autoplay_base_response="deterministic",
+        base_response_max_tokens=220,
+        fail_on_dialogue_coverage_gap=False,
+        action_diversity_window=12,
+        min_action_diversity_rate=0.0,
+        min_category_diversity_rate=0.0,
+    )
+
+    summary = run_autoplay_campaign(args)
+    transcript = json.loads((tmp_path / "autoplay-transcript.json").read_text(encoding="utf-8"))
+    source = transcript[0]["turn_result"]["narration_payload"]["source"]
+
+    assert summary["ok"] is True
+    assert "deferred" in runtime_modes
+    assert source != "provider_runtime_narration"

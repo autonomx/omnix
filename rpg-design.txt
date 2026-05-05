@@ -1,1285 +1,732 @@
-Below is a literal apply-this-patch diff spec for:
-
-N34-N36 — Campaign Seed Variants + Story Variety Metrics v1
-
-This adds multiple deterministic campaign seeds, reproducible random seed selection, and report metrics proving whether autoplay runs are actually producing different stories.
-
-Bundle N34-N36 — Campaign Seed Variants + Story Variety Metrics v1
-GOAL:
-Stop every autoplay campaign from feeling like the same Rusty Flagon witness story.
-
-Current problem:
-- --scenario-seed tavern_story_seed always loads the same setup.
-- story_hooks.py progresses through the same fixed witness branch.
-- LLM player phrasing varies, but story structure is mostly identical.
-- This is good for regression testing, but bad for measuring RPG story variety.
-
-This bundle adds:
-1. Multiple deterministic campaign seeds.
-2. --scenario-seed random.
-3. --random-seed for reproducible random selection.
-4. Seed metadata in summary/report.
-5. Story variety metrics.
-6. Report section explaining campaign seed, premise, NPCs, locations, objectives, and branch signature.
-7. Tests proving different seeds produce different arcs/lore/NPCs/objectives.
-Design
-
-Keep the current Rusty Flagon seed as the regression default:
-
-tavern_story_seed
-
-Add new seeds:
-
-caravan_ambush_seed
-missing_apprentice_seed
-haunted_mill_seed
-noble_blackmail_seed
-
-For v1, these seeds can reuse the existing generic runtime systems and define their own:
-
-campaign_director_state
-lore_state
-npc_profile_state
-npc_progression_state
-player_state
-inventory_state
-story_arc_state
-story_arc_milestone_state
-campaign_journal_state
-story_event_queue_state
-autoplay_story_hook_state
-
-The new seeds do not need full custom hook chains yet. They should still produce different report setup, story arcs, NPCs, locations, and initial objectives. N37-N39 can make the director dynamically plan branches.
-
-Patch 1 — Add seed registry and random selection
-
-Patch:
-
-src/tests/rpg/autoplay/seeding.py
-
-Add imports near top:
-
-*** Begin Patch
-*** Update File: src/tests/rpg/autoplay/seeding.py
-@@
- from __future__ import annotations
- 
-+import random
- from typing import Any, Dict
-*** End Patch
-
-Add registry constants near top-level:
-
-*** Begin Patch
-*** Update File: src/tests/rpg/autoplay/seeding.py
-@@
-+DEFAULT_CAMPAIGN_SEED = "tavern_story_seed"
-+
-+
-+CAMPAIGN_SEED_NAMES = [
-+    "tavern_story_seed",
-+    "caravan_ambush_seed",
-+    "missing_apprentice_seed",
-+    "haunted_mill_seed",
-+    "noble_blackmail_seed",
-+]
-+
-+
-+def available_campaign_seeds() -> list[str]:
-+    return list(CAMPAIGN_SEED_NAMES)
-+
-+
-+def resolve_campaign_seed_name(
-+    requested_seed: str,
-+    *,
-+    random_seed: int | None = None,
-+) -> Dict[str, Any]:
-+    requested = (requested_seed or DEFAULT_CAMPAIGN_SEED).strip()
-+    if requested == "random":
-+        rng = random.Random(random_seed)
-+        resolved = rng.choice(CAMPAIGN_SEED_NAMES)
-+        return {
-+            "requested_seed": requested,
-+            "resolved_seed": resolved,
-+            "random_seed": random_seed,
-+            "available_seeds": available_campaign_seeds(),
-+            "randomized": True,
-+        }
-+    if requested not in CAMPAIGN_SEED_NAMES:
-+        raise ValueError(
-+            f"unknown_campaign_seed:{requested}; available={','.join(CAMPAIGN_SEED_NAMES)}"
-+        )
-+    return {
-+        "requested_seed": requested,
-+        "resolved_seed": requested,
-+        "random_seed": random_seed,
-+        "available_seeds": available_campaign_seeds(),
-+        "randomized": False,
-+    }
-+
-*** End Patch
-Patch 2 — Add reusable seed helpers
-
-Patch:
-
-src/tests/rpg/autoplay/seeding.py
-
-Add helpers before existing seed_tavern_story_campaign(...):
-
-*** Begin Patch
-*** Update File: src/tests/rpg/autoplay/seeding.py
-@@
-+def _reset_seed_roots(simulation_state: Dict[str, Any]) -> None:
-+    for key in [
-+        "campaign_director_state",
-+        "campaign_journal_state",
-+        "inventory_state",
-+        "lore_state",
-+        "npc_profile_state",
-+        "npc_progression_state",
-+        "player_state",
-+        "story_arc_state",
-+        "story_arc_milestone_state",
-+        "story_event_queue_state",
-+        "autoplay_story_hook_state",
-+    ]:
-+        simulation_state.pop(key, None)
-+
-+
-+def _seed_common_player(
-+    simulation_state: Dict[str, Any],
-+    *,
-+    gold: int = 15,
-+    silver: int = 8,
-+) -> None:
-+    simulation_state.setdefault("player_state", {}).update(
-+        {
-+            "character_id": "player",
-+            "name": "The Player",
-+            "level": 1,
-+            "experience": 0,
-+            "experience_to_next_level": 100,
-+            "inventory": {
-+                "currency": {
-+                    "gold": gold,
-+                    "silver": silver,
-+                },
-+                "items": [
-+                    {
-+                        "item_id": "item:travelers_cloak",
-+                        "name": "Traveler's Cloak",
-+                        "quantity": 1,
-+                        "type": "gear",
-+                        "description": "A weathered cloak suitable for road travel.",
-+                    },
-+                    {
-+                        "item_id": "item:iron_dagger",
-+                        "name": "Iron Dagger",
-+                        "quantity": 1,
-+                        "type": "weapon",
-+                        "description": "A simple backup blade.",
-+                    },
-+                    {
-+                        "item_id": "item:rations",
-+                        "name": "Trail Rations",
-+                        "quantity": 3,
-+                        "type": "consumable",
-+                        "description": "Basic food for short travel.",
-+                    },
-+                    {
-+                        "item_id": "item:waterskin",
-+                        "name": "Waterskin",
-+                        "quantity": 1,
-+                        "type": "gear",
-+                        "description": "A filled waterskin.",
-+                    },
-+                    {
-+                        "item_id": "item:journal",
-+                        "name": "Plain Journal",
-+                        "quantity": 1,
-+                        "type": "tool",
-+                        "description": "A small book for notes, rumors, and leads.",
-+                    },
-+                ],
-+            },
-+            "stats": {
-+                "strength": 10,
-+                "dexterity": 10,
-+                "constitution": 10,
-+                "intelligence": 11,
-+                "wisdom": 12,
-+                "charisma": 10,
-+            },
-+            "progression_log": [
-+                {
-+                    "turn_index": 0,
-+                    "type": "campaign_start",
-+                    "summary": "The player begins as a level 1 adventurer with basic travel gear.",
-+                }
-+            ],
-+        }
-+    )
-+    simulation_state.setdefault("inventory_state", {}).update(
-+        simulation_state.get("player_state", {}).get("inventory", {})
-+    )
-+
-+
-+def _seed_arc(
-+    simulation_state: Dict[str, Any],
-+    *,
-+    arc_id: str,
-+    title: str,
-+    stage: str,
-+    milestones: list[Dict[str, Any]],
-+    pressure: int = 35,
-+) -> None:
-+    simulation_state.setdefault("story_arc_state", {}).setdefault("arcs", {})[arc_id] = {
-+        "arc_id": arc_id,
-+        "title": title,
-+        "stage": stage,
-+        "status": "active",
-+        "pressure": pressure,
-+    }
-+    simulation_state.setdefault("story_arc_milestone_state", {}).setdefault("arcs", {})[
-+        arc_id
-+    ] = {
-+        "milestones": milestones,
-+    }
-+
-+
-+def _seed_initial_journal(
-+    simulation_state: Dict[str, Any],
-+    *,
-+    entry_id: str,
-+    title: str,
-+    text: str,
-+    tags: list[str] | None = None,
-+) -> None:
-+    simulation_state.setdefault("campaign_journal_state", {}).setdefault("entries", []).append(
-+        {
-+            "entry_id": entry_id,
-+            "turn_index": 0,
-+            "title": title,
-+            "text": text,
-+            "tags": tags or ["campaign_start"],
-+        }
-+    )
-+
-+
-+def _seed_event(
-+    simulation_state: Dict[str, Any],
-+    *,
-+    event_id: str,
-+    title: str,
-+    summary: str,
-+    severity: str = "medium",
-+) -> None:
-+    simulation_state.setdefault("story_event_queue_state", {}).setdefault("queue", []).append(
-+        {
-+            "event_id": event_id,
-+            "turn_index": 0,
-+            "title": title,
-+            "summary": summary,
-+            "severity": severity,
-+        }
-+    )
-+
-+
-+def _seed_npc_profiles(
-+    simulation_state: Dict[str, Any],
-+    profiles: Dict[str, Dict[str, Any]],
-+) -> None:
-+    simulation_state.setdefault("npc_profile_state", {}).setdefault("profiles", {}).update(profiles)
-+    progression = simulation_state.setdefault("npc_progression_state", {}).setdefault("npcs", {})
-+    for profile in profiles.values():
-+        name = profile.get("name") or profile.get("npc_id") or "Unknown NPC"
-+        progression.setdefault(
-+            name,
-+            {
-+                "name": name,
-+                "level": 1,
-+                "disposition": profile.get("disposition", "neutral"),
-+                "trust": 0,
-+                "growth_stage": profile.get("growth_stage", "introduced"),
-+                "progression_log": [
-+                    {
-+                        "turn_index": 0,
-+                        "summary": profile.get("growth")
-+                        or profile.get("biography")
-+                        or f"{name} is introduced to the campaign.",
-+                    }
-+                ],
-+            },
-+        )
-+
-*** End Patch
-Patch 3 — Refactor tavern seed to use common player helper
-
-Patch:
-
-src/tests/rpg/autoplay/seeding.py
-
-Inside seed_tavern_story_campaign(...), replace the large player_state block you recently added with:
-
-*** Begin Patch
-*** Update File: src/tests/rpg/autoplay/seeding.py
-@@
--    simulation_state.setdefault("player_state", {}).update(
--        {
--            "character_id": "player",
--            "name": "The Player",
--            "level": 1,
--            "experience": 0,
--            "experience_to_next_level": 100,
--            "inventory": {
--                "currency": {
--                    "gold": 15,
--                    "silver": 8,
--                },
--                "items": [
--                    ...
--                ],
--            },
--            "stats": {
--                "strength": 10,
--                "dexterity": 10,
--                "constitution": 10,
--                "intelligence": 11,
--                "wisdom": 12,
--                "charisma": 10,
--            },
--            "progression_log": [
--                {
--                    "turn_index": 0,
--                    "type": "campaign_start",
--                    "summary": "The player begins as a level 1 adventurer investigating rumors at the Rusty Flagon.",
--                }
--            ],
--        }
--    )
--    simulation_state.setdefault("inventory_state", {}).update(
--        simulation_state.get("player_state", {}).get("inventory", {})
--    )
-+    _seed_common_player(simulation_state)
-+    simulation_state["player_state"]["progression_log"][0][
-+        "summary"
-+    ] = "The player begins as a level 1 adventurer investigating rumors at the Rusty Flagon."
-*** End Patch
-
-If applying this manually is awkward due to the large block, keep the existing block and skip this patch. The new seeds still work either way.
-
-Patch 4 — Add new campaign seed functions
-
-Patch:
-
-src/tests/rpg/autoplay/seeding.py
-
-Add after seed_tavern_story_campaign(...):
-
-*** Begin Patch
-*** Update File: src/tests/rpg/autoplay/seeding.py
-@@
- def seed_tavern_story_campaign(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
-@@
-     return {
-         "ok": True,
-         "seed": "tavern_story_seed",
-         "hook_result": hook_result,
-     }
-+
-+
-+def seed_caravan_ambush_campaign(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
-+    _reset_seed_roots(simulation_state)
-+    _seed_common_player(simulation_state, gold=12, silver=5)
-+    simulation_state["campaign_director_state"] = {
-+        "campaign_title": "Ash on the Trade Road",
-+        "premise": "The player reaches a trade road shortly after a merchant caravan is ambushed and left burning near a dry ravine.",
-+        "dramatic_question": "Can the player identify who attacked the caravan before survivors scatter and evidence is lost?",
-+        "opening_tension": "Merchants fear the attack was too coordinated to be ordinary banditry.",
-+        "director_goals": [
-+            "Introduce a road encounter with immediate stakes.",
-+            "Offer investigation, rescue, and pursuit paths.",
-+            "Reveal whether the ambush points to bandits, mercenaries, or an inside betrayal.",
-+        ],
-+        "stakes": [
-+            "Survivors may die without aid.",
-+            "Trade through the region may collapse.",
-+            "The attackers may strike the next caravan.",
-+        ],
-+    }
-+    simulation_state["lore_state"] = {
-+        "entries": [
-+            {
-+                "id": "lore:trade_road",
-+                "title": "The Old Trade Road",
-+                "text": "A long road connecting market towns, exposed ravines, and isolated caravan stops.",
-+            },
-+            {
-+                "id": "lore:ember_ravine",
-+                "title": "Ember Ravine",
-+                "text": "A dry ravine where smoke lingers after the caravan attack and tracks are difficult to read.",
-+            },
-+        ]
-+    }
-+    _seed_npc_profiles(
-+        simulation_state,
-+        {
-+            "npc:Selka": {
-+                "npc_id": "npc:Selka",
-+                "name": "Selka",
-+                "role": "Caravan Guard",
-+                "history": "Selka survived the ambush but lost most of her company.",
-+                "biography": "A disciplined guard trying to hide panic behind procedure.",
-+                "growth": "Begins defensive and suspicious; may become an ally if survivors are protected.",
-+                "growth_stage": "wounded_guard",
-+            },
-+            "npc:Orren": {
-+                "npc_id": "npc:Orren",
-+                "name": "Orren",
-+                "role": "Merchant Factor",
-+                "history": "Orren managed the caravan's contracts and knows what cargo mattered most.",
-+                "biography": "A nervous merchant whose fear may conceal useful details.",
-+                "growth": "Begins evasive; may reveal the cargo was targeted.",
-+                "growth_stage": "fearful_merchant",
-+            },
-+        },
-+    )
-+    _seed_arc(
-+        simulation_state,
-+        arc_id="arc:caravan_ambush",
-+        title="Caravan Ambush",
-+        stage="aftermath",
-+        pressure=55,
-+        milestones=[
-+            {
-+                "milestone_id": "milestone:aid_survivors",
-+                "title": "Aid the survivors",
-+                "objective_text": "Stabilize survivors and learn what happened during the ambush.",
-+                "status": "active",
-+                "priority": 90,
-+            },
-+            {
-+                "milestone_id": "milestone:inspect_wreckage",
-+                "title": "Inspect the wreckage",
-+                "objective_text": "Search the burned wagons and ravine for evidence.",
-+                "status": "active",
-+                "priority": 80,
-+            },
-+            {
-+                "milestone_id": "milestone:identify_attackers",
-+                "title": "Identify the attackers",
-+                "objective_text": "Determine whether the attack was banditry, mercenary work, or betrayal.",
-+                "status": "active",
-+                "priority": 70,
-+            },
-+        ],
-+    )
-+    _seed_initial_journal(
-+        simulation_state,
-+        entry_id="journal:caravan_ambush:start",
-+        title="Smoke on the Trade Road",
-+        text="A caravan has been ambushed near Ember Ravine. Survivors and evidence remain at risk.",
-+    )
-+    _seed_event(
-+        simulation_state,
-+        event_id="event:caravan_ambush:aftermath",
-+        title="Caravan Ambush Aftermath",
-+        summary="The player arrives after a coordinated attack on a merchant caravan.",
-+        severity="high",
-+    )
-+    return {"ok": True, "seed": "caravan_ambush_seed", "hook_result": {"ok": True}}
-+
-+
-+def seed_missing_apprentice_campaign(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
-+    _reset_seed_roots(simulation_state)
-+    _seed_common_player(simulation_state, gold=10, silver=12)
-+    simulation_state["campaign_director_state"] = {
-+        "campaign_title": "The Missing Apprentice",
-+        "premise": "A village apothecary begs for help after an apprentice vanishes while gathering herbs near the old standing stones.",
-+        "dramatic_question": "Can the player find the apprentice before fear turns the village against the wrong suspect?",
-+        "opening_tension": "The village is split between superstition, suspicion, and practical urgency.",
-+        "director_goals": [
-+            "Introduce a village mystery with social pressure.",
-+            "Create suspects with partial truths.",
-+            "Branch toward rescue, accusation, or supernatural investigation.",
-+        ],
-+        "stakes": [
-+            "The apprentice may still be alive.",
-+            "A false accusation could tear the village apart.",
-+            "The standing stones may hide a larger danger.",
-+        ],
-+    }
-+    simulation_state["lore_state"] = {
-+        "entries": [
-+            {
-+                "id": "lore:greenhollow",
-+                "title": "Greenhollow Village",
-+                "text": "A small herb-growing village where everyone knows each other's secrets.",
-+            },
-+            {
-+                "id": "lore:standing_stones",
-+                "title": "The Old Standing Stones",
-+                "text": "Ancient stones outside the village, avoided after sunset and blamed for disappearances.",
-+            },
-+        ]
-+    }
-+    _seed_npc_profiles(
-+        simulation_state,
-+        {
-+            "npc:Maela": {
-+                "npc_id": "npc:Maela",
-+                "name": "Maela",
-+                "role": "Apothecary",
-+                "history": "Maela trained the missing apprentice and feels responsible.",
-+                "biography": "A practical healer fighting panic with work.",
-+                "growth": "Begins desperate; may become a grounded source of village truth.",
-+                "growth_stage": "desperate_mentor",
-+            },
-+            "npc:Tovin": {
-+                "npc_id": "npc:Tovin",
-+                "name": "Tovin",
-+                "role": "Miller's Son",
-+                "history": "Tovin argued with the apprentice before the disappearance.",
-+                "biography": "Defensive, frightened, and hiding something small that looks larger than it is.",
-+                "growth": "Begins as a suspect; may become a witness.",
-+                "growth_stage": "suspect",
-+            },
-+        },
-+    )
-+    _seed_arc(
-+        simulation_state,
-+        arc_id="arc:missing_apprentice",
-+        title="Missing Apprentice",
-+        stage="village_alarm",
-+        pressure=45,
-+        milestones=[
-+            {
-+                "milestone_id": "milestone:question_maela",
-+                "title": "Question Maela",
-+                "objective_text": "Learn where the apprentice was last seen.",
-+                "status": "active",
-+                "priority": 90,
-+            },
-+            {
-+                "milestone_id": "milestone:search_herb_path",
-+                "title": "Search the herb path",
-+                "objective_text": "Follow the route toward the standing stones.",
-+                "status": "active",
-+                "priority": 80,
-+            },
-+            {
-+                "milestone_id": "milestone:separate_truth_from_rumor",
-+                "title": "Separate truth from rumor",
-+                "objective_text": "Resolve which village rumors are backed by evidence.",
-+                "status": "active",
-+                "priority": 70,
-+            },
-+        ],
-+    )
-+    _seed_initial_journal(
-+        simulation_state,
-+        entry_id="journal:missing_apprentice:start",
-+        title="A Vanished Apprentice",
-+        text="An apprentice disappeared while gathering herbs near the old standing stones.",
-+    )
-+    _seed_event(
-+        simulation_state,
-+        event_id="event:missing_apprentice:village_alarm",
-+        title="Village Alarm",
-+        summary="Greenhollow is frightened after the apprentice vanishes.",
-+        severity="medium",
-+    )
-+    return {"ok": True, "seed": "missing_apprentice_seed", "hook_result": {"ok": True}}
-+
-+
-+def seed_haunted_mill_campaign(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
-+    _reset_seed_roots(simulation_state)
-+    _seed_common_player(simulation_state, gold=9, silver=14)
-+    simulation_state["campaign_director_state"] = {
-+        "campaign_title": "The Haunted Mill",
-+        "premise": "A riverside mill has gone silent after three nights of strange lights and impossible knocking from inside the locked wheelhouse.",
-+        "dramatic_question": "Can the player discover whether the haunting is real, staged, or something worse?",
-+        "opening_tension": "The mill feeds the town, and every silent day pushes the town closer to panic.",
-+        "director_goals": [
-+            "Introduce a gothic investigation location.",
-+            "Create ambiguity between supernatural and human causes.",
-+            "Branch toward exorcism, exposure, or rescue.",
-+        ],
-+        "stakes": [
-+            "The town's food supply is threatened.",
-+            "Fear may turn into violence.",
-+            "Someone may be trapped or hiding inside the mill.",
-+        ],
-+    }
-+    simulation_state["lore_state"] = {
-+        "entries": [
-+            {
-+                "id": "lore:graywater_mill",
-+                "title": "Graywater Mill",
-+                "text": "A river mill whose locked wheelhouse has become the center of local fear.",
-+            },
-+            {
-+                "id": "lore:mill_ghost",
-+                "title": "The Miller's Ghost",
-+                "text": "A local legend claiming a drowned miller knocks from beneath the wheel when debts go unpaid.",
-+            },
-+        ]
-+    }
-+    _seed_npc_profiles(
-+        simulation_state,
-+        {
-+            "npc:Elian": {
-+                "npc_id": "npc:Elian",
-+                "name": "Elian",
-+                "role": "Miller",
-+                "history": "Elian locked the mill after hearing knocking from inside.",
-+                "biography": "A proud worker shaken by fear and public blame.",
-+                "growth": "Begins ashamed and afraid; may regain courage if the truth is found.",
-+                "growth_stage": "frightened_miller",
-+            },
-+            "npc:Sister Vale": {
-+                "npc_id": "npc:SisterVale",
-+                "name": "Sister Vale",
-+                "role": "Village Priest",
-+                "history": "Sister Vale has been asked to bless the mill but doubts the simple ghost story.",
-+                "biography": "Calm, observant, and careful about superstition.",
-+                "growth": "Begins cautious; may support either spiritual or practical resolution.",
-+                "growth_stage": "careful_priest",
-+            },
-+        },
-+    )
-+    _seed_arc(
-+        simulation_state,
-+        arc_id="arc:haunted_mill",
-+        title="Haunted Mill",
-+        stage="locked_wheelhouse",
-+        pressure=50,
-+        milestones=[
-+            {
-+                "milestone_id": "milestone:enter_mill",
-+                "title": "Enter the mill",
-+                "objective_text": "Find a safe way into Graywater Mill.",
-+                "status": "active",
-+                "priority": 90,
-+            },
-+            {
-+                "milestone_id": "milestone:investigate_knocking",
-+                "title": "Investigate the knocking",
-+                "objective_text": "Determine what is making sounds inside the wheelhouse.",
-+                "status": "active",
-+                "priority": 80,
-+            },
-+            {
-+                "milestone_id": "milestone:restore_mill",
-+                "title": "Restore the mill",
-+                "objective_text": "Resolve the threat so the town's mill can work again.",
-+                "status": "active",
-+                "priority": 70,
-+            },
-+        ],
-+    )
-+    _seed_initial_journal(
-+        simulation_state,
-+        entry_id="journal:haunted_mill:start",
-+        title="The Silent Mill",
-+        text="Graywater Mill has stopped, and the town fears a haunting.",
-+    )
-+    _seed_event(
-+        simulation_state,
-+        event_id="event:haunted_mill:silent_wheel",
-+        title="Silent Wheel",
-+        summary="The town's mill has stopped after strange lights and knocking.",
-+        severity="medium",
-+    )
-+    return {"ok": True, "seed": "haunted_mill_seed", "hook_result": {"ok": True}}
-+
-+
-+def seed_noble_blackmail_campaign(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
-+    _reset_seed_roots(simulation_state)
-+    _seed_common_player(simulation_state, gold=20, silver=4)
-+    simulation_state["campaign_director_state"] = {
-+        "campaign_title": "Letters Beneath the Seal",
-+        "premise": "A minor noble hires the player after blackmail letters threaten to expose a secret before the midsummer court.",
-+        "dramatic_question": "Can the player uncover the blackmailer without becoming a pawn in court politics?",
-+        "opening_tension": "Every suspect has something to gain, and every truth carries social cost.",
-+        "director_goals": [
-+            "Introduce intrigue instead of wilderness investigation.",
-+            "Create social choices with reputation consequences.",
-+            "Branch toward loyalty, exposure, or double-cross.",
-+        ],
-+        "stakes": [
-+            "A household may collapse.",
-+            "An innocent servant may be blamed.",
-+            "The player may gain or lose noble favor.",
-+        ],
-+    }
-+    simulation_state["lore_state"] = {
-+        "entries": [
-+            {
-+                "id": "lore:midsummer_court",
-+                "title": "Midsummer Court",
-+                "text": "A seasonal gathering where alliances, marriages, debts, and scandals become weapons.",
-+            },
-+            {
-+                "id": "lore:wax_seals",
-+                "title": "Wax Seals and Secret Letters",
-+                "text": "Among minor nobles, forged seals and intercepted letters can ruin families faster than swords.",
-+            },
-+        ]
-+    }
-+    _seed_npc_profiles(
-+        simulation_state,
-+        {
-+            "npc:LadyArven": {
-+                "npc_id": "npc:LadyArven",
-+                "name": "Lady Arven",
-+                "role": "Minor Noble",
-+                "history": "Lady Arven received blackmail letters before court.",
-+                "biography": "Composed in public but privately cornered.",
-+                "growth": "Begins controlling and guarded; may learn to trust or manipulate the player.",
-+                "growth_stage": "cornered_patron",
-+            },
-+            "npc:Perrin": {
-+                "npc_id": "npc:Perrin",
-+                "name": "Perrin",
-+                "role": "House Steward",
-+                "history": "Perrin manages household correspondence and knows who handles seals.",
-+                "biography": "Precise, loyal, and possibly too knowledgeable.",
-+                "growth": "Begins formal; may become ally, suspect, or scapegoat.",
-+                "growth_stage": "formal_steward",
-+            },
-+        },
-+    )
-+    _seed_arc(
-+        simulation_state,
-+        arc_id="arc:noble_blackmail",
-+        title="Noble Blackmail",
-+        stage="sealed_threat",
-+        pressure=60,
-+        milestones=[
-+            {
-+                "milestone_id": "milestone:inspect_letters",
-+                "title": "Inspect the letters",
-+                "objective_text": "Examine the blackmail letters, seals, handwriting, and delivery method.",
-+                "status": "active",
-+                "priority": 90,
-+            },
-+            {
-+                "milestone_id": "milestone:question_household",
-+                "title": "Question the household",
-+                "objective_text": "Interview servants, stewards, and visitors without causing scandal.",
-+                "status": "active",
-+                "priority": 80,
-+            },
-+            {
-+                "milestone_id": "milestone:identify_blackmailer",
-+                "title": "Identify the blackmailer",
-+                "objective_text": "Find who is using the secret and decide what to do with the truth.",
-+                "status": "active",
-+                "priority": 70,
-+            },
-+        ],
-+    )
-+    _seed_initial_journal(
-+        simulation_state,
-+        entry_id="journal:noble_blackmail:start",
-+        title="Letters Beneath the Seal",
-+        text="Lady Arven is being blackmailed before midsummer court.",
-+    )
-+    _seed_event(
-+        simulation_state,
-+        event_id="event:noble_blackmail:sealed_threat",
-+        title="Sealed Threat",
-+        summary="Blackmail letters threaten a noble household before court.",
-+        severity="high",
-+    )
-+    return {"ok": True, "seed": "noble_blackmail_seed", "hook_result": {"ok": True}}
-*** End Patch
-Patch 5 — Update seed_campaign(...)
-
-Patch:
-
-src/tests/rpg/autoplay/seeding.py
-
-Find seed_campaign(...). Replace it with:
-
-*** Begin Patch
-*** Update File: src/tests/rpg/autoplay/seeding.py
-@@
- def seed_campaign(simulation_state: Dict[str, Any], scenario_seed: str) -> Dict[str, Any]:
--    if scenario_seed == "tavern_story_seed":
--        return seed_tavern_story_campaign(simulation_state)
--    raise ValueError(f"unknown_campaign_seed:{scenario_seed}")
-+    if scenario_seed == "tavern_story_seed":
-+        return seed_tavern_story_campaign(simulation_state)
-+    if scenario_seed == "caravan_ambush_seed":
-+        return seed_caravan_ambush_campaign(simulation_state)
-+    if scenario_seed == "missing_apprentice_seed":
-+        return seed_missing_apprentice_campaign(simulation_state)
-+    if scenario_seed == "haunted_mill_seed":
-+        return seed_haunted_mill_campaign(simulation_state)
-+    if scenario_seed == "noble_blackmail_seed":
-+        return seed_noble_blackmail_campaign(simulation_state)
-+    raise ValueError(
-+        f"unknown_campaign_seed:{scenario_seed}; available={','.join(CAMPAIGN_SEED_NAMES)}"
-+    )
-*** End Patch
-Patch 6 — Add random seed CLI support
-
-Patch:
-
-src/tests/rpg/autoplay_llm_campaign.py
-
-Update imports:
-
-*** Begin Patch
-*** Update File: src/tests/rpg/autoplay_llm_campaign.py
-@@
--from tests.rpg.autoplay.seeding import seed_campaign
-+from tests.rpg.autoplay.seeding import (
-+    available_campaign_seeds,
-+    resolve_campaign_seed_name,
-+    seed_campaign,
-+)
-*** End Patch
-
-Add CLI args near --scenario-seed:
-
-*** Begin Patch
-*** Update File: src/tests/rpg/autoplay_llm_campaign.py
-@@
-     parser.add_argument("--scenario-seed", default="tavern_story_seed")
-+    parser.add_argument("--random-seed", type=int, default=None)
-+    parser.add_argument("--list-scenario-seeds", action="store_true")
-*** End Patch
-
-Where main() parses args, before running campaign, add:
-
-*** Begin Patch
-*** Update File: src/tests/rpg/autoplay_llm_campaign.py
-@@
- def main() -> int:
-     args = build_parser().parse_args()
-+    if getattr(args, "list_scenario_seeds", False):
-+        for name in available_campaign_seeds():
-+            print(name)
-+        return 0
-     summary = run_autoplay_campaign(args)
-*** End Patch
-
-Inside run_autoplay_campaign(...), replace:
-
-seed_result = seed_campaign(simulation_state, args.scenario_seed)
-
-with:
-
-*** Begin Patch
-*** Update File: src/tests/rpg/autoplay_llm_campaign.py
-@@
-     simulation_state: Dict[str, Any] = {}
--    seed_result = seed_campaign(simulation_state, args.scenario_seed)
-+    seed_resolution = resolve_campaign_seed_name(
-+        args.scenario_seed,
-+        random_seed=args.random_seed,
-+    )
-+    seed_result = seed_campaign(simulation_state, seed_resolution["resolved_seed"])
-+    seed_result["seed_resolution"] = seed_resolution
-*** End Patch
-
-In summary dict, add:
-
-*** Begin Patch
-*** Update File: src/tests/rpg/autoplay_llm_campaign.py
-@@
-         "scenario_seed": args.scenario_seed,
-+        "resolved_scenario_seed": seed_resolution["resolved_seed"],
-+        "seed_resolution": seed_resolution,
-         "seed_result": seed_result,
-*** End Patch
-
-If summary is built in a different location, add those fields there.
-
-Patch 7 — Add story variety metrics module
-
-Add:
-
-src/tests/rpg/autoplay/story_variety.py
-*** Begin Patch
-*** Add File: src/tests/rpg/autoplay/story_variety.py
+1. Create background pipeline
+--- /dev/null
++++ src/tests/rpg/autoplay/parallel_pipeline.py
+@@ -0,0 +1,240 @@
 +from __future__ import annotations
 +
-+import hashlib
-+import json
++import traceback
++from concurrent.futures import Future, ThreadPoolExecutor, as_completed
++from copy import deepcopy
 +from typing import Any, Dict, List
++
++from app.rpg.narration.runtime_narration_contract import build_runtime_narration_payload
++
++from tests.rpg.autoplay.checkpoints import validate_save_load_checkpoint
++from tests.rpg.autoplay.performance import elapsed_ms, now_perf
++from tests.rpg.autoplay.progress import state_digest
 +
 +
 +def _safe_dict(value: Any) -> Dict[str, Any]:
 +    return value if isinstance(value, dict) else {}
 +
 +
-+def _safe_list(value: Any) -> List[Any]:
-+    return value if isinstance(value, list) else []
-+
-+
 +def _safe_str(value: Any) -> str:
 +    return value if isinstance(value, str) else ""
 +
 +
-+def _hash(value: Any) -> str:
-+    text = json.dumps(value, ensure_ascii=False, sort_keys=True, default=str)
-+    return hashlib.sha256(text.encode("utf-8")).hexdigest()[:16]
++def freeze_snapshot(value: Any) -> Any:
++    """Create a worker-owned copy so background jobs never touch live state."""
++    return deepcopy(value)
 +
 +
-+def extract_story_signature_from_state(state: Dict[str, Any]) -> Dict[str, Any]:
-+    director = _safe_dict(state.get("campaign_director_state"))
-+    lore_entries = _safe_list(_safe_dict(state.get("lore_state")).get("entries"))
-+    npc_profiles = _safe_dict(_safe_dict(state.get("npc_profile_state")).get("profiles"))
-+    arcs = _safe_dict(_safe_dict(state.get("story_arc_state")).get("arcs"))
-+    milestones_by_arc = _safe_dict(_safe_dict(state.get("story_arc_milestone_state")).get("arcs"))
-+
-+    milestone_titles = []
-+    for bucket in milestones_by_arc.values():
-+        for milestone in _safe_list(_safe_dict(bucket).get("milestones")):
-+            milestone = _safe_dict(milestone)
-+            title = _safe_str(milestone.get("title") or milestone.get("milestone_id"))
-+            if title:
-+                milestone_titles.append(title)
-+
-+    signature = {
-+        "campaign_title": director.get("campaign_title"),
-+        "premise": director.get("premise"),
-+        "dramatic_question": director.get("dramatic_question"),
-+        "lore_titles": sorted(
-+            _safe_str(row.get("title") or row.get("id"))
-+            for row in lore_entries
-+            if _safe_str(row.get("title") or row.get("id"))
-+        ),
-+        "npc_names": sorted(
-+            _safe_str(profile.get("name") or key)
-+            for key, profile in npc_profiles.items()
-+            if _safe_str(_safe_dict(profile).get("name") or key)
-+        ),
-+        "arc_titles": sorted(
-+            _safe_str(arc.get("title") or arc_id)
-+            for arc_id, arc in arcs.items()
-+            if _safe_str(_safe_dict(arc).get("title") or arc_id)
-+        ),
-+        "milestone_titles": sorted(milestone_titles),
-+    }
-+    signature["signature_hash"] = _hash(signature)
-+    return signature
-+
-+
-+def compute_story_variety_metrics(
++def _deferred_narration_job(
 +    *,
-+    summary: Dict[str, Any],
-+    state: Dict[str, Any],
-+    transcript: List[Dict[str, Any]],
++    provider: Any,
++    session_id: str,
++    turn_index: int,
++    player_action: str,
++    simulation_state: Dict[str, Any],
++    turn_contract: Dict[str, Any],
++    prefer_provider: bool,
 +) -> Dict[str, Any]:
-+    signature = extract_story_signature_from_state(state)
-+    hook_ids = []
-+    dialogue_sources = []
-+    for row in transcript:
-+        for hook in _safe_list(row.get("story_hook_result", {}).get("fired_hooks")):
-+            hook = _safe_dict(hook)
-+            if hook.get("hook_id"):
-+                hook_ids.append(str(hook.get("hook_id")))
-+        if row.get("dialogue_source"):
-+            dialogue_sources.append(str(row.get("dialogue_source")))
-+    branch_path = {
-+        "hook_ids": hook_ids,
-+        "dialogue_sources": dialogue_sources,
++    started = now_perf()
++    before_digest = state_digest(_safe_dict(simulation_state))
++    frozen_state = freeze_snapshot(_safe_dict(simulation_state))
++    try:
++        payload = build_runtime_narration_payload(
++            provider=provider,
++            player_action=player_action,
++            simulation_state=frozen_state,
++            turn_contract=freeze_snapshot(_safe_dict(turn_contract)),
++            prefer_provider=bool(prefer_provider),
++        )
++        after_digest = state_digest(_safe_dict(simulation_state))
++        return {
++            "ok": True,
++            "kind": "deferred_narration",
++            "session_id": session_id,
++            "turn_index": turn_index,
++            "narration_status": "ready",
++            "narration_job_id": f"narration:{session_id}:{turn_index}",
++            "narration": _safe_str(payload.get("narration")),
++            "npc": _safe_dict(payload.get("npc")),
++            "narration_payload": payload,
++            "worker_ms": elapsed_ms(started),
++            "state_digest_before": before_digest,
++            "state_digest_after": after_digest,
++            "mutated_authoritative_snapshot": before_digest != after_digest,
++        }
++    except Exception as exc:
++        return {
++            "ok": False,
++            "kind": "deferred_narration",
++            "session_id": session_id,
++            "turn_index": turn_index,
++            "narration_status": "error",
++            "narration_job_id": f"narration:{session_id}:{turn_index}",
++            "error": f"{type(exc).__name__}: {exc}",
++            "traceback": traceback.format_exc(),
++            "worker_ms": elapsed_ms(started),
++        }
++
++
++def _checkpoint_job(
++    *,
++    session_id: str,
++    turn_index: int,
++    checkpoint_dir: Any,
++    simulation_state: Dict[str, Any],
++) -> Dict[str, Any]:
++    started = now_perf()
++    try:
++        result = validate_save_load_checkpoint(
++            session_id=session_id,
++            turn_index=turn_index,
++            checkpoint_dir=checkpoint_dir,
++            simulation_state=freeze_snapshot(_safe_dict(simulation_state)),
++        )
++        result["kind"] = "checkpoint"
++        result["turn_index"] = turn_index
++        result["worker_ms"] = elapsed_ms(started)
++        return result
++    except Exception as exc:
++        return {
++            "ok": False,
++            "kind": "checkpoint",
++            "turn_index": turn_index,
++            "error": f"{type(exc).__name__}: {exc}",
++            "traceback": traceback.format_exc(),
++            "worker_ms": elapsed_ms(started),
++        }
++
++
++class AutoplayBackgroundPipeline:
++    """Thread pool for non-authoritative autoplay jobs.
++
++    The simulation turn still runs synchronously. Jobs submitted here must only
++    receive frozen snapshots and may only return presentation, diagnostic,
++    checkpoint, or report artifacts.
++    """
++
++    def __init__(self, *, background_workers: int = 4, provider_workers: int = 1) -> None:
++        self.background_workers = max(1, int(background_workers or 1))
++        self.provider_workers = max(1, int(provider_workers or 1))
++        self._background_executor = ThreadPoolExecutor(
++            max_workers=self.background_workers,
++            thread_name_prefix="rpg-autoplay-bg",
++        )
++        self._provider_executor = ThreadPoolExecutor(
++            max_workers=self.provider_workers,
++            thread_name_prefix="rpg-autoplay-provider",
++        )
++        self._futures: List[Future] = []
++
++    def submit_deferred_narration(
++        self,
++        *,
++        provider: Any,
++        session_id: str,
++        turn_index: int,
++        player_action: str,
++        simulation_state: Dict[str, Any],
++        turn_contract: Dict[str, Any],
++        prefer_provider: bool = True,
++    ) -> str:
++        job_id = f"narration:{session_id}:{turn_index}"
++        future = self._provider_executor.submit(
++            _deferred_narration_job,
++            provider=provider,
++            session_id=session_id,
++            turn_index=turn_index,
++            player_action=player_action,
++            simulation_state=freeze_snapshot(simulation_state),
++            turn_contract=freeze_snapshot(turn_contract),
++            prefer_provider=prefer_provider,
++        )
++        self._futures.append(future)
++        return job_id
++
++    def submit_checkpoint(
++        self,
++        *,
++        session_id: str,
++        turn_index: int,
++        checkpoint_dir: Any,
++        simulation_state: Dict[str, Any],
++    ) -> str:
++        job_id = f"checkpoint:{session_id}:{turn_index}"
++        future = self._background_executor.submit(
++            _checkpoint_job,
++            session_id=session_id,
++            turn_index=turn_index,
++            checkpoint_dir=checkpoint_dir,
++            simulation_state=freeze_snapshot(simulation_state),
++        )
++        self._futures.append(future)
++        return job_id
++
++    def drain(self) -> List[Dict[str, Any]]:
++        results: List[Dict[str, Any]] = []
++        futures = list(self._futures)
++        self._futures.clear()
++        for future in as_completed(futures):
++            try:
++                value = future.result()
++                results.append(
++                    value if isinstance(value, dict)
++                    else {"ok": False, "error": "worker_returned_non_dict"}
++                )
++            except Exception as exc:
++                results.append(
++                    {
++                        "ok": False,
++                        "kind": "unknown",
++                        "error": f"{type(exc).__name__}: {exc}",
++                        "traceback": traceback.format_exc(),
++                    }
++                )
++        return results
++
++    def shutdown(self) -> None:
++        self._provider_executor.shutdown(wait=True)
++        self._background_executor.shutdown(wait=True)
++
++
++def attach_background_results_to_transcript(
++    transcript: List[Dict[str, Any]],
++    results: List[Dict[str, Any]],
++) -> Dict[str, Any]:
++    by_turn = {
++        int(row.get("turn_index") or 0): row
++        for row in transcript
++        if isinstance(row, dict)
 +    }
-+    return {
-+        "requested_seed": summary.get("scenario_seed"),
-+        "resolved_seed": summary.get("resolved_scenario_seed") or summary.get("scenario_seed"),
-+        "random_seed": _safe_dict(summary.get("seed_resolution")).get("random_seed"),
-+        "randomized": _safe_dict(summary.get("seed_resolution")).get("randomized", False),
-+        "story_signature": signature,
-+        "branch_path": branch_path,
-+        "branch_signature_hash": _hash(branch_path),
-+        "story_variety_key": _hash(
-+            {
-+                "seed": summary.get("resolved_scenario_seed") or summary.get("scenario_seed"),
-+                "story_signature_hash": signature.get("signature_hash"),
-+                "branch_signature_hash": _hash(branch_path),
-+            }
-+        ),
++    summary = {
++        "total_jobs": len(results),
++        "ok_jobs": 0,
++        "failed_jobs": 0,
++        "narration_jobs": 0,
++        "checkpoint_jobs": 0,
++        "background_job_seconds": 0.0,
++        "errors": [],
 +    }
-*** End Patch
-Patch 8 — Wire story variety metrics into runner
-
-Patch:
-
-src/tests/rpg/autoplay_llm_campaign.py
-
-Add import:
-
-*** Begin Patch
-*** Update File: src/tests/rpg/autoplay_llm_campaign.py
-@@
++    for result in results:
++        if result.get("ok"):
++            summary["ok_jobs"] += 1
++        else:
++            summary["failed_jobs"] += 1
++            if result.get("error"):
++                summary["errors"].append(result.get("error"))
++
++        summary["background_job_seconds"] += float(result.get("worker_ms") or 0.0) / 1000.0
++        turn_index = int(result.get("turn_index") or 0)
++        row = by_turn.get(turn_index)
++        if not row:
++            continue
++
++        if result.get("kind") == "deferred_narration":
++            summary["narration_jobs"] += 1
++            row["deferred_narration_result"] = result
++            row["narration_status"] = result.get("narration_status")
++            if result.get("ok") and result.get("narration"):
++                row["narration"] = result.get("narration")
++                row.setdefault("turn_result", {})["narration"] = result.get("narration")
++                row.setdefault("turn_result", {})["structured_narration"] = (
++                    result.get("narration_payload") or {}
++                )
++                row.setdefault("turn_result", {})["narration_payload"] = (
++                    result.get("narration_payload") or {}
++                )
++        elif result.get("kind") == "checkpoint":
++            summary["checkpoint_jobs"] += 1
++            row["save_load_checkpoint"] = result
++
++    summary["background_job_seconds"] = round(summary["background_job_seconds"], 3)
++    return summary
+2. Let runtime narration be disabled for deferred mode
+--- src/app/rpg/session/runtime.py
++++ src/app/rpg/session/runtime.py
+@@ -13555,13 +13555,15 @@
+         or session.get("simulation_state")
+         or {}
+     )
++    runtime_state = _safe_dict(_safe_dict(final_result.get("session")).get("runtime_state")) or _safe_dict(session.get("runtime_state"))
++    prefer_runtime_provider_narration = _runtime_narration_enabled(runtime_state)
+     narration_payload = build_runtime_narration_payload(
+-        provider=get_runtime_llm_provider(),
++        provider=get_runtime_llm_provider() if prefer_runtime_provider_narration else None,
+         player_action=player_input,
+         simulation_state=simulation_state,
+         turn_contract=turn_contract,
+-        prefer_provider=True,
++        prefer_provider=prefer_runtime_provider_narration,
+     )
+     final_result["narration_payload"] = narration_payload
+     final_result["structured_narration"] = narration_payload
+3. Add deferred narration mode to manual autoplay driver
+--- src/tests/rpg/autoplay/manual_turn_driver.py
++++ src/tests/rpg/autoplay/manual_turn_driver.py
+@@ -231,6 +231,7 @@
+     session_id: str,
+     simulation_state: Dict[str, Any],
+     reset_session_state: bool = True,
++    runtime_narration: str = "blocking",
+ ) -> Dict[str, Any]:
+@@ -250,7 +251,15 @@
+     session["simulation_state"] = sim
+-    session.setdefault("runtime_state", {})
++    runtime_state = session.setdefault("runtime_state", {})
++    runtime_state.setdefault("performance", {})
++    if runtime_narration == "deferred":
++        runtime_state["performance"]["enable_live_narration_llm"] = False
++        runtime_state["performance"]["enable_narration_retry"] = False
++        runtime_state["autoplay_deferred_narration"] = True
++    else:
++        runtime_state["autoplay_deferred_narration"] = False
++
+     session.setdefault("setup_payload", {})
+     session["setup_payload"].setdefault("metadata", {})
+     session["setup_payload"]["metadata"]["simulation_state"] = deepcopy(sim)
+@@ -292,11 +301,22 @@
+     console_llm: bool = False,
+     console_llm_raw: bool = False,
+     console_llm_max_chars: int = 10_000,
++    runtime_narration: str = "blocking",
+ ) -> Dict[str, Any]:
+     """Run one autoplay turn through the manual harness turn function."""
+     pre_turn_session = load_autoplay_manual_session(session_id)
++    if runtime_narration == "deferred":
++        runtime_state = pre_turn_session.setdefault("runtime_state", {})
++        runtime_state.setdefault("performance", {})
++        runtime_state["performance"]["enable_live_narration_llm"] = False
++        runtime_state["performance"]["enable_narration_retry"] = False
++        runtime_state["autoplay_deferred_narration"] = True
++        _save_manual_session_for_test(session_id, pre_turn_session)
++        _save_through_app_session_service(pre_turn_session)
++
+     pre_turn_state = deepcopy(_safe_dict(pre_turn_session.get("simulation_state")))
+4. Add playability latency metrics
+--- src/tests/rpg/autoplay/performance.py
++++ src/tests/rpg/autoplay/performance.py
+@@ -91,6 +91,8 @@
+         "progress_eval_ms",
+         "state_bounds_ms",
+         "record_build_ms",
++        "playable_blocking_ms",
++        "background_enqueue_ms",
+     ]
+@@ -119,6 +121,12 @@
+     turn_count = len(transcript)
+     campaign_seconds = campaign_wall_ms / 1000.0 if campaign_wall_ms else 0.0
++    playable_blocking_ms = [
++        _safe_float(row.get("playable_blocking_ms"))
++        for row in turn_timings
++        if _safe_float(row.get("playable_blocking_ms")) > 0
++    ]
++
+     return {
+         "turn_count": turn_count,
+         "campaign_wall_ms": round(campaign_wall_ms, 3),
+@@ -127,6 +135,9 @@
+         "artifact_write_ms": round(artifact_write_ms, 3),
+         "turns_per_second": round(turn_count / campaign_seconds, 4) if campaign_seconds else 0.0,
+         "avg_turn_ms": round(statistics.mean(total_turn_ms), 3) if total_turn_ms else 0.0,
++        "avg_playable_blocking_ms": round(statistics.mean(playable_blocking_ms), 3) if playable_blocking_ms else 0.0,
++        "p95_playable_blocking_ms": _percentile(playable_blocking_ms, 0.95),
++        "max_playable_blocking_ms": round(max(playable_blocking_ms), 3) if playable_blocking_ms else 0.0,
+         "median_turn_ms": round(statistics.median(total_turn_ms), 3) if total_turn_ms else 0.0,
+         "p90_turn_ms": _percentile(total_turn_ms, 0.90),
+         "p95_turn_ms": _percentile(total_turn_ms, 0.95),
+5. Wire deferred/background pipeline into autoplay runner
+--- src/tests/rpg/autoplay_llm_campaign.py
++++ src/tests/rpg/autoplay_llm_campaign.py
+@@ -22,6 +22,10 @@
+ from tests.rpg.autoplay.manual_turn_driver import (
+     merge_autoplay_simulation_state,
+     prepare_autoplay_manual_session,
+     run_autoplay_manual_turn,
+ )
++from tests.rpg.autoplay.parallel_pipeline import (
++    AutoplayBackgroundPipeline,
++    attach_background_results_to_transcript,
++)
  from tests.rpg.autoplay.performance import (
      elapsed_ms,
      now_perf,
-     summarize_performance,
-     timed_stage,
- )
-+from tests.rpg.autoplay.story_variety import compute_story_variety_metrics
-*** End Patch
-
-After performance_metrics / before artifact writing, add to metrics:
-
-*** Begin Patch
-*** Update File: src/tests/rpg/autoplay_llm_campaign.py
-@@
-     metrics["performance"] = summarize_performance(
-         transcript=transcript,
-         campaign_wall_ms=elapsed_ms(campaign_perf_start),
-         artifact_write_ms=0.0,
+@@ -151,6 +155,7 @@
+     session_id: str,
+     player_action: str,
+     turn_index: int,
++    runtime_narration: str = "blocking",
+ ) -> Dict[str, Any]:
+     return run_autoplay_manual_turn(
+         session_id=session_id,
+@@ -160,6 +165,7 @@
+         target_channel="autoplay_runtime",
+         console_llm=False,
+         console_llm_raw=False,
++        runtime_narration=runtime_narration,
      )
-+    metrics["story_variety"] = compute_story_variety_metrics(
-+        summary=summary,
-+        state=last_committed_state,
-+        transcript=transcript,
-+    )
-     summary["performance"] = metrics["performance"]
-+    summary["story_variety"] = metrics["story_variety"]
-*** End Patch
-
-Also update the later recomputation after artifact timing:
-
-*** Begin Patch
-*** Update File: src/tests/rpg/autoplay_llm_campaign.py
-@@
-     metrics["performance"] = summarize_performance(
-         transcript=transcript,
-         campaign_wall_ms=elapsed_ms(campaign_perf_start),
-         artifact_write_ms=artifact_write_ms,
-     )
-+    metrics["story_variety"] = compute_story_variety_metrics(
-+        summary=summary,
-+        state=last_committed_state,
-+        transcript=transcript,
-+    )
-     summary["performance"] = metrics["performance"]
-+    summary["story_variety"] = metrics["story_variety"]
-*** End Patch
-Patch 9 — Add story variety to campaign report
-
-Patch:
-
-src/tests/rpg/autoplay/campaign_report.py
-
-In render_campaign_report_html(...), near:
-
-performance = _safe_dict(metrics.get("performance"))
-
-add:
-
-*** Begin Patch
-*** Update File: src/tests/rpg/autoplay/campaign_report.py
-@@
-     performance = _safe_dict(metrics.get("performance"))
-+    story_variety = _safe_dict(metrics.get("story_variety"))
-     latest_state = _safe_dict(model.get("latest_state"))
-*** End Patch
-
-Add nav link:
-
-*** Begin Patch
-*** Update File: src/tests/rpg/autoplay/campaign_report.py
-@@
-     <a href="#locations">Locations</a>
-+    <a href="#variety">Variety</a>
-     <a href="#npcs">NPCs</a>
-*** End Patch
-
-Add report section after Location Journey:
-
-*** Begin Patch
-*** Update File: src/tests/rpg/autoplay/campaign_report.py
-@@
-   <section id="locations">
-@@
-     {_render_json_details("Location journey JSON", model.get("location_journey"))}
-   </section>
-+
-+  <section id="variety">
-+    <h2>Story Variety</h2>
-+    <p class="section-lede">Identifies which campaign seed ran and gives stable signatures for comparing story setups across multiple autoplay runs.</p>
-+    <div class="grid">
-+      <div class="metric"><div class="value">{_esc(story_variety.get("resolved_seed"))}</div><div>Resolved Seed</div></div>
-+      <div class="metric"><div class="value">{_esc(story_variety.get("randomized"))}</div><div>Randomized</div></div>
-+      <div class="metric"><div class="value">{_esc(_safe_dict(story_variety.get("story_signature")).get("signature_hash"))}</div><div>Story Signature</div></div>
-+      <div class="metric"><div class="value">{_esc(story_variety.get("branch_signature_hash"))}</div><div>Branch Signature</div></div>
-+    </div>
-+    {_render_json_details("Story variety JSON", story_variety)}
-+  </section>
+@@ -260,7 +266,13 @@
+     if args.debug_provider_shape and provider_shape:
+         print("Player-agent provider shape:")
+         print(provider_shape)
  
-   <section id="journal">
-*** End Patch
-Patch 10 — Write story variety standalone JSON
-
-Patch:
-
-src/tests/rpg/autoplay/reporting.py
-
-In write_autoplay_artifacts(...), after performance JSON:
-
-*** Begin Patch
-*** Update File: src/tests/rpg/autoplay/reporting.py
-@@
-     performance_path = output_dir / "autoplay-performance.json"
-     performance_path.write_text(
-         json.dumps(metrics.get("performance") or {}, ensure_ascii=False, indent=2, sort_keys=True, default=str),
-         encoding="utf-8",
++    pipeline = AutoplayBackgroundPipeline(
++        background_workers=int(args.background_workers),
++        provider_workers=int(args.provider_workers),
++    )
++    background_results_summary: Dict[str, Any] = {}
++
+     transcript: List[Dict[str, Any]] = []
+@@ -331,6 +343,7 @@
+                     session_id=session_id,
+                     player_action=player_action,
+                     turn_index=turn_index,
++                    runtime_narration=args.narration_mode,
+                 )
+@@ -437,14 +450,27 @@
+         save_load_checkpoint = {}
+         checkpoint_every = int(args.checkpoint_every or 0)
+         if checkpoint_every > 0 and turn_index % checkpoint_every == 0:
+-            with timed_stage(turn_performance, "checkpoint_ms"):
+-                save_load_checkpoint = validate_save_load_checkpoint(
+-                    session_id=session_id,
+-                    turn_index=turn_index,
+-                    checkpoint_dir=checkpoint_dir,
+-                    simulation_state=final_turn_state,
+-                )
++            if args.checkpoint_mode == "background":
++                with timed_stage(turn_performance, "background_enqueue_ms"):
++                    checkpoint_job_id = pipeline.submit_checkpoint(
++                        session_id=session_id,
++                        turn_index=turn_index,
++                        checkpoint_dir=checkpoint_dir,
++                        simulation_state=final_turn_state,
++                    )
++                save_load_checkpoint = {
++                    "ok": True,
++                    "status": "pending",
++                    "job_id": checkpoint_job_id,
++                    "mode": "background",
++                }
++            else:
++                with timed_stage(turn_performance, "checkpoint_ms"):
++                    save_load_checkpoint = validate_save_load_checkpoint(
++                        session_id=session_id,
++                        turn_index=turn_index,
++                        checkpoint_dir=checkpoint_dir,
++                        simulation_state=final_turn_state,
++                    )
+             simulation_state = deepcopy(final_turn_state)
+@@ -452,6 +478,35 @@
+         last_committed_state = deepcopy(final_turn_state)
+         simulation_state = deepcopy(final_turn_state)
+         narration = _extract_narration(turn_result)
++        narration_status = "ready"
++        narration_job_id = ""
++        if args.narration_mode == "deferred":
++            narration_status = "pending"
++            with timed_stage(turn_performance, "background_enqueue_ms"):
++                narration_job_id = pipeline.submit_deferred_narration(
++                    provider=provider,
++                    session_id=session_id,
++                    turn_index=turn_index,
++                    player_action=player_action,
++                    simulation_state=final_turn_state,
++                    turn_contract=turn_result.get("turn_contract") or {},
++                    prefer_provider=args.player_agent == "llm",
++                )
++            if not narration:
++                narration = "Narration is being prepared..."
++
++        playable_blocking_keys = [
++            "player_agent_ms",
++            "manual_turn_ms",
++            "story_hooks_ms",
++            "base_response_ms",
++            "progress_eval_ms",
++            "state_bounds_ms",
++            "record_build_ms",
++        ]
++        if args.checkpoint_mode == "blocking":
++            playable_blocking_keys.append("checkpoint_ms")
++        turn_performance["playable_blocking_ms"] = round(
++            sum(float(turn_performance.get(key) or 0.0) for key in playable_blocking_keys),
++            3,
++        )
+         record_build_start = now_perf()
+@@ -476,6 +531,10 @@
+             },
+             "turn_contract": turn_result.get("turn_contract") or {},
+             "narration": narration,
++            "narration_mode": args.narration_mode,
++            "narration_status": narration_status,
++            "narration_job_id": narration_job_id,
++            "latency_profile": args.latency_profile,
+             "runtime_error": runtime_error,
+@@ -516,6 +575,10 @@
+             stopped_reason = "runtime_error"
+             break
+ 
++    background_results = pipeline.drain()
++    background_results_summary = attach_background_results_to_transcript(transcript, background_results)
++    pipeline.shutdown()
++
+     latest_context = (
+         transcript[-1].get("player_action_context")
+@@ -529,6 +592,7 @@
+     metrics = compute_progress_metrics(transcript, latest_context=latest_context)
+     metrics["progress_quality"] = progress_quality_metrics
+     metrics["performance"] = performance_metrics
++    metrics["background_jobs"] = background_results_summary
+     health = evaluate_autoplay_health(
+@@ -563,8 +627,8 @@
+             progress_quality_health.setdefault("warnings", [])
+             progress_quality_health["warnings"].extend(post_objective_warnings)
+             progress_quality_health["ok"] = False
+-        health["ok"] = False
++            health["ok"] = False
+     health["progress_quality"] = progress_quality_health
+@@ -573,6 +637,11 @@
+         "resolved_scenario_seed": seed_resolution["resolved_seed"],
+         "seed_resolution": seed_resolution,
+         "turn_runtime": "manual_harness",
+         "server_runtime_used": False,
++        "latency_profile": args.latency_profile,
++        "narration_mode": args.narration_mode,
++        "checkpoint_mode": args.checkpoint_mode,
++        "background_workers": int(args.background_workers),
++        "provider_workers": int(args.provider_workers),
+         "checkpoint_every": int(args.checkpoint_every or 0),
+@@ -613,6 +682,7 @@
+         "health": health,
+         "performance": performance_metrics,
++        "background_jobs": background_results_summary,
+     }
+@@ -627,6 +697,7 @@
      )
-+    story_variety_path = output_dir / "autoplay-story-variety.json"
-+    story_variety_path.write_text(
-+        json.dumps(metrics.get("story_variety") or {}, ensure_ascii=False, indent=2, sort_keys=True, default=str),
-+        encoding="utf-8",
+     summary["performance"] = metrics["performance"]
+     summary["story_variety"] = metrics["story_variety"]
++    metrics["background_jobs"] = background_results_summary
+ 
+@@ -653,6 +724,7 @@
+     )
+     summary["performance"] = metrics["performance"]
+     summary["story_variety"] = metrics["story_variety"]
++    metrics["background_jobs"] = background_results_summary
+ 
+@@ -695,6 +767,11 @@
+     parser.add_argument("--suggested-action-limit", type=int, default=12)
+     parser.add_argument("--artifact-detail", choices=["summary", "full"], default="summary")
++    parser.add_argument("--latency-profile", choices=["evaluation", "playable"], default="evaluation")
++    parser.add_argument("--narration-mode", choices=["blocking", "deferred"], default="blocking")
++    parser.add_argument("--checkpoint-mode", choices=["blocking", "background"], default="blocking")
++    parser.add_argument("--background-workers", type=int, default=4)
++    parser.add_argument("--provider-workers", type=int, default=1)
+     parser.add_argument("--output-dir", default=str(Path("resources") / "data" / "test-results" / "autoplay"))
+@@ -742,6 +819,9 @@
+     print(f"turns_executed: {summary['turns_executed']}")
+     print(f"stopped_reason: {summary['stopped_reason']}")
+     print(f"ok: {summary['ok']}")
++    print(f"latency_profile: {summary.get('latency_profile')}")
++    print(f"narration_mode: {summary.get('narration_mode')}")
++    print(f"checkpoint_mode: {summary.get('checkpoint_mode')}")
+     print(f"results_zip: {summary['artifact_paths']['zip']}")
+6. Add report visibility for playability latency
+--- src/tests/rpg/autoplay/campaign_report.py
++++ src/tests/rpg/autoplay/campaign_report.py
+@@ -1023,6 +1023,7 @@
+         "dialogue_coverage": dialogue_coverage,
+         "runtime_narration_diagnostics": runtime_narration_diagnostics,
++        "background_jobs": _safe_dict(metrics.get("background_jobs")),
+         "shortcomings": shortcomings,
+     }
+@@ -1685,9 +1686,20 @@
+   <section id="performance">
+     <h2>Performance Metrics</h2>
+-    <p class="section-lede">Runtime speed and where time is spent. Technical timing details are available below.</p>
++    <p class="section-lede">Runtime speed and where time is spent. Playability latency separates the blocking turn path from background narration/checkpoint/report work.</p>
++    <h3>Playability Latency</h3>
++    <div class="grid">
++      <div class="metric"><div class="value">{_esc(_seconds_from_ms(performance.get("avg_playable_blocking_ms")))}</div><div>Avg Blocking Turn</div></div>
++      <div class="metric"><div class="value">{_esc(_seconds_from_ms(performance.get("p95_playable_blocking_ms")))}</div><div>p95 Blocking Turn</div></div>
++      <div class="metric"><div class="value">{_esc(_seconds_from_ms(performance.get("max_playable_blocking_ms")))}</div><div>Max Blocking Turn</div></div>
++      <div class="metric"><div class="value">{_esc(_safe_dict(model.get("background_jobs")).get("total_jobs"))}</div><div>Background Jobs</div></div>
++      <div class="metric"><div class="value">{_esc(_number(_safe_dict(model.get("background_jobs")).get("background_job_seconds"), 2))}s</div><div>Background Worker Time</div></div>
++    </div>
++    <h3>Evaluation Wall Time</h3>
+     <div class="grid">
+       <div class="metric"><div class="value">{_esc(_number(performance.get("campaign_wall_seconds"), 2))}s</div><div>Campaign Wall Time</div></div>
+@@ -1695,7 +1707,8 @@
+     </div>
+     <h3>Time by Stage</h3>
+     {performance_stage_bars}
+     {_render_json_details("Stage summary JSON", performance.get("stage_summary") or {})}
++    {_render_json_details("Background job summary JSON", model.get("background_jobs") or {})}
+     {_render_json_details("Slowest turns JSON", performance.get("slowest_turns") or [])}
+   </section>
+7. Add tests
+--- src/tests/rpg/autoplay/test_performance.py
++++ src/tests/rpg/autoplay/test_performance.py
+@@ -35,3 +35,21 @@
+     assert metrics["artifact_write_ms"] == 25.0
+     assert metrics["stage_summary"]["manual_turn_ms"]["total_ms"] == 150.0
+     assert metrics["slowest_turns"][0]["turn_index"] == 2
++
++
++def test_summarize_performance_reports_playable_blocking_latency():
++    transcript = [
++        {"turn_index": 1, "performance": {"turn_total_ms": 5000.0, "playable_blocking_ms": 400.0}},
++        {"turn_index": 2, "performance": {"turn_total_ms": 7000.0, "playable_blocking_ms": 600.0}},
++    ]
++
++    metrics = summarize_performance(
++        transcript=transcript,
++        campaign_wall_ms=12_000.0,
++        artifact_write_ms=0.0,
 +    )
-@@
-         "performance": str(performance_path),
-+        "story_variety": str(story_variety_path),
-*** End Patch
-
-In zip writing:
-
-*** Begin Patch
-*** Update File: src/tests/rpg/autoplay/reporting.py
-@@
-         zf.write(metrics_path, metrics_path.name)
-         zf.write(performance_path, performance_path.name)
-+        zf.write(story_variety_path, story_variety_path.name)
-         zf.write(health_path, health_path.name)
-*** End Patch
-Patch 11 — Add story variety tests
-
-Add:
-
-src/tests/rpg/autoplay/test_story_variety.py
-*** Begin Patch
-*** Add File: src/tests/rpg/autoplay/test_story_variety.py
-+from tests.rpg.autoplay.seeding import (
-+    available_campaign_seeds,
-+    resolve_campaign_seed_name,
-+    seed_campaign,
-+)
-+from tests.rpg.autoplay.story_variety import (
-+    compute_story_variety_metrics,
-+    extract_story_signature_from_state,
++
++    assert metrics["avg_turn_ms"] == 6000.0
++    assert metrics["avg_playable_blocking_ms"] == 500.0
++    assert metrics["p95_playable_blocking_ms"] == 590.0
++    assert metrics["max_playable_blocking_ms"] == 600.0
+--- /dev/null
++++ src/tests/rpg/autoplay/test_parallel_pipeline.py
+@@ -0,0 +1,67 @@
++from tests.rpg.autoplay.parallel_pipeline import (
++    AutoplayBackgroundPipeline,
++    attach_background_results_to_transcript,
 +)
 +
 +
-+def test_available_campaign_seeds_include_variants():
-+    seeds = available_campaign_seeds()
++def test_deferred_narration_job_does_not_mutate_authoritative_snapshot():
++    pipeline = AutoplayBackgroundPipeline(background_workers=1, provider_workers=1)
++    state = {
++        "location": {"name": "The Mill"},
++        "inventory_state": {"currency": {"gold": 5}},
++    }
++    pipeline.submit_deferred_narration(
++        provider=None,
++        session_id="s",
++        turn_index=1,
++        player_action="I inspect the mill door.",
++        simulation_state=state,
++        turn_contract={"result": "The door is swollen shut."},
++        prefer_provider=False,
++    )
++    results = pipeline.drain()
++    pipeline.shutdown()
 +
-+    assert "tavern_story_seed" in seeds
-+    assert "caravan_ambush_seed" in seeds
-+    assert "missing_apprentice_seed" in seeds
-+    assert "haunted_mill_seed" in seeds
-+    assert "noble_blackmail_seed" in seeds
-+
-+
-+def test_random_campaign_seed_is_reproducible():
-+    first = resolve_campaign_seed_name("random", random_seed=123)
-+    second = resolve_campaign_seed_name("random", random_seed=123)
-+
-+    assert first["resolved_seed"] == second["resolved_seed"]
-+    assert first["randomized"] is True
-+
-+
-+def test_different_campaign_seeds_produce_different_story_signatures():
-+    tavern_state = {}
-+    caravan_state = {}
-+
-+    seed_campaign(tavern_state, "tavern_story_seed")
-+    seed_campaign(caravan_state, "caravan_ambush_seed")
-+
-+    tavern_signature = extract_story_signature_from_state(tavern_state)
-+    caravan_signature = extract_story_signature_from_state(caravan_state)
-+
-+    assert tavern_signature["campaign_title"] != caravan_signature["campaign_title"]
-+    assert tavern_signature["signature_hash"] != caravan_signature["signature_hash"]
-+    assert "Bran" in tavern_signature["npc_names"]
-+    assert "Selka" in caravan_signature["npc_names"]
++    assert state == {
++        "location": {"name": "The Mill"},
++        "inventory_state": {"currency": {"gold": 5}},
++    }
++    assert results[0]["ok"] is True
++    assert results[0]["mutated_authoritative_snapshot"] is False
++    assert results[0]["narration_status"] == "ready"
 +
 +
-+def test_story_variety_metrics_include_seed_and_hashes():
-+    state = {}
-+    seed_campaign(state, "haunted_mill_seed")
-+
-+    metrics = compute_story_variety_metrics(
-+        summary={
-+            "scenario_seed": "haunted_mill_seed",
-+            "resolved_scenario_seed": "haunted_mill_seed",
-+            "seed_resolution": {"random_seed": None, "randomized": False},
++def test_attach_background_results_preserves_turn_order_and_updates_rows():
++    transcript = [
++        {"turn_index": 1, "narration": "pending", "turn_result": {}},
++        {"turn_index": 2, "narration": "pending", "turn_result": {}},
++    ]
++    results = [
++        {
++            "ok": True,
++            "kind": "deferred_narration",
++            "turn_index": 2,
++            "narration_status": "ready",
++            "narration": "Second narration.",
++            "narration_payload": {"narration": "Second narration."},
++            "worker_ms": 10.0,
 +        },
-+        state=state,
-+        transcript=[],
-+    )
++        {
++            "ok": True,
++            "kind": "deferred_narration",
++            "turn_index": 1,
++            "narration_status": "ready",
++            "narration": "First narration.",
++            "narration_payload": {"narration": "First narration."},
++            "worker_ms": 20.0,
++        },
++    ]
 +
-+    assert metrics["resolved_seed"] == "haunted_mill_seed"
-+    assert metrics["story_signature"]["campaign_title"] == "The Haunted Mill"
-+    assert metrics["story_variety_key"]
-*** End Patch
-Patch 12 — Add seeding tests for each seed
-
-Patch:
-
-src/tests/rpg/autoplay/test_story_hooks.py
-
-Add:
-
-*** Begin Patch
-*** Update File: src/tests/rpg/autoplay/test_story_hooks.py
-@@
- def test_tavern_story_seed_gives_player_starter_inventory():
-@@
-     assert any(item["item_id"] == "item:iron_dagger" for item in inventory["items"])
-     assert state["inventory_state"]["currency"]["gold"] == 15
++    summary = attach_background_results_to_transcript(transcript, results)
 +
-+
-+def test_all_campaign_seed_variants_have_director_lore_npcs_and_arc():
-+    from tests.rpg.autoplay.seeding import available_campaign_seeds, seed_campaign
-+
-+    for seed_name in available_campaign_seeds():
-+        state = {}
-+        result = seed_campaign(state, seed_name)
-+
-+        assert result["ok"] is True
-+        assert state["campaign_director_state"]["campaign_title"]
-+        assert state["lore_state"]["entries"]
-+        assert state["npc_profile_state"]["profiles"]
-+        assert state["story_arc_state"]["arcs"]
-+        assert state["story_arc_milestone_state"]["arcs"]
-+        assert state["player_state"]["inventory"]["items"]
-*** End Patch
-Patch 13 — Update test runner Namespace for new args
++    assert [row["turn_index"] for row in transcript] == [1, 2]
++    assert transcript[0]["narration"] == "First narration."
++    assert transcript[1]["narration"] == "Second narration."
++    assert summary["narration_jobs"] == 2
++    assert summary["background_job_seconds"] == 0.03
+8. Update existing autoplay runner tests for new args/signatures
+--- src/tests/rpg/autoplay/test_autoplay_runner.py
++++ src/tests/rpg/autoplay/test_autoplay_runner.py
+@@ -8,14 +8,14 @@
+ def test_autoplay_runner_fallback_executes_short_campaign(tmp_path: Path, monkeypatch):
+     state_holder = {"state": {}}
+ 
+-    def fake_prepare(*, session_id, simulation_state, reset_session_state=True):
++    def fake_prepare(*, session_id, simulation_state, reset_session_state=True, **kwargs):
+         state_holder["state"] = dict(simulation_state)
+         return {"session_id": session_id, "simulation_state": state_holder["state"]}
+ 
+     def fake_load_state(session_id):
+         return dict(state_holder["state"])
+ 
+-    def fake_turn(*, session_id, player_action, turn_index):
++    def fake_turn(*, session_id, player_action, turn_index, **kwargs):
+         state_holder["state"]["turns"] = int(state_holder["state"].get("turns") or 0) + 1
+         return {
+@@ -49,6 +49,11 @@
+         strategy="balanced_story_player",
+         player_agent_max_tokens=200,
+         suggested_action_limit=12,
+         artifact_detail="full",
++        latency_profile="evaluation",
++        narration_mode="blocking",
++        checkpoint_mode="blocking",
++        background_workers=2,
++        provider_workers=1,
+         output_dir=str(tmp_path),
+@@ -315,7 +320,7 @@
+ 
+     saved = {}
+ 
+-    def fake_prepare(*, session_id, simulation_state, reset_session_state=False):
++    def fake_prepare(*, session_id, simulation_state, reset_session_state=False, **kwargs):
+         saved["session_id"] = session_id
+         saved["simulation_state"] = simulation_state
+         saved["reset_session_state"] = reset_session_state
 
-Patch:
+If your test_autoplay_runner.py has additional Namespace(...) blocks, add the same five fields to each:
 
-src/tests/rpg/autoplay/test_autoplay_runner.py
+latency_profile="evaluation",
+narration_mode="blocking",
+checkpoint_mode="blocking",
+background_workers=2,
+provider_workers=1,
+Validation
 
-Where test Namespace includes scenario_seed, add:
+Compile:
 
-*** Begin Patch
-*** Update File: src/tests/rpg/autoplay/test_autoplay_runner.py
-@@
-         scenario_seed="tavern_story_seed",
-+        random_seed=None,
-+        list_scenario_seeds=False,
-*** End Patch
-Validation commands
-Compile
-python -m py_compile src/tests/rpg/autoplay/seeding.py
-python -m py_compile src/tests/rpg/autoplay/story_variety.py
-python -m py_compile src/tests/rpg/autoplay_llm_campaign.py
-python -m py_compile src/tests/rpg/autoplay/reporting.py
-python -m py_compile src/tests/rpg/autoplay/campaign_report.py
-python -m py_compile src/tests/rpg/autoplay/test_story_variety.py
-python -m py_compile src/tests/rpg/autoplay/test_story_hooks.py
-python -m py_compile src/tests/rpg/autoplay/test_autoplay_runner.py
-Focused tests
-python -m pytest src/tests/rpg/autoplay/test_story_variety.py src/tests/rpg/autoplay/test_campaign_report.py src/tests/rpg/autoplay/test_story_hooks.py src/tests/rpg/narration/test_runtime_narration_contract.py src/tests/rpg/narration/test_session_turn_narration_binding.py src/tests/rpg/autoplay/test_performance.py src/tests/rpg/autoplay/test_base_runtime_response.py src/tests/rpg/autoplay/test_autoplay_runner.py src/tests/rpg/autoplay/test_manual_turn_driver.py src/tests/rpg/autoplay/test_progress.py src/tests/rpg/autoplay/test_progress_quality.py src/tests/rpg/autoplay/test_strategy_profiles.py src/tests/rpg/autoplay/test_checkpoints.py src/tests/rpg/autoplay/test_player_agent.py src/tests/rpg/autoplay/test_provider_adapter.py -q
+python -m py_compile src/app/rpg/session/runtime.py src/tests/rpg/autoplay/parallel_pipeline.py src/tests/rpg/autoplay/performance.py src/tests/rpg/autoplay/manual_turn_driver.py src/tests/rpg/autoplay/campaign_report.py src/tests/rpg/autoplay_llm_campaign.py src/tests/rpg/autoplay/test_parallel_pipeline.py src/tests/rpg/autoplay/test_performance.py src/tests/rpg/autoplay/test_autoplay_runner.py
+
+Focused tests:
+
+python -m pytest src/tests/rpg/autoplay/test_parallel_pipeline.py src/tests/rpg/autoplay/test_performance.py src/tests/rpg/autoplay/test_autoplay_runner.py -q
+
+Expected:
+
+all passed
