@@ -33,6 +33,9 @@ AUTOPLAY_PRESERVED_SIMULATION_ROOTS = {
     "campaign_director_state",
     "lore_state",
     "npc_evolution_state",
+    "npc_profile_state",
+    "npc_progression_state",
+    "player_state",
     "social_state",
 }
 

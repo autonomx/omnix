@@ -31,6 +31,8 @@ def test_ask_bran_hook_adds_journal_and_arc_stage():
     assert after["story_arc_state"]["arcs"]["arc:witness_search"]["stage"] == "lead_found"
     assert after["campaign_journal_state"]["entries"]
     assert after["story_event_queue_state"]["queue"]
+    assert result["display"]["npc"]["speaker"] == "Bran"
+    assert result["display"]["npc"]["line"]
 
 
 def test_find_witness_hook_requires_prior_hook():
@@ -98,7 +100,7 @@ def test_report_to_bran_adds_next_branch_objective():
     )
     third = apply_autoplay_story_hooks(
         simulation_state=second["simulation_state"],
-        player_action="I return to Bran and report the witness findings.",
+        player_action="I return to Bran and talk about the witness findings.",
         turn_index=3,
     )
 
@@ -128,7 +130,7 @@ def test_pursue_bandit_trail_completes_branch_objective():
     )["simulation_state"]
     state = apply_autoplay_story_hooks(
         simulation_state=state,
-        player_action="I return to Bran and report the witness findings.",
+        player_action="I return to Bran and talk about the witness findings.",
         turn_index=3,
     )["simulation_state"]
     result = apply_autoplay_story_hooks(
@@ -144,3 +146,18 @@ def test_pursue_bandit_trail_completes_branch_objective():
     assert result["changed"] is True
     assert after["story_arc_state"]["arcs"]["arc:witness_search"]["stage"] == "bandit_trail"
     assert milestone_by_id["milestone:pursue_bandit_trail"]["status"] == "completed"
+
+
+def test_story_hooks_do_not_cascade_prerequisites_in_same_turn():
+    state = {}
+    seed_tavern_story_campaign(state)
+
+    result = apply_autoplay_story_hooks(
+        simulation_state=state,
+        player_action="I ask Bran about the witness and follow the cloaked traveler outside.",
+        turn_index=1,
+    )
+
+    fired_ids = [row["hook_id"] for row in result["fired_hooks"]]
+
+    assert fired_ids == ["hook:witness:ask_bran"]
