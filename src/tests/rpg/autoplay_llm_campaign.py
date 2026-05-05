@@ -156,6 +156,7 @@ def _call_turn_runtime(
     player_action: str,
     turn_index: int,
     runtime_narration: str = "blocking",
+    debug_narration_trace: bool = False,
 ) -> Dict[str, Any]:
     return run_autoplay_manual_turn(
         session_id=session_id,
@@ -165,6 +166,7 @@ def _call_turn_runtime(
         console_llm=False,
         console_llm_raw=False,
         runtime_narration=runtime_narration,
+        debug_narration_trace=debug_narration_trace,
     )
 
 
@@ -179,6 +181,192 @@ def _extract_narration(turn_result: Dict[str, Any]) -> str:
         if isinstance(candidate, str) and candidate.strip():
             return candidate.strip()
     return ""
+
+
+def _turn_result_narration_source(turn_result: Dict[str, Any]) -> str:
+    """Return the source from the exact turn_result shape written to transcript."""
+    if not isinstance(turn_result, dict):
+        return ""
+    candidate_containers = [
+        turn_result,
+        turn_result.get("raw_result") if isinstance(turn_result.get("raw_result"), dict) else {},
+        turn_result.get("result") if isinstance(turn_result.get("result"), dict) else {},
+        turn_result.get("turn_result") if isinstance(turn_result.get("turn_result"), dict) else {},
+    ]
+    for container in candidate_containers:
+        if not isinstance(container, dict):
+            continue
+        payload = (
+            container.get("narration_payload")
+            or container.get("structured_narration")
+            or {}
+        )
+        if not isinstance(payload, dict):
+            continue
+        source = payload.get("source")
+        if isinstance(source, str) and source:
+            return source
+    return ""
+
+
+def _replace_turn_result_narration_with_pending(turn_result: Dict[str, Any]) -> None:
+    """Replace visible blocking narration with a deferred placeholder.
+
+    This does not undo time already spent in the provider call. It makes the
+    transcript/report truthful and prevents a blocking provider narration from
+    being presented as the final turn narration in deferred mode.
+    """
+    if not isinstance(turn_result, dict):
+        return
+    pending_payload = _pending_deferred_narration_payload()
+    turn_result["narration_payload"] = pending_payload
+    turn_result["structured_narration"] = pending_payload
+    turn_result["narration"] = pending_payload["narration"]
+
+    raw_result = turn_result.get("raw_result") if isinstance(turn_result.get("raw_result"), dict) else {}
+    if raw_result:
+        raw_result["narration_payload"] = pending_payload
+        raw_result["structured_narration"] = pending_payload
+        raw_result["narration"] = pending_payload["narration"]
+
+    nested_result = turn_result.get("result") if isinstance(turn_result.get("result"), dict) else {}
+    if nested_result:
+        nested_result["narration_payload"] = pending_payload
+        nested_result["structured_narration"] = pending_payload
+        nested_result["narration"] = pending_payload["narration"]
+
+    nested_turn_result = (
+        turn_result.get("turn_result")
+        if isinstance(turn_result.get("turn_result"), dict)
+        else {}
+    )
+    if nested_turn_result:
+        nested_turn_result["narration_payload"] = pending_payload
+        nested_turn_result["structured_narration"] = pending_payload
+        nested_turn_result["narration"] = pending_payload["narration"]
+
+
+def _apply_deferred_narration_violation_detection(
+    *,
+    record: Dict[str, Any],
+    narration_mode: str,
+) -> None:
+    """Inspect the final transcript record and mark deferred-mode violations.
+
+    Latest artifacts proved the real source is here:
+        record["turn_result"]["narration_payload"]["source"]
+
+    So detection must run after the transcript record is built and before it is
+    appended/written.
+    """
+    if not isinstance(record, dict):
+        return
+    turn_result = _dict_or_empty(record.get("turn_result"))
+    source = _turn_result_narration_source(turn_result)
+    record["blocking_narration_source"] = source
+    violation = (
+        narration_mode == "deferred"
+        and source == "provider_runtime_narration"
+    )
+    record["deferred_blocking_provider_violation"] = bool(violation)
+    record["blocking_provider_call_suppressed_after_the_fact"] = bool(violation)
+    if violation:
+        _replace_turn_result_narration_with_pending(turn_result)
+        record["narration"] = "Narration is being prepared..."
+
+
+def _dict_or_empty(value: Any) -> Dict[str, Any]:
+    return value if isinstance(value, dict) else {}
+
+
+def _find_narration_payload(container: Dict[str, Any]) -> Dict[str, Any]:
+    """Find the actual narration payload regardless of wrapper shape.
+
+    Autoplay/manual turn results have changed shape several times:
+    - result.narration_payload
+    - result.structured_narration
+    - result.turn_result.narration_payload
+    - result.result.narration_payload
+
+    Deferred-mode violation detection must inspect all of these or the report
+    can falsely show blocking_narration_source=None while the nested turn result
+    still contains provider_runtime_narration.
+    """
+    if not isinstance(container, dict):
+        return {}
+
+    direct = (
+        container.get("narration_payload")
+        or container.get("structured_narration")
+    )
+    if isinstance(direct, dict):
+        return direct
+
+    nested_turn = _dict_or_empty(container.get("turn_result"))
+    nested_payload = (
+        nested_turn.get("narration_payload")
+        or nested_turn.get("structured_narration")
+    )
+    if isinstance(nested_payload, dict):
+        return nested_payload
+
+    nested_result = _dict_or_empty(container.get("result"))
+    result_payload = (
+        nested_result.get("narration_payload")
+        or nested_result.get("structured_narration")
+    )
+    if isinstance(result_payload, dict):
+        return result_payload
+
+    return {}
+
+
+def _narration_source(container: Dict[str, Any]) -> str:
+    payload = _find_narration_payload(container)
+    source = payload.get("source") if isinstance(payload, dict) else ""
+    return source if isinstance(source, str) else ""
+
+
+def _pending_deferred_narration_payload() -> Dict[str, Any]:
+    return {
+        "format_version": "rpg_narration_v2",
+        "source": "deferred_runtime_narration_pending",
+        "deferred": True,
+        "narration_status": "pending",
+        "narration": "Narration is being prepared...",
+        "action": "The action has been resolved.",
+        "npc": {"speaker": "", "line": ""},
+        "reward": "",
+        "followup_hooks": [],
+    }
+
+
+def _replace_blocking_narration_with_pending(turn_result: Dict[str, Any]) -> None:
+    """Replace blocking narration artifacts with a deferred placeholder.
+
+    This does not undo time already spent in a provider call. It makes the
+    transcript/report truthful and prevents blocking provider narration from
+    being presented as the canonical turn narration in deferred mode.
+    """
+    if not isinstance(turn_result, dict):
+        return
+    pending_payload = _pending_deferred_narration_payload()
+
+    turn_result["narration_payload"] = pending_payload
+    turn_result["structured_narration"] = pending_payload
+    turn_result["narration"] = pending_payload["narration"]
+
+    nested_turn = _dict_or_empty(turn_result.get("turn_result"))
+    if nested_turn:
+        nested_turn["narration_payload"] = pending_payload
+        nested_turn["structured_narration"] = pending_payload
+        nested_turn["narration"] = pending_payload["narration"]
+
+    nested_result = _dict_or_empty(turn_result.get("result"))
+    if nested_result:
+        nested_result["narration_payload"] = pending_payload
+        nested_result["structured_narration"] = pending_payload
+        nested_result["narration"] = pending_payload["narration"]
 
 
 def _select_player_action(
@@ -348,6 +536,7 @@ def run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
                     player_action=player_action,
                     turn_index=turn_index,
                     runtime_narration=args.narration_mode,
+                    debug_narration_trace=args.debug_provider_shape,
                 )
             returned_state = _safe_dict(turn_result.get("simulation_state"))
             if returned_state:
@@ -514,17 +703,23 @@ def run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
             args.narration_mode == "deferred"
             and blocking_narration_source == "provider_runtime_narration"
         )
+
+        record_build_start = now_perf()
         if deferred_blocking_provider_violation:
+            pending_payload = _pending_deferred_narration_payload()
+            turn_result["narration_payload"] = pending_payload
+            turn_result["structured_narration"] = pending_payload
+            turn_result["narration"] = pending_payload["narration"]
+            narration = pending_payload["narration"]
             regression_warnings.append(
                 {
                     "turn_index": turn_index,
                     "category": "deferred_narration_blocked_on_provider",
                     "message": "Deferred narration mode still called provider_runtime_narration inside the blocking turn path.",
-                    "blocking_source": blocking_narration_source,
+                    "blocking_source": "provider_runtime_narration",
                 }
             )
 
-        record_build_start = now_perf()
         record = {
             "turn_index": turn_index,
             "session_id": session_id,
@@ -547,6 +742,7 @@ def run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
                 "compatibility_turn_runtime": turn_result.get("compatibility_turn_runtime"),
                 "runtime_name": turn_result.get("runtime_name"),
             },
+            "narration_trace": turn_result.get("narration_trace") if args.debug_provider_shape else [],
             "turn_contract": turn_result.get("turn_contract") or {},
             "narration": narration,
             "narration_mode": args.narration_mode,
@@ -554,6 +750,7 @@ def run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
             "narration_job_id": narration_job_id,
             "blocking_narration_source": blocking_narration_source,
             "deferred_blocking_provider_violation": deferred_blocking_provider_violation,
+            "blocking_provider_call_suppressed_after_the_fact": bool(deferred_blocking_provider_violation),
             "latency_profile": args.latency_profile,
             "runtime_error": runtime_error,
             "before_state_digest": before_digest,
@@ -570,6 +767,7 @@ def run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
             "story_hook_result": story_hook_result,
             "base_response_payload": base_response_payload,
         }
+
         turn_performance["record_build_ms"] = elapsed_ms(record_build_start)
 
         playable_blocking_keys = [
@@ -598,6 +796,49 @@ def run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
         )
         turn_performance["turn_total_ms"] = elapsed_ms(turn_perf_start)
         record["performance"] = turn_performance
+
+        # Final source detection must run against the exact record object that
+        # will be appended/written. Recent artifacts showed:
+        #   record["turn_result"]["narration_payload"]["source"]
+        # was provider_runtime_narration while blocking_narration_source stayed
+        # empty, so do this directly and overwrite the record fields here.
+        record_turn_result = (
+            record.get("turn_result")
+            if isinstance(record.get("turn_result"), dict)
+            else {}
+        )
+        record_payload = (
+            record_turn_result.get("narration_payload")
+            or record_turn_result.get("structured_narration")
+            or {}
+        )
+        record_source = (
+            record_payload.get("source")
+            if isinstance(record_payload, dict)
+            else ""
+        )
+        record["blocking_narration_source"] = record_source
+        record_violation = (
+            args.narration_mode == "deferred"
+            and record_source == "provider_runtime_narration"
+        )
+        record["deferred_blocking_provider_violation"] = bool(record_violation)
+        record["blocking_provider_call_suppressed_after_the_fact"] = bool(record_violation)
+        if record_violation:
+            pending_payload = _pending_deferred_narration_payload()
+            record_turn_result["narration_payload"] = pending_payload
+            record_turn_result["structured_narration"] = pending_payload
+            record_turn_result["narration"] = pending_payload["narration"]
+            record["narration"] = pending_payload["narration"]
+            regression_warnings.append(
+                {
+                    "turn_index": turn_index,
+                    "category": "deferred_narration_blocked_on_provider",
+                    "message": "Deferred narration mode still called provider_runtime_narration inside the blocking turn path.",
+                    "blocking_source": "provider_runtime_narration",
+                }
+            )
+
         transcript.append(record)
 
         health = evaluate_autoplay_health(
@@ -636,6 +877,33 @@ def run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
         artifact_write_ms=artifact_write_ms,
     )
     metrics = compute_progress_metrics(transcript, latest_context=latest_context)
+    metrics["narration_trace_summary"] = {
+        "guard_enter_count": sum(
+            1
+            for row in transcript
+            for item in (row.get("narration_trace") or [])
+            if item.get("event") == "guard_enter"
+        ),
+        "provider_accessor_calls": sum(
+            1
+            for row in transcript
+            for item in (row.get("narration_trace") or [])
+            if item.get("event") == "get_runtime_llm_provider_called"
+        ),
+        "build_payload_calls": sum(
+            1
+            for row in transcript
+            for item in (row.get("narration_trace") or [])
+            if item.get("event") == "before_build_runtime_narration_payload"
+        ),
+        "provider_runtime_sources": sum(
+            1
+            for row in transcript
+            for item in (row.get("narration_trace") or [])
+            if item.get("event") == "after_build_runtime_narration_payload"
+            and item.get("source") == "provider_runtime_narration"
+        ),
+    }
     metrics["progress_quality"] = progress_quality_metrics
     metrics["performance"] = performance_metrics
     metrics["background_jobs"] = background_results_summary

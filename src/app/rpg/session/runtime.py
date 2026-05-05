@@ -10,11 +10,8 @@ This replaces the legacy in-memory GameSession / pipeline.py / routes.py flow.
 """
 from __future__ import annotations
 
-try:
-    from tests.rpg.autoplay.deferred_narration_guard import suppress_provider_runtime_narration
-except Exception:
-    def suppress_provider_runtime_narration() -> bool:
-        return False
+from app.rpg.session.deferred_narration_guard import suppress_provider_runtime_narration
+from app.rpg.session.narration_trace import record_narration_trace, record_narration_trace_stack
 
 import ast
 import copy
@@ -13570,37 +13567,43 @@ def apply_turn(
     setup_metadata = _safe_dict(_safe_dict(session.get("setup_payload")).get("metadata"))
     performance_settings = _safe_dict(runtime_state.get("performance"))
 
-    defer_runtime_narration = bool(
-        suppress_provider_runtime_narration()
-        or runtime_state.get("autoplay_deferred_narration")
-        or runtime_state.get("deferred_runtime_narration")
-        or runtime_state.get("narration_mode") == "deferred"
-        or setup_metadata.get("autoplay_deferred_narration")
-        or setup_metadata.get("runtime_narration") == "deferred"
+    defer_runtime_narration = bool(suppress_provider_runtime_narration())
+    if defer_runtime_narration:
+        runtime_provider = None
+    else:
+        suppressed = suppress_provider_runtime_narration()
+        record_narration_trace_stack(
+            "get_runtime_llm_provider_called",
+            suppressed=suppressed,
+        )
+        if suppressed:
+            record_narration_trace("get_runtime_llm_provider_return_none_due_to_suppression")
+            runtime_provider = None
+        else:
+            runtime_provider = get_runtime_llm_provider()
+    _defer_trace_value = suppress_provider_runtime_narration()
+    record_narration_trace_stack(
+        "before_build_runtime_narration_payload",
+        defer_runtime_narration=_defer_trace_value,
+        provider_will_be_none=_defer_trace_value,
     )
-
-    provider_runtime_enabled = bool(
-        performance_settings.get("enable_live_narration_llm", True)
-        and performance_settings.get("enable_provider_runtime_narration", True)
-    )
-    prefer_runtime_provider_narration = provider_runtime_enabled and not defer_runtime_narration
-
     narration_payload = build_runtime_narration_payload(
-        provider=get_runtime_llm_provider() if prefer_runtime_provider_narration else None,
+        provider=None if _defer_trace_value else runtime_provider,
         player_action=player_input,
         simulation_state=simulation_state,
         turn_contract=turn_contract,
-        prefer_provider=prefer_runtime_provider_narration,
+        prefer_provider=not _defer_trace_value,
     )
-
-    if defer_runtime_narration:
+    record_narration_trace(
+        "after_build_runtime_narration_payload",
+        source=(narration_payload.get("source") if isinstance(narration_payload, dict) else ""),
+        defer_runtime_narration=_defer_trace_value,
+    )
+    if _defer_trace_value and isinstance(narration_payload, dict):
         narration_payload["source"] = "deferred_runtime_narration_pending"
         narration_payload["deferred"] = True
         narration_payload["narration_status"] = "pending"
-        narration_payload["narration"] = (
-            narration_payload.get("narration")
-            or "Narration is being prepared..."
-        )
+        narration_payload["narration"] = narration_payload.get("narration") or "Narration is being prepared..."
     final_result["narration_payload"] = narration_payload
     final_result["structured_narration"] = narration_payload
     final_result["npc"] = narration_payload.get("npc") or {}

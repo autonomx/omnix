@@ -1,7 +1,13 @@
 from __future__ import annotations
 
 from copy import deepcopy
-from tests.rpg.autoplay.deferred_narration_guard import deferred_runtime_narration_context
+from app.rpg.session.deferred_narration_guard import deferred_runtime_narration_context
+from app.rpg.session.narration_trace import (
+    clear_narration_trace,
+    enable_narration_trace,
+    get_narration_trace,
+    record_narration_trace,
+)
 from typing import Any, Dict
 
 from tests.rpg.manual.session_helpers import (
@@ -308,6 +314,7 @@ def run_autoplay_manual_turn(
     console_llm_raw: bool = False,
     console_llm_max_chars: int = 10_000,
     runtime_narration: str = "blocking",
+    debug_narration_trace: bool = False,
 ) -> Dict[str, Any]:
     """Run one autoplay turn through the manual harness turn function."""
     pre_turn_session = load_autoplay_manual_session(session_id)
@@ -331,6 +338,15 @@ def run_autoplay_manual_turn(
 
     pre_turn_state = deepcopy(_safe_dict(pre_turn_session.get("simulation_state")))
 
+    enable_narration_trace(bool(debug_narration_trace))
+    clear_narration_trace()
+    record_narration_trace(
+        "manual_turn_driver_before_call",
+        session_id=session_id,
+        turn_index=turn_index,
+        runtime_narration=runtime_narration,
+        deferred_requested=runtime_narration == "deferred",
+    )
     with deferred_runtime_narration_context(runtime_narration == "deferred"):
         turn_summary = _run_one_manual_turn(
             session_id=session_id,
@@ -344,6 +360,16 @@ def run_autoplay_manual_turn(
             story_event_queue_checks=None,
             include_raw_result=True,
         )
+    record_narration_trace(
+        "manual_turn_driver_after_call",
+        session_id=session_id,
+        turn_index=turn_index,
+        result_source=(
+            ((turn_summary.get("raw_result") or {}).get("narration_payload") or {}).get("source")
+            if isinstance(turn_summary, dict) and isinstance(turn_summary.get("raw_result"), dict)
+            else ""
+        ),
+    )
 
     post_turn_session = load_autoplay_manual_session(session_id)
     post_turn_state = _safe_dict(post_turn_session.get("simulation_state"))
@@ -371,7 +397,7 @@ def run_autoplay_manual_turn(
         _safe_str(turn_summary.get("raw_narration"))
         or _extract_narration_from_manual_turn_summary(turn_summary)
     )
-    return {
+    result = {
         "ok": not bool(turn_summary.get("error")),
         "runtime_name": "manual_harness._run_one_manual_turn",
         "manual_turn_summary": turn_summary,
@@ -380,6 +406,9 @@ def run_autoplay_manual_turn(
         "narration": narration,
         "player_input": player_input,
     }
+    if debug_narration_trace:
+        result["narration_trace"] = get_narration_trace()
+    return result
 
 
 def _extract_narration_from_manual_turn_summary(turn_summary: Dict[str, Any]) -> str:

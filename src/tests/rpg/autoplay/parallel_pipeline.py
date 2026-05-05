@@ -235,14 +235,13 @@ def attach_background_results_to_transcript(
             row["deferred_narration_result"] = result
             row["narration_status"] = result.get("narration_status")
             if result.get("ok") and result.get("narration"):
+                # Do not overwrite row["turn_result"]. That object represents
+                # the blocking/manual runtime result and is used to diagnose
+                # whether deferred mode really avoided blocking provider
+                # narration. Store background narration separately.
+                row["resolved_narration"] = result.get("narration")
+                row["resolved_narration_payload"] = result.get("narration_payload") or {}
                 row["narration"] = result.get("narration")
-                row.setdefault("turn_result", {})["narration"] = result.get("narration")
-                row.setdefault("turn_result", {})["structured_narration"] = (
-                    result.get("narration_payload") or {}
-                )
-                row.setdefault("turn_result", {})["narration_payload"] = (
-                    result.get("narration_payload") or {}
-                )
         elif result.get("kind") == "checkpoint":
             summary["checkpoint_jobs"] += 1
             row["save_load_checkpoint"] = result
