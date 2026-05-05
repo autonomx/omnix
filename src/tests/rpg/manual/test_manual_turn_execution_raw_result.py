@@ -56,3 +56,34 @@ def test_run_one_manual_turn_does_not_preserve_raw_result_by_default(monkeypatch
     assert "raw_result" not in result
     assert "raw_narration" not in result
     assert "raw_turn_contract" not in result
+
+
+def test_run_one_manual_turn_preserves_raw_npc_payload_when_requested(monkeypatch):
+    def fake_apply_turn(*, session_id, player_input):
+        return {
+            "ok": True,
+            "narration_payload": {
+                "narration": "Bran leans in.",
+                "npc": {"speaker": "Bran", "line": "The witness went outside."},
+            },
+            "npc": {"speaker": "Bran", "line": "The witness went outside."},
+            "turn_contract": {"player_action": player_input},
+        }
+
+    monkeypatch.setattr(turn_execution, "_get_apply_turn", lambda: fake_apply_turn)
+    monkeypatch.setattr(turn_execution, "_record_token_usage", lambda **kwargs: None)
+    monkeypatch.setattr(turn_execution.output_artifacts, "_emit", lambda *args, **kwargs: None)
+
+    result = turn_execution._run_one_manual_turn(
+        session_id="raw_npc_test",
+        turn="I ask Bran about the witness.",
+        turn_index=1,
+        scenario_name="raw_npc_test",
+        target_channel="test",
+        console_llm=False,
+        console_llm_raw=False,
+        include_raw_result=True,
+    )
+
+    assert result["raw_npc"]["speaker"] == "Bran"
+    assert result["raw_narration_payload"]["npc"]["line"] == "The witness went outside."

@@ -28,6 +28,7 @@ from tests.rpg.autoplay.checkpoints import (
     collect_state_bounds,
     validate_save_load_checkpoint,
 )
+from tests.rpg.autoplay.campaign_report import write_campaign_report
 from tests.rpg.autoplay.player_agent import (
     build_player_agent_prompt,
     choose_fallback_player_action,
@@ -528,6 +529,17 @@ def run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
         "duration_seconds": round(time.time() - started, 3),
         "health": health,
     }
+    extra_paths = {}
+    if args.artifact_detail == "full":
+        extra_paths.update(
+            write_campaign_report(
+                output_dir=Path(args.output_dir),
+                transcript=transcript,
+                summary=summary,
+                metrics=metrics,
+                health=health,
+            )
+        )
     paths = write_autoplay_artifacts(
         output_dir=Path(args.output_dir),
         transcript=transcript,
@@ -536,6 +548,7 @@ def run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
         health=health,
         artifact_detail=args.artifact_detail,
     )
+    paths.update(extra_paths)
     summary["artifact_paths"] = paths
     return summary
 

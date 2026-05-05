@@ -133,6 +133,18 @@ def _run_one_manual_turn(
                 result.get("turn_contract")
                 or _safe_dict(result.get("result")).get("turn_contract")
             )
+            turn_summary["raw_npc"] = _safe_dict(
+                result.get("npc")
+                or _safe_dict(result.get("result")).get("npc")
+                or _safe_dict(result.get("turn_contract")).get("npc")
+            )
+            turn_summary["raw_narration_payload"] = _safe_dict(
+                result.get("narration_payload")
+                or result.get("structured_narration")
+                or result.get("narration_result")
+                or _safe_dict(result.get("result")).get("narration_payload")
+                or _safe_dict(result.get("result")).get("structured_narration")
+            )
 
         # Apply sanitization for summary output
         turn_summary = sanitize_turn_for_summary(turn_summary)
@@ -146,6 +158,18 @@ def _run_one_manual_turn(
             turn_summary["raw_turn_contract"] = _safe_dict(
                 result.get("turn_contract")
                 or _safe_dict(result.get("result")).get("turn_contract")
+            )
+            turn_summary["raw_npc"] = _safe_dict(
+                result.get("npc")
+                or _safe_dict(result.get("result")).get("npc")
+                or _safe_dict(result.get("turn_contract")).get("npc")
+            )
+            turn_summary["raw_narration_payload"] = _safe_dict(
+                result.get("narration_payload")
+                or result.get("structured_narration")
+                or result.get("narration_result")
+                or _safe_dict(result.get("result")).get("narration_payload")
+                or _safe_dict(result.get("result")).get("structured_narration")
             )
 
         return turn_summary

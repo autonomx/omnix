@@ -124,6 +124,12 @@ def write_autoplay_artifacts(
         if artifact_detail == "full":
             zf.write(transcript_path, transcript_path.name)
             zf.write(html_path, html_path.name)
+            campaign_report_html = output_dir / "autoplay-campaign-report.html"
+            campaign_report_json = output_dir / "autoplay-campaign-report.json"
+            if campaign_report_html.exists():
+                zf.write(campaign_report_html, campaign_report_html.name)
+            if campaign_report_json.exists():
+                zf.write(campaign_report_json, campaign_report_json.name)
             checkpoint_dir = output_dir / "checkpoints"
             if checkpoint_dir.exists():
                 session_id = str(summary.get("session_id") or "")
