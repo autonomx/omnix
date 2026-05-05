@@ -740,7 +740,25 @@ def main(argv: List[str] | None = None) -> int:
     print(f"turns_executed: {summary['turns_executed']}")
     print(f"stopped_reason: {summary['stopped_reason']}")
     print(f"ok: {summary['ok']}")
-    print(f"results_zip: {summary['artifact_paths']['zip']}")
+    artifact_paths = summary.get("artifact_paths") or {}
+    story_variety = summary.get("story_variety") or {}
+    seed_result = summary.get("seed_result") or {}
+    output_dir_abs = Path(args.output_dir).resolve()
+
+    print(f"requested_seed: {story_variety.get('requested_seed') or seed_result.get('requested_seed')}")
+    print(f"resolved_seed: {story_variety.get('resolved_seed') or seed_result.get('resolved_seed')}")
+    print(f"output_dir: {args.output_dir}")
+    print(f"output_dir_abs: {output_dir_abs}")
+    print(f"results_zip: {artifact_paths.get('zip')}")
+    print(f"results_zip_abs: {Path(artifact_paths.get('zip')).resolve() if artifact_paths.get('zip') else ''}")
+    print(f"campaign_report_html: {artifact_paths.get('campaign_report_html') or ''}")
+    print(f"campaign_report_html_abs: {Path(artifact_paths.get('campaign_report_html')).resolve() if artifact_paths.get('campaign_report_html') else ''}")
+    print(f"campaign_report_json: {artifact_paths.get('campaign_report_json') or ''}")
+    print(f"story_variety_json: {artifact_paths.get('story_variety') or ''}")
+
+    if args.artifact_detail == "full" and not artifact_paths.get("campaign_report_html"):
+        print("missing_full_artifacts: campaign_report_html")
+
     metrics = summary.get("health", {}).get("metrics", {})
     print(f"real_turn_runtime_count: {metrics.get('real_turn_runtime_count')}")
     print(f"compatibility_turn_runtime_count: {metrics.get('compatibility_turn_runtime_count')}")
