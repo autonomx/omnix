@@ -3,6 +3,9 @@ from pathlib import Path
 from tests.rpg.autoplay.campaign_report import (
     build_campaign_report_model,
     build_chapter_status,
+    build_inventory_rows,
+    build_location_journey_model,
+    build_player_progression_rows,
     build_story_so_far_paragraph,
     classify_dialogue_source,
     compute_dialogue_coverage,
@@ -138,8 +141,8 @@ def test_render_campaign_report_html_contains_major_sections():
     html = render_campaign_report_html(model)
 
     assert "Autoplay Campaign Report" in html
-    assert "NPCs Introduced" in html
-    assert "Lore & Worldbuilding" in html
+    assert "NPC Cast, Biography, and Growth" in html
+    assert "Lore, Setting, and Director Setup" in html
     assert "Turn-by-Turn Story Timeline" in html
 
 
@@ -585,3 +588,206 @@ def test_runtime_diagnostics_count_repaired_provider_payloads():
     assert diagnostics["provider_repaired_turns"] == 1
     assert diagnostics["provider_original_error_counts"]["followup_hooks_not_empty"] == 1
     assert diagnostics["provider_repair_action_counts"]["cleared_followup_hooks"] == 1
+
+
+def test_campaign_report_model_includes_pm_summary_and_inventory():
+    transcript = [
+        {
+            "turn_index": 1,
+            "player_action": "I ask Bran.",
+            "before_state": {
+                "player_state": {
+                    "inventory": {
+                        "items": [{"id": "torch", "name": "Torch"}],
+                        "currency": {"gold": 1},
+                    }
+                }
+            },
+            "final_authoritative_state": {
+                "player_state": {
+                    "inventory": {
+                        "items": [{"id": "torch", "name": "Torch"}],
+                        "currency": {"gold": 1},
+                    }
+                },
+                "story_arc_state": {"arcs": {"arc:x": {"stage": "active"}}},
+                "story_arc_milestone_state": {
+                    "arcs": {
+                        "arc:x": {
+                            "milestones": [
+                                {"milestone_id": "m:next", "title": "Next step", "status": "active"}
+                            ]
+                        }
+                    }
+                },
+            },
+        }
+    ]
+    model = build_campaign_report_model(
+        transcript=transcript,
+        summary={"session_id": "s", "turns_executed": 1},
+        metrics={"progress_quality": {"meaningful_turns": 1}},
+        health={},
+    )
+
+    assert model["pm_summary"]["overall_status"] in {"good", "partial"}
+
+
+def test_inventory_rows_format_currency_and_items():
+    rows = build_inventory_rows(
+        {
+            "currency": {"gold": 15},
+            "items": [
+                {
+                    "name": "Iron Dagger",
+                    "quantity": 1,
+                    "type": "weapon",
+                    "description": "A simple blade.",
+                }
+            ],
+        }
+    )
+
+    assert rows["currency_rows"] == [["gold", 15]]
+    assert rows["item_rows"][0][0] == "Iron Dagger"
+
+
+def test_player_progression_rows_are_table_ready():
+    state = {
+        "player_state": {
+            "name": "The Player",
+            "level": 2,
+            "experience": 5,
+            "experience_to_next_level": 150,
+            "stats": {"strength": 10},
+            "progression_log": [{"turn_index": 1, "type": "experience", "amount": 15, "reason": "Lead found."}],
+        }
+    }
+
+    rows = build_player_progression_rows(state)
+
+    assert ("Level", 2) in rows["summary_rows"]
+    assert rows["stats_rows"] == [("Strength", 10)]
+    assert rows["recent_progression_rows"][0][3] == "Lead found."
+
+
+def test_location_journey_model_groups_tavern_and_road():
+    timeline = [
+        {
+            "turn_index": 1,
+            "player_action": "I ask Bran about the witness.",
+            "narration": "Bran answers in the tavern.",
+            "npc": {"speaker": "Bran"},
+            "fired_hooks": [{"story_label": "Bran reveals a lead."}],
+        },
+        {
+            "turn_index": 2,
+            "player_action": "I pursue the bandit road outside.",
+            "narration": "The road grows quiet.",
+            "npc": {},
+            "fired_hooks": [{"story_label": "The road branch opens."}],
+        },
+    ]
+    state = {
+        "story_arc_milestone_state": {
+            "arcs": {
+                "arc:witness_search": {
+                    "milestones": [
+                        {"title": "Find the witness", "objective_text": "Find the witness near the tavern."},
+                        {"title": "Prepare for the bandit road", "objective_text": "Prepare for the bandit road."},
+                    ]
+                }
+            }
+        }
+    }
+
+    model = build_location_journey_model(timeline=timeline, state=state)
+    names = {row["name"] for row in model["locations"]}
+
+    assert "The Rusty Flagon Tavern" in names
+    assert "The Bandit Road" in names
+
+
+def test_render_campaign_report_html_has_story_so_far_and_single_body():
+    model = build_campaign_report_model(
+        transcript=[
+            {
+                "turn_index": 1,
+                "player_action": "I ask Bran about the witness.",
+                "narration": "Bran lowers his voice.",
+                "final_authoritative_state": {
+                    "story_arc_milestone_state": {
+                        "arcs": {
+                            "arc:witness_search": {
+                                "milestones": [
+                                    {"title": "Find the witness", "status": "completed"},
+                                    {"title": "Prepare for the bandit road", "status": "active"},
+                                ]
+                            }
+                        }
+                    },
+                },
+            }
+        ],
+        summary={"session_id": "s", "turns_executed": 1},
+        metrics={},
+        health={},
+    )
+
+    html = render_campaign_report_html(model)
+
+    assert html.count("<body>") == 1
+    assert '<section id="story-so-far">' in html
+    assert html.index('<section id="story-so-far">') < html.index('<section id="setting">')
+    assert "Find the witness" in html
+
+
+def test_render_campaign_report_html_formats_chapter_status_not_raw_pre():
+    model = build_campaign_report_model(
+        transcript=[
+            {
+                "turn_index": 1,
+                "final_authoritative_state": {
+                    "campaign_director_state": {"campaign_title": "The Witness Trail"},
+                    "story_arc_state": {"arcs": {"arc:x": {"stage": "bandit_trail"}}},
+                    "story_arc_milestone_state": {
+                        "arcs": {
+                            "arc:x": {
+                                "milestones": [
+                                    {"title": "Find the witness", "status": "completed"},
+                                    {"title": "Prepare for the bandit road", "status": "active"},
+                                ]
+                            }
+                        }
+                    },
+                },
+            }
+        ],
+        summary={"session_id": "s", "turns_executed": 1},
+        metrics={},
+        health={},
+    )
+
+    html = render_campaign_report_html(model)
+    chapter_html = html.split('<section id="chapter-status">', 1)[1].split("</section>", 1)[0]
+
+    assert "Active Objectives" in chapter_html
+    assert "Completed Objectives" in chapter_html
+    assert "Prepare for the bandit road" in chapter_html
+    assert "Chapter status JSON" in chapter_html
+    assert "<pre>" not in chapter_html.split("Chapter status JSON", 1)[0]
+
+
+def test_render_campaign_report_places_npcs_before_technical_sections():
+    model = build_campaign_report_model(
+        transcript=[],
+        summary={"session_id": "s"},
+        metrics={},
+        health={},
+    )
+
+    html = render_campaign_report_html(model)
+
+    assert html.index('<section id="npcs">') < html.index('<section id="dialogue-coverage">')
+    assert html.index('<section id="npcs">') < html.index('<section id="performance">')
+    assert html.index('<section id="npcs">') < html.index('<section id="runtime-narration-diagnostics">')

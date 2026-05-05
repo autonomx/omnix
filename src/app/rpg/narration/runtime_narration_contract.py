@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import re
-import inspect
 from typing import Any, Dict, List
 
 
@@ -677,6 +676,7 @@ def build_provider_narration_payload(
     simulation_state: Dict[str, Any] | None = None,
     turn_contract: Dict[str, Any] | None = None,
     max_tokens: int = 320,
+    repair_context: Dict[str, Any] | None = None,
 ) -> Dict[str, Any]:
     simulation_state = _safe_dict(simulation_state)
     turn_contract = _safe_dict(turn_contract)
@@ -700,8 +700,13 @@ def build_provider_narration_payload(
             "Do not say 'the player'.",
             "Do not repeat the player input.",
             "If the action addresses an NPC, include a grounded npc.speaker and npc.line.",
+            "reward MUST be an empty string.",
+            "followup_hooks MUST be an empty array.",
+            "authoritative_changes MUST be false if included.",
+            "Do not include rolls, DCs, success/failure claims, XP, gold, item changes, quest completion, or objective completion unless already present in the deterministic turn_contract.",
             "Return JSON only.",
         ],
+        "previous_attempt_repair_context": _safe_dict(repair_context),
         "player_action": player_action,
         "action_type": action_type,
         "target_npc": target_npc,
@@ -737,6 +742,7 @@ def build_runtime_narration_payload(
     turn_contract: Dict[str, Any] | None = None,
     prefer_provider: bool = True,
     max_tokens: int = 320,
+    max_provider_attempts: int = 2,
 ) -> Dict[str, Any]:
     diagnostics = {
         "provider_requested": bool(prefer_provider),
@@ -752,28 +758,59 @@ def build_runtime_narration_payload(
         "fallback_used": False,
     }
     if prefer_provider and provider is not None:
-        diagnostics["provider_attempted"] = True
-        provider_payload = build_provider_narration_payload(
-            provider=provider,
-            player_action=player_action,
-            simulation_state=simulation_state,
-            turn_contract=turn_contract,
-            max_tokens=max_tokens,
-        )
-        diagnostics["provider_call_diagnostics"] = _safe_dict(
-            provider_payload.get("_provider_call_diagnostics")
-        )
-        validated = validate_narration_payload(provider_payload, player_action=player_action)
-        if validated["ok"]:
-            diagnostics["provider_valid"] = True
-            diagnostics["provider_repaired"] = False
-            payload = validated["payload"]
-            payload["raw_provider_response"] = _safe_str(provider_payload.get("_raw_provider_response"))
-            payload["runtime_narration_diagnostics"] = diagnostics
-            return payload
+        diagnostics["provider_attempt_count"] = 0
+        diagnostics["provider_retry_count"] = 0
+        diagnostics["provider_attempt_errors"] = []
+        last_provider_payload: Dict[str, Any] = {}
+        last_validated: Dict[str, Any] = {}
+        repair_context: Dict[str, Any] = {}
+
+        for attempt_index in range(max(1, int(max_provider_attempts))):
+            diagnostics["provider_attempt_count"] += 1
+            provider_payload = build_provider_narration_payload(
+                provider=provider,
+                player_action=player_action,
+                simulation_state=simulation_state,
+                turn_contract=turn_contract,
+                max_tokens=max_tokens,
+                repair_context=repair_context,
+            )
+            last_provider_payload = provider_payload
+            diagnostics["provider_call_diagnostics"] = _safe_dict(
+                provider_payload.get("_provider_call_diagnostics")
+            )
+            validated = validate_narration_payload(provider_payload, player_action=player_action)
+            last_validated = validated
+            if validated["ok"]:
+                diagnostics["provider_valid"] = True
+                diagnostics["provider_repaired"] = False
+                payload = validated["payload"]
+                payload["raw_provider_response"] = _safe_str(provider_payload.get("_raw_provider_response"))
+                payload["runtime_narration_diagnostics"] = diagnostics
+                return payload
+
+            errors = list(validated.get("errors") or [])
+            diagnostics["provider_attempt_errors"].append(
+                {
+                    "attempt": attempt_index + 1,
+                    "errors": errors,
+                }
+            )
+            call_diag = _safe_dict(provider_payload.get("_provider_call_diagnostics"))
+            if call_diag.get("error") or not _safe_str(provider_payload.get("_raw_provider_response")):
+                break
+            if attempt_index + 1 < max(1, int(max_provider_attempts)):
+                diagnostics["provider_retry_count"] += 1
+                repair_context = {
+                    "previous_errors": errors,
+                    "instruction": (
+                        "Retry with valid JSON only. reward must be ''. followup_hooks must be []. "
+                        "Do not include rolls, DCs, rewards, XP, item changes, or objective completion."
+                    ),
+                }
 
         repaired_provider_payload = repair_provider_narration_payload(
-            provider_payload,
+            last_provider_payload,
             player_action=player_action,
             turn_contract=turn_contract,
         )
@@ -787,18 +824,18 @@ def build_runtime_narration_payload(
             diagnostics["provider_repair_actions"] = list(
                 repaired_provider_payload.get("_repair_actions") or []
             )
-            diagnostics["provider_original_errors"] = list(validated.get("errors") or [])
+            diagnostics["provider_original_errors"] = list(last_validated.get("errors") or [])
             payload = repaired_validated["payload"]
-            payload["raw_provider_response"] = _safe_str(provider_payload.get("_raw_provider_response"))
+            payload["raw_provider_response"] = _safe_str(last_provider_payload.get("_raw_provider_response"))
             payload["runtime_narration_diagnostics"] = diagnostics
             return payload
-        call_diag = _safe_dict(provider_payload.get("_provider_call_diagnostics"))
+        call_diag = _safe_dict(last_provider_payload.get("_provider_call_diagnostics"))
         if call_diag.get("error"):
             diagnostics["provider_errors"] = [str(call_diag.get("error"))]
-        elif not _safe_str(provider_payload.get("_raw_provider_response")):
+        elif not _safe_str(last_provider_payload.get("_raw_provider_response")):
             diagnostics["provider_errors"] = ["provider_returned_empty_text"]
         else:
-            diagnostics["provider_errors"] = list(validated.get("errors") or [])
+            diagnostics["provider_errors"] = list(last_validated.get("errors") or [])
     elif prefer_provider and provider is None:
         diagnostics["provider_errors"] = ["provider_not_available"]
 
