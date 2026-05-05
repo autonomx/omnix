@@ -3,6 +3,10 @@ from pathlib import Path
 from tests.rpg.autoplay.campaign_report import (
     build_campaign_report_model,
     build_story_so_far_paragraph,
+    build_chapter_status,
+    build_lore_setting_paragraph,
+    classify_dialogue_source,
+    compute_dialogue_coverage,
     extract_conversation_beat,
     extract_dialogue,
     extract_narration,
@@ -248,3 +252,88 @@ def test_campaign_report_shortcomings_flag_fallback_player_agent():
 
     assert "Player-agent exceptions" in text
     assert "Fallback player action rate" in text
+
+
+def test_dialogue_coverage_detects_social_turn_missing_npc_response():
+    timeline = [
+        {
+            "turn_index": 1,
+            "player_action": "I ask Bran about the witness.",
+            "social_action": True,
+            "npc": {},
+            "missing_npc_response": True,
+            "dialogue_source": "none",
+            "echoed_narration": True,
+            "narration": "I ask Bran about the witness.",
+        },
+        {
+            "turn_index": 2,
+            "player_action": "I inspect the tavern.",
+            "social_action": False,
+            "npc": {"speaker": "Mira", "line": "I saw someone leave."},
+            "missing_npc_response": False,
+            "dialogue_source": "story_hook_display",
+            "echoed_narration": False,
+        },
+    ]
+
+    coverage = compute_dialogue_coverage(timeline)
+
+    assert coverage["social_turn_missing_npc_response_count"] == 1
+    assert coverage["hook_dialogue_turn_count"] == 1
+    assert coverage["echoed_narration_turn_count"] == 1
+
+
+def test_classify_dialogue_source_prefers_story_hook_display():
+    row = {
+        "story_hook_result": {
+            "display": {
+                "npc": {"speaker": "Bran", "line": "Take the road carefully."}
+            }
+        }
+    }
+
+    assert classify_dialogue_source(row) == "story_hook_display"
+
+
+def test_chapter_status_recommends_next_objective_when_active_exists():
+    state = {
+        "campaign_director_state": {"campaign_title": "Test Campaign"},
+        "story_arc_state": {"arcs": {"arc:x": {"stage": "bandit_trail"}}},
+    }
+    model_like = {
+        "milestones": [
+            {"title": "Find witness", "status": "completed"},
+            {"title": "Prepare for the bandit road", "status": "active"},
+        ]
+    }
+
+    status = build_chapter_status(state, model_like)
+
+    assert status["active_objective_count"] == 1
+    assert "can continue" in status["recommendation"]
+
+
+def test_story_summary_has_multiple_paragraphs_and_no_hook_ids():
+    model = {
+        "timeline": [
+            {
+                "turn_index": 1,
+                "fired_hooks": [
+                    {
+                        "hook_id": "hook:witness:ask_bran",
+                        "story_summary": "Bran reveals the first witness lead.",
+                    }
+                ],
+            }
+        ],
+        "milestones": [{"title": "Find the witness", "status": "completed"}],
+        "journal_entries": [],
+        "hook_counts": {"hook:witness:ask_bran": 1},
+    }
+
+    paragraph = build_story_so_far_paragraph(model)
+
+    assert "\n\n" in paragraph
+    assert "hook:witness" not in paragraph
+    assert "Bran reveals the first witness lead" in paragraph
