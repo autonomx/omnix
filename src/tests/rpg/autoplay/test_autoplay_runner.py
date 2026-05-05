@@ -26,7 +26,7 @@ def test_autoplay_runner_fallback_executes_short_campaign(tmp_path: Path, monkey
         }
 
     monkeypatch.setattr("tests.rpg.autoplay_llm_campaign.prepare_autoplay_manual_session", fake_prepare)
-    monkeypatch.setattr("tests.rpg.autoplay_llm_campaign.load_autoplay_simulation_state", fake_load_state)
+    monkeypatch.setattr("tests.rpg.autoplay.manual_turn_driver.load_autoplay_simulation_state", fake_load_state)
     monkeypatch.setattr("tests.rpg.autoplay_llm_campaign._call_turn_runtime", fake_turn)
     monkeypatch.setattr(
         "tests.rpg.autoplay_llm_campaign.validate_save_load_checkpoint",
@@ -75,6 +75,9 @@ def test_autoplay_runner_fallback_executes_short_campaign(tmp_path: Path, monkey
         max_churn_only_streak=0,
         max_objective_target_no_progress_streak=0,
         fail_on_post_objective_weak_progress=False,
+        autoplay_base_response="deterministic",
+        base_response_max_tokens=220,
+        fail_on_dialogue_coverage_gap=False,
         action_diversity_window=12,
         min_action_diversity_rate=0.0,
         min_category_diversity_rate=0.0,

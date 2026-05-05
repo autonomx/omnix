@@ -2,11 +2,11 @@ from pathlib import Path
 
 from tests.rpg.autoplay.campaign_report import (
     build_campaign_report_model,
-    build_story_so_far_paragraph,
     build_chapter_status,
-    build_lore_setting_paragraph,
+    build_story_so_far_paragraph,
     classify_dialogue_source,
     compute_dialogue_coverage,
+    extract_base_response_payload,
     extract_conversation_beat,
     extract_dialogue,
     extract_narration,
@@ -114,7 +114,10 @@ def test_campaign_report_model_collects_core_sections():
 def test_render_campaign_report_html_contains_major_sections():
     model = {
         "summary": {"session_id": "s", "turns_executed": 1, "ok": True},
-        "metrics": {"progress_quality": {"meaningful_turns": 1}},
+        "metrics": {
+            "progress_quality": {"meaningful_turns": 1},
+            "performance": {"avg_turn_ms": 1.0, "stage_summary": {}, "slowest_turns": []},
+        },
         "health": {"warnings": []},
         "timeline": [],
         "story_arcs": [],
@@ -296,6 +299,136 @@ def test_classify_dialogue_source_prefers_story_hook_display():
     assert classify_dialogue_source(row) == "story_hook_display"
 
 
+def test_extract_dialogue_from_base_runtime_response():
+    row = {
+        "base_response_payload": {
+            "source": "deterministic_base_runtime_response",
+            "narration": "Bran studies the question before answering.",
+            "npc": {
+                "speaker": "Bran",
+                "line": "Tell me exactly what you found.",
+            },
+        }
+    }
+
+    assert extract_base_response_payload(row)["npc"]["speaker"] == "Bran"
+    assert extract_dialogue(row)["line"] == "Tell me exactly what you found."
+    assert extract_narration(row) == "Bran studies the question before answering."
+    assert classify_dialogue_source(row) == "base_runtime_deterministic"
+
+
+def test_dialogue_coverage_counts_base_runtime_dialogue():
+    timeline = [
+        {
+            "turn_index": 1,
+            "player_action": "I ask Bran about the witness.",
+            "social_action": True,
+            "npc": {"speaker": "Bran", "line": "Tell me exactly what you found."},
+            "missing_npc_response": False,
+            "dialogue_source": "base_runtime_deterministic",
+            "echoed_narration": False,
+        }
+    ]
+
+    coverage = compute_dialogue_coverage(timeline)
+
+    assert coverage["base_runtime_dialogue_turn_count"] == 1
+    assert coverage["social_turn_missing_npc_response_count"] == 0
+
+
+def test_report_classifies_real_runtime_provider_dialogue():
+    row = {
+        "turn_result": {
+            "manual_turn_summary": {
+                "raw_narration_payload": {
+                    "format_version": "rpg_narration_v2",
+                    "source": "provider_runtime_narration",
+                    "narration": "Bran lowers his voice.",
+                    "npc": {
+                        "speaker": "Bran",
+                        "line": "Tell me exactly what you found.",
+                    },
+                    "reward": "",
+                    "followup_hooks": [],
+                }
+            }
+        }
+    }
+
+    assert classify_dialogue_source(row) == "real_runtime_provider"
+
+
+def test_story_hook_display_overrides_deterministic_runtime_fallback_in_report():
+    row = {
+        "turn_result": {
+            "manual_turn_summary": {
+                "raw_narration_payload": {
+                    "format_version": "rpg_narration_v2",
+                    "source": "deterministic_runtime_narration_fallback",
+                    "narration": "Generic fallback narration.",
+                    "npc": {
+                        "speaker": "Bran",
+                        "line": "Generic fallback line.",
+                    },
+                    "reward": "",
+                    "followup_hooks": [],
+                }
+            }
+        },
+        "story_hook_result": {
+            "display": {
+                "narration": "Specific hook narration.",
+                "npc": {
+                    "speaker": "Bran",
+                    "line": "Specific hook line.",
+                },
+            }
+        },
+    }
+
+    assert classify_dialogue_source(row) == "story_hook_display"
+    assert extract_dialogue(row)["line"] == "Specific hook line."
+    assert extract_narration(row) == "Specific hook narration."
+
+
+def test_runtime_diagnostics_are_collected_in_campaign_report_model():
+    transcript = [
+        {
+            "turn_index": 1,
+            "player_action": "I ask Bran about the witness.",
+            "turn_result": {
+                "manual_turn_summary": {
+                    "raw_narration_payload": {
+                        "format_version": "rpg_narration_v2",
+                        "source": "deterministic_runtime_narration_fallback",
+                        "narration": "Bran answers.",
+                        "npc": {"speaker": "Bran", "line": "Tell me more."},
+                        "runtime_narration_diagnostics": {
+                            "provider_requested": True,
+                            "provider_present": False,
+                            "provider_attempted": False,
+                            "provider_valid": False,
+                            "provider_errors": ["provider_not_available"],
+                            "fallback_used": True,
+                        },
+                    }
+                }
+            },
+        }
+    ]
+
+    model = build_campaign_report_model(
+        transcript=transcript,
+        summary={"session_id": "s"},
+        metrics={},
+        health={},
+    )
+
+    diagnostics = model["runtime_narration_diagnostics"]
+    assert diagnostics["fallback_used_turns"] == 1
+    assert diagnostics["provider_error_counts"]["provider_not_available"] == 1
+
+
 def test_chapter_status_recommends_next_objective_when_active_exists():
     state = {
         "campaign_director_state": {"campaign_title": "Test Campaign"},
@@ -337,3 +470,118 @@ def test_story_summary_has_multiple_paragraphs_and_no_hook_ids():
     assert "\n\n" in paragraph
     assert "hook:witness" not in paragraph
     assert "Bran reveals the first witness lead" in paragraph
+
+
+def test_campaign_report_prefers_final_authoritative_state_for_latest_state():
+    transcript = [
+        {
+            "turn_index": 1,
+            "turn_result": {
+                "simulation_state": {
+                    "story_arc_state": {
+                        "arcs": {
+                            "arc:witness_search": {"stage": "reported_to_bran"}
+                        }
+                    },
+                    "story_arc_milestone_state": {
+                        "arcs": {
+                            "arc:witness_search": {
+                                "milestones": [
+                                    {
+                                        "milestone_id": "milestone:pursue_bandit_trail",
+                                        "title": "Pursue the bandit trail",
+                                        "status": "active",
+                                    }
+                                ]
+                            }
+                        }
+                    },
+                }
+            },
+            "final_authoritative_state": {
+                "story_arc_state": {
+                    "arcs": {
+                        "arc:witness_search": {"stage": "bandit_trail"}
+                    }
+                },
+                "story_arc_milestone_state": {
+                    "arcs": {
+                        "arc:witness_search": {
+                            "milestones": [
+                                {
+                                    "milestone_id": "milestone:pursue_bandit_trail",
+                                    "title": "Pursue the bandit trail",
+                                    "status": "completed",
+                                },
+                                {
+                                    "milestone_id": "milestone:prepare_for_bandit_road",
+                                    "title": "Prepare for the bandit road",
+                                    "status": "active",
+                                },
+                            ]
+                        }
+                    }
+                },
+            },
+        }
+    ]
+
+    model = build_campaign_report_model(
+        transcript=transcript,
+        summary={"session_id": "s", "turns_executed": 1},
+        metrics={},
+        health={},
+    )
+
+    milestones = {
+        row["milestone_id"]: row
+        for row in model["milestones"]
+    }
+
+    assert model["latest_state_source"] == "final_authoritative_state"
+    assert model["story_arcs"][0]["stage"] == "bandit_trail"
+    assert milestones["milestone:pursue_bandit_trail"]["status"] == "completed"
+    assert milestones["milestone:prepare_for_bandit_road"]["status"] == "active"
+    assert model["chapter_status"]["active_objectives"] == ["Prepare for the bandit road"]
+
+
+def test_runtime_diagnostics_count_repaired_provider_payloads():
+    transcript = [
+        {
+            "turn_index": 1,
+            "player_action": "I ask Bran about the witness.",
+            "turn_result": {
+                "manual_turn_summary": {
+                    "raw_narration_payload": {
+                        "format_version": "rpg_narration_v2",
+                        "source": "provider_runtime_narration",
+                        "narration": "Bran answers.",
+                        "npc": {"speaker": "Bran", "line": "Tell me more."},
+                        "runtime_narration_diagnostics": {
+                            "provider_requested": True,
+                            "provider_present": True,
+                            "provider_attempted": True,
+                            "provider_valid": True,
+                            "provider_repaired": True,
+                            "provider_original_errors": ["followup_hooks_not_empty"],
+                            "provider_repair_actions": ["cleared_followup_hooks"],
+                            "fallback_used": False,
+                        },
+                    }
+                }
+            },
+        }
+    ]
+
+    model = build_campaign_report_model(
+        transcript=transcript,
+        summary={"session_id": "s"},
+        metrics={},
+        health={},
+    )
+
+    diagnostics = model["runtime_narration_diagnostics"]
+    assert diagnostics["provider_valid_turns"] == 1
+    assert diagnostics["provider_repaired_turns"] == 1
+    assert diagnostics["provider_original_error_counts"]["followup_hooks_not_empty"] == 1
+    assert diagnostics["provider_repair_action_counts"]["cleared_followup_hooks"] == 1

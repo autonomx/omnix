@@ -1,630 +1,893 @@
-Bundle N19-N21 — Post-Objective Progress Quality + Arc Branching v1
+Bundle N28-N30 — Real Runtime Narration Contract Binding for Session Turns v1
 GOAL:
-N16-N18 proved deterministic story hooks can advance and complete the seeded witness objective.
+Normal RPG session turns should return a real structured narration payload.
 
-Current issue:
-- objective completes correctly
-- arc stage changes correctly
-- story events are queued correctly
-- checkpoints/state bounds remain clean
-- but after objective completion, later turns may still count as meaningful because generic journal entries appear every turn
+Current accepted state:
+- Autoplay report now shows useful non-hook dialogue through deterministic autoplay base responses.
+- Campaign report is honest that this is not true runtime narration.
+- Real session turns still often return:
+    narration == player_action
+    npc: {}
+    raw_narration_payload: {}
+    llm_called: false
 
-N19-N21 adds:
-1. Post-objective progress quality refinement.
-2. Branching deterministic follow-up arc after witness_found.
-3. Stronger distinction between:
-   - real arc/objective/story progression
-   - generic journal churn
-   - memory/presentation churn
-4. New post-completion objectives:
-   - report witness findings to Bran
-   - decide whether to pursue bandit trail
-5. Branch hooks:
-   - report_to_bran branch
-   - pursue_bandit_trail branch
-   - ignore/escalation branch
-6. Tests proving completed objective does not produce false meaningful progress forever.
+N28-N30 adds:
+1. A runtime narration contract adapter for real session turns.
+2. Structured narration payload attached to turn result.
+3. Provider-backed narration through centralized app provider when available.
+4. Deterministic safe fallback when provider is unavailable/invalid.
+5. Strict no-authority rules:
+   - narration cannot award XP
+   - narration cannot complete objectives
+   - narration cannot invent items/rewards
+   - narration cannot mutate simulation state
+6. Manual/autoplay harness extraction of the real runtime payload.
+7. Tests proving normal non-hook turns produce:
+   - narration_payload.format_version == rpg_narration_v2
+   - narration text not equal to player action
+   - npc speaker/line for social turns
+   - llm provider path is central when enabled
+Patch 1 — Add runtime narration contract module
 
-Core rule:
-The player-agent may choose actions.
-The deterministic simulation hooks decide whether story branches advance.
-LLM output remains presentation/action-selection only.
-Patch 1 — Refine progress quality so generic journal churn is not always meaningful
+Add:
+
+src/app/rpg/narration/runtime_narration_contract.py
+*** Begin Patch
+*** Add File: src/app/rpg/narration/runtime_narration_contract.py
++from __future__ import annotations
++
++import json
++import re
++from typing import Any, Dict, List
++
++
++NARRATION_FORMAT_VERSION = "rpg_narration_v2"
++
++
++def _safe_dict(value: Any) -> Dict[str, Any]:
++    return value if isinstance(value, dict) else {}
++
++
++def _safe_list(value: Any) -> List[Any]:
++    return value if isinstance(value, list) else []
++
++
++def _safe_str(value: Any) -> str:
++    return value if isinstance(value, str) else ""
++
++
++def _norm(value: Any) -> str:
++    return " ".join(str(value or "").lower().strip().split())
++
++
++def is_echo_narration(*, player_action: str, narration: str) -> bool:
++    action = _norm(player_action)
++    text = _norm(narration)
++    return bool(action and text and (text == action or text == action.rstrip(".") or text == action + "."))
++
++
++def classify_player_action(player_action: str) -> str:
++    text = _norm(player_action)
++    if any(word in text for word in ["ask", "talk", "tell", "speak", "question", "report", "explain", "share", "approach", "convince", "persuade"]):
++        return "social"
++    if any(word in text for word in ["look", "inspect", "search", "observe", "scan", "examine", "listen"]):
++        return "exploration"
++    if any(word in text for word in ["walk", "travel", "leave", "follow", "pursue", "road", "outside"]):
++        return "travel"
++    if any(word in text for word in ["attack", "strike", "hit", "shoot", "cast", "defend"]):
++        return "combat"
++    if any(word in text for word in ["buy", "sell", "rent", "room", "drink", "meal", "service"]):
++        return "service"
++    return "general"
++
++
++def infer_npc_speaker(player_action: str, simulation_state: Dict[str, Any] | None = None) -> str:
++    text = _norm(player_action)
++    aliases = {
++        "bran": "Bran",
++        "innkeeper": "Bran",
++        "mira": "Mira",
++        "cloaked traveler": "Cloaked Traveler",
++        "traveler": "Cloaked Traveler",
++        "patron": "Local Patron",
++        "guard": "Guard",
++        "merchant": "Merchant",
++    }
++    for key, value in aliases.items():
++        if key in text:
++            return value
++
++    simulation_state = _safe_dict(simulation_state)
++    profiles = _safe_dict(_safe_dict(simulation_state.get("npc_profile_state")).get("profiles"))
++    for profile in profiles.values():
++        profile = _safe_dict(profile)
++        name = _safe_str(profile.get("name"))
++        if name and _norm(name) in text:
++            return name
++    return ""
++
++
++def _fallback_npc_line(*, speaker: str, player_action: str, action_type: str) -> str:
++    text = _norm(player_action)
++    if not speaker:
++        return ""
++    if speaker == "Bran":
++        if "bandit" in text or "road" in text:
++            return "If the road is involved, then this is bigger than tavern gossip. Be careful how loudly you ask."
++        if "witness" in text or "traveler" in text or "found" in text:
++            return "Slow down and tell me what you know. Around here, one witness can change the whole story."
++        if "room" in text or "rent" in text:
++            return "I have rooms, but tonight I am more worried about what followed people here than where they sleep."
++        return "Say what you need to say. I am listening, even if the rest of the room is pretending not to."
++    if speaker == "Mira":
++        return "I notice the things people try to hide. Ask plainly, and I will tell you what I saw."
++    if speaker == "Cloaked Traveler":
++        return "I did not want to be noticed. That should tell you enough about how dangerous this is."
++    if speaker == "Local Patron":
++        return "People saw more than they are admitting. Fear has a way of keeping mugs close and mouths shut."
++    return "The reply comes cautiously, shaped by the pressure in the room."
++
++
++def build_deterministic_narration_payload(
++    *,
++    player_action: str,
++    simulation_state: Dict[str, Any] | None = None,
++    turn_contract: Dict[str, Any] | None = None,
++) -> Dict[str, Any]:
++    """Build a safe presentation-only narration payload.
++
++    This is a fallback, not a simulation authority. It describes only that the
++    moment responds to the player's action. It does not award, complete, mutate,
++    or invent authoritative facts.
++    """
++    simulation_state = _safe_dict(simulation_state)
++    turn_contract = _safe_dict(turn_contract)
++    action_type = classify_player_action(player_action)
++    speaker = infer_npc_speaker(player_action, simulation_state)
++
++    if action_type == "social":
++        speaker = speaker or "Local Patron"
++        narration = f"{speaker} reacts to the question, and the surrounding noise seems to thin as the conversation draws attention."
++        npc_line = _fallback_npc_line(speaker=speaker, player_action=player_action, action_type=action_type)
++    elif action_type == "exploration":
++        narration = "The search draws out grounded details from the scene: small marks, watchful faces, and signs of recent tension."
++        npc_line = ""
++    elif action_type == "travel":
++        narration = "The scene shifts with the movement, carrying the pressure of the current lead into the space ahead."
++        npc_line = ""
++    elif action_type == "combat":
++        narration = "The hostile motion sharpens the moment, but the actual outcome remains bound to the combat result."
++        npc_line = ""
++    elif action_type == "service":
++        speaker = speaker or "Bran"
++        narration = "The practical request lands against the unease of the room, making ordinary business feel less ordinary."
++        npc_line = _fallback_npc_line(speaker=speaker, player_action=player_action, action_type=action_type)
++    else:
++        narration = "The moment responds without producing a major new consequence."
++        npc_line = ""
++
++    if is_echo_narration(player_action=player_action, narration=narration):
++        narration = "The scene responds with a grounded beat rather than merely repeating the attempted action."
++
++    return {
++        "format_version": NARRATION_FORMAT_VERSION,
++        "narration": narration,
++        "action": _safe_str(turn_contract.get("summary") or turn_contract.get("action") or "The action is acknowledged by the scene."),
++        "npc": {
++            "speaker": speaker if npc_line else "",
++            "line": npc_line,
++        },
++        "reward": "",
++        "followup_hooks": [],
++        "source": "deterministic_runtime_narration_fallback",
++        "authoritative_changes": False,
++    }
++
++
++def _extract_json_object(text: str) -> Dict[str, Any]:
++    text = _safe_str(text).strip()
++    if not text:
++        return {}
++    try:
++        value = json.loads(text)
++        return value if isinstance(value, dict) else {}
++    except Exception:
++        pass
++    match = re.search(r"\{.*\}", text, flags=re.DOTALL)
++    if not match:
++        return {}
++    try:
++        value = json.loads(match.group(0))
++        return value if isinstance(value, dict) else {}
++    except Exception:
++        return {}
++
++
++def _call_provider_text(provider: Any, prompt: str, *, max_tokens: int = 320) -> str:
++    if provider is None:
++        return ""
++    for method_name in ("chat", "complete", "generate", "invoke"):
++        method = getattr(provider, method_name, None)
++        if not callable(method):
++            continue
++        try:
++            if method_name == "chat":
++                response = method(
++                    [
++                        {
++                            "role": "system",
++                            "content": (
++                                "You are the presentation-only narration layer for a deterministic RPG. "
++                                "Return JSON only."
++                            ),
++                        },
++                        {"role": "user", "content": prompt},
++                    ],
++                    max_tokens=max_tokens,
++                )
++            else:
++                response = method(prompt, max_tokens=max_tokens)
++            if isinstance(response, str):
++                return response
++            if isinstance(response, dict):
++                return _safe_str(response.get("content") or response.get("text") or response.get("response"))
++            content = getattr(response, "content", "")
++            if content:
++                return str(content)
++        except Exception:
++            continue
++    return ""
++
++
++def validate_narration_payload(
++    payload: Dict[str, Any],
++    *,
++    player_action: str,
++) -> Dict[str, Any]:
++    payload = _safe_dict(payload)
++    errors: List[str] = []
++
++    if payload.get("format_version") != NARRATION_FORMAT_VERSION:
++        errors.append("invalid_format_version")
++    narration = _safe_str(payload.get("narration"))
++    if not narration:
++        errors.append("missing_narration")
++    if is_echo_narration(player_action=player_action, narration=narration):
++        errors.append("echoed_player_action")
++    npc = _safe_dict(payload.get("npc"))
++    if not isinstance(payload.get("npc"), dict):
++        errors.append("npc_not_object")
++    if payload.get("reward") not in ("", None):
++        errors.append("reward_not_empty")
++    hooks = payload.get("followup_hooks")
++    if hooks not in ([], None):
++        errors.append("followup_hooks_not_empty")
++    if payload.get("authoritative_changes") not in (False, None):
++        errors.append("authoritative_changes_not_false")
++
++    normalized = {
++        "format_version": NARRATION_FORMAT_VERSION,
++        "narration": narration,
++        "action": _safe_str(payload.get("action")),
++        "npc": {
++            "speaker": _safe_str(npc.get("speaker")),
++            "line": _safe_str(npc.get("line")),
++        },
++        "reward": "",
++        "followup_hooks": [],
++        "source": _safe_str(payload.get("source") or "runtime_narration"),
++        "authoritative_changes": False,
++    }
++    return {
++        "ok": not errors,
++        "errors": errors,
++        "payload": normalized,
++    }
++
++
++def build_provider_narration_payload(
++    *,
++    provider: Any,
++    player_action: str,
++    simulation_state: Dict[str, Any] | None = None,
++    turn_contract: Dict[str, Any] | None = None,
++    max_tokens: int = 320,
++) -> Dict[str, Any]:
++    simulation_state = _safe_dict(simulation_state)
++    turn_contract = _safe_dict(turn_contract)
++    action_type = classify_player_action(player_action)
++    target_npc = infer_npc_speaker(player_action, simulation_state)
++
++    prompt = {
++        "task": "Produce structured RPG narration for a completed deterministic turn.",
++        "schema": {
++            "format_version": NARRATION_FORMAT_VERSION,
++            "narration": "2-5 sentences describing how the scene responds. Do not repeat the player input.",
++            "action": "Result/acknowledgement of the action, not the original action text.",
++            "npc": {"speaker": "NPC name or empty", "line": "NPC line or empty"},
++            "reward": "",
++            "followup_hooks": [],
++        },
++        "rules": [
++            "Simulation is authoritative. You cannot award XP, gold, items, damage, quest completion, or story outcomes.",
++            "Do not invent rewards.",
++            "Do not mutate state.",
++            "Do not say 'the player'.",
++            "Do not repeat the player input.",
++            "If the action addresses an NPC, include a grounded npc.speaker and npc.line.",
++            "Return JSON only.",
++        ],
++        "player_action": player_action,
++        "action_type": action_type,
++        "target_npc": target_npc,
++        "turn_contract": turn_contract,
++        "bounded_state_summary": {
++            "scene": simulation_state.get("scene"),
++            "location": simulation_state.get("location"),
++            "story_arc_state": simulation_state.get("story_arc_state"),
++            "campaign_journal_state": simulation_state.get("campaign_journal_state"),
++            "npc_profile_state": simulation_state.get("npc_profile_state"),
++        },
++    }
++    raw = _call_provider_text(provider, json.dumps(prompt, ensure_ascii=False), max_tokens=max_tokens)
++    parsed = _extract_json_object(raw)
++    if parsed:
++        parsed["source"] = "provider_runtime_narration"
++    parsed["_raw_provider_response"] = raw
++    return parsed
++
++
++def build_runtime_narration_payload(
++    *,
++    provider: Any = None,
++    player_action: str,
++    simulation_state: Dict[str, Any] | None = None,
++    turn_contract: Dict[str, Any] | None = None,
++    prefer_provider: bool = True,
++    max_tokens: int = 320,
++) -> Dict[str, Any]:
++    if prefer_provider and provider is not None:
++        provider_payload = build_provider_narration_payload(
++            provider=provider,
++            player_action=player_action,
++            simulation_state=simulation_state,
++            turn_contract=turn_contract,
++            max_tokens=max_tokens,
++        )
++        validated = validate_narration_payload(provider_payload, player_action=player_action)
++        if validated["ok"]:
++            payload = validated["payload"]
++            payload["raw_provider_response"] = _safe_str(provider_payload.get("_raw_provider_response"))
++            return payload
++
++    fallback = build_deterministic_narration_payload(
++        player_action=player_action,
++        simulation_state=simulation_state,
++        turn_contract=turn_contract,
++    )
++    return validate_narration_payload(fallback, player_action=player_action)["payload"]
+*** End Patch
+Patch 2 — Add provider adapter helper
+
+You need one central way to access app.shared.get_provider() without breaking tests.
+
+Add:
+
+src/app/rpg/narration/runtime_provider.py
+*** Begin Patch
+*** Add File: src/app/rpg/narration/runtime_provider.py
++from __future__ import annotations
++
++from typing import Any
++
++
++def get_runtime_llm_provider() -> Any:
++    """Return the centralized app LLM provider if available.
++
++    Keep this tiny and defensive so tests can monkeypatch it easily.
++    """
++    try:
++        from app import shared  # type: ignore
++
++        getter = getattr(shared, "get_provider", None)
++        if callable(getter):
++            return getter()
++    except Exception:
++        return None
++    return None
+*** End Patch
+Patch 3 — Bind narration payload into session turn result
+
+This is the integration point. The exact file may differ in your tree, but based on earlier bundles you likely have an apply_turn/session turn runtime under one of these:
+
+src/app/rpg/session_runtime.py
+src/app/rpg/session/turn_runtime.py
+src/app/rpg/runtime/session_turn.py
+src/app/rpg/api/session.py
+
+Use the file that owns the return dict for /api/rpg/session/turn and manual harness _get_apply_turn().
+
+For this spec, patch the module that defines apply_turn(...).
+
+Add imports at top:
+
+*** Begin Patch
+*** Update File: src/app/rpg/session_runtime.py
+@@
++from app.rpg.narration.runtime_narration_contract import build_runtime_narration_payload
++from app.rpg.narration.runtime_provider import get_runtime_llm_provider
+*** End Patch
+
+If your actual file is not session_runtime.py, apply this import to the real apply-turn module.
+
+Inside apply_turn(...), after the deterministic simulation result / turn contract is built and before the final return result, add:
+
+*** Begin Patch
+*** Update File: src/app/rpg/session_runtime.py
+@@
++    turn_contract = result.get("turn_contract") or result.get("turnContract") or {}
++    simulation_state = (
++        result.get("simulation_state")
++        or result.get("state")
++        or result.get("session", {}).get("simulation_state")
++        or session.get("simulation_state")
++        or {}
++    )
++    narration_payload = build_runtime_narration_payload(
++        provider=get_runtime_llm_provider(),
++        player_action=player_input,
++        simulation_state=simulation_state,
++        turn_contract=turn_contract,
++        prefer_provider=True,
++    )
++    result["narration_payload"] = narration_payload
++    result["structured_narration"] = narration_payload
++    result["npc"] = narration_payload.get("npc") or {}
++    if narration_payload.get("narration"):
++        result["narration"] = narration_payload["narration"]
++    result["llm_called"] = narration_payload.get("source") == "provider_runtime_narration"
+*** End Patch
+If your result object is built as a literal return
+
+If the code currently does:
+
+return {
+    "ok": True,
+    "session": session,
+    "turn_contract": turn_contract,
+    "narration": narration,
+}
+
+replace with:
+
+result = {
+    "ok": True,
+    "session": session,
+    "turn_contract": turn_contract,
+    "narration": narration,
+}
+narration_payload = build_runtime_narration_payload(
+    provider=get_runtime_llm_provider(),
+    player_action=player_input,
+    simulation_state=session.get("simulation_state") or {},
+    turn_contract=turn_contract,
+    prefer_provider=True,
+)
+result["narration_payload"] = narration_payload
+result["structured_narration"] = narration_payload
+result["npc"] = narration_payload.get("npc") or {}
+result["narration"] = narration_payload.get("narration") or result.get("narration") or ""
+result["llm_called"] = narration_payload.get("source") == "provider_runtime_narration"
+return result
+If you already have a narration call
+
+Do not create a second independent narration path. Instead, wrap the existing provider output through:
+
+validate_narration_payload(...)
+
+and normalize to the same result fields.
+
+Patch 4 — Manual harness should preserve these fields
 
 Patch:
 
-src/tests/rpg/autoplay/progress_quality.py
-1A. Add weak/generic progress categories
+src/tests/rpg/manual/turn_execution.py
+
+You already added raw_npc and raw_narration_payload. Make extraction more complete.
+
+Find both include_raw_result blocks and make sure this exact extraction is used:
+
+*** Begin Patch
+*** Update File: src/tests/rpg/manual/turn_execution.py
+@@
+             turn_summary["raw_npc"] = _safe_dict(
+                 result.get("npc")
+                 or _safe_dict(result.get("result")).get("npc")
+                 or _safe_dict(result.get("turn_contract")).get("npc")
+             )
+             turn_summary["raw_narration_payload"] = _safe_dict(
+                 result.get("narration_payload")
+                 or result.get("structured_narration")
+                 or result.get("narration_result")
++                or _safe_dict(result.get("result")).get("narration_payload")
++                or _safe_dict(result.get("result")).get("structured_narration")
++                or _safe_dict(result.get("session")).get("last_narration_payload")
++                or _safe_dict(result.get("session")).get("narration_payload")
++            )
++            turn_summary["llm_called"] = bool(
++                result.get("llm_called")
++                or _safe_dict(result.get("result")).get("llm_called")
++                or _safe_dict(turn_summary["raw_narration_payload"]).get("source") == "provider_runtime_narration"
++            )
+*** End Patch
+
+Apply the same addition to the second include_raw_result block if the function has pre/post sanitizer duplicates.
+
+Patch 5 — Campaign report should classify real runtime narration separately
+
+Patch:
+
+src/tests/rpg/autoplay/campaign_report.py
+
+Update classify_dialogue_source(...).
 
 Find:
 
-MEANINGFUL_PROGRESS_CATEGORIES = {
-
-Replace that block with:
-
-*** Begin Patch
-*** Update File: src/tests/rpg/autoplay/progress_quality.py
-@@
- MEANINGFUL_PROGRESS_CATEGORIES = {
-     "milestone_added",
-     "milestone_completed",
-     "arc_stage_changed",
--    "journal_entry_added",
-     "objective_added",
-     "objective_completed",
-     "quest_log_changed",
-     "location_changed",
-     "npc_relationship_changed",
-@@
-     "story_event_queued",
-     "story_event_resolved",
- }
-+
-+
-+WEAK_PROGRESS_CATEGORIES = {
-+    # A journal entry can be meaningful when paired with arc/objective/event
-+    # progress, but generic per-turn journal/memory entries must not make a
-+    # stalled post-objective run look healthy forever.
-+    "journal_entry_added",
-+}
-*** End Patch
-1B. Update classifier logic
-
-Find inside classify_turn_progress_quality(...):
-
-meaningful = sorted([c for c in categories if c in MEANINGFUL_PROGRESS_CATEGORIES])
-churn_only = sorted([c for c in categories if c in CHURN_ONLY_CATEGORIES])
-unknown = sorted(
+if _safe_dict(ai_payload.get("npc")).get("line"):
+    return "raw_ai_payload"
 
 Replace with:
 
 *** Begin Patch
-*** Update File: src/tests/rpg/autoplay/progress_quality.py
+*** Update File: src/tests/rpg/autoplay/campaign_report.py
 @@
--    meaningful = sorted([c for c in categories if c in MEANINGFUL_PROGRESS_CATEGORIES])
-+    strong_meaningful = sorted([c for c in categories if c in MEANINGFUL_PROGRESS_CATEGORIES])
-+    weak_progress = sorted([c for c in categories if c in WEAK_PROGRESS_CATEGORIES])
-+    meaningful = list(strong_meaningful)
-+    if strong_meaningful and weak_progress:
-+        meaningful.extend(weak_progress)
-     churn_only = sorted([c for c in categories if c in CHURN_ONLY_CATEGORIES])
-     unknown = sorted(
-         [
-             c
-             for c in categories
--            if c not in MEANINGFUL_PROGRESS_CATEGORIES and c not in CHURN_ONLY_CATEGORIES
-+            if c not in MEANINGFUL_PROGRESS_CATEGORIES
-+            and c not in WEAK_PROGRESS_CATEGORIES
-+            and c not in CHURN_ONLY_CATEGORIES
-         ]
-     )
-@@
--    if meaningful:
-+    if strong_meaningful:
-         quality = "meaningful_progress"
-+    elif weak_progress:
-+        quality = "weak_progress"
-     elif categories and all(c in CHURN_ONLY_CATEGORIES for c in categories):
-         quality = "churn_only"
-@@
-         "meaningful": meaningful,
-+        "strong_meaningful": strong_meaningful,
-+        "weak_progress": weak_progress,
-         "churn_only": churn_only,
+     ai_payload = extract_turn_ai_payload(row)
+     if _safe_dict(ai_payload.get("npc")).get("line"):
++        if _safe_str(ai_payload.get("source")) == "provider_runtime_narration":
++            return "real_runtime_provider"
++        if _safe_str(ai_payload.get("source")) == "deterministic_runtime_narration_fallback":
++            return "real_runtime_fallback"
+         return "raw_ai_payload"
 *** End Patch
-1C. Count weak progress separately
 
-Find in compute_progress_quality_metrics(...):
+Update compute_dialogue_coverage(...).
 
-unknown_category_counts = Counter()
-targeted_objective_turns = 0
+Find base runtime set:
+
+{
+    "raw_ai_payload",
+    "raw_npc",
+    "conversation_beat",
+    "base_runtime_deterministic",
+    "base_runtime_provider",
+}
 
 Replace with:
 
 *** Begin Patch
-*** Update File: src/tests/rpg/autoplay/progress_quality.py
+*** Update File: src/tests/rpg/autoplay/campaign_report.py
 @@
-     churn_category_counts = Counter()
-+    weak_category_counts = Counter()
-     unknown_category_counts = Counter()
-     targeted_objective_turns = 0
-@@
-         for category in _safe_list(quality.get("churn_only")):
-             churn_category_counts[str(category)] += 1
-+        for category in _safe_list(quality.get("weak_progress")):
-+            weak_category_counts[str(category)] += 1
-         for category in _safe_list(quality.get("unknown")):
-             unknown_category_counts[str(category)] += 1
-@@
-     churn_turns = int(quality_counts.get("churn_only") or 0)
-+    weak_turns = int(quality_counts.get("weak_progress") or 0)
-     no_change_turns = int(quality_counts.get("no_change") or 0)
-@@
-         "churn_only_turns": churn_turns,
-+        "weak_progress_turns": weak_turns,
-         "no_change_turns": no_change_turns,
-         "meaningful_progress_rate": (meaningful_turns / turn_count) if turn_count else 0.0,
-         "churn_only_rate": (churn_turns / turn_count) if turn_count else 0.0,
-+        "weak_progress_rate": (weak_turns / turn_count) if turn_count else 0.0,
-@@
-         "churn_category_counts": dict(churn_category_counts),
-+        "weak_category_counts": dict(weak_category_counts),
-         "unknown_category_counts": dict(unknown_category_counts),
+         in {
+             "raw_ai_payload",
+             "raw_npc",
+             "conversation_beat",
++            "real_runtime_provider",
++            "real_runtime_fallback",
+             "base_runtime_deterministic",
+             "base_runtime_provider",
+         }
 *** End Patch
-Patch 2 — Add post-objective branch hooks
 
-Patch:
-
-src/tests/rpg/autoplay/story_hooks.py
-2A. Add helper to add milestone
-
-Add after _set_milestone_status(...):
+Add a “real runtime narration” metric in returned coverage:
 
 *** Begin Patch
-*** Update File: src/tests/rpg/autoplay/story_hooks.py
-@@
- def _set_milestone_status(
-@@
-     return True
-+
-+
-+def _add_milestone_once(
-+    state: Dict[str, Any],
-+    *,
-+    arc_id: str,
-+    milestone_id: str,
-+    title: str,
-+    objective_text: str,
-+    turn_index: int,
-+    priority: int = 70,
-+) -> bool:
-+    milestone_state = _ensure_milestone_state(state)
-+    arcs = _safe_dict(milestone_state.setdefault("arcs", {}))
-+    bucket = _safe_dict(arcs.setdefault(arc_id, {"arc_id": arc_id, "milestones": []}))
-+    milestones = _safe_list(bucket.setdefault("milestones", []))
-+    if any(_safe_dict(row).get("milestone_id") == milestone_id for row in milestones):
-+        return False
-+    milestones.append(
-+        {
-+            "milestone_id": milestone_id,
-+            "title": title,
-+            "objective_text": objective_text,
-+            "status": "active",
-+            "priority": int(priority),
-+            "created_turn_index": int(turn_index),
-+            "updated_turn_index": int(turn_index),
-+        }
-+    )
-+    bucket["milestones"] = milestones
-+    arcs[arc_id] = bucket
-+    milestone_state["arcs"] = arcs
-+    return True
-*** End Patch
-2B. Add post-objective hooks to seed
-
-Inside seed_witness_resolution_hooks(...), find the root["hooks"] = [ list. After the existing hook:witness:find_witness dict, add these hooks before the closing ]:
-
-*** Begin Patch
-*** Update File: src/tests/rpg/autoplay/story_hooks.py
-@@
-         {
-             "hook_id": "hook:witness:find_witness",
-@@
-                 "queue_event_summary": "The witness search objective has been resolved by a grounded investigation action.",
-             },
-         },
-+        {
-+            "hook_id": "hook:witness:report_to_bran",
-+            "arc_id": "arc:witness_search",
-+            "milestone_id": "milestone:report_findings_to_bran",
-+            "kind": "post_objective_report",
-+            "description": "After finding the witness lead, reporting the findings to Bran opens a response branch.",
-+            "requires_any": ["bran", "innkeeper", "report", "tell", "return", "findings", "witness"],
-+            "action_keywords": ["tell", "report", "return", "explain", "share", "ask", "talk"],
-+            "requires_prior_hooks_any": ["hook:witness:find_witness"],
-+            "effect": {
-+                "journal_entry_id": "journal:witness:reported_to_bran",
-+                "journal_title": "Reported to Bran",
-+                "journal_text": "The witness findings are reported back to Bran, turning the investigation toward what comes next.",
-+                "arc_stage": "reported_to_bran",
-+                "add_milestone": {
-+                    "milestone_id": "milestone:pursue_bandit_trail",
-+                    "title": "Pursue the bandit trail",
-+                    "objective_text": "Follow the trail suggested by the witness report.",
-+                    "priority": 75,
-+                },
-+                "complete_milestone": True,
-+                "queue_event_id": "event:witness:reported_to_bran",
-+                "queue_event_title": "Findings Reported",
-+                "queue_event_summary": "Bran now knows the witness findings and points toward a possible bandit trail.",
-+            },
-+        },
-+        {
-+            "hook_id": "hook:witness:pursue_bandit_trail",
-+            "arc_id": "arc:witness_search",
-+            "milestone_id": "milestone:pursue_bandit_trail",
-+            "kind": "branch_pursuit",
-+            "description": "Following the bandit trail after reporting to Bran advances the arc into pursuit.",
-+            "requires_any": ["bandit", "trail", "road", "outside", "tracks", "follow", "pursue"],
-+            "action_keywords": ["follow", "pursue", "track", "walk", "search", "leave", "travel"],
-+            "requires_prior_hooks_any": ["hook:witness:report_to_bran"],
-+            "effect": {
-+                "journal_entry_id": "journal:witness:bandit_trail",
-+                "journal_title": "The Bandit Trail",
-+                "journal_text": "The investigation branches toward a bandit trail beyond the tavern.",
-+                "arc_stage": "bandit_trail",
-+                "complete_milestone": True,
-+                "queue_event_id": "event:witness:bandit_trail",
-+                "queue_event_title": "Bandit Trail Pursued",
-+                "queue_event_summary": "The witness arc now points toward a bandit trail outside the tavern.",
-+            },
-+        },
-*** End Patch
-2C. Apply add_milestone effect
-
-Inside apply_autoplay_story_hooks(...), after the milestone completion block:
-
-if effect.get("complete_milestone") and milestone_id:
-    ...
-
-add:
-
-*** Begin Patch
-*** Update File: src/tests/rpg/autoplay/story_hooks.py
-@@
-         if effect.get("complete_milestone") and milestone_id:
-             if _set_milestone_status(
-                 state,
-                 milestone_id=milestone_id,
-                 status="completed",
-                 turn_index=turn_index,
-             ):
-                 changed_parts.append("milestone_completed")
-+
-+        add_milestone = _safe_dict(effect.get("add_milestone"))
-+        if add_milestone and arc_id:
-+            if _add_milestone_once(
-+                state,
-+                arc_id=arc_id,
-+                milestone_id=_safe_str(add_milestone.get("milestone_id")),
-+                title=_safe_str(add_milestone.get("title")),
-+                objective_text=_safe_str(add_milestone.get("objective_text")),
-+                priority=int(add_milestone.get("priority") or 70),
-+                turn_index=turn_index,
-+            ):
-+                changed_parts.append("milestone_added")
-*** End Patch
-Patch 3 — Prevent generic journal-only progress from being called meaningful
-
-Patch:
-
-src/tests/rpg/autoplay/progress.py
-
-This file should still emit journal_entry_added when journal entries appear. Keep that. The quality classifier now downgrades journal-only changes to weak_progress.
-
-No patch needed here.
-
-Patch 4 — Add hook hints for post-objective branches
-
-Patch:
-
-src/tests/rpg/autoplay/story_hooks.py
-
-The existing autoplay_story_hook_player_hints(...) already filters prior hooks, so once hook:witness:find_witness fires, hook:witness:report_to_bran becomes visible; once report fires, hook:witness:pursue_bandit_trail becomes visible.
-
-No patch needed if Patch 2 is applied.
-
-Patch 5 — Update metrics for weak progress
-
-Patch:
-
-src/tests/rpg/autoplay/evaluators.py
-
-No structural patch needed if compute_progress_quality_metrics(...) is already embedded under:
-
-"progress_quality": progress_quality_metrics
-
-But this now includes:
-
-weak_progress_turns
-weak_progress_rate
-weak_category_counts
-
-No patch required.
-
-Patch 6 — Add tests for post-objective branch hooks
-
-Patch:
-
-src/tests/rpg/autoplay/test_story_hooks.py
-
-Add:
-
-*** Begin Patch
-*** Update File: src/tests/rpg/autoplay/test_story_hooks.py
-@@
- def test_hooks_are_one_shot():
-@@
-     assert first["changed"] is True
-     assert second["changed"] is False
-+
-+
-+def test_report_to_bran_adds_next_branch_objective():
-+    state = {}
-+    seed_tavern_story_campaign(state)
-+
-+    first = apply_autoplay_story_hooks(
-+        simulation_state=state,
-+        player_action="I ask Bran about the witness.",
-+        turn_index=1,
-+    )
-+    second = apply_autoplay_story_hooks(
-+        simulation_state=first["simulation_state"],
-+        player_action="I walk outside and follow the cloaked traveler to find the witness.",
-+        turn_index=2,
-+    )
-+    third = apply_autoplay_story_hooks(
-+        simulation_state=second["simulation_state"],
-+        player_action="I return to Bran and report the witness findings.",
-+        turn_index=3,
-+    )
-+
-+    after = third["simulation_state"]
-+    milestones = after["story_arc_milestone_state"]["arcs"]["arc:witness_search"]["milestones"]
-+    milestone_by_id = {row["milestone_id"]: row for row in milestones}
-+
-+    assert third["changed"] is True
-+    assert after["story_arc_state"]["arcs"]["arc:witness_search"]["stage"] == "reported_to_bran"
-+    assert milestone_by_id["milestone:report_findings_to_bran"]["status"] == "completed"
-+    assert milestone_by_id["milestone:pursue_bandit_trail"]["status"] == "active"
-+
-+
-+def test_pursue_bandit_trail_completes_branch_objective():
-+    state = {}
-+    seed_tavern_story_campaign(state)
-+
-+    state = apply_autoplay_story_hooks(
-+        simulation_state=state,
-+        player_action="I ask Bran about the witness.",
-+        turn_index=1,
-+    )["simulation_state"]
-+    state = apply_autoplay_story_hooks(
-+        simulation_state=state,
-+        player_action="I walk outside and follow the cloaked traveler to find the witness.",
-+        turn_index=2,
-+    )["simulation_state"]
-+    state = apply_autoplay_story_hooks(
-+        simulation_state=state,
-+        player_action="I return to Bran and report the witness findings.",
-+        turn_index=3,
-+    )["simulation_state"]
-+    result = apply_autoplay_story_hooks(
-+        simulation_state=state,
-+        player_action="I leave the tavern and pursue the bandit trail along the road.",
-+        turn_index=4,
-+    )
-+
-+    after = result["simulation_state"]
-+    milestones = after["story_arc_milestone_state"]["arcs"]["arc:witness_search"]["milestones"]
-+    milestone_by_id = {row["milestone_id"]: row for row in milestones}
-+
-+    assert result["changed"] is True
-+    assert after["story_arc_state"]["arcs"]["arc:witness_search"]["stage"] == "bandit_trail"
-+    assert milestone_by_id["milestone:pursue_bandit_trail"]["status"] == "completed"
-*** End Patch
-Patch 7 — Add tests for weak journal progress
-
-Patch:
-
-src/tests/rpg/autoplay/test_progress_quality.py
-
-Add:
-
-*** Begin Patch
-*** Update File: src/tests/rpg/autoplay/test_progress_quality.py
-@@
- def test_classify_turn_progress_quality_churn_only():
-@@
-     assert quality["quality"] == "churn_only"
-     assert quality["churn_only"] == ["state_changed"]
-+
-+
-+def test_classify_turn_progress_quality_journal_only_is_weak_progress():
-+    row = {
-+        "progress_delta": {"categories": ["journal_entry_added"]},
-+        "player_action": "I write down what happened.",
-+    }
-+
-+    quality = classify_turn_progress_quality(row)
-+
-+    assert quality["quality"] == "weak_progress"
-+    assert quality["weak_progress"] == ["journal_entry_added"]
-+    assert quality["meaningful"] == []
-+
-+
-+def test_classify_turn_progress_quality_journal_plus_arc_is_meaningful():
-+    row = {
-+        "progress_delta": {"categories": ["journal_entry_added", "arc_stage_changed"]},
-+        "player_action": "I report the findings.",
-+    }
-+
-+    quality = classify_turn_progress_quality(row)
-+
-+    assert quality["quality"] == "meaningful_progress"
-+    assert "arc_stage_changed" in quality["meaningful"]
-+    assert "journal_entry_added" in quality["meaningful"]
-*** End Patch
-Patch 8 — Add progress delta test for new branch objective
-
-Patch:
-
-src/tests/rpg/autoplay/test_progress.py
-
-Add:
-
-*** Begin Patch
-*** Update File: src/tests/rpg/autoplay/test_progress.py
-@@
- def test_classify_progress_delta_detects_witness_hook_meaningful_progress():
-@@
-     assert "story_event_queued" in delta["categories"]
-+
-+
-+def test_classify_progress_delta_detects_added_branch_objective():
-+    before = {
-+        "story_arc_milestone_state": {
-+            "arcs": {
-+                "arc:witness_search": {
-+                    "milestones": [
-+                        {"milestone_id": "milestone:find_witness", "status": "completed"}
-+                    ]
-+                }
-+            }
-+        }
-+    }
-+    after = {
-+        "story_arc_milestone_state": {
-+            "arcs": {
-+                "arc:witness_search": {
-+                    "milestones": [
-+                        {"milestone_id": "milestone:find_witness", "status": "completed"},
-+                        {"milestone_id": "milestone:pursue_bandit_trail", "status": "active"},
-+                    ]
-+                }
-+            }
-+        }
-+    }
-+
-+    delta = classify_progress_delta(before_state=before, after_state=after)
-+
-+    assert "milestone_added" in delta["categories"]
-+    assert "objective_added" in delta["categories"]
-*** End Patch
-Patch 9 — Add optional strict post-objective no-false-progress flag
-
-This makes the diagnostic explicit without making normal runs brittle.
-
-Patch:
-
-src/tests/rpg/autoplay/progress_quality.py
-
-Add helper at end:
-
-*** Begin Patch
-*** Update File: src/tests/rpg/autoplay/progress_quality.py
-@@
- def evaluate_progress_quality_health(
+*** Update File: src/tests/rpg/autoplay/campaign_report.py
 @@
      return {
-         "ok": not warnings,
-         "warnings": warnings,
-         "metrics": metrics,
-     }
-+
-+
-+def post_objective_false_progress_warnings(transcript: List[Dict[str, Any]]) -> List[str]:
-+    """Warn if only weak journal progress happens after all objectives complete."""
-+    warnings: List[str] = []
-+    seen_no_active_objectives = False
-+    weak_after_completion = 0
-+    meaningful_after_completion = 0
-+
-+    for row in transcript:
-+        context = _safe_dict(row.get("player_action_context"))
-+        active = _safe_list(context.get("active_objectives"))
-+        quality = _safe_dict(row.get("progress_quality"))
-+        if not active:
-+            seen_no_active_objectives = True
-+            if quality.get("quality") == "weak_progress":
-+                weak_after_completion += 1
-+            if quality.get("quality") == "meaningful_progress":
-+                meaningful_after_completion += 1
-+
-+    if seen_no_active_objectives and weak_after_completion > 0 and meaningful_after_completion == 0:
-+        warnings.append("post_objective_weak_progress_only")
-+    return warnings
-*** End Patch
-
-Patch runner import:
-
-src/tests/rpg/autoplay_llm_campaign.py
-*** Begin Patch
-*** Update File: src/tests/rpg/autoplay_llm_campaign.py
 @@
- from tests.rpg.autoplay.progress_quality import (
-     classify_turn_progress_quality,
-     compute_progress_quality_metrics,
-     evaluate_progress_quality_health,
-+    post_objective_false_progress_warnings,
- )
+         "hook_dialogue_turn_count": len(hook_dialogue_turns),
+         "base_runtime_dialogue_turn_count": len(base_dialogue_turns),
++        "real_runtime_dialogue_turn_count": int(source_counts.get("real_runtime_provider") or 0)
++        + int(source_counts.get("real_runtime_fallback") or 0),
++        "real_runtime_provider_dialogue_turn_count": int(source_counts.get("real_runtime_provider") or 0),
++        "real_runtime_fallback_dialogue_turn_count": int(source_counts.get("real_runtime_fallback") or 0),
+         "missing_social_turns": [
 *** End Patch
 
-After progress_quality_health = evaluate_progress_quality_health(...), add:
+Update HTML Dialogue Coverage section to include real runtime counts:
 
 *** Begin Patch
-*** Update File: src/tests/rpg/autoplay_llm_campaign.py
+*** Update File: src/tests/rpg/autoplay/campaign_report.py
 @@
-     progress_quality_health = evaluate_progress_quality_health(
-         transcript,
-         min_meaningful_progress_rate=float(args.min_meaningful_progress_rate),
-         max_churn_only_rate=float(args.max_churn_only_rate),
-         max_churn_only_streak=int(args.max_churn_only_streak),
-         max_objective_target_no_progress_streak=int(args.max_objective_target_no_progress_streak),
-     )
-+    if args.fail_on_post_objective_weak_progress:
-+        post_objective_warnings = post_objective_false_progress_warnings(transcript)
-+        if post_objective_warnings:
-+            progress_quality_health.setdefault("warnings", [])
-+            progress_quality_health["warnings"].extend(post_objective_warnings)
-+            progress_quality_health["ok"] = False
+       <div class="metric"><div class="value">{_esc(_safe_dict(model.get("dialogue_coverage")).get("hook_dialogue_turn_count"))}</div><div>Hook Dialogue Turns</div></div>
+       <div class="metric"><div class="value">{_esc(_safe_dict(model.get("dialogue_coverage")).get("base_runtime_dialogue_turn_count"))}</div><div>Base Runtime Dialogue Turns</div></div>
++      <div class="metric"><div class="value">{_esc(_safe_dict(model.get("dialogue_coverage")).get("real_runtime_dialogue_turn_count"))}</div><div>Real Runtime Dialogue Turns</div></div>
++      <div class="metric"><div class="value">{_esc(_safe_dict(model.get("dialogue_coverage")).get("real_runtime_provider_dialogue_turn_count"))}</div><div>Provider Runtime Dialogue Turns</div></div>
+       <div class="metric"><div class="value">{_esc(_safe_dict(model.get("dialogue_coverage")).get("echoed_narration_turn_count"))}</div><div>Echoed Narration Turns</div></div>
 *** End Patch
+Patch 6 — Autoplay base response should not mask real runtime narration
 
-Add CLI flag:
-
-*** Begin Patch
-*** Update File: src/tests/rpg/autoplay_llm_campaign.py
-@@
-     parser.add_argument("--max-churn-only-streak", type=int, default=0)
-     parser.add_argument("--max-objective-target-no-progress-streak", type=int, default=0)
-+    parser.add_argument("--fail-on-post-objective-weak-progress", action="store_true")
-     parser.add_argument("--action-diversity-window", type=int, default=12)
-*** End Patch
-
-Add to summary thresholds:
-
-*** Begin Patch
-*** Update File: src/tests/rpg/autoplay_llm_campaign.py
-@@
-             "max_churn_only_rate": float(args.max_churn_only_rate),
-             "max_churn_only_streak": int(args.max_churn_only_streak),
-             "max_objective_target_no_progress_streak": int(args.max_objective_target_no_progress_streak),
-+            "fail_on_post_objective_weak_progress": bool(args.fail_on_post_objective_weak_progress),
-         },
-*** End Patch
-Patch 10 — Update runner test Namespace
+Now that real session turns can produce runtime narration, autoplay deterministic base response should only fill gaps.
 
 Patch:
 
-src/tests/rpg/autoplay/test_autoplay_runner.py
+src/tests/rpg/autoplay_llm_campaign.py
 
-Add field:
+Find where base_response_payload is built:
+
+base_response_payload: Dict[str, Any] = {}
+if args.autoplay_base_response != "off":
+    base_response_payload = build_autoplay_base_response(...)
+
+Replace with:
 
 *** Begin Patch
-*** Update File: src/tests/rpg/autoplay/test_autoplay_runner.py
+*** Update File: src/tests/rpg/autoplay_llm_campaign.py
 @@
-         max_churn_only_rate=1.0,
-         max_churn_only_streak=0,
-         max_objective_target_no_progress_streak=0,
-+        fail_on_post_objective_weak_progress=False,
-         action_diversity_window=12,
+         base_response_payload: Dict[str, Any] = {}
+-        if args.autoplay_base_response != "off":
++        raw_payload = _safe_dict(
++            _safe_dict(turn_result.get("manual_turn_summary")).get("raw_narration_payload")
++        )
++        raw_npc = _safe_dict(
++            _safe_dict(turn_result.get("manual_turn_summary")).get("raw_npc")
++        )
++        runtime_has_dialogue = bool(
++            _safe_str(raw_payload.get("narration"))
++            and (
++                _safe_dict(raw_payload.get("npc")).get("line")
++                or raw_npc.get("line")
++                or classify_player_action_for_report(player_action) != "social"
++            )
++        )
++        if args.autoplay_base_response != "off" and not runtime_has_dialogue:
+             base_response_payload = build_autoplay_base_response(
+                 provider=provider,
+                 player_action=player_action,
+                 simulation_state=authoritative_state,
+                 turn_index=turn_index,
+*** End Patch
+
+You need a tiny local helper or import. Simpler: add this local helper near _safe_dict(...):
+
+*** Begin Patch
+*** Update File: src/tests/rpg/autoplay_llm_campaign.py
+@@
+ def _safe_dict(value: Any) -> Dict[str, Any]:
+     return value if isinstance(value, dict) else {}
++
++
++def _autoplay_report_action_type(player_action: str) -> str:
++    text = " ".join(str(player_action or "").lower().strip().split())
++    if any(word in text for word in ["ask", "talk", "tell", "speak", "question", "report", "explain", "share", "approach"]):
++        return "social"
++    return "other"
+*** End Patch
+
+Then use:
+
+*** Begin Patch
+*** Update File: src/tests/rpg/autoplay_llm_campaign.py
+@@
+-                or classify_player_action_for_report(player_action) != "social"
++                or _autoplay_report_action_type(player_action) != "social"
+*** End Patch
+
+This way the report shows real_runtime_provider / real_runtime_fallback when the actual turn runtime produced the payload, and only uses base_runtime_deterministic when the runtime failed.
+
+Patch 7 — Add narration contract unit tests
+
+Add:
+
+src/tests/rpg/narration/test_runtime_narration_contract.py
+*** Begin Patch
+*** Add File: src/tests/rpg/narration/test_runtime_narration_contract.py
++from app.rpg.narration.runtime_narration_contract import (
++    NARRATION_FORMAT_VERSION,
++    build_deterministic_narration_payload,
++    build_runtime_narration_payload,
++    is_echo_narration,
++    validate_narration_payload,
++)
++
++
++class FakeProvider:
++    def chat(self, messages, max_tokens=320):
++        return {
++            "content": (
++                '{"format_version":"rpg_narration_v2",'
++                '"narration":"Bran studies the question before lowering his voice.",'
++                '"action":"The question draws a guarded answer.",'
++                '"npc":{"speaker":"Bran","line":"Tell me exactly what you found."},'
++                '"reward":"",'
++                '"followup_hooks":[]}'
++            )
++        }
++
++
++class EchoProvider:
++    def chat(self, messages, max_tokens=320):
++        return {
++            "content": (
++                '{"format_version":"rpg_narration_v2",'
++                '"narration":"I ask Bran about the witness.",'
++                '"action":"",'
++                '"npc":{"speaker":"Bran","line":"Ok."},'
++                '"reward":"",'
++                '"followup_hooks":[]}'
++            )
++        }
++
++
++def test_deterministic_narration_payload_for_social_turn_has_npc_line():
++    payload = build_deterministic_narration_payload(
++        player_action="I ask Bran about the witness.",
++        simulation_state={},
++        turn_contract={},
++    )
++
++    assert payload["format_version"] == NARRATION_FORMAT_VERSION
++    assert payload["npc"]["speaker"] == "Bran"
++    assert payload["npc"]["line"]
++    assert payload["reward"] == ""
++    assert payload["followup_hooks"] == []
++    assert payload["authoritative_changes"] is False
++
++
++def test_validate_narration_payload_rejects_echo_and_rewards():
++    result = validate_narration_payload(
++        {
++            "format_version": "rpg_narration_v2",
++            "narration": "I ask Bran about the witness.",
++            "action": "",
++            "npc": {},
++            "reward": "100 gold",
++            "followup_hooks": [],
++        },
++        player_action="I ask Bran about the witness.",
++    )
++
++    assert result["ok"] is False
++    assert "echoed_player_action" in result["errors"]
++    assert "reward_not_empty" in result["errors"]
++
++
++def test_provider_runtime_narration_payload_accepts_valid_provider_json():
++    payload = build_runtime_narration_payload(
++        provider=FakeProvider(),
++        player_action="I ask Bran about the witness.",
++        simulation_state={},
++        turn_contract={},
++        prefer_provider=True,
++    )
++
++    assert payload["source"] == "provider_runtime_narration"
++    assert payload["npc"]["speaker"] == "Bran"
++    assert payload["npc"]["line"] == "Tell me exactly what you found."
++
++
++def test_runtime_narration_falls_back_when_provider_echoes_player_action():
++    payload = build_runtime_narration_payload(
++        provider=EchoProvider(),
++        player_action="I ask Bran about the witness.",
++        simulation_state={},
++        turn_contract={},
++        prefer_provider=True,
++    )
++
++    assert payload["source"] == "deterministic_runtime_narration_fallback"
++    assert not is_echo_narration(
++        player_action="I ask Bran about the witness.",
++        narration=payload["narration"],
++    )
+*** End Patch
+Patch 8 — Add runtime integration test with monkeypatch
+
+Add:
+
+src/tests/rpg/narration/test_session_turn_narration_binding.py
+
+This test depends on your actual apply_turn location. If the function is importable through manual turn execution, test through _run_one_manual_turn.
+
+*** Begin Patch
+*** Add File: src/tests/rpg/narration/test_session_turn_narration_binding.py
++from tests.rpg.manual import turn_execution
++
++
++def test_manual_turn_preserves_real_runtime_narration_payload(monkeypatch):
++    def fake_apply_turn(*, session_id, player_input):
++        return {
++            "ok": True,
++            "narration": "Bran studies the question before lowering his voice.",
++            "narration_payload": {
++                "format_version": "rpg_narration_v2",
++                "narration": "Bran studies the question before lowering his voice.",
++                "action": "The question draws a guarded answer.",
++                "npc": {
++                    "speaker": "Bran",
++                    "line": "Tell me exactly what you found.",
++                },
++                "reward": "",
++                "followup_hooks": [],
++                "source": "provider_runtime_narration",
++                "authoritative_changes": False,
++            },
++            "npc": {
++                "speaker": "Bran",
++                "line": "Tell me exactly what you found.",
++            },
++            "turn_contract": {"player_action": player_input},
++            "llm_called": True,
++        }
++
++    monkeypatch.setattr(turn_execution, "_get_apply_turn", lambda: fake_apply_turn)
++    monkeypatch.setattr(turn_execution, "_record_token_usage", lambda **kwargs: None)
++    monkeypatch.setattr(turn_execution.output_artifacts, "_emit", lambda *args, **kwargs: None)
++
++    result = turn_execution._run_one_manual_turn(
++        session_id="runtime_narration_binding_test",
++        turn="I ask Bran about the witness.",
++        turn_index=1,
++        scenario_name="runtime_narration_binding_test",
++        target_channel="test",
++        console_llm=False,
++        console_llm_raw=False,
++        include_raw_result=True,
++    )
++
++    assert result["raw_narration_payload"]["format_version"] == "rpg_narration_v2"
++    assert result["raw_narration_payload"]["source"] == "provider_runtime_narration"
++    assert result["raw_npc"]["speaker"] == "Bran"
++    assert result["raw_npc"]["line"] == "Tell me exactly what you found."
++    assert result["llm_called"] is True
+*** End Patch
+Patch 9 — Add report test for real runtime source
+
+Patch:
+
+src/tests/rpg/autoplay/test_campaign_report.py
+
+Add:
+
+*** Begin Patch
+*** Update File: src/tests/rpg/autoplay/test_campaign_report.py
+@@
+ def test_dialogue_coverage_counts_base_runtime_dialogue():
+@@
+     assert coverage["base_runtime_dialogue_turn_count"] == 1
+     assert coverage["social_turn_missing_npc_response_count"] == 0
++
++
++def test_report_classifies_real_runtime_provider_dialogue():
++    row = {
++        "turn_result": {
++            "manual_turn_summary": {
++                "raw_narration_payload": {
++                    "format_version": "rpg_narration_v2",
++                    "source": "provider_runtime_narration",
++                    "narration": "Bran lowers his voice.",
++                    "npc": {
++                        "speaker": "Bran",
++                        "line": "Tell me exactly what you found.",
++                    },
++                    "reward": "",
++                    "followup_hooks": [],
++                }
++            }
++        }
++    }
++
++    assert classify_dialogue_source(row) == "real_runtime_provider"
 *** End Patch
 Validation commands
 Compile
-python -m py_compile src/tests/rpg/autoplay/story_hooks.py
-python -m py_compile src/tests/rpg/autoplay/progress_quality.py
+python -m py_compile src/app/rpg/narration/runtime_narration_contract.py
+python -m py_compile src/app/rpg/narration/runtime_provider.py
+python -m py_compile src/tests/rpg/manual/turn_execution.py
+python -m py_compile src/tests/rpg/autoplay/campaign_report.py
 python -m py_compile src/tests/rpg/autoplay_llm_campaign.py
-python -m py_compile src/tests/rpg/autoplay/test_story_hooks.py
-python -m py_compile src/tests/rpg/autoplay/test_progress_quality.py
-python -m py_compile src/tests/rpg/autoplay/test_progress.py
-python -m py_compile src/tests/rpg/autoplay/test_autoplay_runner.py
+python -m py_compile src/tests/rpg/narration/test_runtime_narration_contract.py
+python -m py_compile src/tests/rpg/narration/test_session_turn_narration_binding.py
+python -m py_compile src/tests/rpg/autoplay/test_campaign_report.py
 Focused tests
+python -m pytest src/tests/rpg/narration/test_runtime_narration_contract.py src/tests/rpg/narration/test_session_turn_narration_binding.py src/tests/rpg/autoplay/test_campaign_report.py src/tests/rpg/autoplay/test_base_runtime_response.py src/tests/rpg/autoplay/test_autoplay_runner.py src/tests/rpg/autoplay/test_story_hooks.py src/tests/rpg/autoplay/test_manual_turn_driver.py src/tests/rpg/autoplay/test_progress.py src/tests/rpg/autoplay/test_progress_quality.py src/tests/rpg/autoplay/test_strategy_profiles.py src/tests/rpg/autoplay/test_checkpoints.py src/tests/rpg/autoplay/test_player_agent.py src/tests/rpg/autoplay/test_provider_adapter.py -q

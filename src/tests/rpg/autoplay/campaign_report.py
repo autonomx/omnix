@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import html
 import json
-from collections import Counter, defaultdict
+from collections import Counter
 from pathlib import Path
 from typing import Any, Dict, List
 
@@ -126,6 +126,18 @@ def extract_story_hook_display(row: Dict[str, Any]) -> Dict[str, Any]:
     return {}
 
 
+def extract_base_response_payload(row: Dict[str, Any]) -> Dict[str, Any]:
+    payload = _safe_dict(row.get("base_response_payload"))
+    if payload:
+        return payload
+    turn_result = _safe_dict(row.get("turn_result"))
+    manual_summary = _safe_dict(turn_result.get("manual_turn_summary"))
+    payload = _safe_dict(manual_summary.get("base_response_payload"))
+    if payload:
+        return payload
+    return {}
+
+
 def extract_conversation_beat(row: Dict[str, Any]) -> Dict[str, str]:
     turn_result = _safe_dict(row.get("turn_result"))
     manual_summary = _safe_dict(turn_result.get("manual_turn_summary"))
@@ -154,12 +166,17 @@ def extract_conversation_beat(row: Dict[str, Any]) -> Dict[str, str]:
 def classify_dialogue_source(row: Dict[str, Any]) -> str:
     """Classify where the visible NPC dialogue came from."""
     ai_payload = extract_turn_ai_payload(row)
-    if _safe_dict(ai_payload.get("npc")).get("line"):
-        return "raw_ai_payload"
+    if _safe_dict(ai_payload.get("npc")).get("line") and _safe_str(ai_payload.get("source")) == "provider_runtime_narration":
+        return "real_runtime_provider"
 
     hook_display = extract_story_hook_display(row)
     if _safe_dict(hook_display.get("npc")).get("line"):
         return "story_hook_display"
+
+    if _safe_dict(ai_payload.get("npc")).get("line"):
+        if _safe_str(ai_payload.get("source")) == "deterministic_runtime_narration_fallback":
+            return "real_runtime_fallback"
+        return "raw_ai_payload"
 
     turn_result = _safe_dict(row.get("turn_result"))
     manual_summary = _safe_dict(turn_result.get("manual_turn_summary"))
@@ -168,6 +185,13 @@ def classify_dialogue_source(row: Dict[str, Any]) -> str:
 
     if extract_conversation_beat(row).get("line"):
         return "conversation_beat"
+
+    base_response = extract_base_response_payload(row)
+    if _safe_dict(base_response.get("npc")).get("line"):
+        source = _safe_str(base_response.get("source"))
+        if source == "provider_base_runtime_response":
+            return "base_runtime_provider"
+        return "base_runtime_deterministic"
 
     return "none"
 
@@ -178,14 +202,18 @@ def extract_dialogue(row: Dict[str, Any]) -> Dict[str, str]:
     raw_result = _safe_dict(manual_summary.get("raw_result"))
     ai_payload = extract_turn_ai_payload(row)
     hook_display = extract_story_hook_display(row)
+    base_response = extract_base_response_payload(row)
     npc_payload = _safe_dict(ai_payload.get("npc"))
     hook_npc = _safe_dict(hook_display.get("npc"))
+    base_npc = _safe_dict(base_response.get("npc"))
     raw_npc = _safe_dict(manual_summary.get("raw_npc"))
     conversation_beat = extract_conversation_beat(row)
 
     speaker = _first_nonempty(
-        npc_payload.get("speaker"),
+        npc_payload.get("speaker") if _safe_str(ai_payload.get("source")) == "provider_runtime_narration" else "",
         hook_npc.get("speaker"),
+        npc_payload.get("speaker"),
+        base_npc.get("speaker"),
         raw_npc.get("speaker"),
         conversation_beat.get("speaker"),
         raw_result.get("npc_speaker"),
@@ -195,8 +223,10 @@ def extract_dialogue(row: Dict[str, Any]) -> Dict[str, str]:
         _nested_get(turn_result, "turn_contract", "npc", "speaker"),
     )
     line = _first_nonempty(
-        npc_payload.get("line"),
+        npc_payload.get("line") if _safe_str(ai_payload.get("source")) == "provider_runtime_narration" else "",
         hook_npc.get("line"),
+        npc_payload.get("line"),
+        base_npc.get("line"),
         raw_npc.get("line"),
         conversation_beat.get("line"),
         raw_result.get("npc_line"),
@@ -216,10 +246,13 @@ def extract_narration(row: Dict[str, Any]) -> str:
     manual_summary = _safe_dict(turn_result.get("manual_turn_summary"))
     ai_payload = extract_turn_ai_payload(row)
     hook_display = extract_story_hook_display(row)
+    base_response = extract_base_response_payload(row)
     raw_result = _safe_dict(manual_summary.get("raw_result"))
     return _first_nonempty(
-        ai_payload.get("narration"),
+        ai_payload.get("narration") if _safe_str(ai_payload.get("source")) == "provider_runtime_narration" else "",
         hook_display.get("narration"),
+        ai_payload.get("narration"),
+        base_response.get("narration"),
         turn_result.get("narration"),
         manual_summary.get("raw_narration"),
         raw_result.get("narration"),
@@ -229,11 +262,24 @@ def extract_narration(row: Dict[str, Any]) -> str:
 
 def _latest_state_from_transcript(transcript: List[Dict[str, Any]]) -> Dict[str, Any]:
     for row in reversed(transcript):
+        final_state = _safe_dict(row.get("final_authoritative_state"))
+        if final_state:
+            return final_state
         turn_result = _safe_dict(row.get("turn_result"))
         state = _safe_dict(turn_result.get("simulation_state"))
         if state:
             return state
     return {}
+
+
+def _latest_state_source(transcript: List[Dict[str, Any]]) -> str:
+    for row in reversed(transcript):
+        if _safe_dict(row.get("final_authoritative_state")):
+            return "final_authoritative_state"
+        turn_result = _safe_dict(row.get("turn_result"))
+        if _safe_dict(turn_result.get("simulation_state")):
+            return "turn_result.simulation_state"
+    return "none"
 
 
 def _story_arc_rows(state: Dict[str, Any]) -> List[Dict[str, Any]]:
@@ -348,7 +394,6 @@ def _lore_rows(state: Dict[str, Any]) -> List[Dict[str, Any]]:
 def build_story_so_far_paragraph(model: Dict[str, Any]) -> str:
     timeline = _safe_list(model.get("timeline"))
     milestones = _safe_list(model.get("milestones"))
-    journal_entries = _safe_list(model.get("journal_entries"))
 
     completed = [
         row
@@ -514,7 +559,16 @@ def compute_dialogue_coverage(timeline: List[Dict[str, Any]]) -> Dict[str, Any]:
     base_dialogue_turns = [
         row
         for row in timeline
-        if row.get("dialogue_source") in {"raw_ai_payload", "raw_npc", "conversation_beat"}
+        if row.get("dialogue_source")
+        in {
+            "raw_ai_payload",
+            "raw_npc",
+            "conversation_beat",
+            "real_runtime_provider",
+            "real_runtime_fallback",
+            "base_runtime_deterministic",
+            "base_runtime_provider",
+        }
     ]
     return {
         "total_turns": total_turns,
@@ -532,6 +586,10 @@ def compute_dialogue_coverage(timeline: List[Dict[str, Any]]) -> Dict[str, Any]:
         "dialogue_source_counts": dict(source_counts),
         "hook_dialogue_turn_count": len(hook_dialogue_turns),
         "base_runtime_dialogue_turn_count": len(base_dialogue_turns),
+        "real_runtime_dialogue_turn_count": int(source_counts.get("real_runtime_provider") or 0)
+        + int(source_counts.get("real_runtime_fallback") or 0),
+        "real_runtime_provider_dialogue_turn_count": int(source_counts.get("real_runtime_provider") or 0),
+        "real_runtime_fallback_dialogue_turn_count": int(source_counts.get("real_runtime_fallback") or 0),
         "missing_social_turns": [
             {
                 "turn_index": row.get("turn_index"),
@@ -592,6 +650,57 @@ def build_chapter_status(state: Dict[str, Any], model_like: Dict[str, Any]) -> D
     }
 
 
+def compute_runtime_narration_diagnostics(timeline: List[Dict[str, Any]]) -> Dict[str, Any]:
+    provider_present = 0
+    provider_attempted = 0
+    provider_valid = 0
+    provider_repaired = 0
+    fallback_used = 0
+    provider_errors = Counter()
+    provider_original_errors = Counter()
+    provider_repair_actions = Counter()
+    provider_shapes = Counter()
+    selected_methods = Counter()
+    for row in timeline:
+        diag = _safe_dict(row.get("runtime_narration_diagnostics"))
+        if not diag:
+            continue
+        if diag.get("provider_present"):
+            provider_present += 1
+        if diag.get("provider_attempted"):
+            provider_attempted += 1
+        if diag.get("provider_valid"):
+            provider_valid += 1
+        if diag.get("provider_repaired"):
+            provider_repaired += 1
+        if diag.get("fallback_used"):
+            fallback_used += 1
+        for err in _safe_list(diag.get("provider_errors")):
+            provider_errors[str(err)] += 1
+        for err in _safe_list(diag.get("provider_original_errors")):
+            provider_original_errors[str(err)] += 1
+        for action in _safe_list(diag.get("provider_repair_actions")):
+            provider_repair_actions[str(action)] += 1
+        shape = _safe_dict(diag.get("provider_shape"))
+        if shape:
+            provider_shapes[json.dumps(shape, sort_keys=True, default=str)] += 1
+        call_diag = _safe_dict(diag.get("provider_call_diagnostics"))
+        if call_diag.get("selected_method"):
+            selected_methods[str(call_diag.get("selected_method"))] += 1
+    return {
+        "provider_present_turns": provider_present,
+        "provider_attempted_turns": provider_attempted,
+        "provider_valid_turns": provider_valid,
+        "provider_repaired_turns": provider_repaired,
+        "fallback_used_turns": fallback_used,
+        "provider_error_counts": dict(provider_errors),
+        "provider_original_error_counts": dict(provider_original_errors),
+        "provider_repair_action_counts": dict(provider_repair_actions),
+        "provider_shape_counts": dict(provider_shapes),
+        "provider_selected_method_counts": dict(selected_methods),
+    }
+
+
 def build_campaign_report_model(
     *,
     transcript: List[Dict[str, Any]],
@@ -600,6 +709,7 @@ def build_campaign_report_model(
     health: Dict[str, Any],
 ) -> Dict[str, Any]:
     latest_state = _latest_state_from_transcript(transcript)
+    latest_state_source = _latest_state_source(transcript)
     quality = _safe_dict(metrics.get("progress_quality"))
     action_diversity = _safe_dict(metrics.get("action_diversity"))
     category_counts = Counter()
@@ -644,10 +754,16 @@ def build_campaign_report_model(
                 "progress_quality": progress_quality,
                 "fired_hooks": fired_hooks,
                 "state_preservation_debug": row.get("state_preservation_debug") or {},
+                "performance": row.get("performance") or {},
+                "base_response_payload": row.get("base_response_payload") or {},
+                "runtime_narration_diagnostics": _safe_dict(
+                    _safe_dict(extract_turn_ai_payload(row)).get("runtime_narration_diagnostics")
+                ),
             }
         )
 
     dialogue_coverage = compute_dialogue_coverage(timeline)
+    runtime_narration_diagnostics = compute_runtime_narration_diagnostics(timeline)
 
     shortcomings = []
     if float(quality.get("meaningful_progress_rate") or 0.0) < 0.15 and transcript:
@@ -679,6 +795,22 @@ def build_campaign_report_model(
         shortcomings.append(
             "All visible NPC dialogue came from story-hook display payloads; normal non-hook dialogue still needs runtime support."
         )
+    source_counts = _safe_dict(dialogue_coverage.get("dialogue_source_counts"))
+    deterministic_count = int(source_counts.get("base_runtime_deterministic") or 0)
+    provider_count = int(source_counts.get("base_runtime_provider") or 0)
+    if deterministic_count > 0 and provider_count == 0:
+        shortcomings.append(
+            "Some non-hook dialogue is supplied by fallback narration rather than valid provider narration; provider-backed runtime narration should be validated next."
+        )
+    if int(runtime_narration_diagnostics.get("provider_valid_turns") or 0) == 0:
+        shortcomings.append(
+            "Real runtime narration used deterministic fallback for all turns; provider-backed runtime narration is not active or not producing valid contract JSON."
+        )
+    elif int(runtime_narration_diagnostics.get("provider_repaired_turns") or 0) > 0:
+        shortcomings.append(
+            f"Provider runtime narration required contract repair on {runtime_narration_diagnostics.get('provider_repaired_turns')} turns; "
+            "provider prompt/quality gates should be tightened."
+        )
     if int(metrics.get("player_agent_exception_count") or 0) > 0:
         shortcomings.append(
             f"Player-agent exceptions occurred on {metrics.get('player_agent_exception_count')} turns; "
@@ -695,6 +827,7 @@ def build_campaign_report_model(
         "metrics": metrics,
         "health": health,
         "latest_state": latest_state,
+        "latest_state_source": latest_state_source,
         "timeline": timeline,
         "story_arcs": _story_arc_rows(latest_state),
         "milestones": _milestone_rows(latest_state),
@@ -708,6 +841,7 @@ def build_campaign_report_model(
         "npc_dialogue_counts": dict(npc_dialogue_counts),
         "action_diversity": action_diversity,
         "dialogue_coverage": dialogue_coverage,
+        "runtime_narration_diagnostics": runtime_narration_diagnostics,
         "shortcomings": shortcomings,
     }
     model["story_so_far_paragraph"] = build_story_so_far_paragraph(model)
@@ -743,6 +877,7 @@ def render_campaign_report_html(model: Dict[str, Any]) -> str:
     metrics = _safe_dict(model.get("metrics"))
     health = _safe_dict(model.get("health"))
     progress_quality = _safe_dict(metrics.get("progress_quality"))
+    performance = _safe_dict(metrics.get("performance"))
     latest_state = _safe_dict(model.get("latest_state"))
 
     timeline_html = []
@@ -758,10 +893,13 @@ def render_campaign_report_html(model: Dict[str, Any]) -> str:
         timeline_html.append(
             f"""
             <article class="turn-card">
-              <div class="turn-header">
-                <h3>Turn {_esc(row.get("turn_index"))}</h3>
-                <div>{_render_badge(quality or "unknown", "quality")}</div>
-              </div>
+               <div class="turn-header">
+                 <h3>Turn {_esc(row.get("turn_index"))}</h3>
+                 <div>
+                   {_render_badge(quality or "unknown", "quality")}
+                   {_render_badge(str(_safe_dict(row.get("performance")).get("turn_total_ms", "")) + " ms", "category")}
+                 </div>
+               </div>
               <div class="player-action"><strong>Player:</strong> {_esc(row.get("player_action"))}</div>
               <div class="narration"><strong>Narration:</strong> {_esc(row.get("narration") or "[no narration extracted]")}</div>
               <div class="npc-line"><strong>NPC:</strong> {_esc(npc.get("speaker") or "[none]")} — {_esc(npc.get("line") or "[no NPC line extracted]")}</div>
@@ -964,8 +1102,9 @@ def render_campaign_report_html(model: Dict[str, Any]) -> str:
   <div class="muted">Session {_esc(summary.get("session_id"))} · Strategy {_esc(summary.get("strategy_profile") or summary.get("strategy"))} · OK {_esc(summary.get("ok"))}</div>
    <nav>
      <a href="#summary">Summary</a>
-     <a href="#dialogue-coverage">Dialogue</a>
-     <a href="#timeline">Timeline</a>
+      <a href="#dialogue-coverage">Dialogue</a>
+      <a href="#performance">Performance</a>
+      <a href="#timeline">Timeline</a>
     <a href="#arcs">Story Arcs</a>
     <a href="#npcs">NPCs</a>
     <a href="#lore">Lore</a>
@@ -1005,107 +1144,52 @@ def render_campaign_report_html(model: Dict[str, Any]) -> str:
       <div class="metric"><div class="value">{_esc(_safe_dict(model.get("dialogue_coverage")).get("social_turn_missing_npc_response_count"))}</div><div>Social Turns Missing NPC Response</div></div>
       <div class="metric"><div class="value">{_esc(_safe_dict(model.get("dialogue_coverage")).get("hook_dialogue_turn_count"))}</div><div>Hook Dialogue Turns</div></div>
       <div class="metric"><div class="value">{_esc(_safe_dict(model.get("dialogue_coverage")).get("base_runtime_dialogue_turn_count"))}</div><div>Base Runtime Dialogue Turns</div></div>
+      <div class="metric"><div class="value">{_esc(_safe_dict(model.get("dialogue_coverage")).get("real_runtime_dialogue_turn_count"))}</div><div>Real Runtime Dialogue Turns</div></div>
+      <div class="metric"><div class="value">{_esc(_safe_dict(model.get("dialogue_coverage")).get("real_runtime_provider_dialogue_turn_count"))}</div><div>Provider Runtime Dialogue Turns</div></div>
       <div class="metric"><div class="value">{_esc(_safe_dict(model.get("dialogue_coverage")).get("echoed_narration_turn_count"))}</div><div>Echoed Narration Turns</div></div>
     </div>
     <details>
       <summary>Dialogue coverage debug</summary>
       <pre>{_json(model.get("dialogue_coverage"))}</pre>
-    </details>
-  </section>
+     </details>
+   </section>
 
-  <section id="story-so-far">
-    <h2>Story So Far</h2>
-    {_render_paragraphs(model.get("story_so_far_paragraph"))}
-  </section>
-
-  <section id="chapter-status">
-    <h2>Chapter Status</h2>
+  <section id="performance">
+    <h2>Performance Metrics</h2>
     <div class="grid">
-      <div class="metric"><div class="value">{_esc(_safe_dict(model.get("chapter_status")).get("completed_objective_count"))}</div><div>Completed Objectives</div></div>
-      <div class="metric"><div class="value">{_esc(_safe_dict(model.get("chapter_status")).get("active_objective_count"))}</div><div>Active Objectives</div></div>
-      <div class="metric"><div class="value">{_esc(_safe_dict(model.get("chapter_status")).get("current_stage"))}</div><div>Current Arc Stage</div></div>
+      <div class="metric"><div class="value">{_esc(performance.get("campaign_wall_seconds"))}</div><div>Campaign Wall Seconds</div></div>
+      <div class="metric"><div class="value">{_esc(performance.get("turns_per_second"))}</div><div>Turns / Second</div></div>
+      <div class="metric"><div class="value">{_esc(performance.get("avg_turn_ms"))}</div><div>Average Turn ms</div></div>
+      <div class="metric"><div class="value">{_esc(performance.get("p95_turn_ms"))}</div><div>p95 Turn ms</div></div>
+      <div class="metric"><div class="value">{_esc(performance.get("max_turn_ms"))}</div><div>Max Turn ms</div></div>
+      <div class="metric"><div class="value">{_esc(performance.get("artifact_write_ms"))}</div><div>Report Write ms</div></div>
     </div>
-    <p>{_esc(_safe_dict(model.get("chapter_status")).get("recommendation"))}</p>
-    <pre>{_json(model.get("chapter_status"))}</pre>
-  </section>
-
-  <section id="setting">
-    <h2>Lore, Setting, and Director Setup</h2>
-    {_render_paragraphs(model.get("lore_setting_paragraph"))}
-    <h3>Director State</h3>
-    <pre>{_json(_safe_dict(latest_state.get("campaign_director_state")))}</pre>
-  </section>
-
-  <section id="character-progression">
-    <h2>Character Progression Summary</h2>
-    {_render_paragraphs(model.get("character_progression_paragraph"))}
-  </section>
-
-  <section id="shortcomings">
-    <h2>Detected Shortcomings / Evaluation Notes</h2>
-    {shortcomings_html}
-  </section>
-
-  <section id="arcs">
-    <h2>Story Arc Progression</h2>
-    {_render_table(["Arc ID", "Title", "Stage", "Status", "Updated Turn"], arc_rows)}
-    <h3>Objectives / Milestones</h3>
-    {_render_table(["Arc ID", "Milestone ID", "Title", "Status", "Priority", "Completed Turn"], milestone_rows)}
-  </section>
-
-  <section id="journal">
-    <h2>Campaign Journal / Story Summary</h2>
-    {_render_table(["Turn", "Entry ID", "Title", "Text", "Tags"], journal_rows)}
-  </section>
-
-  <section id="events">
-    <h2>Story Events / Branch Outcomes</h2>
-    {_render_table(["Turn", "Event ID", "Title", "Summary", "Severity"], event_rows)}
+    <h3>Stage Summary</h3>
+    <pre>{_json(performance.get("stage_summary") or {})}</pre>
+    <h3>Slowest Turns</h3>
+    <pre>{_json(performance.get("slowest_turns") or [])}</pre>
   </section>
 
   <section id="npcs">
-    <h2>NPCs Introduced / Biography / Growth</h2>
-    {_render_table(["Name", "Role", "Dialogue Turns", "History", "Biography", "Growth / Arc"], npc_rows)}
-    <h3>NPC Dialogue Counts</h3>
-    <pre>{_json(model.get("npc_dialogue_counts"))}</pre>
-    <h3>NPC Progression State</h3>
-    <pre>{_json(_safe_dict(_safe_dict(latest_state.get("npc_progression_state")).get("npcs")))}</pre>
+    <h2>NPCs Introduced</h2>
+    <pre>{_json(model.get("npcs") or [])}</pre>
   </section>
-
-   <section id="player">
-     <h2>Player Character Progression / Stats</h2>
-     <p>{_esc(model.get("character_progression_paragraph"))}</p>
-     <pre>{_json(model.get("player_progression"))}</pre>
-   </section>
 
   <section id="lore">
     <h2>Lore & Worldbuilding</h2>
-    {_render_table(["Type", "ID", "Title/Name", "Text"], lore_rows)}
+    <pre>{_json(model.get("lore") or [])}</pre>
   </section>
 
-  <section id="quality">
-    <h2>Progress Quality & Action Diversity</h2>
-    <div class="grid">
-      <div class="metric"><div class="value">{_esc(progress_quality.get("churn_only_turns"))}</div><div>Churn-only Turns</div></div>
-      <div class="metric"><div class="value">{_esc(progress_quality.get("weak_progress_turns"))}</div><div>Weak Progress Turns</div></div>
-      <div class="metric"><div class="value">{_esc(progress_quality.get("no_change_turns"))}</div><div>No-change Turns</div></div>
-      <div class="metric"><div class="value">{_esc(_safe_dict(model.get("action_diversity")).get("action_diversity_rate"))}</div><div>Action Diversity Rate</div></div>
-    </div>
-    <h3>Progress Categories</h3>
-    <pre>{_json(model.get("category_counts"))}</pre>
-    <h3>Hook Counts</h3>
-    <pre>{_json(model.get("hook_counts"))}</pre>
-  </section>
-
-  <section id="timeline">
+   <section id="timeline">
     <h2>Turn-by-Turn Story Timeline with AI/NPC Responses</h2>
     {''.join(timeline_html)}
   </section>
 
-  <section id="debug">
-    <h2>Raw Debug Appendix</h2>
-    <details>
-      <summary>Latest Simulation State</summary>
+   <section id="debug">
+     <h2>Raw Debug Appendix</h2>
+    <p><strong>Latest state source:</strong> {_esc(model.get("latest_state_source"))}</p>
+     <details>
+       <summary>Latest Simulation State</summary>
       <pre>{_json(latest_state)}</pre>
     </details>
     <details>

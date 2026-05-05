@@ -144,6 +144,18 @@ def _run_one_manual_turn(
                 or result.get("narration_result")
                 or _safe_dict(result.get("result")).get("narration_payload")
                 or _safe_dict(result.get("result")).get("structured_narration")
+                or _safe_dict(result.get("result")).get("narration_payload")
+                or _safe_dict(result.get("result")).get("structured_narration")
+                or _safe_dict(result.get("session")).get("last_narration_payload")
+                or _safe_dict(result.get("session")).get("narration_payload")
+            )
+            turn_summary["llm_called"] = bool(
+                result.get("llm_called")
+                or _safe_dict(result.get("result")).get("llm_called")
+                or _safe_dict(turn_summary["raw_narration_payload"]).get("source") == "provider_runtime_narration"
+            )
+            turn_summary["runtime_narration_diagnostics"] = _safe_dict(
+                _safe_dict(turn_summary["raw_narration_payload"]).get("runtime_narration_diagnostics")
             )
 
         # Apply sanitization for summary output
@@ -170,6 +182,18 @@ def _run_one_manual_turn(
                 or result.get("narration_result")
                 or _safe_dict(result.get("result")).get("narration_payload")
                 or _safe_dict(result.get("result")).get("structured_narration")
+                or _safe_dict(result.get("result")).get("narration_payload")
+                or _safe_dict(result.get("result")).get("structured_narration")
+                or _safe_dict(result.get("session")).get("last_narration_payload")
+                or _safe_dict(result.get("session")).get("narration_payload")
+            )
+            turn_summary["llm_called"] = bool(
+                result.get("llm_called")
+                or _safe_dict(result.get("result")).get("llm_called")
+                or _safe_dict(turn_summary["raw_narration_payload"]).get("source") == "provider_runtime_narration"
+            )
+            turn_summary["runtime_narration_diagnostics"] = _safe_dict(
+                _safe_dict(turn_summary["raw_narration_payload"]).get("runtime_narration_diagnostics")
             )
 
         return turn_summary

@@ -570,6 +570,8 @@ from app.rpg.narration.quality import (
     update_narration_quality_memory,
     validate_narration_quality,
 )
+from app.rpg.narration.runtime_narration_contract import build_runtime_narration_payload
+from app.rpg.narration.runtime_provider import get_runtime_llm_provider
 from app.rpg.party.companion_commands import maybe_apply_companion_command
 from app.rpg.party.companion_memory import (
     companion_loyalty_projection,
@@ -13545,6 +13547,27 @@ def apply_turn(
     final_result = _reconcile_npc_backbone_social_decision(final_result, player_input)
     final_result = _attach_narration_quality_and_backbone_context(final_result, player_input)
     final_result = _reconcile_narration_quality_memory_and_warnings(final_result)
+    turn_contract = final_result.get("turn_contract") or final_result.get("turnContract") or {}
+    simulation_state = (
+        final_result.get("simulation_state")
+        or final_result.get("state")
+        or final_result.get("session", {}).get("simulation_state")
+        or session.get("simulation_state")
+        or {}
+    )
+    narration_payload = build_runtime_narration_payload(
+        provider=get_runtime_llm_provider(),
+        player_action=player_input,
+        simulation_state=simulation_state,
+        turn_contract=turn_contract,
+        prefer_provider=True,
+    )
+    final_result["narration_payload"] = narration_payload
+    final_result["structured_narration"] = narration_payload
+    final_result["npc"] = narration_payload.get("npc") or {}
+    if narration_payload.get("narration"):
+        final_result["narration"] = narration_payload["narration"]
+    final_result["llm_called"] = narration_payload.get("source") == "provider_runtime_narration"
     return final_result
 
 

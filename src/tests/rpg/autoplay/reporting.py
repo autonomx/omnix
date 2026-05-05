@@ -43,6 +43,14 @@ def render_autoplay_html(transcript: List[Dict[str, Any]], summary: Dict[str, An
                 <pre>{html.escape(json.dumps(row.get("story_hook_result") or {}, ensure_ascii=False, indent=2, sort_keys=True, default=str))}</pre>
               </details>
               <details>
+                <summary>Base runtime response</summary>
+                <pre>{html.escape(json.dumps(row.get("base_response_payload") or {}, ensure_ascii=False, indent=2, sort_keys=True, default=str))}</pre>
+              </details>
+              <details>
+                <summary>Final authoritative state</summary>
+                <pre>{html.escape(json.dumps(row.get("final_authoritative_state") or {}, ensure_ascii=False, indent=2, sort_keys=True, default=str))}</pre>
+              </details>
+              <details>
                 <summary>Strategy guidance</summary>
                 <pre>{html.escape(json.dumps(row.get("strategy_guidance") or {}, ensure_ascii=False, indent=2, sort_keys=True, default=str))}</pre>
               </details>
@@ -106,12 +114,14 @@ def write_autoplay_artifacts(
     summary_path = output_dir / "autoplay-summary.json"
     transcript_path = output_dir / "autoplay-transcript.json"
     metrics_path = output_dir / "autoplay-progress-metrics.json"
+    performance_path = output_dir / "autoplay-performance.json"
     health_path = output_dir / "autoplay-health.json"
     html_path = output_dir / "autoplay-transcript.html"
     zip_path = output_dir / "autoplay-campaign-results.zip"
 
     write_json(summary_path, summary)
     write_json(metrics_path, metrics)
+    write_json(performance_path, metrics.get("performance") or {})
     write_json(health_path, health)
     if artifact_detail == "full":
         write_json(transcript_path, transcript)
@@ -120,6 +130,7 @@ def write_autoplay_artifacts(
     with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as zf:
         zf.write(summary_path, summary_path.name)
         zf.write(metrics_path, metrics_path.name)
+        zf.write(performance_path, performance_path.name)
         zf.write(health_path, health_path.name)
         if artifact_detail == "full":
             zf.write(transcript_path, transcript_path.name)
@@ -140,6 +151,7 @@ def write_autoplay_artifacts(
     return {
         "summary": str(summary_path),
         "metrics": str(metrics_path),
+        "performance": str(performance_path),
         "health": str(health_path),
         "transcript": str(transcript_path) if artifact_detail == "full" else "",
         "html": str(html_path) if artifact_detail == "full" else "",
