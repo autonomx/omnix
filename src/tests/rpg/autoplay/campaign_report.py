@@ -34,6 +34,39 @@ def _first_nonempty(*values: Any) -> str:
     return ""
 
 
+SOCIAL_ACTION_WORDS = {
+    "ask",
+    "talk",
+    "tell",
+    "say",
+    "speak",
+    "question",
+    "report",
+    "explain",
+    "share",
+    "approach",
+    "convince",
+    "persuade",
+}
+
+
+def _norm_text(value: Any) -> str:
+    return " ".join(str(value or "").lower().strip().split())
+
+
+def is_social_player_action(player_action: Any) -> bool:
+    text = _norm_text(player_action)
+    return any(word in text for word in SOCIAL_ACTION_WORDS)
+
+
+def is_echoed_narration(*, player_action: Any, narration: Any) -> bool:
+    player = _norm_text(player_action)
+    narr = _norm_text(narration)
+    if not player or not narr:
+        return False
+    return player == narr or narr in {player.rstrip("."), player + "."}
+
+
 def _nested_get(value: Dict[str, Any], *path: str) -> Any:
     current: Any = value
     for key in path:
@@ -116,6 +149,27 @@ def extract_conversation_beat(row: Dict[str, Any]) -> Dict[str, str]:
                 "line": _safe_str(beat.get("line")),
             }
     return {}
+
+
+def classify_dialogue_source(row: Dict[str, Any]) -> str:
+    """Classify where the visible NPC dialogue came from."""
+    ai_payload = extract_turn_ai_payload(row)
+    if _safe_dict(ai_payload.get("npc")).get("line"):
+        return "raw_ai_payload"
+
+    hook_display = extract_story_hook_display(row)
+    if _safe_dict(hook_display.get("npc")).get("line"):
+        return "story_hook_display"
+
+    turn_result = _safe_dict(row.get("turn_result"))
+    manual_summary = _safe_dict(turn_result.get("manual_turn_summary"))
+    if _safe_dict(manual_summary.get("raw_npc")).get("line"):
+        return "raw_npc"
+
+    if extract_conversation_beat(row).get("line"):
+        return "conversation_beat"
+
+    return "none"
 
 
 def extract_dialogue(row: Dict[str, Any]) -> Dict[str, str]:
@@ -328,25 +382,25 @@ def build_story_so_far_paragraph(model: Dict[str, Any]) -> str:
             if summary:
                 story_beats.append(summary)
 
-    if not story_beats:
-        for entry in sorted(journal_entries, key=lambda r: int(_safe_dict(r).get("turn_index") or 0)):
-            text = _safe_str(entry.get("text") or entry.get("title"))
-            if text:
-                story_beats.append(text)
-
-    parts = []
-    opening = (
+    setup = (
         f"Across {len(timeline)} turns, the campaign followed an investigation that began inside "
         "the Rusty Flagon Tavern and gradually widened toward trouble on the road."
     )
-    parts.append(opening)
+    investigation = ""
     if story_beats:
-        parts.append(" ".join(story_beats[:6]))
+        investigation = " ".join(story_beats[:6])
+    else:
+        investigation = "The run recorded player activity, but no major story beats were captured."
+
+    outcome_parts = []
     if completed_titles:
-        parts.append("By the end of the run, the completed objectives were: " + ", ".join(completed_titles) + ".")
+        outcome_parts.append("Completed objectives: " + ", ".join(completed_titles) + ".")
     if active_titles:
-        parts.append("The active unresolved objectives were: " + ", ".join(active_titles) + ".")
-    return " ".join(parts)
+        outcome_parts.append("Active unresolved objectives: " + ", ".join(active_titles) + ".")
+    if not outcome_parts:
+        outcome_parts.append("By the end of the run, the campaign had no active objective, so the director should either declare a chapter boundary or seed the next branch.")
+
+    return "\n\n".join([setup, investigation, " ".join(outcome_parts)])
 
 
 def build_lore_setting_paragraph(state: Dict[str, Any]) -> str:
@@ -432,6 +486,112 @@ def build_character_progression_paragraph(state: Dict[str, Any]) -> str:
     return " ".join(part for part in parts if part.strip())
 
 
+def compute_dialogue_coverage(timeline: List[Dict[str, Any]]) -> Dict[str, Any]:
+    total_turns = len(timeline)
+    social_turns = [row for row in timeline if row.get("social_action")]
+    npc_response_turns = [
+        row
+        for row in timeline
+        if _safe_dict(row.get("npc")).get("line")
+    ]
+    missing_social_turns = [
+        row
+        for row in social_turns
+        if row.get("missing_npc_response")
+    ]
+    echoed_narration_turns = [
+        row
+        for row in timeline
+        if row.get("echoed_narration")
+    ]
+    source_counts = Counter(
+        _safe_str(row.get("dialogue_source") or "none")
+        for row in timeline
+    )
+    hook_dialogue_turns = [
+        row for row in timeline if row.get("dialogue_source") == "story_hook_display"
+    ]
+    base_dialogue_turns = [
+        row
+        for row in timeline
+        if row.get("dialogue_source") in {"raw_ai_payload", "raw_npc", "conversation_beat"}
+    ]
+    return {
+        "total_turns": total_turns,
+        "social_turn_count": len(social_turns),
+        "npc_response_turn_count": len(npc_response_turns),
+        "npc_response_rate": (len(npc_response_turns) / total_turns) if total_turns else 0.0,
+        "social_turn_missing_npc_response_count": len(missing_social_turns),
+        "social_turn_missing_npc_response_rate": (
+            len(missing_social_turns) / len(social_turns) if social_turns else 0.0
+        ),
+        "echoed_narration_turn_count": len(echoed_narration_turns),
+        "echoed_narration_rate": (
+            len(echoed_narration_turns) / total_turns if total_turns else 0.0
+        ),
+        "dialogue_source_counts": dict(source_counts),
+        "hook_dialogue_turn_count": len(hook_dialogue_turns),
+        "base_runtime_dialogue_turn_count": len(base_dialogue_turns),
+        "missing_social_turns": [
+            {
+                "turn_index": row.get("turn_index"),
+                "player_action": row.get("player_action"),
+            }
+            for row in missing_social_turns[:25]
+        ],
+        "echoed_narration_turns": [
+            {
+                "turn_index": row.get("turn_index"),
+                "player_action": row.get("player_action"),
+                "narration": row.get("narration"),
+            }
+            for row in echoed_narration_turns[:25]
+        ],
+    }
+
+
+def build_chapter_status(state: Dict[str, Any], model_like: Dict[str, Any]) -> Dict[str, Any]:
+    director = _safe_dict(state.get("campaign_director_state"))
+    milestones = _safe_list(model_like.get("milestones"))
+    completed = [
+        row for row in milestones if _safe_str(row.get("status")) == "completed"
+    ]
+    active = [
+        row
+        for row in milestones
+        if _safe_str(row.get("status")) not in {"completed", "failed", "cancelled"}
+    ]
+    arcs = _story_arc_rows(state)
+    current_stage = ""
+    if arcs:
+        current_stage = _safe_str(arcs[0].get("stage"))
+    chapter_complete = bool(completed and not active)
+    recommendation = ""
+    if chapter_complete:
+        recommendation = (
+            "The current chapter appears complete. The director should either declare a chapter boundary "
+            "or seed a follow-up objective so long autoplay runs do not drift."
+        )
+    elif active:
+        recommendation = "The campaign has active objectives and can continue from the current branch."
+    else:
+        recommendation = "No active objective was found; the director should seed the next actionable goal."
+    return {
+        "campaign_title": director.get("campaign_title") or "Untitled Campaign",
+        "current_stage": current_stage,
+        "completed_objective_count": len(completed),
+        "active_objective_count": len(active),
+        "completed_objectives": [
+            row.get("title") or row.get("milestone_id") for row in completed
+        ],
+        "active_objectives": [
+            row.get("title") or row.get("milestone_id") for row in active
+        ],
+        "chapter_complete": chapter_complete,
+        "recommendation": recommendation,
+    }
+
+
 def build_campaign_report_model(
     *,
     transcript: List[Dict[str, Any]],
@@ -450,6 +610,14 @@ def build_campaign_report_model(
     for row in transcript:
         dialogue = extract_dialogue(row)
         narration = extract_narration(row)
+        dialogue_source = classify_dialogue_source(row)
+        player_action = _safe_str(row.get("player_action"))
+        social_action = is_social_player_action(player_action)
+        missing_npc_response = bool(social_action and not dialogue.get("line"))
+        echoed_narration = is_echoed_narration(
+            player_action=player_action,
+            narration=narration,
+        )
         progress_delta = _safe_dict(row.get("progress_delta"))
         progress_quality = _safe_dict(row.get("progress_quality"))
         hook_result = _safe_dict(row.get("story_hook_result"))
@@ -465,15 +633,21 @@ def build_campaign_report_model(
         timeline.append(
             {
                 "turn_index": row.get("turn_index"),
-                "player_action": row.get("player_action"),
+                "player_action": player_action,
                 "narration": narration,
                 "npc": dialogue,
+                "dialogue_source": dialogue_source,
+                "social_action": social_action,
+                "missing_npc_response": missing_npc_response,
+                "echoed_narration": echoed_narration,
                 "progress_delta": progress_delta,
                 "progress_quality": progress_quality,
                 "fired_hooks": fired_hooks,
                 "state_preservation_debug": row.get("state_preservation_debug") or {},
             }
         )
+
+    dialogue_coverage = compute_dialogue_coverage(timeline)
 
     shortcomings = []
     if float(quality.get("meaningful_progress_rate") or 0.0) < 0.15 and transcript:
@@ -488,6 +662,23 @@ def build_campaign_report_model(
         shortcomings.append("No story hooks fired; deterministic story progression may be missing.")
     if not npc_dialogue_counts:
         shortcomings.append("No NPC dialogue extracted; narration payload may not expose speaker/line fields.")
+    if int(dialogue_coverage.get("social_turn_missing_npc_response_count") or 0) > 0:
+        shortcomings.append(
+            f"{dialogue_coverage.get('social_turn_missing_npc_response_count')} social turns had no extracted NPC response; "
+            "base-runtime dialogue coverage is incomplete."
+        )
+    if int(dialogue_coverage.get("echoed_narration_turn_count") or 0) > 0:
+        shortcomings.append(
+            f"{dialogue_coverage.get('echoed_narration_turn_count')} turns appear to echo the player action as narration; "
+            "the narration runtime may be falling back instead of generating scene response text."
+        )
+    if (
+        int(dialogue_coverage.get("hook_dialogue_turn_count") or 0) > 0
+        and int(dialogue_coverage.get("base_runtime_dialogue_turn_count") or 0) == 0
+    ):
+        shortcomings.append(
+            "All visible NPC dialogue came from story-hook display payloads; normal non-hook dialogue still needs runtime support."
+        )
     if int(metrics.get("player_agent_exception_count") or 0) > 0:
         shortcomings.append(
             f"Player-agent exceptions occurred on {metrics.get('player_agent_exception_count')} turns; "
@@ -516,16 +707,25 @@ def build_campaign_report_model(
         "hook_counts": dict(hook_counts),
         "npc_dialogue_counts": dict(npc_dialogue_counts),
         "action_diversity": action_diversity,
+        "dialogue_coverage": dialogue_coverage,
         "shortcomings": shortcomings,
     }
     model["story_so_far_paragraph"] = build_story_so_far_paragraph(model)
     model["lore_setting_paragraph"] = build_lore_setting_paragraph(latest_state)
     model["character_progression_paragraph"] = build_character_progression_paragraph(latest_state)
+    model["chapter_status"] = build_chapter_status(latest_state, model)
     return model
 
 
 def _render_badge(text: str, cls: str = "") -> str:
     return f'<span class="badge {html.escape(cls)}">{_esc(text)}</span>'
+
+
+def _render_paragraphs(text: Any) -> str:
+    chunks = [chunk.strip() for chunk in str(text or "").split("\n\n") if chunk.strip()]
+    if not chunks:
+        return '<p class="muted">No narrative summary available.</p>'
+    return "\n".join(f"<p>{_esc(chunk)}</p>" for chunk in chunks)
 
 
 def _render_table(headers: List[str], rows: List[List[Any]]) -> str:
@@ -565,7 +765,12 @@ def render_campaign_report_html(model: Dict[str, Any]) -> str:
               <div class="player-action"><strong>Player:</strong> {_esc(row.get("player_action"))}</div>
               <div class="narration"><strong>Narration:</strong> {_esc(row.get("narration") or "[no narration extracted]")}</div>
               <div class="npc-line"><strong>NPC:</strong> {_esc(npc.get("speaker") or "[none]")} — {_esc(npc.get("line") or "[no NPC line extracted]")}</div>
-              <div class="badges">{categories} {hook_badges}</div>
+              <div class="badges">
+                {_render_badge("dialogue:" + _safe_str(row.get("dialogue_source") or "none"), "category")}
+                {categories} {hook_badges}
+                {_render_badge("missing_npc_response", "quality") if row.get("missing_npc_response") else ""}
+                {_render_badge("echoed_narration", "quality") if row.get("echoed_narration") else ""}
+              </div>
               <details>
                 <summary>Turn debug</summary>
                 <pre>{_json(row)}</pre>
@@ -757,9 +962,10 @@ def render_campaign_report_html(model: Dict[str, Any]) -> str:
 <header>
   <h1>Autoplay Campaign Report</h1>
   <div class="muted">Session {_esc(summary.get("session_id"))} · Strategy {_esc(summary.get("strategy_profile") or summary.get("strategy"))} · OK {_esc(summary.get("ok"))}</div>
-  <nav>
-    <a href="#summary">Summary</a>
-    <a href="#timeline">Timeline</a>
+   <nav>
+     <a href="#summary">Summary</a>
+     <a href="#dialogue-coverage">Dialogue</a>
+     <a href="#timeline">Timeline</a>
     <a href="#arcs">Story Arcs</a>
     <a href="#npcs">NPCs</a>
     <a href="#lore">Lore</a>
@@ -792,21 +998,47 @@ def render_campaign_report_html(model: Dict[str, Any]) -> str:
     <p class="muted">A high fallback rate means this campaign reflects deterministic fallback action selection more than true LLM-player behavior.</p>
   </section>
 
+  <section id="dialogue-coverage">
+    <h2>Dialogue Coverage</h2>
+    <div class="grid">
+      <div class="metric"><div class="value">{_esc(_safe_dict(model.get("dialogue_coverage")).get("npc_response_turn_count"))}</div><div>Turns with NPC Response</div></div>
+      <div class="metric"><div class="value">{_esc(_safe_dict(model.get("dialogue_coverage")).get("social_turn_missing_npc_response_count"))}</div><div>Social Turns Missing NPC Response</div></div>
+      <div class="metric"><div class="value">{_esc(_safe_dict(model.get("dialogue_coverage")).get("hook_dialogue_turn_count"))}</div><div>Hook Dialogue Turns</div></div>
+      <div class="metric"><div class="value">{_esc(_safe_dict(model.get("dialogue_coverage")).get("base_runtime_dialogue_turn_count"))}</div><div>Base Runtime Dialogue Turns</div></div>
+      <div class="metric"><div class="value">{_esc(_safe_dict(model.get("dialogue_coverage")).get("echoed_narration_turn_count"))}</div><div>Echoed Narration Turns</div></div>
+    </div>
+    <details>
+      <summary>Dialogue coverage debug</summary>
+      <pre>{_json(model.get("dialogue_coverage"))}</pre>
+    </details>
+  </section>
+
   <section id="story-so-far">
     <h2>Story So Far</h2>
-    <p>{_esc(model.get("story_so_far_paragraph"))}</p>
+    {_render_paragraphs(model.get("story_so_far_paragraph"))}
+  </section>
+
+  <section id="chapter-status">
+    <h2>Chapter Status</h2>
+    <div class="grid">
+      <div class="metric"><div class="value">{_esc(_safe_dict(model.get("chapter_status")).get("completed_objective_count"))}</div><div>Completed Objectives</div></div>
+      <div class="metric"><div class="value">{_esc(_safe_dict(model.get("chapter_status")).get("active_objective_count"))}</div><div>Active Objectives</div></div>
+      <div class="metric"><div class="value">{_esc(_safe_dict(model.get("chapter_status")).get("current_stage"))}</div><div>Current Arc Stage</div></div>
+    </div>
+    <p>{_esc(_safe_dict(model.get("chapter_status")).get("recommendation"))}</p>
+    <pre>{_json(model.get("chapter_status"))}</pre>
   </section>
 
   <section id="setting">
     <h2>Lore, Setting, and Director Setup</h2>
-    <p>{_esc(model.get("lore_setting_paragraph"))}</p>
+    {_render_paragraphs(model.get("lore_setting_paragraph"))}
     <h3>Director State</h3>
     <pre>{_json(_safe_dict(latest_state.get("campaign_director_state")))}</pre>
   </section>
 
   <section id="character-progression">
     <h2>Character Progression Summary</h2>
-    <p>{_esc(model.get("character_progression_paragraph"))}</p>
+    {_render_paragraphs(model.get("character_progression_paragraph"))}
   </section>
 
   <section id="shortcomings">

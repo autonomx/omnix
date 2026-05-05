@@ -161,3 +161,52 @@ def test_story_hooks_do_not_cascade_prerequisites_in_same_turn():
     fired_ids = [row["hook_id"] for row in result["fired_hooks"]]
 
     assert fired_ids == ["hook:witness:ask_bran"]
+
+
+def test_report_to_bran_matches_found_witness_language():
+    state = {}
+    seed_tavern_story_campaign(state)
+    state = apply_autoplay_story_hooks(
+        simulation_state=state,
+        player_action="I ask Bran about the witness.",
+        turn_index=1,
+    )["simulation_state"]
+    state = apply_autoplay_story_hooks(
+        simulation_state=state,
+        player_action="I follow the cloaked traveler outside to find the witness.",
+        turn_index=2,
+    )["simulation_state"]
+
+    result = apply_autoplay_story_hooks(
+        simulation_state=state,
+        player_action="I approach Bran and state that I found the witness.",
+        turn_index=3,
+    )
+
+    assert result["changed"] is True
+    assert result["fired_hooks"][0]["hook_id"] == "hook:witness:report_to_bran"
+
+
+def test_pursue_bandit_trail_adds_followup_preparation_objective():
+    state = {}
+    seed_tavern_story_campaign(state)
+    for turn_index, action in enumerate(
+        [
+            "I ask Bran about the witness.",
+            "I inspect the tavern for the witness trail.",
+            "I follow the cloaked traveler outside to find the witness.",
+            "I return to Bran and report the findings.",
+            "I leave the tavern and pursue the bandit trail along the road.",
+        ],
+        start=1,
+    ):
+        state = apply_autoplay_story_hooks(
+            simulation_state=state,
+            player_action=action,
+            turn_index=turn_index,
+        )["simulation_state"]
+
+    milestones = state["story_arc_milestone_state"]["arcs"]["arc:witness_search"]["milestones"]
+    by_id = {row["milestone_id"]: row for row in milestones}
+
+    assert by_id["milestone:prepare_for_bandit_road"]["status"] == "active"
