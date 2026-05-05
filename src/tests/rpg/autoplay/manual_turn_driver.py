@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
+from tests.rpg.autoplay.deferred_narration_guard import deferred_runtime_narration_context
 from typing import Any, Dict
 
 from tests.rpg.manual.session_helpers import (
@@ -221,6 +222,7 @@ def prepare_autoplay_manual_session(
     session_id: str,
     simulation_state: Dict[str, Any],
     reset_session_state: bool = True,
+    runtime_narration: str = "blocking",
 ) -> Dict[str, Any]:
     """Create the same kind of session manual_llm_transcript.py uses.
 
@@ -237,7 +239,20 @@ def prepare_autoplay_manual_session(
     sim.update(deepcopy(_safe_dict(simulation_state)))
 
     session["simulation_state"] = sim
-    session.setdefault("runtime_state", {})
+    runtime_state = session.setdefault("runtime_state", {})
+    performance = runtime_state.setdefault("performance", {})
+    if runtime_narration == "deferred":
+        runtime_state["autoplay_deferred_narration"] = True
+        runtime_state["deferred_runtime_narration"] = True
+        runtime_state["narration_mode"] = "deferred"
+        performance["enable_live_narration_llm"] = False
+        performance["enable_narration_retry"] = False
+        performance["enable_provider_runtime_narration"] = False
+    else:
+        runtime_state["autoplay_deferred_narration"] = False
+        runtime_state["deferred_runtime_narration"] = False
+        runtime_state["narration_mode"] = "blocking"
+
     session.setdefault("setup_payload", {})
     session["setup_payload"].setdefault("metadata", {})
     session["setup_payload"]["metadata"]["simulation_state"] = deepcopy(sim)
@@ -292,23 +307,43 @@ def run_autoplay_manual_turn(
     console_llm: bool = False,
     console_llm_raw: bool = False,
     console_llm_max_chars: int = 10_000,
+    runtime_narration: str = "blocking",
 ) -> Dict[str, Any]:
     """Run one autoplay turn through the manual harness turn function."""
     pre_turn_session = load_autoplay_manual_session(session_id)
+    if runtime_narration == "deferred":
+        runtime_state = pre_turn_session.setdefault("runtime_state", {})
+        performance = runtime_state.setdefault("performance", {})
+        runtime_state["autoplay_deferred_narration"] = True
+        runtime_state["deferred_runtime_narration"] = True
+        runtime_state["narration_mode"] = "deferred"
+        performance["enable_live_narration_llm"] = False
+        performance["enable_narration_retry"] = False
+        performance["enable_provider_runtime_narration"] = False
+
+        setup_payload = pre_turn_session.setdefault("setup_payload", {})
+        metadata = setup_payload.setdefault("metadata", {})
+        metadata["runtime_narration"] = "deferred"
+        metadata["autoplay_deferred_narration"] = True
+
+        _save_manual_session_for_test(session_id, pre_turn_session)
+        _save_through_app_session_service(pre_turn_session)
+
     pre_turn_state = deepcopy(_safe_dict(pre_turn_session.get("simulation_state")))
 
-    turn_summary = _run_one_manual_turn(
-        session_id=session_id,
-        turn=player_input,
-        turn_index=turn_index,
-        scenario_name=scenario_name,
-        target_channel=target_channel,
-        console_llm=console_llm,
-        console_llm_raw=console_llm_raw,
-        console_llm_max_chars=console_llm_max_chars,
-        story_event_queue_checks=None,
-        include_raw_result=True,
-    )
+    with deferred_runtime_narration_context(runtime_narration == "deferred"):
+        turn_summary = _run_one_manual_turn(
+            session_id=session_id,
+            turn=player_input,
+            turn_index=turn_index,
+            scenario_name=scenario_name,
+            target_channel=target_channel,
+            console_llm=console_llm,
+            console_llm_raw=console_llm_raw,
+            console_llm_max_chars=console_llm_max_chars,
+            story_event_queue_checks=None,
+            include_raw_result=True,
+        )
 
     post_turn_session = load_autoplay_manual_session(session_id)
     post_turn_state = _safe_dict(post_turn_session.get("simulation_state"))

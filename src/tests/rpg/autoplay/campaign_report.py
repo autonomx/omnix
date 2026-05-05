@@ -1026,6 +1026,7 @@ def build_campaign_report_model(
         "action_diversity": action_diversity,
         "dialogue_coverage": dialogue_coverage,
         "runtime_narration_diagnostics": runtime_narration_diagnostics,
+        "background_jobs": _safe_dict(metrics.get("background_jobs")),
         "shortcomings": shortcomings,
     }
     model["story_so_far_paragraph"] = build_story_so_far_paragraph(model)
@@ -1728,7 +1729,7 @@ def render_campaign_report_html(model: Dict[str, Any]) -> str:
 
   <section id="performance">
     <h2>Performance Metrics</h2>
-    <p class="section-lede">Runtime speed and where time is spent. Technical timing details are available below.</p>
+    <p class="section-lede">Runtime speed and where time is spent. Playability latency separates the blocking turn path from background narration/checkpoint/report work.</p>
     <div class="grid">
       <div class="metric"><div class="value">{_esc(_number(performance.get("campaign_wall_seconds"), 2))}s</div><div>Campaign Wall Time</div></div>
       <div class="metric"><div class="value">{_esc(performance.get("turns_per_second"))}</div><div>Turns / Second</div></div>
@@ -1737,10 +1738,25 @@ def render_campaign_report_html(model: Dict[str, Any]) -> str:
       <div class="metric"><div class="value">{_esc(_seconds_from_ms(performance.get("max_turn_ms")))}</div><div>Max Turn</div></div>
       <div class="metric"><div class="value">{_esc(_seconds_from_ms(performance.get("artifact_write_ms")))}</div><div>Report Write Time</div></div>
     </div>
-    <h3>Time by Stage</h3>
+    <h3>Playability Latency</h3>
+    <p class="muted">
+      Autoplay blocking includes the LLM player-agent. Human-equivalent blocking excludes the player-agent because a real player supplies the action.
+    </p>
+    <div class="grid">
+      <div class="metric"><div class="value">{_esc(_seconds_from_ms(performance.get("avg_human_playable_blocking_ms")))}</div><div>Avg Human-Equivalent Blocking Turn</div></div>
+      <div class="metric"><div class="value">{_esc(_seconds_from_ms(performance.get("p95_human_playable_blocking_ms")))}</div><div>p95 Human-Equivalent Blocking Turn</div></div>
+      <div class="metric"><div class="value">{_esc(_seconds_from_ms(performance.get("max_human_playable_blocking_ms")))}</div><div>Max Human-Equivalent Blocking Turn</div></div>
+      <div class="metric"><div class="value">{_esc(_seconds_from_ms(performance.get("avg_playable_blocking_ms")))}</div><div>Avg Autoplay Blocking Turn</div></div>
+      <div class="metric"><div class="value">{_esc(_seconds_from_ms(performance.get("p95_playable_blocking_ms")))}</div><div>p95 Autoplay Blocking Turn</div></div>
+      <div class="metric"><div class="value">{_esc(_seconds_from_ms(performance.get("max_playable_blocking_ms")))}</div><div>Max Autoplay Blocking Turn</div></div>
+      <div class="metric"><div class="value">{_esc(_safe_dict(model.get("background_jobs")).get("total_jobs"))}</div><div>Background Jobs</div></div>
+      <div class="metric"><div class="value">{_esc(_number(_safe_dict(model.get("background_jobs")).get("background_job_seconds"), 2))}s</div><div>Background Worker Time</div></div>
+    </div>
+    <h3>Evaluation Wall Time</h3>
     {performance_stage_bars}
     {_render_json_details("Stage summary JSON", performance.get("stage_summary") or {})}
     {_render_json_details("Slowest turns JSON", performance.get("slowest_turns") or [])}
+    {_render_json_details("Background job summary JSON", model.get("background_jobs") or {})}
   </section>
 
   <section id="quality">

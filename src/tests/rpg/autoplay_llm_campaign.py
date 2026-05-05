@@ -31,6 +31,10 @@ from tests.rpg.autoplay.manual_turn_driver import (
     prepare_autoplay_manual_session,
     run_autoplay_manual_turn,
 )
+from tests.rpg.autoplay.parallel_pipeline import (
+    AutoplayBackgroundPipeline,
+    attach_background_results_to_transcript,
+)
 from tests.rpg.autoplay.performance import (
     elapsed_ms,
     now_perf,
@@ -115,6 +119,7 @@ def _commit_authoritative_state(
     *,
     session_id: str,
     authoritative_state: Dict[str, Any],
+    runtime_narration: str = "blocking",
 ) -> Dict[str, Any]:
     """Persist and return the runner-owned authoritative autoplay state.
 
@@ -127,6 +132,7 @@ def _commit_authoritative_state(
         session_id=session_id,
         simulation_state=committed,
         reset_session_state=False,
+        runtime_narration=runtime_narration,
     )
     return committed
 
@@ -149,15 +155,16 @@ def _call_turn_runtime(
     session_id: str,
     player_action: str,
     turn_index: int,
+    runtime_narration: str = "blocking",
 ) -> Dict[str, Any]:
     return run_autoplay_manual_turn(
         session_id=session_id,
         player_input=player_action,
         turn_index=turn_index,
-        scenario_name="autoplay_campaign",
         target_channel="autoplay_runtime",
         console_llm=False,
         console_llm_raw=False,
+        runtime_narration=runtime_narration,
     )
 
 
@@ -252,6 +259,7 @@ def run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
     authoritative_state = _commit_authoritative_state(
         session_id=session_id,
         authoritative_state=authoritative_state,
+        runtime_narration=args.narration_mode,
     )
     last_committed_state: Dict[str, Any] = deepcopy(authoritative_state)
     checkpoint_dir = Path(args.output_dir) / "checkpoints"
@@ -262,8 +270,15 @@ def run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
         print("Player-agent provider shape:")
         print(provider_shape)
 
+    pipeline = AutoplayBackgroundPipeline(
+        background_workers=int(args.background_workers),
+        provider_workers=int(args.provider_workers),
+    )
+    background_results_summary: Dict[str, Any] = {}
+
 
     transcript: List[Dict[str, Any]] = []
+    regression_warnings: List[Dict[str, Any]] = []
     started = time.time()
     stopped_reason = ""
 
@@ -332,6 +347,7 @@ def run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
                     session_id=session_id,
                     player_action=player_action,
                     turn_index=turn_index,
+                    runtime_narration=args.narration_mode,
                 )
             returned_state = _safe_dict(turn_result.get("simulation_state"))
             if returned_state:
@@ -351,11 +367,12 @@ def run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
                     before_state=authoritative_state,
                     returned_state=_safe_dict(story_hook_result.get("simulation_state")),
                 )
-                authoritative_state = _commit_authoritative_state(
-                    session_id=session_id,
-                    authoritative_state=authoritative_state,
-                )
-                simulation_state = deepcopy(authoritative_state)
+            authoritative_state = _commit_authoritative_state(
+                session_id=session_id,
+                authoritative_state=authoritative_state,
+                runtime_narration=args.narration_mode,
+            )
+            simulation_state = deepcopy(authoritative_state)
 
         except Exception as exc:
             runtime_error = f"{type(exc).__name__}: {exc}"
@@ -437,13 +454,28 @@ def run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
         save_load_checkpoint = {}
         checkpoint_every = int(args.checkpoint_every or 0)
         if checkpoint_every > 0 and turn_index % checkpoint_every == 0:
-            with timed_stage(turn_performance, "checkpoint_ms"):
-                save_load_checkpoint = validate_save_load_checkpoint(
-                    session_id=session_id,
-                    turn_index=turn_index,
-                    checkpoint_dir=checkpoint_dir,
-                    simulation_state=final_turn_state,
-                )
+            if args.checkpoint_mode == "background":
+                with timed_stage(turn_performance, "background_enqueue_ms"):
+                    checkpoint_job_id = pipeline.submit_checkpoint(
+                        session_id=session_id,
+                        turn_index=turn_index,
+                        checkpoint_dir=checkpoint_dir,
+                        simulation_state=final_turn_state,
+                    )
+                save_load_checkpoint = {
+                    "ok": True,
+                    "status": "pending",
+                    "job_id": checkpoint_job_id,
+                    "mode": "background",
+                }
+            else:
+                with timed_stage(turn_performance, "checkpoint_ms"):
+                    save_load_checkpoint = validate_save_load_checkpoint(
+                        session_id=session_id,
+                        turn_index=turn_index,
+                        checkpoint_dir=checkpoint_dir,
+                        simulation_state=final_turn_state,
+                    )
             # validate_save_load_checkpoint() already verifies checkpoint
             # rehydration. Do not make the checkpoint reload the live baseline;
             # the runner-owned authoritative_state remains canonical.
@@ -451,6 +483,47 @@ def run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
         last_committed_state = deepcopy(final_turn_state)
         simulation_state = deepcopy(final_turn_state)
         narration = _extract_narration(turn_result)
+        narration_status = "ready"
+        narration_job_id = ""
+        if args.narration_mode == "deferred":
+            narration_status = "pending"
+            with timed_stage(turn_performance, "background_enqueue_ms"):
+                narration_job_id = pipeline.submit_deferred_narration(
+                    provider=provider,
+                    session_id=session_id,
+                    turn_index=turn_index,
+                    player_action=player_action,
+                    simulation_state=final_turn_state,
+                    turn_contract=turn_result.get("turn_contract") or {},
+                    prefer_provider=True,
+                )
+            if not narration:
+                narration = "Narration is being prepared..."
+
+        blocking_narration_payload = (
+            turn_result.get("narration_payload")
+            or turn_result.get("structured_narration")
+            or {}
+        )
+        blocking_narration_source = (
+            blocking_narration_payload.get("source")
+            if isinstance(blocking_narration_payload, dict)
+            else ""
+        )
+        deferred_blocking_provider_violation = (
+            args.narration_mode == "deferred"
+            and blocking_narration_source == "provider_runtime_narration"
+        )
+        if deferred_blocking_provider_violation:
+            regression_warnings.append(
+                {
+                    "turn_index": turn_index,
+                    "category": "deferred_narration_blocked_on_provider",
+                    "message": "Deferred narration mode still called provider_runtime_narration inside the blocking turn path.",
+                    "blocking_source": blocking_narration_source,
+                }
+            )
+
         record_build_start = now_perf()
         record = {
             "turn_index": turn_index,
@@ -476,6 +549,12 @@ def run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
             },
             "turn_contract": turn_result.get("turn_contract") or {},
             "narration": narration,
+            "narration_mode": args.narration_mode,
+            "narration_status": narration_status,
+            "narration_job_id": narration_job_id,
+            "blocking_narration_source": blocking_narration_source,
+            "deferred_blocking_provider_violation": deferred_blocking_provider_violation,
+            "latency_profile": args.latency_profile,
             "runtime_error": runtime_error,
             "before_state_digest": before_digest,
             "after_state_digest": after_digest,
@@ -492,6 +571,31 @@ def run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
             "base_response_payload": base_response_payload,
         }
         turn_performance["record_build_ms"] = elapsed_ms(record_build_start)
+
+        playable_blocking_keys = [
+            "manual_turn_ms",
+            "story_hooks_ms",
+            "base_response_ms",
+            "progress_eval_ms",
+            "state_bounds_ms",
+            "record_build_ms",
+        ]
+
+        autoplay_blocking_keys = ["player_agent_ms"] + playable_blocking_keys
+
+        if args.checkpoint_mode == "blocking":
+            playable_blocking_keys.append("checkpoint_ms")
+            autoplay_blocking_keys.append("checkpoint_ms")
+
+        turn_performance["human_playable_blocking_ms"] = round(
+            sum(float(turn_performance.get(key) or 0.0) for key in playable_blocking_keys),
+            3,
+        )
+
+        turn_performance["playable_blocking_ms"] = round(
+            sum(float(turn_performance.get(key) or 0.0) for key in autoplay_blocking_keys),
+            3,
+        )
         turn_performance["turn_total_ms"] = elapsed_ms(turn_perf_start)
         record["performance"] = turn_performance
         transcript.append(record)
@@ -516,6 +620,10 @@ def run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
             stopped_reason = "runtime_error"
             break
 
+    background_results = pipeline.drain()
+    background_results_summary = attach_background_results_to_transcript(transcript, background_results)
+    pipeline.shutdown()
+
     latest_context = (
         transcript[-1].get("player_action_context")
         if transcript and isinstance(transcript[-1].get("player_action_context"), dict)
@@ -530,6 +638,7 @@ def run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
     metrics = compute_progress_metrics(transcript, latest_context=latest_context)
     metrics["progress_quality"] = progress_quality_metrics
     metrics["performance"] = performance_metrics
+    metrics["background_jobs"] = background_results_summary
     health = evaluate_autoplay_health(
         transcript,
         latest_context=latest_context,
@@ -543,6 +652,17 @@ def run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
         min_action_diversity_rate=float(args.min_action_diversity_rate),
         min_category_diversity_rate=float(args.min_category_diversity_rate),
     )
+
+    deferred_blocking_violations = [
+        row for row in transcript
+        if row.get("deferred_blocking_provider_violation")
+    ]
+    if deferred_blocking_violations:
+        health["ok"] = False
+        health.setdefault("warnings", []).append(
+            f"deferred_narration_blocked_on_provider:{len(deferred_blocking_violations)}"
+        )
+
     progress_quality_health = evaluate_progress_quality_health(
         transcript,
         min_meaningful_progress_rate=float(args.min_meaningful_progress_rate),
@@ -574,6 +694,11 @@ def run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
         "seed_resolution": seed_resolution,
         "turn_runtime": "manual_harness",
         "server_runtime_used": False,
+        "latency_profile": args.latency_profile,
+        "narration_mode": args.narration_mode,
+        "checkpoint_mode": args.checkpoint_mode,
+        "background_workers": int(args.background_workers),
+        "provider_workers": int(args.provider_workers),
         "checkpoint_every": int(args.checkpoint_every or 0),
         "state_bounds_limits": {
             "max_state_bytes": int(args.max_state_bytes),
@@ -611,6 +736,7 @@ def run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
         "duration_seconds": round(time.time() - started, 3),
         "health": health,
         "performance": performance_metrics,
+        "background_jobs": background_results_summary,
     }
     artifact_start = now_perf()
     extra_paths = {}
@@ -627,6 +753,7 @@ def run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
     )
     summary["performance"] = metrics["performance"]
     summary["story_variety"] = metrics["story_variety"]
+    metrics["background_jobs"] = background_results_summary
 
     # Write the campaign report once for human-readable output.
     if args.artifact_detail == "full":
@@ -653,6 +780,7 @@ def run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
     )
     summary["performance"] = metrics["performance"]
     summary["story_variety"] = metrics["story_variety"]
+    metrics["background_jobs"] = background_results_summary
 
     # Rewrite the report with final performance metrics so the HTML/JSON report
     # agrees with autoplay-performance.json.
@@ -722,6 +850,11 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--action-diversity-window", type=int, default=12)
     parser.add_argument("--min-action-diversity-rate", type=float, default=0.0)
     parser.add_argument("--min-category-diversity-rate", type=float, default=0.0)
+    parser.add_argument("--latency-profile", choices=["evaluation", "playable"], default="evaluation")
+    parser.add_argument("--narration-mode", choices=["blocking", "deferred"], default="blocking")
+    parser.add_argument("--checkpoint-mode", choices=["blocking", "background"], default="blocking")
+    parser.add_argument("--background-workers", type=int, default=4)
+    parser.add_argument("--provider-workers", type=int, default=1)
     return parser
 
 
@@ -740,6 +873,9 @@ def main(argv: List[str] | None = None) -> int:
     print(f"turns_executed: {summary['turns_executed']}")
     print(f"stopped_reason: {summary['stopped_reason']}")
     print(f"ok: {summary['ok']}")
+    print(f"latency_profile: {summary.get('latency_profile')}")
+    print(f"narration_mode: {summary.get('narration_mode')}")
+    print(f"checkpoint_mode: {summary.get('checkpoint_mode')}")
     artifact_paths = summary.get("artifact_paths") or {}
     story_variety = summary.get("story_variety") or {}
     seed_result = summary.get("seed_result") or {}

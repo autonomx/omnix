@@ -10,6 +10,12 @@ This replaces the legacy in-memory GameSession / pipeline.py / routes.py flow.
 """
 from __future__ import annotations
 
+try:
+    from tests.rpg.autoplay.deferred_narration_guard import suppress_provider_runtime_narration
+except Exception:
+    def suppress_provider_runtime_narration() -> bool:
+        return False
+
 import ast
 import copy
 import hashlib
@@ -13555,13 +13561,46 @@ def apply_turn(
         or session.get("simulation_state")
         or {}
     )
+
+    runtime_state = (
+        _safe_dict(_safe_dict(final_result.get("session")).get("runtime_state"))
+        or _safe_dict(session.get("runtime_state"))
+        or {}
+    )
+    setup_metadata = _safe_dict(_safe_dict(session.get("setup_payload")).get("metadata"))
+    performance_settings = _safe_dict(runtime_state.get("performance"))
+
+    defer_runtime_narration = bool(
+        suppress_provider_runtime_narration()
+        or runtime_state.get("autoplay_deferred_narration")
+        or runtime_state.get("deferred_runtime_narration")
+        or runtime_state.get("narration_mode") == "deferred"
+        or setup_metadata.get("autoplay_deferred_narration")
+        or setup_metadata.get("runtime_narration") == "deferred"
+    )
+
+    provider_runtime_enabled = bool(
+        performance_settings.get("enable_live_narration_llm", True)
+        and performance_settings.get("enable_provider_runtime_narration", True)
+    )
+    prefer_runtime_provider_narration = provider_runtime_enabled and not defer_runtime_narration
+
     narration_payload = build_runtime_narration_payload(
-        provider=get_runtime_llm_provider(),
+        provider=get_runtime_llm_provider() if prefer_runtime_provider_narration else None,
         player_action=player_input,
         simulation_state=simulation_state,
         turn_contract=turn_contract,
-        prefer_provider=True,
+        prefer_provider=prefer_runtime_provider_narration,
     )
+
+    if defer_runtime_narration:
+        narration_payload["source"] = "deferred_runtime_narration_pending"
+        narration_payload["deferred"] = True
+        narration_payload["narration_status"] = "pending"
+        narration_payload["narration"] = (
+            narration_payload.get("narration")
+            or "Narration is being prepared..."
+        )
     final_result["narration_payload"] = narration_payload
     final_result["structured_narration"] = narration_payload
     final_result["npc"] = narration_payload.get("npc") or {}
