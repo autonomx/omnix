@@ -3,7 +3,7 @@ from argparse import Namespace
 from pathlib import Path
 
 from tests.rpg.autoplay.manual_turn_driver import merge_autoplay_simulation_state
-from tests.rpg.autoplay_llm_campaign import run_autoplay_campaign
+from tests.rpg.autoplay_llm_campaign import run_autoplay_campaign, _narration_source, _replace_blocking_narration_with_pending
 
 
 def test_autoplay_runner_fallback_executes_short_campaign(tmp_path: Path, monkeypatch):
@@ -684,3 +684,32 @@ def test_deferred_narration_mode_does_not_leave_provider_source_in_blocking_turn
     assert summary["ok"] is True
     assert "deferred" in runtime_modes
     assert source != "provider_runtime_narration"
+
+
+def test_narration_source_detects_nested_turn_result_payload():
+    row = {
+        "turn_result": {
+            "narration_payload": {
+                "source": "provider_runtime_narration",
+                "narration": "Provider narration.",
+            }
+        }
+    }
+
+    assert _narration_source(row) == "provider_runtime_narration"
+
+
+def test_replace_blocking_narration_with_pending_updates_nested_payload():
+    row = {
+        "turn_result": {
+            "narration_payload": {
+                "source": "provider_runtime_narration",
+                "narration": "Provider narration.",
+            }
+        }
+    }
+
+    _replace_blocking_narration_with_pending(row)
+
+    assert row["narration_payload"]["source"] == "deferred_runtime_narration_pending"
+    assert row["turn_result"]["narration_payload"]["source"] == "deferred_runtime_narration_pending"

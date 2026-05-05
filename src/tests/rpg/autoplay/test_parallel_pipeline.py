@@ -1,4 +1,4 @@
-from tests.rpg.autoplay.deferred_narration_guard import (
+from app.rpg.session.deferred_narration_guard import (
     deferred_runtime_narration_context,
     suppress_provider_runtime_narration,
 )
@@ -37,8 +37,20 @@ def test_deferred_narration_job_does_not_mutate_authoritative_snapshot():
 
 def test_attach_background_results_preserves_turn_order_and_updates_rows():
     transcript = [
-        {"turn_index": 1, "narration": "pending", "turn_result": {}},
-        {"turn_index": 2, "narration": "pending", "turn_result": {}},
+        {
+            "turn_index": 1,
+            "narration": "pending",
+            "turn_result": {
+                "narration_payload": {"source": "deferred_runtime_narration_pending"}
+            },
+        },
+        {
+            "turn_index": 2,
+            "narration": "pending",
+            "turn_result": {
+                "narration_payload": {"source": "deferred_runtime_narration_pending"}
+            },
+        },
     ]
     results = [
         {
@@ -66,7 +78,18 @@ def test_attach_background_results_preserves_turn_order_and_updates_rows():
     assert [row["turn_index"] for row in transcript] == [1, 2]
     assert transcript[0]["narration"] == "First narration."
     assert transcript[1]["narration"] == "Second narration."
+    assert transcript[0]["resolved_narration"] == "First narration."
+    assert transcript[1]["resolved_narration"] == "Second narration."
+    assert (
+        transcript[0]["turn_result"]["narration_payload"]["source"]
+        == "deferred_runtime_narration_pending"
+    )
+    assert (
+        transcript[1]["turn_result"]["narration_payload"]["source"]
+        == "deferred_runtime_narration_pending"
+    )
     assert summary["narration_jobs"] == 2
+    assert summary["background_job_seconds"] == 0.03
 
 
 def test_deferred_runtime_narration_context_suppresses_provider_runtime_narration():
