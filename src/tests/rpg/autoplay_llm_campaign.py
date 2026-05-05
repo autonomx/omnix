@@ -14,21 +14,29 @@ from typing import Any, Dict, List
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', '..', 'src'))
 
 from app.rpg.player_action_context.runtime import build_player_action_context
-from tests.rpg.autoplay.evaluators import (
-    compute_progress_metrics,
-    evaluate_autoplay_health,
+from tests.rpg.autoplay.base_runtime_response import (
+    build_autoplay_base_response,
 )
-from tests.rpg.autoplay.manual_turn_driver import (
-    load_autoplay_simulation_state,
-    merge_autoplay_simulation_state,
-    prepare_autoplay_manual_session,
-    run_autoplay_manual_turn,
+from tests.rpg.autoplay.campaign_report import write_campaign_report
+from tests.rpg.autoplay.performance import (
+    elapsed_ms,
+    now_perf,
+    summarize_performance,
+    timed_stage,
 )
 from tests.rpg.autoplay.checkpoints import (
     collect_state_bounds,
     validate_save_load_checkpoint,
 )
-from tests.rpg.autoplay.campaign_report import write_campaign_report
+from tests.rpg.autoplay.evaluators import (
+    compute_progress_metrics,
+    evaluate_autoplay_health,
+)
+from tests.rpg.autoplay.manual_turn_driver import (
+    merge_autoplay_simulation_state,
+    prepare_autoplay_manual_session,
+    run_autoplay_manual_turn,
+)
 from tests.rpg.autoplay.player_agent import (
     build_player_agent_prompt,
     choose_fallback_player_action,
@@ -42,25 +50,32 @@ from tests.rpg.autoplay.progress_quality import (
     evaluate_progress_quality_health,
     post_objective_false_progress_warnings,
 )
+from tests.rpg.autoplay.provider_adapter import (
+    call_provider_text,
+    describe_provider_shape,
+)
+from tests.rpg.autoplay.reporting import write_autoplay_artifacts
+from tests.rpg.autoplay.seeding import seed_campaign
+from tests.rpg.autoplay.story_hooks import (
+    apply_autoplay_story_hooks,
+    autoplay_story_hook_player_hints,
+)
 from tests.rpg.autoplay.strategy_profiles import (
     action_diversity_metrics,
     build_strategy_guidance,
     rerank_suggested_actions_for_strategy,
 )
-from tests.rpg.autoplay.provider_adapter import (
-    call_provider_text,
-    describe_provider_shape,
-)
-from tests.rpg.autoplay.story_hooks import (
-    apply_autoplay_story_hooks,
-    autoplay_story_hook_player_hints,
-)
-from tests.rpg.autoplay.reporting import write_autoplay_artifacts
-from tests.rpg.autoplay.seeding import seed_campaign
 
 
 def _safe_dict(value: Any) -> Dict[str, Any]:
     return value if isinstance(value, dict) else {}
+
+
+def _autoplay_report_action_type(player_action: str) -> str:
+    text = " ".join(str(player_action or "").lower().strip().split())
+    if any(word in text for word in ["ask", "talk", "tell", "speak", "question", "report", "explain", "share", "approach"]):
+        return "social"
+    return "other"
 
 
 def _digest_counts(value: Dict[str, Any]) -> Dict[str, int]:
@@ -218,6 +233,8 @@ def _select_player_action(
 
 
 def run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
+    campaign_perf_start = now_perf()
+    artifact_write_ms = 0.0
     session_id = args.session_id or f"autoplay_{uuid.uuid4().hex[:12]}"
     simulation_state: Dict[str, Any] = {}
     seed_result = seed_campaign(simulation_state, args.scenario_seed)
@@ -241,6 +258,10 @@ def run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
     stopped_reason = ""
 
     for turn_index in range(1, int(args.turns) + 1):
+        turn_perf_start = now_perf()
+        turn_performance: Dict[str, Any] = {
+            "turn_index": turn_index,
+        }
         # The previous turn's committed state is the only valid baseline.
         # Never derive the next before_state from manual session reloads.
         expected_baseline_state = deepcopy(last_committed_state)
@@ -273,17 +294,18 @@ def run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
             diversity_metrics=current_diversity_metrics,
             recent_transcript=transcript,
         )
-        selected = _select_player_action(
-            provider=provider,
-            player_action_context=context,
-            transcript=transcript,
-            strategy=args.strategy,
-            use_llm_player=args.player_agent == "llm",
-            max_tokens=args.player_agent_max_tokens,
-            progress_quality_metrics=current_progress_quality_metrics,
-            diversity_metrics=current_diversity_metrics,
-        )
-        player_action = _safe_str(selected.get("action"))
+        with timed_stage(turn_performance, "player_agent_ms"):
+            selected = _select_player_action(
+                provider=provider,
+                player_action_context=context,
+                transcript=transcript,
+                strategy=args.strategy,
+                use_llm_player=args.player_agent == "llm",
+                max_tokens=args.player_agent_max_tokens,
+                progress_quality_metrics=current_progress_quality_metrics,
+                diversity_metrics=current_diversity_metrics,
+            )
+            player_action = _safe_str(selected.get("action"))
 
         runtime_error = ""
         turn_result: Dict[str, Any]
@@ -295,11 +317,12 @@ def run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
         )
         story_hook_result: Dict[str, Any] = {}
         try:
-            turn_result = _call_turn_runtime(
-                session_id=session_id,
-                player_action=player_action,
-                turn_index=turn_index,
-            )
+            with timed_stage(turn_performance, "manual_turn_ms"):
+                turn_result = _call_turn_runtime(
+                    session_id=session_id,
+                    player_action=player_action,
+                    turn_index=turn_index,
+                )
             returned_state = _safe_dict(turn_result.get("simulation_state"))
             if returned_state:
                 authoritative_state = merge_autoplay_simulation_state(
@@ -307,11 +330,12 @@ def run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
                     returned_state=returned_state,
                 )
             simulation_state = deepcopy(authoritative_state)
-            story_hook_result = apply_autoplay_story_hooks(
-                simulation_state=authoritative_state,
-                player_action=player_action,
-                turn_index=turn_index,
-            )
+            with timed_stage(turn_performance, "story_hooks_ms"):
+                story_hook_result = apply_autoplay_story_hooks(
+                    simulation_state=authoritative_state,
+                    player_action=player_action,
+                    turn_index=turn_index,
+                )
             if story_hook_result.get("changed"):
                 authoritative_state = merge_autoplay_simulation_state(
                     before_state=authoritative_state,
@@ -332,6 +356,32 @@ def run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
             }
             story_hook_result = {}
 
+        base_response_payload: Dict[str, Any] = {}
+        raw_payload = _safe_dict(
+            _safe_dict(turn_result.get("manual_turn_summary")).get("raw_narration_payload")
+        )
+        raw_npc = _safe_dict(
+            _safe_dict(turn_result.get("manual_turn_summary")).get("raw_npc")
+        )
+        runtime_has_dialogue = bool(
+            _safe_str(raw_payload.get("narration"))
+            and (
+                _safe_dict(raw_payload.get("npc")).get("line")
+                or raw_npc.get("line")
+                or _autoplay_report_action_type(player_action) != "social"
+            )
+        )
+        with timed_stage(turn_performance, "base_response_ms"):
+            if args.autoplay_base_response != "off" and not runtime_has_dialogue:
+                base_response_payload = build_autoplay_base_response(
+                    provider=provider,
+                    player_action=player_action,
+                    simulation_state=authoritative_state,
+                    turn_index=turn_index,
+                    use_provider=args.autoplay_base_response == "provider",
+                    max_tokens=int(args.base_response_max_tokens),
+                )
+
         # Final turn commit. This is the state that the next turn must use as
         # before_state. Do not reload from the manual session here.
         authoritative_state = _commit_authoritative_state(
@@ -339,11 +389,12 @@ def run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
             authoritative_state=authoritative_state,
         )
         final_turn_state = deepcopy(authoritative_state)
-        progress_delta = classify_progress_delta(
-            before_state=before_state,
-            after_state=final_turn_state,
-        )
-        after_digest = state_digest(final_turn_state)
+        with timed_stage(turn_performance, "progress_eval_ms"):
+            progress_delta = classify_progress_delta(
+                before_state=before_state,
+                after_state=final_turn_state,
+            )
+            after_digest = state_digest(final_turn_state)
         state_preservation_debug = {
             "baseline_source": "runner_authoritative_state",
             "commit_policy": "no_manual_reload_after_turn_start",
@@ -365,22 +416,24 @@ def run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
                 "player_action": player_action,
             }
         )
-        state_bounds = collect_state_bounds(
-            final_turn_state,
-            max_state_bytes=int(args.max_state_bytes),
-            max_root_count=int(args.max_state_roots),
-            max_list_length=int(args.max_state_list_length),
-            max_dict_keys=int(args.max_state_dict_keys),
-        )
+        with timed_stage(turn_performance, "state_bounds_ms"):
+            state_bounds = collect_state_bounds(
+                final_turn_state,
+                max_state_bytes=int(args.max_state_bytes),
+                max_root_count=int(args.max_state_roots),
+                max_list_length=int(args.max_state_list_length),
+                max_dict_keys=int(args.max_state_dict_keys),
+            )
         save_load_checkpoint = {}
         checkpoint_every = int(args.checkpoint_every or 0)
         if checkpoint_every > 0 and turn_index % checkpoint_every == 0:
-            save_load_checkpoint = validate_save_load_checkpoint(
-                session_id=session_id,
-                turn_index=turn_index,
-                checkpoint_dir=checkpoint_dir,
-                simulation_state=final_turn_state,
-            )
+            with timed_stage(turn_performance, "checkpoint_ms"):
+                save_load_checkpoint = validate_save_load_checkpoint(
+                    session_id=session_id,
+                    turn_index=turn_index,
+                    checkpoint_dir=checkpoint_dir,
+                    simulation_state=final_turn_state,
+                )
             # validate_save_load_checkpoint() already verifies checkpoint
             # rehydration. Do not make the checkpoint reload the live baseline;
             # the runner-owned authoritative_state remains canonical.
@@ -388,6 +441,7 @@ def run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
         last_committed_state = deepcopy(final_turn_state)
         simulation_state = deepcopy(final_turn_state)
         narration = _extract_narration(turn_result)
+        record_build_start = now_perf()
         record = {
             "turn_index": turn_index,
             "session_id": session_id,
@@ -416,14 +470,19 @@ def run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
             "before_state_digest": before_digest,
             "after_state_digest": after_digest,
             "progress_delta": progress_delta,
-            "state_preservation_debug": state_preservation_debug,
-            "authoritative_state_digest": after_digest,
-            "committed_next_turn_digest": state_digest(last_committed_state),
-            "progress_quality": progress_quality,
+             "state_preservation_debug": state_preservation_debug,
+             "authoritative_state_digest": after_digest,
+             "committed_next_turn_digest": state_digest(last_committed_state),
+             "final_authoritative_state": final_turn_state,
+             "progress_quality": progress_quality,
             "state_bounds": state_bounds,
             "save_load_checkpoint": save_load_checkpoint,
             "story_hook_result": story_hook_result,
+            "base_response_payload": base_response_payload,
         }
+        turn_performance["record_build_ms"] = elapsed_ms(record_build_start)
+        turn_performance["turn_total_ms"] = elapsed_ms(turn_perf_start)
+        record["performance"] = turn_performance
         transcript.append(record)
 
         health = evaluate_autoplay_health(
@@ -451,7 +510,15 @@ def run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
         if transcript and isinstance(transcript[-1].get("player_action_context"), dict)
         else {}
     )
+    progress_quality_metrics = compute_progress_quality_metrics(transcript)
+    performance_metrics = summarize_performance(
+        transcript=transcript,
+        campaign_wall_ms=elapsed_ms(campaign_perf_start),
+        artifact_write_ms=artifact_write_ms,
+    )
     metrics = compute_progress_metrics(transcript, latest_context=latest_context)
+    metrics["progress_quality"] = progress_quality_metrics
+    metrics["performance"] = performance_metrics
     health = evaluate_autoplay_health(
         transcript,
         latest_context=latest_context,
@@ -507,8 +574,10 @@ def run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
             "max_churn_only_streak": int(args.max_churn_only_streak),
             "max_objective_target_no_progress_streak": int(args.max_objective_target_no_progress_streak),
             "fail_on_post_objective_weak_progress": bool(args.fail_on_post_objective_weak_progress),
+            "fail_on_dialogue_coverage_gap": bool(args.fail_on_dialogue_coverage_gap),
         },
         "strategy_profile": args.strategy,
+        "base_response_mode": args.autoplay_base_response,
         "action_diversity_thresholds": {
             "action_diversity_window": int(args.action_diversity_window),
             "min_action_diversity_rate": float(args.min_action_diversity_rate),
@@ -528,8 +597,40 @@ def run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
         "artifact_detail": args.artifact_detail,
         "duration_seconds": round(time.time() - started, 3),
         "health": health,
+        "performance": performance_metrics,
     }
+    artifact_start = now_perf()
     extra_paths = {}
+    # First compute current performance without report write timing.
+    metrics["performance"] = summarize_performance(
+        transcript=transcript,
+        campaign_wall_ms=elapsed_ms(campaign_perf_start),
+        artifact_write_ms=0.0,
+    )
+    summary["performance"] = metrics["performance"]
+
+    # Write the campaign report once for human-readable output.
+    if args.artifact_detail == "full":
+        extra_paths.update(
+            write_campaign_report(
+                output_dir=Path(args.output_dir),
+                transcript=transcript,
+                summary=summary,
+                metrics=metrics,
+                health=health,
+            )
+        )
+
+    artifact_write_ms = elapsed_ms(artifact_start)
+    metrics["performance"] = summarize_performance(
+        transcript=transcript,
+        campaign_wall_ms=elapsed_ms(campaign_perf_start),
+        artifact_write_ms=artifact_write_ms,
+    )
+    summary["performance"] = metrics["performance"]
+
+    # Rewrite the report with final performance metrics so the HTML/JSON report
+    # agrees with autoplay-performance.json.
     if args.artifact_detail == "full":
         extra_paths.update(
             write_campaign_report(
@@ -588,6 +689,9 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--max-churn-only-streak", type=int, default=0)
     parser.add_argument("--max-objective-target-no-progress-streak", type=int, default=0)
     parser.add_argument("--fail-on-post-objective-weak-progress", action="store_true")
+    parser.add_argument("--autoplay-base-response", choices=["off", "deterministic", "provider"], default="deterministic")
+    parser.add_argument("--base-response-max-tokens", type=int, default=220)
+    parser.add_argument("--fail-on-dialogue-coverage-gap", action="store_true")
     parser.add_argument("--action-diversity-window", type=int, default=12)
     parser.add_argument("--min-action-diversity-rate", type=float, default=0.0)
     parser.add_argument("--min-category-diversity-rate", type=float, default=0.0)
