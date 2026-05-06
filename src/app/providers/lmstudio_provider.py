@@ -25,6 +25,7 @@ from .base import (
     ProviderConfig,
     ProviderError,
 )
+from .provider_trace import provider_call_enter, provider_call_exit
 
 
 class LMStudioProvider(BaseProvider):
@@ -115,34 +116,50 @@ class LMStudioProvider(BaseProvider):
             ConnectionError: If connection fails
             ModelNotFoundError: If model doesn't exist
         """
-        if not messages:
-            raise ValueError("Messages list cannot be empty")
+        _trace_row = provider_call_enter(
+            provider="lmstudio",
+            method="chat_completion",
+            model=model,
+            messages=messages,
+            extra={
+                "stream": bool(stream),
+                "kwargs_keys": sorted(list(kwargs.keys())),
+            },
+        )
+        try:
+            if not messages:
+                raise ValueError("Messages list cannot be empty")
 
-        # Prepare minimal OpenAI-compatible payload for LM Studio
-        resolved_model = model or self.config.model
+            # Prepare minimal OpenAI-compatible payload for LM Studio
+            resolved_model = model or self.config.model
 
-        payload = {
-            "messages": [msg.to_dict() for msg in messages],
-            "temperature": kwargs.get("temperature", 0.7),
-            "stream": stream,
-        }
+            payload = {
+                "messages": [msg.to_dict() for msg in messages],
+                "temperature": kwargs.get("temperature", 0.7),
+                "stream": stream,
+            }
 
-        # LM Studio can reject an empty model string with HTTP 400.
-        # If no model is configured, omit the field and let the server use
-        # its currently loaded model.
-        if resolved_model:
-            payload["model"] = resolved_model
+            # LM Studio can reject an empty model string with HTTP 400.
+            # If no model is configured, omit the field and let the server use
+            # its currently loaded model.
+            if resolved_model:
+                payload["model"] = resolved_model
 
-        # Add other optional parameters only if explicitly provided
-        for key in ["max_tokens", "top_p"]:
-            if key in kwargs:
-                payload[key] = kwargs[key]
+            # Add other optional parameters only if explicitly provided
+            for key in ["max_tokens", "top_p"]:
+                if key in kwargs:
+                    payload[key] = kwargs[key]
 
-        # Make request
-        if stream:
-            return self._stream_completion(payload)
-        else:
-            return self._non_stream_completion(payload)
+            # Make request
+            if stream:
+                result = self._stream_completion(payload)
+            else:
+                result = self._non_stream_completion(payload)
+            provider_call_exit(_trace_row, ok=True)
+            return result
+        except Exception as exc:
+            provider_call_exit(_trace_row, ok=False, error=f"{type(exc).__name__}: {exc}")
+            raise
 
     def _non_stream_completion(self, payload: Dict[str, Any]) -> ChatResponse:
         """Handle non-streaming completion."""

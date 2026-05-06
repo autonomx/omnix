@@ -5,7 +5,6 @@ import traceback
 from contextvars import ContextVar
 from typing import Any, Dict, List
 
-
 _TRACE_ENABLED: ContextVar[bool] = ContextVar("RPG_NARRATION_TRACE_ENABLED", default=False)
 _TRACE_ROWS: ContextVar[List[Dict[str, Any]] | None] = ContextVar("RPG_NARRATION_TRACE_ROWS", default=None)
 

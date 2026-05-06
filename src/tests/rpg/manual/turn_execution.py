@@ -4,6 +4,11 @@ import json
 from typing import Any, Callable, Dict
 
 from tests.rpg.manual import output_artifacts
+from tests.rpg.manual.perf_trace import (
+    record_manual_harness_trace,
+    record_manual_harness_trace_stack,
+    traced_manual_stage,
+)
 from tests.rpg.manual.safe import _safe_dict, _safe_str
 from tests.rpg.manual.scenario_summary import _compact_result_for_summary
 from tests.rpg.manual.story_event_queue_m25_m27_checks import (
@@ -11,6 +16,17 @@ from tests.rpg.manual.story_event_queue_m25_m27_checks import (
 )
 from tests.rpg.manual.summary_sanitizer import sanitize_turn_for_summary
 from tests.rpg.manual.token_usage import _record_token_usage
+
+
+def _trace_value_shape(value):
+    if isinstance(value, dict):
+        return {
+            "type": "dict",
+            "keys": sorted([str(k) for k in value.keys()])[:50],
+        }
+    if isinstance(value, list):
+        return {"type": "list", "len": len(value)}
+    return {"type": type(value).__name__}
 
 
 def _get_apply_turn() -> Callable:
@@ -27,6 +43,14 @@ def _get_apply_turn() -> Callable:
             module = __import__(module_name, fromlist=[attr])
             fn = getattr(module, attr)
             if callable(fn):
+                record_manual_harness_trace(
+                    "manual_harness_selected_apply_turn",
+                    module_name=module_name,
+                    attr=attr,
+                    callable_module=getattr(fn, "__module__", ""),
+                    callable_name=getattr(fn, "__name__", ""),
+                    callable_qualname=getattr(fn, "__qualname__", ""),
+                )
                 return fn
         except Exception as exc:
             errors.append(f"{module_name}.{attr}:{type(exc).__name__}:{exc}")
@@ -61,7 +85,21 @@ def _run_one_manual_turn(
     raw_turn = turn
     player_input = _extract_player_input_from_turn(raw_turn)
 
+    record_manual_harness_trace_stack(
+        "manual_harness_enter",
+        function="_run_one_manual_turn",
+    )
+
+    record_manual_harness_trace("checkpoint_01_enter_run_one_manual_turn")
+
     if not player_input:
+        record_manual_harness_trace("checkpoint_99_before_return", result_shape=_trace_value_shape({
+            "turn_index": turn_index,
+            "error": "no_player_input",
+            "scenario_warnings": ["no_player_input"],
+            "regression_warnings": ["no_player_input"],
+        }))
+        record_manual_harness_trace("manual_harness_exit")
         return {
             "turn_index": turn_index,
             "error": "no_player_input",
@@ -69,145 +107,182 @@ def _run_one_manual_turn(
             "regression_warnings": ["no_player_input"],
         }
 
-    try:
-        apply_turn = _get_apply_turn()
+    with traced_manual_stage("manual_harness_total"):
+        try:
+            with traced_manual_stage("manual_harness_get_apply_turn"):
+                record_manual_harness_trace_stack("checkpoint_03_before_get_apply_turn")
+                apply_turn = _get_apply_turn()
 
-        result = apply_turn(
-            session_id=session_id,
-            player_input=player_input,
-        )
+            with traced_manual_stage("manual_harness_apply_turn"):
+                record_manual_harness_trace_stack("checkpoint_04_before_apply_turn")
+                result = apply_turn(
+                    session_id=session_id,
+                    player_input=player_input,
+                )
 
-        _record_token_usage(
-            scope="service_scenario",
-            label=scenario_name,
-            turn=turn_index,
-            player_input=player_input,
-            result=result,
-        )
+            record_manual_harness_trace("checkpoint_05_after_apply_turn", result_shape=_trace_value_shape(result))
+            record_manual_harness_trace(
+                "manual_harness_apply_turn_result_sources",
+                llm_called=bool(
+                    _safe_dict(result).get("llm_called")
+                    or _safe_dict(_safe_dict(result).get("result")).get("llm_called")
+                ),
+                narration_source=_safe_dict(
+                    _safe_dict(result).get("narration_payload")
+                    or _safe_dict(result).get("structured_narration")
+                ).get("source"),
+            )
 
-        # Log to console if requested
-        if console_llm:
-            _log_llm_response(
-                scope="service",
+            with traced_manual_stage("manual_harness_record_token_usage"):
+                _record_token_usage(
+                scope="service_scenario",
                 label=scenario_name,
                 turn=turn_index,
                 player_input=player_input,
                 result=result,
-                raw=console_llm_raw,
-                max_chars=console_llm_max_chars,
             )
 
-        # Emit to output artifacts
-        output_artifacts._emit(f"TURN {turn_index}", channel=target_channel)
-        output_artifacts._emit(f"PLAYER: {player_input}", channel=target_channel)
-        narration = _extract_narration(result)
-        output_artifacts._emit("NARRATION:", channel=target_channel)
-        output_artifacts._emit(narration or "[no narration found]", channel=target_channel)
-        output_artifacts._emit("RAW RESULT KEYS:", channel=target_channel)
-        output_artifacts._emit(", ".join(sorted(result.keys())), channel=target_channel)
+            # Log to console if requested
+            if console_llm:
+                with traced_manual_stage("manual_harness_console_llm_log"):
+                    _log_llm_response(
+                        scope="service",
+                        label=scenario_name,
+                        turn=turn_index,
+                        player_input=player_input,
+                        result=result,
+                        raw=console_llm_raw,
+                        max_chars=console_llm_max_chars,
+                    )
 
-        # Run story event queue checks if provided
-        story_event_queue_check_results = []
-        if story_event_queue_checks:
-            from tests.rpg.manual.session_helpers import get_active_session
-            session_obj = get_active_session(session_id)
-            for check_def in story_event_queue_checks:
-                check_result = run_story_event_queue_m25_m27_check(
-                    check=check_def,
-                    result=result,
-                    session=session_obj,
-                )
-                story_event_queue_check_results.append(check_result)
+            # Emit to output artifacts
+            with traced_manual_stage("manual_harness_emit_artifacts"):
+                output_artifacts._emit(f"TURN {turn_index}", channel=target_channel)
+                output_artifacts._emit(f"PLAYER: {player_input}", channel=target_channel)
+                narration = _extract_narration(result)
+                output_artifacts._emit("NARRATION:", channel=target_channel)
+                output_artifacts._emit(narration or "[no narration found]", channel=target_channel)
+                output_artifacts._emit("RAW RESULT KEYS:", channel=target_channel)
+                output_artifacts._emit(", ".join(sorted(result.keys())), channel=target_channel)
 
-        turn_summary = {
-            "turn_index": turn_index,
-            "player_input": player_input,
-            "result": _compact_result_for_summary(result),
-            "story_event_queue_checks": story_event_queue_check_results,
-        }
+                # Run story event queue checks if provided
+            story_event_queue_check_results = []
+            if story_event_queue_checks:
+                with traced_manual_stage("manual_harness_story_event_queue_checks"):
+                    from tests.rpg.manual.session_helpers import get_active_session
+                    session_obj = get_active_session(session_id)
+                    for check_def in story_event_queue_checks:
+                        check_result = run_story_event_queue_m25_m27_check(
+                            check=check_def,
+                            result=result,
+                            session=session_obj,
+                        )
+                        story_event_queue_check_results.append(check_result)
 
-        if include_raw_result:
-            turn_summary["raw_result"] = result
-            turn_summary["raw_narration"] = _extract_narration(result)
-            turn_summary["raw_turn_contract"] = _safe_dict(
-                result.get("turn_contract")
-                or _safe_dict(result.get("result")).get("turn_contract")
-            )
-            turn_summary["raw_npc"] = _safe_dict(
-                result.get("npc")
-                or _safe_dict(result.get("result")).get("npc")
-                or _safe_dict(result.get("turn_contract")).get("npc")
-            )
-            turn_summary["raw_narration_payload"] = _safe_dict(
-                result.get("narration_payload")
-                or result.get("structured_narration")
-                or result.get("narration_result")
-                or _safe_dict(result.get("result")).get("narration_payload")
-                or _safe_dict(result.get("result")).get("structured_narration")
-                or _safe_dict(result.get("result")).get("narration_payload")
-                or _safe_dict(result.get("result")).get("structured_narration")
-                or _safe_dict(result.get("session")).get("last_narration_payload")
-                or _safe_dict(result.get("session")).get("narration_payload")
-            )
-            turn_summary["llm_called"] = bool(
-                result.get("llm_called")
-                or _safe_dict(result.get("result")).get("llm_called")
-                or _safe_dict(turn_summary["raw_narration_payload"]).get("source") == "provider_runtime_narration"
-            )
-            turn_summary["runtime_narration_diagnostics"] = _safe_dict(
-                _safe_dict(turn_summary["raw_narration_payload"]).get("runtime_narration_diagnostics")
-            )
+            record_manual_harness_trace_stack("checkpoint_05_before_summary_or_narration")
 
-        # Apply sanitization for summary output
-        turn_summary = sanitize_turn_for_summary(turn_summary)
+            with traced_manual_stage("manual_harness_summary_compact_result"):
+                compact_result = _compact_result_for_summary(result)
 
-        if include_raw_result:
-            # The sanitizer is designed for compact manual scenario summaries.
-            # Autoplay needs the raw apply_turn result for diagnostics and
-            # progress evaluation, so restore these fields after sanitization.
-            turn_summary["raw_result"] = result
-            turn_summary["raw_narration"] = _extract_narration(result)
-            turn_summary["raw_turn_contract"] = _safe_dict(
-                result.get("turn_contract")
-                or _safe_dict(result.get("result")).get("turn_contract")
-            )
-            turn_summary["raw_npc"] = _safe_dict(
-                result.get("npc")
-                or _safe_dict(result.get("result")).get("npc")
-                or _safe_dict(result.get("turn_contract")).get("npc")
-            )
-            turn_summary["raw_narration_payload"] = _safe_dict(
-                result.get("narration_payload")
-                or result.get("structured_narration")
-                or result.get("narration_result")
-                or _safe_dict(result.get("result")).get("narration_payload")
-                or _safe_dict(result.get("result")).get("structured_narration")
-                or _safe_dict(result.get("result")).get("narration_payload")
-                or _safe_dict(result.get("result")).get("structured_narration")
-                or _safe_dict(result.get("session")).get("last_narration_payload")
-                or _safe_dict(result.get("session")).get("narration_payload")
-            )
-            turn_summary["llm_called"] = bool(
-                result.get("llm_called")
-                or _safe_dict(result.get("result")).get("llm_called")
-                or _safe_dict(turn_summary["raw_narration_payload"]).get("source") == "provider_runtime_narration"
-            )
-            turn_summary["runtime_narration_diagnostics"] = _safe_dict(
-                _safe_dict(turn_summary["raw_narration_payload"]).get("runtime_narration_diagnostics")
-            )
+            with traced_manual_stage("manual_harness_summary_initial_build"):
+                turn_summary = {
+                    "turn_index": turn_index,
+                    "player_input": player_input,
+                    "result": compact_result,
+                    "story_event_queue_checks": story_event_queue_check_results,
+                }
 
-        return turn_summary
+            if include_raw_result:
+                with traced_manual_stage("manual_harness_include_raw_result_first_pass"):
+                    turn_summary["raw_result"] = result
+                    turn_summary["raw_narration"] = _extract_narration(result)
+                    turn_summary["raw_turn_contract"] = _safe_dict(
+                        result.get("turn_contract")
+                        or _safe_dict(result.get("result")).get("turn_contract")
+                    )
+                    turn_summary["raw_npc"] = _safe_dict(
+                        result.get("npc")
+                        or _safe_dict(result.get("result")).get("npc")
+                        or _safe_dict(result.get("turn_contract")).get("npc")
+                    )
+                    turn_summary["raw_narration_payload"] = _safe_dict(
+                        result.get("narration_payload")
+                        or result.get("structured_narration")
+                        or result.get("narration_result")
+                        or _safe_dict(result.get("result")).get("narration_payload")
+                        or _safe_dict(result.get("result")).get("structured_narration")
+                        or _safe_dict(result.get("session")).get("last_narration_payload")
+                        or _safe_dict(result.get("session")).get("narration_payload")
+                    )
+                    turn_summary["llm_called"] = bool(
+                        result.get("llm_called")
+                        or _safe_dict(result.get("result")).get("llm_called")
+                        or _safe_dict(turn_summary["raw_narration_payload"]).get("source") == "provider_runtime_narration"
+                    )
+                    turn_summary["runtime_narration_diagnostics"] = _safe_dict(
+                        _safe_dict(turn_summary["raw_narration_payload"]).get("runtime_narration_diagnostics")
+                    )
 
-    except Exception as exc:
-        error_msg = f"{type(exc).__name__}: {exc}"
-        output_artifacts._emit(f"TURN {turn_index} ERROR: {error_msg}", channel=target_channel)
-        return {
-            "turn_index": turn_index,
-            "player_input": player_input,
-            "error": error_msg,
-            "scenario_warnings": [f"turn_runtime_error:{error_msg}"],
-            "regression_warnings": [f"turn_runtime_error:{error_msg}"],
-        }
+                # Apply sanitization for summary output
+            with traced_manual_stage("manual_harness_sanitize_turn_for_summary"):
+                turn_summary = sanitize_turn_for_summary(turn_summary)
+
+            if include_raw_result:
+                # The sanitizer is designed for compact manual scenario summaries.
+                # Autoplay needs the raw apply_turn result for diagnostics and
+                # progress evaluation, so restore these fields after sanitization.
+                with traced_manual_stage("manual_harness_restore_raw_result_after_sanitize"):
+                    turn_summary["raw_result"] = result
+                    turn_summary["raw_narration"] = _extract_narration(result)
+                    turn_summary["raw_turn_contract"] = _safe_dict(
+                        result.get("turn_contract")
+                        or _safe_dict(result.get("result")).get("turn_contract")
+                    )
+                    turn_summary["raw_npc"] = _safe_dict(
+                        result.get("npc")
+                        or _safe_dict(result.get("result")).get("npc")
+                        or _safe_dict(result.get("turn_contract")).get("npc")
+                    )
+                    turn_summary["raw_narration_payload"] = _safe_dict(
+                        result.get("narration_payload")
+                        or result.get("structured_narration")
+                        or result.get("narration_result")
+                        or _safe_dict(result.get("result")).get("narration_payload")
+                        or _safe_dict(result.get("result")).get("structured_narration")
+                        or _safe_dict(result.get("session")).get("last_narration_payload")
+                        or _safe_dict(result.get("session")).get("narration_payload")
+                    )
+                    turn_summary["llm_called"] = bool(
+                        result.get("llm_called")
+                        or _safe_dict(result.get("result")).get("llm_called")
+                        or _safe_dict(turn_summary["raw_narration_payload"]).get("source") == "provider_runtime_narration"
+                    )
+                    turn_summary["runtime_narration_diagnostics"] = _safe_dict(
+                        _safe_dict(turn_summary["raw_narration_payload"]).get("runtime_narration_diagnostics")
+                    )
+
+            record_manual_harness_trace("checkpoint_99_before_return", result_shape=_trace_value_shape(turn_summary))
+            record_manual_harness_trace("manual_harness_exit")
+            return turn_summary
+
+        except Exception as exc:
+            error_msg = f"{type(exc).__name__}: {exc}"
+            output_artifacts._emit(f"TURN {turn_index} ERROR: {error_msg}", channel=target_channel)
+            record_manual_harness_trace("checkpoint_99_before_return", result_shape=_trace_value_shape({
+                "turn_index": turn_index,
+                "player_input": player_input,
+                "error": error_msg,
+                "scenario_warnings": [f"turn_runtime_error:{error_msg}"],
+                "regression_warnings": [f"turn_runtime_error:{error_msg}"],
+            }))
+            record_manual_harness_trace("manual_harness_exit")
+            return {
+                "turn_index": turn_index,
+                "player_input": player_input,
+                "error": error_msg,
+                "scenario_warnings": [f"turn_runtime_error:{error_msg}"],
+                "regression_warnings": [f"turn_runtime_error:{error_msg}"],
+            }
 
 
 def _extract_narration(result: Dict[str, Any]) -> str:

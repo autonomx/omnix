@@ -3,7 +3,11 @@ from argparse import Namespace
 from pathlib import Path
 
 from tests.rpg.autoplay.manual_turn_driver import merge_autoplay_simulation_state
-from tests.rpg.autoplay_llm_campaign import run_autoplay_campaign, _narration_source, _replace_blocking_narration_with_pending
+from tests.rpg.autoplay_llm_campaign import (
+    _narration_source,
+    _replace_blocking_narration_with_pending,
+    run_autoplay_campaign,
+)
 
 
 def test_autoplay_runner_fallback_executes_short_campaign(tmp_path: Path, monkeypatch):

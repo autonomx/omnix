@@ -22,6 +22,7 @@ from .base import (
     ProviderCapability,
     ProviderConfig,
 )
+from .provider_trace import provider_call_enter, provider_call_exit
 
 
 class OpenAICompatibleProvider(BaseProvider):
@@ -113,60 +114,73 @@ class OpenAICompatibleProvider(BaseProvider):
     ) -> Union[ChatResponse, Iterator[ChatResponse]]:
         """
         Generate a chat completion using OpenAI-compatible API.
-        
+
         Args:
             messages: List of chat messages
             model: Optional model override
             stream: Whether to stream the response
             **kwargs: Additional parameters (temperature, max_tokens, etc.)
-            
+
         Returns:
             ChatResponse or iterator of ChatResponse chunks
-            
+
         Raises:
             AuthenticationError: If authentication fails
             ConnectionError: If connection fails
             ModelNotFoundError: If model doesn't exist
         """
-        if not messages:
-            raise ValueError("Messages list cannot be empty")
-        
-        # Build payload
-        payload = {
-            "model": model or self.config.model,
-            "messages": [msg.to_dict() for msg in messages],
-            "stream": stream,
-        }
-        
-        # Add optional parameters
-        optional_params = ["temperature", "top_p", "max_tokens", "top_k", "presence_penalty", "frequency_penalty"]
-        for key in optional_params:
-            if key in kwargs:
-                payload[key] = kwargs[key]
-            elif key in self.config.extra_params:
-                payload[key] = self.config.extra_params[key]
-        
-        # Add any additional parameters from extra_params
-        for key, value in self.config.extra_params.items():
-            if key not in ['custom_headers', 'thinking_budget'] and key not in payload:
-                payload[key] = value
-        
-        # Handle thinking budget if supported (some APIs might use different field names)
-        thinking_budget = kwargs.get('thinking_budget', self.config.extra_params.get('thinking_budget', 0))
-        if thinking_budget and thinking_budget > 0:
-            # Try common field names for thinking/reasoning tokens
-            if 'max_completion_tokens' in payload:
-                payload['max_completion_tokens'] = thinking_budget
-            elif 'max_tokens' in payload:
-                payload['max_tokens'] = thinking_budget
+        _trace_row = provider_call_enter(
+            provider="openai_compatible",
+            method="chat_completion",
+            model=model,
+            messages=messages,
+            extra={"stream": bool(stream), "kwargs_keys": sorted(list(kwargs.keys()))},
+        )
+        try:
+            if not messages:
+                raise ValueError("Messages list cannot be empty")
+
+            # Build payload
+            payload = {
+                "model": model or self.config.model,
+                "messages": [msg.to_dict() for msg in messages],
+                "stream": stream,
+            }
+
+            # Add optional parameters
+            optional_params = ["temperature", "top_p", "max_tokens", "top_k", "presence_penalty", "frequency_penalty"]
+            for key in optional_params:
+                if key in kwargs:
+                    payload[key] = kwargs[key]
+                elif key in self.config.extra_params:
+                    payload[key] = self.config.extra_params[key]
+
+            # Add any additional parameters from extra_params
+            for key, value in self.config.extra_params.items():
+                if key not in ['custom_headers', 'thinking_budget'] and key not in payload:
+                    payload[key] = value
+
+            # Handle thinking budget if supported (some APIs might use different field names)
+            thinking_budget = kwargs.get('thinking_budget', self.config.extra_params.get('thinking_budget', 0))
+            if thinking_budget and thinking_budget > 0:
+                # Try common field names for thinking/reasoning tokens
+                if 'max_completion_tokens' in payload:
+                    payload['max_completion_tokens'] = thinking_budget
+                elif 'max_tokens' in payload:
+                    payload['max_tokens'] = thinking_budget
+                else:
+                    payload['max_tokens'] = thinking_budget
+
+            # Make request
+            if stream:
+                result = self._stream_completion(payload)
             else:
-                payload['max_tokens'] = thinking_budget
-        
-        # Make request
-        if stream:
-            return self._stream_completion(payload)
-        else:
-            return self._non_stream_completion(payload)
+                result = self._non_stream_completion(payload)
+            provider_call_exit(_trace_row, ok=True)
+            return result
+        except Exception as exc:
+            provider_call_exit(_trace_row, ok=False, error=f"{type(exc).__name__}: {exc}")
+            raise
     
     def _non_stream_completion(self, payload: Dict[str, Any]) -> ChatResponse:
         """Handle non-streaming completion."""

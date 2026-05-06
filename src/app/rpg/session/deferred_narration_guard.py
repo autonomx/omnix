@@ -6,7 +6,6 @@ from typing import Iterator
 
 from app.rpg.session.narration_trace import record_narration_trace
 
-
 _SUPPRESS_PROVIDER_RUNTIME_NARRATION: ContextVar[bool] = ContextVar(
     "RPG_SUPPRESS_PROVIDER_RUNTIME_NARRATION",
     default=False,

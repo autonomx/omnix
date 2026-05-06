@@ -3,7 +3,6 @@ from __future__ import annotations
 from collections import Counter
 from typing import Any, Dict, List
 
-
 MEANINGFUL_PROGRESS_CATEGORIES = {
     "milestone_added",
     "milestone_completed",

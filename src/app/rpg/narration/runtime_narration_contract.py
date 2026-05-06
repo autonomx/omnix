@@ -4,7 +4,6 @@ import json
 import re
 from typing import Any, Dict, List
 
-
 PROVIDER_METHOD_CANDIDATES = [
     "chat",
     "complete",
