@@ -535,6 +535,7 @@ def _summarize_quality_gates(
         background_jobs = _safe_dict(_safe_dict(performance_budget.get("background_llm")))
     player_agent_summary = _safe_dict(summary.get("player_agent_trace_summary"))
     advisory_promotion_summary = _safe_dict(summary.get("deferred_advisory_promotion_summary"))
+    profile_persist_summary = _safe_dict(summary.get("npc_evolution_profile_persistence_summary"))
     evolution_mutated_authoritative_state = False
     for row in transcript:
         evo_result = _safe_dict(_safe_dict(row).get("npc_evolution_consumption_result"))
@@ -562,6 +563,10 @@ def _summarize_quality_gates(
         ),
         "npc_evolution_consumption_did_not_mutate_authoritative_state": (
             not evolution_mutated_authoritative_state
+        ),
+        "npc_evolution_profile_persistence_ok": (
+            not profile_persist_summary
+            or bool(profile_persist_summary.get("ok"))
         ),
     }
 
@@ -1746,7 +1751,11 @@ def run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
         "signals_created": advisory_promotion_summary.get("evolution_signals_created", 0),
         "signals_consumed": advisory_promotion_summary.get("evolution_signals_consumed", 0),
     }
+    summary["npc_evolution_profile_persistence_summary"] = (
+        advisory_promotion_summary.get("profile_persist_result") or {}
+    )
     metrics["npc_evolution_summary"] = summary["npc_evolution_summary"]
+    metrics["npc_evolution_profile_persistence_summary"] = summary["npc_evolution_profile_persistence_summary"]
     summary["quality_gate_summary"] = _summarize_quality_gates(
         args=args,
         metrics=metrics,
@@ -1995,6 +2004,7 @@ def main(argv: List[str] | None = None) -> int:
     print(f"player_agent_cache_summary: {summary.get('player_agent_cache_summary')}")
     print(f"deferred_advisory_promotion_summary: {summary.get('deferred_advisory_promotion_summary')}")
     print(f"npc_evolution_summary: {summary.get('npc_evolution_summary')}")
+    print(f"npc_evolution_profile_persistence_summary: {summary.get('npc_evolution_profile_persistence_summary')}")
     print(f"quality_gate_summary: {summary.get('quality_gate_summary')}")
 
     warnings = summary.get("health", {}).get("warnings") or []

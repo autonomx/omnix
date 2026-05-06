@@ -9,6 +9,7 @@ from app.rpg.npc_evolution.arcs import (
     npc_evolution_state,
     summarize_npc_evolution_state,
 )
+from app.rpg.npc_evolution.target_grounding import ground_projection_target
 
 
 AXES = {
@@ -291,12 +292,17 @@ def consume_accepted_advisory_projections(
                 }
             )
             continue
-        signal, rejection = normalize_projection_to_evolution_signal(
+        grounded_projection, grounding_result = ground_projection_target(
             projection=projection,
+            simulation_state=simulation_state,
+        )
+        signal, rejection = normalize_projection_to_evolution_signal(
+            projection=grounded_projection,
             simulation_state=simulation_state,
             turn_index=int(turn_index),
         )
         if signal:
+            signal["target_grounding"] = grounding_result
             signals.append(signal)
             projection_decisions.append(
                 {
@@ -305,6 +311,7 @@ def consume_accepted_advisory_projections(
                     "signal_id": signal.get("signal_id"),
                     "kind": signal.get("kind"),
                     "npc_id": signal.get("npc_id"),
+                    "target_grounding": grounding_result,
                 }
             )
         else:
@@ -314,6 +321,7 @@ def consume_accepted_advisory_projections(
                     "status": "rejected",
                     "reason": rejection,
                     "kind": projection.get("kind"),
+                    "target_grounding": grounding_result,
                 }
             )
 

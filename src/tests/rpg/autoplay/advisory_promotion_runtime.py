@@ -6,6 +6,7 @@ from typing import Any, Dict, List
 from app.rpg.advisory.promotion import promote_advisory_candidates
 from app.rpg.advisory.runtime_store import compact_deferred_advisory_runtime_summary
 from app.rpg.npc_evolution.consumer import consume_accepted_advisory_projections
+from app.rpg.npc_evolution.profile_store import persist_npc_evolution_profiles
 
 
 def _safe_dict(value: Any) -> Dict[str, Any]:
@@ -147,6 +148,7 @@ def run_deferred_advisory_promotions_for_transcript(
     pending = 0
     evolution_signals_created = 0
     evolution_signals_consumed = 0
+    latest_profile_persist_result: Dict[str, Any] = {}
 
     # Carry advisory runtime state forward across rows so turn N candidates can
     # be promoted on turn N+1.
@@ -217,6 +219,9 @@ def run_deferred_advisory_promotions_for_transcript(
         row["runtime_state"] = updated_runtime_state
         row["npc_evolution_consumption_result"] = evolution_result
         row["npc_evolution_summary"] = evolution_result.get("summary") or {}
+        profile_persist_result = persist_npc_evolution_profiles(runtime_state=updated_runtime_state)
+        row["npc_evolution_profile_persist_result"] = profile_persist_result
+        latest_profile_persist_result = profile_persist_result
         evolution_signals_created += int(evolution_result.get("signals_created") or 0)
         evolution_signals_consumed += int(evolution_result.get("signals_consumed") or 0)
         carried_runtime_state = updated_runtime_state
@@ -229,6 +234,7 @@ def run_deferred_advisory_promotions_for_transcript(
                 "evolution_signals_created": evolution_result.get("signals_created"),
                 "evolution_signals_consumed": evolution_result.get("signals_consumed"),
                 "npc_evolution_summary": evolution_result.get("summary") or {},
+                "profile_persist_result": profile_persist_result,
             }
         )
 
@@ -240,6 +246,7 @@ def run_deferred_advisory_promotions_for_transcript(
         "pending": pending,
         "evolution_signals_created": evolution_signals_created,
         "evolution_signals_consumed": evolution_signals_consumed,
+        "profile_persist_result": latest_profile_persist_result,
         "results": promotion_results,
         "mutated_authoritative_state": any(item.get("mutated_authoritative_state") for item in promotion_results),
     }
