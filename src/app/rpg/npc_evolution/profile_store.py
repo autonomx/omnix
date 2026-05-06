@@ -264,3 +264,76 @@ def persist_npc_evolution_profiles(
         "written": written,
         "errors": errors,
     }
+
+
+def _profile_arc_projection(profile: Dict[str, Any]) -> Dict[str, Any]:
+    """Bounded runtime projection of persistent NPC profile evolution.
+
+    This is context only. It intentionally excludes any authoritative fields.
+    """
+    profile = _safe_dict(profile)
+    evolution = _safe_dict(profile.get("evolution"))
+    return {
+        "npc_id": _safe_str(profile.get("npc_id")),
+        "arc_stage": _safe_str(evolution.get("arc_stage")) or "stable",
+        "axes": _safe_dict(evolution.get("axes")),
+        "memories": _safe_list(evolution.get("memories"))[-8:],
+        "future_hooks": _safe_list(evolution.get("future_hooks"))[-8:],
+        "world_signals": _safe_list(evolution.get("world_signals"))[-6:],
+        "semantic_intents": _safe_list(evolution.get("semantic_intents"))[-6:],
+        "milestones": _safe_list(evolution.get("milestones"))[-5:],
+        "signals_applied_count": len(_safe_list(evolution.get("signals_applied"))),
+    }
+
+
+def load_npc_evolution_profiles_for_runtime(
+    *,
+    npc_ids: List[str],
+    root: Path | None = None,
+) -> Dict[str, Any]:
+    """Load file-based NPC evolution profiles into a bounded runtime shape."""
+    root = root or default_profile_root()
+    loaded: Dict[str, Any] = {}
+    missing: List[str] = []
+    errors: List[Dict[str, Any]] = []
+
+    for npc_id in npc_ids if isinstance(npc_ids, list) else []:
+        npc_id = _safe_str(npc_id)
+        if not npc_id:
+            continue
+        try:
+            path = profile_path_for_npc(npc_id, root=root)
+            if not path.exists():
+                missing.append(npc_id)
+                continue
+            profile = load_npc_profile(npc_id, root=root)
+            projection = _profile_arc_projection(profile)
+            loaded[npc_id] = {
+                "path": str(path),
+                "profile": projection,
+            }
+        except Exception as exc:
+            errors.append({"npc_id": npc_id, "error": f"{type(exc).__name__}: {exc}"})
+
+    return {
+        "ok": not errors,
+        "root": str(root),
+        "loaded_count": len(loaded),
+        "missing_count": len(missing),
+        "loaded": loaded,
+        "missing": missing,
+        "errors": errors,
+    }
+
+
+def attach_loaded_profiles_to_runtime_state(
+    *,
+    runtime_state: Dict[str, Any],
+    load_result: Dict[str, Any],
+) -> Dict[str, Any]:
+    """Attach loaded NPC profiles to runtime state."""
+    runtime_state = _safe_dict(runtime_state)
+    load_result = _safe_dict(load_result)
+    evo = runtime_state.setdefault("npc_evolution", {})
+    evo["loaded_profiles"] = _safe_dict(load_result.get("loaded"))
+    return runtime_state

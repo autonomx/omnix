@@ -1047,6 +1047,10 @@ def build_campaign_report_model(
             summary.get("npc_evolution_profile_persistence_summary")
             or metrics.get("npc_evolution_profile_persistence_summary")
         ),
+        "npc_profile_load_summary": _safe_dict(
+            summary.get("npc_profile_load_summary")
+            or metrics.get("npc_profile_load_summary")
+        ),
         "promotion_target_grounding_summary": _safe_dict(
             summary.get("promotion_target_grounding_summary")
             or metrics.get("promotion_target_grounding_summary")
@@ -1794,6 +1798,7 @@ def render_campaign_report_html(model: Dict[str, Any]) -> str:
     {_render_json_details("Deferred advisory promotion summary JSON", model.get("deferred_advisory_promotion_summary") or {})}
     {_render_json_details("NPC evolution summary JSON", model.get("npc_evolution_summary") or {})}
     {_render_json_details("NPC evolution profile persistence summary JSON", model.get("npc_evolution_profile_persistence_summary") or {})}
+    {_render_json_details("NPC profile load summary JSON", model.get("npc_profile_load_summary") or {})}
     {_render_json_details("Promotion target grounding summary JSON", model.get("promotion_target_grounding_summary") or {})}
     {_render_json_details("Quality gate summary JSON", model.get("quality_gate_summary") or {})}
     {_render_json_details("Slowest turns JSON", performance.get("slowest_turns") or [])}

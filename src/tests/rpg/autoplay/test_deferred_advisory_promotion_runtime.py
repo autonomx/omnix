@@ -270,3 +270,65 @@ def test_promotion_runtime_relationship_delta_advances_npc_arc_axis_after_ground
     assert result["accepted"] >= 1
     arc = transcript[1]["runtime_state"]["npc_evolution"]["arcs"]["Bran"]
     assert arc["axes"]["trust"] >= 1
+
+
+def test_profile_loading_does_not_break_deferred_advisory_carry_forward(tmp_path, monkeypatch):
+    monkeypatch.setenv("RPG_NPC_PROFILE_ROOT", str(tmp_path))
+    (tmp_path / "bran.json").write_text(
+        '{"format_version":"npc_evolution_profile_v1","npc_id":"Bran","evolution":{"arc_stage":"stable","axes":{}}}',
+        encoding="utf-8",
+    )
+    candidates = normalize_advisory_candidates(
+        session_id="s",
+        turn_index=1,
+        player_input="I thank the innkeeper.",
+        turn_contract={"player_input": "I thank the innkeeper."},
+        payload={
+            "relationship_delta_candidates": [
+                {
+                    "target": "innkeeper",
+                    "axis": "trust",
+                    "delta": 1,
+                    "summary": "The innkeeper trusts the player slightly more.",
+                }
+            ]
+        },
+    )
+    transcript = [
+        {
+            "turn_index": 1,
+            "runtime_state": {
+                "deferred_advisory": {
+                    "candidates": candidates,
+                    "accepted": [],
+                    "rejected": [],
+                }
+            },
+            "turn_result": {
+                "simulation_state": {
+                    "scene": {"nearby_npcs": ["Bran"]},
+                    "npc_progression_state": {
+                        "npcs": {"Bran": {"name": "Bran", "role": "innkeeper"}}
+                    },
+                }
+            },
+        },
+        {
+            "turn_index": 2,
+            "turn_result": {
+                "simulation_state": {
+                    "scene": {"nearby_npcs": ["Bran"]},
+                    "npc_progression_state": {
+                        "npcs": {"Bran": {"name": "Bran", "role": "innkeeper"}}
+                    },
+                }
+            },
+        },
+    ]
+
+    result = run_deferred_advisory_promotions_for_transcript(transcript=transcript)
+
+    assert result["accepted"] >= 1
+    assert result["evolution_signals_created"] >= 1
+    assert transcript[1]["npc_profile_load_result"]["loaded_count"] == 1
+    assert transcript[1]["runtime_state"]["npc_evolution"]["arcs"]["Bran"]["axes"]["trust"] >= 1

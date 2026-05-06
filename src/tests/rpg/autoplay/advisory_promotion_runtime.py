@@ -7,6 +7,7 @@ from app.rpg.advisory.promotion import promote_advisory_candidates
 from app.rpg.advisory.runtime_store import compact_deferred_advisory_runtime_summary
 from app.rpg.npc_evolution.consumer import consume_accepted_advisory_projections
 from app.rpg.npc_evolution.profile_store import persist_npc_evolution_profiles
+from tests.rpg.autoplay.npc_profile_runtime_loader import load_profiles_into_row_runtime
 
 
 def _safe_dict(value: Any) -> Dict[str, Any]:
@@ -163,10 +164,17 @@ def run_deferred_advisory_promotions_for_transcript(
             _runtime_state_from_row(row),
         )
 
-        # Ingest result may have already placed current-turn candidates into this
-        # row's runtime_state. They are not eligible until turn_index + 1, so this
-        # call will reject/preserve same-turn candidates as not eligible.
         simulation_state_before = _simulation_state_from_row(row)
+        # Important: profile loading must enrich the already-merged runtime
+        # state. If it reads only the row-local runtime_state, it can drop
+        # carried deferred_advisory candidates from previous turns, causing all
+        # candidates to remain same-turn pending forever.
+        row["runtime_state"] = runtime_state
+        profile_load_summary = load_profiles_into_row_runtime(
+            row=row,
+            simulation_state=simulation_state_before,
+        )
+        runtime_state = _safe_dict(row.get("runtime_state")) or runtime_state
         simulation_state_after_probe = deepcopy(simulation_state_before)
 
         updated_runtime_state, result = promote_advisory_candidates(
@@ -235,6 +243,7 @@ def run_deferred_advisory_promotions_for_transcript(
                 "evolution_signals_consumed": evolution_result.get("signals_consumed"),
                 "npc_evolution_summary": evolution_result.get("summary") or {},
                 "profile_persist_result": profile_persist_result,
+                "profile_load_summary": profile_load_summary,
             }
         )
 

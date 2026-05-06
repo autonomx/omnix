@@ -1,261 +1,112 @@
-Below is N61-N63.3 — Promotion Target Grounding Summary De-dup Fix as a literal apply-this-patch diff spec.
-
+Below is N64-N66 — NPC Profile Loading + Arc Projection Into Runtime v1 as a literal apply-this-patch diff spec.
 Goal:
+N64: Load file-based NPC evolution profiles into runtime/session state.N65: Project bounded NPC arc state into turn/background LLM context.N66: Report loaded/projected profiles and prove loaded profile data cannot mutate authoritative inventory/currency/combat/quest/location.
+Strict rule:
+Profile files are persistent memory/evolution context only.Loading profiles must not mutate authoritative simulation facts.Projection may influence narration/advisory/player-agent context, but cannot directly grant rewards, items, gold, XP, quest completion, combat damage, or travel.
 
-relationship_accepted counts unique accepted relationship candidate IDs
-relationship_rejected counts unique rejected relationship candidate IDs
-examples avoid duplicate candidate IDs
-grounded/ungrounded counts avoid duplicate candidate IDs
-runtime behavior unchanged
+N64 — Load file-based NPC evolution profiles into runtime state
+1. Patch src/app/rpg/npc_evolution/profile_store.py
+1A. Add profile loading helpers
+Add after persist_npc_evolution_profiles(...):
+--- src/app/rpg/npc_evolution/profile_store.py+++ src/app/rpg/npc_evolution/profile_store.py@@ def persist_npc_evolution_profiles(@@     return {         "ok": not errors,         "root": str(root),         "written_count": len(written),         "written": written,         "errors": errors,     }+++def _profile_arc_projection(profile: Dict[str, Any]) -> Dict[str, Any]:+    """Bounded runtime projection of persistent NPC profile evolution.++    This is context only. It intentionally excludes any authoritative fields.+    """+    profile = _safe_dict(profile)+    evolution = _safe_dict(profile.get("evolution"))+    return {+        "npc_id": _safe_str(profile.get("npc_id")),+        "arc_stage": _safe_str(evolution.get("arc_stage")) or "stable",+        "axes": _safe_dict(evolution.get("axes")),+        "memories": _safe_list(evolution.get("memories"))[-8:],+        "future_hooks": _safe_list(evolution.get("future_hooks"))[-8:],+        "world_signals": _safe_list(evolution.get("world_signals"))[-6:],+        "semantic_intents": _safe_list(evolution.get("semantic_intents"))[-6:],+        "milestones": _safe_list(evolution.get("milestones"))[-5:],+        "signals_applied_count": len(_safe_list(evolution.get("signals_applied"))),+    }+++def load_npc_evolution_profiles_for_runtime(+    *,+    npc_ids: List[str],+    root: Path | None = None,+) -> Dict[str, Any]:+    """Load file-based NPC evolution profiles into a bounded runtime shape."""+    root = root or default_profile_root()+    loaded: Dict[str, Any] = {}+    missing: List[str] = []+    errors: List[Dict[str, Any]] = []++    for npc_id in npc_ids if isinstance(npc_ids, list) else []:+        npc_id = _safe_str(npc_id)+        if not npc_id:+            continue+        try:+            path = profile_path_for_npc(npc_id, root=root)+            if not path.exists():+                missing.append(npc_id)+                continue+            profile = load_npc_profile(npc_id, root=root)+            projection = _profile_arc_projection(profile)+            loaded[_safe_str(projection.get("npc_id")) or npc_id] = {+                "path": str(path),+                "profile": projection,+            }+        except Exception as exc:+            errors.append({"npc_id": npc_id, "error": f"{type(exc).__name__}: {exc}"})++    return {+        "ok": not errors,+        "root": str(root),+        "loaded_count": len(loaded),+        "missing_count": len(missing),+        "loaded": loaded,+        "missing": missing,+        "errors": errors,+    }+++def attach_loaded_profiles_to_runtime_state(+    *,+    runtime_state: Dict[str, Any],+    load_result: Dict[str, Any],+) -> Dict[str, Any]:+    runtime_state = runtime_state if isinstance(runtime_state, dict) else {}+    load_result = _safe_dict(load_result)+    npc_evolution = runtime_state.setdefault("npc_evolution", {})+    npc_evolution["loaded_profiles"] = _safe_dict(load_result.get("loaded"))+    npc_evolution["profile_load_result"] = {+        "ok": bool(load_result.get("ok")),+        "root": load_result.get("root"),+        "loaded_count": load_result.get("loaded_count"),+        "missing_count": load_result.get("missing_count"),+        "missing": load_result.get("missing") or [],+        "errors": load_result.get("errors") or [],+    }+    return runtime_state
 
-This is a reporting-only fix.
+2. Add runtime NPC profile load bridge
+Create:
+--- /dev/null+++ src/tests/rpg/autoplay/npc_profile_runtime_loader.py@@ -0,0 +1,198 @@+from __future__ import annotations++from copy import deepcopy+from typing import Any, Dict, List++from app.rpg.npc_evolution.profile_store import (+    attach_loaded_profiles_to_runtime_state,+    load_npc_evolution_profiles_for_runtime,+)+++def _safe_dict(value: Any) -> Dict[str, Any]:+    return value if isinstance(value, dict) else {}+++def _safe_list(value: Any) -> List[Any]:+    return value if isinstance(value, list) else []+++def _safe_str(value: Any) -> str:+    return value if isinstance(value, str) else ""+++def _id_variants(value: Any) -> set[str]:+    raw = _safe_str(value).strip()+    normed = raw.lower()+    variants = {normed} if normed else set()+    if normed.startswith("npc:"):+        variants.add(normed.split("npc:", 1)[1])+    elif normed:+        variants.add(f"npc:{normed}")+    return {item for item in variants if item}+++def _known_npcs_from_state(simulation_state: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:+    simulation_state = _safe_dict(simulation_state)+    for source in (+        _safe_dict(simulation_state.get("npcs")),+        _safe_dict(_safe_dict(simulation_state.get("npc_progression_state")).get("npcs")),+        _safe_dict(_safe_dict(simulation_state.get("npc_profile_state")).get("npcs")),+    ):+        if source:+            return {str(key): _safe_dict(value) for key, value in source.items()}+    return {}+++def _present_npc_items(simulation_state: Dict[str, Any]) -> List[Any]:+    simulation_state = _safe_dict(simulation_state)+    direct = (+        _safe_list(simulation_state.get("present_npcs"))+        or _safe_list(simulation_state.get("nearby_npcs"))+        or _safe_list(simulation_state.get("visible_npcs"))+    )+    if direct:+        return direct++    scene = _safe_dict(simulation_state.get("scene"))+    scene_items = (+        _safe_list(scene.get("present_npcs"))+        or _safe_list(scene.get("nearby_npcs"))+        or _safe_list(scene.get("visible_npcs"))+    )+    if scene_items:+        return scene_items++    contract = _safe_dict(simulation_state.get("turn_contract"))+    for section_key in ("resolved_action", "resolved_result"):+        section = _safe_dict(contract.get(section_key))+        current_location = _safe_dict(+            _safe_dict(section.get("location_state")).get("current_location")+        )+        present = _safe_list(current_location.get("present_npcs"))+        if present:+            return present++    return []+++def _item_id(item: Any) -> str:+    if isinstance(item, str):+        return item+    item_dict = _safe_dict(item)+    return (+        _safe_str(item_dict.get("id"))+        or _safe_str(item_dict.get("npc_id"))+        or _safe_str(item_dict.get("name"))+    )+++def _canonical_npc_id(simulation_state: Dict[str, Any], value: str) -> str:+    variants = _id_variants(value)+    if not variants:+        return ""+    npcs = _known_npcs_from_state(simulation_state)+    for npc_id, record in npcs.items():+        known = set()+        known.update(_id_variants(npc_id))+        known.update(_id_variants(record.get("id")))+        known.update(_id_variants(record.get("npc_id")))+        known.update(_id_variants(record.get("name")))+        known.update(_id_variants(record.get("display_name")))+        if variants & known:+            return str(npc_id)+    return value+++def npc_ids_for_profile_loading(simulation_state: Dict[str, Any]) -> List[str]:+    simulation_state = _safe_dict(simulation_state)+    npcs = _known_npcs_from_state(simulation_state)+    present = [_item_id(item) for item in _present_npc_items(simulation_state)]++    ids: List[str] = []+    seen = set()++    # Prefer present NPCs, but canonicalize to known profile keys.+    for value in present:+        npc_id = _canonical_npc_id(simulation_state, value)+        marker = npc_id.lower()+        if npc_id and marker not in seen:+            seen.add(marker)+            ids.append(npc_id)++    # If presence is unavailable, load known NPC profiles. This is still bounded+    # by the known NPC map, not by arbitrary file scanning.+    if not ids:+        for npc_id in list(npcs.keys())[:12]:+            marker = str(npc_id).lower()+            if marker not in seen:+                seen.add(marker)+                ids.append(str(npc_id))++    return ids+++def load_profiles_into_row_runtime(+    *,+    row: Dict[str, Any],+    simulation_state: Dict[str, Any],+) -> Dict[str, Any]:+    row = row if isinstance(row, dict) else {}+    runtime_state = _safe_dict(row.get("runtime_state"))+    if not runtime_state:+        runtime_state = {}++    npc_ids = npc_ids_for_profile_loading(simulation_state)+    load_result = load_npc_evolution_profiles_for_runtime(npc_ids=npc_ids)+    runtime_state = attach_loaded_profiles_to_runtime_state(+        runtime_state=runtime_state,+        load_result=load_result,+    )+    row["runtime_state"] = runtime_state+    row["npc_profile_load_result"] = load_result+    return {+        "ok": bool(load_result.get("ok")),+        "npc_ids": npc_ids,+        "loaded_count": load_result.get("loaded_count"),+        "missing_count": load_result.get("missing_count"),+        "errors": load_result.get("errors") or [],+    }+++def summarize_profile_loads(transcript: List[Dict[str, Any]]) -> Dict[str, Any]:+    loaded_ids = set()+    missing_ids = set()+    errors: List[Dict[str, Any]] = []+    turns_with_profiles = 0+    for row in transcript if isinstance(transcript, list) else []:+        result = _safe_dict(_safe_dict(row).get("npc_profile_load_result"))+        loaded = _safe_dict(result.get("loaded"))+        if loaded:+            turns_with_profiles += 1+        loaded_ids.update(loaded.keys())+        missing_ids.update(_safe_str(item) for item in _safe_list(result.get("missing")) if _safe_str(item))+        errors.extend(_safe_list(result.get("errors")))+    return {+        "ok": not errors,+        "turns_with_profiles": turns_with_profiles,+        "loaded_npc_ids": sorted(loaded_ids),+        "missing_npc_ids": sorted(missing_ids - loaded_ids),+        "error_count": len(errors),+        "errors": errors[:10],+    }
 
-N61-N63.3 — Promotion Target Grounding Summary De-dup Fix
-1. Patch src/tests/rpg/autoplay_llm_campaign.py
+N65 — Project loaded arcs into background context
+3. Patch src/tests/rpg/autoplay/advisory_promotion_runtime.py
+This is the cleanest integration point because it already extracts simulation state, carries runtime state, runs promotion/evolution, and persists profiles.
+3A. Add import
+--- src/tests/rpg/autoplay/advisory_promotion_runtime.py+++ src/tests/rpg/autoplay/advisory_promotion_runtime.py@@ from app.rpg.npc_evolution.consumer import consume_accepted_advisory_projections from app.rpg.npc_evolution.profile_store import persist_npc_evolution_profiles+from tests.rpg.autoplay.npc_profile_runtime_loader import load_profiles_into_row_runtime
+3B. Load profiles before promotion/evolution consumption
+Inside run_deferred_advisory_promotions_for_transcript(...), after:
+simulation_state_before = _simulation_state_from_row(row)simulation_state_after_probe = deepcopy(simulation_state_before)
+add:
+--- src/tests/rpg/autoplay/advisory_promotion_runtime.py+++ src/tests/rpg/autoplay/advisory_promotion_runtime.py@@         simulation_state_before = _simulation_state_from_row(row)+        profile_load_summary = load_profiles_into_row_runtime(+            row=row,+            simulation_state=simulation_state_before,+        )+        runtime_state = _safe_dict(row.get("runtime_state")) or runtime_state         simulation_state_after_probe = deepcopy(simulation_state_before)
+3C. Include profile load in per-turn result
+In promotion_results.append(...), add:
+--- src/tests/rpg/autoplay/advisory_promotion_runtime.py+++ src/tests/rpg/autoplay/advisory_promotion_runtime.py@@                 "npc_evolution_summary": evolution_result.get("summary") or {},                 "profile_persist_result": profile_persist_result,+                "profile_load_summary": profile_load_summary,             }         )
 
+4. Patch combined background context to include loaded profiles
+File:
+src/tests/rpg/autoplay/parallel_pipeline.py
+4A. Add compact loaded-profile helper
+Add near build_combined_background_context_packet(...) helpers:
+--- src/tests/rpg/autoplay/parallel_pipeline.py+++ src/tests/rpg/autoplay/parallel_pipeline.py@@ def _compact_player_visible_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]:@@     return {         "name": _safe_str(player.get("name") or simulation_state.get("player_name")),         "status": _safe_str(player.get("status")),         "visible_conditions": _safe_list(player.get("conditions"))[:8],         "inventory_item_count": len(_safe_list(inventory.get("items"))),         "currency": currency,     }+++def _compact_loaded_npc_profiles(runtime_state: Dict[str, Any], limit: int = 6) -> Dict[str, Any]:+    npc_evolution = _safe_dict(_safe_dict(runtime_state).get("npc_evolution"))+    loaded = _safe_dict(npc_evolution.get("loaded_profiles"))+    out: Dict[str, Any] = {}+    for npc_id, row_any in list(loaded.items())[:limit]:+        row = _safe_dict(row_any)+        profile = _safe_dict(row.get("profile"))+        out[str(npc_id)] = {+            "arc_stage": _safe_str(profile.get("arc_stage")) or "stable",+            "axes": _safe_dict(profile.get("axes")),+            "memories": _safe_list(profile.get("memories"))[-4:],+            "future_hooks": _safe_list(profile.get("future_hooks"))[-4:],+            "world_signals": _safe_list(profile.get("world_signals"))[-3:],+            "semantic_intents": _safe_list(profile.get("semantic_intents"))[-3:],+            "milestones": _safe_list(profile.get("milestones"))[-3:],+            "signals_applied_count": profile.get("signals_applied_count"),+        }+    return out
+4B. Add runtime_state param to context packet builder
+Patch signature:
+--- src/tests/rpg/autoplay/parallel_pipeline.py+++ src/tests/rpg/autoplay/parallel_pipeline.py@@ def build_combined_background_context_packet(     *,     player_action: str,     simulation_state: Dict[str, Any],+    runtime_state: Dict[str, Any] | None = None,     turn_contract: Dict[str, Any],     semantic_action_record: Dict[str, Any], ) -> Dict[str, Any]:@@     simulation_state = _safe_dict(simulation_state)+    runtime_state = _safe_dict(runtime_state)     turn_contract = _safe_dict(turn_contract)     semantic_action_record = _safe_dict(semantic_action_record)@@         "recent_events": _compact_recent_events(simulation_state, limit=5),+        "loaded_npc_profiles": _compact_loaded_npc_profiles(runtime_state, limit=6),         "turn_contract": _compact_turn_contract(turn_contract),         "fast_semantic_action": semantic_action_record,     }
+4C. Add runtime_state param to combined payload builder
+Patch _build_combined_background_payload(...) signature:
+--- src/tests/rpg/autoplay/parallel_pipeline.py+++ src/tests/rpg/autoplay/parallel_pipeline.py@@ def _build_combined_background_payload(     *,     provider: Any,     player_action: str,     simulation_state: Dict[str, Any],+    runtime_state: Dict[str, Any] | None = None,     turn_contract: Dict[str, Any],     semantic_action_record: Dict[str, Any], ) -> Dict[str, Any]:@@     context_packet = build_combined_background_context_packet(         player_action=player_action,         simulation_state=simulation_state,+        runtime_state=runtime_state or {},         turn_contract=turn_contract,         semantic_action_record=semantic_action_record,     )
+4D. Add runtime_state to combined background job
+Patch _combined_background_llm_job(...) signature:
+--- src/tests/rpg/autoplay/parallel_pipeline.py+++ src/tests/rpg/autoplay/parallel_pipeline.py@@ def _combined_background_llm_job(     *,     queued_at: float,     provider: Any,     session_id: str,@@     player_action: str,     simulation_state: Dict[str, Any],+    runtime_state: Dict[str, Any] | None = None,     turn_contract: Dict[str, Any],     semantic_action_record: Dict[str, Any],     prefer_provider: bool, ) -> Dict[str, Any]:@@                 player_action=player_action,                 simulation_state=freeze_snapshot(_safe_dict(simulation_state)),+                runtime_state=freeze_snapshot(_safe_dict(runtime_state)),                 turn_contract=freeze_snapshot(_safe_dict(turn_contract)),                 semantic_action_record=freeze_snapshot(_safe_dict(semantic_action_record)),             )
+Patch the fallback narration payload call only if your build_runtime_narration_payload(...) accepts runtime_state. If not, leave unchanged.
+4E. Patch submit_combined_background_llm(...)
+Patch signature and submit call:
+--- src/tests/rpg/autoplay/parallel_pipeline.py+++ src/tests/rpg/autoplay/parallel_pipeline.py@@     def submit_combined_background_llm(         self,         *,         provider: Any,         session_id: str,@@         player_action: str,         simulation_state: Dict[str, Any],+        runtime_state: Dict[str, Any] | None = None,         turn_contract: Dict[str, Any],         semantic_action_record: Dict[str, Any],         prefer_provider: bool = True,@@             player_action=player_action,             simulation_state=freeze_snapshot(simulation_state),+            runtime_state=freeze_snapshot(runtime_state or {}),             turn_contract=freeze_snapshot(turn_contract),             semantic_action_record=freeze_snapshot(semantic_action_record),             prefer_provider=prefer_provider,         )
+4F. Patch call site in src/tests/rpg/autoplay_llm_campaign.py
 Find:
+combined_background_llm_job_id = pipeline.submit_combined_background_llm(
+Add runtime_state from current session/turn if available:
+--- src/tests/rpg/autoplay_llm_campaign.py+++ src/tests/rpg/autoplay_llm_campaign.py@@                     combined_background_llm_job_id = pipeline.submit_combined_background_llm(                         provider=provider,                         session_id=session_id,                         turn_index=turn_index,                         player_action=player_action,                         simulation_state=final_turn_state,+                        runtime_state=_safe_dict(_safe_dict(turn_result.get("session")).get("runtime_state")),                         turn_contract=turn_result.get("turn_contract") or {},                         semantic_action_record=semantic_action_record,                         prefer_provider=True,                     )
+If turn_result.session.runtime_state is not available at this point, use:
+runtime_state=_safe_dict(turn_result.get("runtime_state"))
+or:
+runtime_state=_safe_dict(current_session.get("runtime_state"))
+The important part is to pass profile-loaded runtime state once available. This first patch gives the plumbing and report visibility. The next smoke may show loaded_npc_profiles starts filling after the profile loader runs.
 
-def _summarize_promotion_target_grounding(transcript: List[Dict[str, Any]]) -> Dict[str, Any]:
+N66 — Reporting and safety gates
+5. Patch src/tests/rpg/autoplay_llm_campaign.py
+5A. Import summary helper
+--- src/tests/rpg/autoplay_llm_campaign.py+++ src/tests/rpg/autoplay_llm_campaign.py@@ from tests.rpg.autoplay.advisory_promotion_runtime import run_deferred_advisory_promotions_for_transcript+from tests.rpg.autoplay.npc_profile_runtime_loader import summarize_profile_loads
+5B. Add profile load summary
+After summary["npc_evolution_profile_persistence_summary"] = ..., add:
+--- src/tests/rpg/autoplay_llm_campaign.py+++ src/tests/rpg/autoplay_llm_campaign.py@@     summary["npc_evolution_profile_persistence_summary"] = (         advisory_promotion_summary.get("profile_persist_result") or {}     )+    summary["npc_profile_load_summary"] = summarize_profile_loads(transcript)     metrics["npc_evolution_summary"] = summary["npc_evolution_summary"]     metrics["npc_evolution_profile_persistence_summary"] = summary["npc_evolution_profile_persistence_summary"]+    metrics["npc_profile_load_summary"] = summary["npc_profile_load_summary"]
+5C. Add quality gate
+In _summarize_quality_gates(...), add:
+--- src/tests/rpg/autoplay_llm_campaign.py+++ src/tests/rpg/autoplay_llm_campaign.py@@     profile_persist_summary = _safe_dict(summary.get("npc_evolution_profile_persistence_summary"))+    profile_load_summary = _safe_dict(summary.get("npc_profile_load_summary"))@@         "npc_evolution_profile_persistence_ok": (             not profile_persist_summary             or bool(profile_persist_summary.get("ok"))         ),+        "npc_profile_load_ok": (+            not profile_load_summary+            or bool(profile_load_summary.get("ok"))+        ),     }
+5D. Console output
+--- src/tests/rpg/autoplay_llm_campaign.py+++ src/tests/rpg/autoplay_llm_campaign.py@@     print(f"npc_evolution_profile_persistence_summary: {summary.get('npc_evolution_profile_persistence_summary')}")+    print(f"npc_profile_load_summary: {summary.get('npc_profile_load_summary')}")     print(f"promotion_target_grounding_summary: {summary.get('promotion_target_grounding_summary')}")
 
-Replace the whole function with:
+6. Patch src/tests/rpg/autoplay/campaign_report.py
+In model construction:
+--- src/tests/rpg/autoplay/campaign_report.py+++ src/tests/rpg/autoplay/campaign_report.py@@         "npc_evolution_profile_persistence_summary": _safe_dict(             summary.get("npc_evolution_profile_persistence_summary")             or metrics.get("npc_evolution_profile_persistence_summary")         ),+        "npc_profile_load_summary": _safe_dict(+            summary.get("npc_profile_load_summary")+            or metrics.get("npc_profile_load_summary")+        ),         "promotion_target_grounding_summary": _safe_dict(             summary.get("promotion_target_grounding_summary")             or metrics.get("promotion_target_grounding_summary")         ),
+In details:
+--- src/tests/rpg/autoplay/campaign_report.py+++ src/tests/rpg/autoplay/campaign_report.py@@     {_render_json_details("NPC evolution profile persistence summary JSON", model.get("npc_evolution_profile_persistence_summary") or {})}+    {_render_json_details("NPC profile load summary JSON", model.get("npc_profile_load_summary") or {})}     {_render_json_details("Promotion target grounding summary JSON", model.get("promotion_target_grounding_summary") or {})}
 
---- src/tests/rpg/autoplay_llm_campaign.py
-+++ src/tests/rpg/autoplay_llm_campaign.py
-@@
- def _summarize_promotion_target_grounding(transcript: List[Dict[str, Any]]) -> Dict[str, Any]:
-+    seen_grounding_candidate_ids = set()
-+    seen_example_candidate_ids = set()
-+    accepted_relationship_ids = set()
-+    rejected_relationship_ids = set()
-+
-     summary: Dict[str, Any] = {
-         "grounded": 0,
-         "ungrounded": 0,
-         "by_reason": {},
-         "relationship_accepted": 0,
-         "relationship_rejected": 0,
-+        "unique_relationship_accepted": 0,
-+        "unique_relationship_rejected": 0,
-         "examples": [],
-     }
-+
-+    def candidate_marker(value: Any, *, prefix: str = "candidate") -> str:
-+        text = _safe_str(value)
-+        if text:
-+            return text
-+        return f"{prefix}:missing"
-+
-     for row in transcript:
-         result = _safe_dict(row.get("deferred_advisory_promotion_result"))
-         for decision in result.get("decisions") if isinstance(result.get("decisions"), list) else []:
-             decision = _safe_dict(decision)
-             grounding = _safe_dict(decision.get("target_grounding"))
-             if not grounding:
-                 continue
-+            marker = candidate_marker(decision.get("candidate_id"))
-+            if marker in seen_grounding_candidate_ids:
-+                continue
-+            seen_grounding_candidate_ids.add(marker)
-+
-             reason = _safe_str(grounding.get("reason")) or "unknown"
-             summary["by_reason"][reason] = int(summary["by_reason"].get(reason) or 0) + 1
-             if grounding.get("grounded"):
-                 summary["grounded"] += 1
-             else:
-                 summary["ungrounded"] += 1
--            if len(summary["examples"]) < 5:
-+            if len(summary["examples"]) < 5 and marker not in seen_example_candidate_ids:
-+                seen_example_candidate_ids.add(marker)
-                 summary["examples"].append(
-                     {
-                         "turn_index": row.get("turn_index"),
-                         "candidate_id": decision.get("candidate_id"),
-                         "status": decision.get("status"),
-@@
- 
-         runtime_state = _safe_dict(row.get("runtime_state"))
-         accepted = _safe_list(_safe_dict(runtime_state.get("deferred_advisory")).get("accepted"))
-         rejected = _safe_list(_safe_dict(runtime_state.get("deferred_advisory")).get("rejected"))
--        summary["relationship_accepted"] += sum(
--            1 for item in accepted if _safe_dict(item).get("kind") == "relationship_delta"
--        )
--        summary["relationship_rejected"] += sum(
--            1 for item in rejected if _safe_dict(item).get("kind") == "relationship_delta"
--        )
-+        for item in accepted:
-+            item = _safe_dict(item)
-+            if item.get("kind") != "relationship_delta":
-+                continue
-+            marker = candidate_marker(item.get("candidate_id"), prefix="accepted")
-+            accepted_relationship_ids.add(marker)
-+        for item in rejected:
-+            item = _safe_dict(item)
-+            if item.get("kind") != "relationship_delta":
-+                continue
-+            marker = candidate_marker(item.get("candidate_id"), prefix="rejected")
-+            rejected_relationship_ids.add(marker)
-+
-+    summary["relationship_accepted"] = len(accepted_relationship_ids)
-+    summary["relationship_rejected"] = len(rejected_relationship_ids)
-+    summary["unique_relationship_accepted"] = len(accepted_relationship_ids)
-+    summary["unique_relationship_rejected"] = len(rejected_relationship_ids)
-+    summary["dedup"] = {
-+        "grounding_candidate_ids": len(seen_grounding_candidate_ids),
-+        "accepted_relationship_candidate_ids": len(accepted_relationship_ids),
-+        "rejected_relationship_candidate_ids": len(rejected_relationship_ids),
-+    }
-     return summary
-2. Add regression test
+Tests
+7. Add profile loading tests
+Create:
+--- /dev/null+++ src/tests/rpg/npc_evolution/test_profile_loading.py@@ -0,0 +1,113 @@+import json++from app.rpg.npc_evolution.profile_store import (+    attach_loaded_profiles_to_runtime_state,+    load_npc_evolution_profiles_for_runtime,+)+++def test_load_npc_evolution_profiles_for_runtime_loads_bounded_projection(tmp_path):+    profile_path = tmp_path / "bran.json"+    profile_path.write_text(+        json.dumps(+            {+                "format_version": "npc_evolution_profile_v1",+                "npc_id": "Bran",+                "evolution": {+                    "arc_stage": "trusting",+                    "axes": {"trust": 4},+                    "memories": [+                        {"signal_id": f"m{i}", "summary": f"memory {i}"}+                        for i in range(12)+                    ],+                    "future_hooks": [+                        {"signal_id": f"h{i}", "summary": f"hook {i}"}+                        for i in range(12)+                    ],+                    "signals_applied": [{"signal_id": "s1"}],+                },+            }+        ),+        encoding="utf-8",+    )++    result = load_npc_evolution_profiles_for_runtime(npc_ids=["Bran"], root=tmp_path)++    assert result["ok"] is True+    assert result["loaded_count"] == 1+    projection = result["loaded"]["Bran"]["profile"]+    assert projection["arc_stage"] == "trusting"+    assert projection["axes"]["trust"] == 4+    assert len(projection["memories"]) == 8+    assert len(projection["future_hooks"]) == 8+++def test_attach_loaded_profiles_to_runtime_state():+    runtime_state = {}+    load_result = {+        "ok": True,+        "root": "x",+        "loaded_count": 1,+        "missing_count": 0,+        "loaded": {+            "Bran": {+                "path": "bran.json",+                "profile": {"npc_id": "Bran", "arc_stage": "trusting"},+            }+        },+        "missing": [],+        "errors": [],+    }++    updated = attach_loaded_profiles_to_runtime_state(+        runtime_state=runtime_state,+        load_result=load_result,+    )++    assert updated["npc_evolution"]["loaded_profiles"]["Bran"]["profile"]["arc_stage"] == "trusting"+    assert updated["npc_evolution"]["profile_load_result"]["loaded_count"] == 1
 
+8. Add runtime loader tests
+Create:
+--- /dev/null+++ src/tests/rpg/autoplay/test_npc_profile_runtime_loader.py@@ -0,0 +1,90 @@+import json+import os++from tests.rpg.autoplay.npc_profile_runtime_loader import (+    load_profiles_into_row_runtime,+    npc_ids_for_profile_loading,+    summarize_profile_loads,+)+++def test_npc_ids_for_profile_loading_uses_present_npcs_canonicalized():+    ids = npc_ids_for_profile_loading(+        {+            "scene": {"nearby_npcs": ["npc:bran"]},+            "npc_progression_state": {"npcs": {"Bran": {"name": "Bran"}}},+        }+    )++    assert ids == ["Bran"]+++def test_load_profiles_into_row_runtime_attaches_loaded_profile(tmp_path, monkeypatch):+    monkeypatch.setenv("RPG_NPC_PROFILE_ROOT", str(tmp_path))+    (tmp_path / "bran.json").write_text(+        json.dumps(+            {+                "format_version": "npc_evolution_profile_v1",+                "npc_id": "Bran",+                "evolution": {+                    "arc_stage": "trusting",+                    "axes": {"trust": 4},+                    "memories": [],+                    "future_hooks": [],+                    "signals_applied": [],+                },+            }+        ),+        encoding="utf-8",+    )+    row = {}++    result = load_profiles_into_row_runtime(+        row=row,+        simulation_state={+            "scene": {"nearby_npcs": ["Bran"]},+            "npc_progression_state": {"npcs": {"Bran": {"name": "Bran"}}},+        },+    )++    assert result["loaded_count"] == 1+    assert row["runtime_state"]["npc_evolution"]["loaded_profiles"]["Bran"]["profile"]["arc_stage"] == "trusting"+++def test_summarize_profile_loads():+    summary = summarize_profile_loads(+        [+            {+                "npc_profile_load_result": {+                    "loaded": {"Bran": {"profile": {}}},+                    "missing": [],+                    "errors": [],+                }+            }+        ]+    )++    assert summary["ok"] is True+    assert summary["turns_with_profiles"] == 1+    assert summary["loaded_npc_ids"] == ["Bran"]
+
+9. Add context packet test
 Patch:
-
-src/tests/rpg/autoplay/test_quality_gates.py
-
-Add import if needed:
-
---- src/tests/rpg/autoplay/test_quality_gates.py
-+++ src/tests/rpg/autoplay/test_quality_gates.py
-@@
- from tests.rpg.autoplay_llm_campaign import (
-     _summarize_player_agent_prompt_budget,
-+    _summarize_promotion_target_grounding,
-     _summarize_quality_gates,
- )
-
-Add test:
-
---- src/tests/rpg/autoplay/test_quality_gates.py
-+++ src/tests/rpg/autoplay/test_quality_gates.py
-@@
- def test_quality_gates_fallback_to_performance_budget_background_llm():
-@@
-     assert result["ok"] is True
-     assert result["gates"]["combined_background_mode_when_requested"] is True
-+
-+
-+def test_promotion_target_grounding_summary_dedupes_cumulative_runtime_state():
-+    transcript = [
-+        {
-+            "turn_index": 2,
-+            "deferred_advisory_promotion_result": {
-+                "decisions": [
-+                    {
-+                        "candidate_id": "adv:1:relationship_delta:a",
-+                        "status": "accepted",
-+                        "reason": "accepted_by_deterministic_gate",
-+                        "target_grounding": {
-+                            "grounded": True,
-+                            "npc_id": "Bran",
-+                            "reason": "explicit_known_target",
-+                        },
-+                    }
-+                ]
-+            },
-+            "runtime_state": {
-+                "deferred_advisory": {
-+                    "accepted": [
-+                        {
-+                            "candidate_id": "adv:1:relationship_delta:a",
-+                            "kind": "relationship_delta",
-+                        }
-+                    ],
-+                    "rejected": [],
-+                }
-+            },
-+        },
-+        {
-+            "turn_index": 3,
-+            "deferred_advisory_promotion_result": {
-+                "decisions": [
-+                    {
-+                        "candidate_id": "adv:1:relationship_delta:a",
-+                        "status": "accepted",
-+                        "reason": "accepted_by_deterministic_gate",
-+                        "target_grounding": {
-+                            "grounded": True,
-+                            "npc_id": "Bran",
-+                            "reason": "explicit_known_target",
-+                        },
-+                    },
-+                    {
-+                        "candidate_id": "adv:2:relationship_delta:b",
-+                        "status": "rejected",
-+                        "reason": "relationship_target_not_present_or_unknown",
-+                        "target_grounding": {
-+                            "grounded": False,
-+                            "npc_id": "",
-+                            "reason": "no_deterministic_target",
-+                        },
-+                    },
-+                ]
-+            },
-+            "runtime_state": {
-+                "deferred_advisory": {
-+                    "accepted": [
-+                        {
-+                            "candidate_id": "adv:1:relationship_delta:a",
-+                            "kind": "relationship_delta",
-+                        }
-+                    ],
-+                    "rejected": [
-+                        {
-+                            "candidate_id": "adv:2:relationship_delta:b",
-+                            "kind": "relationship_delta",
-+                        }
-+                    ],
-+                }
-+            },
-+        },
-+        {
-+            "turn_index": 4,
-+            "runtime_state": {
-+                "deferred_advisory": {
-+                    "accepted": [
-+                        {
-+                            "candidate_id": "adv:1:relationship_delta:a",
-+                            "kind": "relationship_delta",
-+                        }
-+                    ],
-+                    "rejected": [
-+                        {
-+                            "candidate_id": "adv:2:relationship_delta:b",
-+                            "kind": "relationship_delta",
-+                        }
-+                    ],
-+                }
-+            },
-+        },
-+    ]
-+
-+    summary = _summarize_promotion_target_grounding(transcript)
-+
-+    assert summary["relationship_accepted"] == 1
-+    assert summary["relationship_rejected"] == 1
-+    assert summary["unique_relationship_accepted"] == 1
-+    assert summary["unique_relationship_rejected"] == 1
-+    assert summary["grounded"] == 1
-+    assert summary["ungrounded"] == 1
-+    assert summary["by_reason"]["explicit_known_target"] == 1
-+    assert summary["by_reason"]["no_deterministic_target"] == 1
-+    assert len(summary["examples"]) == 2
-3. Optional: make naming clearer in report
-
-No behavior change, but the summary is now explicit. The report already renders:
-
-Promotion target grounding summary JSON
-
-No extra report patch is required if promotion_target_grounding_summary is already included.
+src/tests/rpg/autoplay/test_combined_context_budget.py
+Add:
+--- src/tests/rpg/autoplay/test_combined_context_budget.py+++ src/tests/rpg/autoplay/test_combined_context_budget.py@@ from tests.rpg.autoplay.parallel_pipeline import (     build_combined_background_context_packet,@@ )@@ def test_combined_context_packet_excludes_raw_large_state_and_keeps_quality_fields():@@     assert "huge_debug_blob" not in text+++def test_combined_context_packet_includes_loaded_npc_profiles():+    packet = build_combined_background_context_packet(+        player_action="I ask Bran about the mill.",+        simulation_state={+            "scene": {"title": "Tavern"},+            "npc_progression_state": {"npcs": {"Bran": {"name": "Bran"}}},+        },+        runtime_state={+            "npc_evolution": {+                "loaded_profiles": {+                    "Bran": {+                        "profile": {+                            "npc_id": "Bran",+                            "arc_stage": "trusting",+                            "axes": {"trust": 4},+                            "memories": [{"summary": "Bran remembers the player."}],+                            "future_hooks": [{"summary": "Bran may offer a rumor."}],+                        }+                    }+                }+            }+        },+        turn_contract={"player_input": "I ask Bran about the mill."},+        semantic_action_record={"semantic_action_type": "ask"},+    )++    assert packet["loaded_npc_profiles"]["Bran"]["arc_stage"] == "trusting"+    assert packet["loaded_npc_profiles"]["Bran"]["axes"]["trust"] == 4
 
 Validation
-
 Compile:
-
-python -m py_compile src\tests\rpg\autoplay_llm_campaign.py src\tests\rpg\autoplay\test_quality_gates.py
-
+python -m py_compile src\app\rpg\npc_evolution\profile_store.py src\tests\rpg\autoplay\npc_profile_runtime_loader.py src\tests\rpg\autoplay\advisory_promotion_runtime.py src\tests\rpg\autoplay\parallel_pipeline.py src\tests\rpg\autoplay_llm_campaign.py src\tests\rpg\autoplay\campaign_report.py
 Run focused tests:
-
-python -m pytest src\tests\rpg\autoplay\test_quality_gates.py -q
-
-Run broader smoke tests:
-
-python -m pytest src\tests\rpg\advisory\test_deferred_advisory_candidates.py src\tests\rpg\autoplay\test_deferred_advisory_promotion_runtime.py src\tests\rpg\npc_evolution\test_target_grounding.py src\tests\rpg\npc_evolution\test_npc_evolution_consumer.py src\tests\rpg\autoplay\test_quality_gates.py -q
+python -m pytest src\tests\rpg\npc_evolution\test_profile_loading.py src\tests\rpg\autoplay\test_npc_profile_runtime_loader.py src\tests\rpg\autoplay\test_combined_context_budget.py src\tests\rpg\npc_evolution\test_profile_store.py -q
+Run broader tests:
+python -m pytest src\tests\rpg\npc_evolution\test_profile_loading.py src\tests\rpg\autoplay\test_npc_profile_runtime_loader.py src\tests\rpg\autoplay\test_combined_context_budget.py src\tests\rpg\npc_evolution\test_profile_store.py src\tests\rpg\npc_evolution\test_npc_evolution_arcs.py src\tests\rpg\npc_evolution\test_npc_evolution_consumer.py src\tests\rpg\autoplay\test_deferred_advisory_promotion_runtime.py src\tests\rpg\autoplay\test_quality_gates.py -q
+Run two-pass smoke to prove persistence then loading.
+Pass 1: create/update profile
+python src/tests/rpg/autoplay_llm_campaign.py --turns 4 --player-agent llm --player-agent-context-mode compact --player-agent-cache on --scenario-seed tavern_story_seed --artifact-detail full --latency-profile playable --narration-mode deferred --background-llm-mode combined --deferred-advisory-promotion on --checkpoint-mode background --background-workers 2 --provider-workers 1 --output-dir resources/data/test-results/autoplay-npc-profile-pass1 --checkpoint-every 0 --debug-provider-shape --strategy balanced_story_player --autoplay-base-response deterministic --action-diversity-window 8 --max-player-agent-fallback-rate 0.25 --min-meaningful-progress-rate 0.10 --max-churn-only-rate 0.95 --max-churn-only-streak 8 --max-objective-target-no-progress-streak 8 --max-state-bytes 2000000 --fail-on-compatibility-turn-runtime --fail-on-runtime-error --fail-on-regression-warnings
+Pass 2: load existing profile and project it
+python src/tests/rpg/autoplay_llm_campaign.py --turns 4 --player-agent llm --player-agent-context-mode compact --player-agent-cache on --scenario-seed tavern_story_seed --artifact-detail full --latency-profile playable --narration-mode deferred --background-llm-mode combined --deferred-advisory-promotion on --checkpoint-mode background --background-workers 2 --provider-workers 1 --output-dir resources/data/test-results/autoplay-npc-profile-pass2 --checkpoint-every 0 --debug-provider-shape --strategy balanced_story_player --autoplay-base-response deterministic --action-diversity-window 8 --max-player-agent-fallback-rate 0.25 --min-meaningful-progress-rate 0.10 --max-churn-only-rate 0.95 --max-churn-only-streak 8 --max-objective-target-no-progress-streak 8 --max-state-bytes 2000000 --fail-on-compatibility-turn-runtime --fail-on-runtime-error --fail-on-regression-warnings
+Inspect pass 2:
+Get-Content resources\data\test-results\autoplay-npc-profile-pass2\autoplay-summary.json | ConvertFrom-Json |  Select-Object npc_profile_load_summary,npc_evolution_summary,npc_evolution_profile_persistence_summary,quality_gate_summary |  ConvertTo-Json -Depth 12
+Expected:
+npc_profile_load_summary.ok == truenpc_profile_load_summary.loaded_npc_ids includes Brannpc_profile_load_summary.turns_with_profiles > 0background prompt context includes loaded_npc_profilesnpc_evolution_profile_persistence_summary.ok == truequality_gate_summary.ok == trueavg_human_playable_blocking_ms remains low
+This completes the persistence loop:
+profile file written in pass 1→ profile loaded in pass 2→ loaded arc projected into background context→ future background narration/advisory can reflect evolved NPC state
