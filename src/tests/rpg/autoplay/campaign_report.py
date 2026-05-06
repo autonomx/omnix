@@ -1036,6 +1036,9 @@ def build_campaign_report_model(
         "performance_budget_summary": _safe_dict(metrics.get("performance_budget_summary")),
         "background_prompt_budget_summary": _safe_dict(metrics.get("background_prompt_budget_summary")),
         "combined_quality_shape_summary": _safe_dict(metrics.get("combined_quality_shape_summary")),
+        "player_agent_prompt_budget_summary": _safe_dict(summary.get("player_agent_prompt_budget_summary")),
+        "player_agent_cache_summary": _safe_dict(summary.get("player_agent_cache_summary")),
+        "quality_gate_summary": _safe_dict(summary.get("quality_gate_summary")),
         "shortcomings": shortcomings,
     }
     model["story_so_far_paragraph"] = build_story_so_far_paragraph(model)
@@ -1773,6 +1776,9 @@ def render_campaign_report_html(model: Dict[str, Any]) -> str:
     {_render_json_details("Performance budget summary JSON", model.get("performance_budget_summary") or {})}
     {_render_json_details("Background prompt budget summary JSON", model.get("background_prompt_budget_summary") or {})}
     {_render_json_details("Combined quality shape summary JSON", model.get("combined_quality_shape_summary") or {})}
+    {_render_json_details("Player-agent prompt budget summary JSON", model.get("player_agent_prompt_budget_summary") or {})}
+    {_render_json_details("Player-agent cache summary JSON", model.get("player_agent_cache_summary") or {})}
+    {_render_json_details("Quality gate summary JSON", model.get("quality_gate_summary") or {})}
     {_render_json_details("Slowest turns JSON", performance.get("slowest_turns") or [])}
     {_render_json_details("Background job summary JSON", model.get("background_jobs") or {})}
   </section>

@@ -76,6 +76,13 @@ from tests.rpg.autoplay.strategy_profiles import (
     build_strategy_guidance,
     rerank_suggested_actions_for_strategy,
 )
+from tests.rpg.autoplay.player_agent_cache import PlayerAgentDecisionCache
+from tests.rpg.autoplay.player_agent_optimization import (
+    build_player_agent_context_packet,
+    build_player_agent_messages,
+    normalize_player_agent_payload,
+    player_agent_cache_key,
+)
 
 
 def _safe_dict(value: Any) -> Dict[str, Any]:
@@ -115,6 +122,78 @@ def _baseline_mismatch_warning(
 
 def _safe_str(value: Any) -> str:
     return value if isinstance(value, str) else ""
+
+
+try:
+    from app.providers.base import ChatMessage
+except Exception:
+    ChatMessage = None
+
+
+def _provider_messages(messages: List[Dict[str, str]]) -> List[Any]:
+    if ChatMessage is None:
+        return messages
+    converted: List[Any] = []
+    for message in messages:
+        role = str(message.get("role") or "user")
+        content = str(message.get("content") or "")
+        try:
+            converted.append(ChatMessage(role=role, content=content))
+        except TypeError:
+            converted.append(ChatMessage(role, content))
+    return converted
+
+
+def _provider_text_from_response(response: Any) -> str:
+    for attr in ("content", "text", "message"):
+        value = getattr(response, attr, None)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    if isinstance(response, dict):
+        for key in ("content", "text", "message"):
+            value = response.get(key)
+            if isinstance(value, str) and value.strip():
+                return value.strip()
+    return ""
+
+
+def _extract_json_object_from_text(text: str) -> Dict[str, Any]:
+    import json
+    import re
+
+    cleaned = text.strip()
+    fenced = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", cleaned, flags=re.DOTALL | re.IGNORECASE)
+    if fenced:
+        return json.loads(fenced.group(1))
+    try:
+        return json.loads(cleaned)
+    except Exception:
+        pass
+    start = cleaned.find("{")
+    if start < 0:
+        raise ValueError("no_json_object_start")
+    depth = 0
+    in_string = False
+    escape = False
+    for index in range(start, len(cleaned)):
+        char = cleaned[index]
+        if in_string:
+            if escape:
+                escape = False
+            elif char == "\\":
+                escape = True
+            elif char == '"':
+                in_string = False
+            continue
+        if char == '"':
+            in_string = True
+        elif char == "{":
+            depth += 1
+        elif char == "}":
+            depth -= 1
+            if depth == 0:
+                return json.loads(cleaned[start : index + 1])
+    raise ValueError("unterminated_json_object")
 
 
 def _summarize_player_agent_trace(transcript: List[Dict[str, Any]]) -> Dict[str, Any]:
@@ -406,6 +485,85 @@ def _summarize_combined_quality_shape(transcript: List[Dict[str, Any]]) -> Dict[
     }
 
 
+def _summarize_player_agent_prompt_budget(rows: List[Dict[str, Any]]) -> Dict[str, Any]:
+    prompt_rows = [row for row in rows if isinstance(row.get("prompt_metrics"), dict)]
+    if not prompt_rows:
+        return {
+            "count": 0,
+            "avg_total_chars": 0.0,
+            "max_total_chars": 0,
+            "avg_estimated_tokens": 0.0,
+            "cache_hits": 0,
+            "sources": {},
+        }
+    sources: Dict[str, int] = {}
+    total_chars: List[int] = []
+    tokens: List[float] = []
+    cache_hits = 0
+    for row in prompt_rows:
+        source = str(row.get("source") or "unknown")
+        sources[source] = int(sources.get(source) or 0) + 1
+        metrics = row.get("prompt_metrics") or {}
+        total_chars.append(int(metrics.get("total_chars") or 0))
+        tokens.append(float(metrics.get("estimated_tokens") or 0.0))
+        if row.get("cache_hit"):
+            cache_hits += 1
+    return {
+        "count": len(prompt_rows),
+        "avg_total_chars": round(sum(total_chars) / len(total_chars), 3),
+        "max_total_chars": max(total_chars),
+        "avg_estimated_tokens": round(sum(tokens) / len(tokens), 3),
+        "max_estimated_tokens": round(max(tokens), 3),
+        "cache_hits": cache_hits,
+        "sources": sources,
+        "examples": prompt_rows[:3],
+    }
+
+
+def _summarize_quality_gates(
+    *,
+    args: Any,
+    metrics: Dict[str, Any],
+    summary: Dict[str, Any],
+    transcript: List[Dict[str, Any]],
+) -> Dict[str, Any]:
+    performance_budget = _safe_dict(summary.get("performance_budget_summary"))
+    live = _safe_dict(performance_budget.get("live_blocking"))
+    background_jobs = _safe_dict(summary.get("background_jobs"))
+    if not background_jobs:
+        background_jobs = _safe_dict(_safe_dict(performance_budget.get("background_llm")))
+    player_agent_summary = _safe_dict(summary.get("player_agent_trace_summary"))
+
+    gates = {
+        "avg_human_playable_blocking_under_500ms": float(live.get("avg_human_playable_blocking_ms") or 0.0) < 500.0,
+        "max_human_playable_blocking_under_1000ms": float(live.get("max_human_playable_blocking_ms") or 0.0) < 1000.0,
+        "real_turn_runtime_used": int(metrics.get("real_turn_runtime_count") or 0) == len(transcript),
+        "combined_background_mode_when_requested": (
+            args.background_llm_mode != "combined"
+            or int(background_jobs.get("combined_background_llm_jobs") or 0) == len(transcript)
+        ),
+        "no_split_jobs_when_combined_requested": (
+            args.background_llm_mode != "combined"
+            or (
+                int(background_jobs.get("narration_jobs") or 0) == 0
+                and int(background_jobs.get("advisory_jobs") or 0) == 0
+            )
+        ),
+        "player_agent_fallback_rate_within_limit": True,
+    }
+
+    fallback_turns = int(player_agent_summary.get("fallback_turns") or 0)
+    turns = int(player_agent_summary.get("turns") or 0)
+    if turns:
+        fallback_rate = fallback_turns / turns
+        gates["player_agent_fallback_rate_within_limit"] = fallback_rate <= float(args.max_player_agent_fallback_rate)
+
+    return {
+        "ok": all(bool(value) for value in gates.values()),
+        "gates": gates,
+    }
+
+
 def _commit_authoritative_state(
     *,
     session_id: str,
@@ -674,6 +832,102 @@ def _replace_blocking_narration_with_pending(turn_result: Dict[str, Any]) -> Non
         nested_result["narration"] = pending_payload["narration"]
 
 
+def _select_compact_llm_player_action(
+    *,
+    provider: Any,
+    session: Dict[str, Any],
+    transcript: List[Dict[str, Any]],
+    latest_context: Dict[str, Any],
+    player_action_context: Dict[str, Any],
+    strategy: str,
+    action_diversity_window: int,
+    max_context_chars: int,
+    cache: PlayerAgentDecisionCache,
+    cache_enabled: bool,
+) -> Dict[str, Any]:
+    context_packet = build_player_agent_context_packet(
+        session=session,
+        transcript_tail=transcript,
+        latest_context=latest_context,
+        strategy=strategy,
+        action_diversity_window=action_diversity_window,
+    )
+    messages, prompt_metrics = build_player_agent_messages(
+        context_packet=context_packet,
+        max_context_chars=max_context_chars,
+    )
+    key = player_agent_cache_key(context_packet=context_packet, strategy=strategy)
+
+    cached = cache.get(key) if cache_enabled else None
+    if cached:
+        # Validate cached action against current context
+        validation = validate_player_action_against_context(
+            player_action=cached,
+            player_action_context=player_action_context,
+        )
+        if not validation.get("ok"):
+            cached["cache_rejected_by_validation"] = True
+            # Fall back to non-cached path
+            cached = None
+        else:
+            cached["cache_hit"] = True
+            cached["prompt_metrics"] = prompt_metrics
+            cached["cache_key"] = key
+            return cached
+
+    if provider is None or not callable(getattr(provider, "chat_completion", None)):
+        return {
+            "ok": False,
+            "source": "llm_player_agent_error",
+            "error": "provider_missing_or_unsupported",
+            "prompt_metrics": prompt_metrics,
+            "cache_hit": False,
+            "cache_key": key,
+        }
+
+    try:
+        provider_messages = _provider_messages(messages)
+        try:
+            response = provider.chat_completion(messages=provider_messages, stream=False)
+        except TypeError:
+            response = provider.chat_completion(provider_messages, stream=False)
+        text = _provider_text_from_response(response)
+        parsed = _extract_json_object_from_text(text)
+        normalized = normalize_player_agent_payload(parsed)
+        # Validate the LLM result
+        validation = validate_player_action_against_context(
+            player_action=normalized,
+            player_action_context=player_action_context,
+        )
+        if not validation.get("ok"):
+            fallback = choose_fallback_player_action(
+                player_action_context=player_action_context,
+                recent_transcript=transcript,
+            )
+            fallback["player_agent_validation"] = validation
+            fallback["raw_player_agent_action"] = normalized
+            return fallback
+        result = {
+            **normalized,
+            "source": "llm_player_agent",
+            "prompt_metrics": prompt_metrics,
+            "cache_hit": False,
+            "cache_key": key,
+        }
+        if result.get("ok") and cache_enabled:
+            cache.put(key, result)
+        return result
+    except Exception as exc:
+        return {
+            "ok": False,
+            "source": "llm_player_agent_error",
+            "error": f"{type(exc).__name__}: {exc}",
+            "prompt_metrics": prompt_metrics,
+            "cache_hit": False,
+            "cache_key": key,
+        }
+
+
 def _select_player_action(
     *,
     provider: Any,
@@ -771,6 +1025,8 @@ def run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
 
 
     transcript: List[Dict[str, Any]] = []
+    player_agent_cache = PlayerAgentDecisionCache(max_entries=256)
+    player_agent_prompt_rows: List[Dict[str, Any]] = []
     regression_warnings: List[Dict[str, Any]] = []
     started = time.time()
     stopped_reason = ""
@@ -813,17 +1069,43 @@ def run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
             recent_transcript=transcript,
         )
         with timed_stage(turn_performance, "player_agent_ms"):
-            selected = _select_player_action(
-                provider=provider,
-                player_action_context=context,
-                transcript=transcript,
-                strategy=args.strategy,
-                use_llm_player=args.player_agent == "llm",
-                max_tokens=args.player_agent_max_tokens,
-                progress_quality_metrics=current_progress_quality_metrics,
-                diversity_metrics=current_diversity_metrics,
-            )
+            if args.player_agent == "llm" and args.player_agent_context_mode == "compact":
+                selected = _select_compact_llm_player_action(
+                    provider=provider,
+                    session=simulation_state,
+                    transcript=transcript,
+                    latest_context=context,
+                    player_action_context=context,
+                    strategy=args.strategy,
+                    action_diversity_window=int(args.action_diversity_window),
+                    max_context_chars=int(args.player_agent_max_context_chars),
+                    cache=player_agent_cache,
+                    cache_enabled=args.player_agent_cache == "on",
+                )
+            else:
+                selected = _select_player_action(
+                    provider=provider,
+                    player_action_context=context,
+                    transcript=transcript,
+                    strategy=args.strategy,
+                    use_llm_player=args.player_agent == "llm",
+                    max_tokens=args.player_agent_max_tokens,
+                    progress_quality_metrics=current_progress_quality_metrics,
+                    diversity_metrics=current_diversity_metrics,
+                )
+
             player_action = _safe_str(selected.get("action"))
+
+            if isinstance(selected, dict):
+                player_agent_prompt_rows.append(
+                    {
+                        "turn_index": turn_index,
+                        "source": selected.get("source"),
+                        "ok": bool(selected.get("ok")),
+                        "cache_hit": bool(selected.get("cache_hit")),
+                        "prompt_metrics": selected.get("prompt_metrics") or {},
+                    }
+                )
 
         runtime_error = ""
         turn_result: Dict[str, Any]
@@ -1429,7 +1711,19 @@ def run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
         "performance_budget_summary": metrics.get("performance_budget_summary") or {},
         "background_prompt_budget_summary": metrics.get("background_prompt_budget_summary") or {},
         "combined_quality_shape_summary": metrics.get("combined_quality_shape_summary") or {},
+        "player_agent_prompt_budget_summary": _summarize_player_agent_prompt_budget(player_agent_prompt_rows),
+        "player_agent_cache_summary": player_agent_cache.summary(),
     }
+    summary["quality_gate_summary"] = _summarize_quality_gates(
+        args=args,
+        metrics=metrics,
+        summary=summary,
+        transcript=transcript,
+    )
+    if not summary["quality_gate_summary"].get("ok"):
+        health["ok"] = False
+        health.setdefault("warnings", []).append("quality_gate_summary_failed")
+    summary["health"] = health
     artifact_start = now_perf()
     extra_paths = {}
     # First compute current performance without report write timing.
@@ -1523,7 +1817,25 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--scenario-seed", default="tavern_story_seed")
     parser.add_argument("--random-seed", type=int, default=None)
     parser.add_argument("--list-scenario-seeds", action="store_true")
-    parser.add_argument("--player-agent", choices=["llm", "fallback"], default="llm")
+    parser.add_argument("--player-agent", choices=["scripted", "llm"], default="scripted")
+    parser.add_argument(
+        "--player-agent-context-mode",
+        choices=["legacy", "compact"],
+        default="compact",
+        help="compact uses a smaller action-only prompt for the autoplay LLM player-agent.",
+    )
+    parser.add_argument(
+        "--player-agent-cache",
+        choices=["off", "on"],
+        default="on",
+        help="Cache successful compact player-agent decisions by compact context hash.",
+    )
+    parser.add_argument(
+        "--player-agent-max-context-chars",
+        type=int,
+        default=5000,
+        help="Max compact context chars for autoplay player-agent prompt.",
+    )
     parser.add_argument("--strategy", default="balanced_story_player")
     parser.add_argument("--player-agent-max-tokens", type=int, default=600)
     parser.add_argument("--debug-provider-shape", action="store_true")
@@ -1631,6 +1943,9 @@ def main(argv: List[str] | None = None) -> int:
     print(f"performance_budget_background_llm: {performance_budget.get('background_llm')}")
     print(f"background_prompt_budget_summary: {summary.get('background_prompt_budget_summary')}")
     print(f"combined_quality_shape_summary: {summary.get('combined_quality_shape_summary')}")
+    print(f"player_agent_prompt_budget_summary: {summary.get('player_agent_prompt_budget_summary')}")
+    print(f"player_agent_cache_summary: {summary.get('player_agent_cache_summary')}")
+    print(f"quality_gate_summary: {summary.get('quality_gate_summary')}")
 
     warnings = summary.get("health", {}).get("warnings") or []
     if args.fail_on_regression_warnings and warnings:
