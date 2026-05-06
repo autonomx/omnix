@@ -1,712 +1,261 @@
-Below is N61-N63.2 — Promotion-Time Relationship Target Grounding Fix as a literal apply-this-patch diff spec.
+Below is N61-N63.3 — Promotion Target Grounding Summary De-dup Fix as a literal apply-this-patch diff spec.
 
 Goal:
 
-relationship_delta target: innkeeper / npc:bran / Bran / implicit single present NPC
-→ deterministic canonical target Bran before promotion validation
-→ relationship_delta accepted when safe
-→ NPC evolution axes can advance
+relationship_accepted counts unique accepted relationship candidate IDs
+relationship_rejected counts unique rejected relationship candidate IDs
+examples avoid duplicate candidate IDs
+grounded/ungrounded counts avoid duplicate candidate IDs
+runtime behavior unchanged
 
-Strict rule remains:
+This is a reporting-only fix.
 
-Target grounding uses deterministic known NPC state only.
-LLM advisory still produces candidates only.
-Promotion may accept/reject candidates, but cannot directly mutate authoritative inventory/currency/combat/quest/location state.
-N61-N63.2 — Promotion-Time Relationship Target Grounding Fix
-Problem
-
-Relationship candidates are currently rejected before the later NPC evolution grounding layer can help:
-
-relationship_target_not_present_or_unknown
-
-This happens because promotion validation checks:
-
-_npc_exists_or_is_present(simulation_state, target)
-
-before target aliases are normalized.
-
-Examples that should be accepted when deterministic state supports them:
-
-target: "innkeeper" + present NPC Bran role innkeeper
-target: "npc:bran" + known NPC key/name Bran
-target missing + exactly one present NPC Bran
-summary mentions Bran + known NPC Bran
-N61 — Shared deterministic NPC target grounding for promotion
-1. Patch src/app/rpg/advisory/promotion.py
-1A. Add safe target-grounding import
-
-Add near imports:
-
---- src/app/rpg/advisory/promotion.py
-+++ src/app/rpg/advisory/promotion.py
-@@
- from copy import deepcopy
- from typing import Any, Dict, List, Tuple
- 
- from app.rpg.advisory.candidates import advisory_candidate_summary
-+
-+try:
-+    from app.rpg.npc_evolution.target_grounding import ground_projection_target
-+except Exception:
-+    ground_projection_target = None
-
-The try keeps advisory promotion usable even if the evolution module is unavailable in a smaller test environment.
-
-1B. Add canonical NPC helpers
-
-Add after _safe_str(...):
-
---- src/app/rpg/advisory/promotion.py
-+++ src/app/rpg/advisory/promotion.py
-@@
- def _safe_str(value: Any) -> str:
-     return value if isinstance(value, str) else ""
-+
-+
-+def _id_variants(value: Any) -> set[str]:
-+    raw = _safe_str(value).strip().lower()
-+    variants = {raw} if raw else set()
-+    if raw.startswith("npc:"):
-+        variants.add(raw.split("npc:", 1)[1])
-+    elif raw:
-+        variants.add(f"npc:{raw}")
-+    return {item for item in variants if item}
-+
-+
-+def _known_npcs(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
-+    simulation_state = _safe_dict(simulation_state)
-+    direct = _safe_dict(simulation_state.get("npcs"))
-+    if direct:
-+        return direct
-+    npc_progression = _safe_dict(simulation_state.get("npc_progression_state"))
-+    nested = _safe_dict(npc_progression.get("npcs"))
-+    if nested:
-+        return nested
-+    npc_profile = _safe_dict(simulation_state.get("npc_profile_state"))
-+    profile_npcs = _safe_dict(npc_profile.get("npcs"))
-+    if profile_npcs:
-+        return profile_npcs
-+    return {}
-+
-+
-+def _present_npc_items(simulation_state: Dict[str, Any]) -> List[Any]:
-+    simulation_state = _safe_dict(simulation_state)
-+    direct = (
-+        _safe_list(simulation_state.get("present_npcs"))
-+        or _safe_list(simulation_state.get("nearby_npcs"))
-+        or _safe_list(simulation_state.get("visible_npcs"))
-+    )
-+    if direct:
-+        return direct
-+
-+    scene = _safe_dict(simulation_state.get("scene"))
-+    scene_items = (
-+        _safe_list(scene.get("present_npcs"))
-+        or _safe_list(scene.get("nearby_npcs"))
-+        or _safe_list(scene.get("visible_npcs"))
-+    )
-+    if scene_items:
-+        return scene_items
-+
-+    contract = _safe_dict(simulation_state.get("turn_contract"))
-+    for section_key in ("resolved_action", "resolved_result"):
-+        section = _safe_dict(contract.get(section_key))
-+        current_location = _safe_dict(
-+            _safe_dict(section.get("location_state")).get("current_location")
-+        )
-+        present = _safe_list(current_location.get("present_npcs"))
-+        if present:
-+            return present
-+
-+    return []
-+
-+
-+def _npc_id_from_present_item(item: Any) -> str:
-+    if isinstance(item, str):
-+        return item
-+    item_dict = _safe_dict(item)
-+    return (
-+        _safe_str(item_dict.get("id"))
-+        or _safe_str(item_dict.get("npc_id"))
-+        or _safe_str(item_dict.get("name"))
-+    )
-+
-+
-+def _canonical_npc_id(simulation_state: Dict[str, Any], candidate: str) -> str:
-+    candidate_variants = _id_variants(candidate)
-+    if not candidate_variants:
-+        return ""
-+
-+    npcs = _known_npcs(simulation_state)
-+    for npc_id, record_any in npcs.items():
-+        record = _safe_dict(record_any)
-+        known = set()
-+        known.update(_id_variants(npc_id))
-+        known.update(_id_variants(record.get("id")))
-+        known.update(_id_variants(record.get("npc_id")))
-+        known.update(_id_variants(record.get("name")))
-+        known.update(_id_variants(record.get("display_name")))
-+        if candidate_variants & known:
-+            return str(npc_id)
-+
-+    for item in _present_npc_items(simulation_state):
-+        present_id = _npc_id_from_present_item(item)
-+        if candidate_variants & _id_variants(present_id):
-+            canonical = _canonical_npc_id_from_known(simulation_state, present_id)
-+            return canonical or present_id
-+
-+    return ""
-+
-+
-+def _canonical_npc_id_from_known(simulation_state: Dict[str, Any], candidate: str) -> str:
-+    candidate_variants = _id_variants(candidate)
-+    npcs = _known_npcs(simulation_state)
-+    for npc_id, record_any in npcs.items():
-+        record = _safe_dict(record_any)
-+        known = set()
-+        known.update(_id_variants(npc_id))
-+        known.update(_id_variants(record.get("id")))
-+        known.update(_id_variants(record.get("npc_id")))
-+        known.update(_id_variants(record.get("name")))
-+        if candidate_variants & known:
-+            return str(npc_id)
-+    return ""
-1C. Replace _npc_exists_or_is_present(...)
-
-Replace the existing function with this normalized version:
-
---- src/app/rpg/advisory/promotion.py
-+++ src/app/rpg/advisory/promotion.py
-@@
- def _npc_exists_or_is_present(simulation_state: Dict[str, Any], target: str) -> bool:
-     if not target:
-         return False
--    target_norm = target.lower()
--    npcs = _safe_dict(simulation_state.get("npcs"))
--    if target in npcs or target_norm in {str(k).lower() for k in npcs.keys()}:
--        return True
--    present = _safe_list(simulation_state.get("present_npcs")) or _safe_list(simulation_state.get("nearby_npcs"))
--    return any(str(npc).lower() == target_norm for npc in present)
-+    if _canonical_npc_id(simulation_state, target):
-+        return True
-+    target_variants = _id_variants(target)
-+    present_variants = set()
-+    for item in _present_npc_items(simulation_state):
-+        present_variants.update(_id_variants(_npc_id_from_present_item(item)))
-+    return bool(target_variants & present_variants)
-1D. Add relationship target grounding helper
-
-Add after _is_backed_by_turn(...):
-
---- src/app/rpg/advisory/promotion.py
-+++ src/app/rpg/advisory/promotion.py
-@@
- def _is_backed_by_turn(candidate: Dict[str, Any]) -> bool:
-     backing = _safe_dict(candidate.get("backing"))
-     action = _safe_str(backing.get("turn_contract_action"))
-     return bool(action.strip())
-+
-+
-+def _ground_relationship_candidate_target(
-+    candidate: Dict[str, Any],
-+    simulation_state: Dict[str, Any],
-+) -> Tuple[Dict[str, Any], Dict[str, Any]]:
-+    """Ground relationship target before promotion validation.
-+
-+    This uses the same deterministic target grounding rules as NPC evolution:
-+    known explicit target, role alias, name match, or single present NPC.
-+    """
-+    candidate = deepcopy(_safe_dict(candidate))
-+    payload = candidate.setdefault("payload", {})
-+
-+    if ground_projection_target is not None:
-+        projection = {
-+            "candidate_id": candidate.get("candidate_id"),
-+            "kind": candidate.get("kind"),
-+            "payload": deepcopy(payload),
-+        }
-+        grounded_projection, grounding_result = ground_projection_target(
-+            projection=projection,
-+            simulation_state=simulation_state,
-+        )
-+        grounded_payload = _safe_dict(grounded_projection.get("payload"))
-+        grounded_target = _safe_str(
-+            grounded_payload.get("target")
-+            or grounded_payload.get("grounded_target")
-+            or grounding_result.get("npc_id")
-+        )
-+        if grounded_target:
-+            canonical = _canonical_npc_id(simulation_state, grounded_target) or grounded_target
-+            payload["target"] = canonical
-+            payload.setdefault("grounded_target", canonical)
-+            candidate["payload"] = payload
-+            candidate["target_grounding"] = {
-+                **grounding_result,
-+                "npc_id": canonical,
-+            }
-+            return candidate, candidate["target_grounding"]
-+
-+        candidate["target_grounding"] = grounding_result
-+        return candidate, grounding_result
-+
-+    # Fallback grounding if target_grounding module is unavailable.
-+    target = _safe_str(payload.get("target") or payload.get("npc") or payload.get("npc_id") or payload.get("owner"))
-+    canonical = _canonical_npc_id(simulation_state, target)
-+    if canonical:
-+        payload["target"] = canonical
-+        payload.setdefault("grounded_target", canonical)
-+        candidate["payload"] = payload
-+        candidate["target_grounding"] = {
-+            "grounded": True,
-+            "npc_id": canonical,
-+            "reason": "canonicalized_explicit_target",
-+            "original_target": target,
-+        }
-+        return candidate, candidate["target_grounding"]
-+
-+    present = [_npc_id_from_present_item(item) for item in _present_npc_items(simulation_state)]
-+    present = [item for item in present if item]
-+    if len(set(item.lower() for item in present)) == 1:
-+        canonical = _canonical_npc_id(simulation_state, present[0]) or present[0]
-+        payload["target"] = canonical
-+        payload.setdefault("grounded_target", canonical)
-+        candidate["payload"] = payload
-+        candidate["target_grounding"] = {
-+            "grounded": True,
-+            "npc_id": canonical,
-+            "reason": "single_present_npc",
-+        }
-+        return candidate, candidate["target_grounding"]
-+
-+    candidate["target_grounding"] = {
-+        "grounded": False,
-+        "npc_id": "",
-+        "reason": "no_deterministic_target",
-+    }
-+    return candidate, candidate["target_grounding"]
-1E. Use grounding in relationship validation
-
-In _candidate_rejection_reason(...), replace the relationship block.
+N61-N63.3 — Promotion Target Grounding Summary De-dup Fix
+1. Patch src/tests/rpg/autoplay_llm_campaign.py
 
 Find:
 
-if kind == "relationship_delta":
-    target = _safe_str(payload.get("target") or payload.get("npc") or payload.get("npc_id"))
-    if not _npc_exists_or_is_present(simulation_state, target):
-        return "relationship_target_not_present_or_unknown"
+def _summarize_promotion_target_grounding(transcript: List[Dict[str, Any]]) -> Dict[str, Any]:
 
-Replace with:
+Replace the whole function with:
 
---- src/app/rpg/advisory/promotion.py
-+++ src/app/rpg/advisory/promotion.py
+--- src/tests/rpg/autoplay_llm_campaign.py
++++ src/tests/rpg/autoplay_llm_campaign.py
 @@
-     if kind == "relationship_delta":
--        target = _safe_str(payload.get("target") or payload.get("npc") or payload.get("npc_id"))
-+        target = _safe_str(
-+            payload.get("target")
-+            or payload.get("grounded_target")
-+            or payload.get("npc")
-+            or payload.get("npc_id")
-+            or payload.get("owner")
-+        )
-         if not _npc_exists_or_is_present(simulation_state, target):
-             return "relationship_target_not_present_or_unknown"
-
-Then in promote_advisory_candidates(...), before rejection reason is calculated, add candidate grounding for relationship candidates.
-
-Find:
-
-reason = _candidate_rejection_reason(candidate, simulation_state, current_turn)
-
-Replace with:
-
---- src/app/rpg/advisory/promotion.py
-+++ src/app/rpg/advisory/promotion.py
-@@
--        reason = _candidate_rejection_reason(candidate, simulation_state, current_turn)
-+        if _safe_str(candidate.get("kind")) == "relationship_delta":
-+            candidate, grounding_result = _ground_relationship_candidate_target(
-+                candidate,
-+                simulation_state,
-+            )
-+            candidate.setdefault("promotion", {})["target_grounding"] = grounding_result
+ def _summarize_promotion_target_grounding(transcript: List[Dict[str, Any]]) -> Dict[str, Any]:
++    seen_grounding_candidate_ids = set()
++    seen_example_candidate_ids = set()
++    accepted_relationship_ids = set()
++    rejected_relationship_ids = set()
 +
-+        reason = _candidate_rejection_reason(candidate, simulation_state, current_turn)
-1F. Include grounding result in accepted/rejected decisions
-
-In the rejected branch, patch the rejected row:
-
---- src/app/rpg/advisory/promotion.py
-+++ src/app/rpg/advisory/promotion.py
-@@
-             rejected.append(
-                 {
-                     "candidate_id": cid,
-                     "turn_index": candidate.get("turn_index"),
-                     "kind": candidate.get("kind"),
-                     "reason": reason,
-                     "rejected_at_turn": current_turn,
-+                    "target_grounding": candidate.get("target_grounding") or _safe_dict(candidate.get("promotion")).get("target_grounding") or {},
-                 }
-             )
--            decisions.append({"candidate_id": cid, "status": "rejected", "reason": reason})
-+            decisions.append(
-+                {
-+                    "candidate_id": cid,
-+                    "status": "rejected",
-+                    "reason": reason,
-+                    "target_grounding": candidate.get("target_grounding") or _safe_dict(candidate.get("promotion")).get("target_grounding") or {},
-+                }
-+            )
-
-In the accepted branch, patch accepted.append(...):
-
---- src/app/rpg/advisory/promotion.py
-+++ src/app/rpg/advisory/promotion.py
-@@
-             accepted.append(
-                 {
-                     "candidate_id": cid,
-                     "turn_index": candidate.get("turn_index"),
-                     "kind": candidate.get("kind"),
-                     "projection": projection,
-                     "accepted_at_turn": current_turn,
-                     "reason": "accepted_by_deterministic_gate",
-+                    "target_grounding": candidate.get("target_grounding") or _safe_dict(candidate.get("promotion")).get("target_grounding") or {},
-                 }
-             )
-
-And patch the accepted decision:
-
---- src/app/rpg/advisory/promotion.py
-+++ src/app/rpg/advisory/promotion.py
-@@
-             decisions.append(
-                 {
-                     "candidate_id": cid,
-                     "status": "accepted",
-                     "reason": "accepted_by_deterministic_gate",
-+                    "target_grounding": candidate.get("target_grounding") or _safe_dict(candidate.get("promotion")).get("target_grounding") or {},
-                 }
-             )
-1G. Preserve grounded target in projection
-
-Patch _accepted_projection(...) so relationship target survives into evolution.
-
-Find:
-
-payload = deepcopy(_safe_dict(candidate.get("payload")))
-return {
-
-Change to:
-
---- src/app/rpg/advisory/promotion.py
-+++ src/app/rpg/advisory/promotion.py
-@@
- def _accepted_projection(candidate: Dict[str, Any]) -> Dict[str, Any]:
-     kind = _safe_str(candidate.get("kind"))
-     payload = deepcopy(_safe_dict(candidate.get("payload")))
--    return {
-+    projection = {
-         "candidate_id": candidate.get("candidate_id"),
-         "kind": kind,
-         "payload": payload,
-         "source": "deferred_advisory_promotion",
+     summary: Dict[str, Any] = {
+         "grounded": 0,
+         "ungrounded": 0,
+         "by_reason": {},
+         "relationship_accepted": 0,
+         "relationship_rejected": 0,
++        "unique_relationship_accepted": 0,
++        "unique_relationship_rejected": 0,
+         "examples": [],
      }
-+    if candidate.get("target_grounding"):
-+        projection["target_grounding"] = candidate.get("target_grounding")
-+    return projection
-N62 — Tests for promotion-time target grounding
-2. Patch src/tests/rpg/advisory/test_deferred_advisory_candidates.py
-
-Add these tests, or create a new file if you prefer:
-
---- src/tests/rpg/advisory/test_deferred_advisory_candidates.py
-+++ src/tests/rpg/advisory/test_deferred_advisory_candidates.py
++
++    def candidate_marker(value: Any, *, prefix: str = "candidate") -> str:
++        text = _safe_str(value)
++        if text:
++            return text
++        return f"{prefix}:missing"
++
+     for row in transcript:
+         result = _safe_dict(row.get("deferred_advisory_promotion_result"))
+         for decision in result.get("decisions") if isinstance(result.get("decisions"), list) else []:
+             decision = _safe_dict(decision)
+             grounding = _safe_dict(decision.get("target_grounding"))
+             if not grounding:
+                 continue
++            marker = candidate_marker(decision.get("candidate_id"))
++            if marker in seen_grounding_candidate_ids:
++                continue
++            seen_grounding_candidate_ids.add(marker)
++
+             reason = _safe_str(grounding.get("reason")) or "unknown"
+             summary["by_reason"][reason] = int(summary["by_reason"].get(reason) or 0) + 1
+             if grounding.get("grounded"):
+                 summary["grounded"] += 1
+             else:
+                 summary["ungrounded"] += 1
+-            if len(summary["examples"]) < 5:
++            if len(summary["examples"]) < 5 and marker not in seen_example_candidate_ids:
++                seen_example_candidate_ids.add(marker)
+                 summary["examples"].append(
+                     {
+                         "turn_index": row.get("turn_index"),
+                         "candidate_id": decision.get("candidate_id"),
+                         "status": decision.get("status"),
 @@
- from app.rpg.advisory.promotion import promote_advisory_candidates
-@@
-+def test_promotion_grounds_relationship_target_role_alias_to_present_npc():
-+    candidates = normalize_advisory_candidates(
-+        session_id="s",
-+        turn_index=1,
-+        player_input="I thank the innkeeper.",
-+        turn_contract={"player_input": "I thank the innkeeper."},
-+        payload={
-+            "relationship_delta_candidates": [
-+                {
-+                    "target": "innkeeper",
-+                    "axis": "trust",
-+                    "delta": 1,
-+                    "summary": "The innkeeper warms slightly.",
-+                }
-+            ]
-+        },
-+    )
-+    runtime_state = {
-+        "deferred_advisory": {
-+            "candidates": candidates,
-+            "accepted": [],
-+            "rejected": [],
-+        }
+ 
+         runtime_state = _safe_dict(row.get("runtime_state"))
+         accepted = _safe_list(_safe_dict(runtime_state.get("deferred_advisory")).get("accepted"))
+         rejected = _safe_list(_safe_dict(runtime_state.get("deferred_advisory")).get("rejected"))
+-        summary["relationship_accepted"] += sum(
+-            1 for item in accepted if _safe_dict(item).get("kind") == "relationship_delta"
+-        )
+-        summary["relationship_rejected"] += sum(
+-            1 for item in rejected if _safe_dict(item).get("kind") == "relationship_delta"
+-        )
++        for item in accepted:
++            item = _safe_dict(item)
++            if item.get("kind") != "relationship_delta":
++                continue
++            marker = candidate_marker(item.get("candidate_id"), prefix="accepted")
++            accepted_relationship_ids.add(marker)
++        for item in rejected:
++            item = _safe_dict(item)
++            if item.get("kind") != "relationship_delta":
++                continue
++            marker = candidate_marker(item.get("candidate_id"), prefix="rejected")
++            rejected_relationship_ids.add(marker)
++
++    summary["relationship_accepted"] = len(accepted_relationship_ids)
++    summary["relationship_rejected"] = len(rejected_relationship_ids)
++    summary["unique_relationship_accepted"] = len(accepted_relationship_ids)
++    summary["unique_relationship_rejected"] = len(rejected_relationship_ids)
++    summary["dedup"] = {
++        "grounding_candidate_ids": len(seen_grounding_candidate_ids),
++        "accepted_relationship_candidate_ids": len(accepted_relationship_ids),
++        "rejected_relationship_candidate_ids": len(rejected_relationship_ids),
 +    }
-+    simulation_state = {
-+        "scene": {"nearby_npcs": ["Bran"]},
-+        "npc_progression_state": {
-+            "npcs": {"Bran": {"name": "Bran", "role": "innkeeper"}}
-+        },
-+    }
-+
-+    updated, result = promote_advisory_candidates(
-+        simulation_state=simulation_state,
-+        runtime_state=runtime_state,
-+        current_turn=2,
-+    )
-+
-+    assert result["promoted_this_turn"] == 1
-+    accepted = updated["deferred_advisory"]["accepted"][0]
-+    assert accepted["kind"] == "relationship_delta"
-+    assert accepted["projection"]["payload"]["target"] == "Bran"
-+    assert accepted["target_grounding"]["reason"] in {
-+        "explicit_role_alias",
-+        "role_alias_mentioned_in_projection_text",
-+        "single_present_npc",
-+    }
-+
-+
-+def test_promotion_grounds_relationship_target_prefixed_id_to_canonical_npc():
-+    candidates = normalize_advisory_candidates(
-+        session_id="s",
-+        turn_index=1,
-+        player_input="I reassure Bran.",
-+        turn_contract={"player_input": "I reassure Bran."},
-+        payload={
-+            "relationship_delta_candidates": [
-+                {
-+                    "target": "npc:bran",
-+                    "axis": "trust",
-+                    "delta": 1,
-+                    "summary": "Bran is reassured.",
-+                }
-+            ]
-+        },
-+    )
-+    runtime_state = {
-+        "deferred_advisory": {
-+            "candidates": candidates,
-+            "accepted": [],
-+            "rejected": [],
-+        }
-+    }
-+    simulation_state = {
-+        "scene": {"nearby_npcs": ["npc:bran"]},
-+        "npc_progression_state": {"npcs": {"Bran": {"name": "Bran"}}},
-+    }
-+
-+    updated, result = promote_advisory_candidates(
-+        simulation_state=simulation_state,
-+        runtime_state=runtime_state,
-+        current_turn=2,
-+    )
-+
-+    assert result["promoted_this_turn"] == 1
-+    assert updated["deferred_advisory"]["accepted"][0]["projection"]["payload"]["target"] == "Bran"
-
-If test_deferred_advisory_candidates.py is getting too broad, create:
-
-src/tests/rpg/advisory/test_promotion_target_grounding.py
-
-with the imports:
-
-from app.rpg.advisory.candidates import normalize_advisory_candidates
-from app.rpg.advisory.promotion import promote_advisory_candidates
-3. Patch NPC evolution runtime test to expect relationship axes
+     return summary
+2. Add regression test
 
 Patch:
 
-src/tests/rpg/autoplay/test_deferred_advisory_promotion_runtime.py
+src/tests/rpg/autoplay/test_quality_gates.py
 
-Add:
+Add import if needed:
 
---- src/tests/rpg/autoplay/test_deferred_advisory_promotion_runtime.py
-+++ src/tests/rpg/autoplay/test_deferred_advisory_promotion_runtime.py
+--- src/tests/rpg/autoplay/test_quality_gates.py
++++ src/tests/rpg/autoplay/test_quality_gates.py
 @@
- def test_promotion_runtime_extracts_nested_turn_result_simulation_state_for_evolution():
+ from tests.rpg.autoplay_llm_campaign import (
+     _summarize_player_agent_prompt_budget,
++    _summarize_promotion_target_grounding,
+     _summarize_quality_gates,
+ )
+
+Add test:
+
+--- src/tests/rpg/autoplay/test_quality_gates.py
++++ src/tests/rpg/autoplay/test_quality_gates.py
 @@
-     assert result["evolution_signals_created"] >= 1
-     assert result["evolution_signals_consumed"] >= 1
-     assert transcript[1]["npc_evolution_summary"]["arcs_by_npc"] == ["bran"]
+ def test_quality_gates_fallback_to_performance_budget_background_llm():
+@@
+     assert result["ok"] is True
+     assert result["gates"]["combined_background_mode_when_requested"] is True
 +
 +
-+def test_promotion_runtime_relationship_delta_advances_npc_arc_axis_after_grounding():
-+    candidates = normalize_advisory_candidates(
-+        session_id="s",
-+        turn_index=1,
-+        player_input="I thank the innkeeper.",
-+        turn_contract={"player_input": "I thank the innkeeper."},
-+        payload={
-+            "relationship_delta_candidates": [
-+                {
-+                    "target": "innkeeper",
-+                    "axis": "trust",
-+                    "delta": 1,
-+                    "summary": "The innkeeper trusts the player slightly more.",
-+                }
-+            ]
-+        },
-+    )
++def test_promotion_target_grounding_summary_dedupes_cumulative_runtime_state():
 +    transcript = [
 +        {
-+            "turn_index": 1,
++            "turn_index": 2,
++            "deferred_advisory_promotion_result": {
++                "decisions": [
++                    {
++                        "candidate_id": "adv:1:relationship_delta:a",
++                        "status": "accepted",
++                        "reason": "accepted_by_deterministic_gate",
++                        "target_grounding": {
++                            "grounded": True,
++                            "npc_id": "Bran",
++                            "reason": "explicit_known_target",
++                        },
++                    }
++                ]
++            },
 +            "runtime_state": {
 +                "deferred_advisory": {
-+                    "candidates": candidates,
-+                    "accepted": [],
++                    "accepted": [
++                        {
++                            "candidate_id": "adv:1:relationship_delta:a",
++                            "kind": "relationship_delta",
++                        }
++                    ],
 +                    "rejected": [],
 +                }
 +            },
-+            "turn_result": {
-+                "simulation_state": {
-+                    "scene": {"nearby_npcs": ["Bran"]},
-+                    "npc_progression_state": {
-+                        "npcs": {"Bran": {"name": "Bran", "role": "innkeeper"}}
++        },
++        {
++            "turn_index": 3,
++            "deferred_advisory_promotion_result": {
++                "decisions": [
++                    {
++                        "candidate_id": "adv:1:relationship_delta:a",
++                        "status": "accepted",
++                        "reason": "accepted_by_deterministic_gate",
++                        "target_grounding": {
++                            "grounded": True,
++                            "npc_id": "Bran",
++                            "reason": "explicit_known_target",
++                        },
 +                    },
++                    {
++                        "candidate_id": "adv:2:relationship_delta:b",
++                        "status": "rejected",
++                        "reason": "relationship_target_not_present_or_unknown",
++                        "target_grounding": {
++                            "grounded": False,
++                            "npc_id": "",
++                            "reason": "no_deterministic_target",
++                        },
++                    },
++                ]
++            },
++            "runtime_state": {
++                "deferred_advisory": {
++                    "accepted": [
++                        {
++                            "candidate_id": "adv:1:relationship_delta:a",
++                            "kind": "relationship_delta",
++                        }
++                    ],
++                    "rejected": [
++                        {
++                            "candidate_id": "adv:2:relationship_delta:b",
++                            "kind": "relationship_delta",
++                        }
++                    ],
 +                }
 +            },
 +        },
 +        {
-+            "turn_index": 2,
-+            "turn_result": {
-+                "simulation_state": {
-+                    "scene": {"nearby_npcs": ["Bran"]},
-+                    "npc_progression_state": {
-+                        "npcs": {"Bran": {"name": "Bran", "role": "innkeeper"}}
-+                    },
++            "turn_index": 4,
++            "runtime_state": {
++                "deferred_advisory": {
++                    "accepted": [
++                        {
++                            "candidate_id": "adv:1:relationship_delta:a",
++                            "kind": "relationship_delta",
++                        }
++                    ],
++                    "rejected": [
++                        {
++                            "candidate_id": "adv:2:relationship_delta:b",
++                            "kind": "relationship_delta",
++                        }
++                    ],
 +                }
 +            },
 +        },
 +    ]
 +
-+    result = run_deferred_advisory_promotions_for_transcript(transcript=transcript)
++    summary = _summarize_promotion_target_grounding(transcript)
 +
-+    assert result["accepted"] >= 1
-+    arc = transcript[1]["runtime_state"]["npc_evolution"]["arcs"]["Bran"]
-+    assert arc["axes"]["trust"] >= 1
-N63 — Report/debug counters
-4. Add relationship target grounding summary
++    assert summary["relationship_accepted"] == 1
++    assert summary["relationship_rejected"] == 1
++    assert summary["unique_relationship_accepted"] == 1
++    assert summary["unique_relationship_rejected"] == 1
++    assert summary["grounded"] == 1
++    assert summary["ungrounded"] == 1
++    assert summary["by_reason"]["explicit_known_target"] == 1
++    assert summary["by_reason"]["no_deterministic_target"] == 1
++    assert len(summary["examples"]) == 2
+3. Optional: make naming clearer in report
 
-Patch src/tests/rpg/autoplay_llm_campaign.py.
+No behavior change, but the summary is now explicit. The report already renders:
 
-Add helper near other summarizers:
+Promotion target grounding summary JSON
 
---- src/tests/rpg/autoplay_llm_campaign.py
-+++ src/tests/rpg/autoplay_llm_campaign.py
-@@
- def _summarize_combined_quality_shape(transcript: List[Dict[str, Any]]) -> Dict[str, Any]:
-@@
-     return {
-@@
-     }
-+
-+
-+def _summarize_promotion_target_grounding(transcript: List[Dict[str, Any]]) -> Dict[str, Any]:
-+    summary: Dict[str, Any] = {
-+        "grounded": 0,
-+        "ungrounded": 0,
-+        "by_reason": {},
-+        "relationship_accepted": 0,
-+        "relationship_rejected": 0,
-+        "examples": [],
-+    }
-+    for row in transcript:
-+        result = _safe_dict(row.get("deferred_advisory_promotion_result"))
-+        for decision in result.get("decisions") if isinstance(result.get("decisions"), list) else []:
-+            decision = _safe_dict(decision)
-+            grounding = _safe_dict(decision.get("target_grounding"))
-+            if not grounding:
-+                continue
-+            reason = _safe_str(grounding.get("reason")) or "unknown"
-+            summary["by_reason"][reason] = int(summary["by_reason"].get(reason) or 0) + 1
-+            if grounding.get("grounded"):
-+                summary["grounded"] += 1
-+            else:
-+                summary["ungrounded"] += 1
-+            if len(summary["examples"]) < 5:
-+                summary["examples"].append(
-+                    {
-+                        "turn_index": row.get("turn_index"),
-+                        "candidate_id": decision.get("candidate_id"),
-+                        "status": decision.get("status"),
-+                        "reason": decision.get("reason"),
-+                        "target_grounding": grounding,
-+                    }
-+                )
-+
-+        runtime_state = _safe_dict(row.get("runtime_state"))
-+        accepted = _safe_list(_safe_dict(runtime_state.get("deferred_advisory")).get("accepted"))
-+        rejected = _safe_list(_safe_dict(runtime_state.get("deferred_advisory")).get("rejected"))
-+        summary["relationship_accepted"] += sum(
-+            1 for item in accepted if _safe_dict(item).get("kind") == "relationship_delta"
-+        )
-+        summary["relationship_rejected"] += sum(
-+            1 for item in rejected if _safe_dict(item).get("kind") == "relationship_delta"
-+        )
-+    return summary
+No extra report patch is required if promotion_target_grounding_summary is already included.
 
-After summary["npc_evolution_summary"] = ..., add:
-
---- src/tests/rpg/autoplay_llm_campaign.py
-+++ src/tests/rpg/autoplay_llm_campaign.py
-@@
-     summary["npc_evolution_summary"] = {
-         "latest": latest_evolution_summary,
-         "signals_created": advisory_promotion_summary.get("evolution_signals_created", 0),
-         "signals_consumed": advisory_promotion_summary.get("evolution_signals_consumed", 0),
-     }
-+    summary["promotion_target_grounding_summary"] = _summarize_promotion_target_grounding(transcript)
-+    metrics["promotion_target_grounding_summary"] = summary["promotion_target_grounding_summary"]
-
-Console output:
-
---- src/tests/rpg/autoplay_llm_campaign.py
-+++ src/tests/rpg/autoplay_llm_campaign.py
-@@
-     print(f"npc_evolution_profile_persistence_summary: {summary.get('npc_evolution_profile_persistence_summary')}")
-+    print(f"promotion_target_grounding_summary: {summary.get('promotion_target_grounding_summary')}")
-5. Add report section
-
-Patch:
-
-src/tests/rpg/autoplay/campaign_report.py
-
-In model construction:
-
---- src/tests/rpg/autoplay/campaign_report.py
-+++ src/tests/rpg/autoplay/campaign_report.py
-@@
-         "npc_evolution_profile_persistence_summary": _safe_dict(
-             summary.get("npc_evolution_profile_persistence_summary")
-             or metrics.get("npc_evolution_profile_persistence_summary")
-         ),
-+        "promotion_target_grounding_summary": _safe_dict(
-+            summary.get("promotion_target_grounding_summary")
-+            or metrics.get("promotion_target_grounding_summary")
-+        ),
-
-In HTML details:
-
---- src/tests/rpg/autoplay/campaign_report.py
-+++ src/tests/rpg/autoplay/campaign_report.py
-@@
-     {_render_json_details("NPC evolution profile persistence summary JSON", model.get("npc_evolution_profile_persistence_summary") or {})}
-+    {_render_json_details("Promotion target grounding summary JSON", model.get("promotion_target_grounding_summary") or {})}
-     {_render_json_details("Background job summary JSON", model.get("background_jobs") or {})}
 Validation
 
 Compile:
 
-python -m py_compile src\app\rpg\advisory\promotion.py src\tests\rpg\autoplay_llm_campaign.py src\tests\rpg\autoplay\campaign_report.py
+python -m py_compile src\tests\rpg\autoplay_llm_campaign.py src\tests\rpg\autoplay\test_quality_gates.py
 
 Run focused tests:
 
-python -m pytest src\tests\rpg\advisory\test_deferred_advisory_candidates.py src\tests\rpg\autoplay\test_deferred_advisory_promotion_runtime.py src\tests\rpg\npc_evolution\test_target_grounding.py src\tests\rpg\npc_evolution\test_npc_evolution_consumer.py -q
+python -m pytest src\tests\rpg\autoplay\test_quality_gates.py -q
+
+Run broader smoke tests:
+
+python -m pytest src\tests\rpg\advisory\test_deferred_advisory_candidates.py src\tests\rpg\autoplay\test_deferred_advisory_promotion_runtime.py src\tests\rpg\npc_evolution\test_target_grounding.py src\tests\rpg\npc_evolution\test_npc_evolution_consumer.py src\tests\rpg\autoplay\test_quality_gates.py -q

@@ -3,6 +3,7 @@ import json
 from app.rpg.npc_evolution.profile_store import (
     load_npc_profile,
     persist_npc_evolution_profiles,
+    profile_path_for_npc,
 )
 
 
@@ -84,3 +85,40 @@ def test_persist_npc_evolution_profiles_is_idempotent(tmp_path):
 
     assert len(profile["evolution"]["future_hooks"]) == 1
     assert len(profile["evolution"]["signals_applied"]) == 1
+
+
+def test_profile_path_collapses_prefixed_npc_id(tmp_path):
+    assert profile_path_for_npc("npc:bran", root=tmp_path).name == "bran.json"
+
+
+def test_persist_removes_legacy_prefixed_profile(tmp_path):
+    legacy_path = tmp_path / "npc_bran.json"
+    legacy_path.write_text("{}", encoding="utf-8")
+    runtime_state = {
+        "npc_evolution": {
+            "signals": [
+                {
+                    "signal_id": "s1",
+                    "npc_id": "Bran",
+                    "kind": "memory",
+                    "summary": "Bran remembers.",
+                    "consumed": True,
+                }
+            ],
+            "arcs": {
+                "Bran": {
+                    "npc_id": "Bran",
+                    "arc_stage": "stable",
+                    "axes": {},
+                    "memories": [{"signal_id": "s1", "summary": "Bran remembers."}],
+                }
+            },
+        }
+    }
+
+    result = persist_npc_evolution_profiles(runtime_state=runtime_state, root=tmp_path)
+
+    assert result["ok"] is True
+    assert (tmp_path / "bran.json").exists()
+    assert not legacy_path.exists()
+    assert result["written"][0]["removed_legacy_paths"]

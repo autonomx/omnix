@@ -2,6 +2,7 @@ from types import SimpleNamespace
 
 from tests.rpg.autoplay_llm_campaign import (
     _summarize_player_agent_prompt_budget,
+    _summarize_promotion_target_grounding,
     _summarize_quality_gates,
 )
 
@@ -126,3 +127,110 @@ def test_quality_gates_fallback_to_performance_budget_background_llm():
 
     assert result["ok"] is True
     assert result["gates"]["combined_background_mode_when_requested"] is True
+
+
+def test_promotion_target_grounding_summary_dedupes_cumulative_runtime_state():
+    transcript = [
+        {
+            "turn_index": 2,
+            "deferred_advisory_promotion_result": {
+                "decisions": [
+                    {
+                        "candidate_id": "adv:1:relationship_delta:a",
+                        "status": "accepted",
+                        "reason": "accepted_by_deterministic_gate",
+                        "target_grounding": {
+                            "grounded": True,
+                            "npc_id": "Bran",
+                            "reason": "explicit_known_target",
+                        },
+                    }
+                ]
+            },
+            "runtime_state": {
+                "deferred_advisory": {
+                    "accepted": [
+                        {
+                            "candidate_id": "adv:1:relationship_delta:a",
+                            "kind": "relationship_delta",
+                        }
+                    ],
+                    "rejected": [],
+                }
+            },
+        },
+        {
+            "turn_index": 3,
+            "deferred_advisory_promotion_result": {
+                "decisions": [
+                    {
+                        "candidate_id": "adv:1:relationship_delta:a",
+                        "status": "accepted",
+                        "reason": "accepted_by_deterministic_gate",
+                        "target_grounding": {
+                            "grounded": True,
+                            "npc_id": "Bran",
+                            "reason": "explicit_known_target",
+                        },
+                    },
+                    {
+                        "candidate_id": "adv:2:relationship_delta:b",
+                        "status": "rejected",
+                        "reason": "relationship_target_not_present_or_unknown",
+                        "target_grounding": {
+                            "grounded": False,
+                            "npc_id": "",
+                            "reason": "no_deterministic_target",
+                        },
+                    },
+                ]
+            },
+            "runtime_state": {
+                "deferred_advisory": {
+                    "accepted": [
+                        {
+                            "candidate_id": "adv:1:relationship_delta:a",
+                            "kind": "relationship_delta",
+                        }
+                    ],
+                    "rejected": [
+                        {
+                            "candidate_id": "adv:2:relationship_delta:b",
+                            "kind": "relationship_delta",
+                        }
+                    ],
+                }
+            },
+        },
+        {
+            "turn_index": 4,
+            "runtime_state": {
+                "deferred_advisory": {
+                    "accepted": [
+                        {
+                            "candidate_id": "adv:1:relationship_delta:a",
+                            "kind": "relationship_delta",
+                        }
+                    ],
+                    "rejected": [
+                        {
+                            "candidate_id": "adv:2:relationship_delta:b",
+                            "kind": "relationship_delta",
+                        }
+                    ],
+                }
+            },
+        },
+    ]
+
+    summary = _summarize_promotion_target_grounding(transcript)
+
+    assert summary["relationship_accepted"] == 1
+    assert summary["relationship_rejected"] == 1
+    assert summary["unique_relationship_accepted"] == 1
+    assert summary["unique_relationship_rejected"] == 1
+    assert summary["grounded"] == 1
+    assert summary["ungrounded"] == 1
+    assert summary["by_reason"]["explicit_known_target"] == 1
+    assert summary["by_reason"]["no_deterministic_target"] == 1
+    assert len(summary["examples"]) == 2

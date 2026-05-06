@@ -4,6 +4,7 @@ from copy import deepcopy
 from typing import Any, Dict, List, Tuple
 
 from app.rpg.npc_evolution.arcs import (
+    canonical_npc_id,
     ingest_evolution_signals,
     normalize_projection_to_evolution_signal,
     npc_evolution_state,
@@ -89,6 +90,53 @@ def _arc_for_npc(runtime_state: Dict[str, Any], npc_id: str) -> Dict[str, Any]:
         },
     )
     return arc
+
+
+def _merge_duplicate_arc_ids(
+    *,
+    runtime_state: Dict[str, Any],
+    canonical_id: str,
+    aliases: List[str],
+) -> None:
+    evo_state = npc_evolution_state(runtime_state)
+    arcs = evo_state.setdefault("arcs", {})
+    if canonical_id not in arcs:
+        return
+    canonical_arc = arcs[canonical_id]
+
+    for alias in aliases:
+        if not alias or alias == canonical_id or alias not in arcs:
+            continue
+        alias_arc = arcs.pop(alias)
+
+        for axis, value in _safe_dict(alias_arc.get("axes")).items():
+            try:
+                canonical_arc.setdefault("axes", {})[axis] = max(
+                    int(canonical_arc.setdefault("axes", {}).get(axis) or 0),
+                    int(value or 0),
+                )
+            except Exception:
+                canonical_arc.setdefault("axes", {})[axis] = value
+
+        for key, limit in (
+            ("memories", 30),
+            ("world_signals", 20),
+            ("future_hooks", 20),
+            ("semantic_intents", 20),
+            ("milestones", 20),
+        ):
+            existing = _safe_list(canonical_arc.get(key))
+            seen = {
+                _safe_str(_safe_dict(item).get("signal_id")) or str(item)
+                for item in existing
+            }
+            for item in _safe_list(alias_arc.get(key)):
+                marker = _safe_str(_safe_dict(item).get("signal_id")) or str(item)
+                if marker in seen:
+                    continue
+                seen.add(marker)
+                existing.append(item)
+            canonical_arc[key] = existing[-limit:]
 
 
 def _derive_arc_stage(axes: Dict[str, Any]) -> str:
@@ -208,6 +256,16 @@ def consume_evolution_signal(
         return runtime_state, {"ok": False, "reason": "already_consumed", "signal_id": signal.get("signal_id")}
 
     arc = _arc_for_npc(runtime_state, npc_id)
+    alias_base = npc_id.lower()
+    _merge_duplicate_arc_ids(
+        runtime_state=runtime_state,
+        canonical_id=npc_id,
+        aliases=[
+            f"npc:{alias_base}",
+            f"npc:{npc_id}",
+            alias_base,
+        ],
+    )
     before_stage = _safe_str(arc.get("arc_stage") or "stable")
     kind = _safe_str(signal.get("kind"))
 
@@ -302,6 +360,15 @@ def consume_accepted_advisory_projections(
             turn_index=int(turn_index),
         )
         if signal:
+            canonical = canonical_npc_id(
+                simulation_state=simulation_state,
+                npc_id=_safe_str(signal.get("npc_id")),
+            )
+            if canonical:
+                signal["npc_id"] = canonical
+                signal["canonical_npc_id"] = canonical
+                signal.setdefault("payload", {})["target"] = canonical
+                signal.setdefault("payload", {})["grounded_target"] = canonical
             signal["target_grounding"] = grounding_result
             signals.append(signal)
             projection_decisions.append(

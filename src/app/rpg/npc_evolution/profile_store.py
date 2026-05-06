@@ -30,6 +30,8 @@ def _now_iso() -> str:
 
 def _slug(value: str) -> str:
     value = _safe_str(value).strip().lower()
+    if value.startswith("npc:"):
+        value = value.split("npc:", 1)[1]
     value = re.sub(r"[^a-z0-9_.-]+", "_", value)
     value = re.sub(r"_+", "_", value).strip("_")
     return value or "unknown_npc"
@@ -47,6 +49,19 @@ def default_profile_root() -> Path:
 def profile_path_for_npc(npc_id: str, *, root: Path | None = None) -> Path:
     root = root or default_profile_root()
     return root / f"{_slug(npc_id)}.json"
+
+
+def legacy_profile_paths_for_npc(npc_id: str, *, root: Path | None = None) -> List[Path]:
+    root = root or default_profile_root()
+    raw = _safe_str(npc_id).strip().lower()
+    paths: List[Path] = []
+    if raw.startswith("npc:"):
+        legacy_slug = re.sub(r"[^a-z0-9_.-]+", "_", raw).strip("_")
+        paths.append(root / f"{legacy_slug}.json")
+    else:
+        paths.append(root / f"npc_{_slug(npc_id)}.json")
+    canonical = profile_path_for_npc(npc_id, root=root)
+    return [path for path in paths if path != canonical]
 
 
 def load_npc_profile(npc_id: str, *, root: Path | None = None) -> Dict[str, Any]:
@@ -219,6 +234,15 @@ def persist_npc_evolution_profiles(
             with path.open("w", encoding="utf-8") as fh:
                 json.dump(profile, fh, indent=2, sort_keys=True, ensure_ascii=False, default=str)
 
+            removed_legacy_paths = []
+            for legacy_path in legacy_profile_paths_for_npc(str(npc_id), root=root):
+                if legacy_path.exists() and legacy_path != path:
+                    try:
+                        legacy_path.unlink()
+                        removed_legacy_paths.append(str(legacy_path))
+                    except Exception:
+                        pass
+
             written.append(
                 {
                     "npc_id": str(npc_id),
@@ -227,6 +251,7 @@ def persist_npc_evolution_profiles(
                     "memory_count": len(_safe_list(evolution.get("memories"))),
                     "future_hook_count": len(_safe_list(evolution.get("future_hooks"))),
                     "signal_count": len(_safe_list(evolution.get("signals_applied"))),
+                    "removed_legacy_paths": removed_legacy_paths,
                 }
             )
         except Exception as exc:
