@@ -159,3 +159,55 @@ def test_promotion_runtime_carries_pending_candidates_forward_to_next_turn():
     assert result["accepted"] >= 1
     assert transcript[0]["deferred_advisory_promotion_result"]["decisions"][0]["status"] == "pending"
     assert transcript[1]["deferred_advisory_promotion_result"]["promoted_this_turn"] >= 1
+    assert transcript[1]["npc_evolution_consumption_result"]["signals_created"] >= 1
+    assert transcript[1]["npc_evolution_consumption_result"]["signals_consumed"] >= 1
+    assert transcript[1]["npc_evolution_summary"]["arc_count"] >= 1
+
+
+def test_promotion_runtime_extracts_nested_turn_result_simulation_state_for_evolution():
+    candidates = normalize_advisory_candidates(
+        session_id="s",
+        turn_index=1,
+        player_input="I ask Bran about rumors.",
+        turn_contract={"player_input": "I ask Bran about rumors."},
+        payload={
+            "future_hook_candidates": [
+                {
+                    "summary": "Bran may offer a rumor later.",
+                }
+            ]
+        },
+    )
+    transcript = [
+        {
+            "turn_index": 1,
+            "runtime_state": {
+                "deferred_advisory": {
+                    "candidates": candidates,
+                    "accepted": [],
+                    "rejected": [],
+                }
+            },
+            "turn_result": {
+                "simulation_state": {
+                    "scene": {"nearby_npcs": ["bran"]},
+                    "npc_progression_state": {"npcs": {"bran": {"name": "Bran"}}},
+                }
+            },
+        },
+        {
+            "turn_index": 2,
+            "turn_result": {
+                "simulation_state": {
+                    "scene": {"nearby_npcs": ["bran"]},
+                    "npc_progression_state": {"npcs": {"bran": {"name": "Bran"}}},
+                }
+            },
+        },
+    ]
+
+    result = run_deferred_advisory_promotions_for_transcript(transcript=transcript)
+
+    assert result["evolution_signals_created"] >= 1
+    assert result["evolution_signals_consumed"] >= 1
+    assert transcript[1]["npc_evolution_summary"]["arcs_by_npc"] == ["bran"]
