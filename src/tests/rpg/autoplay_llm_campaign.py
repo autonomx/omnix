@@ -19,6 +19,7 @@ from app.rpg.player_action_context.runtime import build_player_action_context
 from tests.rpg.autoplay.advisory_promotion_runtime import (
     run_deferred_advisory_promotions_for_transcript,
 )
+from tests.rpg.autoplay.npc_profile_runtime_loader import summarize_profile_loads
 from tests.rpg.autoplay.base_runtime_response import (
     build_autoplay_base_response,
 )
@@ -623,6 +624,7 @@ def _summarize_quality_gates(
     player_agent_summary = _safe_dict(summary.get("player_agent_trace_summary"))
     advisory_promotion_summary = _safe_dict(summary.get("deferred_advisory_promotion_summary"))
     profile_persist_summary = _safe_dict(summary.get("npc_evolution_profile_persistence_summary"))
+    profile_load_summary = _safe_dict(summary.get("npc_profile_load_summary"))
     evolution_mutated_authoritative_state = False
     for row in transcript:
         evo_result = _safe_dict(_safe_dict(row).get("npc_evolution_consumption_result"))
@@ -654,6 +656,10 @@ def _summarize_quality_gates(
         "npc_evolution_profile_persistence_ok": (
             not profile_persist_summary
             or bool(profile_persist_summary.get("ok"))
+        ),
+        "npc_profile_load_ok": (
+            not profile_load_summary
+            or bool(profile_load_summary.get("ok"))
         ),
     }
 
@@ -1381,6 +1387,7 @@ def run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
                         turn_index=turn_index,
                         player_action=player_action,
                         simulation_state=final_turn_state,
+                        runtime_state=_safe_dict(_safe_dict(turn_result.get("session")).get("runtime_state")),
                         turn_contract=turn_result.get("turn_contract") or {},
                         semantic_action_record=semantic_action_record,
                         prefer_provider=True,
@@ -1843,8 +1850,10 @@ def run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
     summary["npc_evolution_profile_persistence_summary"] = (
         advisory_promotion_summary.get("profile_persist_result") or {}
     )
+    summary["npc_profile_load_summary"] = summarize_profile_loads(transcript)
     metrics["npc_evolution_summary"] = summary["npc_evolution_summary"]
     metrics["npc_evolution_profile_persistence_summary"] = summary["npc_evolution_profile_persistence_summary"]
+    metrics["npc_profile_load_summary"] = summary["npc_profile_load_summary"]
     summary["quality_gate_summary"] = _summarize_quality_gates(
         args=args,
         metrics=metrics,
@@ -2094,6 +2103,7 @@ def main(argv: List[str] | None = None) -> int:
     print(f"deferred_advisory_promotion_summary: {summary.get('deferred_advisory_promotion_summary')}")
     print(f"npc_evolution_summary: {summary.get('npc_evolution_summary')}")
     print(f"npc_evolution_profile_persistence_summary: {summary.get('npc_evolution_profile_persistence_summary')}")
+    print(f"npc_profile_load_summary: {summary.get('npc_profile_load_summary')}")
     print(f"promotion_target_grounding_summary: {summary.get('promotion_target_grounding_summary')}")
     print(f"quality_gate_summary: {summary.get('quality_gate_summary')}")
 

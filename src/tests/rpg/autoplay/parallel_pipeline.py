@@ -226,6 +226,26 @@ def _compact_player_visible_state(simulation_state: Dict[str, Any]) -> Dict[str,
     }
 
 
+def _compact_loaded_npc_profiles(runtime_state: Dict[str, Any], limit: int = 6) -> Dict[str, Any]:
+    npc_evolution = _safe_dict(_safe_dict(runtime_state).get("npc_evolution"))
+    loaded = _safe_dict(npc_evolution.get("loaded_profiles"))
+    out: Dict[str, Any] = {}
+    for npc_id, row_any in list(loaded.items())[:limit]:
+        row = _safe_dict(row_any)
+        profile = _safe_dict(row.get("profile"))
+        out[str(npc_id)] = {
+            "arc_stage": _safe_str(profile.get("arc_stage")) or "stable",
+            "axes": _safe_dict(profile.get("axes")),
+            "memories": _safe_list(profile.get("memories"))[-4:],
+            "future_hooks": _safe_list(profile.get("future_hooks"))[-4:],
+            "world_signals": _safe_list(profile.get("world_signals"))[-3:],
+            "semantic_intents": _safe_list(profile.get("semantic_intents"))[-3:],
+            "milestones": _safe_list(profile.get("milestones"))[-3:],
+            "signals_applied_count": profile.get("signals_applied_count"),
+        }
+    return out
+
+
 def _compact_turn_contract(turn_contract: Dict[str, Any]) -> Dict[str, Any]:
     contract = _safe_dict(turn_contract)
     semantic_action = _safe_dict(contract.get("semantic_action"))
@@ -250,6 +270,7 @@ def build_combined_background_context_packet(
     *,
     player_action: str,
     simulation_state: Dict[str, Any],
+    runtime_state: Dict[str, Any] | None = None,
     turn_contract: Dict[str, Any],
     semantic_action_record: Dict[str, Any],
 ) -> Dict[str, Any]:
@@ -259,6 +280,7 @@ def build_combined_background_context_packet(
     excluding raw session/debug/history blobs.
     """
     simulation_state = _safe_dict(simulation_state)
+    runtime_state = _safe_dict(runtime_state)
     turn_contract = _safe_dict(turn_contract)
     semantic_action_record = _safe_dict(semantic_action_record)
 
@@ -268,6 +290,7 @@ def build_combined_background_context_packet(
         "present_npcs": _compact_present_npcs(simulation_state, limit=6),
         "player_visible_state": _compact_player_visible_state(simulation_state),
         "recent_events": _compact_recent_events(simulation_state, limit=5),
+        "loaded_npc_profiles": _compact_loaded_npc_profiles(runtime_state, limit=6),
         "turn_contract": _compact_turn_contract(turn_contract),
         "fast_semantic_action": semantic_action_record,
     }
@@ -748,6 +771,7 @@ def _build_combined_background_payload(
     provider: Any,
     player_action: str,
     simulation_state: Dict[str, Any],
+    runtime_state: Dict[str, Any] | None = None,
     turn_contract: Dict[str, Any],
     semantic_action_record: Dict[str, Any],
 ) -> Dict[str, Any]:
@@ -758,6 +782,7 @@ def _build_combined_background_payload(
     context_packet = build_combined_background_context_packet(
         player_action=player_action,
         simulation_state=simulation_state,
+        runtime_state=runtime_state or {},
         turn_contract=turn_contract,
         semantic_action_record=semantic_action_record,
     )
@@ -963,6 +988,7 @@ def _combined_background_llm_job(
     turn_index: int,
     player_action: str,
     simulation_state: Dict[str, Any],
+    runtime_state: Dict[str, Any] | None = None,
     turn_contract: Dict[str, Any],
     semantic_action_record: Dict[str, Any],
     prefer_provider: bool,
@@ -984,6 +1010,7 @@ def _combined_background_llm_job(
                 provider=provider,
                 player_action=player_action,
                 simulation_state=freeze_snapshot(_safe_dict(simulation_state)),
+                runtime_state=freeze_snapshot(_safe_dict(runtime_state)),
                 turn_contract=freeze_snapshot(_safe_dict(turn_contract)),
                 semantic_action_record=freeze_snapshot(_safe_dict(semantic_action_record)),
             )
@@ -1244,6 +1271,7 @@ class AutoplayBackgroundPipeline:
         turn_index: int,
         player_action: str,
         simulation_state: Dict[str, Any],
+        runtime_state: Dict[str, Any] | None = None,
         turn_contract: Dict[str, Any],
         semantic_action_record: Dict[str, Any],
         prefer_provider: bool = True,
@@ -1258,6 +1286,7 @@ class AutoplayBackgroundPipeline:
             turn_index=turn_index,
             player_action=player_action,
             simulation_state=freeze_snapshot(simulation_state),
+            runtime_state=freeze_snapshot(runtime_state or {}),
             turn_contract=freeze_snapshot(turn_contract),
             semantic_action_record=freeze_snapshot(semantic_action_record),
             prefer_provider=prefer_provider,

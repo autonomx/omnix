@@ -47,6 +47,36 @@ def test_combined_context_packet_excludes_raw_large_state_and_keeps_quality_fiel
     assert "huge_debug_blob" not in text
 
 
+def test_combined_context_packet_includes_loaded_npc_profiles():
+    packet = build_combined_background_context_packet(
+        player_action="I ask Bran about the mill.",
+        simulation_state={
+            "scene": {"title": "Tavern"},
+            "npc_progression_state": {"npcs": {"Bran": {"name": "Bran"}}},
+        },
+        runtime_state={
+            "npc_evolution": {
+                "loaded_profiles": {
+                    "Bran": {
+                        "profile": {
+                            "npc_id": "Bran",
+                            "arc_stage": "trusting",
+                            "axes": {"trust": 4},
+                            "memories": [{"summary": "Bran remembers the player."}],
+                            "future_hooks": [{"summary": "Bran may offer a rumor."}],
+                        }
+                    }
+                }
+            }
+        },
+        turn_contract={"player_input": "I ask Bran about the mill."},
+        semantic_action_record={"semantic_action_type": "ask"},
+    )
+
+    assert packet["loaded_npc_profiles"]["Bran"]["arc_stage"] == "trusting"
+    assert packet["loaded_npc_profiles"]["Bran"]["axes"]["trust"] == 4
+
+
 def test_prompt_section_metrics_counts_sections():
     metrics = prompt_section_metrics(
         {
