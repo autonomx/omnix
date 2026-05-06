@@ -120,7 +120,8 @@ def test_promotion_gate_rejects_same_turn_candidate():
     )
 
     assert result["promoted_this_turn"] == 0
-    assert updated["deferred_advisory"]["rejected"][0]["reason"] == "not_eligible_until_future_turn"
+    assert result["decisions"][0]["reason"] == "not_eligible_until_future_turn"
+    assert len(updated["deferred_advisory"]["rejected"]) == 0
 
 
 def test_promotion_gate_does_not_mutate_authoritative_state():

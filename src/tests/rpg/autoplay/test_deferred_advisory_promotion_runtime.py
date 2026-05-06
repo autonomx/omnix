@@ -1,0 +1,161 @@
+from tests.rpg.autoplay.advisory_promotion_runtime import (
+    run_deferred_advisory_promotions_for_transcript,
+)
+from app.rpg.advisory.candidates import normalize_advisory_candidates
+
+
+def test_promotion_runtime_promotes_previous_turn_candidate_without_state_mutation():
+    candidates = normalize_advisory_candidates(
+        session_id="s",
+        turn_index=1,
+        player_input="I reassure Bran.",
+        turn_contract={"player_input": "I reassure Bran."},
+        payload={
+            "relationship_delta_candidates": [
+                {
+                    "target": "bran",
+                    "delta": 1,
+                    "summary": "Bran is slightly reassured.",
+                }
+            ]
+        },
+    )
+    transcript = [
+        {
+            "turn_index": 1,
+            "runtime_state": {
+                "deferred_advisory": {
+                    "candidates": candidates,
+                    "accepted": [],
+                    "rejected": [],
+                }
+            },
+            "simulation_state": {"npcs": {"bran": {"name": "Bran"}}},
+        },
+        {
+            "turn_index": 2,
+            "simulation_state": {"npcs": {"bran": {"name": "Bran"}}},
+        },
+    ]
+
+    result = run_deferred_advisory_promotions_for_transcript(transcript=transcript)
+
+    assert result["ok"] is True
+    assert result["accepted"] >= 1
+    assert result["mutated_authoritative_state"] is False
+    assert transcript[1]["deferred_advisory_promotion_result"]["promoted_this_turn"] >= 1
+
+
+def test_promotion_runtime_keeps_same_turn_candidate_pending():
+    candidates = normalize_advisory_candidates(
+        session_id="s",
+        turn_index=3,
+        player_input="I inspect.",
+        turn_contract={"player_input": "I inspect."},
+        payload={"future_hook_candidates": [{"summary": "A guard may react."}]},
+    )
+    transcript = [
+        {
+            "turn_index": 3,
+            "runtime_state": {
+                "deferred_advisory": {
+                    "candidates": candidates,
+                    "accepted": [],
+                    "rejected": [],
+                }
+            },
+            "simulation_state": {},
+        }
+    ]
+
+    result = run_deferred_advisory_promotions_for_transcript(transcript=transcript)
+
+    assert result["ok"] is True
+    assert result["accepted"] == 0
+    assert result["rejected"] == 0
+    assert result["pending"] >= 1
+    decision = transcript[0]["deferred_advisory_promotion_result"]["decisions"][0]
+    assert decision["status"] == "pending"
+    assert decision["reason"] == "not_eligible_until_future_turn"
+
+
+def test_promotion_runtime_does_not_mutate_inventory_or_currency():
+    candidates = normalize_advisory_candidates(
+        session_id="s",
+        turn_index=1,
+        player_input="I ask for payment.",
+        turn_contract={"player_input": "I ask for payment."},
+        payload={"future_hook_candidates": [{"summary": "Payment can be discussed later."}]},
+    )
+    simulation_state = {
+        "inventory": {"items": []},
+        "currency": {"gold": 0},
+    }
+    transcript = [
+        {
+            "turn_index": 2,
+            "runtime_state": {
+                "deferred_advisory": {
+                    "candidates": candidates,
+                    "accepted": [],
+                    "rejected": [],
+                }
+            },
+            "simulation_state": simulation_state,
+        }
+    ]
+
+    result = run_deferred_advisory_promotions_for_transcript(transcript=transcript)
+
+    assert result["mutated_authoritative_state"] is False
+    assert transcript[0]["simulation_state"]["inventory"]["items"] == []
+    assert transcript[0]["simulation_state"]["currency"]["gold"] == 0
+
+
+def test_promotion_runtime_carries_pending_candidates_forward_to_next_turn():
+    candidates = normalize_advisory_candidates(
+        session_id="s",
+        turn_index=1,
+        player_input="I reassure Bran.",
+        turn_contract={"player_input": "I reassure Bran."},
+        payload={
+            "relationship_delta_candidates": [
+                {
+                    "target": "bran",
+                    "delta": 1,
+                    "summary": "Bran is reassured.",
+                }
+            ]
+        },
+    )
+    transcript = [
+        {
+            "turn_index": 1,
+            "runtime_state": {
+                "deferred_advisory": {
+                    "candidates": candidates,
+                    "accepted": [],
+                    "rejected": [],
+                }
+            },
+            "simulation_state": {"npcs": {"bran": {"name": "Bran"}}},
+        },
+        {
+            "turn_index": 2,
+            "runtime_state": {
+                "deferred_advisory": {
+                    "candidates": [],
+                    "accepted": [],
+                    "rejected": [],
+                }
+            },
+            "simulation_state": {"npcs": {"bran": {"name": "Bran"}}},
+        },
+    ]
+
+    result = run_deferred_advisory_promotions_for_transcript(transcript=transcript)
+
+    assert result["mutated_authoritative_state"] is False
+    assert result["accepted"] >= 1
+    assert transcript[0]["deferred_advisory_promotion_result"]["decisions"][0]["status"] == "pending"
+    assert transcript[1]["deferred_advisory_promotion_result"]["promoted_this_turn"] >= 1

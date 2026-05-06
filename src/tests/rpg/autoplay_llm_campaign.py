@@ -83,6 +83,7 @@ from tests.rpg.autoplay.player_agent_optimization import (
     normalize_player_agent_payload,
     player_agent_cache_key,
 )
+from tests.rpg.autoplay.advisory_promotion_runtime import run_deferred_advisory_promotions_for_transcript
 
 
 def _safe_dict(value: Any) -> Dict[str, Any]:
@@ -533,6 +534,7 @@ def _summarize_quality_gates(
     if not background_jobs:
         background_jobs = _safe_dict(_safe_dict(performance_budget.get("background_llm")))
     player_agent_summary = _safe_dict(summary.get("player_agent_trace_summary"))
+    advisory_promotion_summary = _safe_dict(summary.get("deferred_advisory_promotion_summary"))
 
     gates = {
         "avg_human_playable_blocking_under_500ms": float(live.get("avg_human_playable_blocking_ms") or 0.0) < 500.0,
@@ -550,6 +552,9 @@ def _summarize_quality_gates(
             )
         ),
         "player_agent_fallback_rate_within_limit": True,
+        "deferred_advisory_promotion_did_not_mutate_authoritative_state": (
+            not bool(advisory_promotion_summary.get("mutated_authoritative_state"))
+        ),
     }
 
     fallback_turns = int(player_agent_summary.get("fallback_turns") or 0)
@@ -1489,6 +1494,13 @@ def run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
 
     background_results = pipeline.drain()
     background_results_summary = attach_background_results_to_transcript(transcript, background_results)
+    advisory_promotion_summary = {"ok": True, "enabled": False}
+    if args.deferred_advisory_promotion == "on":
+        advisory_promotion_summary = run_deferred_advisory_promotions_for_transcript(
+            transcript=transcript,
+            max_promotions_per_turn=int(args.max_advisory_promotions_per_turn),
+        )
+        advisory_promotion_summary["enabled"] = True
     pipeline.shutdown()
 
     latest_context = (
@@ -1606,6 +1618,7 @@ def run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
     metrics["progress_quality"] = progress_quality_metrics
     metrics["performance"] = performance_metrics
     metrics["background_jobs"] = background_results_summary
+    metrics["deferred_advisory_promotion_summary"] = advisory_promotion_summary
     health = evaluate_autoplay_health(
         transcript,
         latest_context=latest_context,
@@ -1705,6 +1718,7 @@ def run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
         "health": health,
         "performance": performance_metrics,
         "background_jobs": background_results_summary,
+        "deferred_advisory_promotion_summary": advisory_promotion_summary,
         "player_agent_trace_summary": metrics.get("player_agent_trace_summary") or {},
         "deferred_narration_trace_summary": metrics.get("deferred_narration_trace_summary") or {},
         "deferred_advisory_trace_summary": metrics.get("deferred_advisory_trace_summary") or {},
@@ -1723,6 +1737,9 @@ def run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
     if not summary["quality_gate_summary"].get("ok"):
         health["ok"] = False
         health.setdefault("warnings", []).append("quality_gate_summary_failed")
+    if advisory_promotion_summary.get("mutated_authoritative_state"):
+        health["ok"] = False
+        health.setdefault("warnings", []).append("deferred_advisory_promotion_mutated_authoritative_state")
     summary["health"] = health
     artifact_start = now_perf()
     extra_paths = {}
@@ -1829,6 +1846,18 @@ def build_arg_parser() -> argparse.ArgumentParser:
         choices=["off", "on"],
         default="on",
         help="Cache successful compact player-agent decisions by compact context hash.",
+    )
+    parser.add_argument(
+        "--deferred-advisory-promotion",
+        choices=["off", "on"],
+        default="on",
+        help="Run deterministic promotion gate over deferred advisory candidates after background jobs attach.",
+    )
+    parser.add_argument(
+        "--max-advisory-promotions-per-turn",
+        type=int,
+        default=5,
+        help="Maximum advisory candidates promoted per turn by the deterministic gate.",
     )
     parser.add_argument(
         "--player-agent-max-context-chars",
@@ -1945,6 +1974,7 @@ def main(argv: List[str] | None = None) -> int:
     print(f"combined_quality_shape_summary: {summary.get('combined_quality_shape_summary')}")
     print(f"player_agent_prompt_budget_summary: {summary.get('player_agent_prompt_budget_summary')}")
     print(f"player_agent_cache_summary: {summary.get('player_agent_cache_summary')}")
+    print(f"deferred_advisory_promotion_summary: {summary.get('deferred_advisory_promotion_summary')}")
     print(f"quality_gate_summary: {summary.get('quality_gate_summary')}")
 
     warnings = summary.get("health", {}).get("warnings") or []
