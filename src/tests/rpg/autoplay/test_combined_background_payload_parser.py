@@ -1,10 +1,11 @@
 from tests.rpg.autoplay.parallel_pipeline import (
-    _combined_payload_has_useful_content,
-    _combined_background_llm_job,
-    _extract_json_object_from_text,
-    _extract_nested_combined_payload,
-    _has_expected_combined_provider_keys,
-)
+     _combined_payload_has_useful_content,
+     _combined_background_llm_job,
+     _extract_json_object_from_text,
+     _extract_nested_combined_payload,
+     _has_expected_combined_provider_keys,
+     _salvage_combined_narration_from_text,
+ )
 
 
 class _FakeCombinedProvider:
@@ -151,3 +152,12 @@ def test_combined_background_job_marks_provider_success_when_payload_ok():
     assert result["source"] == "provider_combined_background_llm"
     assert result["narration_payload"]["source"] == "provider_runtime_narration"
     assert result["candidate_count"] >= 1
+    assert result["prompt_metrics"]["total_chars"] > 0
+
+
+def test_salvage_combined_narration_from_truncated_json():
+    raw = '{"narration":"Bran studies you carefully. The tavern noise lowers as he considers the question.","action":"'
+    salvaged = _salvage_combined_narration_from_text(raw)
+    assert salvaged["ok"] is True
+    assert salvaged["partial"] is True
+    assert "Bran studies you carefully" in salvaged["narration"]
