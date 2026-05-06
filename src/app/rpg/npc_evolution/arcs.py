@@ -49,6 +49,20 @@ def _safe_str(value: Any) -> str:
     return value if isinstance(value, str) else ""
 
 
+def _norm_id(value: Any) -> str:
+    return _safe_str(value).strip().lower()
+
+
+def _id_variants(value: Any) -> set[str]:
+    normed = _norm_id(value)
+    variants = {normed} if normed else set()
+    if normed.startswith("npc:"):
+        variants.add(normed.split("npc:", 1)[1])
+    elif normed:
+        variants.add(f"npc:{normed}")
+    return {item for item in variants if item}
+
+
 def _known_npcs(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
     """Return known NPC map across supported state shapes."""
     simulation_state = _safe_dict(simulation_state)
@@ -179,14 +193,22 @@ def _extract_target_npc_id(projection: Dict[str, Any]) -> str:
 def _npc_exists(simulation_state: Dict[str, Any], npc_id: str) -> bool:
     if not npc_id:
         return False
-    npc_norm = npc_id.lower()
+    npc_variants = _id_variants(npc_id)
     npcs = _known_npcs(simulation_state)
-    if npc_id in npcs:
-        return True
-    if npc_norm in {str(key).lower() for key in npcs.keys()}:
+    known_variants = set()
+    for key, record_any in npcs.items():
+        record = _safe_dict(record_any)
+        known_variants.update(_id_variants(key))
+        known_variants.update(_id_variants(record.get("name")))
+        known_variants.update(_id_variants(record.get("id")))
+        known_variants.update(_id_variants(record.get("npc_id")))
+    if npc_variants & known_variants:
         return True
     present = _present_npc_items(simulation_state)
-    return any(str(item).lower() == npc_norm for item in present)
+    present_variants = set()
+    for item in present:
+        present_variants.update(_id_variants(_npc_id_from_present_item(item)))
+    return bool(npc_variants & present_variants)
 
 
 def _npc_id_from_present_item(item: Any) -> str:

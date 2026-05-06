@@ -1,312 +1,973 @@
-N58-N60.3 — Evolution Projection Idempotency Fix
-Goal
+Below is N61-N63 — NPC Evolution Target Grounding + Profile Persistence v1 as a literal apply-this-patch diff spec.
 
-Prevent this duplicate pattern:
+Goal:
 
-same accepted advisory projection
-→ converted into a new evolution signal every later turn
-→ duplicate memories/future_hooks in npc_evolution arcs
+N61: Deterministically ground ambiguous NPC targets before evolution consumption.
+N62: Persist NPC evolution arcs to file-based NPC profiles.
+N63: Report profile persistence + target grounding yield.
 
-Current bad behavior:
+Strict rules:
 
-adv:1:memory:abc
-→ npc_evo:Bran:2:memory:...
-→ npc_evo:Bran:3:memory:...
-→ npc_evo:Bran:4:memory:...
+LLM advisory does not directly mutate authoritative state.
+Target grounding must use deterministic known NPC state only.
+Profile persistence writes bounded NPC evolution/profile metadata only.
+No inventory/currency/combat/quest/location mutation.
+N61 — NPC Evolution Target Grounding
+1. Add target grounding module
 
-Expected behavior:
+Create:
 
-adv:1:memory:abc
-→ npc_evo:Bran:memory:adv_abc
-→ consumed once
-→ skipped on later turns as already evolution-consumed
-1. Patch src/app/rpg/npc_evolution/arcs.py
-1A. Make signal IDs stable by projection ID
-
-Find:
-
-def evolution_signal_id(*, npc_id: str, turn_index: int, kind: str, payload: Dict[str, Any]) -> str:
-
-Replace it with:
-
---- src/app/rpg/npc_evolution/arcs.py
-+++ src/app/rpg/npc_evolution/arcs.py
-@@
--def evolution_signal_id(*, npc_id: str, turn_index: int, kind: str, payload: Dict[str, Any]) -> str:
-+def evolution_signal_id(
-+    *,
-+    npc_id: str,
-+    turn_index: int,
-+    kind: str,
-+    payload: Dict[str, Any],
-+    projection_id: str = "",
-+) -> str:
-+    # Idempotency rule:
-+    # If a signal comes from an accepted advisory projection, the signal id must
-+    # be stable across later turns. Otherwise the same projection can be
-+    # re-consumed every turn and duplicate memories/hooks.
-+    if projection_id:
-+        raw = _stable_json(
-+            {
-+                "npc_id": npc_id,
-+                "kind": kind,
-+                "projection_id": projection_id,
-+            }
-+        )
-+        digest = hashlib.sha256(raw.encode("utf-8")).hexdigest()[:16]
-+        return f"npc_evo:{npc_id}:{kind}:projection:{digest}"
+--- /dev/null
++++ src/app/rpg/npc_evolution/target_grounding.py
+@@ -0,0 +1,286 @@
++from __future__ import annotations
 +
-     raw = _stable_json(
-         {
-             "npc_id": npc_id,
-             "turn_index": turn_index,
-             "kind": kind,
-1B. Pass projection ID when building signals
-
-Find inside normalize_projection_to_evolution_signal(...):
-
-"signal_id": evolution_signal_id(
-    npc_id=npc_id,
-    turn_index=turn_index,
-    kind=kind,
-    payload=payload,
-),
-
-Replace with:
-
---- src/app/rpg/npc_evolution/arcs.py
-+++ src/app/rpg/npc_evolution/arcs.py
-@@
-         "format_version": NPC_EVOLUTION_VERSION,
-         "signal_id": evolution_signal_id(
-             npc_id=npc_id,
-             turn_index=turn_index,
-             kind=kind,
-             payload=payload,
-+            projection_id=_safe_str(projection.get("candidate_id")),
-         ),
-2. Patch src/app/rpg/npc_evolution/consumer.py
-2A. Track evolution-consumed accepted projections
-
-Add helper near _safe_str(...):
-
---- src/app/rpg/npc_evolution/consumer.py
-+++ src/app/rpg/npc_evolution/consumer.py
-@@
- def _safe_str(value: Any) -> str:
-     return value if isinstance(value, str) else ""
++import re
++from copy import deepcopy
++from typing import Any, Dict, List, Tuple
 +
 +
-+def _projection_id_from_accepted_row(accepted_row: Dict[str, Any]) -> str:
-+    accepted_row = _safe_dict(accepted_row)
-+    projection = _safe_dict(accepted_row.get("projection"))
++def _safe_dict(value: Any) -> Dict[str, Any]:
++    return value if isinstance(value, dict) else {}
++
++
++def _safe_list(value: Any) -> List[Any]:
++    return value if isinstance(value, list) else []
++
++
++def _safe_str(value: Any) -> str:
++    return value if isinstance(value, str) else ""
++
++
++ROLE_ALIASES = {
++    "innkeeper": {"innkeeper", "barkeep", "bartender", "tavern keeper", "host", "keeper"},
++    "guard": {"guard", "watchman", "watch", "sentinel"},
++    "merchant": {"merchant", "shopkeeper", "vendor", "trader"},
++    "blacksmith": {"blacksmith", "smith"},
++    "healer": {"healer", "priest", "medic"},
++}
++
++
++NON_NPC_TARGETS = {
++    "player",
++    "the player",
++    "you",
++    "self",
++    "environment",
++    "room",
++    "scene",
++    "unknown",
++    "none",
++    "n/a",
++}
++
++
++def _norm(value: Any) -> str:
++    return re.sub(r"\s+", " ", _safe_str(value).strip().lower())
++
++
++def _known_npcs(simulation_state: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
++    simulation_state = _safe_dict(simulation_state)
++    candidates = [
++        _safe_dict(simulation_state.get("npcs")),
++        _safe_dict(_safe_dict(simulation_state.get("npc_progression_state")).get("npcs")),
++        _safe_dict(_safe_dict(simulation_state.get("npc_profile_state")).get("npcs")),
++    ]
++    for candidate in candidates:
++        if candidate:
++            return {str(k): _safe_dict(v) for k, v in candidate.items()}
++    return {}
++
++
++def _present_npc_items(simulation_state: Dict[str, Any]) -> List[Any]:
++    simulation_state = _safe_dict(simulation_state)
++    direct = (
++        _safe_list(simulation_state.get("present_npcs"))
++        or _safe_list(simulation_state.get("nearby_npcs"))
++        or _safe_list(simulation_state.get("visible_npcs"))
++    )
++    if direct:
++        return direct
++
++    scene = _safe_dict(simulation_state.get("scene"))
++    scene_items = (
++        _safe_list(scene.get("present_npcs"))
++        or _safe_list(scene.get("nearby_npcs"))
++        or _safe_list(scene.get("visible_npcs"))
++    )
++    if scene_items:
++        return scene_items
++
++    contract = _safe_dict(simulation_state.get("turn_contract"))
++    for section_key in ("resolved_action", "resolved_result"):
++        section = _safe_dict(contract.get(section_key))
++        location = _safe_dict(_safe_dict(section.get("location_state")).get("current_location"))
++        present = _safe_list(location.get("present_npcs"))
++        if present:
++            return present
++
++    return []
++
++
++def _item_id(item: Any) -> str:
++    if isinstance(item, str):
++        return item
++    item_dict = _safe_dict(item)
 +    return (
-+        _safe_str(projection.get("candidate_id"))
-+        or _safe_str(accepted_row.get("candidate_id"))
++        _safe_str(item_dict.get("id"))
++        or _safe_str(item_dict.get("npc_id"))
++        or _safe_str(item_dict.get("name"))
 +    )
 +
 +
-+def _evolution_consumed_projection_ids(runtime_state: Dict[str, Any]) -> set[str]:
-+    evo_state = _safe_dict(_safe_dict(runtime_state).get("npc_evolution"))
-+    consumed = _safe_list(evo_state.get("consumed_projection_ids"))
-+    return {str(item) for item in consumed if item}
++def _present_npc_ids(simulation_state: Dict[str, Any]) -> List[str]:
++    seen = set()
++    out: List[str] = []
++    for item in _present_npc_items(simulation_state):
++        npc_id = _item_id(item)
++        if not npc_id:
++            continue
++        marker = npc_id.lower()
++        if marker in seen:
++            continue
++        seen.add(marker)
++        out.append(npc_id)
++    return out
 +
 +
-+def _mark_projection_evolution_consumed(runtime_state: Dict[str, Any], projection_id: str) -> None:
-+    if not projection_id:
-+        return
-+    evo_state = runtime_state.setdefault("npc_evolution", {})
-+    consumed = evo_state.setdefault("consumed_projection_ids", [])
-+    if projection_id not in consumed:
-+        consumed.append(projection_id)
-+    if len(consumed) > 500:
-+        evo_state["consumed_projection_ids"] = consumed[-500:]
-2B. Skip already-consumed projections
++def _npc_record_names(npc_id: str, record: Dict[str, Any]) -> List[str]:
++    names = [
++        npc_id,
++        _safe_str(record.get("name")),
++        _safe_str(record.get("display_name")),
++        _safe_str(record.get("title")),
++    ]
++    aliases = record.get("aliases")
++    if isinstance(aliases, list):
++        names.extend(_safe_str(alias) for alias in aliases)
++    return [name for name in names if _safe_str(name)]
++
++
++def _npc_role_terms(record: Dict[str, Any]) -> List[str]:
++    role = _norm(record.get("role") or record.get("occupation") or record.get("job"))
++    terms = set()
++    if role:
++        terms.add(role)
++        terms.update(ROLE_ALIASES.get(role, set()))
++    for key in ("tags", "traits"):
++        values = record.get(key)
++        if isinstance(values, list):
++            for value in values:
++                normed = _norm(value)
++                if normed:
++                    terms.add(normed)
++                    terms.update(ROLE_ALIASES.get(normed, set()))
++    return sorted(terms)
++
++
++def _projection_text(projection: Dict[str, Any]) -> str:
++    projection = _safe_dict(projection)
++    payload = _safe_dict(projection.get("payload"))
++    parts = [
++        projection.get("kind"),
++        payload.get("target"),
++        payload.get("owner"),
++        payload.get("npc"),
++        payload.get("npc_id"),
++        payload.get("summary"),
++        payload.get("description"),
++        payload.get("reason"),
++        payload.get("intent"),
++        payload.get("type"),
++    ]
++    return " ".join(_safe_str(part) for part in parts if _safe_str(part)).lower()
++
++
++def _explicit_target(projection: Dict[str, Any]) -> str:
++    payload = _safe_dict(_safe_dict(projection).get("payload"))
++    return (
++        _safe_str(payload.get("target"))
++        or _safe_str(payload.get("owner"))
++        or _safe_str(payload.get("npc"))
++        or _safe_str(payload.get("npc_id"))
++    )
++
++
++def _npc_exists(simulation_state: Dict[str, Any], npc_id: str) -> bool:
++    if not npc_id:
++        return False
++    marker = npc_id.lower()
++    npcs = _known_npcs(simulation_state)
++    if npc_id in npcs:
++        return True
++    if marker in {str(key).lower() for key in npcs.keys()}:
++        return True
++    return marker in {str(item).lower() for item in _present_npc_ids(simulation_state)}
++
++
++def _canonical_npc_id(simulation_state: Dict[str, Any], candidate: str) -> str:
++    candidate_norm = _norm(candidate)
++    if not candidate_norm:
++        return ""
++    npcs = _known_npcs(simulation_state)
++    for npc_id, record in npcs.items():
++        names = {_norm(name) for name in _npc_record_names(npc_id, record)}
++        if candidate_norm in names:
++            return str(npc_id)
++    for npc_id in _present_npc_ids(simulation_state):
++        if candidate_norm == _norm(npc_id):
++            return npc_id
++    return ""
++
++
++def ground_projection_target(
++    *,
++    projection: Dict[str, Any],
++    simulation_state: Dict[str, Any],
++) -> Tuple[Dict[str, Any], Dict[str, Any]]:
++    """Deterministically ground ambiguous projection target to a known NPC.
++
++    Grounding order:
++      1. explicit known target/name/alias
++      2. explicit role alias matched against present NPC roles
++      3. NPC name mentioned in summary/text
++      4. role alias mentioned in summary/text and exactly one matching present NPC
++      5. exactly one present NPC
++
++    Returns (projection_copy, grounding_result).
++    """
++    projection = deepcopy(_safe_dict(projection))
++    payload = projection.setdefault("payload", {})
++    simulation_state = _safe_dict(simulation_state)
++    npcs = _known_npcs(simulation_state)
++    present_ids = _present_npc_ids(simulation_state)
++    text = _projection_text(projection)
++
++    explicit = _explicit_target(projection)
++    explicit_norm = _norm(explicit)
++    if explicit_norm and explicit_norm not in NON_NPC_TARGETS:
++        canonical = _canonical_npc_id(simulation_state, explicit)
++        if canonical:
++            payload["target"] = canonical
++            payload.setdefault("grounded_target", canonical)
++            projection["target_grounding"] = {
++                "grounded": True,
++                "npc_id": canonical,
++                "reason": "explicit_known_target",
++                "original_target": explicit,
++            }
++            return projection, projection["target_grounding"]
++
++        # Role alias from explicit target, for example "innkeeper" -> Bran.
++        role_matches = []
++        for npc_id in present_ids or list(npcs.keys()):
++            record = _safe_dict(npcs.get(npc_id))
++            role_terms = set(_npc_role_terms(record))
++            if explicit_norm in role_terms:
++                role_matches.append(str(npc_id))
++        if len(role_matches) == 1:
++            npc_id = role_matches[0]
++            payload["target"] = npc_id
++            payload.setdefault("grounded_target", npc_id)
++            projection["target_grounding"] = {
++                "grounded": True,
++                "npc_id": npc_id,
++                "reason": "explicit_role_alias",
++                "original_target": explicit,
++            }
++            return projection, projection["target_grounding"]
++
++    # Name/alias mentioned in text.
++    for npc_id, record in npcs.items():
++        for name in _npc_record_names(npc_id, record):
++            norm_name = _norm(name)
++            if norm_name and norm_name in text:
++                payload["target"] = str(npc_id)
++                payload.setdefault("grounded_target", str(npc_id))
++                projection["target_grounding"] = {
++                    "grounded": True,
++                    "npc_id": str(npc_id),
++                    "reason": "name_mentioned_in_projection_text",
++                    "matched": name,
++                }
++                return projection, projection["target_grounding"]
++
++    # Role alias mentioned in text and exactly one matching present NPC.
++    role_matches = []
++    for npc_id in present_ids or list(npcs.keys()):
++        record = _safe_dict(npcs.get(npc_id))
++        role_terms = set(_npc_role_terms(record))
++        if any(term and term in text for term in role_terms):
++            role_matches.append(str(npc_id))
++    role_matches = sorted(set(role_matches))
++    if len(role_matches) == 1:
++        npc_id = role_matches[0]
++        payload["target"] = npc_id
++        payload.setdefault("grounded_target", npc_id)
++        projection["target_grounding"] = {
++            "grounded": True,
++            "npc_id": npc_id,
++            "reason": "role_alias_mentioned_in_projection_text",
++        }
++        return projection, projection["target_grounding"]
++
++    if len(present_ids) == 1:
++        npc_id = present_ids[0]
++        payload["target"] = npc_id
++        payload.setdefault("grounded_target", npc_id)
++        projection["target_grounding"] = {
++            "grounded": True,
++            "npc_id": npc_id,
++            "reason": "single_present_npc",
++        }
++        return projection, projection["target_grounding"]
++
++    projection["target_grounding"] = {
++        "grounded": False,
++        "npc_id": "",
++        "reason": "no_deterministic_target",
++        "present_npc_count": len(present_ids),
++        "known_npc_count": len(npcs),
++    }
++    return projection, projection["target_grounding"]
+2. Use target grounding in evolution consumer
 
-Find this loop inside consume_accepted_advisory_projections(...):
+Patch:
 
-for accepted_row in accepted[-max_signals_per_turn:]:
-    projection = _safe_dict(_safe_dict(accepted_row).get("projection"))
-    if not projection:
-        continue
-    signal, rejection = normalize_projection_to_evolution_signal(
+src/app/rpg/npc_evolution/consumer.py
+
+Add import:
+
+--- src/app/rpg/npc_evolution/consumer.py
++++ src/app/rpg/npc_evolution/consumer.py
+@@
+ from app.rpg.npc_evolution.arcs import (
+     ingest_evolution_signals,
+     normalize_projection_to_evolution_signal,
+     npc_evolution_state,
+     summarize_npc_evolution_state,
+ )
++from app.rpg.npc_evolution.target_grounding import ground_projection_target
+
+Inside consume_accepted_advisory_projections(...), find:
+
+signal, rejection = normalize_projection_to_evolution_signal(
+    projection=projection,
+    simulation_state=simulation_state,
+    turn_index=int(turn_index),
+)
 
 Replace with:
 
 --- src/app/rpg/npc_evolution/consumer.py
 +++ src/app/rpg/npc_evolution/consumer.py
 @@
--    for accepted_row in accepted[-max_signals_per_turn:]:
--        projection = _safe_dict(_safe_dict(accepted_row).get("projection"))
-+    consumed_projection_ids = _evolution_consumed_projection_ids(runtime_state)
-+    for accepted_row in accepted[-max_signals_per_turn:]:
-+        accepted_row = _safe_dict(accepted_row)
-+        projection = _safe_dict(accepted_row.get("projection"))
-         if not projection:
-             continue
-+        projection_id = _projection_id_from_accepted_row(accepted_row)
-+        if projection_id and projection_id in consumed_projection_ids:
-+            projection_decisions.append(
-+                {
-+                    "projection_id": projection_id,
-+                    "status": "skipped",
-+                    "reason": "already_evolution_consumed",
-+                    "kind": projection.get("kind"),
-+                }
-+            )
-+            continue
-         signal, rejection = normalize_projection_to_evolution_signal(
-             projection=projection,
+-        signal, rejection = normalize_projection_to_evolution_signal(
+-            projection=projection,
++        grounded_projection, grounding_result = ground_projection_target(
++            projection=projection,
++            simulation_state=simulation_state,
++        )
++        signal, rejection = normalize_projection_to_evolution_signal(
++            projection=grounded_projection,
              simulation_state=simulation_state,
              turn_index=int(turn_index),
          )
-2C. Mark projections consumed only after successful signal consumption
-
-Find this block:
-
-if signal:
-    signals.append(signal)
-    projection_decisions.append(
-        {
-            "projection_id": projection.get("candidate_id"),
-            "status": "signal_created",
-            "signal_id": signal.get("signal_id"),
-            "kind": signal.get("kind"),
-            "npc_id": signal.get("npc_id"),
-        }
-    )
-
-Replace with:
-
---- src/app/rpg/npc_evolution/consumer.py
-+++ src/app/rpg/npc_evolution/consumer.py
-@@
          if signal:
++            signal["target_grounding"] = grounding_result
              signals.append(signal)
              projection_decisions.append(
                  {
--                    "projection_id": projection.get("candidate_id"),
-+                    "projection_id": projection_id or projection.get("candidate_id"),
+                     "projection_id": projection_id or projection.get("candidate_id"),
                      "status": "signal_created",
                      "signal_id": signal.get("signal_id"),
                      "kind": signal.get("kind"),
                      "npc_id": signal.get("npc_id"),
++                    "target_grounding": grounding_result,
                  }
+             )
+         else:
+             projection_decisions.append(
+                 {
+                     "projection_id": projection.get("candidate_id"),
+                     "status": "rejected",
+                     "reason": rejection,
+                     "kind": projection.get("kind"),
++                    "target_grounding": grounding_result,
+                 }
+             )
+N62 — File-based NPC evolution profile persistence
+3. Add profile store module
 
-Then find the signal consumption loop:
+Create:
 
-for signal in _safe_list(evo_state.get("signals")):
-    signal_dict = _safe_dict(signal)
-    if signal_dict.get("consumed"):
-        continue
-    runtime_state, decision = consume_evolution_signal(
-        runtime_state=runtime_state,
-        signal=signal_dict,
-        turn_index=turn_index,
-    )
-    consume_decisions.append(decision)
-    if decision.get("ok"):
-        consumed += 1
+--- /dev/null
++++ src/app/rpg/npc_evolution/profile_store.py
+@@ -0,0 +1,292 @@
++from __future__ import annotations
++
++import json
++import os
++import re
++from copy import deepcopy
++from datetime import datetime, timezone
++from pathlib import Path
++from typing import Any, Dict, List
++
++
++PROFILE_VERSION = "npc_evolution_profile_v1"
++
++
++def _safe_dict(value: Any) -> Dict[str, Any]:
++    return value if isinstance(value, dict) else {}
++
++
++def _safe_list(value: Any) -> List[Any]:
++    return value if isinstance(value, list) else []
++
++
++def _safe_str(value: Any) -> str:
++    return value if isinstance(value, str) else ""
++
++
++def _now_iso() -> str:
++    return datetime.now(timezone.utc).isoformat()
++
++
++def _slug(value: str) -> str:
++    value = _safe_str(value).strip().lower()
++    value = re.sub(r"[^a-z0-9_.-]+", "_", value)
++    value = re.sub(r"_+", "_", value).strip("_")
++    return value or "unknown_npc"
++
++
++def default_profile_root() -> Path:
++    return Path(
++        os.environ.get(
++            "RPG_NPC_PROFILE_ROOT",
++            "resources/data/rpg_npc_profiles",
++        )
++    )
++
++
++def profile_path_for_npc(npc_id: str, *, root: Path | None = None) -> Path:
++    root = root or default_profile_root()
++    return root / f"{_slug(npc_id)}.json"
++
++
++def load_npc_profile(npc_id: str, *, root: Path | None = None) -> Dict[str, Any]:
++    path = profile_path_for_npc(npc_id, root=root)
++    if not path.exists():
++        return {
++            "format_version": PROFILE_VERSION,
++            "npc_id": npc_id,
++            "created_at": _now_iso(),
++            "updated_at": "",
++            "evolution": {
++                "arc_stage": "stable",
++                "axes": {},
++                "memories": [],
++                "world_signals": [],
++                "future_hooks": [],
++                "semantic_intents": [],
++                "milestones": [],
++                "signals_applied": [],
++            },
++            "audit": [],
++        }
++    try:
++        with path.open("r", encoding="utf-8") as fh:
++            data = json.load(fh)
++        if isinstance(data, dict):
++            data.setdefault("format_version", PROFILE_VERSION)
++            data.setdefault("npc_id", npc_id)
++            data.setdefault("evolution", {})
++            data.setdefault("audit", [])
++            return data
++    except Exception:
++        pass
++    return {
++        "format_version": PROFILE_VERSION,
++        "npc_id": npc_id,
++        "created_at": _now_iso(),
++        "updated_at": "",
++        "evolution": {},
++        "audit": [{"kind": "profile_load_failed_reset", "at": _now_iso()}],
++    }
++
++
++def _bounded_extend_unique(
++    existing: List[Dict[str, Any]],
++    incoming: List[Dict[str, Any]],
++    *,
++    id_key: str,
++    limit: int,
++) -> List[Dict[str, Any]]:
++    out = [deepcopy(item) for item in existing if isinstance(item, dict)]
++    seen = {_safe_str(item.get(id_key)) or json.dumps(item, sort_keys=True, default=str) for item in out}
++    for item in incoming:
++        if not isinstance(item, dict):
++            continue
++        marker = _safe_str(item.get(id_key)) or json.dumps(item, sort_keys=True, default=str)
++        if marker in seen:
++            continue
++        seen.add(marker)
++        out.append(deepcopy(item))
++    if len(out) > limit:
++        out = out[-limit:]
++    return out
++
++
++def _profile_projection_from_arc(arc: Dict[str, Any]) -> Dict[str, Any]:
++    arc = _safe_dict(arc)
++    return {
++        "arc_stage": _safe_str(arc.get("arc_stage")) or "stable",
++        "axes": _safe_dict(arc.get("axes")),
++        "memories": _safe_list(arc.get("memories"))[-30:],
++        "world_signals": _safe_list(arc.get("world_signals"))[-20:],
++        "future_hooks": _safe_list(arc.get("future_hooks"))[-20:],
++        "semantic_intents": _safe_list(arc.get("semantic_intents"))[-20:],
++        "milestones": _safe_list(arc.get("milestones"))[-20:],
++    }
++
++
++def persist_npc_evolution_profiles(
++    *,
++    runtime_state: Dict[str, Any],
++    root: Path | None = None,
++) -> Dict[str, Any]:
++    """Persist runtime_state.npc_evolution.arcs into file-based NPC profiles."""
++    runtime_state = _safe_dict(runtime_state)
++    evo = _safe_dict(runtime_state.get("npc_evolution"))
++    arcs = _safe_dict(evo.get("arcs"))
++    signals = _safe_list(evo.get("signals"))
++    root = root or default_profile_root()
++    root.mkdir(parents=True, exist_ok=True)
++
++    written: List[Dict[str, Any]] = []
++    errors: List[Dict[str, Any]] = []
++
++    signals_by_npc: Dict[str, List[Dict[str, Any]]] = {}
++    for signal in signals:
++        signal_dict = _safe_dict(signal)
++        npc_id = _safe_str(signal_dict.get("npc_id"))
++        if npc_id:
++            signals_by_npc.setdefault(npc_id, []).append(signal_dict)
++
++    for npc_id, arc_any in arcs.items():
++        try:
++            arc = _safe_dict(arc_any)
++            profile = load_npc_profile(str(npc_id), root=root)
++            evolution = profile.setdefault("evolution", {})
++            projected = _profile_projection_from_arc(arc)
++
++            evolution["arc_stage"] = projected["arc_stage"]
++            evolution["axes"] = projected["axes"]
++            evolution["memories"] = _bounded_extend_unique(
++                _safe_list(evolution.get("memories")),
++                projected["memories"],
++                id_key="signal_id",
++                limit=30,
++            )
++            evolution["world_signals"] = _bounded_extend_unique(
++                _safe_list(evolution.get("world_signals")),
++                projected["world_signals"],
++                id_key="signal_id",
++                limit=20,
++            )
++            evolution["future_hooks"] = _bounded_extend_unique(
++                _safe_list(evolution.get("future_hooks")),
++                projected["future_hooks"],
++                id_key="signal_id",
++                limit=20,
++            )
++            evolution["semantic_intents"] = _bounded_extend_unique(
++                _safe_list(evolution.get("semantic_intents")),
++                projected["semantic_intents"],
++                id_key="signal_id",
++                limit=20,
++            )
++            evolution["milestones"] = _bounded_extend_unique(
++                _safe_list(evolution.get("milestones")),
++                projected["milestones"],
++                id_key="signal_id",
++                limit=20,
++            )
++            evolution["signals_applied"] = _bounded_extend_unique(
++                _safe_list(evolution.get("signals_applied")),
++                [
++                    {
++                        "signal_id": signal.get("signal_id"),
++                        "kind": signal.get("kind"),
++                        "turn_index": signal.get("turn_index"),
++                        "summary": signal.get("summary"),
++                        "source": signal.get("source"),
++                    }
++                    for signal in signals_by_npc.get(str(npc_id), [])
++                    if signal.get("consumed")
++                ],
++                id_key="signal_id",
++                limit=100,
++            )
++
++            profile["updated_at"] = _now_iso()
++            profile.setdefault("audit", []).append(
++                {
++                    "kind": "npc_evolution_profile_persisted",
++                    "at": profile["updated_at"],
++                    "arc_stage": evolution.get("arc_stage"),
++                    "signal_count": len(signals_by_npc.get(str(npc_id), [])),
++                }
++            )
++            profile["audit"] = _safe_list(profile.get("audit"))[-50:]
++
++            path = profile_path_for_npc(str(npc_id), root=root)
++            with path.open("w", encoding="utf-8") as fh:
++                json.dump(profile, fh, indent=2, sort_keys=True, ensure_ascii=False, default=str)
++
++            written.append(
++                {
++                    "npc_id": str(npc_id),
++                    "path": str(path),
++                    "arc_stage": evolution.get("arc_stage"),
++                    "memory_count": len(_safe_list(evolution.get("memories"))),
++                    "future_hook_count": len(_safe_list(evolution.get("future_hooks"))),
++                    "signal_count": len(_safe_list(evolution.get("signals_applied"))),
++                }
++            )
++        except Exception as exc:
++            errors.append({"npc_id": str(npc_id), "error": f"{type(exc).__name__}: {exc}"})
++
++    return {
++        "ok": not errors,
++        "root": str(root),
++        "written_count": len(written),
++        "written": written,
++        "errors": errors,
++    }
+4. Integrate profile persistence into autoplay pipeline
 
-Patch it:
+Patch:
 
---- src/app/rpg/npc_evolution/consumer.py
-+++ src/app/rpg/npc_evolution/consumer.py
+src/tests/rpg/autoplay/advisory_promotion_runtime.py
+
+Add import:
+
+--- src/tests/rpg/autoplay/advisory_promotion_runtime.py
++++ src/tests/rpg/autoplay/advisory_promotion_runtime.py
 @@
-     for signal in _safe_list(evo_state.get("signals")):
-         signal_dict = _safe_dict(signal)
-         if signal_dict.get("consumed"):
-             continue
-         runtime_state, decision = consume_evolution_signal(
-             runtime_state=runtime_state,
-             signal=signal_dict,
-             turn_index=turn_index,
+ from app.rpg.npc_evolution.consumer import consume_accepted_advisory_projections
++from app.rpg.npc_evolution.profile_store import persist_npc_evolution_profiles
+
+Inside run_deferred_advisory_promotions_for_transcript(...), add counters near:
+
+evolution_signals_created = 0
+evolution_signals_consumed = 0
+
+Patch:
+
+@@
+     evolution_signals_created = 0
+     evolution_signals_consumed = 0
++    latest_profile_persist_result: Dict[str, Any] = {}
+
+After:
+
+row["npc_evolution_summary"] = evolution_result.get("summary") or {}
+
+add:
+
+@@
+         row["npc_evolution_consumption_result"] = evolution_result
+         row["npc_evolution_summary"] = evolution_result.get("summary") or {}
++        profile_persist_result = persist_npc_evolution_profiles(runtime_state=updated_runtime_state)
++        row["npc_evolution_profile_persist_result"] = profile_persist_result
++        latest_profile_persist_result = profile_persist_result
+         evolution_signals_created += int(evolution_result.get("signals_created") or 0)
+         evolution_signals_consumed += int(evolution_result.get("signals_consumed") or 0)
+
+In final return add:
+
+@@
+         "evolution_signals_created": evolution_signals_created,
+         "evolution_signals_consumed": evolution_signals_consumed,
++        "profile_persist_result": latest_profile_persist_result,
+         "results": promotion_results,
+
+In promotion_results.append(...), add:
+
+@@
+                 "evolution_signals_created": evolution_result.get("signals_created"),
+                 "evolution_signals_consumed": evolution_result.get("signals_consumed"),
+                 "npc_evolution_summary": evolution_result.get("summary") or {},
++                "profile_persist_result": profile_persist_result,
+             }
          )
-         consume_decisions.append(decision)
-         if decision.get("ok"):
-             consumed += 1
-+            projection_id = _safe_str(signal_dict.get("projection_id"))
-+            if projection_id:
-+                _mark_projection_evolution_consumed(runtime_state, projection_id)
-2D. Include idempotency counters in result
+N63 — Reporting, gates, tests
+5. Add aggregate profile persistence summary
 
-Before final return in consume_accepted_advisory_projections(...), add:
+Patch:
 
---- src/app/rpg/npc_evolution/consumer.py
-+++ src/app/rpg/npc_evolution/consumer.py
+src/tests/rpg/autoplay_llm_campaign.py
+
+After existing summary["npc_evolution_summary"] = {...} block, add profile persistence fields:
+
+--- src/tests/rpg/autoplay_llm_campaign.py
++++ src/tests/rpg/autoplay_llm_campaign.py
 @@
-     return runtime_state, {
-         "ok": True,
-         "turn_index": turn_index,
-         "signals_created": len(signals),
-         "signals_consumed": consumed,
-+        "already_consumed_projection_skips": sum(
-+            1
-+            for decision in projection_decisions
-+            if _safe_dict(decision).get("reason") == "already_evolution_consumed"
-+        ),
-         "projection_decisions": projection_decisions,
-         "consume_decisions": consume_decisions,
-         "ingest_result": ingest_result,
-         "summary": summary,
-3. Patch src/app/rpg/npc_evolution/arcs.py summary
-
-Find summarize_npc_evolution_state(...).
-
-Add consumed projection count:
-
---- src/app/rpg/npc_evolution/arcs.py
-+++ src/app/rpg/npc_evolution/arcs.py
-@@
-     state = _safe_dict(_safe_dict(runtime_state).get("npc_evolution"))
-     signals = _safe_list(state.get("signals"))
-     arcs = _safe_dict(state.get("arcs"))
-+    consumed_projection_ids = _safe_list(state.get("consumed_projection_ids"))
-@@
-         "arc_count": len(arcs),
-         "arcs_by_npc": sorted(list(arcs.keys())),
-+        "consumed_projection_count": len(consumed_projection_ids),
+     summary["npc_evolution_summary"] = {
+         "latest": latest_evolution_summary,
+         "signals_created": advisory_promotion_summary.get("evolution_signals_created", 0),
+         "signals_consumed": advisory_promotion_summary.get("evolution_signals_consumed", 0),
      }
-4. Add tests
-4A. Patch src/tests/rpg/npc_evolution/test_npc_evolution_arcs.py
-
-Add:
-
---- src/tests/rpg/npc_evolution/test_npc_evolution_arcs.py
-+++ src/tests/rpg/npc_evolution/test_npc_evolution_arcs.py
-@@
- from app.rpg.npc_evolution.arcs import (
-+    evolution_signal_id,
-     ingest_evolution_signals,
-     infer_npc_target_for_projection,
-     normalize_projection_to_evolution_signal,
-     summarize_npc_evolution_state,
- )
-@@
- def test_explicit_unknown_target_falls_back_to_summary_name_match():
-@@
-     assert signal["npc_id"] == "bran"
-     assert signal["target_inference"] == "matched_npc_name_in_summary"
-+
-+
-+def test_evolution_signal_id_is_stable_for_same_projection_across_turns():
-+    one = evolution_signal_id(
-+        npc_id="bran",
-+        turn_index=2,
-+        kind="memory",
-+        payload={"summary": "Bran remembers."},
-+        projection_id="adv:1:memory:abc",
++    summary["npc_evolution_profile_persistence_summary"] = (
++        advisory_promotion_summary.get("profile_persist_result") or {}
 +    )
-+    two = evolution_signal_id(
-+        npc_id="bran",
-+        turn_index=4,
-+        kind="memory",
-+        payload={"summary": "Bran remembers."},
-+        projection_id="adv:1:memory:abc",
+     metrics["npc_evolution_summary"] = summary["npc_evolution_summary"]
++    metrics["npc_evolution_profile_persistence_summary"] = summary["npc_evolution_profile_persistence_summary"]
+
+In _summarize_quality_gates(...), add after evolution safety:
+
+@@
+     advisory_promotion_summary = _safe_dict(summary.get("deferred_advisory_promotion_summary"))
++    profile_persist_summary = _safe_dict(summary.get("npc_evolution_profile_persistence_summary"))
+@@
+         "npc_evolution_consumption_did_not_mutate_authoritative_state": (
+             not evolution_mutated_authoritative_state
+         ),
++        "npc_evolution_profile_persistence_ok": (
++            not profile_persist_summary
++            or bool(profile_persist_summary.get("ok"))
++        ),
+     }
+
+Console output:
+
+@@
+     print(f"npc_evolution_summary: {summary.get('npc_evolution_summary')}")
++    print(f"npc_evolution_profile_persistence_summary: {summary.get('npc_evolution_profile_persistence_summary')}")
+6. Report HTML section
+
+Patch:
+
+src/tests/rpg/autoplay/campaign_report.py
+
+In model construction:
+
+--- src/tests/rpg/autoplay/campaign_report.py
++++ src/tests/rpg/autoplay/campaign_report.py
+@@
+         "npc_evolution_summary": _safe_dict(summary.get("npc_evolution_summary") or metrics.get("npc_evolution_summary")),
++        "npc_evolution_profile_persistence_summary": _safe_dict(
++            summary.get("npc_evolution_profile_persistence_summary")
++            or metrics.get("npc_evolution_profile_persistence_summary")
++        ),
+
+In debug/details section:
+
+@@
+     {_render_json_details("NPC evolution summary JSON", model.get("npc_evolution_summary") or {})}
++    {_render_json_details("NPC evolution profile persistence summary JSON", model.get("npc_evolution_profile_persistence_summary") or {})}
+     {_render_json_details("Background job summary JSON", model.get("background_jobs") or {})}
+Tests
+7. Add target grounding tests
+
+Create:
+
+--- /dev/null
++++ src/tests/rpg/npc_evolution/test_target_grounding.py
+@@ -0,0 +1,103 @@
++from app.rpg.npc_evolution.target_grounding import ground_projection_target
++
++
++def test_ground_projection_explicit_role_alias_to_present_npc():
++    projection = {
++        "kind": "future_hook",
++        "payload": {
++            "target": "innkeeper",
++            "summary": "The innkeeper may become guarded.",
++        },
++    }
++    grounded, result = ground_projection_target(
++        projection=projection,
++        simulation_state={
++            "scene": {"nearby_npcs": ["Bran"]},
++            "npc_progression_state": {
++                "npcs": {"Bran": {"name": "Bran", "role": "innkeeper"}}
++            },
++        },
 +    )
 +
-+    assert one == two
-4B. Patch src/tests/rpg/npc_evolution/test_npc_evolution_consumer.py
++    assert result["grounded"] is True
++    assert result["npc_id"] == "Bran"
++    assert result["reason"] == "explicit_role_alias"
++    assert grounded["payload"]["target"] == "Bran"
++
++
++def test_ground_projection_name_mentioned_in_summary():
++    grounded, result = ground_projection_target(
++        projection={
++            "kind": "memory",
++            "payload": {
++                "owner": "Player",
++                "summary": "Bran remembers the player asking about the mill.",
++            },
++        },
++        simulation_state={
++            "scene": {"nearby_npcs": ["Bran", "Mira"]},
++            "npc_progression_state": {
++                "npcs": {
++                    "Bran": {"name": "Bran", "role": "innkeeper"},
++                    "Mira": {"name": "Mira", "role": "scout"},
++                }
++            },
++        },
++    )
++
++    assert result["grounded"] is True
++    assert result["npc_id"] == "Bran"
++    assert result["reason"] == "name_mentioned_in_projection_text"
++    assert grounded["payload"]["target"] == "Bran"
++
++
++def test_ground_projection_single_present_npc():
++    grounded, result = ground_projection_target(
++        projection={
++            "kind": "semantic_intent",
++            "payload": {
++                "intent": "ask",
++                "summary": "The player asks a direct question.",
++            },
++        },
++        simulation_state={
++            "scene": {"nearby_npcs": ["Bran"]},
++            "npc_progression_state": {"npcs": {"Bran": {"name": "Bran"}}},
++        },
++    )
++
++    assert result["grounded"] is True
++    assert result["npc_id"] == "Bran"
++    assert result["reason"] == "single_present_npc"
++
++
++def test_ground_projection_refuses_ambiguous_multi_npc_context():
++    grounded, result = ground_projection_target(
++        projection={
++            "kind": "future_hook",
++            "payload": {"summary": "Someone may react later."},
++        },
++        simulation_state={
++            "scene": {"nearby_npcs": ["Bran", "Mira"]},
++            "npc_progression_state": {
++                "npcs": {
++                    "Bran": {"name": "Bran"},
++                    "Mira": {"name": "Mira"},
++                }
++            },
++        },
++    )
++
++    assert result["grounded"] is False
++    assert result["reason"] == "no_deterministic_target"
++    assert "target" not in grounded["payload"]
+8. Add profile persistence tests
+
+Create:
+
+--- /dev/null
++++ src/tests/rpg/npc_evolution/test_profile_store.py
+@@ -0,0 +1,82 @@
++import json
++
++from app.rpg.npc_evolution.profile_store import (
++    load_npc_profile,
++    persist_npc_evolution_profiles,
++)
++
++
++def test_persist_npc_evolution_profiles_writes_bounded_profile(tmp_path):
++    runtime_state = {
++        "npc_evolution": {
++            "signals": [
++                {
++                    "signal_id": "s1",
++                    "npc_id": "Bran",
++                    "kind": "memory",
++                    "turn_index": 2,
++                    "summary": "Bran remembers the player.",
++                    "source": "deferred_advisory_promotion",
++                    "consumed": True,
++                }
++            ],
++            "arcs": {
++                "Bran": {
++                    "npc_id": "Bran",
++                    "arc_stage": "stable",
++                    "axes": {"trust": 1},
++                    "memories": [
++                        {
++                            "signal_id": "s1",
++                            "summary": "Bran remembers the player.",
++                        }
++                    ],
++                    "future_hooks": [],
++                    "world_signals": [],
++                    "semantic_intents": [],
++                    "milestones": [],
++                }
++            },
++        }
++    }
++
++    result = persist_npc_evolution_profiles(runtime_state=runtime_state, root=tmp_path)
++
++    assert result["ok"] is True
++    assert result["written_count"] == 1
++
++    profile_path = tmp_path / "bran.json"
++    assert profile_path.exists()
++    data = json.loads(profile_path.read_text(encoding="utf-8"))
++    assert data["npc_id"] == "Bran"
++    assert data["evolution"]["axes"]["trust"] == 1
++    assert data["evolution"]["signals_applied"][0]["signal_id"] == "s1"
++
++
++def test_persist_npc_evolution_profiles_is_idempotent(tmp_path):
++    runtime_state = {
++        "npc_evolution": {
++            "signals": [
++                {
++                    "signal_id": "s1",
++                    "npc_id": "Bran",
++                    "kind": "future_hook",
++                    "turn_index": 2,
++                    "summary": "Bran may answer later.",
++                    "source": "deferred_advisory_promotion",
++                    "consumed": True,
++                }
++            ],
++            "arcs": {
++                "Bran": {
++                    "npc_id": "Bran",
++                    "arc_stage": "stable",
++                    "axes": {},
++                    "future_hooks": [{"signal_id": "s1", "summary": "Bran may answer later."}],
++                }
++            },
++        }
++    }
++
++    persist_npc_evolution_profiles(runtime_state=runtime_state, root=tmp_path)
++    persist_npc_evolution_profiles(runtime_state=runtime_state, root=tmp_path)
++    profile = load_npc_profile("Bran", root=tmp_path)
++
++    assert len(profile["evolution"]["future_hooks"]) == 1
++    assert len(profile["evolution"]["signals_applied"]) == 1
+9. Extend consumer tests
+
+Patch:
+
+src/tests/rpg/npc_evolution/test_npc_evolution_consumer.py
 
 Add:
 
@@ -319,67 +980,45 @@ Add:
      assert updated["npc_evolution"]["arcs"]["bran"]["future_hooks"][0]["summary"].startswith("The innkeeper")
 +
 +
-+def test_consumer_does_not_reconsume_same_accepted_projection_on_later_turns():
++def test_consumer_grounds_innkeeper_alias_to_bran():
 +    runtime_state = {
 +        "deferred_advisory": {
 +            "accepted": [
 +                {
-+                    "candidate_id": "adv:1:memory:abc",
-+                    "kind": "memory",
++                    "candidate_id": "c1",
++                    "kind": "future_hook",
 +                    "projection": {
-+                        "candidate_id": "adv:1:memory:abc",
-+                        "kind": "memory",
++                        "candidate_id": "c1",
++                        "kind": "future_hook",
 +                        "payload": {
-+                            "owner": "bran",
-+                            "summary": "Bran remembers the player asking about the mill.",
-+                            "importance": 0.8,
++                            "target": "innkeeper",
++                            "summary": "The innkeeper may become more guarded.",
 +                        },
 +                    },
 +                }
 +            ]
 +        }
 +    }
-+    simulation_state = {"present_npcs": ["bran"], "npcs": {"bran": {"name": "Bran"}}}
++    simulation_state = {
++        "scene": {"nearby_npcs": ["Bran"]},
++        "npc_progression_state": {"npcs": {"Bran": {"name": "Bran", "role": "innkeeper"}}},
++    }
 +
-+    updated, first = consume_accepted_advisory_projections(
++    updated, result = consume_accepted_advisory_projections(
 +        runtime_state=runtime_state,
 +        simulation_state=simulation_state,
 +        turn_index=2,
 +    )
-+    updated, second = consume_accepted_advisory_projections(
-+        runtime_state=updated,
-+        simulation_state=simulation_state,
-+        turn_index=3,
-+    )
 +
-+    assert first["signals_created"] == 1
-+    assert first["signals_consumed"] == 1
-+    assert second["signals_created"] == 0
-+    assert second["signals_consumed"] == 0
-+    assert second["already_consumed_projection_skips"] == 1
-+    assert len(updated["npc_evolution"]["arcs"]["bran"]["memories"]) == 1
-+    assert updated["npc_evolution"]["summary"]["consumed_projection_count"] == 1
-4C. Patch src/tests/rpg/autoplay/test_deferred_advisory_promotion_runtime.py
-
-Add a check to the carry-forward test:
-
---- src/tests/rpg/autoplay/test_deferred_advisory_promotion_runtime.py
-+++ src/tests/rpg/autoplay/test_deferred_advisory_promotion_runtime.py
-@@
- def test_promotion_runtime_carries_pending_candidates_forward_to_next_turn():
-@@
-     assert transcript[1]["npc_evolution_consumption_result"]["signals_created"] >= 1
-     assert transcript[1]["npc_evolution_consumption_result"]["signals_consumed"] >= 1
-     assert transcript[1]["npc_evolution_summary"]["arc_count"] >= 1
-+    # Running the consumer again on the same carried runtime state should not
-+    # create another signal for the same accepted projection.
-+    assert transcript[1]["npc_evolution_summary"]["consumed_projection_count"] >= 1
-5. Validation
++    assert result["signals_created"] == 1
++    assert result["projection_decisions"][0]["target_grounding"]["reason"] == "explicit_role_alias"
++    assert "Bran" in updated["npc_evolution"]["arcs"]
+Validation
 
 Compile:
 
-python -m py_compile src\app\rpg\npc_evolution\arcs.py src\app\rpg\npc_evolution\consumer.py
+python -m py_compile src\app\rpg\npc_evolution\target_grounding.py src\app\rpg\npc_evolution\profile_store.py src\app\rpg\npc_evolution\consumer.py src\tests\rpg\autoplay\advisory_promotion_runtime.py src\tests\rpg\autoplay_llm_campaign.py src\tests\rpg\autoplay\campaign_report.py
 
-Run focused tests:
+Run tests:
 
-python -m pytest src\tests\rpg\npc_evolution\test_npc_evolution_arcs.py src\tests\rpg\npc_evolution\test_npc_evolution_consumer.py src\tests\rpg\autoplay\test_deferred_advisory_promotion_runtime.py -q
+python -m pytest src\tests\rpg\npc_evolution\test_target_grounding.py src\tests\rpg\npc_evolution\test_profile_store.py src\tests\rpg\npc_evolution\test_npc_evolution_arcs.py src\tests\rpg\npc_evolution\test_npc_evolution_consumer.py src\tests\rpg\autoplay\test_deferred_advisory_promotion_runtime.py src\tests\rpg\advisory\test_advisory_runtime_store.py src\tests\rpg\autoplay\test_quality_gates.py -q

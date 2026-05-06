@@ -162,6 +162,27 @@ def test_explicit_unknown_target_falls_back_to_summary_name_match():
     assert signal["target_inference"] == "matched_npc_name_in_summary"
 
 
+def test_normalize_projection_accepts_prefixed_npc_id_when_known_as_name():
+    signal, reason = normalize_projection_to_evolution_signal(
+        projection={
+            "candidate_id": "c1",
+            "kind": "semantic_intent",
+            "payload": {
+                "target": "npc:bran",
+                "summary": "The player asks Bran a question.",
+            },
+        },
+        simulation_state={
+            "scene": {"nearby_npcs": ["npc:bran"]},
+            "npc_progression_state": {"npcs": {"Bran": {"name": "Bran"}}},
+        },
+        turn_index=2,
+    )
+
+    assert reason == ""
+    assert signal["npc_id"] in {"npc:bran", "Bran"}
+
+
 def test_evolution_signal_id_is_stable_for_same_projection_across_turns():
     one = evolution_signal_id(
         npc_id="bran",

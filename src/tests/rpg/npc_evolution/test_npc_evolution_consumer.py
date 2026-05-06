@@ -169,3 +169,38 @@ def test_consumer_does_not_reconsume_same_accepted_projection_on_later_turns():
     assert second["already_consumed_projection_skips"] == 1
     assert len(updated["npc_evolution"]["arcs"]["bran"]["memories"]) == 1
     assert updated["npc_evolution"]["summary"]["consumed_projection_count"] == 1
+
+
+def test_consumer_grounds_innkeeper_alias_to_bran():
+    runtime_state = {
+        "deferred_advisory": {
+            "accepted": [
+                {
+                    "candidate_id": "c1",
+                    "kind": "future_hook",
+                    "projection": {
+                        "candidate_id": "c1",
+                        "kind": "future_hook",
+                        "payload": {
+                            "target": "innkeeper",
+                            "summary": "The innkeeper may become more guarded.",
+                        },
+                    },
+                }
+            ]
+        }
+    }
+    simulation_state = {
+        "scene": {"nearby_npcs": ["Bran"]},
+        "npc_progression_state": {"npcs": {"Bran": {"name": "Bran", "role": "innkeeper"}}},
+    }
+
+    updated, result = consume_accepted_advisory_projections(
+        runtime_state=runtime_state,
+        simulation_state=simulation_state,
+        turn_index=2,
+    )
+
+    assert result["signals_created"] == 1
+    assert result["projection_decisions"][0]["target_grounding"]["reason"] == "explicit_role_alias"
+    assert "Bran" in updated["npc_evolution"]["arcs"]

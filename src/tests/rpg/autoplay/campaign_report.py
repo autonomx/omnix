@@ -1043,6 +1043,10 @@ def build_campaign_report_model(
             or metrics.get("deferred_advisory_promotion_summary")
         ),
         "npc_evolution_summary": _safe_dict(summary.get("npc_evolution_summary") or metrics.get("npc_evolution_summary")),
+        "npc_evolution_profile_persistence_summary": _safe_dict(
+            summary.get("npc_evolution_profile_persistence_summary")
+            or metrics.get("npc_evolution_profile_persistence_summary")
+        ),
         "quality_gate_summary": _safe_dict(summary.get("quality_gate_summary")),
         "shortcomings": shortcomings,
     }
@@ -1785,6 +1789,7 @@ def render_campaign_report_html(model: Dict[str, Any]) -> str:
     {_render_json_details("Player-agent cache summary JSON", model.get("player_agent_cache_summary") or {})}
     {_render_json_details("Deferred advisory promotion summary JSON", model.get("deferred_advisory_promotion_summary") or {})}
     {_render_json_details("NPC evolution summary JSON", model.get("npc_evolution_summary") or {})}
+    {_render_json_details("NPC evolution profile persistence summary JSON", model.get("npc_evolution_profile_persistence_summary") or {})}
     {_render_json_details("Quality gate summary JSON", model.get("quality_gate_summary") or {})}
     {_render_json_details("Slowest turns JSON", performance.get("slowest_turns") or [])}
     {_render_json_details("Background job summary JSON", model.get("background_jobs") or {})}
