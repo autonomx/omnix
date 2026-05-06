@@ -570,6 +570,20 @@ def _dict_or_empty(value: Any) -> Dict[str, Any]:
     return value if isinstance(value, dict) else {}
 
 
+def _extract_background_semantic_action_record(turn_result: Dict[str, Any]) -> Dict[str, Any]:
+    turn_result = _safe_dict(turn_result)
+    return (
+        _safe_dict(turn_result.get("semantic_action_v2"))
+        or _safe_dict(_safe_dict(turn_result.get("turn_contract")).get("semantic_action_v2"))
+        or _safe_dict(_safe_dict(turn_result.get("turn_contract")).get("semantic_action"))
+        or _safe_dict(_safe_dict(turn_result.get("raw_result")).get("semantic_action_v2"))
+        or _safe_dict(_safe_dict(turn_result.get("raw_result")).get("semantic_action"))
+        or _safe_dict(_safe_dict(turn_result.get("manual_turn_summary")).get("semantic_action_v2"))
+        or _safe_dict(_safe_dict(turn_result.get("manual_turn_summary")).get("semantic_action"))
+        or {}
+    )
+
+
 def _find_narration_payload(container: Dict[str, Any]) -> Dict[str, Any]:
     """Find the actual narration payload regardless of wrapper shape.
 
@@ -972,13 +986,7 @@ def run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
             narration_status = "pending"
             advisory_status = "pending"
             with timed_stage(turn_performance, "background_enqueue_ms"):
-                semantic_action_record = (
-                    _safe_dict(turn_result.get("semantic_action_v2"))
-                    or _safe_dict(_safe_dict(turn_result.get("turn_contract")).get("semantic_action_v2"))
-                    or _safe_dict(_safe_dict(turn_result.get("raw_result")).get("semantic_action_v2"))
-                    or _safe_dict(_safe_dict(turn_result.get("manual_turn_summary")).get("semantic_action_v2"))
-                    or {}
-                )
+                semantic_action_record = _extract_background_semantic_action_record(turn_result)
                 if args.background_llm_mode == "combined":
                     combined_background_llm_job_id = pipeline.submit_combined_background_llm(
                         provider=provider,
