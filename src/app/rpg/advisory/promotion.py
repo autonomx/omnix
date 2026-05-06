@@ -43,7 +43,7 @@ def _candidate_rejection_reason(
     promotion = _safe_dict(candidate.get("promotion"))
     eligible_from = int(promotion.get("eligible_from_turn") or 0)
     if current_turn < eligible_from:
-        return "not_eligible_until_future_turn"
+        return "__pending_not_eligible_until_future_turn__"
     if _safe_dict(candidate.get("safety")).get("contains_forbidden_authoritative_claim"):
         return "contains_forbidden_authoritative_claim"
     if not _is_backed_by_turn(candidate):
@@ -137,19 +137,34 @@ def promote_advisory_candidates(
             continue
 
         reason = _candidate_rejection_reason(candidate, simulation_state, current_turn)
+        if reason == "__pending_not_eligible_until_future_turn__":
+            candidate["status"] = "pending"
+            candidate.setdefault("promotion", {})["reason"] = "not_eligible_until_future_turn"
+            decisions.append(
+                {
+                    "candidate_id": cid,
+                    "status": "pending",
+                    "reason": "not_eligible_until_future_turn",
+                }
+            )
+            updated_candidates.append(candidate)
+            continue
+
         if reason:
             candidate["status"] = "rejected"
             candidate.setdefault("promotion", {})["rejected"] = True
             candidate.setdefault("promotion", {})["reason"] = reason
-            rejected.append(
-                {
-                    "candidate_id": cid,
-                    "turn_index": candidate.get("turn_index"),
-                    "kind": candidate.get("kind"),
-                    "reason": reason,
-                    "rejected_at_turn": current_turn,
-                }
-            )
+            # Only add to permanent rejected list if not a timing issue
+            if reason != "__pending_not_eligible_until_future_turn__":
+                rejected.append(
+                    {
+                        "candidate_id": cid,
+                        "turn_index": candidate.get("turn_index"),
+                        "kind": candidate.get("kind"),
+                        "reason": reason,
+                        "rejected_at_turn": current_turn,
+                    }
+                )
             decisions.append({"candidate_id": cid, "status": "rejected", "reason": reason})
         else:
             candidate["status"] = "accepted"

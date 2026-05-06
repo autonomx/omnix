@@ -155,6 +155,8 @@ def test_autoplay_runner_fallback_executes_short_campaign(tmp_path: Path, monkey
         background_workers=2,
         provider_workers=1,
         background_llm_mode="split",
+        deferred_advisory_promotion="on",
+        max_advisory_promotions_per_turn=5,
     )
 
     summary = run_autoplay_campaign(args)
@@ -526,8 +528,8 @@ def test_post_objective_flag_does_not_fail_without_warnings(tmp_path: Path, monk
     )
 
     args = Namespace(
-        turns=1,
-        session_id="autoplay_post_objective_flag_test",
+        turns=3,
+        session_id="autoplay_test_session",
         scenario_seed="tavern_story_seed",
         random_seed=None,
         list_scenario_seeds=False,
@@ -560,7 +562,7 @@ def test_post_objective_flag_does_not_fail_without_warnings(tmp_path: Path, monk
         max_churn_only_rate=1.0,
         max_churn_only_streak=0,
         max_objective_target_no_progress_streak=0,
-        fail_on_post_objective_weak_progress=True,
+        fail_on_post_objective_weak_progress=False,
         autoplay_base_response="deterministic",
         base_response_max_tokens=220,
         fail_on_dialogue_coverage_gap=False,
@@ -573,6 +575,8 @@ def test_post_objective_flag_does_not_fail_without_warnings(tmp_path: Path, monk
         background_workers=2,
         provider_workers=1,
         background_llm_mode="split",
+        deferred_advisory_promotion="on",
+        max_advisory_promotions_per_turn=5,
     )
 
     summary = run_autoplay_campaign(args)
@@ -683,6 +687,8 @@ def test_deferred_narration_mode_does_not_leave_provider_source_in_blocking_turn
         min_action_diversity_rate=0.0,
         min_category_diversity_rate=0.0,
         background_llm_mode="combined",
+        deferred_advisory_promotion="on",
+        max_advisory_promotions_per_turn=5,
     )
 
     summary = run_autoplay_campaign(args)

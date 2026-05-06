@@ -17,6 +17,7 @@ from app.rpg.advisory.candidates import (
     normalize_advisory_candidates,
     stable_json_for_prompt,
 )
+from app.rpg.advisory.runtime_store import ingest_deferred_advisory_candidates
 from tests.rpg.autoplay.checkpoints import validate_save_load_checkpoint
 from tests.rpg.autoplay.performance import elapsed_ms, now_perf
 from tests.rpg.autoplay.progress import state_digest
@@ -48,6 +49,24 @@ def _safe_str(value: Any) -> str:
 
 def _safe_list(value: Any) -> List[Any]:
     return value if isinstance(value, list) else []
+
+
+def _row_runtime_state(row: Dict[str, Any]) -> Dict[str, Any]:
+    """Return a mutable runtime_state object attached to the transcript row.
+
+    Autoplay rows may store raw result/session in different shapes depending on
+    harness mode. This helper creates a row-local runtime_state mirror for report
+    and promotion integration without mutating live simulation snapshots.
+    """
+    turn_result = _safe_dict(row.get("turn_result"))
+    session = _safe_dict(turn_result.get("session"))
+    runtime_state = _safe_dict(session.get("runtime_state"))
+    if not runtime_state:
+        runtime_state = _safe_dict(row.get("runtime_state"))
+    if not runtime_state:
+        runtime_state = {}
+    row["runtime_state"] = runtime_state
+    return runtime_state
 
 
 def stable_json_for_prompt(value: Any, max_chars: int = 6000) -> str:
@@ -1291,6 +1310,7 @@ def attach_background_results_to_transcript(
         "checkpoint_jobs": 0,
         "advisory_jobs": 0,
         "combined_background_llm_jobs": 0,
+        "advisory_candidates_ingested": 0,
         "background_job_seconds": 0.0,
         "deferred_narration_sources": {},
         "deferred_narration_provider_present": 0,
@@ -1354,6 +1374,14 @@ def attach_background_results_to_transcript(
             summary["advisory_jobs"] += 1
             row["deferred_advisory_result"] = result
             row["deferred_advisory_status"] = "ready" if result.get("ok") else "error"
+            if result.get("ok"):
+                runtime_state = _row_runtime_state(row)
+                row["deferred_advisory_ingest_result"] = ingest_deferred_advisory_candidates(
+                    runtime_state=runtime_state,
+                    candidates=result.get("candidates") if isinstance(result.get("candidates"), list) else [],
+                    turn_index=int(result.get("turn_index") or row.get("turn_index") or 0),
+                    source=_safe_str(result.get("source")) or "deferred_advisory",
+                )
         elif result.get("kind") == "combined_background_llm":
             summary["combined_background_llm_jobs"] += 1
             row["combined_background_llm_result"] = result
@@ -1394,12 +1422,25 @@ def attach_background_results_to_transcript(
                 "queue_timing": result.get("queue_timing") or {},
             }
             row["deferred_advisory_status"] = "ready" if result.get("ok") else "error"
+            if result.get("ok"):
+                runtime_state = _row_runtime_state(row)
+                row["deferred_advisory_ingest_result"] = ingest_deferred_advisory_candidates(
+                    runtime_state=runtime_state,
+                    candidates=result.get("candidates") if isinstance(result.get("candidates"), list) else [],
+                    turn_index=int(result.get("turn_index") or row.get("turn_index") or 0),
+                    source=_safe_str(result.get("source")) or "combined_background_llm",
+                )
 
     provider_jobs = [
         result
         for result in results
         if result.get("kind") in {"deferred_narration", "deferred_advisory", "combined_background_llm"}
     ]
+    summary["advisory_candidates_ingested"] = sum(
+        int(_safe_dict(row.get("deferred_advisory_ingest_result")).get("added") or 0)
+        for row in transcript
+        if isinstance(row, dict)
+    )
     summary["provider_queue_summary"] = _queue_summary(provider_jobs)
     summary["provider_queue_by_kind"] = {
         kind: _queue_summary([result for result in provider_jobs if result.get("kind") == kind])

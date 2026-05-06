@@ -1038,6 +1038,10 @@ def build_campaign_report_model(
         "combined_quality_shape_summary": _safe_dict(metrics.get("combined_quality_shape_summary")),
         "player_agent_prompt_budget_summary": _safe_dict(summary.get("player_agent_prompt_budget_summary")),
         "player_agent_cache_summary": _safe_dict(summary.get("player_agent_cache_summary")),
+        "deferred_advisory_promotion_summary": _safe_dict(
+            summary.get("deferred_advisory_promotion_summary")
+            or metrics.get("deferred_advisory_promotion_summary")
+        ),
         "quality_gate_summary": _safe_dict(summary.get("quality_gate_summary")),
         "shortcomings": shortcomings,
     }
@@ -1778,6 +1782,7 @@ def render_campaign_report_html(model: Dict[str, Any]) -> str:
     {_render_json_details("Combined quality shape summary JSON", model.get("combined_quality_shape_summary") or {})}
     {_render_json_details("Player-agent prompt budget summary JSON", model.get("player_agent_prompt_budget_summary") or {})}
     {_render_json_details("Player-agent cache summary JSON", model.get("player_agent_cache_summary") or {})}
+    {_render_json_details("Deferred advisory promotion summary JSON", model.get("deferred_advisory_promotion_summary") or {})}
     {_render_json_details("Quality gate summary JSON", model.get("quality_gate_summary") or {})}
     {_render_json_details("Slowest turns JSON", performance.get("slowest_turns") or [])}
     {_render_json_details("Background job summary JSON", model.get("background_jobs") or {})}
