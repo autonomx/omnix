@@ -33,6 +33,32 @@ def _safe_str(value: Any) -> str:
     return value if isinstance(value, str) else ""
 
 
+def _projection_id_from_accepted_row(accepted_row: Dict[str, Any]) -> str:
+    accepted_row = _safe_dict(accepted_row)
+    projection = _safe_dict(accepted_row.get("projection"))
+    return (
+        _safe_str(projection.get("candidate_id"))
+        or _safe_str(accepted_row.get("candidate_id"))
+    )
+
+
+def _evolution_consumed_projection_ids(runtime_state: Dict[str, Any]) -> set[str]:
+    evo_state = _safe_dict(_safe_dict(runtime_state).get("npc_evolution"))
+    consumed = _safe_list(evo_state.get("consumed_projection_ids"))
+    return {str(item) for item in consumed if item}
+
+
+def _mark_projection_evolution_consumed(runtime_state: Dict[str, Any], projection_id: str) -> None:
+    if not projection_id:
+        return
+    evo_state = runtime_state.setdefault("npc_evolution", {})
+    consumed = evo_state.setdefault("consumed_projection_ids", [])
+    if projection_id not in consumed:
+        consumed.append(projection_id)
+    if len(consumed) > 500:
+        evo_state["consumed_projection_ids"] = consumed[-500:]
+
+
 def _clamp(value: int, low: int, high: int) -> int:
     return max(low, min(high, value))
 
@@ -248,9 +274,22 @@ def consume_accepted_advisory_projections(
 
     signals: List[Dict[str, Any]] = []
     projection_decisions: List[Dict[str, Any]] = []
+    consumed_projection_ids = _evolution_consumed_projection_ids(runtime_state)
     for accepted_row in accepted[-max_signals_per_turn:]:
-        projection = _safe_dict(_safe_dict(accepted_row).get("projection"))
+        accepted_row = _safe_dict(accepted_row)
+        projection = _safe_dict(accepted_row.get("projection"))
         if not projection:
+            continue
+        projection_id = _projection_id_from_accepted_row(accepted_row)
+        if projection_id and projection_id in consumed_projection_ids:
+            projection_decisions.append(
+                {
+                    "projection_id": projection_id,
+                    "status": "skipped",
+                    "reason": "already_evolution_consumed",
+                    "kind": projection.get("kind"),
+                }
+            )
             continue
         signal, rejection = normalize_projection_to_evolution_signal(
             projection=projection,
@@ -261,7 +300,7 @@ def consume_accepted_advisory_projections(
             signals.append(signal)
             projection_decisions.append(
                 {
-                    "projection_id": projection.get("candidate_id"),
+                    "projection_id": projection_id or projection.get("candidate_id"),
                     "status": "signal_created",
                     "signal_id": signal.get("signal_id"),
                     "kind": signal.get("kind"),
@@ -271,7 +310,7 @@ def consume_accepted_advisory_projections(
         else:
             projection_decisions.append(
                 {
-                    "projection_id": projection.get("candidate_id"),
+                    "projection_id": projection_id or projection.get("candidate_id"),
                     "status": "rejected",
                     "reason": rejection,
                     "kind": projection.get("kind"),
@@ -294,6 +333,9 @@ def consume_accepted_advisory_projections(
         consume_decisions.append(decision)
         if decision.get("ok"):
             consumed += 1
+            projection_id = _safe_str(signal_dict.get("projection_id"))
+            if projection_id:
+                _mark_projection_evolution_consumed(runtime_state, projection_id)
 
     evo_state = npc_evolution_state(runtime_state)
     summary = summarize_npc_evolution_state(runtime_state)
@@ -313,6 +355,11 @@ def consume_accepted_advisory_projections(
         "turn_index": turn_index,
         "signals_created": len(signals),
         "signals_consumed": consumed,
+        "already_consumed_projection_skips": sum(
+            1
+            for decision in projection_decisions
+            if _safe_dict(decision).get("reason") == "already_evolution_consumed"
+        ),
         "projection_decisions": projection_decisions,
         "consume_decisions": consume_decisions,
         "ingest_result": ingest_result,

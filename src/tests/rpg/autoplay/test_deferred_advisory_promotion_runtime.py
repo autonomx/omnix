@@ -162,6 +162,9 @@ def test_promotion_runtime_carries_pending_candidates_forward_to_next_turn():
     assert transcript[1]["npc_evolution_consumption_result"]["signals_created"] >= 1
     assert transcript[1]["npc_evolution_consumption_result"]["signals_consumed"] >= 1
     assert transcript[1]["npc_evolution_summary"]["arc_count"] >= 1
+    # Running the consumer again on the same carried runtime state should not
+    # create another signal for the same accepted projection.
+    assert transcript[1]["npc_evolution_summary"]["consumed_projection_count"] >= 1
 
 
 def test_promotion_runtime_extracts_nested_turn_result_simulation_state_for_evolution():

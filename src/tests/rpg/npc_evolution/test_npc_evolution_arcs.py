@@ -1,4 +1,5 @@
 from app.rpg.npc_evolution.arcs import (
+    evolution_signal_id,
     ingest_evolution_signals,
     infer_npc_target_for_projection,
     normalize_projection_to_evolution_signal,
@@ -159,3 +160,22 @@ def test_explicit_unknown_target_falls_back_to_summary_name_match():
     assert reason == ""
     assert signal["npc_id"] == "bran"
     assert signal["target_inference"] == "matched_npc_name_in_summary"
+
+
+def test_evolution_signal_id_is_stable_for_same_projection_across_turns():
+    one = evolution_signal_id(
+        npc_id="bran",
+        turn_index=2,
+        kind="memory",
+        payload={"summary": "Bran remembers."},
+        projection_id="adv:1:memory:abc",
+    )
+    two = evolution_signal_id(
+        npc_id="bran",
+        turn_index=4,
+        kind="memory",
+        payload={"summary": "Bran remembers."},
+        projection_id="adv:1:memory:abc",
+    )
+
+    assert one == two

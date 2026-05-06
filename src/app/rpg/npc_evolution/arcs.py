@@ -113,7 +113,29 @@ def _contains_forbidden_claim(value: Any) -> bool:
     return any(key in text for key in FORBIDDEN_EVOLUTION_MUTATION_KEYS)
 
 
-def evolution_signal_id(*, npc_id: str, turn_index: int, kind: str, payload: Dict[str, Any]) -> str:
+def evolution_signal_id(
+    *,
+    npc_id: str,
+    turn_index: int,
+    kind: str,
+    payload: Dict[str, Any],
+    projection_id: str = "",
+) -> str:
+    # Idempotency rule:
+    # If a signal comes from an accepted advisory projection, the signal id must
+    # be stable across later turns. Otherwise the same projection can be
+    # re-consumed every turn and duplicate memories/hooks.
+    if projection_id:
+        raw = _stable_json(
+            {
+                "npc_id": npc_id,
+                "kind": kind,
+                "projection_id": projection_id,
+            }
+        )
+        digest = hashlib.sha256(raw.encode("utf-8")).hexdigest()[:16]
+        return f"npc_evo:{npc_id}:{kind}:projection:{digest}"
+
     raw = _stable_json(
         {
             "npc_id": npc_id,
@@ -295,6 +317,7 @@ def normalize_projection_to_evolution_signal(
             turn_index=turn_index,
             kind=kind,
             payload=payload,
+            projection_id=_safe_str(projection.get("candidate_id")),
         ),
         "npc_id": npc_id,
         "turn_index": int(turn_index),
@@ -364,6 +387,7 @@ def summarize_npc_evolution_state(runtime_state: Dict[str, Any]) -> Dict[str, An
     state = _safe_dict(_safe_dict(runtime_state).get("npc_evolution"))
     signals = _safe_list(state.get("signals"))
     arcs = _safe_dict(state.get("arcs"))
+    consumed_projection_ids = _safe_list(state.get("consumed_projection_ids"))
     by_kind: Dict[str, int] = {}
     by_npc: Dict[str, int] = {}
     consumed = 0
@@ -383,4 +407,5 @@ def summarize_npc_evolution_state(runtime_state: Dict[str, Any]) -> Dict[str, An
         "signals_by_npc": by_npc,
         "arc_count": len(arcs),
         "arcs_by_npc": sorted(list(arcs.keys())),
+        "consumed_projection_count": len(consumed_projection_ids),
     }
