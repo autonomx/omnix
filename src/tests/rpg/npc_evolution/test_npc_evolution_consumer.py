@@ -204,3 +204,39 @@ def test_consumer_grounds_innkeeper_alias_to_bran():
     assert result["signals_created"] == 1
     assert result["projection_decisions"][0]["target_grounding"]["reason"] == "explicit_role_alias"
     assert "Bran" in updated["npc_evolution"]["arcs"]
+
+
+def test_consumer_uses_canonical_arc_for_prefixed_npc_id():
+    runtime_state = {
+        "deferred_advisory": {
+            "accepted": [
+                {
+                    "candidate_id": "adv:1:future_hook:prefixed",
+                    "kind": "future_hook",
+                    "projection": {
+                        "candidate_id": "adv:1:future_hook:prefixed",
+                        "kind": "future_hook",
+                        "payload": {
+                            "target": "npc:bran",
+                            "summary": "Bran may answer later.",
+                        },
+                    },
+                }
+            ]
+        }
+    }
+    simulation_state = {
+        "scene": {"nearby_npcs": ["npc:bran"]},
+        "npc_progression_state": {"npcs": {"Bran": {"name": "Bran"}}},
+    }
+
+    updated, result = consume_accepted_advisory_projections(
+        runtime_state=runtime_state,
+        simulation_state=simulation_state,
+        turn_index=2,
+    )
+
+    assert result["signals_created"] == 1
+    assert "Bran" in updated["npc_evolution"]["arcs"]
+    assert "npc:bran" not in updated["npc_evolution"]["arcs"]
+    assert updated["npc_evolution"]["summary"]["arcs_by_npc"] == ["Bran"]

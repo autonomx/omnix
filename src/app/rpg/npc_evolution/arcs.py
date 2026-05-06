@@ -63,6 +63,36 @@ def _id_variants(value: Any) -> set[str]:
     return {item for item in variants if item}
 
 
+def canonical_npc_id(
+    *,
+    simulation_state: Dict[str, Any],
+    npc_id: str,
+) -> str:
+    """Collapse npc:bran / bran / Bran to the canonical known NPC key."""
+    variants = _id_variants(npc_id)
+    if not variants:
+        return ""
+
+    npcs = _known_npcs(simulation_state)
+    for known_id, record_any in npcs.items():
+        record = _safe_dict(record_any)
+        known_variants = set()
+        known_variants.update(_id_variants(known_id))
+        known_variants.update(_id_variants(record.get("id")))
+        known_variants.update(_id_variants(record.get("npc_id")))
+        known_variants.update(_id_variants(record.get("name")))
+        known_variants.update(_id_variants(record.get("display_name")))
+        if variants & known_variants:
+            return str(known_id)
+
+    for item in _present_npc_items(simulation_state):
+        present_id = _npc_id_from_present_item(item)
+        if variants & _id_variants(present_id):
+            return present_id
+
+    return npc_id
+
+
 def _known_npcs(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
     """Return known NPC map across supported state shapes."""
     simulation_state = _safe_dict(simulation_state)
@@ -312,6 +342,9 @@ def normalize_projection_to_evolution_signal(
         return None, target_reason or "npc_target_missing"
     if not _npc_exists(simulation_state, npc_id):
         return None, "npc_target_not_found"
+    npc_id = canonical_npc_id(simulation_state=simulation_state, npc_id=npc_id) or npc_id
+    payload["target"] = npc_id
+    payload["grounded_target"] = npc_id
 
     summary = _projection_summary(projection)
     if not summary:

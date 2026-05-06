@@ -1,4 +1,5 @@
 from app.rpg.npc_evolution.arcs import (
+    canonical_npc_id,
     evolution_signal_id,
     ingest_evolution_signals,
     infer_npc_target_for_projection,
@@ -200,3 +201,39 @@ def test_evolution_signal_id_is_stable_for_same_projection_across_turns():
     )
 
     assert one == two
+
+
+def test_canonical_npc_id_collapses_prefixed_id_to_known_npc_key():
+    assert (
+        canonical_npc_id(
+            simulation_state={
+                "scene": {"nearby_npcs": ["npc:bran"]},
+                "npc_progression_state": {"npcs": {"Bran": {"name": "Bran"}}},
+            },
+            npc_id="npc:bran",
+        )
+        == "Bran"
+    )
+
+
+def test_normalize_projection_emits_canonical_npc_id_for_prefixed_target():
+    signal, reason = normalize_projection_to_evolution_signal(
+        projection={
+            "candidate_id": "c1",
+            "kind": "future_hook",
+            "payload": {
+                "target": "npc:bran",
+                "summary": "Bran may answer later.",
+            },
+        },
+        simulation_state={
+            "scene": {"nearby_npcs": ["npc:bran"]},
+            "npc_progression_state": {"npcs": {"Bran": {"name": "Bran"}}},
+        },
+        turn_index=2,
+    )
+
+    assert reason == ""
+    assert signal["npc_id"] == "Bran"
+    assert signal["payload"]["target"] == "Bran"
+    assert signal["signal_id"].startswith("npc_evo:Bran:")

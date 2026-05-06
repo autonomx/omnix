@@ -16,6 +16,9 @@ from typing import Any, Dict, List
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', '..', 'src'))
 
 from app.rpg.player_action_context.runtime import build_player_action_context
+from tests.rpg.autoplay.advisory_promotion_runtime import (
+    run_deferred_advisory_promotions_for_transcript,
+)
 from tests.rpg.autoplay.base_runtime_response import (
     build_autoplay_base_response,
 )
@@ -49,6 +52,13 @@ from tests.rpg.autoplay.player_agent import (
     parse_player_agent_response,
     validate_player_action_against_context,
 )
+from tests.rpg.autoplay.player_agent_cache import PlayerAgentDecisionCache
+from tests.rpg.autoplay.player_agent_optimization import (
+    build_player_agent_context_packet,
+    build_player_agent_messages,
+    normalize_player_agent_payload,
+    player_agent_cache_key,
+)
 from tests.rpg.autoplay.progress import classify_progress_delta, state_digest
 from tests.rpg.autoplay.progress_quality import (
     classify_turn_progress_quality,
@@ -76,14 +86,6 @@ from tests.rpg.autoplay.strategy_profiles import (
     build_strategy_guidance,
     rerank_suggested_actions_for_strategy,
 )
-from tests.rpg.autoplay.player_agent_cache import PlayerAgentDecisionCache
-from tests.rpg.autoplay.player_agent_optimization import (
-    build_player_agent_context_packet,
-    build_player_agent_messages,
-    normalize_player_agent_payload,
-    player_agent_cache_key,
-)
-from tests.rpg.autoplay.advisory_promotion_runtime import run_deferred_advisory_promotions_for_transcript
 
 
 def _safe_dict(value: Any) -> Dict[str, Any]:
@@ -491,14 +493,28 @@ def _summarize_combined_quality_shape(transcript: List[Dict[str, Any]]) -> Dict[
 
 
 def _summarize_promotion_target_grounding(transcript: List[Dict[str, Any]]) -> Dict[str, Any]:
+    seen_grounding_candidate_ids = set()
+    seen_example_candidate_ids = set()
+    accepted_relationship_ids = set()
+    rejected_relationship_ids = set()
+
     summary: Dict[str, Any] = {
         "grounded": 0,
         "ungrounded": 0,
         "by_reason": {},
         "relationship_accepted": 0,
         "relationship_rejected": 0,
+        "unique_relationship_accepted": 0,
+        "unique_relationship_rejected": 0,
         "examples": [],
     }
+
+    def candidate_marker(value: Any, *, prefix: str = "candidate") -> str:
+        text = _safe_str(value)
+        if text:
+            return text
+        return f"{prefix}:missing"
+
     for row in transcript:
         result = _safe_dict(row.get("deferred_advisory_promotion_result"))
         for decision in result.get("decisions") if isinstance(result.get("decisions"), list) else []:
@@ -506,13 +522,19 @@ def _summarize_promotion_target_grounding(transcript: List[Dict[str, Any]]) -> D
             grounding = _safe_dict(decision.get("target_grounding"))
             if not grounding:
                 continue
+            marker = candidate_marker(decision.get("candidate_id"))
+            if marker in seen_grounding_candidate_ids:
+                continue
+            seen_grounding_candidate_ids.add(marker)
+
             reason = _safe_str(grounding.get("reason")) or "unknown"
             summary["by_reason"][reason] = int(summary["by_reason"].get(reason) or 0) + 1
             if grounding.get("grounded"):
                 summary["grounded"] += 1
             else:
                 summary["ungrounded"] += 1
-            if len(summary["examples"]) < 5:
+            if len(summary["examples"]) < 5 and marker not in seen_example_candidate_ids:
+                seen_example_candidate_ids.add(marker)
                 summary["examples"].append(
                     {
                         "turn_index": row.get("turn_index"),
@@ -526,12 +548,28 @@ def _summarize_promotion_target_grounding(transcript: List[Dict[str, Any]]) -> D
         runtime_state = _safe_dict(row.get("runtime_state"))
         accepted = _safe_list(_safe_dict(runtime_state.get("deferred_advisory")).get("accepted"))
         rejected = _safe_list(_safe_dict(runtime_state.get("deferred_advisory")).get("rejected"))
-        summary["relationship_accepted"] += sum(
-            1 for item in accepted if _safe_dict(item).get("kind") == "relationship_delta"
-        )
-        summary["relationship_rejected"] += sum(
-            1 for item in rejected if _safe_dict(item).get("kind") == "relationship_delta"
-        )
+        for item in accepted:
+            item = _safe_dict(item)
+            if item.get("kind") != "relationship_delta":
+                continue
+            marker = candidate_marker(item.get("candidate_id"), prefix="accepted")
+            accepted_relationship_ids.add(marker)
+        for item in rejected:
+            item = _safe_dict(item)
+            if item.get("kind") != "relationship_delta":
+                continue
+            marker = candidate_marker(item.get("candidate_id"), prefix="rejected")
+            rejected_relationship_ids.add(marker)
+
+    summary["relationship_accepted"] = len(accepted_relationship_ids)
+    summary["relationship_rejected"] = len(rejected_relationship_ids)
+    summary["unique_relationship_accepted"] = len(accepted_relationship_ids)
+    summary["unique_relationship_rejected"] = len(rejected_relationship_ids)
+    summary["dedup"] = {
+        "grounding_candidate_ids": len(seen_grounding_candidate_ids),
+        "accepted_relationship_candidate_ids": len(accepted_relationship_ids),
+        "rejected_relationship_candidate_ids": len(rejected_relationship_ids),
+    }
     return summary
 
 
