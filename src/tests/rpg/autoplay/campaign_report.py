@@ -1027,6 +1027,12 @@ def build_campaign_report_model(
         "dialogue_coverage": dialogue_coverage,
         "runtime_narration_diagnostics": runtime_narration_diagnostics,
         "background_jobs": _safe_dict(metrics.get("background_jobs")),
+        "provider_trace_summary": _safe_dict(metrics.get("provider_trace_summary")),
+        "manual_harness_trace_summary": _safe_dict(metrics.get("manual_harness_trace_summary")),
+        "turn_perf_trace_summary": _safe_dict(metrics.get("turn_perf_trace_summary")),
+        "player_agent_trace_summary": _safe_dict(metrics.get("player_agent_trace_summary")),
+        "deferred_narration_trace_summary": _safe_dict(metrics.get("deferred_narration_trace_summary")),
+        "deferred_advisory_trace_summary": _safe_dict(metrics.get("deferred_advisory_trace_summary")),
         "shortcomings": shortcomings,
     }
     model["story_so_far_paragraph"] = build_story_so_far_paragraph(model)
@@ -1755,6 +1761,12 @@ def render_campaign_report_html(model: Dict[str, Any]) -> str:
     <h3>Evaluation Wall Time</h3>
     {performance_stage_bars}
     {_render_json_details("Stage summary JSON", performance.get("stage_summary") or {})}
+    {_render_json_details("Provider trace summary JSON", model.get("provider_trace_summary") or {})}
+    {_render_json_details("Manual harness trace summary JSON", model.get("manual_harness_trace_summary") or {})}
+    {_render_json_details("Session turn trace summary JSON", model.get("turn_perf_trace_summary") or {})}
+    {_render_json_details("Player-agent trace summary JSON", model.get("player_agent_trace_summary") or {})}
+    {_render_json_details("Deferred narration trace summary JSON", model.get("deferred_narration_trace_summary") or {})}
+    {_render_json_details("Deferred advisory trace summary JSON", model.get("deferred_advisory_trace_summary") or {})}
     {_render_json_details("Slowest turns JSON", performance.get("slowest_turns") or [])}
     {_render_json_details("Background job summary JSON", model.get("background_jobs") or {})}
   </section>

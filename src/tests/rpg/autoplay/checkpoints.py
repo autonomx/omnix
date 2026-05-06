@@ -5,13 +5,12 @@ from copy import deepcopy
 from pathlib import Path
 from typing import Any, Dict, List
 
-from tests.rpg.autoplay.progress import state_digest
 from tests.rpg.autoplay.manual_turn_driver import (
     load_autoplay_manual_session,
     load_autoplay_simulation_state,
     prepare_autoplay_manual_session,
 )
-
+from tests.rpg.autoplay.progress import state_digest
 
 DEFAULT_MAX_STATE_BYTES = 2_000_000
 DEFAULT_MAX_ROOT_COUNT = 80

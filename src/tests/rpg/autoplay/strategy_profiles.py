@@ -3,7 +3,6 @@ from __future__ import annotations
 from collections import Counter
 from typing import Any, Dict, List
 
-
 DEFAULT_STRATEGY_PROFILE = "balanced_story_player"
 
 

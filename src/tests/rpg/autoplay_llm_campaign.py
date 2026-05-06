@@ -115,6 +115,167 @@ def _safe_str(value: Any) -> str:
     return value if isinstance(value, str) else ""
 
 
+def _summarize_player_agent_trace(transcript: List[Dict[str, Any]]) -> Dict[str, Any]:
+    summary: Dict[str, Any] = {
+        "turns": 0,
+        "fallback_turns": 0,
+        "llm_turns": 0,
+        "unknown_turns": 0,
+        "avg_player_agent_ms": 0.0,
+        "max_player_agent_ms": 0.0,
+        "selected_source_counts": {},
+        "fallback_reason_counts": {},
+        "errors": {},
+    }
+    timings: List[float] = []
+    for row in transcript:
+        if not isinstance(row, dict):
+            continue
+        summary["turns"] += 1
+        perf = _safe_dict(row.get("performance"))
+        ms = float(perf.get("player_agent_ms") or 0.0)
+        if ms:
+            timings.append(ms)
+
+        selected = _safe_dict(row.get("selected_player_action"))
+        source = (
+            _safe_str(selected.get("source"))
+            or _safe_str(selected.get("agent_source"))
+            or _safe_str(selected.get("mode"))
+            or "unknown"
+        )
+        if source == "unknown" and selected.get("ok") is True and selected.get("raw"):
+            source = "llm_player_agent"
+        summary["selected_source_counts"][source] = (
+            int(summary["selected_source_counts"].get(source) or 0) + 1
+        )
+        if "fallback" in source:
+            summary["fallback_turns"] += 1
+        elif "llm" in source or "provider" in source:
+            summary["llm_turns"] += 1
+        else:
+            summary["unknown_turns"] += 1
+
+        reason = _safe_str(selected.get("fallback_reason")) or _safe_str(selected.get("reason_code"))
+        if reason:
+            summary["fallback_reason_counts"][reason] = (
+                int(summary["fallback_reason_counts"].get(reason) or 0) + 1
+            )
+        error = _safe_str(selected.get("error")) or _safe_str(selected.get("provider_error"))
+        if error:
+            summary["errors"][error] = int(summary["errors"].get(error) or 0) + 1
+
+    if timings:
+        summary["avg_player_agent_ms"] = round(sum(timings) / len(timings), 3)
+        summary["max_player_agent_ms"] = round(max(timings), 3)
+    return summary
+
+
+def _summarize_deferred_narration_trace(transcript: List[Dict[str, Any]]) -> Dict[str, Any]:
+    summary: Dict[str, Any] = {
+        "turns": 0,
+        "ok_jobs": 0,
+        "failed_jobs": 0,
+        "sources": {},
+        "avg_worker_ms": 0.0,
+        "max_worker_ms": 0.0,
+        "provider_present": 0,
+        "provider_missing": 0,
+        "errors": {},
+        "diagnostics_examples": [],
+    }
+    timings: List[float] = []
+    for row in transcript:
+        if not isinstance(row, dict):
+            continue
+        result = _safe_dict(row.get("deferred_narration_result"))
+        if not result:
+            continue
+        summary["turns"] += 1
+        if result.get("ok"):
+            summary["ok_jobs"] += 1
+        else:
+            summary["failed_jobs"] += 1
+        ms = float(result.get("worker_ms") or 0.0)
+        if ms:
+            timings.append(ms)
+        payload = _safe_dict(result.get("narration_payload"))
+        source = _safe_str(payload.get("source")) or "unknown"
+        summary["sources"][source] = int(summary["sources"].get(source) or 0) + 1
+        diagnostics = _safe_dict(result.get("diagnostics"))
+        provider_shape = _safe_dict(diagnostics.get("provider_shape"))
+        if provider_shape.get("present"):
+            summary["provider_present"] += 1
+        else:
+            summary["provider_missing"] += 1
+        error = (
+            _safe_str(result.get("error"))
+            or _safe_str(payload.get("error"))
+            or _safe_str(payload.get("original_error"))
+            or _safe_str(diagnostics.get("exception"))
+            or _safe_str(diagnostics.get("payload_error"))
+            or _safe_str(diagnostics.get("payload_original_error"))
+        )
+        if error:
+            summary["errors"][error] = int(summary["errors"].get(error) or 0) + 1
+        if len(summary["diagnostics_examples"]) < 3:
+            summary["diagnostics_examples"].append(
+                {
+                    "turn_index": row.get("turn_index"),
+                    "source": source,
+                    "worker_ms": ms,
+                    "provider_shape": provider_shape,
+                    "payload_error": diagnostics.get("payload_error"),
+                    "payload_original_error": diagnostics.get("payload_original_error"),
+                }
+            )
+    if timings:
+        summary["avg_worker_ms"] = round(sum(timings) / len(timings), 3)
+        summary["max_worker_ms"] = round(max(timings), 3)
+    return summary
+
+
+def _summarize_deferred_advisory_trace(transcript: List[Dict[str, Any]]) -> Dict[str, Any]:
+    summary: Dict[str, Any] = {
+        "turns": 0,
+        "ok_jobs": 0,
+        "failed_jobs": 0,
+        "sources": {},
+        "candidate_count": 0,
+        "candidate_kinds": {},
+        "avg_worker_ms": 0.0,
+        "max_worker_ms": 0.0,
+        "errors": {},
+    }
+    timings: List[float] = []
+    for row in transcript:
+        result = _safe_dict(row.get("deferred_advisory_result"))
+        if not result:
+            continue
+        summary["turns"] += 1
+        if result.get("ok"):
+            summary["ok_jobs"] += 1
+        else:
+            summary["failed_jobs"] += 1
+        source = _safe_str(result.get("source")) or "unknown"
+        summary["sources"][source] = int(summary["sources"].get(source) or 0) + 1
+        ms = float(result.get("worker_ms") or 0.0)
+        if ms:
+            timings.append(ms)
+        candidates = result.get("candidates") if isinstance(result.get("candidates"), list) else []
+        summary["candidate_count"] += len(candidates)
+        for candidate in candidates:
+            kind = _safe_str(_safe_dict(candidate).get("kind")) or "unknown"
+            summary["candidate_kinds"][kind] = int(summary["candidate_kinds"].get(kind) or 0) + 1
+        error = _safe_str(result.get("error")) or _safe_str(_safe_dict(result.get("diagnostics")).get("provider_payload_error"))
+        if error:
+            summary["errors"][error] = int(summary["errors"].get(error) or 0) + 1
+    if timings:
+        summary["avg_worker_ms"] = round(sum(timings) / len(timings), 3)
+        summary["max_worker_ms"] = round(max(timings), 3)
+    return summary
+
+
 def _commit_authoritative_state(
     *,
     session_id: str,
@@ -674,8 +835,11 @@ def run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
         narration = _extract_narration(turn_result)
         narration_status = "ready"
         narration_job_id = ""
+        advisory_status = "disabled"
+        advisory_job_id = ""
         if args.narration_mode == "deferred":
             narration_status = "pending"
+            advisory_status = "pending"
             with timed_stage(turn_performance, "background_enqueue_ms"):
                 narration_job_id = pipeline.submit_deferred_narration(
                     provider=provider,
@@ -684,6 +848,23 @@ def run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
                     player_action=player_action,
                     simulation_state=final_turn_state,
                     turn_contract=turn_result.get("turn_contract") or {},
+                    prefer_provider=True,
+                )
+                semantic_action_record = (
+                    _safe_dict(turn_result.get("semantic_action_v2"))
+                    or _safe_dict(_safe_dict(turn_result.get("turn_contract")).get("semantic_action_v2"))
+                    or _safe_dict(_safe_dict(turn_result.get("raw_result")).get("semantic_action_v2"))
+                    or _safe_dict(_safe_dict(turn_result.get("manual_turn_summary")).get("semantic_action_v2"))
+                    or {}
+                )
+                advisory_job_id = pipeline.submit_deferred_advisory(
+                    provider=provider,
+                    session_id=session_id,
+                    turn_index=turn_index,
+                    player_action=player_action,
+                    simulation_state=final_turn_state,
+                    turn_contract=turn_result.get("turn_contract") or {},
+                    semantic_action_record=semantic_action_record,
                     prefer_provider=True,
                 )
             if not narration:
@@ -743,11 +924,19 @@ def run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
                 "runtime_name": turn_result.get("runtime_name"),
             },
             "narration_trace": turn_result.get("narration_trace") if args.debug_provider_shape else [],
+            "provider_trace": turn_result.get("provider_trace") if args.debug_provider_shape else [],
+            "manual_stage_trace": turn_result.get("manual_stage_trace") if args.debug_provider_shape else [],
+            "manual_harness_trace": turn_result.get("manual_harness_trace") if args.debug_provider_shape else [],
+            "manual_harness_trace_summary": turn_result.get("manual_harness_trace_summary") if args.debug_provider_shape else {},
+            "turn_perf_trace": turn_result.get("turn_perf_trace") if args.debug_provider_shape else [],
+            "turn_perf_trace_summary": turn_result.get("turn_perf_trace_summary") if args.debug_provider_shape else {},
             "turn_contract": turn_result.get("turn_contract") or {},
             "narration": narration,
             "narration_mode": args.narration_mode,
             "narration_status": narration_status,
             "narration_job_id": narration_job_id,
+            "deferred_advisory_status": advisory_status,
+            "deferred_advisory_job_id": advisory_job_id,
             "blocking_narration_source": blocking_narration_source,
             "deferred_blocking_provider_violation": deferred_blocking_provider_violation,
             "blocking_provider_call_suppressed_after_the_fact": bool(deferred_blocking_provider_violation),
@@ -877,6 +1066,73 @@ def run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
         artifact_write_ms=artifact_write_ms,
     )
     metrics = compute_progress_metrics(transcript, latest_context=latest_context)
+    metrics["player_agent_trace_summary"] = _summarize_player_agent_trace(transcript)
+    metrics["deferred_narration_trace_summary"] = _summarize_deferred_narration_trace(transcript)
+    metrics["deferred_advisory_trace_summary"] = _summarize_deferred_advisory_trace(transcript)
+    manual_harness_slowest = []
+    for row in transcript:
+        summary = row.get("manual_harness_trace_summary") or {}
+        for stage in summary.get("slowest_stages") or []:
+            manual_harness_slowest.append(
+                {
+                    "turn_index": row.get("turn_index"),
+                    "event": stage.get("event"),
+                    "elapsed_seconds": stage.get("elapsed_seconds"),
+                }
+            )
+    metrics["manual_harness_trace_summary"] = {
+        "enabled": bool(args.debug_provider_shape),
+        "slowest_stages": sorted(
+            manual_harness_slowest,
+            key=lambda item: float(item.get("elapsed_seconds") or 0.0),
+            reverse=True,
+        )[:20],
+    }
+
+    turn_perf_slowest = []
+    for row in transcript:
+        summary = row.get("turn_perf_trace_summary") or {}
+        for stage in summary.get("slowest_stages") or []:
+            turn_perf_slowest.append(
+                {
+                    "turn_index": row.get("turn_index"),
+                    "event": stage.get("event"),
+                    "elapsed_seconds": stage.get("elapsed_seconds"),
+                }
+            )
+    metrics["turn_perf_trace_summary"] = {
+        "enabled": bool(args.debug_provider_shape),
+        "slowest_stages": sorted(
+            turn_perf_slowest,
+            key=lambda item: float(item.get("elapsed_seconds") or 0.0),
+            reverse=True,
+        )[:30],
+    }
+    provider_trace_rows = [
+        item
+        for row in transcript
+        for item in (row.get("provider_trace") or [])
+        if isinstance(item, dict)
+    ]
+    metrics["provider_trace_summary"] = {
+        "provider_call_count": sum(1 for row in provider_trace_rows if row.get("event") == "provider_call"),
+        "provider_call_seconds": round(
+            sum(float(row.get("elapsed_seconds") or 0.0) for row in provider_trace_rows if row.get("event") == "provider_call"),
+            3,
+        ),
+        "by_purpose": {},
+    }
+    for row in provider_trace_rows:
+        if row.get("event") != "provider_call":
+            continue
+        purpose = str(row.get("purpose") or "unknown")
+        bucket = metrics["provider_trace_summary"]["by_purpose"].setdefault(
+            purpose,
+            {"count": 0, "seconds": 0.0, "prompt_chars": 0},
+        )
+        bucket["count"] += 1
+        bucket["seconds"] = round(bucket["seconds"] + float(row.get("elapsed_seconds") or 0.0), 3)
+        bucket["prompt_chars"] += int(row.get("prompt_chars") or 0)
     metrics["narration_trace_summary"] = {
         "guard_enter_count": sum(
             1
@@ -1005,6 +1261,9 @@ def run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
         "health": health,
         "performance": performance_metrics,
         "background_jobs": background_results_summary,
+        "player_agent_trace_summary": metrics.get("player_agent_trace_summary") or {},
+        "deferred_narration_trace_summary": metrics.get("deferred_narration_trace_summary") or {},
+        "deferred_advisory_trace_summary": metrics.get("deferred_advisory_trace_summary") or {},
     }
     artifact_start = now_perf()
     extra_paths = {}
@@ -1166,6 +1425,19 @@ def main(argv: List[str] | None = None) -> int:
     metrics = summary.get("health", {}).get("metrics", {})
     print(f"real_turn_runtime_count: {metrics.get('real_turn_runtime_count')}")
     print(f"compatibility_turn_runtime_count: {metrics.get('compatibility_turn_runtime_count')}")
+    player_agent_trace_summary = summary.get("player_agent_trace_summary") or {}
+    deferred_trace_summary = summary.get("deferred_narration_trace_summary") or {}
+    print(f"player_agent_sources: {player_agent_trace_summary.get('selected_source_counts')}")
+    print(f"player_agent_fallback_reasons: {player_agent_trace_summary.get('fallback_reason_counts')}")
+    print(f"deferred_narration_sources: {deferred_trace_summary.get('sources')}")
+    print(f"deferred_narration_provider_present: {deferred_trace_summary.get('provider_present')}")
+    print(f"deferred_narration_provider_missing: {deferred_trace_summary.get('provider_missing')}")
+    print(f"deferred_narration_errors: {deferred_trace_summary.get('errors')}")
+    deferred_advisory_summary = summary.get("deferred_advisory_trace_summary") or {}
+    print(f"deferred_advisory_sources: {deferred_advisory_summary.get('sources')}")
+    print(f"deferred_advisory_candidate_count: {deferred_advisory_summary.get('candidate_count')}")
+    print(f"deferred_advisory_candidate_kinds: {deferred_advisory_summary.get('candidate_kinds')}")
+    print(f"deferred_advisory_errors: {deferred_advisory_summary.get('errors')}")
 
     warnings = summary.get("health", {}).get("warnings") or []
     if args.fail_on_regression_warnings and warnings:

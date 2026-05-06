@@ -10,9 +10,6 @@ This replaces the legacy in-memory GameSession / pipeline.py / routes.py flow.
 """
 from __future__ import annotations
 
-from app.rpg.session.deferred_narration_guard import suppress_provider_runtime_narration
-from app.rpg.session.narration_trace import record_narration_trace, record_narration_trace_stack
-
 import ast
 import copy
 import hashlib
@@ -24,6 +21,18 @@ import time as _time
 from copy import deepcopy
 from datetime import datetime, timezone
 from typing import Any, Callable, Dict, List, Optional, Tuple
+
+from app.rpg.session.deferred_narration_guard import suppress_provider_runtime_narration
+from app.rpg.session.narration_trace import (
+    record_narration_trace,
+    record_narration_trace_stack,
+)
+from app.rpg.session.turn_perf_trace import (
+    record_elapsed_turn_stage,
+    record_turn_perf_trace,
+    record_turn_perf_trace_stack,
+    traced_turn_stage,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -3098,7 +3107,7 @@ def _classify_player_action_context(
     location_id = _safe_str(player_state.get("location_id"))
     tick = int(simulation_state.get("tick", runtime_state.get("tick", 0)) or 0)
 
-    return {
+    result = {
         "tick": tick,
         "player_input": player_input[:200],
         "action_type": action_type,
@@ -3109,6 +3118,13 @@ def _classify_player_action_context(
         "target_name": target_name,
         "location_id": location_id,
     }
+    record_turn_perf_trace(
+        "authoritative_before_return",
+        reason="normal",
+        return_keys=sorted(list(_safe_dict(result).keys()))[:80],
+        ok=bool(_safe_dict(result).get("ok")),
+    )
+    return result
 
 
 def _seconds_since_iso(iso_str: str) -> int:
@@ -10029,9 +10045,20 @@ def _apply_turn_authoritative(
     *,
     performance_override: Dict[str, Any] | None = None,
 ) -> Dict[str, Any]:
+    record_turn_perf_trace_stack(
+        "authoritative_enter",
+        function="_apply_turn_authoritative",
+    )
     _t0 = _time.monotonic()
+
     session = load_runtime_session(session_id)
     if session is None:
+        record_turn_perf_trace(
+            "authoritative_before_return",
+            reason="session_not_found",
+            return_keys=[],
+            ok=False,
+        )
         return {"ok": False, "error": "session_not_found"}
 
     # IMPORTANT: keep the old apply_turn authoritative pipeline intact.
@@ -10053,6 +10080,22 @@ def _apply_turn_authoritative(
         else:
             runtime_state["performance"] = dict(performance_override)
     perf = _normalize_performance_settings(runtime_state)
+
+    # Playable/deferred mode: keep the authoritative turn synchronous,
+    # deterministic, and fast. LLM advisory is useful for richer interpretation,
+    # but it is not allowed to block the turn path when narration/LLM work is
+    # being deferred. The deterministic semantic action fallback still runs
+    # below via _build_fast_semantic_action_record(...).
+    defer_runtime_llm_work = bool(
+        suppress_provider_runtime_narration()
+        or runtime_state.get("autoplay_deferred_narration")
+        or runtime_state.get("deferred_runtime_narration")
+        or runtime_state.get("narration_mode") == "deferred"
+    )
+    if defer_runtime_llm_work:
+        perf["enable_action_advisory"] = False
+        perf["enable_semantic_action_advisory"] = False
+        runtime_state["deferred_runtime_advisory_suppressed"] = True
     runtime_state["performance"] = perf
 
     story_policy = _normalize_story_policy(runtime_state)
@@ -10243,7 +10286,14 @@ def _apply_turn_authoritative(
     }
 
     if mode == "live":
+        record_turn_perf_trace(
+            "authoritative_advisory_policy",
+            enable_action_advisory=bool(perf.get("enable_action_advisory")),
+            enable_semantic_action_advisory=bool(perf.get("enable_semantic_action_advisory")),
+            deferred_runtime_advisory_suppressed=bool(runtime_state.get("deferred_runtime_advisory_suppressed")),
+        )
         if perf["enable_action_advisory"]:
+            _stage_started = __import__("time").perf_counter()
             try:
                 advisory = get_action_advisory(
                     llm_gateway=_get_llm_gateway(),
@@ -10270,8 +10320,14 @@ def _apply_turn_authoritative(
             except Exception as e:
                 logger.warning(f"Action advisory failed: {e}", exc_info=True)
                 advisory = {}
+            record_elapsed_turn_stage(
+                "authoritative_action_advisory",
+                _stage_started,
+                advisory_present=bool(advisory),
+            )
 
         if perf["enable_semantic_action_advisory"]:
+            _stage_started = __import__("time").perf_counter()
             try:
                 semantic_advisory = get_semantic_action_advisory(
                     llm_gateway=_get_llm_gateway(),
@@ -10296,6 +10352,11 @@ def _apply_turn_authoritative(
             except Exception as e:
                 logger.warning(f"Semantic action advisory failed: {e}", exc_info=True)
                 semantic_advisory = {}
+            record_elapsed_turn_stage(
+                "authoritative_semantic_action_advisory",
+                _stage_started,
+                semantic_advisory_present=bool(semantic_advisory),
+            )
         if record_replay_artifacts:
             runtime_state = _prune_llm_records_state(runtime_state)
     else:
@@ -10339,6 +10400,7 @@ def _apply_turn_authoritative(
 
     semantic_compiled_key = f"semantic_action_compiled:{current_tick}"
     if mode == "live":
+        _stage_started = __import__("time").perf_counter()
         if perf["enable_semantic_action_advisory"]:
             semantic_action_record = _compile_semantic_action_record(
                 simulation_state=simulation_state,
@@ -10351,6 +10413,13 @@ def _apply_turn_authoritative(
             semantic_action_record = _build_fast_semantic_action_record(
                 player_input, action, simulation_state,
             )
+        record_elapsed_turn_stage(
+            "authoritative_semantic_action_compile",
+            _stage_started,
+            advisory_enabled=bool(perf.get("enable_semantic_action_advisory")),
+            semantic_action_type=_safe_str(_safe_dict(semantic_action_record).get("semantic_action_type")),
+            semantic_family=_safe_str(_safe_dict(semantic_action_record).get("semantic_family")),
+        )
         semantic_compiled_capture = {
             "type": "semantic_action_compiled",
             "tick": current_tick,
@@ -12759,8 +12828,18 @@ def apply_turn(
     *,
     performance_override: Dict[str, Any] | None = None,
 ) -> Dict[str, Any]:
+    record_turn_perf_trace_stack(
+        "runtime_apply_turn_enter",
+        function="app.rpg.session.runtime.apply_turn",
+    )
+    _apply_turn_started = __import__("time").perf_counter()
     session = load_runtime_session(session_id)
     if session is None:
+        record_turn_perf_trace(
+            "runtime_apply_turn_before_return",
+            elapsed_seconds=round(__import__("time").perf_counter() - _apply_turn_started, 3),
+            return_keys=sorted(list({"ok": False, "error": "session_not_found"}.keys()))[:80],
+        )
         return {"ok": False, "error": "session_not_found"}
 
     simulation_state = copy.deepcopy(_safe_dict(session.get("simulation_state")))
@@ -12971,38 +13050,11 @@ def apply_turn(
         )
         result["direct_companion_turn_result"] = copy.deepcopy(direct_companion_turn_result)
 
-        conversation_result["party_aware_turn_context"] = copy.deepcopy(party_aware_turn_context)
-        conversation_result["companion_presence_summary"] = copy.deepcopy(companion_presence)
-        conversation_result["companion_presence_projection"] = copy.deepcopy(
-            _safe_dict(simulation_state.get("companion_presence_projection"))
+        record_turn_perf_trace(
+            "runtime_apply_turn_before_return",
+            elapsed_seconds=round(__import__("time").perf_counter() - _apply_turn_started, 3),
+            return_keys=sorted(list(result.keys()))[:80] if isinstance(result, dict) else [],
         )
-        conversation_result["direct_companion_turn_result"] = copy.deepcopy(direct_companion_turn_result)
-        conversation_result["companion_memory_result"] = copy.deepcopy(companion_memory_result)
-        conversation_result["companion_loyalty_projection"] = copy.deepcopy(companion_loyalty_result)
-        conversation_result["companion_memory_summary"] = copy.deepcopy(companion_memory_summary_result)
-        conversation_result["companion_quest_seed_result"] = copy.deepcopy(companion_quest_seed_result)
-        conversation_result["companion_quest_summary"] = copy.deepcopy(companion_quest_summary_result)
-        conversation_result["party_composition_effects"] = copy.deepcopy(party_composition_result)
-        result["party_composition_effects"] = copy.deepcopy(party_composition_result)
-        result["result"]["party_composition_effects"] = copy.deepcopy(party_composition_result)
-        resolved_result["party_composition_effects"] = copy.deepcopy(party_composition_result)
-
-        _npc_profile_summary = copy.deepcopy(_active_companion_profiles_summary(simulation_state))
-        _character_cards_sum = copy.deepcopy(list_character_cards_for_simulation_state(simulation_state))
-        conversation_result["npc_profile_summary"] = _npc_profile_summary
-        conversation_result["character_cards_summary"] = _character_cards_sum
-        result["npc_profile_summary"] = _npc_profile_summary
-        result["character_cards_summary"] = _character_cards_sum
-        result["result"]["npc_profile_summary"] = _npc_profile_summary
-        result["result"]["character_cards_summary"] = _character_cards_sum
-        resolved_result["npc_profile_summary"] = _npc_profile_summary
-        resolved_result["character_cards_summary"] = _character_cards_sum
-
-        turn_contract["resolved_result"] = copy.deepcopy(resolved_result)
-        result["conversation_result"] = conversation_result
-        result["result"]["conversation_result"] = conversation_result
-        turn_contract["conversation_result"] = conversation_result
-
         return result
 
     # AR-AS-AT: Companion command runtime (bounded, deterministic).
@@ -13113,13 +13165,33 @@ def apply_turn(
         )
         result["session"] = session
 
+        record_turn_perf_trace(
+            "runtime_apply_turn_before_return",
+            elapsed_seconds=round(__import__("time").perf_counter() - _apply_turn_started, 3),
+            return_keys=sorted(list(result.keys()))[:80] if isinstance(result, dict) else [],
+        )
         return result
 
+    record_turn_perf_trace_stack("runtime_checkpoint_03_before_core_turn")
+
+    # Everything between checkpoint_03 and checkpoint_04 is currently the
+    # remaining live-blocking bottleneck. Keep these stages broad but tied to
+    # concrete subsystem calls/assignments so the next artifact names the owner.
+
+    _general_interaction_started = __import__("time").perf_counter()
+    record_turn_perf_trace_stack("runtime_core_before_pre_authoritative_general_interaction")
     general_interaction_result = resolve_general_interaction(
         simulation_state,
         player_input=player_input,
         actor_id="player",
         tick=tick,
+    )
+    record_elapsed_turn_stage(
+        "pre_authoritative_general_interaction",
+        _general_interaction_started,
+        result_keys=sorted(list(_safe_dict(general_interaction_result).keys()))[:80],
+        llm_called=bool(_safe_dict(general_interaction_result).get("llm_called")),
+        combat_narration_attempted=bool(_safe_dict(general_interaction_result).get("combat_narration_attempted")),
     )
 
     inventory_result = _safe_dict(general_interaction_result.get("inventory_result"))
@@ -13136,7 +13208,9 @@ def apply_turn(
     consumable_result = _safe_dict(general_interaction_result.get("consumable_result"))
     equipment_stats = _safe_dict(general_interaction_result.get("equipment_stats"))
     crafting_result = _safe_dict(general_interaction_result.get("crafting_result"))
+    _merchant_started = __import__("time").perf_counter()
     merchant_result = _safe_dict(general_interaction_result.get("merchant_result"))
+    record_elapsed_turn_stage("merchant", _merchant_started)
     loot_result = _safe_dict(general_interaction_result.get("loot_result"))
 
     combat_result = _safe_dict(general_interaction_result.get("combat_result"))
@@ -13153,11 +13227,14 @@ def apply_turn(
             combat_result=combat_result,
             combat_state=combat_state,
         )
-        combat_result = _safe_dict(general_interaction_result.get("combat_result"))
-        combat_state = _safe_dict(
-            general_interaction_result.get("combat_state")
-            or simulation_state.get("combat_state")
-        )
+    _combat_started = __import__("time").perf_counter()
+    combat_result = _safe_dict(general_interaction_result.get("combat_result"))
+    record_elapsed_turn_stage("combat", _combat_started)
+    record_turn_perf_trace("runtime_checkpoint_before_companion_systems")
+    combat_state = _safe_dict(
+        general_interaction_result.get("combat_state")
+        or simulation_state.get("combat_state")
+    )
     combat_narration_contract = _safe_dict(
         general_interaction_result.get("combat_narration_contract")
     )
@@ -13192,19 +13269,37 @@ def apply_turn(
             pass
         return final_result
 
+    _stage_started = __import__("time").perf_counter()
+    record_turn_perf_trace_stack("runtime_core_before_apply_turn_authoritative")
     authoritative_result = _apply_turn_authoritative(
         session_id,
         player_input,
         action=action,
         performance_override=performance_override,
     )
+    record_elapsed_turn_stage(
+        "apply_turn_authoritative",
+        _stage_started,
+        ok=bool(_safe_dict(authoritative_result).get("ok")),
+        result_keys=sorted(list(_safe_dict(authoritative_result).keys()))[:80],
+    )
     if not authoritative_result.get("ok"):
         return authoritative_result
+
+    _stage_started = __import__("time").perf_counter()
     final_result = build_apply_turn_response(authoritative_result)
+    record_elapsed_turn_stage(
+        "build_apply_turn_response",
+        _stage_started,
+        result_keys=sorted(list(_safe_dict(final_result).keys()))[:80],
+    )
+
+    _stage_started = __import__("time").perf_counter()
     final_result = _rescue_final_apply_turn_combat_utility_result(
         final_result,
         player_input,
     )
+    record_elapsed_turn_stage("rescue_final_apply_turn_combat_utility", _stage_started)
 
     # Defaults for post-action companion runtime.
     # Some authoritative paths, including J19-J21 combat utility rescue paths,
@@ -13255,27 +13350,51 @@ def apply_turn(
             tick=tick,
             reason="apply_turn_post_action",
         )
+        _stage_started = __import__("time").perf_counter()
+        project_active_companions_into_presence(
+            _post_action_sim,
+            location_id=_post_loc,
+            tick=tick,
+            reason="apply_turn_post_action",
+        )
+        record_elapsed_turn_stage("companion_presence_projection", _stage_started)
+
+        _stage_started = __import__("time").perf_counter()
         _companion_presence = companion_presence_summary(_post_action_sim)
+        record_elapsed_turn_stage("companion_presence_summary", _stage_started)
+
         _party_aware_ctx = build_party_aware_turn_context(
             _post_action_sim,
             player_input=player_input,
             tick=tick,
         )
         # AU-AV-AW Patch 3.2: apply personality-aware relationship drift on normal party turns.
+        _stage_started = __import__("time").perf_counter()
         _companion_drift = maybe_apply_companion_relationship_drift_from_player_input(
             _post_action_sim,
             player_input=player_input,
             tick=tick,
         )
-        _companion_mem_summary = companion_memory_summary(_post_action_sim)
+        record_elapsed_turn_stage("companion_relationship_drift", _stage_started)
 
+        _stage_started = __import__("time").perf_counter()
+        _companion_mem_summary = companion_memory_summary(_post_action_sim)
+        record_elapsed_turn_stage("companion_memory_summary", _stage_started)
+        
         # AX-AY-AZ Patch 3: progress companion quests from player input.
+        _stage_started = __import__("time").perf_counter()
         _companion_quest_progress = maybe_progress_companion_quest_from_player_input(
             _post_action_sim,
             player_input=player_input,
             tick=tick,
         )
+        record_elapsed_turn_stage("companion_quest_progress", _stage_started)
+
+        _stage_started = __import__("time").perf_counter()
         _companion_quest_sum = companion_quest_summary(_post_action_sim)
+        record_elapsed_turn_stage("companion_quest_summary", _stage_started)
+
+        record_turn_perf_trace("runtime_checkpoint_after_companion_systems")
 
         _direct_companion = maybe_build_direct_companion_turn_response(
             _post_action_sim,
@@ -13306,16 +13425,22 @@ def apply_turn(
         final_result["companion_quest_summary"] = copy.deepcopy(_companion_quest_sum)
         final_result["party_composition_effects"] = copy.deepcopy(_party_composition)
 
+        _npc_profile_started = __import__("time").perf_counter()
         _nps = copy.deepcopy(_active_companion_profiles_summary(_post_action_sim))
+        record_elapsed_turn_stage("npc_profile_summary", _npc_profile_started)
         _ccs = copy.deepcopy(list_character_cards_for_simulation_state(_post_action_sim))
         final_result["npc_profile_summary"] = _nps
         final_result["character_cards_summary"] = _ccs
+        _semantic_action_started = __import__("time").perf_counter()
         final_result["semantic_action_v2"] = copy.deepcopy(
             _safe_dict(general_interaction_result.get("semantic_action_v2"))
         )
+        record_elapsed_turn_stage("semantic_action", _semantic_action_started)
+        _interaction_started = __import__("time").perf_counter()
         final_result["interaction_result"] = copy.deepcopy(
             _safe_dict(general_interaction_result.get("interaction_result"))
         )
+        record_elapsed_turn_stage("interaction", _interaction_started)
         final_result["general_interaction_result"] = copy.deepcopy(general_interaction_result)
         final_result["inventory_result"] = copy.deepcopy(inventory_result)
         final_result["container_result"] = copy.deepcopy(container_result)
@@ -13337,7 +13462,9 @@ def apply_turn(
         final_result["combat_narration_error"] = combat_llm_error
         final_result["combat_loot_result"] = copy.deepcopy(combat_loot_result)
         final_result["combat_ammo_result"] = copy.deepcopy(combat_ammo_result)
+        _visible_interaction_started = __import__("time").perf_counter()
         final_result["visible_interaction_reason"] = _interaction_visible_result_reason(general_interaction_result)
+        record_elapsed_turn_stage("visible_interaction_reason", _visible_interaction_started)
 
         _nested = _safe_dict(final_result.get("result"))
         _nested["party_aware_turn_context"] = copy.deepcopy(_party_aware_ctx)
@@ -13581,6 +13708,8 @@ def apply_turn(
             runtime_provider = None
         else:
             runtime_provider = get_runtime_llm_provider()
+    record_turn_perf_trace("runtime_checkpoint_04_after_core_turn")
+    record_turn_perf_trace_stack("runtime_checkpoint_05_before_narration")
     _defer_trace_value = suppress_provider_runtime_narration()
     record_narration_trace_stack(
         "before_build_runtime_narration_payload",
@@ -13599,6 +13728,7 @@ def apply_turn(
         source=(narration_payload.get("source") if isinstance(narration_payload, dict) else ""),
         defer_runtime_narration=_defer_trace_value,
     )
+    record_turn_perf_trace("runtime_checkpoint_06_after_narration")
     if _defer_trace_value and isinstance(narration_payload, dict):
         narration_payload["source"] = "deferred_runtime_narration_pending"
         narration_payload["deferred"] = True
@@ -13610,6 +13740,11 @@ def apply_turn(
     if narration_payload.get("narration"):
         final_result["narration"] = narration_payload["narration"]
     final_result["llm_called"] = narration_payload.get("source") == "provider_runtime_narration"
+    record_turn_perf_trace(
+        "runtime_apply_turn_before_return",
+        elapsed_seconds=round(__import__("time").perf_counter() - _apply_turn_started, 3),
+        return_keys=sorted(list(final_result.keys()))[:80] if isinstance(final_result, dict) else [],
+    )
     return final_result
 
 
