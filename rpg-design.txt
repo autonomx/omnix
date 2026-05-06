@@ -1,881 +1,720 @@
-Below is N43-N45 — Background LLM Consolidation + Provider Queue Metrics v1 as a literal apply-this-patch diff spec.
+Below is N46-N48 — Combined Background Prompt Context Budget v1 as a literal apply-this-patch diff spec.
 
 Goal:
 
-N43: provider queue/run timing for background LLM jobs
-N44: optional combined narration + advisory background job
-N45: report performance budget split + regression thresholds
+Keep output quality high.
+Reduce prompt waste.
+Measure prompt/context size by section.
+Keep combined background LLM provider-backed.
+Do not touch live blocking path.
+N46-N48 — Combined Background Prompt Context Budget v1
+Scope
 
-This bundle must preserve the current win:
+This bundle changes only the combined background LLM job prompt/context construction.
 
-human-equivalent blocking stays sub-second / low-ms
-blocking provider calls remain 0
-blocking advisory remains suppressed
-N43 — Provider Queue Metrics
-1. Add queue timing to AutoplayBackgroundPipeline
+It should not change:
 
-Patch:
+runtime.apply_turn
+_apply_turn_authoritative
+blocking narration/advisory suppression
+manual_turn_ms path
+authoritative simulation state
 
-src/tests/rpg/autoplay/parallel_pipeline.py
-1A. Add queued timestamp wrapper helpers
+Expected:
+
+avg_human_playable_blocking_ms remains ~tens of ms
+combined_background_llm_jobs == turns_executed
+provider_combined_background_llm remains active
+candidate_count remains > 0
+prompt/context metrics appear in report
+N46 — Compact context packet
+1. Patch src/tests/rpg/autoplay/parallel_pipeline.py
+1A. Add compact JSON and context budgeting helpers
+
+Add near stable_json_for_prompt(...) / prompt helper area.
+
 --- src/tests/rpg/autoplay/parallel_pipeline.py
 +++ src/tests/rpg/autoplay/parallel_pipeline.py
 @@
- from __future__ import annotations
+ def stable_json_for_prompt(value: Any, max_chars: int = 6000) -> str:
+     import json
  
- import traceback
- import time
- from concurrent.futures import Future, ThreadPoolExecutor, as_completed
-@@
- def now_perf() -> float:
-     return time.perf_counter()
- 
- 
- def elapsed_ms(start: float) -> float:
-     return round((time.perf_counter() - start) * 1000.0, 3)
+     text = json.dumps(value, sort_keys=True, ensure_ascii=False, default=str)
+     if len(text) > max_chars:
+         return text[:max_chars] + "...[truncated]"
+     return text
 +
 +
-+def _queue_timing(
-+    *,
-+    queued_at: float,
-+    started_at: float,
-+    finished_at: float,
-+) -> Dict[str, Any]:
++def compact_json_for_prompt(value: Any, max_chars: int = 6000) -> str:
++    """Stable compact JSON for prompt context.
++
++    This preserves information while removing whitespace/token waste.
++    Section-level caps should be applied before this where possible.
++    """
++    import json
++
++    text = json.dumps(
++        value,
++        sort_keys=True,
++        separators=(",", ":"),
++        ensure_ascii=False,
++        default=str,
++    )
++    if len(text) > max_chars:
++        return text[:max_chars] + "...[truncated]"
++    return text
++
++
++def _short_text(value: Any, max_chars: int = 600) -> str:
++    text = _safe_str(value).strip()
++    if len(text) > max_chars:
++        return text[:max_chars].rstrip() + "...[truncated]"
++    return text
++
++
++def _list_tail(value: Any, limit: int) -> List[Any]:
++    values = value if isinstance(value, list) else []
++    if limit <= 0:
++        return []
++    return values[-limit:]
++
++
++def _dict_subset(value: Any, keys: List[str]) -> Dict[str, Any]:
++    source = _safe_dict(value)
++    return {key: source.get(key) for key in keys if key in source and source.get(key) not in (None, "", [], {})}
++
++
++def _safe_npc_name(npc: Any) -> str:
++    if isinstance(npc, str):
++        return npc
++    npc_dict = _safe_dict(npc)
++    return (
++        _safe_str(npc_dict.get("name"))
++        or _safe_str(npc_dict.get("id"))
++        or _safe_str(npc_dict.get("npc_id"))
++        or _safe_str(npc_dict.get("speaker"))
++    )
++
++
++def _compact_present_npcs(simulation_state: Dict[str, Any], limit: int = 6) -> List[Dict[str, Any]]:
++    present = (
++        _safe_list(simulation_state.get("present_npcs"))
++        or _safe_list(simulation_state.get("nearby_npcs"))
++        or _safe_list(simulation_state.get("visible_npcs"))
++    )
++    npcs_by_id = _safe_dict(simulation_state.get("npcs"))
++    compact: List[Dict[str, Any]] = []
++
++    for item in present[:limit]:
++        npc_id = _safe_npc_name(item)
++        npc_record = _safe_dict(npcs_by_id.get(npc_id)) or _safe_dict(item)
++        compact.append(
++            {
++                "id": npc_id,
++                "name": _safe_str(npc_record.get("name")) or npc_id,
++                "role": _safe_str(npc_record.get("role") or npc_record.get("occupation")),
++                "mood": _safe_str(npc_record.get("mood") or npc_record.get("emotional_state")),
++                "relationship": _safe_dict(npc_record.get("relationship")),
++            }
++        )
++
++    if not compact and npcs_by_id:
++        for npc_id, npc_record_any in list(npcs_by_id.items())[:limit]:
++            npc_record = _safe_dict(npc_record_any)
++            compact.append(
++                {
++                    "id": str(npc_id),
++                    "name": _safe_str(npc_record.get("name")) or str(npc_id),
++                    "role": _safe_str(npc_record.get("role") or npc_record.get("occupation")),
++                    "mood": _safe_str(npc_record.get("mood") or npc_record.get("emotional_state")),
++                }
++            )
++
++    return [item for item in compact if item.get("id") or item.get("name")]
++
++
++def _compact_scene_context(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
++    scene = _safe_dict(simulation_state.get("scene"))
++    location = _safe_dict(simulation_state.get("location"))
++    current_location = (
++        _safe_str(simulation_state.get("current_location"))
++        or _safe_str(location.get("name"))
++        or _safe_str(scene.get("location"))
++        or _safe_str(scene.get("name"))
++    )
 +    return {
-+        "queued_at": round(queued_at, 6),
-+        "started_at": round(started_at, 6),
-+        "finished_at": round(finished_at, 6),
-+        "queue_wait_ms": round((started_at - queued_at) * 1000.0, 3),
-+        "run_ms": round((finished_at - started_at) * 1000.0, 3),
-+        "total_ms": round((finished_at - queued_at) * 1000.0, 3),
++        "location": current_location,
++        "scene_title": _safe_str(scene.get("title") or scene.get("name")),
++        "scene_summary": _short_text(
++            scene.get("summary") or scene.get("description") or simulation_state.get("scene_summary"),
++            900,
++        ),
++        "time": _safe_str(simulation_state.get("time") or simulation_state.get("world_time")),
++        "weather": _safe_str(simulation_state.get("weather")),
 +    }
-1B. Patch _deferred_narration_job signature and timings
++
++
++def _compact_recent_events(simulation_state: Dict[str, Any], limit: int = 5) -> List[Dict[str, Any]]:
++    raw_events = (
++        _safe_list(simulation_state.get("recent_events"))
++        or _safe_list(simulation_state.get("world_events"))
++        or _safe_list(simulation_state.get("event_log"))
++    )
++    events = []
++    for event in _list_tail(raw_events, limit):
++        event_dict = _safe_dict(event)
++        if event_dict:
++            events.append(
++                {
++                    "kind": _safe_str(event_dict.get("kind") or event_dict.get("type")),
++                    "summary": _short_text(
++                        event_dict.get("summary")
++                        or event_dict.get("description")
++                        or event_dict.get("text"),
++                        400,
++                    ),
++                }
++            )
++        elif isinstance(event, str):
++            events.append({"summary": _short_text(event, 400)})
++    return [event for event in events if event.get("summary")]
++
++
++def _compact_player_visible_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
++    player = _safe_dict(simulation_state.get("player"))
++    inventory = _safe_dict(simulation_state.get("inventory") or player.get("inventory"))
++    currency = _safe_dict(simulation_state.get("currency") or player.get("currency"))
++    return {
++        "name": _safe_str(player.get("name") or simulation_state.get("player_name")),
++        "status": _safe_str(player.get("status")),
++        "visible_conditions": _safe_list(player.get("conditions"))[:8],
++        "inventory_item_count": len(_safe_list(inventory.get("items"))),
++        "currency": currency,
++    }
++
++
++def _compact_turn_contract(turn_contract: Dict[str, Any]) -> Dict[str, Any]:
++    contract = _safe_dict(turn_contract)
++    semantic_action = _safe_dict(contract.get("semantic_action"))
++    state_delta = _safe_dict(contract.get("state_delta"))
++    return {
++        "version": contract.get("version"),
++        "player_input": _short_text(contract.get("player_input"), 500),
++        "resolved_action": contract.get("resolved_action"),
++        "resolved_result": contract.get("resolved_result"),
++        "semantic_action": semantic_action,
++        "service_result": contract.get("service_result"),
++        "state_delta": _dict_subset(
++            state_delta,
++            ["summary", "changed_keys", "relationship_delta", "memory_delta", "world_signal_delta"],
++        ),
++        "narration_brief": _short_text(contract.get("narration_brief"), 700),
++        "presentation": _dict_subset(_safe_dict(contract.get("presentation")), ["title", "summary", "npc"]),
++    }
++
++
++def build_combined_background_context_packet(
++    *,
++    player_action: str,
++    simulation_state: Dict[str, Any],
++    turn_contract: Dict[str, Any],
++    semantic_action_record: Dict[str, Any],
++) -> Dict[str, Any]:
++    """Quality-preserving compact context for combined background LLM.
++
++    This intentionally keeps the highest-value world and turn facts while
++    excluding raw session/debug/history blobs.
++    """
++    simulation_state = _safe_dict(simulation_state)
++    turn_contract = _safe_dict(turn_contract)
++    semantic_action_record = _safe_dict(semantic_action_record)
++
++    return {
++        "player_action": _short_text(player_action, 800),
++        "scene": _compact_scene_context(simulation_state),
++        "present_npcs": _compact_present_npcs(simulation_state, limit=6),
++        "player_visible_state": _compact_player_visible_state(simulation_state),
++        "recent_events": _compact_recent_events(simulation_state, limit=5),
++        "turn_contract": _compact_turn_contract(turn_contract),
++        "fast_semantic_action": semantic_action_record,
++    }
++
++
++def prompt_section_metrics(sections: Dict[str, str]) -> Dict[str, Any]:
++    by_section: Dict[str, Dict[str, Any]] = {}
++    total_chars = 0
++    for name, text in sections.items():
++        text_value = text if isinstance(text, str) else str(text)
++        chars = len(text_value)
++        total_chars += chars
++        by_section[name] = {
++            "chars": chars,
++            # Rough heuristic; exact tokenizer is provider/model-dependent.
++            "estimated_tokens": round(chars / 4.0, 1),
++        }
++    return {
++        "total_chars": total_chars,
++        "estimated_tokens": round(total_chars / 4.0, 1),
++        "by_section": by_section,
++    }
+N47 — Use context packet in combined prompt + record metrics
+2. Patch _build_combined_background_payload(...)
+
+Replace the current prompt construction that embeds PLAYER_INPUT, TURN_CONTRACT_JSON, and FAST_SEMANTIC_JSON separately with a compact context packet.
+
+Find:
+
+messages = [
+    {
+        "role": "system",
+        "content": (
+            "You are an RPG background enrichment worker. Return JSON only. "
+...
+
+Replace the function body from before messages = [...] through message construction with this pattern.
+
 --- src/tests/rpg/autoplay/parallel_pipeline.py
 +++ src/tests/rpg/autoplay/parallel_pipeline.py
 @@
- def _deferred_narration_job(
+ def _build_combined_background_payload(
      *,
-+    queued_at: float,
      provider: Any,
-     session_id: str,
-     turn_index: int,
      player_action: str,
+     simulation_state: Dict[str, Any],
 @@
  ) -> Dict[str, Any]:
--    started = now_perf()
-+    started = now_perf()
-     wall_started = time.perf_counter()
+     """One provider call that returns both narration and advisory candidates."""
+     if provider is None or not callable(getattr(provider, "chat_completion", None)):
+         return {"ok": False, "error": "provider_missing_or_unsupported"}
+ 
++    context_packet = build_combined_background_context_packet(
++        player_action=player_action,
++        simulation_state=simulation_state,
++        turn_contract=turn_contract,
++        semantic_action_record=semantic_action_record,
++    )
++    context_json = compact_json_for_prompt(context_packet, max_chars=9000)
++    schema_text = (
++        "{"
++        '"narration":"2-5 sentences describing the resolved scene without repeating player input.",'
++        '"action":"Short result of the player action.",'
++        '"npc":{"speaker":"","line":""},'
++        '"reward":"",'
++        '"followup_hooks":[],'
++        '"semantic_intent_candidates":[],'
++        '"relationship_delta_candidates":[],'
++        '"memory_candidates":[],'
++        '"world_signal_candidates":[],'
++        '"future_hook_candidates":[]'
++        "}"
++    )
++    prompt_metrics = prompt_section_metrics(
++        {
++            "system_contract": "combined_background_worker_v1",
++            "context_packet": context_json,
++            "output_schema": schema_text,
++        }
++    )
++
+     messages = [
+         {
+             "role": "system",
+             "content": (
+                 "You are an RPG background enrichment worker. Return JSON only. "
+                 "You must not assert authoritative outcomes that are not in the turn contract. "
+                 "Do not grant items, currency, quest completion, damage, travel, or rewards. "
+-                "Return one JSON object and no markdown fences, no prose, no commentary."
++                "Return one JSON object and no markdown fences, no prose, no commentary. "
++                "Maintain rich narration quality. Use only the provided compact context. "
++                "Prefer 1-3 high-quality candidates per category over many weak candidates."
+             ),
+         },
+         {
+             "role": "user",
+             "content": (
+-                "Create background narration and advisory candidates for this resolved RPG turn.\n\n"
+-                f"PLAYER_INPUT:\n{player_action}\n\n"
+-                f"TURN_CONTRACT_JSON:\n{stable_json_for_prompt(turn_contract)}\n\n"
+-                f"FAST_SEMANTIC_JSON:\n{stable_json_for_prompt(semantic_action_record)}\n\n"
+-                "Return exactly this JSON shape:\n"
+-                "{\n"
+-                '  "narration": "2-5 sentences describing the resolved scene without repeating player input.",\n'
+-                '  "action": "Short result of the player action.",\n'
+-                '  "npc": {"speaker": "", "line": ""},\n'
+-                '  "reward": "",\n'
+-                '  "followup_hooks": [],\n'
+-                '  "semantic_intent_candidates": [],\n'
+-                '  "relationship_delta_candidates": [],\n'
+-                '  "memory_candidates": [],\n'
+-                '  "world_signal_candidates": [],\n'
+-                '  "future_hook_candidates": []\n'
+-                "}"
++                "Create background narration and advisory candidates for this resolved RPG turn.\n\n"
++                "COMPACT_CONTEXT_JSON:\n"
++                f"{context_json}\n\n"
++                "Return exactly this JSON shape:\n"
++                f"{schema_text}"
+             ),
+         },
+     ]
 @@
-         after_digest = state_digest(_safe_dict(simulation_state))
-+        finished = now_perf()
+         parsed = _extract_json_object_from_text(content)
+         if isinstance(parsed, dict):
+             normalized = _extract_nested_combined_payload(parsed)
+             if (
+                 _combined_payload_has_useful_content(normalized)
+                 or _has_expected_combined_provider_keys(parsed)
+             ):
+                 normalized["ok"] = True
+                 normalized.setdefault("raw_provider_shape_keys", sorted(list(parsed.keys()))[:80])
++                normalized.setdefault("prompt_metrics", prompt_metrics)
++                normalized.setdefault("context_packet_keys", sorted(list(context_packet.keys())))
+                 return normalized
+             return {
+                 "ok": False,
+                 "error": "provider_combined_json_missing_useful_content",
+                 "raw": content[:1000],
+                 "parsed_keys": sorted(list(parsed.keys()))[:80],
++                "prompt_metrics": prompt_metrics,
++                "context_packet_keys": sorted(list(context_packet.keys())),
+             }
+         return {"ok": False, "error": "provider_combined_json_not_object", "raw": content[:1000]}
+     except Exception as exc:
+         return {
+             "ok": False,
+             "error": f"provider_combined_json_parse_error:{type(exc).__name__}: {exc}",
+             "raw": content[:1000],
++            "prompt_metrics": prompt_metrics,
++            "context_packet_keys": sorted(list(context_packet.keys())),
+         }
+3. Capture prompt metrics in combined diagnostics
+
+Inside _combined_background_llm_job(...), after:
+
+diagnostics["provider_payload_keys"] = ...
+
+add:
+
+--- src/tests/rpg/autoplay/parallel_pipeline.py
++++ src/tests/rpg/autoplay/parallel_pipeline.py
+@@
+             diagnostics["provider_payload_keys"] = (
+                 sorted(list(provider_payload.keys()))[:80]
+                 if isinstance(provider_payload, dict)
+                 else []
+             )
++            diagnostics["prompt_metrics"] = _safe_dict(provider_payload.get("prompt_metrics"))
++            diagnostics["context_packet_keys"] = (
++                provider_payload.get("context_packet_keys")
++                if isinstance(provider_payload.get("context_packet_keys"), list)
++                else []
++            )
+
+Also include prompt metrics in the successful combined result top-level for easier report extraction:
+
+--- src/tests/rpg/autoplay/parallel_pipeline.py
++++ src/tests/rpg/autoplay/parallel_pipeline.py
+@@
          return {
              "ok": True,
-             "kind": "deferred_narration",
+             "kind": "combined_background_llm",
+             "session_id": session_id,
+             "turn_index": turn_index,
+             "source": source,
 @@
+             "advisory_summary": advisory_candidate_summary(candidates),
              "diagnostics": diagnostics,
++            "prompt_metrics": _safe_dict(diagnostics.get("prompt_metrics")),
              "worker_ms": elapsed_ms(started),
-             "worker_wall_seconds": round(time.perf_counter() - wall_started, 3),
-+            "queue_timing": _queue_timing(
-+                queued_at=queued_at,
-+                started_at=started,
-+                finished_at=finished,
-+            ),
-             "state_digest_before": before_digest,
-             "state_digest_after": after_digest,
-             "mutated_authoritative_snapshot": before_digest != after_digest,
-         }
-     except Exception as exc:
-+        finished = now_perf()
-         diagnostics["exception"] = f"{type(exc).__name__}: {exc}"
-         return {
-@@
-             "diagnostics": diagnostics,
-             "worker_ms": elapsed_ms(started),
-             "worker_wall_seconds": round(time.perf_counter() - wall_started, 3),
-+            "queue_timing": _queue_timing(
-+                queued_at=queued_at,
-+                started_at=started,
-+                finished_at=finished,
-+            ),
-         }
-1C. Patch _deferred_advisory_job signature and timings
---- src/tests/rpg/autoplay/parallel_pipeline.py
-+++ src/tests/rpg/autoplay/parallel_pipeline.py
-@@
- def _deferred_advisory_job(
-     *,
-+    queued_at: float,
-     provider: Any,
-     session_id: str,
-     turn_index: int,
-@@
- ) -> Dict[str, Any]:
-     started = now_perf()
-@@
--        return {
-+        finished = now_perf()
-+        return {
-             "ok": True,
-             "kind": "deferred_advisory",
-@@
-             "summary": advisory_candidate_summary(candidates),
-             "diagnostics": diagnostics,
-             "worker_ms": elapsed_ms(started),
-+            "queue_timing": _queue_timing(
-+                queued_at=queued_at,
-+                started_at=started,
-+                finished_at=finished,
-+            ),
-         }
-     except Exception as exc:
-+        finished = now_perf()
-         return {
-@@
-             "traceback": traceback.format_exc(),
-             "diagnostics": diagnostics,
-             "worker_ms": elapsed_ms(started),
-+            "queue_timing": _queue_timing(
-+                queued_at=queued_at,
-+                started_at=started,
-+                finished_at=finished,
-+            ),
-         }
-1D. Pass queued_at in submitters
+             "queue_timing": _queue_timing(
+N48 — Prompt quality metrics + report summaries
+4. Add prompt budget summary helper
 
-Patch submit_deferred_narration(...):
+Patch src/tests/rpg/autoplay_llm_campaign.py.
 
---- src/tests/rpg/autoplay/parallel_pipeline.py
-+++ src/tests/rpg/autoplay/parallel_pipeline.py
-@@
-     def submit_deferred_narration(
-@@
-     ) -> str:
-         job_id = f"narration:{session_id}:{turn_index}"
-+        queued_at = now_perf()
-         future = self._provider_executor.submit(
-             _deferred_narration_job,
-+            queued_at=queued_at,
-             provider=provider,
-             session_id=session_id,
-             turn_index=turn_index,
+Add near the existing summarizer helpers:
 
-Patch submit_deferred_advisory(...):
-
---- src/tests/rpg/autoplay/parallel_pipeline.py
-+++ src/tests/rpg/autoplay/parallel_pipeline.py
+--- src/tests/rpg/autoplay_llm_campaign.py
++++ src/tests/rpg/autoplay_llm_campaign.py
 @@
-     def submit_deferred_advisory(
+ def _summarize_performance_budget(
 @@
-     ) -> str:
-         job_id = f"advisory:{session_id}:{turn_index}"
-+        queued_at = now_perf()
-         future = self._provider_executor.submit(
-             _deferred_advisory_job,
-+            queued_at=queued_at,
-             provider=provider,
-             session_id=session_id,
-             turn_index=turn_index,
-1E. Aggregate queue timings in background summary
-
-Add helper:
-
---- src/tests/rpg/autoplay/parallel_pipeline.py
-+++ src/tests/rpg/autoplay/parallel_pipeline.py
-@@
- def _provider_shape(provider: Any) -> Dict[str, Any]:
+     return {
 @@
      }
 +
 +
-+def _queue_summary(rows: List[Dict[str, Any]]) -> Dict[str, Any]:
-+    timings = [
-+        _safe_dict(row.get("queue_timing"))
-+        for row in rows
-+        if isinstance(row, dict) and isinstance(row.get("queue_timing"), dict)
-+    ]
-+    if not timings:
++def _summarize_background_prompt_budget(transcript: List[Dict[str, Any]]) -> Dict[str, Any]:
++    rows: List[Dict[str, Any]] = []
++    for row in transcript:
++        combined = _safe_dict(row.get("combined_background_llm_result"))
++        diagnostics = _safe_dict(combined.get("diagnostics"))
++        prompt_metrics = (
++            _safe_dict(combined.get("prompt_metrics"))
++            or _safe_dict(diagnostics.get("prompt_metrics"))
++        )
++        if not prompt_metrics:
++            continue
++        rows.append(
++            {
++                "turn_index": row.get("turn_index"),
++                "source": _safe_str(combined.get("source")),
++                "total_chars": int(prompt_metrics.get("total_chars") or 0),
++                "estimated_tokens": float(prompt_metrics.get("estimated_tokens") or 0.0),
++                "by_section": _safe_dict(prompt_metrics.get("by_section")),
++            }
++        )
++
++    if not rows:
 +        return {
 +            "count": 0,
-+            "avg_queue_wait_ms": 0.0,
-+            "max_queue_wait_ms": 0.0,
-+            "avg_run_ms": 0.0,
-+            "max_run_ms": 0.0,
-+            "avg_total_ms": 0.0,
-+            "max_total_ms": 0.0,
++            "avg_total_chars": 0.0,
++            "max_total_chars": 0,
++            "avg_estimated_tokens": 0.0,
++            "max_estimated_tokens": 0.0,
++            "by_section_avg_chars": {},
++            "examples": [],
 +        }
 +
-+    def avg(key: str) -> float:
-+        return round(sum(float(item.get(key) or 0.0) for item in timings) / len(timings), 3)
-+
-+    def maxv(key: str) -> float:
-+        return round(max(float(item.get(key) or 0.0) for item in timings), 3)
++    section_totals: Dict[str, List[int]] = {}
++    for item in rows:
++        for section, metrics in _safe_dict(item.get("by_section")).items():
++            section_totals.setdefault(section, []).append(int(_safe_dict(metrics).get("chars") or 0))
 +
 +    return {
-+        "count": len(timings),
-+        "avg_queue_wait_ms": avg("queue_wait_ms"),
-+        "max_queue_wait_ms": maxv("queue_wait_ms"),
-+        "avg_run_ms": avg("run_ms"),
-+        "max_run_ms": maxv("run_ms"),
-+        "avg_total_ms": avg("total_ms"),
-+        "max_total_ms": maxv("total_ms"),
-+    }
-
-Patch summary finalization at end of attach_background_results_to_transcript(...) before return:
-
---- src/tests/rpg/autoplay/parallel_pipeline.py
-+++ src/tests/rpg/autoplay/parallel_pipeline.py
-@@
-     for result in results:
-@@
-         else:
-             summary["errors"].append(
-                 {
-                     "kind": result.get("kind"),
-                     "turn_index": result.get("turn_index"),
-                     "error": result.get("error"),
-                 }
-             )
- 
-+    provider_jobs = [
-+        result
-+        for result in results
-+        if result.get("kind") in {"deferred_narration", "deferred_advisory", "combined_background_llm"}
-+    ]
-+    summary["provider_queue_summary"] = _queue_summary(provider_jobs)
-+    summary["provider_queue_by_kind"] = {
-+        kind: _queue_summary([result for result in provider_jobs if result.get("kind") == kind])
-+        for kind in ("deferred_narration", "deferred_advisory", "combined_background_llm")
-+    }
-+
-     return summary
-N44 — Combined Narration + Advisory Job
-2. Add combined job type
-
-Patch imports in parallel_pipeline.py if needed:
-
---- src/tests/rpg/autoplay/parallel_pipeline.py
-+++ src/tests/rpg/autoplay/parallel_pipeline.py
-@@
- from app.rpg.advisory.candidates import (
-     advisory_candidate_summary,
-     build_deterministic_advisory_candidates,
-     normalize_advisory_candidates,
-     stable_json_for_prompt,
- )
-
-Add combined provider payload builder after _build_provider_advisory_payload(...):
-
---- src/tests/rpg/autoplay/parallel_pipeline.py
-+++ src/tests/rpg/autoplay/parallel_pipeline.py
-@@
- def _build_provider_advisory_payload(
-@@
-         }
-+
-+
-+def _build_combined_background_payload(
-+    *,
-+    provider: Any,
-+    player_action: str,
-+    simulation_state: Dict[str, Any],
-+    turn_contract: Dict[str, Any],
-+    semantic_action_record: Dict[str, Any],
-+) -> Dict[str, Any]:
-+    """One provider call that returns both narration and advisory candidates."""
-+    if provider is None or not callable(getattr(provider, "chat_completion", None)):
-+        return {"ok": False, "error": "provider_missing_or_unsupported"}
-+
-+    messages = [
-+        {
-+            "role": "system",
-+            "content": (
-+                "You are an RPG background enrichment worker. Return JSON only. "
-+                "You must not assert authoritative outcomes that are not in the turn contract. "
-+                "Do not grant items, currency, quest completion, damage, travel, or rewards. "
-+                "Return one JSON object and no markdown fences, no prose, no commentary."
-+            ),
++        "count": len(rows),
++        "avg_total_chars": round(sum(item["total_chars"] for item in rows) / len(rows), 3),
++        "max_total_chars": max(item["total_chars"] for item in rows),
++        "avg_estimated_tokens": round(sum(item["estimated_tokens"] for item in rows) / len(rows), 3),
++        "max_estimated_tokens": round(max(item["estimated_tokens"] for item in rows), 3),
++        "by_section_avg_chars": {
++            section: round(sum(values) / len(values), 3)
++            for section, values in section_totals.items()
++            if values
 +        },
-+        {
-+            "role": "user",
-+            "content": (
-+                "Create background narration and advisory candidates for this resolved RPG turn.\n\n"
-+                f"PLAYER_INPUT:\n{player_action}\n\n"
-+                f"TURN_CONTRACT_JSON:\n{stable_json_for_prompt(turn_contract)}\n\n"
-+                f"FAST_SEMANTIC_JSON:\n{stable_json_for_prompt(semantic_action_record)}\n\n"
-+                "Return exactly this JSON shape:\n"
-+                "{\n"
-+                '  "narration": "2-5 sentences describing the resolved scene without repeating player input.",\n'
-+                '  "action": "Short result of the player action.",\n'
-+                '  "npc": {"speaker": "", "line": ""},\n'
-+                '  "reward": "",\n'
-+                '  "followup_hooks": [],\n'
-+                '  "semantic_intent_candidates": [],\n'
-+                '  "relationship_delta_candidates": [],\n'
-+                '  "memory_candidates": [],\n'
-+                '  "world_signal_candidates": [],\n'
-+                '  "future_hook_candidates": []\n'
-+                "}"
-+            ),
-+        },
-+    ]
-+
-+    provider_messages = _provider_messages(messages)
-+    try:
-+        response = provider.chat_completion(messages=provider_messages, stream=False)
-+    except TypeError:
-+        response = provider.chat_completion(provider_messages, stream=False)
-+
-+    content = _provider_text_from_response(response)
-+    if not content:
-+        return {"ok": False, "error": "provider_empty_combined_response"}
-+
-+    try:
-+        parsed = _extract_json_object_from_text(content)
-+        if isinstance(parsed, dict):
-+            parsed["ok"] = True
-+            return parsed
-+        return {"ok": False, "error": "provider_combined_json_not_object", "raw": content[:1000]}
-+    except Exception as exc:
-+        return {
-+            "ok": False,
-+            "error": f"provider_combined_json_parse_error:{type(exc).__name__}: {exc}",
-+            "raw": content[:1000],
-+        }
-
-Add combined job after _deferred_advisory_job(...):
-
---- src/tests/rpg/autoplay/parallel_pipeline.py
-+++ src/tests/rpg/autoplay/parallel_pipeline.py
-@@
- def _deferred_advisory_job(
-@@
-         }
-+
-+
-+def _combined_background_llm_job(
-+    *,
-+    queued_at: float,
-+    provider: Any,
-+    session_id: str,
-+    turn_index: int,
-+    player_action: str,
-+    simulation_state: Dict[str, Any],
-+    turn_contract: Dict[str, Any],
-+    semantic_action_record: Dict[str, Any],
-+    prefer_provider: bool,
-+) -> Dict[str, Any]:
-+    started = now_perf()
-+    diagnostics: Dict[str, Any] = {
-+        "prefer_provider": bool(prefer_provider),
-+        "provider_shape": _provider_shape(provider),
-+        "turn_contract_keys": sorted(list(_safe_dict(turn_contract).keys())),
-+        "semantic_keys": sorted(list(_safe_dict(semantic_action_record).keys())),
++        "examples": rows[:3],
 +    }
-+    try:
-+        source = "provider_combined_background_llm"
-+        provider_payload: Dict[str, Any] = {}
-+        if prefer_provider and provider is not None:
-+            provider_started = now_perf()
-+            provider_payload = _build_combined_background_payload(
-+                provider=provider,
-+                player_action=player_action,
-+                simulation_state=freeze_snapshot(_safe_dict(simulation_state)),
-+                turn_contract=freeze_snapshot(_safe_dict(turn_contract)),
-+                semantic_action_record=freeze_snapshot(_safe_dict(semantic_action_record)),
-+            )
-+            diagnostics["provider_combined_ms"] = elapsed_ms(provider_started)
-+            diagnostics["provider_payload_error"] = _safe_str(provider_payload.get("error"))
-+            if not provider_payload.get("ok"):
-+                source = "combined_background_llm_fallback"
-+        else:
-+            source = "combined_background_llm_fallback"
-+
-+        if source == "provider_combined_background_llm":
-+            narration_payload = {
-+                "format_version": "rpg_narration_v2",
-+                "source": "provider_runtime_narration",
-+                "narration": _safe_str(provider_payload.get("narration")) or "The scene settles after the action.",
-+                "action": _safe_str(provider_payload.get("action")) or "The action has been resolved.",
-+                "npc": _safe_dict(provider_payload.get("npc")),
-+                "reward": _safe_str(provider_payload.get("reward")),
-+                "followup_hooks": provider_payload.get("followup_hooks")
-+                if isinstance(provider_payload.get("followup_hooks"), list)
-+                else [],
-+            }
-+            candidates = normalize_advisory_candidates(
-+                session_id=session_id,
-+                turn_index=turn_index,
-+                player_input=player_action,
-+                turn_contract=_safe_dict(turn_contract),
-+                payload=_safe_dict(provider_payload),
-+            )
-+        else:
-+            # Fallback keeps the same output shape and preserves correctness.
-+            narration_payload = build_runtime_narration_payload(
-+                provider=None,
-+                player_action=player_action,
-+                simulation_state=freeze_snapshot(_safe_dict(simulation_state)),
-+                turn_contract=freeze_snapshot(_safe_dict(turn_contract)),
-+                prefer_provider=False,
-+            )
-+            candidates = build_deterministic_advisory_candidates(
-+                session_id=session_id,
-+                turn_index=turn_index,
-+                player_input=player_action,
-+                turn_contract=_safe_dict(turn_contract),
-+                semantic_action_record=_safe_dict(semantic_action_record),
-+            )
-+
-+        finished = now_perf()
-+        return {
-+            "ok": True,
-+            "kind": "combined_background_llm",
-+            "session_id": session_id,
-+            "turn_index": turn_index,
-+            "source": source,
-+            "narration": _safe_str(narration_payload.get("narration")),
-+            "npc": _safe_dict(narration_payload.get("npc")),
-+            "narration_payload": narration_payload,
-+            "candidate_count": len(candidates),
-+            "candidates": candidates,
-+            "advisory_summary": advisory_candidate_summary(candidates),
-+            "diagnostics": diagnostics,
-+            "worker_ms": elapsed_ms(started),
-+            "queue_timing": _queue_timing(
-+                queued_at=queued_at,
-+                started_at=started,
-+                finished_at=finished,
-+            ),
-+        }
-+    except Exception as exc:
-+        finished = now_perf()
-+        diagnostics["exception"] = f"{type(exc).__name__}: {exc}"
-+        return {
-+            "ok": False,
-+            "kind": "combined_background_llm",
-+            "session_id": session_id,
-+            "turn_index": turn_index,
-+            "source": "combined_background_llm_error",
-+            "error": f"{type(exc).__name__}: {exc}",
-+            "traceback": traceback.format_exc(),
-+            "diagnostics": diagnostics,
-+            "worker_ms": elapsed_ms(started),
-+            "queue_timing": _queue_timing(
-+                queued_at=queued_at,
-+                started_at=started,
-+                finished_at=finished,
-+            ),
-+        }
-3. Add submit method for combined job
-
-Patch AutoplayBackgroundPipeline:
-
---- src/tests/rpg/autoplay/parallel_pipeline.py
-+++ src/tests/rpg/autoplay/parallel_pipeline.py
-@@
-     def submit_deferred_advisory(
-@@
-         self._futures.append(future)
-         return job_id
-+
-+    def submit_combined_background_llm(
-+        self,
-+        *,
-+        provider: Any,
-+        session_id: str,
-+        turn_index: int,
-+        player_action: str,
-+        simulation_state: Dict[str, Any],
-+        turn_contract: Dict[str, Any],
-+        semantic_action_record: Dict[str, Any],
-+        prefer_provider: bool = True,
-+    ) -> str:
-+        job_id = f"combined_background_llm:{session_id}:{turn_index}"
-+        queued_at = now_perf()
-+        future = self._provider_executor.submit(
-+            _combined_background_llm_job,
-+            queued_at=queued_at,
-+            provider=provider,
-+            session_id=session_id,
-+            turn_index=turn_index,
-+            player_action=player_action,
-+            simulation_state=freeze_snapshot(simulation_state),
-+            turn_contract=freeze_snapshot(turn_contract),
-+            semantic_action_record=freeze_snapshot(semantic_action_record),
-+            prefer_provider=prefer_provider,
-+        )
-+        self._futures.append(future)
-+        return job_id
-4. Attach combined job results
-
-Patch attach_background_results_to_transcript(...) summary:
-
---- src/tests/rpg/autoplay/parallel_pipeline.py
-+++ src/tests/rpg/autoplay/parallel_pipeline.py
-@@
-         "narration_jobs": 0,
-         "checkpoint_jobs": 0,
-         "advisory_jobs": 0,
-+        "combined_background_llm_jobs": 0,
-         "background_job_seconds": 0.0,
-@@
-         elif result.get("kind") == "deferred_advisory":
-             summary["advisory_jobs"] += 1
-             row["deferred_advisory_result"] = result
-             row["deferred_advisory_status"] = "ready" if result.get("ok") else "error"
-+        elif result.get("kind") == "combined_background_llm":
-+            summary["combined_background_llm_jobs"] += 1
-+            row["combined_background_llm_result"] = result
-+
-+            # Attach narration in the same slots used by split narration jobs.
-+            row["deferred_narration_result"] = {
-+                "ok": result.get("ok"),
-+                "kind": "deferred_narration",
-+                "session_id": result.get("session_id"),
-+                "turn_index": result.get("turn_index"),
-+                "narration_status": "ready" if result.get("ok") else "error",
-+                "narration": result.get("narration"),
-+                "npc": result.get("npc") or {},
-+                "narration_payload": result.get("narration_payload") or {},
-+                "diagnostics": result.get("diagnostics") or {},
-+                "worker_ms": result.get("worker_ms"),
-+                "queue_timing": result.get("queue_timing") or {},
-+            }
-+            row["narration_status"] = "ready" if result.get("ok") else "error"
-+            if result.get("ok") and result.get("narration"):
-+                row["resolved_narration"] = result.get("narration")
-+                row["resolved_narration_payload"] = result.get("narration_payload") or {}
-+                row["narration"] = result.get("narration")
-+
-+            # Attach advisory in the same slots used by split advisory jobs.
-+            row["deferred_advisory_result"] = {
-+                "ok": result.get("ok"),
-+                "kind": "deferred_advisory",
-+                "session_id": result.get("session_id"),
-+                "turn_index": result.get("turn_index"),
-+                "source": result.get("source"),
-+                "candidate_count": result.get("candidate_count"),
-+                "candidates": result.get("candidates") or [],
-+                "summary": result.get("advisory_summary") or {},
-+                "diagnostics": result.get("diagnostics") or {},
-+                "worker_ms": result.get("worker_ms"),
-+                "queue_timing": result.get("queue_timing") or {},
-+            }
-+            row["deferred_advisory_status"] = "ready" if result.get("ok") else "error"
-N45 — CLI flag + performance budget split
-5. Add CLI flag
-
-Patch autoplay_llm_campaign.py parser:
-
---- src/tests/rpg/autoplay_llm_campaign.py
-+++ src/tests/rpg/autoplay_llm_campaign.py
-@@
-     parser.add_argument("--narration-mode", choices=["blocking", "deferred"], default="blocking")
-+    parser.add_argument(
-+        "--background-llm-mode",
-+        choices=["split", "combined"],
-+        default="split",
-+        help="split = separate deferred narration/advisory jobs; combined = one provider job for both.",
-+    )
-6. Enqueue combined vs split mode
-
-Patch the deferred job enqueue block.
-
-Find the current deferred block that enqueues narration and advisory. Replace the inner enqueue with:
-
---- src/tests/rpg/autoplay_llm_campaign.py
-+++ src/tests/rpg/autoplay_llm_campaign.py
-@@
-         narration_status = "ready"
-         narration_job_id = ""
-         advisory_status = "disabled"
-         advisory_job_id = ""
-+        combined_background_llm_job_id = ""
-         if args.narration_mode == "deferred":
-             narration_status = "pending"
-             advisory_status = "pending"
-             with timed_stage(turn_performance, "background_enqueue_ms"):
--                narration_job_id = pipeline.submit_deferred_narration(
--                    provider=provider,
--                    session_id=session_id,
--                    turn_index=turn_index,
--                    player_action=player_action,
--                    simulation_state=final_turn_state,
--                    turn_contract=turn_result.get("turn_contract") or {},
--                    prefer_provider=True,
--                )
-                 semantic_action_record = (
-                     _safe_dict(turn_result.get("semantic_action_v2"))
-                     or _safe_dict(_safe_dict(turn_result.get("turn_contract")).get("semantic_action_v2"))
-                     or _safe_dict(_safe_dict(turn_result.get("raw_result")).get("semantic_action_v2"))
-                     or _safe_dict(_safe_dict(turn_result.get("manual_turn_summary")).get("semantic_action_v2"))
-                     or {}
-                 )
--                advisory_job_id = pipeline.submit_deferred_advisory(
--                    provider=provider,
--                    session_id=session_id,
--                    turn_index=turn_index,
--                    player_action=player_action,
--                    simulation_state=final_turn_state,
--                    turn_contract=turn_result.get("turn_contract") or {},
--                    semantic_action_record=semantic_action_record,
--                    prefer_provider=True,
--                )
-+                if args.background_llm_mode == "combined":
-+                    combined_background_llm_job_id = pipeline.submit_combined_background_llm(
-+                        provider=provider,
-+                        session_id=session_id,
-+                        turn_index=turn_index,
-+                        player_action=player_action,
-+                        simulation_state=final_turn_state,
-+                        turn_contract=turn_result.get("turn_contract") or {},
-+                        semantic_action_record=semantic_action_record,
-+                        prefer_provider=True,
-+                    )
-+                    narration_job_id = combined_background_llm_job_id
-+                    advisory_job_id = combined_background_llm_job_id
-+                else:
-+                    narration_job_id = pipeline.submit_deferred_narration(
-+                        provider=provider,
-+                        session_id=session_id,
-+                        turn_index=turn_index,
-+                        player_action=player_action,
-+                        simulation_state=final_turn_state,
-+                        turn_contract=turn_result.get("turn_contract") or {},
-+                        prefer_provider=True,
-+                    )
-+                    advisory_job_id = pipeline.submit_deferred_advisory(
-+                        provider=provider,
-+                        session_id=session_id,
-+                        turn_index=turn_index,
-+                        player_action=player_action,
-+                        simulation_state=final_turn_state,
-+                        turn_contract=turn_result.get("turn_contract") or {},
-+                        semantic_action_record=semantic_action_record,
-+                        prefer_provider=True,
-+                    )
-             if not narration:
-                 narration = "Narration is being prepared..."
-
-Add record field:
-
---- src/tests/rpg/autoplay_llm_campaign.py
-+++ src/tests/rpg/autoplay_llm_campaign.py
-@@
-             "deferred_advisory_status": advisory_status,
-             "deferred_advisory_job_id": advisory_job_id,
-+            "background_llm_mode": args.background_llm_mode,
-+            "combined_background_llm_job_id": combined_background_llm_job_id,
-
-Add to summary dict:
-
---- src/tests/rpg/autoplay_llm_campaign.py
-+++ src/tests/rpg/autoplay_llm_campaign.py
-@@
-         "narration_mode": args.narration_mode,
-+        "background_llm_mode": args.background_llm_mode,
-         "checkpoint_mode": args.checkpoint_mode,
-7. Add performance budget summary
-
-Add helper in autoplay_llm_campaign.py near metric summarizers:
-
---- src/tests/rpg/autoplay_llm_campaign.py
-+++ src/tests/rpg/autoplay_llm_campaign.py
-@@
- def _summarize_deferred_advisory_trace(transcript: List[Dict[str, Any]]) -> Dict[str, Any]:
-@@
-     return summary
 +
 +
-+def _summarize_performance_budget(
-+    *,
-+    transcript: List[Dict[str, Any]],
-+    background_summary: Dict[str, Any],
-+) -> Dict[str, Any]:
-+    def avg(values: List[float]) -> float:
++def _summarize_combined_quality_shape(transcript: List[Dict[str, Any]]) -> Dict[str, Any]:
++    narration_lengths: List[int] = []
++    candidate_counts: List[int] = []
++    candidate_kinds: Dict[str, int] = {}
++
++    for row in transcript:
++        combined = _safe_dict(row.get("combined_background_llm_result"))
++        if not combined:
++            continue
++        narration = _safe_str(combined.get("narration"))
++        if narration:
++            narration_lengths.append(len(narration))
++        candidates = combined.get("candidates") if isinstance(combined.get("candidates"), list) else []
++        candidate_counts.append(len(candidates))
++        for candidate in candidates:
++            kind = _safe_str(_safe_dict(candidate).get("kind")) or "unknown"
++            candidate_kinds[kind] = int(candidate_kinds.get(kind) or 0) + 1
++
++    def avg(values: List[int]) -> float:
 +        return round(sum(values) / len(values), 3) if values else 0.0
 +
-+    manual = []
-+    player = []
-+    human = []
-+    autoplay = []
-+    for row in transcript:
-+        perf = _safe_dict(row.get("performance"))
-+        manual.append(float(perf.get("manual_turn_ms") or 0.0))
-+        player.append(float(perf.get("player_agent_ms") or 0.0))
-+        human.append(float(perf.get("human_playable_blocking_ms") or perf.get("manual_turn_ms") or 0.0))
-+        autoplay.append(float(perf.get("playable_blocking_ms") or 0.0))
-+
-+    provider_queue = _safe_dict(background_summary.get("provider_queue_summary"))
 +    return {
-+        "live_blocking": {
-+            "avg_manual_turn_ms": avg(manual),
-+            "max_manual_turn_ms": round(max(manual), 3) if manual else 0.0,
-+            "avg_human_playable_blocking_ms": avg(human),
-+            "max_human_playable_blocking_ms": round(max(human), 3) if human else 0.0,
-+        },
-+        "autoplay_only": {
-+            "avg_player_agent_ms": avg(player),
-+            "max_player_agent_ms": round(max(player), 3) if player else 0.0,
-+            "avg_autoplay_blocking_ms": avg(autoplay),
-+            "max_autoplay_blocking_ms": round(max(autoplay), 3) if autoplay else 0.0,
-+        },
-+        "background_llm": {
-+            "total_jobs": background_summary.get("total_jobs"),
-+            "narration_jobs": background_summary.get("narration_jobs"),
-+            "advisory_jobs": background_summary.get("advisory_jobs"),
-+            "combined_background_llm_jobs": background_summary.get("combined_background_llm_jobs"),
-+            "background_job_seconds": background_summary.get("background_job_seconds"),
-+            "provider_queue_summary": provider_queue,
-+            "provider_queue_by_kind": background_summary.get("provider_queue_by_kind") or {},
-+        },
++        "combined_turns": len(candidate_counts),
++        "avg_narration_chars": avg(narration_lengths),
++        "min_narration_chars": min(narration_lengths) if narration_lengths else 0,
++        "avg_candidate_count": avg(candidate_counts),
++        "min_candidate_count": min(candidate_counts) if candidate_counts else 0,
++        "candidate_kinds": candidate_kinds,
 +    }
+5. Add summaries after metrics are computed
 
-After background summary and metrics are available:
+Find where you already add:
+
+metrics["performance_budget_summary"] = ...
+
+Add:
 
 --- src/tests/rpg/autoplay_llm_campaign.py
 +++ src/tests/rpg/autoplay_llm_campaign.py
 @@
-     metrics["deferred_narration_trace_summary"] = _summarize_deferred_narration_trace(transcript)
-     metrics["deferred_advisory_trace_summary"] = _summarize_deferred_advisory_trace(transcript)
-+    metrics["performance_budget_summary"] = _summarize_performance_budget(
-+        transcript=transcript,
-+        background_summary=background_results_summary,
-+    )
+     metrics["performance_budget_summary"] = _summarize_performance_budget(
+         transcript=transcript,
+         background_summary=background_results_summary,
+     )
++    metrics["background_prompt_budget_summary"] = _summarize_background_prompt_budget(transcript)
++    metrics["combined_quality_shape_summary"] = _summarize_combined_quality_shape(transcript)
 
 Add to summary:
 
 --- src/tests/rpg/autoplay_llm_campaign.py
 +++ src/tests/rpg/autoplay_llm_campaign.py
 @@
-     summary["deferred_narration_trace_summary"] = metrics.get("deferred_narration_trace_summary") or {}
-     summary["deferred_advisory_trace_summary"] = metrics.get("deferred_advisory_trace_summary") or {}
-+    summary["performance_budget_summary"] = metrics.get("performance_budget_summary") or {}
+     summary["performance_budget_summary"] = metrics.get("performance_budget_summary") or {}
++    summary["background_prompt_budget_summary"] = metrics.get("background_prompt_budget_summary") or {}
++    summary["combined_quality_shape_summary"] = metrics.get("combined_quality_shape_summary") or {}
 
-Console output:
+Add console output:
 
 --- src/tests/rpg/autoplay_llm_campaign.py
 +++ src/tests/rpg/autoplay_llm_campaign.py
 @@
-     print(f"deferred_advisory_candidate_kinds: {deferred_advisory_summary.get('candidate_kinds')}")
-     print(f"deferred_advisory_errors: {deferred_advisory_summary.get('errors')}")
-+    performance_budget = summary.get("performance_budget_summary") or {}
-+    print(f"performance_budget_live_blocking: {performance_budget.get('live_blocking')}")
-+    print(f"performance_budget_background_llm: {performance_budget.get('background_llm')}")
-8. Report sections
+     print(f"performance_budget_live_blocking: {performance_budget.get('live_blocking')}")
+     print(f"performance_budget_background_llm: {performance_budget.get('background_llm')}")
++    print(f"background_prompt_budget_summary: {summary.get('background_prompt_budget_summary')}")
++    print(f"combined_quality_shape_summary: {summary.get('combined_quality_shape_summary')}")
+6. Patch campaign report model/HTML
 
-Patch campaign_report.py.
+Patch src/tests/rpg/autoplay/campaign_report.py.
 
---- src/tests/rpg/autoplay/campaign_report.py
-+++ src/tests/rpg/autoplay/campaign_report.py
-@@
-         "deferred_advisory_trace_summary": _safe_dict(metrics.get("deferred_advisory_trace_summary")),
-+        "performance_budget_summary": _safe_dict(metrics.get("performance_budget_summary")),
-
-Add details:
+In model construction:
 
 --- src/tests/rpg/autoplay/campaign_report.py
 +++ src/tests/rpg/autoplay/campaign_report.py
 @@
-     {_render_json_details("Player-agent trace summary JSON", model.get("player_agent_trace_summary") or {})}
-     {_render_json_details("Deferred narration trace summary JSON", model.get("deferred_narration_trace_summary") or {})}
-     {_render_json_details("Deferred advisory trace summary JSON", model.get("deferred_advisory_trace_summary") or {})}
-+    {_render_json_details("Performance budget summary JSON", model.get("performance_budget_summary") or {})}
+         "performance_budget_summary": _safe_dict(metrics.get("performance_budget_summary")),
++        "background_prompt_budget_summary": _safe_dict(metrics.get("background_prompt_budget_summary")),
++        "combined_quality_shape_summary": _safe_dict(metrics.get("combined_quality_shape_summary")),
+
+In performance/debug section:
+
+--- src/tests/rpg/autoplay/campaign_report.py
++++ src/tests/rpg/autoplay/campaign_report.py
+@@
+     {_render_json_details("Performance budget summary JSON", model.get("performance_budget_summary") or {})}
++    {_render_json_details("Background prompt budget summary JSON", model.get("background_prompt_budget_summary") or {})}
++    {_render_json_details("Combined quality shape summary JSON", model.get("combined_quality_shape_summary") or {})}
      {_render_json_details("Background job summary JSON", model.get("background_jobs") or {})}
 Tests
-9. Add queue + combined job tests
+7. Add context packet tests
 
 Create:
 
 --- /dev/null
-+++ src/tests/rpg/autoplay/test_background_llm_consolidation.py
++++ src/tests/rpg/autoplay/test_combined_context_budget.py
 @@ -0,0 +1,103 @@
 +from tests.rpg.autoplay.parallel_pipeline import (
-+    _queue_summary,
-+    attach_background_results_to_transcript,
++    build_combined_background_context_packet,
++    compact_json_for_prompt,
++    prompt_section_metrics,
 +)
-+from tests.rpg.autoplay_llm_campaign import _summarize_performance_budget
++from tests.rpg.autoplay_llm_campaign import (
++    _summarize_background_prompt_budget,
++    _summarize_combined_quality_shape,
++)
 +
 +
-+def test_queue_summary_computes_wait_run_total():
-+    summary = _queue_summary(
-+        [
-+            {"queue_timing": {"queue_wait_ms": 10, "run_ms": 100, "total_ms": 110}},
-+            {"queue_timing": {"queue_wait_ms": 30, "run_ms": 300, "total_ms": 330}},
-+        ]
++def test_combined_context_packet_excludes_raw_large_state_and_keeps_quality_fields():
++    simulation_state = {
++        "scene": {"title": "Rusty Flagon", "description": "A busy tavern."},
++        "present_npcs": ["bran"],
++        "npcs": {
++            "bran": {
++                "name": "Bran",
++                "role": "innkeeper",
++                "mood": "wary",
++                "huge_debug_blob": "x" * 10000,
++            }
++        },
++        "recent_events": [{"summary": "A stranger entered."}],
++        "debug_raw_session": "x" * 10000,
++    }
++    turn_contract = {
++        "player_input": "I ask Bran about the mill.",
++        "resolved_action": {"type": "ask", "target": "bran"},
++        "resolved_result": {"summary": "Bran hears the question."},
++        "semantic_action": {"semantic_action_type": "ask"},
++    }
++
++    packet = build_combined_background_context_packet(
++        player_action="I ask Bran about the mill.",
++        simulation_state=simulation_state,
++        turn_contract=turn_contract,
++        semantic_action_record={"semantic_action_type": "ask"},
 +    )
-+    assert summary["count"] == 2
-+    assert summary["avg_queue_wait_ms"] == 20.0
-+    assert summary["max_run_ms"] == 300.0
++
++    text = compact_json_for_prompt(packet, max_chars=9000)
++
++    assert packet["scene"]["scene_title"] == "Rusty Flagon"
++    assert packet["present_npcs"][0]["name"] == "Bran"
++    assert packet["turn_contract"]["resolved_action"]["type"] == "ask"
++    assert "debug_raw_session" not in text
++    assert "huge_debug_blob" not in text
 +
 +
-+def test_attach_combined_background_llm_populates_narration_and_advisory_slots():
++def test_prompt_section_metrics_counts_sections():
++    metrics = prompt_section_metrics(
++        {
++            "system_contract": "abc",
++            "context_packet": "x" * 100,
++            "output_schema": "schema",
++        }
++    )
++
++    assert metrics["total_chars"] == 108
++    assert metrics["by_section"]["context_packet"]["chars"] == 100
++    assert metrics["estimated_tokens"] > 0
++
++
++def test_summarize_background_prompt_budget():
 +    transcript = [
 +        {
 +            "turn_index": 1,
-+            "narration": "pending",
-+            "turn_result": {
-+                "narration_payload": {"source": "deferred_runtime_narration_pending"}
++            "combined_background_llm_result": {
++                "source": "provider_combined_background_llm",
++                "prompt_metrics": {
++                    "total_chars": 1000,
++                    "estimated_tokens": 250,
++                    "by_section": {
++                        "context_packet": {"chars": 800, "estimated_tokens": 200}
++                    },
++                },
 +            },
 +        }
 +    ]
-+    result = {
-+        "ok": True,
-+        "kind": "combined_background_llm",
-+        "session_id": "s",
-+        "turn_index": 1,
-+        "source": "provider_combined_background_llm",
-+        "narration": "The tavern quiets.",
-+        "npc": {},
-+        "narration_payload": {
-+            "source": "provider_runtime_narration",
-+            "narration": "The tavern quiets.",
-+        },
-+        "candidate_count": 1,
-+        "candidates": [{"kind": "future_hook"}],
-+        "advisory_summary": {"total": 1},
-+        "worker_ms": 1000.0,
-+        "queue_timing": {"queue_wait_ms": 1, "run_ms": 1000, "total_ms": 1001},
-+    }
 +
-+    summary = attach_background_results_to_transcript(transcript, [result])
++    summary = _summarize_background_prompt_budget(transcript)
 +
-+    assert summary["combined_background_llm_jobs"] == 1
-+    assert transcript[0]["resolved_narration"] == "The tavern quiets."
-+    assert transcript[0]["deferred_narration_result"]["narration_payload"]["source"] == "provider_runtime_narration"
-+    assert transcript[0]["deferred_advisory_result"]["candidate_count"] == 1
-+    assert transcript[0]["turn_result"]["narration_payload"]["source"] == "deferred_runtime_narration_pending"
++    assert summary["count"] == 1
++    assert summary["avg_total_chars"] == 1000
++    assert summary["by_section_avg_chars"]["context_packet"] == 800
 +
 +
-+def test_performance_budget_splits_live_autoplay_and_background():
++def test_summarize_combined_quality_shape_counts_narration_and_candidates():
 +    transcript = [
 +        {
-+            "performance": {
-+                "manual_turn_ms": 50.0,
-+                "human_playable_blocking_ms": 50.0,
-+                "player_agent_ms": 1000.0,
-+                "playable_blocking_ms": 1050.0,
++            "combined_background_llm_result": {
++                "narration": "A rich scene unfolds around Bran.",
++                "candidates": [
++                    {"kind": "semantic_intent"},
++                    {"kind": "memory"},
++                ],
 +            }
 +        }
 +    ]
-+    background = {
-+        "total_jobs": 1,
-+        "narration_jobs": 0,
-+        "advisory_jobs": 0,
-+        "combined_background_llm_jobs": 1,
-+        "background_job_seconds": 1.0,
-+        "provider_queue_summary": {"avg_queue_wait_ms": 0.0, "avg_run_ms": 1000.0},
-+    }
-+    summary = _summarize_performance_budget(transcript=transcript, background_summary=background)
-+    assert summary["live_blocking"]["avg_human_playable_blocking_ms"] == 50.0
-+    assert summary["autoplay_only"]["avg_player_agent_ms"] == 1000.0
-+    assert summary["background_llm"]["combined_background_llm_jobs"] == 1
++
++    summary = _summarize_combined_quality_shape(transcript)
++
++    assert summary["combined_turns"] == 1
++    assert summary["avg_candidate_count"] == 2
++    assert summary["candidate_kinds"]["memory"] == 1
+8. Add parser regression for prompt metrics preservation
+
+Patch src/tests/rpg/autoplay/test_combined_background_payload_parser.py.
+
+--- src/tests/rpg/autoplay/test_combined_background_payload_parser.py
++++ src/tests/rpg/autoplay/test_combined_background_payload_parser.py
+@@
+ def test_combined_background_job_marks_provider_success_when_payload_ok():
+@@
+     assert result["source"] == "provider_combined_background_llm"
+     assert result["narration_payload"]["source"] == "provider_runtime_narration"
+     assert result["candidate_count"] >= 1
++    assert result["prompt_metrics"]["total_chars"] > 0
 Validation
 
 Compile:
 
-python -m py_compile src\tests\rpg\autoplay\parallel_pipeline.py src\tests\rpg\autoplay_llm_campaign.py src\tests\rpg\autoplay\campaign_report.py src\tests\rpg\autoplay\test_background_llm_consolidation.py
+python -m py_compile src\tests\rpg\autoplay\parallel_pipeline.py src\tests\rpg\autoplay_llm_campaign.py src\tests\rpg\autoplay\campaign_report.py src\tests\rpg\autoplay\test_combined_context_budget.py
 
 Run tests:
 
-python -m pytest src\tests\rpg\autoplay\test_background_llm_consolidation.py src\tests\rpg\advisory\test_deferred_advisory_candidates.py src\tests\rpg\autoplay\test_deferred_advisory_json_extract.py src\tests\rpg\autoplay\test_deferred_advisory_trace_summary.py src\tests\rpg\autoplay\test_autoplay_trace_summaries.py src\tests\rpg\autoplay\test_deferred_narration_detection.py src\tests\rpg\autoplay\test_parallel_pipeline.py src\tests\rpg\autoplay\test_autoplay_runner.py src\tests\rpg\autoplay\test_performance.py -q
+python -m pytest src\tests\rpg\autoplay\test_combined_context_budget.py src\tests\rpg\autoplay\test_combined_background_payload_parser.py src\tests\rpg\autoplay\test_background_llm_consolidation.py src\tests\rpg\advisory\test_deferred_advisory_candidates.py src\tests\rpg\autoplay\test_deferred_advisory_json_extract.py src\tests\rpg\autoplay\test_deferred_advisory_trace_summary.py src\tests\rpg\autoplay\test_autoplay_trace_summaries.py src\tests\rpg\autoplay\test_deferred_narration_detection.py src\tests\rpg\autoplay\test_parallel_pipeline.py src\tests\rpg\autoplay\test_autoplay_runner.py src\tests\rpg\autoplay\test_performance.py -q

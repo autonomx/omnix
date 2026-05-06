@@ -46,6 +46,233 @@ def _safe_str(value: Any) -> str:
     return value if isinstance(value, str) else ""
 
 
+def _safe_list(value: Any) -> List[Any]:
+    return value if isinstance(value, list) else []
+
+
+def stable_json_for_prompt(value: Any, max_chars: int = 6000) -> str:
+    import json
+
+    text = json.dumps(value, sort_keys=True, ensure_ascii=False, default=str)
+    if len(text) > max_chars:
+        return text[:max_chars] + "...[truncated]"
+    return text
+
+
+def compact_json_for_prompt(value: Any, max_chars: int = 6000) -> str:
+    """Stable compact JSON for prompt context.
+
+    This preserves information while removing whitespace/token waste.
+    Section-level caps should be applied before this where possible.
+    """
+    import json
+
+    text = json.dumps(
+        value,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+        default=str,
+    )
+    if len(text) > max_chars:
+        return text[:max_chars] + "...[truncated]"
+    return text
+
+
+def _short_text(value: Any, max_chars: int = 600) -> str:
+    text = _safe_str(value).strip()
+    if len(text) > max_chars:
+        return text[:max_chars].rstrip() + "...[truncated]"
+    return text
+
+
+def _list_tail(value: Any, limit: int) -> List[Any]:
+    values = value if isinstance(value, list) else []
+    if limit <= 0:
+        return []
+    return values[-limit:]
+
+
+def _dict_subset(value: Any, keys: List[str]) -> Dict[str, Any]:
+    source = _safe_dict(value)
+    return {key: source.get(key) for key in keys if key in source and source.get(key) not in (None, "", [], {}, {})}
+
+
+def _safe_npc_name(npc: Any) -> str:
+    if isinstance(npc, str):
+        return npc
+    npc_dict = _safe_dict(npc)
+    return (
+        _safe_str(npc_dict.get("name"))
+        or _safe_str(npc_dict.get("id"))
+        or _safe_str(npc_dict.get("npc_id"))
+        or _safe_str(npc_dict.get("speaker"))
+    )
+
+
+def _compact_present_npcs(simulation_state: Dict[str, Any], limit: int = 6) -> List[Dict[str, Any]]:
+    present = (
+        _safe_list(simulation_state.get("present_npcs"))
+        or _safe_list(simulation_state.get("nearby_npcs"))
+        or _safe_list(simulation_state.get("visible_npcs"))
+    )
+    npcs_by_id = _safe_dict(simulation_state.get("npcs"))
+    compact: List[Dict[str, Any]] = []
+
+    for item in present[:limit]:
+        npc_id = _safe_npc_name(item)
+        npc_record = _safe_dict(npcs_by_id.get(npc_id)) or _safe_dict(item)
+        compact.append(
+            {
+                "id": npc_id,
+                "name": _safe_str(npc_record.get("name")) or npc_id,
+                "role": _safe_str(npc_record.get("role") or npc_record.get("occupation")),
+                "mood": _safe_str(npc_record.get("mood") or npc_record.get("emotional_state")),
+                "relationship": _safe_dict(npc_record.get("relationship")),
+            }
+        )
+
+    if not compact and npcs_by_id:
+        for npc_id, npc_record_any in list(npcs_by_id.items())[:limit]:
+            npc_record = _safe_dict(npc_record_any)
+            compact.append(
+                {
+                    "id": str(npc_id),
+                    "name": _safe_str(npc_record.get("name")) or str(npc_id),
+                    "role": _safe_str(npc_record.get("role") or npc_record.get("occupation")),
+                    "mood": _safe_str(npc_record.get("mood") or npc_record.get("emotional_state")),
+                }
+            )
+
+    return [item for item in compact if item.get("id") or item.get("name")]
+
+
+def _compact_scene_context(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
+    scene = _safe_dict(simulation_state.get("scene"))
+    location = _safe_dict(simulation_state.get("location"))
+    current_location = (
+        _safe_str(simulation_state.get("current_location"))
+        or _safe_str(location.get("name"))
+        or _safe_str(scene.get("location"))
+        or _safe_str(scene.get("name"))
+    )
+    return {
+        "location": current_location,
+        "scene_title": _safe_str(scene.get("title") or scene.get("name")),
+        "scene_summary": _short_text(
+            scene.get("summary") or scene.get("description") or simulation_state.get("scene_summary"),
+            900,
+        ),
+        "time": _safe_str(simulation_state.get("time") or simulation_state.get("world_time")),
+        "weather": _safe_str(simulation_state.get("weather")),
+    }
+
+
+def _compact_recent_events(simulation_state: Dict[str, Any], limit: int = 5) -> List[Dict[str, Any]]:
+    raw_events = (
+        _safe_list(simulation_state.get("recent_events"))
+        or _safe_list(simulation_state.get("world_events"))
+        or _safe_list(simulation_state.get("event_log"))
+    )
+    events = []
+    for event in _list_tail(raw_events, limit):
+        event_dict = _safe_dict(event)
+        if event_dict:
+            events.append(
+                {
+                    "kind": _safe_str(event_dict.get("kind") or event_dict.get("type")),
+                    "summary": _short_text(
+                        event_dict.get("summary")
+                        or event_dict.get("description")
+                        or event_dict.get("text"),
+                        400,
+                    ),
+                }
+            )
+        elif isinstance(event, str):
+            events.append({"summary": _short_text(event, 400)})
+    return [event for event in events if event.get("summary")]
+
+
+def _compact_player_visible_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
+    player = _safe_dict(simulation_state.get("player"))
+    inventory = _safe_dict(simulation_state.get("inventory") or player.get("inventory"))
+    currency = _safe_dict(simulation_state.get("currency") or player.get("currency"))
+    return {
+        "name": _safe_str(player.get("name") or simulation_state.get("player_name")),
+        "status": _safe_str(player.get("status")),
+        "visible_conditions": _safe_list(player.get("conditions"))[:8],
+        "inventory_item_count": len(_safe_list(inventory.get("items"))),
+        "currency": currency,
+    }
+
+
+def _compact_turn_contract(turn_contract: Dict[str, Any]) -> Dict[str, Any]:
+    contract = _safe_dict(turn_contract)
+    semantic_action = _safe_dict(contract.get("semantic_action"))
+    state_delta = _safe_dict(contract.get("state_delta"))
+    return {
+        "version": contract.get("version"),
+        "player_input": _short_text(contract.get("player_input"), 500),
+        "resolved_action": contract.get("resolved_action"),
+        "resolved_result": contract.get("resolved_result"),
+        "semantic_action": semantic_action,
+        "service_result": contract.get("service_result"),
+        "state_delta": _dict_subset(
+            state_delta,
+            ["summary", "changed_keys", "relationship_delta", "memory_delta", "world_signal_delta"],
+        ),
+        "narration_brief": _short_text(contract.get("narration_brief"), 700),
+        "presentation": _dict_subset(_safe_dict(contract.get("presentation")), ["title", "summary", "npc"]),
+    }
+
+
+def build_combined_background_context_packet(
+    *,
+    player_action: str,
+    simulation_state: Dict[str, Any],
+    turn_contract: Dict[str, Any],
+    semantic_action_record: Dict[str, Any],
+) -> Dict[str, Any]:
+    """Quality-preserving compact context for combined background LLM.
+
+    This intentionally keeps the highest-value world and turn facts while
+    excluding raw session/debug/history blobs.
+    """
+    simulation_state = _safe_dict(simulation_state)
+    turn_contract = _safe_dict(turn_contract)
+    semantic_action_record = _safe_dict(semantic_action_record)
+
+    return {
+        "player_action": _short_text(player_action, 800),
+        "scene": _compact_scene_context(simulation_state),
+        "present_npcs": _compact_present_npcs(simulation_state, limit=6),
+        "player_visible_state": _compact_player_visible_state(simulation_state),
+        "recent_events": _compact_recent_events(simulation_state, limit=5),
+        "turn_contract": _compact_turn_contract(turn_contract),
+        "fast_semantic_action": semantic_action_record,
+    }
+
+
+def prompt_section_metrics(sections: Dict[str, str]) -> Dict[str, Any]:
+    by_section: Dict[str, Dict[str, Any]] = {}
+    total_chars = 0
+    for name, text in sections.items():
+        text_value = text if isinstance(text, str) else str(text)
+        chars = len(text_value)
+        total_chars += chars
+        by_section[name] = {
+            "chars": chars,
+            # Rough heuristic; exact tokenizer is provider/model-dependent.
+            "estimated_tokens": round(chars / 4.0, 1),
+        }
+    return {
+        "total_chars": total_chars,
+        "estimated_tokens": round(total_chars / 4.0, 1),
+        "by_section": by_section,
+    }
+
+
 def _provider_shape(provider: Any) -> Dict[str, Any]:
     if provider is None:
         return {"present": False}
@@ -389,6 +616,32 @@ def _combined_payload_has_useful_content(payload: Dict[str, Any]) -> bool:
     )
 
 
+def _salvage_combined_narration_from_text(text: str) -> Dict[str, Any]:
+    import re
+
+    if not isinstance(text, str):
+        return {}
+    match = re.search(r'"narration"\s*:\s*"((?:\\.|[^"\\])*)"', text, flags=re.DOTALL)
+    if not match:
+        return {}
+    narration = match.group(1)
+    try:
+        narration = bytes(narration, "utf-8").decode("unicode_escape")
+    except Exception:
+        pass
+    if not narration.strip():
+        return {}
+    return {
+        "ok": True,
+        "partial": True,
+        "narration": narration.strip(),
+        "action": "The action has been resolved.",
+        "npc": {"speaker": "", "line": ""},
+        "reward": "",
+        "followup_hooks": [],
+    }
+
+
 def _provider_messages(messages: List[Dict[str, str]]) -> List[Any]:
     if ChatMessage is None:
         return messages
@@ -483,6 +736,35 @@ def _build_combined_background_payload(
     if provider is None or not callable(getattr(provider, "chat_completion", None)):
         return {"ok": False, "error": "provider_missing_or_unsupported"}
 
+    context_packet = build_combined_background_context_packet(
+        player_action=player_action,
+        simulation_state=simulation_state,
+        turn_contract=turn_contract,
+        semantic_action_record=semantic_action_record,
+    )
+    context_json = compact_json_for_prompt(context_packet, max_chars=7000)
+    schema_text = (
+        "{"
+        '"narration":"2-5 sentences describing the resolved scene without repeating player input.",'
+        '"action":"Short result of the player action.",'
+        '"npc":{"speaker":"","line":""},'
+        '"reward":"",'
+        '"followup_hooks":[],'
+        '"semantic_intent_candidates":[{"intent":"","summary":"","confidence":0.0}],'
+        '"relationship_delta_candidates":[{"target":"","axis":"trust","delta":0,"summary":""}],'
+        '"memory_candidates":[{"owner":"","summary":"","importance":0.0}],'
+        '"world_signal_candidates":[{"kind":"","summary":""}],'
+        '"future_hook_candidates":[{"kind":"","summary":""}]'
+        "}"
+    )
+    prompt_metrics = prompt_section_metrics(
+        {
+            "system_contract": "combined_background_worker_v1",
+            "context_packet": context_json,
+            "output_schema": schema_text,
+        }
+    )
+
     messages = [
         {
             "role": "system",
@@ -490,29 +772,24 @@ def _build_combined_background_payload(
                 "You are an RPG background enrichment worker. Return JSON only. "
                 "You must not assert authoritative outcomes that are not in the turn contract. "
                 "Do not grant items, currency, quest completion, damage, travel, or rewards. "
-                "Return one JSON object and no markdown fences, no prose, no commentary."
+                "Return one JSON object and no markdown fences, no prose, no commentary. "
+                "Maintain rich 2-5 sentence narration quality. Use only the provided compact context. "
+                "Return compact candidate objects. Prefer at most 1 high-quality candidate per category. "
+                "Do not include long explanations inside candidates."
             ),
         },
         {
             "role": "user",
             "content": (
                 "Create background narration and advisory candidates for this resolved RPG turn.\n\n"
-                f"PLAYER_INPUT:\n{player_action}\n\n"
-                f"TURN_CONTRACT_JSON:\n{stable_json_for_prompt(turn_contract)}\n\n"
-                f"FAST_SEMANTIC_JSON:\n{stable_json_for_prompt(semantic_action_record)}\n\n"
+                "COMPACT_CONTEXT_JSON:\n"
+                f"{context_json}\n\n"
                 "Return exactly this JSON shape:\n"
-                "{\n"
-                '  "narration": "2-5 sentences describing the resolved scene without repeating player input.",\n'
-                '  "action": "Short result of the player action.",\n'
-                '  "npc": {"speaker": "", "line": ""},\n'
-                '  "reward": "",\n'
-                '  "followup_hooks": [],\n'
-                '  "semantic_intent_candidates": [],\n'
-                '  "relationship_delta_candidates": [],\n'
-                '  "memory_candidates": [],\n'
-                '  "world_signal_candidates": [],\n'
-                '  "future_hook_candidates": []\n'
-                "}"
+                f"{schema_text}\n\n"
+                "Candidate limits: max 1 semantic_intent, max 1 relationship_delta, "
+                "max 1 memory, max 1 world_signal, max 1 future_hook. "
+                "Each candidate summary must be under 160 characters. "
+                "Narration remains high quality and should not be shortened below 2 sentences."
             ),
         },
     ]
@@ -537,19 +814,32 @@ def _build_combined_background_payload(
             ):
                 normalized["ok"] = True
                 normalized.setdefault("raw_provider_shape_keys", sorted(list(parsed.keys()))[:80])
+                normalized.setdefault("prompt_metrics", prompt_metrics)
+                normalized.setdefault("context_packet_keys", sorted(list(context_packet.keys())))
                 return normalized
             return {
                 "ok": False,
                 "error": "provider_combined_json_missing_useful_content",
                 "raw": content[:1000],
                 "parsed_keys": sorted(list(parsed.keys()))[:80],
+                "prompt_metrics": prompt_metrics,
+                "context_packet_keys": sorted(list(context_packet.keys())),
             }
-        return {"ok": False, "error": "provider_combined_json_not_object", "raw": content[:1000]}
+        return {"ok": False, "error": "provider_combined_json_not_object", "raw": content[:4000]}
     except Exception as exc:
+        salvaged = _salvage_combined_narration_from_text(content)
+        if salvaged:
+            salvaged["raw"] = content[:4000]
+            salvaged["parse_error"] = f"{type(exc).__name__}: {exc}"
+            salvaged["prompt_metrics"] = prompt_metrics
+            salvaged["context_packet_keys"] = sorted(list(context_packet.keys()))
+            return salvaged
         return {
             "ok": False,
             "error": f"provider_combined_json_parse_error:{type(exc).__name__}: {exc}",
-            "raw": content[:1000],
+            "raw": content[:4000],
+            "prompt_metrics": prompt_metrics,
+            "context_packet_keys": sorted(list(context_packet.keys())),
         }
 
 
@@ -680,10 +970,16 @@ def _combined_background_llm_job(
             )
             diagnostics["provider_combined_ms"] = elapsed_ms(provider_started)
             diagnostics["provider_payload_error"] = _safe_str(provider_payload.get("error"))
-            diagnostics["provider_raw_excerpt"] = _safe_str(provider_payload.get("raw"))[:1000]
+            diagnostics["provider_raw_excerpt"] = _safe_str(provider_payload.get("raw"))[:4000]
             diagnostics["provider_payload_keys"] = (
                 sorted(list(provider_payload.keys()))[:80]
                 if isinstance(provider_payload, dict)
+                else []
+            )
+            diagnostics["prompt_metrics"] = _safe_dict(provider_payload.get("prompt_metrics"))
+            diagnostics["context_packet_keys"] = (
+                provider_payload.get("context_packet_keys")
+                if isinstance(provider_payload.get("context_packet_keys"), list)
                 else []
             )
             diagnostics["provider_parsed_keys"] = (
@@ -765,6 +1061,7 @@ def _combined_background_llm_job(
             "candidates": candidates,
             "advisory_summary": advisory_candidate_summary(candidates),
             "diagnostics": diagnostics,
+            "prompt_metrics": _safe_dict(diagnostics.get("prompt_metrics")),
             "worker_ms": elapsed_ms(started),
             "queue_timing": _queue_timing(
                 queued_at=queued_at,

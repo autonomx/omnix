@@ -323,6 +323,89 @@ def _summarize_performance_budget(
     }
 
 
+def _summarize_background_prompt_budget(transcript: List[Dict[str, Any]]) -> Dict[str, Any]:
+    rows: List[Dict[str, Any]] = []
+    for row in transcript:
+        combined = _safe_dict(row.get("combined_background_llm_result"))
+        diagnostics = _safe_dict(combined.get("diagnostics"))
+        prompt_metrics = (
+            _safe_dict(combined.get("prompt_metrics"))
+            or _safe_dict(diagnostics.get("prompt_metrics"))
+        )
+        if not prompt_metrics:
+            continue
+        rows.append(
+            {
+                "turn_index": row.get("turn_index"),
+                "source": _safe_str(combined.get("source")),
+                "total_chars": int(prompt_metrics.get("total_chars") or 0),
+                "estimated_tokens": float(prompt_metrics.get("estimated_tokens") or 0.0),
+                "by_section": _safe_dict(prompt_metrics.get("by_section")),
+            }
+        )
+
+    if not rows:
+        return {
+            "count": 0,
+            "avg_total_chars": 0.0,
+            "max_total_chars": 0,
+            "avg_estimated_tokens": 0.0,
+            "max_estimated_tokens": 0.0,
+            "by_section_avg_chars": {},
+            "examples": [],
+        }
+
+    section_totals: Dict[str, List[int]] = {}
+    for item in rows:
+        for section, metrics in _safe_dict(item.get("by_section")).items():
+            section_totals.setdefault(section, []).append(int(_safe_dict(metrics).get("chars") or 0))
+
+    return {
+        "count": len(rows),
+        "avg_total_chars": round(sum(item["total_chars"] for item in rows) / len(rows), 3),
+        "max_total_chars": max(item["total_chars"] for item in rows),
+        "avg_estimated_tokens": round(sum(item["estimated_tokens"] for item in rows) / len(rows), 3),
+        "max_estimated_tokens": round(max(item["estimated_tokens"] for item in rows), 3),
+        "by_section_avg_chars": {
+            section: round(sum(values) / len(values), 3)
+            for section, values in section_totals.items()
+            if values
+        },
+        "examples": rows[:3],
+    }
+
+
+def _summarize_combined_quality_shape(transcript: List[Dict[str, Any]]) -> Dict[str, Any]:
+    narration_lengths: List[int] = []
+    candidate_counts: List[int] = []
+    candidate_kinds: Dict[str, int] = {}
+
+    for row in transcript:
+        combined = _safe_dict(row.get("combined_background_llm_result"))
+        if not combined:
+            continue
+        narration = _safe_str(combined.get("narration"))
+        if narration:
+            narration_lengths.append(len(narration))
+        candidates = combined.get("candidates") if isinstance(combined.get("candidates"), list) else []
+        candidate_counts.append(len(candidates))
+        for candidate in candidates:
+            kind = _safe_str(_safe_dict(candidate).get("kind")) or "unknown"
+            candidate_kinds[kind] = int(candidate_kinds.get(kind) or 0) + 1
+
+    def avg(values: List[int]) -> float:
+        return round(sum(values) / len(values), 3) if values else 0.0
+
+    return {
+        "combined_turns": len(candidate_counts),
+        "avg_narration_chars": avg(narration_lengths),
+        "min_narration_chars": min(narration_lengths) if narration_lengths else 0,
+        "avg_candidate_count": avg(candidate_counts),
+        "min_candidate_count": min(candidate_counts) if candidate_counts else 0,
+        "candidate_kinds": candidate_kinds,
+    }
+
+
 def _commit_authoritative_state(
     *,
     session_id: str,
@@ -1137,6 +1220,8 @@ def run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
         transcript=transcript,
         background_summary=background_results_summary,
     )
+    metrics["background_prompt_budget_summary"] = _summarize_background_prompt_budget(transcript)
+    metrics["combined_quality_shape_summary"] = _summarize_combined_quality_shape(transcript)
     manual_harness_slowest = []
     for row in transcript:
         summary = row.get("manual_harness_trace_summary") or {}
@@ -1334,6 +1419,8 @@ def run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
         "deferred_narration_trace_summary": metrics.get("deferred_narration_trace_summary") or {},
         "deferred_advisory_trace_summary": metrics.get("deferred_advisory_trace_summary") or {},
         "performance_budget_summary": metrics.get("performance_budget_summary") or {},
+        "background_prompt_budget_summary": metrics.get("background_prompt_budget_summary") or {},
+        "combined_quality_shape_summary": metrics.get("combined_quality_shape_summary") or {},
     }
     artifact_start = now_perf()
     extra_paths = {}
@@ -1534,6 +1621,8 @@ def main(argv: List[str] | None = None) -> int:
     performance_budget = summary.get("performance_budget_summary") or {}
     print(f"performance_budget_live_blocking: {performance_budget.get('live_blocking')}")
     print(f"performance_budget_background_llm: {performance_budget.get('background_llm')}")
+    print(f"background_prompt_budget_summary: {summary.get('background_prompt_budget_summary')}")
+    print(f"combined_quality_shape_summary: {summary.get('combined_quality_shape_summary')}")
 
     warnings = summary.get("health", {}).get("warnings") or []
     if args.fail_on_regression_warnings and warnings:

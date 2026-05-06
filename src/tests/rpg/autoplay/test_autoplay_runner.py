@@ -104,6 +104,7 @@ def test_autoplay_runner_fallback_executes_short_campaign(tmp_path: Path, monkey
         checkpoint_mode="blocking",
         background_workers=2,
         provider_workers=1,
+        background_llm_mode="split",
     )
 
     args = Namespace(
@@ -153,6 +154,7 @@ def test_autoplay_runner_fallback_executes_short_campaign(tmp_path: Path, monkey
         checkpoint_mode="blocking",
         background_workers=2,
         provider_workers=1,
+        background_llm_mode="split",
     )
 
     summary = run_autoplay_campaign(args)
@@ -570,6 +572,7 @@ def test_post_objective_flag_does_not_fail_without_warnings(tmp_path: Path, monk
         checkpoint_mode="blocking",
         background_workers=2,
         provider_workers=1,
+        background_llm_mode="split",
     )
 
     summary = run_autoplay_campaign(args)
@@ -679,6 +682,7 @@ def test_deferred_narration_mode_does_not_leave_provider_source_in_blocking_turn
         action_diversity_window=12,
         min_action_diversity_rate=0.0,
         min_category_diversity_rate=0.0,
+        background_llm_mode="combined",
     )
 
     summary = run_autoplay_campaign(args)
