@@ -2,6 +2,7 @@ from types import SimpleNamespace
 
 from tests.rpg.autoplay_llm_campaign import (
     _summarize_player_agent_prompt_budget,
+    _summarize_profile_grounded_output,
     _summarize_promotion_target_grounding,
     _summarize_quality_gates,
 )
@@ -234,3 +235,91 @@ def test_promotion_target_grounding_summary_dedupes_cumulative_runtime_state():
     assert summary["by_reason"]["explicit_known_target"] == 1
     assert summary["by_reason"]["no_deterministic_target"] == 1
     assert len(summary["examples"]) == 2
+
+
+def test_summarize_profile_grounded_output_detects_loaded_profile_context_and_reference():
+    transcript = [
+        {
+            "turn_index": 2,
+            "combined_background_llm_result": {
+                "narration": "Bran watches with guarded trust as the room settles.",
+                "narration_payload": {
+                    "npc": {"speaker": "Bran", "line": "I remember what you asked about the mill."}
+                },
+                "profile_context_summary": {
+                    "available": True,
+                    "npc_count": 1,
+                    "npc_ids": ["Bran"],
+                    "arc_stages": {"Bran": "trusting"},
+                },
+            },
+            "runtime_state": {
+                "npc_evolution": {
+                    "loaded_profiles": {
+                        "Bran": {
+                            "profile": {
+                                "npc_id": "Bran",
+                                "arc_stage": "trusting",
+                                "axes": {"trust": 4},
+                                "memories": [
+                                    {"summary": "Bran remembers the player asking about the mill."}
+                                ],
+                                "future_hooks": [],
+                            }
+                        }
+                    }
+                }
+            },
+        }
+    ]
+
+    summary = _summarize_profile_grounded_output(transcript)
+
+    assert summary["available_turns"] == 1
+    assert summary["referenced_turns"] == 1
+    assert summary["loaded_npc_ids"] == ["Bran"]
+    assert summary["by_npc"]["Bran"]["referenced_turns"] == 1
+
+
+def test_quality_gate_requires_profile_context_when_profiles_loaded():
+    from types import SimpleNamespace
+
+    args = SimpleNamespace(
+        background_llm_mode="combined",
+        max_player_agent_fallback_rate=0.25,
+    )
+    metrics = {"real_turn_runtime_count": 1}
+    summary = {
+        "performance_budget_summary": {
+            "live_blocking": {
+                "avg_human_playable_blocking_ms": 50,
+                "max_human_playable_blocking_ms": 90,
+            }
+        },
+        "background_jobs": {
+            "combined_background_llm_jobs": 1,
+            "narration_jobs": 0,
+            "advisory_jobs": 0,
+        },
+        "player_agent_trace_summary": {
+            "turns": 1,
+            "fallback_turns": 0,
+        },
+        "npc_profile_load_summary": {
+            "ok": True,
+            "turns_with_profiles": 1,
+        },
+        "profile_grounded_output_summary": {
+            "available_turns": 1,
+        },
+    }
+
+    result = _summarize_quality_gates(
+        args=args,
+        metrics=metrics,
+        summary=summary,
+        transcript=[{}],
+    )
+
+    assert result["ok"] is True
+    assert result["gates"]["profile_grounding_context_available_when_profiles_loaded"] is True

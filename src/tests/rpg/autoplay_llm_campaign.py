@@ -19,7 +19,10 @@ from app.rpg.player_action_context.runtime import build_player_action_context
 from tests.rpg.autoplay.advisory_promotion_runtime import (
     run_deferred_advisory_promotions_for_transcript,
 )
-from tests.rpg.autoplay.npc_profile_runtime_loader import summarize_profile_loads
+from tests.rpg.autoplay.npc_profile_runtime_loader import (
+    load_profiles_into_row_runtime,
+    summarize_profile_loads,
+)
 from tests.rpg.autoplay.base_runtime_response import (
     build_autoplay_base_response,
 )
@@ -574,6 +577,124 @@ def _summarize_promotion_target_grounding(transcript: List[Dict[str, Any]]) -> D
     return summary
 
 
+def _safe_lower_text(value: Any) -> str:
+    return _safe_str(value).lower()
+
+
+def _profile_reference_terms(profile: Dict[str, Any]) -> List[str]:
+    profile = _safe_dict(profile)
+    terms: List[str] = []
+    arc_stage = _safe_str(profile.get("arc_stage"))
+    if arc_stage and arc_stage != "stable":
+        terms.append(arc_stage.replace("_", " "))
+    axes = _safe_dict(profile.get("axes"))
+    for axis, value in axes.items():
+        try:
+            if abs(int(value or 0)) >= 2:
+                terms.append(str(axis).replace("_", " "))
+        except Exception:
+            continue
+    for key in ("memories", "future_hooks", "world_signals", "semantic_intents", "milestones"):
+        for item in _safe_list(profile.get(key))[-4:]:
+            item = _safe_dict(item)
+            summary = _safe_str(item.get("summary"))
+            if summary:
+                # Keep short keyword-ish fragments. This is only a diagnostic,
+                # not a hard correctness validator.
+                for token in summary.replace(".", " ").replace(",", " ").split():
+                    token = token.strip().lower()
+                    if len(token) >= 5 and token not in {"player", "about", "later", "would", "could"}:
+                        terms.append(token)
+                break
+    deduped: List[str] = []
+    seen = set()
+    for term in terms:
+        marker = term.lower()
+        if marker in seen:
+            continue
+        seen.add(marker)
+        deduped.append(term)
+    return deduped[:12]
+
+
+def _summarize_profile_grounded_output(transcript: List[Dict[str, Any]]) -> Dict[str, Any]:
+    rows: List[Dict[str, Any]] = []
+    available_turns = 0
+    referenced_turns = 0
+    npc_ids = set()
+    by_npc: Dict[str, Dict[str, Any]] = {}
+
+    for row in transcript if isinstance(transcript, list) else []:
+        row = _safe_dict(row)
+        combined = _safe_dict(row.get("combined_background_llm_result"))
+        diagnostics = _safe_dict(combined.get("diagnostics"))
+        profile_summary = (
+            _safe_dict(combined.get("profile_context_summary"))
+            or _safe_dict(diagnostics.get("profile_context_summary"))
+        )
+        if not profile_summary.get("available"):
+            continue
+
+        available_turns += 1
+        for npc_id in _safe_list(profile_summary.get("npc_ids")):
+            if _safe_str(npc_id):
+                npc_ids.add(_safe_str(npc_id))
+
+        runtime_state = _safe_dict(row.get("runtime_state"))
+        loaded = _safe_dict(_safe_dict(runtime_state.get("npc_evolution")).get("loaded_profiles"))
+
+        narration_payload = (
+            _safe_dict(combined.get("narration_payload"))
+            or _safe_dict(row.get("deferred_narration_result")).get("narration_payload")
+            or _safe_dict(_safe_dict(row.get("turn_result")).get("narration_payload"))
+        )
+        if not isinstance(narration_payload, dict):
+            narration_payload = {}
+
+        narration = _safe_str(combined.get("narration")) or _safe_str(narration_payload.get("narration"))
+        npc_line = _safe_str(_safe_dict(narration_payload.get("npc")).get("line"))
+        text = _safe_lower_text(f"{narration}\n{npc_line}")
+
+        row_matches: Dict[str, List[str]] = {}
+        for npc_id, loaded_row_any in loaded.items():
+            loaded_row = _safe_dict(loaded_row_any)
+            profile = _safe_dict(loaded_row.get("profile"))
+            terms = _profile_reference_terms(profile)
+            matches = [term for term in terms if term and term.lower() in text]
+            if matches:
+                row_matches[str(npc_id)] = matches[:6]
+                npc_bucket = by_npc.setdefault(str(npc_id), {"referenced_turns": 0, "matches": {}})
+                npc_bucket["referenced_turns"] += 1
+                for match in matches[:6]:
+                    npc_bucket["matches"][match] = int(npc_bucket["matches"].get(match) or 0) + 1
+
+        if row_matches:
+            referenced_turns += 1
+
+        rows.append(
+            {
+                "turn_index": row.get("turn_index"),
+                "profile_npcs": profile_summary.get("npc_ids") or [],
+                "referenced": bool(row_matches),
+                "matches": row_matches,
+                "arc_stages": profile_summary.get("arc_stages") or {},
+            }
+        )
+
+    return {
+        "available_turns": available_turns,
+        "referenced_turns": referenced_turns,
+        "reference_rate": round(referenced_turns / available_turns, 4) if available_turns else 0.0,
+        "loaded_npc_ids": sorted(npc_ids),
+        "by_npc": by_npc,
+        "examples": rows[:8],
+        "note": (
+            "This is a soft diagnostic. It checks whether provider output appears "
+            "to reference loaded profile context; it is not a hard requirement every turn."
+        ),
+    }
+
+
 def _summarize_player_agent_prompt_budget(rows: List[Dict[str, Any]]) -> Dict[str, Any]:
     prompt_rows = [row for row in rows if isinstance(row.get("prompt_metrics"), dict)]
     if not prompt_rows:
@@ -625,6 +746,7 @@ def _summarize_quality_gates(
     advisory_promotion_summary = _safe_dict(summary.get("deferred_advisory_promotion_summary"))
     profile_persist_summary = _safe_dict(summary.get("npc_evolution_profile_persistence_summary"))
     profile_load_summary = _safe_dict(summary.get("npc_profile_load_summary"))
+    profile_grounded_summary = _safe_dict(summary.get("profile_grounded_output_summary"))
     evolution_mutated_authoritative_state = False
     for row in transcript:
         evo_result = _safe_dict(_safe_dict(row).get("npc_evolution_consumption_result"))
@@ -660,6 +782,11 @@ def _summarize_quality_gates(
         "npc_profile_load_ok": (
             not profile_load_summary
             or bool(profile_load_summary.get("ok"))
+        ),
+        "profile_grounding_context_available_when_profiles_loaded": (
+            not profile_load_summary
+            or int(profile_load_summary.get("turns_with_profiles") or 0) == 0
+            or int(profile_grounded_summary.get("available_turns") or 0) > 0
         ),
     }
 
@@ -851,6 +978,33 @@ def _extract_background_semantic_action_record(turn_result: Dict[str, Any]) -> D
         or _safe_dict(_safe_dict(turn_result.get("manual_turn_summary")).get("semantic_action"))
         or {}
     )
+
+
+def _runtime_state_with_loaded_profiles_for_background(
+    *,
+    turn_result: Dict[str, Any],
+    simulation_state: Dict[str, Any],
+) -> Dict[str, Any]:
+    """Load NPC profiles before submitting the combined background LLM job.
+
+    The later promotion runtime also loads profiles, but that is too late for
+    the provider prompt. This helper prepares a row-local runtime_state snapshot
+    for the background job so loaded_npc_profiles is populated in the compact
+    provider context.
+    """
+    turn_result = _safe_dict(turn_result)
+    session = _safe_dict(turn_result.get("session"))
+    runtime_state = (
+        _safe_dict(turn_result.get("runtime_state"))
+        or _safe_dict(session.get("runtime_state"))
+        or {}
+    )
+    temp_row: Dict[str, Any] = {"runtime_state": runtime_state}
+    load_profiles_into_row_runtime(
+        row=temp_row,
+        simulation_state=_safe_dict(simulation_state),
+    )
+    return _safe_dict(temp_row.get("runtime_state"))
 
 
 def _find_narration_payload(container: Dict[str, Any]) -> Dict[str, Any]:
@@ -1147,6 +1301,7 @@ def run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
         turn_performance: Dict[str, Any] = {
             "turn_index": turn_index,
         }
+        background_runtime_state: Dict[str, Any] = {}
         # The previous turn's committed state is the only valid baseline.
         # Never derive the next before_state from manual session reloads.
         expected_baseline_state = deepcopy(last_committed_state)
@@ -1381,13 +1536,17 @@ def run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
             with timed_stage(turn_performance, "background_enqueue_ms"):
                 semantic_action_record = _extract_background_semantic_action_record(turn_result)
                 if args.background_llm_mode == "combined":
+                    background_runtime_state = _runtime_state_with_loaded_profiles_for_background(
+                        turn_result=turn_result,
+                        simulation_state=final_turn_state,
+                    )
                     combined_background_llm_job_id = pipeline.submit_combined_background_llm(
                         provider=provider,
                         session_id=session_id,
                         turn_index=turn_index,
                         player_action=player_action,
                         simulation_state=final_turn_state,
-                        runtime_state=_safe_dict(_safe_dict(turn_result.get("session")).get("runtime_state")),
+                        runtime_state=background_runtime_state,
                         turn_contract=turn_result.get("turn_contract") or {},
                         semantic_action_record=semantic_action_record,
                         prefer_provider=True,
@@ -1448,6 +1607,10 @@ def run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
                 }
             )
 
+        prebackground_profile_load_result = _safe_dict(
+            _safe_dict(background_runtime_state).get("npc_evolution", {}).get("profile_load_result")
+        )
+
         record = {
             "turn_index": turn_index,
             "session_id": session_id,
@@ -1504,6 +1667,7 @@ def run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
             "save_load_checkpoint": save_load_checkpoint,
             "story_hook_result": story_hook_result,
             "base_response_payload": base_response_payload,
+            "prebackground_profile_load_result": prebackground_profile_load_result,
         }
 
         turn_performance["record_build_ms"] = elapsed_ms(record_build_start)
@@ -1851,9 +2015,11 @@ def run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
         advisory_promotion_summary.get("profile_persist_result") or {}
     )
     summary["npc_profile_load_summary"] = summarize_profile_loads(transcript)
+    summary["profile_grounded_output_summary"] = _summarize_profile_grounded_output(transcript)
     metrics["npc_evolution_summary"] = summary["npc_evolution_summary"]
     metrics["npc_evolution_profile_persistence_summary"] = summary["npc_evolution_profile_persistence_summary"]
     metrics["npc_profile_load_summary"] = summary["npc_profile_load_summary"]
+    metrics["profile_grounded_output_summary"] = summary["profile_grounded_output_summary"]
     summary["quality_gate_summary"] = _summarize_quality_gates(
         args=args,
         metrics=metrics,
@@ -2104,6 +2270,7 @@ def main(argv: List[str] | None = None) -> int:
     print(f"npc_evolution_summary: {summary.get('npc_evolution_summary')}")
     print(f"npc_evolution_profile_persistence_summary: {summary.get('npc_evolution_profile_persistence_summary')}")
     print(f"npc_profile_load_summary: {summary.get('npc_profile_load_summary')}")
+    print(f"profile_grounded_output_summary: {summary.get('profile_grounded_output_summary')}")
     print(f"promotion_target_grounding_summary: {summary.get('promotion_target_grounding_summary')}")
     print(f"quality_gate_summary: {summary.get('quality_gate_summary')}")
 
