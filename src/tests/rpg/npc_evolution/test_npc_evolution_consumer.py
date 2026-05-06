@@ -127,3 +127,45 @@ def test_consumer_uses_single_present_npc_for_future_hook_projection():
     assert result["signals_created"] == 1
     assert result["signals_consumed"] == 1
     assert updated["npc_evolution"]["arcs"]["bran"]["future_hooks"][0]["summary"].startswith("The innkeeper")
+
+
+def test_consumer_does_not_reconsume_same_accepted_projection_on_later_turns():
+    runtime_state = {
+        "deferred_advisory": {
+            "accepted": [
+                {
+                    "candidate_id": "adv:1:memory:abc",
+                    "kind": "memory",
+                    "projection": {
+                        "candidate_id": "adv:1:memory:abc",
+                        "kind": "memory",
+                        "payload": {
+                            "owner": "bran",
+                            "summary": "Bran remembers the player asking about the mill.",
+                            "importance": 0.8,
+                        },
+                    },
+                }
+            ]
+        }
+    }
+    simulation_state = {"present_npcs": ["bran"], "npcs": {"bran": {"name": "Bran"}}}
+
+    updated, first = consume_accepted_advisory_projections(
+        runtime_state=runtime_state,
+        simulation_state=simulation_state,
+        turn_index=2,
+    )
+    updated, second = consume_accepted_advisory_projections(
+        runtime_state=updated,
+        simulation_state=simulation_state,
+        turn_index=3,
+    )
+
+    assert first["signals_created"] == 1
+    assert first["signals_consumed"] == 1
+    assert second["signals_created"] == 0
+    assert second["signals_consumed"] == 0
+    assert second["already_consumed_projection_skips"] == 1
+    assert len(updated["npc_evolution"]["arcs"]["bran"]["memories"]) == 1
+    assert updated["npc_evolution"]["summary"]["consumed_projection_count"] == 1
