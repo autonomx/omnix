@@ -75,6 +75,25 @@ def test_combined_context_packet_includes_loaded_npc_profiles():
 
     assert packet["loaded_npc_profiles"]["Bran"]["arc_stage"] == "trusting"
     assert packet["loaded_npc_profiles"]["Bran"]["axes"]["trust"] == 4
+    assert packet["profile_context_summary"]["available"] is True
+    assert packet["profile_context_summary"]["npc_ids"] == ["Bran"]
+    assert packet["profile_context_summary"]["arc_stages"]["Bran"] == "trusting"
+
+
+def test_combined_context_packet_profile_summary_empty_without_loaded_profiles():
+    packet = build_combined_background_context_packet(
+        player_action="I ask Bran about the mill.",
+        simulation_state={
+            "scene": {"title": "Tavern"},
+            "npc_progression_state": {"npcs": {"Bran": {"name": "Bran"}}},
+        },
+        runtime_state={},
+        turn_contract={"player_input": "I ask Bran about the mill."},
+        semantic_action_record={"semantic_action_type": "ask"},
+    )
+
+    assert packet["profile_context_summary"]["available"] is False
+    assert packet["loaded_npc_profiles"] == {}
 
 
 def test_prompt_section_metrics_counts_sections():

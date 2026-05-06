@@ -161,3 +161,38 @@ def test_salvage_combined_narration_from_truncated_json():
     assert salvaged["ok"] is True
     assert salvaged["partial"] is True
     assert "Bran studies you carefully" in salvaged["narration"]
+
+
+def test_combined_background_job_records_loaded_profile_context_summary():
+    result = _combined_background_llm_job(
+        queued_at=0.0,
+        provider=_FakeCombinedProvider(),
+        session_id="s",
+        turn_index=1,
+        player_action="I ask Bran what he remembers.",
+        simulation_state={
+            "scene": {"nearby_npcs": ["Bran"]},
+            "npc_progression_state": {"npcs": {"Bran": {"name": "Bran"}}},
+        },
+        runtime_state={
+            "npc_evolution": {
+                "loaded_profiles": {
+                    "Bran": {
+                        "profile": {
+                            "npc_id": "Bran",
+                            "arc_stage": "trusting",
+                            "axes": {"trust": 4},
+                            "memories": [{"summary": "Bran remembers the mill question."}],
+                        }
+                    }
+                }
+            }
+        },
+        turn_contract={"player_input": "I ask Bran what he remembers."},
+        semantic_action_record={"semantic_action_type": "ask"},
+        prefer_provider=True,
+    )
+
+    assert result["ok"] is True
+    assert result["profile_context_summary"]["available"] is True
+    assert result["profile_context_summary"]["npc_ids"] == ["Bran"]

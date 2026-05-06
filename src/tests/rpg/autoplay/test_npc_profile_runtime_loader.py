@@ -115,3 +115,21 @@ def test_summarize_profile_loads():
     assert summary["ok"] is True
     assert summary["turns_with_profiles"] == 1
     assert summary["loaded_npc_ids"] == ["Bran"]
+
+
+def test_summarize_profile_loads_reads_prebackground_profile_load_result():
+    summary = summarize_profile_loads(
+        [
+            {
+                "prebackground_profile_load_result": {
+                    "loaded": {"Bran": {"profile": {}}},
+                    "missing": [],
+                    "errors": [],
+                }
+            }
+        ]
+    )
+
+    assert summary["ok"] is True
+    assert summary["turns_with_profiles"] == 1
+    assert summary["loaded_npc_ids"] == ["Bran"]

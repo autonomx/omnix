@@ -133,7 +133,10 @@ def summarize_profile_loads(transcript: List[Dict[str, Any]]) -> Dict[str, Any]:
 
     for turn in transcript:
         turn = _safe_dict(turn)
-        load_result = _safe_dict(turn.get("npc_profile_load_result"))
+        load_result = (
+            _safe_dict(turn.get("npc_profile_load_result"))
+            or _safe_dict(turn.get("prebackground_profile_load_result"))
+        )
         if not load_result:
             continue
 

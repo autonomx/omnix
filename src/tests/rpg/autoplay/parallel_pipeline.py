@@ -246,6 +246,32 @@ def _compact_loaded_npc_profiles(runtime_state: Dict[str, Any], limit: int = 6) 
     return out
 
 
+def _loaded_profile_context_summary(runtime_state: Dict[str, Any]) -> Dict[str, Any]:
+    """Tiny diagnostic for prompt/report quality.
+
+    Keep this separate from the actual context payload so reports can quickly
+    tell whether profile context was available without dumping full profile data.
+    """
+    loaded = _compact_loaded_npc_profiles(runtime_state, limit=12)
+    return {
+        "available": bool(loaded),
+        "npc_count": len(loaded),
+        "npc_ids": sorted(list(loaded.keys())),
+        "arc_stages": {
+            npc_id: _safe_str(profile.get("arc_stage")) or "stable"
+            for npc_id, profile in loaded.items()
+        },
+        "memory_counts": {
+            npc_id: len(_safe_list(profile.get("memories")))
+            for npc_id, profile in loaded.items()
+        },
+        "future_hook_counts": {
+            npc_id: len(_safe_list(profile.get("future_hooks")))
+            for npc_id, profile in loaded.items()
+        },
+    }
+
+
 def _compact_turn_contract(turn_contract: Dict[str, Any]) -> Dict[str, Any]:
     contract = _safe_dict(turn_contract)
     semantic_action = _safe_dict(contract.get("semantic_action"))
@@ -291,6 +317,7 @@ def build_combined_background_context_packet(
         "player_visible_state": _compact_player_visible_state(simulation_state),
         "recent_events": _compact_recent_events(simulation_state, limit=5),
         "loaded_npc_profiles": _compact_loaded_npc_profiles(runtime_state, limit=6),
+        "profile_context_summary": _loaded_profile_context_summary(runtime_state),
         "turn_contract": _compact_turn_contract(turn_contract),
         "fast_semantic_action": semantic_action_record,
     }
@@ -808,6 +835,7 @@ def _build_combined_background_payload(
             "output_schema": schema_text,
         }
     )
+    profile_context_summary = _loaded_profile_context_summary(runtime_state or {})
 
     messages = [
         {
@@ -819,7 +847,12 @@ def _build_combined_background_payload(
                 "Return one JSON object and no markdown fences, no prose, no commentary. "
                 "Maintain rich 2-5 sentence narration quality. Use only the provided compact context. "
                 "Return compact candidate objects. Prefer at most 1 high-quality candidate per category. "
-                "Do not include long explanations inside candidates."
+                "Do not include long explanations inside candidates. "
+                "Loaded NPC profiles are characterization context only. "
+                "You may use loaded_npc_profiles to shape NPC tone, dialogue, memory continuity, and future-hook suggestions. "
+                "You must not treat profile memories or hooks as newly resolved actions. "
+                "You must not invent profile memories that are absent from loaded_npc_profiles or current turn facts. "
+                "If an NPC has arc_stage, axes, memories, or future_hooks, reflect them subtly in the NPC line or candidate summaries when relevant."
             ),
         },
         {
@@ -833,7 +866,11 @@ def _build_combined_background_payload(
                 "Candidate limits: max 1 semantic_intent, max 1 relationship_delta, "
                 "max 1 memory, max 1 world_signal, max 1 future_hook. "
                 "Each candidate summary must be under 160 characters. "
-                "Narration remains high quality and should not be shortened below 2 sentences."
+                "Narration remains high quality and should not be shortened below 2 sentences.\n\n"
+                "Profile grounding rule: when loaded_npc_profiles is non-empty, use it only for NPC continuity. "
+                "For example, a trusting NPC may sound warmer, a guarded NPC may be cautious, "
+                "and a remembered prior topic may be acknowledged. "
+                "Do not create authoritative outcomes from profile context."
             ),
         },
     ]
@@ -860,6 +897,7 @@ def _build_combined_background_payload(
                 normalized.setdefault("raw_provider_shape_keys", sorted(list(parsed.keys()))[:80])
                 normalized.setdefault("prompt_metrics", prompt_metrics)
                 normalized.setdefault("context_packet_keys", sorted(list(context_packet.keys())))
+                normalized.setdefault("profile_context_summary", profile_context_summary)
                 return normalized
             return {
                 "ok": False,
@@ -868,6 +906,7 @@ def _build_combined_background_payload(
                 "parsed_keys": sorted(list(parsed.keys()))[:80],
                 "prompt_metrics": prompt_metrics,
                 "context_packet_keys": sorted(list(context_packet.keys())),
+                "profile_context_summary": profile_context_summary,
             }
         return {"ok": False, "error": "provider_combined_json_not_object", "raw": content[:4000]}
     except Exception as exc:
@@ -884,6 +923,7 @@ def _build_combined_background_payload(
             "raw": content[:4000],
             "prompt_metrics": prompt_metrics,
             "context_packet_keys": sorted(list(context_packet.keys())),
+            "profile_context_summary": profile_context_summary,
         }
 
 
@@ -1028,6 +1068,9 @@ def _combined_background_llm_job(
                 if isinstance(provider_payload.get("context_packet_keys"), list)
                 else []
             )
+            diagnostics["profile_context_summary"] = _safe_dict(
+                provider_payload.get("profile_context_summary")
+            )
             diagnostics["provider_parsed_keys"] = (
                 provider_payload.get("parsed_keys")
                 if isinstance(provider_payload.get("parsed_keys"), list)
@@ -1108,6 +1151,7 @@ def _combined_background_llm_job(
             "advisory_summary": advisory_candidate_summary(candidates),
             "diagnostics": diagnostics,
             "prompt_metrics": _safe_dict(diagnostics.get("prompt_metrics")),
+            "profile_context_summary": _safe_dict(diagnostics.get("profile_context_summary")),
             "worker_ms": elapsed_ms(started),
             "queue_timing": _queue_timing(
                 queued_at=queued_at,
