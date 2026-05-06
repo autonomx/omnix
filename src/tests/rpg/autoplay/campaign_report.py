@@ -1033,6 +1033,7 @@ def build_campaign_report_model(
         "player_agent_trace_summary": _safe_dict(metrics.get("player_agent_trace_summary")),
         "deferred_narration_trace_summary": _safe_dict(metrics.get("deferred_narration_trace_summary")),
         "deferred_advisory_trace_summary": _safe_dict(metrics.get("deferred_advisory_trace_summary")),
+        "performance_budget_summary": _safe_dict(metrics.get("performance_budget_summary")),
         "shortcomings": shortcomings,
     }
     model["story_so_far_paragraph"] = build_story_so_far_paragraph(model)
@@ -1767,6 +1768,7 @@ def render_campaign_report_html(model: Dict[str, Any]) -> str:
     {_render_json_details("Player-agent trace summary JSON", model.get("player_agent_trace_summary") or {})}
     {_render_json_details("Deferred narration trace summary JSON", model.get("deferred_narration_trace_summary") or {})}
     {_render_json_details("Deferred advisory trace summary JSON", model.get("deferred_advisory_trace_summary") or {})}
+    {_render_json_details("Performance budget summary JSON", model.get("performance_budget_summary") or {})}
     {_render_json_details("Slowest turns JSON", performance.get("slowest_turns") or [])}
     {_render_json_details("Background job summary JSON", model.get("background_jobs") or {})}
   </section>

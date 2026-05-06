@@ -22,6 +22,22 @@ from tests.rpg.autoplay.performance import elapsed_ms, now_perf
 from tests.rpg.autoplay.progress import state_digest
 
 
+def _queue_timing(
+    *,
+    queued_at: float,
+    started_at: float,
+    finished_at: float,
+) -> Dict[str, Any]:
+    return {
+        "queued_at": round(queued_at, 6),
+        "started_at": round(started_at, 6),
+        "finished_at": round(finished_at, 6),
+        "queue_wait_ms": round((started_at - queued_at) * 1000.0, 3),
+        "run_ms": round((finished_at - started_at) * 1000.0, 3),
+        "total_ms": round((finished_at - queued_at) * 1000.0, 3),
+    }
+
+
 def _safe_dict(value: Any) -> Dict[str, Any]:
     return value if isinstance(value, dict) else {}
 
@@ -49,8 +65,43 @@ def freeze_snapshot(value: Any) -> Any:
     return deepcopy(value)
 
 
+def _queue_summary(rows: List[Dict[str, Any]]) -> Dict[str, Any]:
+    timings = [
+        _safe_dict(row.get("queue_timing"))
+        for row in rows
+        if isinstance(row, dict) and isinstance(row.get("queue_timing"), dict)
+    ]
+    if not timings:
+        return {
+            "count": 0,
+            "avg_queue_wait_ms": 0.0,
+            "max_queue_wait_ms": 0.0,
+            "avg_run_ms": 0.0,
+            "max_run_ms": 0.0,
+            "avg_total_ms": 0.0,
+            "max_total_ms": 0.0,
+        }
+
+    def avg(key: str) -> float:
+        return round(sum(float(item.get(key) or 0.0) for item in timings) / len(timings), 3)
+
+    def maxv(key: str) -> float:
+        return round(max(float(item.get(key) or 0.0) for item in timings), 3)
+
+    return {
+        "count": len(timings),
+        "avg_queue_wait_ms": avg("queue_wait_ms"),
+        "max_queue_wait_ms": maxv("queue_wait_ms"),
+        "avg_run_ms": avg("run_ms"),
+        "max_run_ms": maxv("run_ms"),
+        "avg_total_ms": avg("total_ms"),
+        "max_total_ms": maxv("total_ms"),
+    }
+
+
 def _deferred_narration_job(
     *,
+    queued_at: float,
     provider: Any,
     session_id: str,
     turn_index: int,
@@ -84,6 +135,7 @@ def _deferred_narration_job(
         diagnostics["payload_error"] = _safe_str(_safe_dict(payload).get("error"))
         diagnostics["payload_original_error"] = _safe_str(_safe_dict(payload).get("original_error"))
         after_digest = state_digest(_safe_dict(simulation_state))
+        finished = now_perf()
         return {
             "ok": True,
             "kind": "deferred_narration",
@@ -97,11 +149,17 @@ def _deferred_narration_job(
             "diagnostics": diagnostics,
             "worker_ms": elapsed_ms(started),
             "worker_wall_seconds": round(time.perf_counter() - wall_started, 3),
+            "queue_timing": _queue_timing(
+                queued_at=queued_at,
+                started_at=started,
+                finished_at=finished,
+            ),
             "state_digest_before": before_digest,
             "state_digest_after": after_digest,
             "mutated_authoritative_snapshot": before_digest != after_digest,
         }
     except Exception as exc:
+        finished = now_perf()
         diagnostics["exception"] = f"{type(exc).__name__}: {exc}"
         return {
             "ok": False,
@@ -115,6 +173,11 @@ def _deferred_narration_job(
             "diagnostics": diagnostics,
             "worker_ms": elapsed_ms(started),
             "worker_wall_seconds": round(time.perf_counter() - wall_started, 3),
+            "queue_timing": _queue_timing(
+                queued_at=queued_at,
+                started_at=started,
+                finished_at=finished,
+            ),
         }
 
 
@@ -183,6 +246,132 @@ def _extract_json_object_from_text(text: str) -> Dict[str, Any]:
                 return json.loads(cleaned[start : index + 1])
 
     raise ValueError("unterminated_json_object")
+
+
+def _candidate_arrays_present(payload: Dict[str, Any]) -> bool:
+    if not isinstance(payload, dict):
+        return False
+    for key in (
+        "candidates",
+        "semantic_intent_candidates",
+        "relationship_delta_candidates",
+        "memory_candidates",
+        "world_signal_candidates",
+        "future_hook_candidates",
+    ):
+        if isinstance(payload.get(key), list):
+            return True
+    return False
+
+
+def _has_expected_combined_provider_keys(payload: Dict[str, Any]) -> bool:
+    if not isinstance(payload, dict):
+        return False
+    expected_keys = {
+        "narration",
+        "action",
+        "npc",
+        "reward",
+        "followup_hooks",
+        "semantic_intent_candidates",
+        "relationship_delta_candidates",
+        "memory_candidates",
+        "world_signal_candidates",
+        "future_hook_candidates",
+        "candidates",
+    }
+    return any(key in payload for key in expected_keys)
+
+
+def _normalize_followup_hooks(value: Any) -> List[Any]:
+    if isinstance(value, list):
+        return value
+    if isinstance(value, str) and value.strip():
+        return [value.strip()]
+    return []
+
+
+def _extract_nested_combined_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
+    """Normalize common provider shapes into the combined background schema.
+
+    Local models may return:
+      - the exact requested shape
+      - {"narration_payload": {...}, "advisory": {...}}
+      - {"narration": {...}, "candidates": [...]}
+      - {"result": {...}}
+      - {"data": {...}}
+
+    Combined mode should accept any of these if they contain usable narration
+    and/or advisory candidates.
+    """
+    payload = _safe_dict(payload)
+    for wrapper_key in ("result", "data", "payload", "response"):
+        nested = _safe_dict(payload.get(wrapper_key))
+        if nested:
+            payload = nested
+            break
+
+    normalized: Dict[str, Any] = {}
+
+    narration_payload = _safe_dict(
+        payload.get("narration_payload")
+        or payload.get("structured_narration")
+        or payload.get("narration_result")
+    )
+
+    narration_value = payload.get("narration")
+    if isinstance(narration_value, dict):
+        narration_payload = {**narration_value, **narration_payload}
+        narration_value = narration_payload.get("narration") or narration_payload.get("text") or ""
+
+    if narration_payload:
+        normalized["narration"] = (
+            _safe_str(narration_payload.get("narration"))
+            or _safe_str(narration_payload.get("text"))
+            or _safe_str(narration_value)
+        )
+        normalized["action"] = (
+            _safe_str(narration_payload.get("action"))
+            or _safe_str(payload.get("action"))
+        )
+        normalized["npc"] = _safe_dict(narration_payload.get("npc") or payload.get("npc"))
+        normalized["reward"] = _safe_str(narration_payload.get("reward") or payload.get("reward"))
+        normalized["followup_hooks"] = (
+            narration_payload.get("followup_hooks")
+            if isinstance(narration_payload.get("followup_hooks"), list)
+            else payload.get("followup_hooks") if isinstance(payload.get("followup_hooks"), list) else []
+        )
+
+    advisory_payload = _safe_dict(
+        payload.get("advisory")
+        or payload.get("advisory_payload")
+        or payload.get("deferred_advisory")
+        or payload.get("advisory_candidates")
+    )
+    if advisory_payload:
+        for key in (
+            "candidates",
+            "semantic_intent_candidates",
+            "relationship_delta_candidates",
+            "memory_candidates",
+            "world_signal_candidates",
+            "future_hook_candidates",
+        ):
+            candidate_list = advisory_payload.get(key)
+            if isinstance(candidate_list, list):
+                normalized[key] = candidate_list
+
+    return normalized
+
+
+def _combined_payload_has_useful_content(payload: Dict[str, Any]) -> bool:
+    payload = _safe_dict(payload)
+    return bool(
+        _safe_str(payload.get("narration"))
+        or _safe_str(payload.get("action"))
+        or _safe_dict(payload.get("npc"))
+        or _candidate_arrays_present(payload)
+    )
 
 
 def _provider_messages(messages: List[Dict[str, str]]) -> List[Any]:
@@ -267,8 +456,88 @@ def _build_provider_advisory_payload(
         }
 
 
+def _build_combined_background_payload(
+    *,
+    provider: Any,
+    player_action: str,
+    simulation_state: Dict[str, Any],
+    turn_contract: Dict[str, Any],
+    semantic_action_record: Dict[str, Any],
+) -> Dict[str, Any]:
+    """One provider call that returns both narration and advisory candidates."""
+    if provider is None or not callable(getattr(provider, "chat_completion", None)):
+        return {"ok": False, "error": "provider_missing_or_unsupported"}
+
+    messages = [
+        {
+            "role": "system",
+            "content": (
+                "You are an RPG background enrichment worker. Return JSON only. "
+                "You must not assert authoritative outcomes that are not in the turn contract. "
+                "Do not grant items, currency, quest completion, damage, travel, or rewards. "
+                "Return one JSON object and no markdown fences, no prose, no commentary."
+            ),
+        },
+        {
+            "role": "user",
+            "content": (
+                "Create background narration and advisory candidates for this resolved RPG turn.\n\n"
+                f"PLAYER_INPUT:\n{player_action}\n\n"
+                f"TURN_CONTRACT_JSON:\n{stable_json_for_prompt(turn_contract)}\n\n"
+                f"FAST_SEMANTIC_JSON:\n{stable_json_for_prompt(semantic_action_record)}\n\n"
+                "Return exactly this JSON shape:\n"
+                "{\n"
+                '  "narration": "2-5 sentences describing the resolved scene without repeating player input.",\n'
+                '  "action": "Short result of the player action.",\n'
+                '  "npc": {"speaker": "", "line": ""},\n'
+                '  "reward": "",\n'
+                '  "followup_hooks": [],\n'
+                '  "semantic_intent_candidates": [],\n'
+                '  "relationship_delta_candidates": [],\n'
+                '  "memory_candidates": [],\n'
+                '  "world_signal_candidates": [],\n'
+                '  "future_hook_candidates": []\n'
+                "}"
+            ),
+        },
+    ]
+
+    provider_messages = _provider_messages(messages)
+    try:
+        response = provider.chat_completion(messages=provider_messages, stream=False)
+    except TypeError:
+        response = provider.chat_completion(provider_messages, stream=False)
+
+    content = _provider_text_from_response(response)
+    if not content:
+        return {"ok": False, "error": "provider_empty_combined_response"}
+
+    try:
+        parsed = _extract_json_object_from_text(content)
+        if isinstance(parsed, dict):
+            normalized = _extract_nested_combined_payload(parsed)
+            if _combined_payload_has_useful_content(normalized):
+                normalized["ok"] = True
+                normalized.setdefault("raw_provider_shape_keys", sorted(list(parsed.keys()))[:80])
+                return normalized
+            return {
+                "ok": False,
+                "error": "provider_combined_json_missing_useful_content",
+                "raw": content[:1000],
+                "parsed_keys": sorted(list(parsed.keys()))[:80],
+            }
+        return {"ok": False, "error": "provider_combined_json_not_object", "raw": content[:1000]}
+    except Exception as exc:
+        return {
+            "ok": False,
+            "error": f"provider_combined_json_parse_error:{type(exc).__name__}: {exc}",
+            "raw": content[:1000],
+        }
+
+
 def _deferred_advisory_job(
     *,
+    queued_at: float,
     provider: Any,
     session_id: str,
     turn_index: int,
@@ -321,6 +590,7 @@ def _deferred_advisory_job(
                 semantic_action_record=_safe_dict(semantic_action_record),
             )
 
+        finished = now_perf()
         return {
             "ok": True,
             "kind": "deferred_advisory",
@@ -332,8 +602,14 @@ def _deferred_advisory_job(
             "summary": advisory_candidate_summary(candidates),
             "diagnostics": diagnostics,
             "worker_ms": elapsed_ms(started),
+            "queue_timing": _queue_timing(
+                queued_at=queued_at,
+                started_at=started,
+                finished_at=finished,
+            ),
         }
     except Exception as exc:
+        finished = now_perf()
         return {
             "ok": False,
             "kind": "deferred_advisory",
@@ -344,6 +620,158 @@ def _deferred_advisory_job(
             "traceback": traceback.format_exc(),
             "diagnostics": diagnostics,
             "worker_ms": elapsed_ms(started),
+            "queue_timing": _queue_timing(
+                queued_at=queued_at,
+                started_at=started,
+                finished_at=finished,
+            ),
+        }
+
+
+def _combined_background_llm_job(
+    *,
+    queued_at: float,
+    provider: Any,
+    session_id: str,
+    turn_index: int,
+    player_action: str,
+    simulation_state: Dict[str, Any],
+    turn_contract: Dict[str, Any],
+    semantic_action_record: Dict[str, Any],
+    prefer_provider: bool,
+) -> Dict[str, Any]:
+    print(f"Starting combined background LLM job for turn {turn_index}")
+    started = now_perf()
+    diagnostics: Dict[str, Any] = {
+        "prefer_provider": bool(prefer_provider),
+        "provider_shape": _provider_shape(provider),
+        "turn_contract_keys": sorted(list(_safe_dict(turn_contract).keys())),
+        "semantic_keys": sorted(list(_safe_dict(semantic_action_record).keys())),
+    }
+    try:
+        source = "combined_background_llm_fallback"
+        provider_payload: Dict[str, Any] = {}
+        if prefer_provider and provider is not None:
+            provider_started = now_perf()
+            provider_payload = _build_combined_background_payload(
+                provider=provider,
+                player_action=player_action,
+                simulation_state=freeze_snapshot(_safe_dict(simulation_state)),
+                turn_contract=freeze_snapshot(_safe_dict(turn_contract)),
+                semantic_action_record=freeze_snapshot(_safe_dict(semantic_action_record)),
+            )
+            diagnostics["provider_combined_ms"] = elapsed_ms(provider_started)
+            diagnostics["provider_payload_error"] = _safe_str(provider_payload.get("error"))
+            diagnostics["provider_raw_excerpt"] = _safe_str(provider_payload.get("raw"))[:1000]
+            diagnostics["provider_payload_keys"] = (
+                sorted(list(provider_payload.keys()))[:80]
+                if isinstance(provider_payload, dict)
+                else []
+            )
+            diagnostics["provider_parsed_keys"] = (
+                provider_payload.get("parsed_keys")
+                if isinstance(provider_payload.get("parsed_keys"), list)
+                else []
+            )
+            diagnostics["provider_raw_shape_keys"] = (
+                provider_payload.get("raw_provider_shape_keys")
+                if isinstance(provider_payload.get("raw_provider_shape_keys"), list)
+                else []
+            )
+            if not provider_payload.get("ok"):
+                source = "combined_background_llm_fallback"
+        else:
+            source = "combined_background_llm_fallback"
+
+        if source == "provider_combined_background_llm":
+            narration_payload = {
+                "format_version": "rpg_narration_v2",
+                "source": "provider_runtime_narration",
+                "narration": _safe_str(provider_payload.get("narration")) or "The scene settles after the action.",
+                "action": _safe_str(provider_payload.get("action")) or "The action has been resolved.",
+                "npc": _safe_dict(provider_payload.get("npc")),
+                "reward": _safe_str(provider_payload.get("reward")),
+                "followup_hooks": provider_payload.get("followup_hooks")
+                if isinstance(provider_payload.get("followup_hooks"), list)
+                else [],
+            }
+            candidates = normalize_advisory_candidates(
+                session_id=session_id,
+                turn_index=turn_index,
+                player_input=player_action,
+                turn_contract=_safe_dict(turn_contract),
+                payload=_safe_dict(provider_payload),
+            )
+            if not candidates:
+                diagnostics["advisory_candidate_fallback_reason"] = "provider_combined_returned_no_candidates"
+                candidates = build_deterministic_advisory_candidates(
+                    session_id=session_id,
+                    turn_index=turn_index,
+                    player_input=player_action,
+                    turn_contract=_safe_dict(turn_contract),
+                    semantic_action_record=_safe_dict(semantic_action_record),
+                )
+        else:
+            # Fallback keeps the same output shape and preserves correctness.
+            diagnostics["fallback_reason"] = _safe_str(
+                diagnostics.get("provider_payload_error")
+            ) or "provider_combined_unavailable"
+            narration_payload = build_runtime_narration_payload(
+                provider=None,
+                player_action=player_action,
+                simulation_state=freeze_snapshot(_safe_dict(simulation_state)),
+                turn_contract=freeze_snapshot(_safe_dict(turn_contract)),
+                prefer_provider=False,
+            )
+            candidates = build_deterministic_advisory_candidates(
+                session_id=session_id,
+                turn_index=turn_index,
+                player_input=player_action,
+                turn_contract=_safe_dict(turn_contract),
+                semantic_action_record=_safe_dict(semantic_action_record),
+            )
+
+        finished = now_perf()
+        print(f"Finished combined background LLM job for turn {turn_index}")
+        return {
+            "ok": True,
+            "kind": "combined_background_llm",
+            "session_id": session_id,
+            "turn_index": turn_index,
+            "source": source,
+            "narration": _safe_str(narration_payload.get("narration")),
+            "npc": _safe_dict(narration_payload.get("npc")),
+            "narration_payload": narration_payload,
+            "candidate_count": len(candidates),
+            "candidates": candidates,
+            "advisory_summary": advisory_candidate_summary(candidates),
+            "diagnostics": diagnostics,
+            "worker_ms": elapsed_ms(started),
+            "queue_timing": _queue_timing(
+                queued_at=queued_at,
+                started_at=started,
+                finished_at=finished,
+            ),
+        }
+    except Exception as exc:
+        finished = now_perf()
+        print(f"Error in combined background LLM job for turn {turn_index}: {exc}")
+        diagnostics["exception"] = f"{type(exc).__name__}: {exc}"
+        return {
+            "ok": False,
+            "kind": "combined_background_llm",
+            "session_id": session_id,
+            "turn_index": turn_index,
+            "source": "combined_background_llm_error",
+            "error": f"{type(exc).__name__}: {exc}",
+            "traceback": traceback.format_exc(),
+            "diagnostics": diagnostics,
+            "worker_ms": elapsed_ms(started),
+            "queue_timing": _queue_timing(
+                queued_at=queued_at,
+                started_at=started,
+                finished_at=finished,
+            ),
         }
 
 
@@ -410,8 +838,10 @@ class AutoplayBackgroundPipeline:
         prefer_provider: bool = True,
     ) -> str:
         job_id = f"narration:{session_id}:{turn_index}"
+        queued_at = now_perf()
         future = self._provider_executor.submit(
             _deferred_narration_job,
+            queued_at=queued_at,
             provider=provider,
             session_id=session_id,
             turn_index=turn_index,
@@ -455,8 +885,10 @@ class AutoplayBackgroundPipeline:
         prefer_provider: bool = True,
     ) -> str:
         job_id = f"advisory:{session_id}:{turn_index}"
+        queued_at = now_perf()
         future = self._provider_executor.submit(
             _deferred_advisory_job,
+            queued_at=queued_at,
             provider=provider,
             session_id=session_id,
             turn_index=turn_index,
@@ -467,6 +899,36 @@ class AutoplayBackgroundPipeline:
             prefer_provider=prefer_provider,
         )
         self._futures.append(future)
+        return job_id
+
+    def submit_combined_background_llm(
+        self,
+        *,
+        provider: Any,
+        session_id: str,
+        turn_index: int,
+        player_action: str,
+        simulation_state: Dict[str, Any],
+        turn_contract: Dict[str, Any],
+        semantic_action_record: Dict[str, Any],
+        prefer_provider: bool = True,
+    ) -> str:
+        job_id = f"combined_background_llm:{session_id}:{turn_index}"
+        queued_at = now_perf()
+        future = self._provider_executor.submit(
+            _combined_background_llm_job,
+            queued_at=queued_at,
+            provider=provider,
+            session_id=session_id,
+            turn_index=turn_index,
+            player_action=player_action,
+            simulation_state=freeze_snapshot(simulation_state),
+            turn_contract=freeze_snapshot(turn_contract),
+            semantic_action_record=freeze_snapshot(semantic_action_record),
+            prefer_provider=prefer_provider,
+        )
+        self._futures.append(future)
+        print(f"Submitted combined background LLM job {job_id}")
         return job_id
 
     def drain(self) -> List[Dict[str, Any]]:
@@ -512,6 +974,7 @@ def attach_background_results_to_transcript(
         "narration_jobs": 0,
         "checkpoint_jobs": 0,
         "advisory_jobs": 0,
+        "combined_background_llm_jobs": 0,
         "background_job_seconds": 0.0,
         "deferred_narration_sources": {},
         "deferred_narration_provider_present": 0,
@@ -575,6 +1038,57 @@ def attach_background_results_to_transcript(
             summary["advisory_jobs"] += 1
             row["deferred_advisory_result"] = result
             row["deferred_advisory_status"] = "ready" if result.get("ok") else "error"
+        elif result.get("kind") == "combined_background_llm":
+            summary["combined_background_llm_jobs"] += 1
+            row["combined_background_llm_result"] = result
+            print(f"Attaching combined background LLM result for turn {turn_index}")
+
+            # Attach narration in the same slots used by split narration jobs.
+            row["deferred_narration_result"] = {
+                "ok": result.get("ok"),
+                "kind": "deferred_narration",
+                "session_id": result.get("session_id"),
+                "turn_index": result.get("turn_index"),
+                "narration_status": "ready" if result.get("ok") else "error",
+                "narration": result.get("narration"),
+                "npc": result.get("npc") or {},
+                "narration_payload": result.get("narration_payload") or {},
+                "diagnostics": result.get("diagnostics") or {},
+                "worker_ms": result.get("worker_ms"),
+                "queue_timing": result.get("queue_timing") or {},
+            }
+            row["narration_status"] = "ready" if result.get("ok") else "error"
+            if result.get("ok") and result.get("narration"):
+                row["resolved_narration"] = result.get("narration")
+                row["resolved_narration_payload"] = result.get("narration_payload") or {}
+                row["narration"] = result.get("narration")
+
+            # Attach advisory in the same slots used by split advisory jobs.
+            row["deferred_advisory_result"] = {
+                "ok": result.get("ok"),
+                "kind": "deferred_advisory",
+                "session_id": result.get("session_id"),
+                "turn_index": result.get("turn_index"),
+                "source": result.get("source"),
+                "candidate_count": result.get("candidate_count"),
+                "candidates": result.get("candidates") or [],
+                "summary": result.get("advisory_summary") or {},
+                "diagnostics": result.get("diagnostics") or {},
+                "worker_ms": result.get("worker_ms"),
+                "queue_timing": result.get("queue_timing") or {},
+            }
+            row["deferred_advisory_status"] = "ready" if result.get("ok") else "error"
+
+    provider_jobs = [
+        result
+        for result in results
+        if result.get("kind") in {"deferred_narration", "deferred_advisory", "combined_background_llm"}
+    ]
+    summary["provider_queue_summary"] = _queue_summary(provider_jobs)
+    summary["provider_queue_by_kind"] = {
+        kind: _queue_summary([result for result in provider_jobs if result.get("kind") == kind])
+        for kind in ("deferred_narration", "deferred_advisory", "combined_background_llm")
+    }
 
     summary["background_job_seconds"] = round(summary["background_job_seconds"], 3)
     return summary

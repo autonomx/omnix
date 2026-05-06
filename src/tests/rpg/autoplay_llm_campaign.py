@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import argparse
 import os
+import shutil
+import subprocess
 import sys
 import time
 import traceback
@@ -274,6 +276,51 @@ def _summarize_deferred_advisory_trace(transcript: List[Dict[str, Any]]) -> Dict
         summary["avg_worker_ms"] = round(sum(timings) / len(timings), 3)
         summary["max_worker_ms"] = round(max(timings), 3)
     return summary
+
+
+def _summarize_performance_budget(
+    *,
+    transcript: List[Dict[str, Any]],
+    background_summary: Dict[str, Any],
+) -> Dict[str, Any]:
+    def avg(values: List[float]) -> float:
+        return round(sum(values) / len(values), 3) if values else 0.0
+
+    manual = []
+    player = []
+    human = []
+    autoplay = []
+    for row in transcript:
+        perf = _safe_dict(row.get("performance"))
+        manual.append(float(perf.get("manual_turn_ms") or 0.0))
+        player.append(float(perf.get("player_agent_ms") or 0.0))
+        human.append(float(perf.get("human_playable_blocking_ms") or perf.get("manual_turn_ms") or 0.0))
+        autoplay.append(float(perf.get("playable_blocking_ms") or 0.0))
+
+    provider_queue = _safe_dict(background_summary.get("provider_queue_summary"))
+    return {
+        "live_blocking": {
+            "avg_manual_turn_ms": avg(manual),
+            "max_manual_turn_ms": round(max(manual), 3) if manual else 0.0,
+            "avg_human_playable_blocking_ms": avg(human),
+            "max_human_playable_blocking_ms": round(max(human), 3) if human else 0.0,
+        },
+        "autoplay_only": {
+            "avg_player_agent_ms": avg(player),
+            "max_player_agent_ms": round(max(player), 3) if player else 0.0,
+            "avg_autoplay_blocking_ms": avg(autoplay),
+            "max_autoplay_blocking_ms": round(max(autoplay), 3) if autoplay else 0.0,
+        },
+        "background_llm": {
+            "total_jobs": background_summary.get("total_jobs"),
+            "narration_jobs": background_summary.get("narration_jobs"),
+            "advisory_jobs": background_summary.get("advisory_jobs"),
+            "combined_background_llm_jobs": background_summary.get("combined_background_llm_jobs"),
+            "background_job_seconds": background_summary.get("background_job_seconds"),
+            "provider_queue_summary": provider_queue,
+            "provider_queue_by_kind": background_summary.get("provider_queue_by_kind") or {},
+        },
+    }
 
 
 def _commit_authoritative_state(
@@ -837,19 +884,11 @@ def run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
         narration_job_id = ""
         advisory_status = "disabled"
         advisory_job_id = ""
+        combined_background_llm_job_id = ""
         if args.narration_mode == "deferred":
             narration_status = "pending"
             advisory_status = "pending"
             with timed_stage(turn_performance, "background_enqueue_ms"):
-                narration_job_id = pipeline.submit_deferred_narration(
-                    provider=provider,
-                    session_id=session_id,
-                    turn_index=turn_index,
-                    player_action=player_action,
-                    simulation_state=final_turn_state,
-                    turn_contract=turn_result.get("turn_contract") or {},
-                    prefer_provider=True,
-                )
                 semantic_action_record = (
                     _safe_dict(turn_result.get("semantic_action_v2"))
                     or _safe_dict(_safe_dict(turn_result.get("turn_contract")).get("semantic_action_v2"))
@@ -857,16 +896,39 @@ def run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
                     or _safe_dict(_safe_dict(turn_result.get("manual_turn_summary")).get("semantic_action_v2"))
                     or {}
                 )
-                advisory_job_id = pipeline.submit_deferred_advisory(
-                    provider=provider,
-                    session_id=session_id,
-                    turn_index=turn_index,
-                    player_action=player_action,
-                    simulation_state=final_turn_state,
-                    turn_contract=turn_result.get("turn_contract") or {},
-                    semantic_action_record=semantic_action_record,
-                    prefer_provider=True,
-                )
+                if args.background_llm_mode == "combined":
+                    combined_background_llm_job_id = pipeline.submit_combined_background_llm(
+                        provider=provider,
+                        session_id=session_id,
+                        turn_index=turn_index,
+                        player_action=player_action,
+                        simulation_state=final_turn_state,
+                        turn_contract=turn_result.get("turn_contract") or {},
+                        semantic_action_record=semantic_action_record,
+                        prefer_provider=True,
+                    )
+                    narration_job_id = combined_background_llm_job_id
+                    advisory_job_id = combined_background_llm_job_id
+                else:
+                    narration_job_id = pipeline.submit_deferred_narration(
+                        provider=provider,
+                        session_id=session_id,
+                        turn_index=turn_index,
+                        player_action=player_action,
+                        simulation_state=final_turn_state,
+                        turn_contract=turn_result.get("turn_contract") or {},
+                        prefer_provider=True,
+                    )
+                    advisory_job_id = pipeline.submit_deferred_advisory(
+                        provider=provider,
+                        session_id=session_id,
+                        turn_index=turn_index,
+                        player_action=player_action,
+                        simulation_state=final_turn_state,
+                        turn_contract=turn_result.get("turn_contract") or {},
+                        semantic_action_record=semantic_action_record,
+                        prefer_provider=True,
+                    )
             if not narration:
                 narration = "Narration is being prepared..."
 
@@ -937,6 +999,8 @@ def run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
             "narration_job_id": narration_job_id,
             "deferred_advisory_status": advisory_status,
             "deferred_advisory_job_id": advisory_job_id,
+            "background_llm_mode": args.background_llm_mode,
+            "combined_background_llm_job_id": combined_background_llm_job_id,
             "blocking_narration_source": blocking_narration_source,
             "deferred_blocking_provider_violation": deferred_blocking_provider_violation,
             "blocking_provider_call_suppressed_after_the_fact": bool(deferred_blocking_provider_violation),
@@ -1069,6 +1133,10 @@ def run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
     metrics["player_agent_trace_summary"] = _summarize_player_agent_trace(transcript)
     metrics["deferred_narration_trace_summary"] = _summarize_deferred_narration_trace(transcript)
     metrics["deferred_advisory_trace_summary"] = _summarize_deferred_advisory_trace(transcript)
+    metrics["performance_budget_summary"] = _summarize_performance_budget(
+        transcript=transcript,
+        background_summary=background_results_summary,
+    )
     manual_harness_slowest = []
     for row in transcript:
         summary = row.get("manual_harness_trace_summary") or {}
@@ -1220,6 +1288,7 @@ def run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
         "server_runtime_used": False,
         "latency_profile": args.latency_profile,
         "narration_mode": args.narration_mode,
+        "background_llm_mode": args.background_llm_mode,
         "checkpoint_mode": args.checkpoint_mode,
         "background_workers": int(args.background_workers),
         "provider_workers": int(args.provider_workers),
@@ -1264,6 +1333,7 @@ def run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
         "player_agent_trace_summary": metrics.get("player_agent_trace_summary") or {},
         "deferred_narration_trace_summary": metrics.get("deferred_narration_trace_summary") or {},
         "deferred_advisory_trace_summary": metrics.get("deferred_advisory_trace_summary") or {},
+        "performance_budget_summary": metrics.get("performance_budget_summary") or {},
     }
     artifact_start = now_perf()
     extra_paths = {}
@@ -1293,6 +1363,23 @@ def run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
                 health=health,
             )
         )
+
+    # Ensure output directory exists and is clean
+    output_dir_path = Path(args.output_dir)
+    if output_dir_path.exists():
+        shutil.rmtree(output_dir_path)
+    output_dir_path.mkdir(parents=True, exist_ok=True)
+
+    # Write code diff for reproducibility
+    diff_path = Path(args.output_dir) / "code-diff.txt"
+    try:
+        with open(diff_path, "w") as f:
+            subprocess.run(["git", "diff"], stdout=f, check=False)
+        extra_paths["code_diff_txt"] = str(diff_path)
+    except Exception as e:
+        print(f"Warning: Could not write code diff: {e}")
+
+    # Zip archive is created by write_autoplay_artifacts
 
     artifact_write_ms = elapsed_ms(artifact_start)
     metrics["performance"] = summarize_performance(
@@ -1379,6 +1466,12 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--min-category-diversity-rate", type=float, default=0.0)
     parser.add_argument("--latency-profile", choices=["evaluation", "playable"], default="evaluation")
     parser.add_argument("--narration-mode", choices=["blocking", "deferred"], default="blocking")
+    parser.add_argument(
+        "--background-llm-mode",
+        choices=["split", "combined"],
+        default="split",
+        help="split = separate deferred narration/advisory jobs; combined = one provider job for both.",
+    )
     parser.add_argument("--checkpoint-mode", choices=["blocking", "background"], default="blocking")
     parser.add_argument("--background-workers", type=int, default=4)
     parser.add_argument("--provider-workers", type=int, default=1)
@@ -1438,6 +1531,9 @@ def main(argv: List[str] | None = None) -> int:
     print(f"deferred_advisory_candidate_count: {deferred_advisory_summary.get('candidate_count')}")
     print(f"deferred_advisory_candidate_kinds: {deferred_advisory_summary.get('candidate_kinds')}")
     print(f"deferred_advisory_errors: {deferred_advisory_summary.get('errors')}")
+    performance_budget = summary.get("performance_budget_summary") or {}
+    print(f"performance_budget_live_blocking: {performance_budget.get('live_blocking')}")
+    print(f"performance_budget_background_llm: {performance_budget.get('background_llm')}")
 
     warnings = summary.get("health", {}).get("warnings") or []
     if args.fail_on_regression_warnings and warnings:

@@ -1,531 +1,279 @@
-N40-N42 — Deferred Advisory Candidate Pipeline v1
-Scope
+Below is N43-N45 — Background LLM Consolidation + Provider Queue Metrics v1 as a literal apply-this-patch diff spec.
 
-Apply:
+Goal:
 
-N40 — Deferred advisory candidate model + provider/deterministic extraction
-N41 — Background advisory job wiring + transcript/report summaries
-N42 — Deterministic promotion gate + tests proving candidates cannot directly mutate authoritative state
+N43: provider queue/run timing for background LLM jobs
+N44: optional combined narration + advisory background job
+N45: report performance budget split + regression thresholds
 
-Do not reapply:
+This bundle must preserve the current win:
 
-runtime.py advisory suppression inside _apply_turn_authoritative
+human-equivalent blocking stays sub-second / low-ms
+blocking provider calls remain 0
+blocking advisory remains suppressed
+N43 — Provider Queue Metrics
+1. Add queue timing to AutoplayBackgroundPipeline
 
-That is already working.
+Patch:
 
-N40 — Candidate model + provider/deterministic extraction
-1. Create advisory package
---- /dev/null
-+++ src/app/rpg/advisory/__init__.py
-@@ -0,0 +1 @@
-+"""Deferred advisory candidate pipeline."""
-2. Add advisory candidate model
---- /dev/null
-+++ src/app/rpg/advisory/candidates.py
-@@ -0,0 +1,250 @@
-+from __future__ import annotations
-+
-+import hashlib
-+import json
-+from copy import deepcopy
-+from datetime import datetime, timezone
-+from typing import Any, Dict, List
-+
-+
-+ADVISORY_CANDIDATE_VERSION = "deferred_advisory_candidates_v1"
-+
-+ALLOWED_CANDIDATE_KINDS = {
-+    "semantic_intent",
-+    "relationship_delta",
-+    "memory",
-+    "world_signal",
-+    "future_hook",
-+}
-+
-+FORBIDDEN_AUTHORITATIVE_KEYS = {
-+    "inventory",
-+    "items",
-+    "currency",
-+    "gold",
-+    "xp",
-+    "experience",
-+    "quest_status",
-+    "quest_completion",
-+    "combat_damage",
-+    "damage",
-+    "hit",
-+    "miss",
-+    "location",
-+    "travel",
-+    "service_purchase",
-+    "reward",
-+}
-+
-+
-+def _safe_dict(value: Any) -> Dict[str, Any]:
-+    return value if isinstance(value, dict) else {}
-+
-+
-+def _safe_list(value: Any) -> List[Any]:
-+    return value if isinstance(value, list) else []
-+
-+
-+def _safe_str(value: Any) -> str:
-+    return value if isinstance(value, str) else ""
-+
-+
-+def _now_iso() -> str:
-+    return datetime.now(timezone.utc).isoformat()
-+
-+
-+def stable_json(value: Any) -> str:
-+    return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False, default=str)
-+
-+
-+def stable_json_for_prompt(value: Any, max_chars: int = 6000) -> str:
-+    text = json.dumps(value, sort_keys=True, ensure_ascii=False, default=str)
-+    if len(text) > max_chars:
-+        return text[:max_chars] + "...[truncated]"
-+    return text
-+
-+
-+def advisory_candidate_id(
-+    *,
-+    session_id: str,
-+    turn_index: int,
-+    kind: str,
-+    payload: Dict[str, Any],
-+) -> str:
-+    raw = stable_json(
-+        {
-+            "session_id": session_id,
-+            "turn_index": turn_index,
-+            "kind": kind,
-+            "payload": payload,
-+        }
-+    )
-+    digest = hashlib.sha256(raw.encode("utf-8")).hexdigest()[:16]
-+    return f"adv:{turn_index}:{kind}:{digest}"
-+
-+
-+def contains_forbidden_authoritative_claim(value: Any) -> bool:
-+    text = stable_json(value).lower()
-+    return any(key in text for key in FORBIDDEN_AUTHORITATIVE_KEYS)
-+
-+
-+def _kind_from_group_key(key: str) -> str:
-+    if key == "semantic_intent_candidates":
-+        return "semantic_intent"
-+    if key == "relationship_delta_candidates":
-+        return "relationship_delta"
-+    if key == "memory_candidates":
-+        return "memory"
-+    if key == "world_signal_candidates":
-+        return "world_signal"
-+    if key == "future_hook_candidates":
-+        return "future_hook"
-+    return "future_hook"
-+
-+
-+def normalize_advisory_candidate(
-+    *,
-+    session_id: str,
-+    turn_index: int,
-+    player_input: str,
-+    turn_contract: Dict[str, Any],
-+    raw: Dict[str, Any],
-+) -> Dict[str, Any]:
-+    raw = deepcopy(_safe_dict(raw))
-+    kind = _safe_str(raw.get("kind")).strip() or _safe_str(raw.get("type")).strip()
-+    if kind not in ALLOWED_CANDIDATE_KINDS:
-+        kind = "future_hook"
-+
-+    payload = deepcopy(_safe_dict(raw.get("payload")) or raw)
-+    for transient_key in ("candidate_id", "status", "promoted", "promotion", "backing", "safety"):
-+        payload.pop(transient_key, None)
-+
-+    candidate = {
-+        "format_version": ADVISORY_CANDIDATE_VERSION,
-+        "candidate_id": advisory_candidate_id(
-+            session_id=session_id,
-+            turn_index=turn_index,
-+            kind=kind,
-+            payload=payload,
-+        ),
-+        "session_id": session_id,
-+        "turn_index": int(turn_index),
-+        "kind": kind,
-+        "status": "pending",
-+        "created_at": _now_iso(),
-+        "source": "deferred_advisory",
-+        "player_input": player_input,
-+        "payload": payload,
-+        "promotion": {
-+            "eligible_from_turn": int(turn_index) + 1,
-+            "accepted": False,
-+            "rejected": False,
-+            "reason": "",
-+        },
-+        "backing": {
-+            "turn_contract_action": _safe_str(
-+                turn_contract.get("action")
-+                or turn_contract.get("result")
-+                or turn_contract.get("player_action")
-+            ),
-+            "turn_contract_keys": sorted([str(k) for k in turn_contract.keys()]),
-+        },
-+        "safety": {
-+            "contains_forbidden_authoritative_claim": contains_forbidden_authoritative_claim(payload),
-+        },
-+    }
-+    return candidate
-+
-+
-+def normalize_advisory_candidates(
-+    *,
-+    session_id: str,
-+    turn_index: int,
-+    player_input: str,
-+    turn_contract: Dict[str, Any],
-+    payload: Dict[str, Any],
-+) -> List[Dict[str, Any]]:
-+    payload = _safe_dict(payload)
-+    raw_candidates: List[Dict[str, Any]] = []
-+
-+    for key in (
-+        "candidates",
-+        "semantic_intent_candidates",
-+        "relationship_delta_candidates",
-+        "memory_candidates",
-+        "world_signal_candidates",
-+        "future_hook_candidates",
-+    ):
-+        for value in _safe_list(payload.get(key)):
-+            if not isinstance(value, dict):
-+                continue
-+            normalized = deepcopy(value)
-+            if key != "candidates" and "kind" not in normalized and "type" not in normalized:
-+                normalized["kind"] = _kind_from_group_key(key)
-+            raw_candidates.append(normalized)
-+
-+    candidates = [
-+        normalize_advisory_candidate(
-+            session_id=session_id,
-+            turn_index=turn_index,
-+            player_input=player_input,
-+            turn_contract=turn_contract,
-+            raw=raw,
-+        )
-+        for raw in raw_candidates
-+    ]
-+
-+    seen = set()
-+    deduped: List[Dict[str, Any]] = []
-+    for candidate in candidates:
-+        cid = candidate.get("candidate_id")
-+        if cid in seen:
-+            continue
-+        seen.add(cid)
-+        deduped.append(candidate)
-+    return deduped
-+
-+
-+def build_deterministic_advisory_candidates(
-+    *,
-+    session_id: str,
-+    turn_index: int,
-+    player_input: str,
-+    turn_contract: Dict[str, Any],
-+    semantic_action_record: Dict[str, Any] | None = None,
-+) -> List[Dict[str, Any]]:
-+    semantic = _safe_dict(semantic_action_record)
-+    intent = (
-+        _safe_str(semantic.get("semantic_action_type"))
-+        or _safe_str(semantic.get("semantic_family"))
-+        or _safe_str(semantic.get("intent"))
-+        or _safe_str(turn_contract.get("action"))
-+        or _safe_str(turn_contract.get("player_action"))
-+        or "unknown"
-+    )
-+    raw = {
-+        "kind": "semantic_intent",
-+        "payload": {
-+            "intent": intent,
-+            "summary": f"Fast deterministic interpretation of player input: {player_input[:180]}",
-+            "confidence": 0.45,
-+            "deterministic_fallback": True,
-+        },
-+    }
-+    return [
-+        normalize_advisory_candidate(
-+            session_id=session_id,
-+            turn_index=turn_index,
-+            player_input=player_input,
-+            turn_contract=turn_contract,
-+            raw=raw,
-+        )
-+    ]
-+
-+
-+def advisory_candidate_summary(candidates: List[Dict[str, Any]]) -> Dict[str, Any]:
-+    summary = {
-+        "total": len(candidates),
-+        "by_kind": {},
-+        "pending": 0,
-+        "accepted": 0,
-+        "rejected": 0,
-+        "forbidden_claims": 0,
-+    }
-+    for candidate in candidates:
-+        kind = _safe_str(candidate.get("kind")) or "unknown"
-+        summary["by_kind"][kind] = int(summary["by_kind"].get(kind) or 0) + 1
-+        status = _safe_str(candidate.get("status")) or "pending"
-+        if status in ("pending", "accepted", "rejected"):
-+            summary[status] += 1
-+        if _safe_dict(candidate.get("safety")).get("contains_forbidden_authoritative_claim"):
-+            summary["forbidden_claims"] += 1
-+    return summary
-N42 — Deterministic promotion gate
-3. Add promotion gate
---- /dev/null
-+++ src/app/rpg/advisory/promotion.py
-@@ -0,0 +1,230 @@
-+from __future__ import annotations
-+
-+from copy import deepcopy
-+from typing import Any, Dict, List, Tuple
-+
-+from app.rpg.advisory.candidates import advisory_candidate_summary
-+
-+
-+def _safe_dict(value: Any) -> Dict[str, Any]:
-+    return value if isinstance(value, dict) else {}
-+
-+
-+def _safe_list(value: Any) -> List[Any]:
-+    return value if isinstance(value, list) else []
-+
-+
-+def _safe_str(value: Any) -> str:
-+    return value if isinstance(value, str) else ""
-+
-+
-+def _npc_exists_or_is_present(simulation_state: Dict[str, Any], target: str) -> bool:
-+    if not target:
-+        return False
-+    target_norm = target.lower()
-+    npcs = _safe_dict(simulation_state.get("npcs"))
-+    if target in npcs or target_norm in {str(k).lower() for k in npcs.keys()}:
-+        return True
-+    present = _safe_list(simulation_state.get("present_npcs")) or _safe_list(simulation_state.get("nearby_npcs"))
-+    return any(str(npc).lower() == target_norm for npc in present)
-+
-+
-+def _is_backed_by_turn(candidate: Dict[str, Any]) -> bool:
-+    backing = _safe_dict(candidate.get("backing"))
-+    action = _safe_str(backing.get("turn_contract_action"))
-+    return bool(action.strip())
-+
-+
-+def _candidate_rejection_reason(
-+    candidate: Dict[str, Any],
-+    simulation_state: Dict[str, Any],
-+    current_turn: int,
-+) -> str:
-+    promotion = _safe_dict(candidate.get("promotion"))
-+    eligible_from = int(promotion.get("eligible_from_turn") or 0)
-+    if current_turn < eligible_from:
-+        return "not_eligible_until_future_turn"
-+    if _safe_dict(candidate.get("safety")).get("contains_forbidden_authoritative_claim"):
-+        return "contains_forbidden_authoritative_claim"
-+    if not _is_backed_by_turn(candidate):
-+        return "not_backed_by_turn_contract"
-+
-+    kind = _safe_str(candidate.get("kind"))
-+    payload = _safe_dict(candidate.get("payload"))
-+
-+    if kind == "relationship_delta":
-+        target = _safe_str(payload.get("target") or payload.get("npc") or payload.get("npc_id"))
-+        if not _npc_exists_or_is_present(simulation_state, target):
-+            return "relationship_target_not_present_or_unknown"
-+        try:
-+            delta = int(payload.get("delta") or 0)
-+        except Exception:
-+            return "relationship_delta_not_integer"
-+        if delta < -2 or delta > 2:
-+            return "relationship_delta_out_of_bounds"
-+
-+    if kind == "memory":
-+        owner = _safe_str(payload.get("owner") or payload.get("npc") or payload.get("npc_id"))
-+        summary = _safe_str(payload.get("summary"))
-+        if not owner:
-+            return "memory_owner_missing"
-+        if not summary:
-+            return "memory_summary_missing"
-+
-+    if kind == "world_signal":
-+        summary = _safe_str(payload.get("summary"))
-+        if not summary:
-+            return "world_signal_summary_missing"
-+
-+    if kind == "future_hook":
-+        summary = _safe_str(payload.get("summary"))
-+        if not summary:
-+            return "future_hook_summary_missing"
-+
-+    return ""
-+
-+
-+def _accepted_projection(candidate: Dict[str, Any]) -> Dict[str, Any]:
-+    kind = _safe_str(candidate.get("kind"))
-+    payload = deepcopy(_safe_dict(candidate.get("payload")))
-+    return {
-+        "candidate_id": candidate.get("candidate_id"),
-+        "kind": kind,
-+        "payload": payload,
-+        "source": "deferred_advisory_promotion",
-+    }
-+
-+
-+def promote_advisory_candidates(
-+    *,
-+    simulation_state: Dict[str, Any],
-+    runtime_state: Dict[str, Any],
-+    current_turn: int,
-+    max_promotions_per_turn: int = 5,
-+) -> Tuple[Dict[str, Any], Dict[str, Any]]:
-+    """Promote advisory candidates deterministically.
-+
-+    Advisory candidates do not mutate authoritative RPG facts directly.
-+    This gate only creates bounded accepted projections that later deterministic
-+    systems can inspect.
-+    """
-+    runtime_state = deepcopy(runtime_state if isinstance(runtime_state, dict) else {})
-+    advisory_state = runtime_state.setdefault("deferred_advisory", {})
-+    candidates = _safe_list(advisory_state.get("candidates"))
-+    accepted = _safe_list(advisory_state.get("accepted"))
-+    rejected = _safe_list(advisory_state.get("rejected"))
-+
-+    accepted_ids = {str(item.get("candidate_id")) for item in accepted if isinstance(item, dict)}
-+    rejected_ids = {str(item.get("candidate_id")) for item in rejected if isinstance(item, dict)}
-+
-+    promoted_this_turn = 0
-+    decisions: List[Dict[str, Any]] = []
-+    updated_candidates: List[Dict[str, Any]] = []
-+
-+    for candidate_raw in candidates:
-+        if not isinstance(candidate_raw, dict):
-+            continue
-+        candidate = deepcopy(candidate_raw)
-+        cid = str(candidate.get("candidate_id") or "")
-+        if not cid:
-+            updated_candidates.append(candidate)
-+            continue
-+        if cid in accepted_ids or cid in rejected_ids:
-+            updated_candidates.append(candidate)
-+            continue
-+        if promoted_this_turn >= max_promotions_per_turn:
-+            updated_candidates.append(candidate)
-+            continue
-+
-+        reason = _candidate_rejection_reason(candidate, simulation_state, current_turn)
-+        if reason:
-+            candidate["status"] = "rejected"
-+            candidate.setdefault("promotion", {})["rejected"] = True
-+            candidate.setdefault("promotion", {})["reason"] = reason
-+            rejected.append(
-+                {
-+                    "candidate_id": cid,
-+                    "turn_index": candidate.get("turn_index"),
-+                    "kind": candidate.get("kind"),
-+                    "reason": reason,
-+                    "rejected_at_turn": current_turn,
-+                }
-+            )
-+            decisions.append({"candidate_id": cid, "status": "rejected", "reason": reason})
-+        else:
-+            candidate["status"] = "accepted"
-+            candidate.setdefault("promotion", {})["accepted"] = True
-+            candidate.setdefault("promotion", {})["reason"] = "accepted_by_deterministic_gate"
-+            candidate.setdefault("promotion", {})["promoted_at_turn"] = current_turn
-+            projection = _accepted_projection(candidate)
-+            accepted.append(
-+                {
-+                    "candidate_id": cid,
-+                    "turn_index": candidate.get("turn_index"),
-+                    "kind": candidate.get("kind"),
-+                    "projection": projection,
-+                    "accepted_at_turn": current_turn,
-+                    "reason": "accepted_by_deterministic_gate",
-+                }
-+            )
-+            decisions.append(
-+                {
-+                    "candidate_id": cid,
-+                    "status": "accepted",
-+                    "reason": "accepted_by_deterministic_gate",
-+                }
-+            )
-+            promoted_this_turn += 1
-+        updated_candidates.append(candidate)
-+
-+    advisory_state["candidates"] = updated_candidates
-+    advisory_state["accepted"] = accepted
-+    advisory_state["rejected"] = rejected
-+    advisory_state["summary"] = {
-+        "candidates": advisory_candidate_summary(updated_candidates),
-+        "accepted_count": len(accepted),
-+        "rejected_count": len(rejected),
-+    }
-+
-+    result = {
-+        "ok": True,
-+        "current_turn": current_turn,
-+        "promoted_this_turn": promoted_this_turn,
-+        "decisions": decisions,
-+        "summary": advisory_state["summary"],
-+    }
-+    return runtime_state, result
-N41 — Background advisory job wiring
-4. Patch parallel_pipeline.py
-
-Add imports:
-
+src/tests/rpg/autoplay/parallel_pipeline.py
+1A. Add queued timestamp wrapper helpers
 --- src/tests/rpg/autoplay/parallel_pipeline.py
 +++ src/tests/rpg/autoplay/parallel_pipeline.py
 @@
- from app.rpg.narration.runtime_narration_contract import build_runtime_narration_payload
-+from app.rpg.advisory.candidates import (
-+    advisory_candidate_summary,
-+    build_deterministic_advisory_candidates,
-+    normalize_advisory_candidates,
-+    stable_json_for_prompt,
-+)
-
-Add provider advisory helpers after _deferred_narration_job(...):
-
+ from __future__ import annotations
+ 
+ import traceback
+ import time
+ from concurrent.futures import Future, ThreadPoolExecutor, as_completed
+@@
+ def now_perf() -> float:
+     return time.perf_counter()
+ 
+ 
+ def elapsed_ms(start: float) -> float:
+     return round((time.perf_counter() - start) * 1000.0, 3)
++
++
++def _queue_timing(
++    *,
++    queued_at: float,
++    started_at: float,
++    finished_at: float,
++) -> Dict[str, Any]:
++    return {
++        "queued_at": round(queued_at, 6),
++        "started_at": round(started_at, 6),
++        "finished_at": round(finished_at, 6),
++        "queue_wait_ms": round((started_at - queued_at) * 1000.0, 3),
++        "run_ms": round((finished_at - started_at) * 1000.0, 3),
++        "total_ms": round((finished_at - queued_at) * 1000.0, 3),
++    }
+1B. Patch _deferred_narration_job signature and timings
 --- src/tests/rpg/autoplay/parallel_pipeline.py
 +++ src/tests/rpg/autoplay/parallel_pipeline.py
 @@
  def _deferred_narration_job(
+     *,
++    queued_at: float,
+     provider: Any,
+     session_id: str,
+     turn_index: int,
+     player_action: str,
+@@
+ ) -> Dict[str, Any]:
+-    started = now_perf()
++    started = now_perf()
+     wall_started = time.perf_counter()
+@@
+         after_digest = state_digest(_safe_dict(simulation_state))
++        finished = now_perf()
+         return {
+             "ok": True,
+             "kind": "deferred_narration",
+@@
+             "diagnostics": diagnostics,
+             "worker_ms": elapsed_ms(started),
+             "worker_wall_seconds": round(time.perf_counter() - wall_started, 3),
++            "queue_timing": _queue_timing(
++                queued_at=queued_at,
++                started_at=started,
++                finished_at=finished,
++            ),
+             "state_digest_before": before_digest,
+             "state_digest_after": after_digest,
+             "mutated_authoritative_snapshot": before_digest != after_digest,
+         }
+     except Exception as exc:
++        finished = now_perf()
+         diagnostics["exception"] = f"{type(exc).__name__}: {exc}"
+         return {
+@@
+             "diagnostics": diagnostics,
+             "worker_ms": elapsed_ms(started),
+             "worker_wall_seconds": round(time.perf_counter() - wall_started, 3),
++            "queue_timing": _queue_timing(
++                queued_at=queued_at,
++                started_at=started,
++                finished_at=finished,
++            ),
+         }
+1C. Patch _deferred_advisory_job signature and timings
+--- src/tests/rpg/autoplay/parallel_pipeline.py
++++ src/tests/rpg/autoplay/parallel_pipeline.py
+@@
+ def _deferred_advisory_job(
+     *,
++    queued_at: float,
+     provider: Any,
+     session_id: str,
+     turn_index: int,
+@@
+ ) -> Dict[str, Any]:
+     started = now_perf()
+@@
+-        return {
++        finished = now_perf()
++        return {
+             "ok": True,
+             "kind": "deferred_advisory",
+@@
+             "summary": advisory_candidate_summary(candidates),
+             "diagnostics": diagnostics,
+             "worker_ms": elapsed_ms(started),
++            "queue_timing": _queue_timing(
++                queued_at=queued_at,
++                started_at=started,
++                finished_at=finished,
++            ),
+         }
+     except Exception as exc:
++        finished = now_perf()
+         return {
+@@
+             "traceback": traceback.format_exc(),
+             "diagnostics": diagnostics,
+             "worker_ms": elapsed_ms(started),
++            "queue_timing": _queue_timing(
++                queued_at=queued_at,
++                started_at=started,
++                finished_at=finished,
++            ),
+         }
+1D. Pass queued_at in submitters
+
+Patch submit_deferred_narration(...):
+
+--- src/tests/rpg/autoplay/parallel_pipeline.py
++++ src/tests/rpg/autoplay/parallel_pipeline.py
+@@
+     def submit_deferred_narration(
+@@
+     ) -> str:
+         job_id = f"narration:{session_id}:{turn_index}"
++        queued_at = now_perf()
+         future = self._provider_executor.submit(
+             _deferred_narration_job,
++            queued_at=queued_at,
+             provider=provider,
+             session_id=session_id,
+             turn_index=turn_index,
+
+Patch submit_deferred_advisory(...):
+
+--- src/tests/rpg/autoplay/parallel_pipeline.py
++++ src/tests/rpg/autoplay/parallel_pipeline.py
+@@
+     def submit_deferred_advisory(
+@@
+     ) -> str:
+         job_id = f"advisory:{session_id}:{turn_index}"
++        queued_at = now_perf()
+         future = self._provider_executor.submit(
+             _deferred_advisory_job,
++            queued_at=queued_at,
+             provider=provider,
+             session_id=session_id,
+             turn_index=turn_index,
+1E. Aggregate queue timings in background summary
+
+Add helper:
+
+--- src/tests/rpg/autoplay/parallel_pipeline.py
++++ src/tests/rpg/autoplay/parallel_pipeline.py
+@@
+ def _provider_shape(provider: Any) -> Dict[str, Any]:
+@@
+     }
++
++
++def _queue_summary(rows: List[Dict[str, Any]]) -> Dict[str, Any]:
++    timings = [
++        _safe_dict(row.get("queue_timing"))
++        for row in rows
++        if isinstance(row, dict) and isinstance(row.get("queue_timing"), dict)
++    ]
++    if not timings:
++        return {
++            "count": 0,
++            "avg_queue_wait_ms": 0.0,
++            "max_queue_wait_ms": 0.0,
++            "avg_run_ms": 0.0,
++            "max_run_ms": 0.0,
++            "avg_total_ms": 0.0,
++            "max_total_ms": 0.0,
++        }
++
++    def avg(key: str) -> float:
++        return round(sum(float(item.get(key) or 0.0) for item in timings) / len(timings), 3)
++
++    def maxv(key: str) -> float:
++        return round(max(float(item.get(key) or 0.0) for item in timings), 3)
++
++    return {
++        "count": len(timings),
++        "avg_queue_wait_ms": avg("queue_wait_ms"),
++        "max_queue_wait_ms": maxv("queue_wait_ms"),
++        "avg_run_ms": avg("run_ms"),
++        "max_run_ms": maxv("run_ms"),
++        "avg_total_ms": avg("total_ms"),
++        "max_total_ms": maxv("total_ms"),
++    }
+
+Patch summary finalization at end of attach_background_results_to_transcript(...) before return:
+
+--- src/tests/rpg/autoplay/parallel_pipeline.py
++++ src/tests/rpg/autoplay/parallel_pipeline.py
+@@
+     for result in results:
+@@
+         else:
+             summary["errors"].append(
+                 {
+                     "kind": result.get("kind"),
+                     "turn_index": result.get("turn_index"),
+                     "error": result.get("error"),
+                 }
+             )
+ 
++    provider_jobs = [
++        result
++        for result in results
++        if result.get("kind") in {"deferred_narration", "deferred_advisory", "combined_background_llm"}
++    ]
++    summary["provider_queue_summary"] = _queue_summary(provider_jobs)
++    summary["provider_queue_by_kind"] = {
++        kind: _queue_summary([result for result in provider_jobs if result.get("kind") == kind])
++        for kind in ("deferred_narration", "deferred_advisory", "combined_background_llm")
++    }
++
+     return summary
+N44 — Combined Narration + Advisory Job
+2. Add combined job type
+
+Patch imports in parallel_pipeline.py if needed:
+
+--- src/tests/rpg/autoplay/parallel_pipeline.py
++++ src/tests/rpg/autoplay/parallel_pipeline.py
+@@
+ from app.rpg.advisory.candidates import (
+     advisory_candidate_summary,
+     build_deterministic_advisory_candidates,
+     normalize_advisory_candidates,
+     stable_json_for_prompt,
+ )
+
+Add combined provider payload builder after _build_provider_advisory_payload(...):
+
+--- src/tests/rpg/autoplay/parallel_pipeline.py
++++ src/tests/rpg/autoplay/parallel_pipeline.py
+@@
+ def _build_provider_advisory_payload(
 @@
          }
 +
 +
-+def _provider_text_from_response(response: Any) -> str:
-+    for attr in ("content", "text", "message"):
-+        value = getattr(response, attr, None)
-+        if isinstance(value, str) and value.strip():
-+            return value.strip()
-+    if isinstance(response, dict):
-+        for key in ("content", "text", "message"):
-+            value = response.get(key)
-+            if isinstance(value, str) and value.strip():
-+                return value.strip()
-+    return ""
-+
-+
-+def _build_provider_advisory_payload(
++def _build_combined_background_payload(
 +    *,
 +    provider: Any,
 +    player_action: str,
@@ -533,6 +281,7 @@ Add provider advisory helpers after _deferred_narration_job(...):
 +    turn_contract: Dict[str, Any],
 +    semantic_action_record: Dict[str, Any],
 +) -> Dict[str, Any]:
++    """One provider call that returns both narration and advisory candidates."""
 +    if provider is None or not callable(getattr(provider, "chat_completion", None)):
 +        return {"ok": False, "error": "provider_missing_or_unsupported"}
 +
@@ -540,52 +289,72 @@ Add provider advisory helpers after _deferred_narration_job(...):
 +        {
 +            "role": "system",
 +            "content": (
-+                "You are an RPG advisory extractor. Return JSON only. "
-+                "You may suggest candidates, but you must not assert authoritative outcomes. "
-+                "Do not grant items, currency, quest completion, damage, travel, or rewards."
++                "You are an RPG background enrichment worker. Return JSON only. "
++                "You must not assert authoritative outcomes that are not in the turn contract. "
++                "Do not grant items, currency, quest completion, damage, travel, or rewards. "
++                "Return one JSON object and no markdown fences, no prose, no commentary."
 +            ),
 +        },
 +        {
 +            "role": "user",
 +            "content": (
-+                "Extract advisory candidates from this turn.\n\n"
++                "Create background narration and advisory candidates for this resolved RPG turn.\n\n"
 +                f"PLAYER_INPUT:\n{player_action}\n\n"
 +                f"TURN_CONTRACT_JSON:\n{stable_json_for_prompt(turn_contract)}\n\n"
 +                f"FAST_SEMANTIC_JSON:\n{stable_json_for_prompt(semantic_action_record)}\n\n"
-+                "Return JSON with optional arrays: semantic_intent_candidates, "
-+                "relationship_delta_candidates, memory_candidates, world_signal_candidates, "
-+                "future_hook_candidates."
++                "Return exactly this JSON shape:\n"
++                "{\n"
++                '  "narration": "2-5 sentences describing the resolved scene without repeating player input.",\n'
++                '  "action": "Short result of the player action.",\n'
++                '  "npc": {"speaker": "", "line": ""},\n'
++                '  "reward": "",\n'
++                '  "followup_hooks": [],\n'
++                '  "semantic_intent_candidates": [],\n'
++                '  "relationship_delta_candidates": [],\n'
++                '  "memory_candidates": [],\n'
++                '  "world_signal_candidates": [],\n'
++                '  "future_hook_candidates": []\n'
++                "}"
 +            ),
 +        },
 +    ]
 +
++    provider_messages = _provider_messages(messages)
 +    try:
-+        response = provider.chat_completion(messages=messages, stream=False)
++        response = provider.chat_completion(messages=provider_messages, stream=False)
 +    except TypeError:
-+        response = provider.chat_completion(messages, stream=False)
++        response = provider.chat_completion(provider_messages, stream=False)
 +
 +    content = _provider_text_from_response(response)
 +    if not content:
-+        return {"ok": False, "error": "provider_empty_advisory_response"}
++        return {"ok": False, "error": "provider_empty_combined_response"}
 +
 +    try:
-+        import json
-+
-+        parsed = json.loads(content)
++        parsed = _extract_json_object_from_text(content)
 +        if isinstance(parsed, dict):
 +            parsed["ok"] = True
 +            return parsed
-+        return {"ok": False, "error": "provider_advisory_json_not_object", "raw": content[:1000]}
++        return {"ok": False, "error": "provider_combined_json_not_object", "raw": content[:1000]}
 +    except Exception as exc:
 +        return {
 +            "ok": False,
-+            "error": f"provider_advisory_json_parse_error:{type(exc).__name__}: {exc}",
++            "error": f"provider_combined_json_parse_error:{type(exc).__name__}: {exc}",
 +            "raw": content[:1000],
 +        }
+
+Add combined job after _deferred_advisory_job(...):
+
+--- src/tests/rpg/autoplay/parallel_pipeline.py
++++ src/tests/rpg/autoplay/parallel_pipeline.py
+@@
+ def _deferred_advisory_job(
+@@
+         }
 +
 +
-+def _deferred_advisory_job(
++def _combined_background_llm_job(
 +    *,
++    queued_at: float,
 +    provider: Any,
 +    session_id: str,
 +    turn_index: int,
@@ -603,33 +372,52 @@ Add provider advisory helpers after _deferred_narration_job(...):
 +        "semantic_keys": sorted(list(_safe_dict(semantic_action_record).keys())),
 +    }
 +    try:
-+        payload: Dict[str, Any] = {}
-+        source = "deterministic_deferred_advisory"
++        source = "provider_combined_background_llm"
++        provider_payload: Dict[str, Any] = {}
 +        if prefer_provider and provider is not None:
 +            provider_started = now_perf()
-+            payload = _build_provider_advisory_payload(
++            provider_payload = _build_combined_background_payload(
 +                provider=provider,
 +                player_action=player_action,
 +                simulation_state=freeze_snapshot(_safe_dict(simulation_state)),
 +                turn_contract=freeze_snapshot(_safe_dict(turn_contract)),
 +                semantic_action_record=freeze_snapshot(_safe_dict(semantic_action_record)),
 +            )
-+            diagnostics["provider_advisory_ms"] = elapsed_ms(provider_started)
-+            diagnostics["provider_payload_error"] = _safe_str(payload.get("error"))
-+            if payload.get("ok"):
-+                source = "provider_deferred_advisory"
-+            else:
-+                source = "deterministic_deferred_advisory_fallback"
++            diagnostics["provider_combined_ms"] = elapsed_ms(provider_started)
++            diagnostics["provider_payload_error"] = _safe_str(provider_payload.get("error"))
++            if not provider_payload.get("ok"):
++                source = "combined_background_llm_fallback"
++        else:
++            source = "combined_background_llm_fallback"
 +
-+        if source == "provider_deferred_advisory":
++        if source == "provider_combined_background_llm":
++            narration_payload = {
++                "format_version": "rpg_narration_v2",
++                "source": "provider_runtime_narration",
++                "narration": _safe_str(provider_payload.get("narration")) or "The scene settles after the action.",
++                "action": _safe_str(provider_payload.get("action")) or "The action has been resolved.",
++                "npc": _safe_dict(provider_payload.get("npc")),
++                "reward": _safe_str(provider_payload.get("reward")),
++                "followup_hooks": provider_payload.get("followup_hooks")
++                if isinstance(provider_payload.get("followup_hooks"), list)
++                else [],
++            }
 +            candidates = normalize_advisory_candidates(
 +                session_id=session_id,
 +                turn_index=turn_index,
 +                player_input=player_action,
 +                turn_contract=_safe_dict(turn_contract),
-+                payload=_safe_dict(payload),
++                payload=_safe_dict(provider_payload),
 +            )
 +        else:
++            # Fallback keeps the same output shape and preserves correctness.
++            narration_payload = build_runtime_narration_payload(
++                provider=None,
++                player_action=player_action,
++                simulation_state=freeze_snapshot(_safe_dict(simulation_state)),
++                turn_contract=freeze_snapshot(_safe_dict(turn_contract)),
++                prefer_provider=False,
++            )
 +            candidates = build_deterministic_advisory_candidates(
 +                session_id=session_id,
 +                turn_index=turn_index,
@@ -638,42 +426,59 @@ Add provider advisory helpers after _deferred_narration_job(...):
 +                semantic_action_record=_safe_dict(semantic_action_record),
 +            )
 +
++        finished = now_perf()
 +        return {
 +            "ok": True,
-+            "kind": "deferred_advisory",
++            "kind": "combined_background_llm",
 +            "session_id": session_id,
 +            "turn_index": turn_index,
 +            "source": source,
++            "narration": _safe_str(narration_payload.get("narration")),
++            "npc": _safe_dict(narration_payload.get("npc")),
++            "narration_payload": narration_payload,
 +            "candidate_count": len(candidates),
 +            "candidates": candidates,
-+            "summary": advisory_candidate_summary(candidates),
++            "advisory_summary": advisory_candidate_summary(candidates),
 +            "diagnostics": diagnostics,
 +            "worker_ms": elapsed_ms(started),
++            "queue_timing": _queue_timing(
++                queued_at=queued_at,
++                started_at=started,
++                finished_at=finished,
++            ),
 +        }
 +    except Exception as exc:
++        finished = now_perf()
++        diagnostics["exception"] = f"{type(exc).__name__}: {exc}"
 +        return {
 +            "ok": False,
-+            "kind": "deferred_advisory",
++            "kind": "combined_background_llm",
 +            "session_id": session_id,
 +            "turn_index": turn_index,
-+            "source": "deferred_advisory_error",
++            "source": "combined_background_llm_error",
 +            "error": f"{type(exc).__name__}: {exc}",
 +            "traceback": traceback.format_exc(),
 +            "diagnostics": diagnostics,
 +            "worker_ms": elapsed_ms(started),
++            "queue_timing": _queue_timing(
++                queued_at=queued_at,
++                started_at=started,
++                finished_at=finished,
++            ),
 +        }
+3. Add submit method for combined job
 
-Add method to AutoplayBackgroundPipeline:
+Patch AutoplayBackgroundPipeline:
 
 --- src/tests/rpg/autoplay/parallel_pipeline.py
 +++ src/tests/rpg/autoplay/parallel_pipeline.py
 @@
-     def submit_checkpoint(
+     def submit_deferred_advisory(
 @@
          self._futures.append(future)
          return job_id
 +
-+    def submit_deferred_advisory(
++    def submit_combined_background_llm(
 +        self,
 +        *,
 +        provider: Any,
@@ -685,9 +490,11 @@ Add method to AutoplayBackgroundPipeline:
 +        semantic_action_record: Dict[str, Any],
 +        prefer_provider: bool = True,
 +    ) -> str:
-+        job_id = f"advisory:{session_id}:{turn_index}"
++        job_id = f"combined_background_llm:{session_id}:{turn_index}"
++        queued_at = now_perf()
 +        future = self._provider_executor.submit(
-+            _deferred_advisory_job,
++            _combined_background_llm_job,
++            queued_at=queued_at,
 +            provider=provider,
 +            session_id=session_id,
 +            turn_index=turn_index,
@@ -699,349 +506,376 @@ Add method to AutoplayBackgroundPipeline:
 +        )
 +        self._futures.append(future)
 +        return job_id
+4. Attach combined job results
 
-Patch background result summary:
+Patch attach_background_results_to_transcript(...) summary:
 
 --- src/tests/rpg/autoplay/parallel_pipeline.py
 +++ src/tests/rpg/autoplay/parallel_pipeline.py
 @@
-     summary = {
-         "total_jobs": len(results),
-         "ok_jobs": 0,
-         "failed_jobs": 0,
          "narration_jobs": 0,
          "checkpoint_jobs": 0,
-+        "advisory_jobs": 0,
+         "advisory_jobs": 0,
++        "combined_background_llm_jobs": 0,
          "background_job_seconds": 0.0,
 @@
-         "errors": [],
-     }
-@@
-         elif result.get("kind") == "checkpoint":
-             summary["checkpoint_jobs"] += 1
-             row["save_load_checkpoint"] = result
-+        elif result.get("kind") == "deferred_advisory":
-+            summary["advisory_jobs"] += 1
-+            row["deferred_advisory_result"] = result
+         elif result.get("kind") == "deferred_advisory":
+             summary["advisory_jobs"] += 1
+             row["deferred_advisory_result"] = result
+             row["deferred_advisory_status"] = "ready" if result.get("ok") else "error"
++        elif result.get("kind") == "combined_background_llm":
++            summary["combined_background_llm_jobs"] += 1
++            row["combined_background_llm_result"] = result
++
++            # Attach narration in the same slots used by split narration jobs.
++            row["deferred_narration_result"] = {
++                "ok": result.get("ok"),
++                "kind": "deferred_narration",
++                "session_id": result.get("session_id"),
++                "turn_index": result.get("turn_index"),
++                "narration_status": "ready" if result.get("ok") else "error",
++                "narration": result.get("narration"),
++                "npc": result.get("npc") or {},
++                "narration_payload": result.get("narration_payload") or {},
++                "diagnostics": result.get("diagnostics") or {},
++                "worker_ms": result.get("worker_ms"),
++                "queue_timing": result.get("queue_timing") or {},
++            }
++            row["narration_status"] = "ready" if result.get("ok") else "error"
++            if result.get("ok") and result.get("narration"):
++                row["resolved_narration"] = result.get("narration")
++                row["resolved_narration_payload"] = result.get("narration_payload") or {}
++                row["narration"] = result.get("narration")
++
++            # Attach advisory in the same slots used by split advisory jobs.
++            row["deferred_advisory_result"] = {
++                "ok": result.get("ok"),
++                "kind": "deferred_advisory",
++                "session_id": result.get("session_id"),
++                "turn_index": result.get("turn_index"),
++                "source": result.get("source"),
++                "candidate_count": result.get("candidate_count"),
++                "candidates": result.get("candidates") or [],
++                "summary": result.get("advisory_summary") or {},
++                "diagnostics": result.get("diagnostics") or {},
++                "worker_ms": result.get("worker_ms"),
++                "queue_timing": result.get("queue_timing") or {},
++            }
 +            row["deferred_advisory_status"] = "ready" if result.get("ok") else "error"
-5. Patch autoplay_llm_campaign.py
-5A. Import no new runtime suppression. Only wire jobs.
+N45 — CLI flag + performance budget split
+5. Add CLI flag
 
-Add summarizer helper near your existing trace summarizers:
+Patch autoplay_llm_campaign.py parser:
 
 --- src/tests/rpg/autoplay_llm_campaign.py
 +++ src/tests/rpg/autoplay_llm_campaign.py
 @@
- def _summarize_deferred_narration_trace(transcript: List[Dict[str, Any]]) -> Dict[str, Any]:
+     parser.add_argument("--narration-mode", choices=["blocking", "deferred"], default="blocking")
++    parser.add_argument(
++        "--background-llm-mode",
++        choices=["split", "combined"],
++        default="split",
++        help="split = separate deferred narration/advisory jobs; combined = one provider job for both.",
++    )
+6. Enqueue combined vs split mode
+
+Patch the deferred job enqueue block.
+
+Find the current deferred block that enqueues narration and advisory. Replace the inner enqueue with:
+
+--- src/tests/rpg/autoplay_llm_campaign.py
++++ src/tests/rpg/autoplay_llm_campaign.py
+@@
+         narration_status = "ready"
+         narration_job_id = ""
+         advisory_status = "disabled"
+         advisory_job_id = ""
++        combined_background_llm_job_id = ""
+         if args.narration_mode == "deferred":
+             narration_status = "pending"
+             advisory_status = "pending"
+             with timed_stage(turn_performance, "background_enqueue_ms"):
+-                narration_job_id = pipeline.submit_deferred_narration(
+-                    provider=provider,
+-                    session_id=session_id,
+-                    turn_index=turn_index,
+-                    player_action=player_action,
+-                    simulation_state=final_turn_state,
+-                    turn_contract=turn_result.get("turn_contract") or {},
+-                    prefer_provider=True,
+-                )
+                 semantic_action_record = (
+                     _safe_dict(turn_result.get("semantic_action_v2"))
+                     or _safe_dict(_safe_dict(turn_result.get("turn_contract")).get("semantic_action_v2"))
+                     or _safe_dict(_safe_dict(turn_result.get("raw_result")).get("semantic_action_v2"))
+                     or _safe_dict(_safe_dict(turn_result.get("manual_turn_summary")).get("semantic_action_v2"))
+                     or {}
+                 )
+-                advisory_job_id = pipeline.submit_deferred_advisory(
+-                    provider=provider,
+-                    session_id=session_id,
+-                    turn_index=turn_index,
+-                    player_action=player_action,
+-                    simulation_state=final_turn_state,
+-                    turn_contract=turn_result.get("turn_contract") or {},
+-                    semantic_action_record=semantic_action_record,
+-                    prefer_provider=True,
+-                )
++                if args.background_llm_mode == "combined":
++                    combined_background_llm_job_id = pipeline.submit_combined_background_llm(
++                        provider=provider,
++                        session_id=session_id,
++                        turn_index=turn_index,
++                        player_action=player_action,
++                        simulation_state=final_turn_state,
++                        turn_contract=turn_result.get("turn_contract") or {},
++                        semantic_action_record=semantic_action_record,
++                        prefer_provider=True,
++                    )
++                    narration_job_id = combined_background_llm_job_id
++                    advisory_job_id = combined_background_llm_job_id
++                else:
++                    narration_job_id = pipeline.submit_deferred_narration(
++                        provider=provider,
++                        session_id=session_id,
++                        turn_index=turn_index,
++                        player_action=player_action,
++                        simulation_state=final_turn_state,
++                        turn_contract=turn_result.get("turn_contract") or {},
++                        prefer_provider=True,
++                    )
++                    advisory_job_id = pipeline.submit_deferred_advisory(
++                        provider=provider,
++                        session_id=session_id,
++                        turn_index=turn_index,
++                        player_action=player_action,
++                        simulation_state=final_turn_state,
++                        turn_contract=turn_result.get("turn_contract") or {},
++                        semantic_action_record=semantic_action_record,
++                        prefer_provider=True,
++                    )
+             if not narration:
+                 narration = "Narration is being prepared..."
+
+Add record field:
+
+--- src/tests/rpg/autoplay_llm_campaign.py
++++ src/tests/rpg/autoplay_llm_campaign.py
+@@
+             "deferred_advisory_status": advisory_status,
+             "deferred_advisory_job_id": advisory_job_id,
++            "background_llm_mode": args.background_llm_mode,
++            "combined_background_llm_job_id": combined_background_llm_job_id,
+
+Add to summary dict:
+
+--- src/tests/rpg/autoplay_llm_campaign.py
++++ src/tests/rpg/autoplay_llm_campaign.py
+@@
+         "narration_mode": args.narration_mode,
++        "background_llm_mode": args.background_llm_mode,
+         "checkpoint_mode": args.checkpoint_mode,
+7. Add performance budget summary
+
+Add helper in autoplay_llm_campaign.py near metric summarizers:
+
+--- src/tests/rpg/autoplay_llm_campaign.py
++++ src/tests/rpg/autoplay_llm_campaign.py
+@@
+ def _summarize_deferred_advisory_trace(transcript: List[Dict[str, Any]]) -> Dict[str, Any]:
 @@
      return summary
 +
 +
-+def _summarize_deferred_advisory_trace(transcript: List[Dict[str, Any]]) -> Dict[str, Any]:
-+    summary: Dict[str, Any] = {
-+        "turns": 0,
-+        "ok_jobs": 0,
-+        "failed_jobs": 0,
-+        "sources": {},
-+        "candidate_count": 0,
-+        "candidate_kinds": {},
-+        "avg_worker_ms": 0.0,
-+        "max_worker_ms": 0.0,
-+        "errors": {},
-+    }
-+    timings: List[float] = []
++def _summarize_performance_budget(
++    *,
++    transcript: List[Dict[str, Any]],
++    background_summary: Dict[str, Any],
++) -> Dict[str, Any]:
++    def avg(values: List[float]) -> float:
++        return round(sum(values) / len(values), 3) if values else 0.0
++
++    manual = []
++    player = []
++    human = []
++    autoplay = []
 +    for row in transcript:
-+        result = _safe_dict(row.get("deferred_advisory_result"))
-+        if not result:
-+            continue
-+        summary["turns"] += 1
-+        if result.get("ok"):
-+            summary["ok_jobs"] += 1
-+        else:
-+            summary["failed_jobs"] += 1
-+        source = _safe_str(result.get("source")) or "unknown"
-+        summary["sources"][source] = int(summary["sources"].get(source) or 0) + 1
-+        ms = float(result.get("worker_ms") or 0.0)
-+        if ms:
-+            timings.append(ms)
-+        candidates = result.get("candidates") if isinstance(result.get("candidates"), list) else []
-+        summary["candidate_count"] += len(candidates)
-+        for candidate in candidates:
-+            kind = _safe_str(_safe_dict(candidate).get("kind")) or "unknown"
-+            summary["candidate_kinds"][kind] = int(summary["candidate_kinds"].get(kind) or 0) + 1
-+        error = _safe_str(result.get("error")) or _safe_str(_safe_dict(result.get("diagnostics")).get("provider_payload_error"))
-+        if error:
-+            summary["errors"][error] = int(summary["errors"].get(error) or 0) + 1
-+    if timings:
-+        summary["avg_worker_ms"] = round(sum(timings) / len(timings), 3)
-+        summary["max_worker_ms"] = round(max(timings), 3)
-+    return summary
-5B. Enqueue advisory job next to deferred narration
++        perf = _safe_dict(row.get("performance"))
++        manual.append(float(perf.get("manual_turn_ms") or 0.0))
++        player.append(float(perf.get("player_agent_ms") or 0.0))
++        human.append(float(perf.get("human_playable_blocking_ms") or perf.get("manual_turn_ms") or 0.0))
++        autoplay.append(float(perf.get("playable_blocking_ms") or 0.0))
++
++    provider_queue = _safe_dict(background_summary.get("provider_queue_summary"))
++    return {
++        "live_blocking": {
++            "avg_manual_turn_ms": avg(manual),
++            "max_manual_turn_ms": round(max(manual), 3) if manual else 0.0,
++            "avg_human_playable_blocking_ms": avg(human),
++            "max_human_playable_blocking_ms": round(max(human), 3) if human else 0.0,
++        },
++        "autoplay_only": {
++            "avg_player_agent_ms": avg(player),
++            "max_player_agent_ms": round(max(player), 3) if player else 0.0,
++            "avg_autoplay_blocking_ms": avg(autoplay),
++            "max_autoplay_blocking_ms": round(max(autoplay), 3) if autoplay else 0.0,
++        },
++        "background_llm": {
++            "total_jobs": background_summary.get("total_jobs"),
++            "narration_jobs": background_summary.get("narration_jobs"),
++            "advisory_jobs": background_summary.get("advisory_jobs"),
++            "combined_background_llm_jobs": background_summary.get("combined_background_llm_jobs"),
++            "background_job_seconds": background_summary.get("background_job_seconds"),
++            "provider_queue_summary": provider_queue,
++            "provider_queue_by_kind": background_summary.get("provider_queue_by_kind") or {},
++        },
++    }
 
-Find:
-
-narration_status = "ready"
-narration_job_id = ""
-
-Patch:
-
---- src/tests/rpg/autoplay_llm_campaign.py
-+++ src/tests/rpg/autoplay_llm_campaign.py
-@@
-         narration = _extract_narration(turn_result)
-         narration_status = "ready"
-         narration_job_id = ""
-+        advisory_status = "disabled"
-+        advisory_job_id = ""
-         if args.narration_mode == "deferred":
-             narration_status = "pending"
-+            advisory_status = "pending"
-             with timed_stage(turn_performance, "background_enqueue_ms"):
-                 narration_job_id = pipeline.submit_deferred_narration(
-@@
-                     turn_contract=turn_result.get("turn_contract") or {},
-                     prefer_provider=True,
-                 )
-+                semantic_action_record = (
-+                    _safe_dict(turn_result.get("semantic_action_v2"))
-+                    or _safe_dict(_safe_dict(turn_result.get("turn_contract")).get("semantic_action_v2"))
-+                    or _safe_dict(_safe_dict(turn_result.get("raw_result")).get("semantic_action_v2"))
-+                    or _safe_dict(_safe_dict(turn_result.get("manual_turn_summary")).get("semantic_action_v2"))
-+                    or {}
-+                )
-+                advisory_job_id = pipeline.submit_deferred_advisory(
-+                    provider=provider,
-+                    session_id=session_id,
-+                    turn_index=turn_index,
-+                    player_action=player_action,
-+                    simulation_state=final_turn_state,
-+                    turn_contract=turn_result.get("turn_contract") or {},
-+                    semantic_action_record=semantic_action_record,
-+                    prefer_provider=True,
-+                )
-             if not narration:
-                 narration = "Narration is being prepared..."
-
-Add fields to transcript record:
+After background summary and metrics are available:
 
 --- src/tests/rpg/autoplay_llm_campaign.py
 +++ src/tests/rpg/autoplay_llm_campaign.py
 @@
-             "narration_status": narration_status,
-             "narration_job_id": narration_job_id,
-+            "deferred_advisory_status": advisory_status,
-+            "deferred_advisory_job_id": advisory_job_id,
-5C. Add summaries after background results attach
-
-After metrics are computed:
-
---- src/tests/rpg/autoplay_llm_campaign.py
-+++ src/tests/rpg/autoplay_llm_campaign.py
-@@
-     metrics["player_agent_trace_summary"] = _summarize_player_agent_trace(transcript)
      metrics["deferred_narration_trace_summary"] = _summarize_deferred_narration_trace(transcript)
-+    metrics["deferred_advisory_trace_summary"] = _summarize_deferred_advisory_trace(transcript)
+     metrics["deferred_advisory_trace_summary"] = _summarize_deferred_advisory_trace(transcript)
++    metrics["performance_budget_summary"] = _summarize_performance_budget(
++        transcript=transcript,
++        background_summary=background_results_summary,
++    )
 
 Add to summary:
 
 --- src/tests/rpg/autoplay_llm_campaign.py
 +++ src/tests/rpg/autoplay_llm_campaign.py
 @@
-     summary["player_agent_trace_summary"] = metrics.get("player_agent_trace_summary") or {}
      summary["deferred_narration_trace_summary"] = metrics.get("deferred_narration_trace_summary") or {}
-+    summary["deferred_advisory_trace_summary"] = metrics.get("deferred_advisory_trace_summary") or {}
-
-If your summary is only built as a dict literal, add:
-
-"deferred_advisory_trace_summary": metrics.get("deferred_advisory_trace_summary") or {},
+     summary["deferred_advisory_trace_summary"] = metrics.get("deferred_advisory_trace_summary") or {}
++    summary["performance_budget_summary"] = metrics.get("performance_budget_summary") or {}
 
 Console output:
 
 --- src/tests/rpg/autoplay_llm_campaign.py
 +++ src/tests/rpg/autoplay_llm_campaign.py
 @@
-     print(f"deferred_narration_provider_missing: {deferred_trace_summary.get('provider_missing')}")
-     print(f"deferred_narration_errors: {deferred_trace_summary.get('errors')}")
-+    deferred_advisory_summary = summary.get("deferred_advisory_trace_summary") or {}
-+    print(f"deferred_advisory_sources: {deferred_advisory_summary.get('sources')}")
-+    print(f"deferred_advisory_candidate_count: {deferred_advisory_summary.get('candidate_count')}")
-+    print(f"deferred_advisory_candidate_kinds: {deferred_advisory_summary.get('candidate_kinds')}")
-+    print(f"deferred_advisory_errors: {deferred_advisory_summary.get('errors')}")
-6. Patch report
+     print(f"deferred_advisory_candidate_kinds: {deferred_advisory_summary.get('candidate_kinds')}")
+     print(f"deferred_advisory_errors: {deferred_advisory_summary.get('errors')}")
++    performance_budget = summary.get("performance_budget_summary") or {}
++    print(f"performance_budget_live_blocking: {performance_budget.get('live_blocking')}")
++    print(f"performance_budget_background_llm: {performance_budget.get('background_llm')}")
+8. Report sections
+
+Patch campaign_report.py.
+
 --- src/tests/rpg/autoplay/campaign_report.py
 +++ src/tests/rpg/autoplay/campaign_report.py
 @@
-         "deferred_narration_trace_summary": _safe_dict(metrics.get("deferred_narration_trace_summary")),
-+        "deferred_advisory_trace_summary": _safe_dict(metrics.get("deferred_advisory_trace_summary")),
+         "deferred_advisory_trace_summary": _safe_dict(metrics.get("deferred_advisory_trace_summary")),
++        "performance_budget_summary": _safe_dict(metrics.get("performance_budget_summary")),
+
+Add details:
+
 --- src/tests/rpg/autoplay/campaign_report.py
 +++ src/tests/rpg/autoplay/campaign_report.py
 @@
      {_render_json_details("Player-agent trace summary JSON", model.get("player_agent_trace_summary") or {})}
      {_render_json_details("Deferred narration trace summary JSON", model.get("deferred_narration_trace_summary") or {})}
-+    {_render_json_details("Deferred advisory trace summary JSON", model.get("deferred_advisory_trace_summary") or {})}
+     {_render_json_details("Deferred advisory trace summary JSON", model.get("deferred_advisory_trace_summary") or {})}
++    {_render_json_details("Performance budget summary JSON", model.get("performance_budget_summary") or {})}
      {_render_json_details("Background job summary JSON", model.get("background_jobs") or {})}
 Tests
-7. Add advisory tests
+9. Add queue + combined job tests
+
+Create:
+
 --- /dev/null
-+++ src/tests/rpg/advisory/test_deferred_advisory_candidates.py
-@@ -0,0 +1,104 @@
-+from app.rpg.advisory.candidates import (
-+    build_deterministic_advisory_candidates,
-+    normalize_advisory_candidates,
++++ src/tests/rpg/autoplay/test_background_llm_consolidation.py
+@@ -0,0 +1,103 @@
++from tests.rpg.autoplay.parallel_pipeline import (
++    _queue_summary,
++    attach_background_results_to_transcript,
 +)
-+from app.rpg.advisory.promotion import promote_advisory_candidates
++from tests.rpg.autoplay_llm_campaign import _summarize_performance_budget
 +
 +
-+def test_normalize_advisory_candidates_flags_authoritative_claims():
-+    candidates = normalize_advisory_candidates(
-+        session_id="s",
-+        turn_index=1,
-+        player_input="I ask Bran about the witness.",
-+        turn_contract={"action": "ask"},
-+        payload={
-+            "relationship_delta_candidates": [
-+                {
-+                    "target": "bran",
-+                    "delta": 1,
-+                    "summary": "Bran trusts the player slightly more.",
-+                    "reward": "100 gold",
-+                }
-+            ]
-+        },
++def test_queue_summary_computes_wait_run_total():
++    summary = _queue_summary(
++        [
++            {"queue_timing": {"queue_wait_ms": 10, "run_ms": 100, "total_ms": 110}},
++            {"queue_timing": {"queue_wait_ms": 30, "run_ms": 300, "total_ms": 330}},
++        ]
 +    )
-+
-+    assert len(candidates) == 1
-+    assert candidates[0]["safety"]["contains_forbidden_authoritative_claim"] is True
-+
-+
-+def test_deterministic_advisory_candidates_are_pending_only():
-+    candidates = build_deterministic_advisory_candidates(
-+        session_id="s",
-+        turn_index=1,
-+        player_input="I inspect the mill.",
-+        turn_contract={"action": "inspect"},
-+        semantic_action_record={"semantic_action_type": "inspect"},
-+    )
-+
-+    assert len(candidates) == 1
-+    assert candidates[0]["status"] == "pending"
-+    assert candidates[0]["kind"] == "semantic_intent"
++    assert summary["count"] == 2
++    assert summary["avg_queue_wait_ms"] == 20.0
++    assert summary["max_run_ms"] == 300.0
 +
 +
-+def test_promotion_gate_accepts_bounded_relationship_candidate_next_turn():
-+    runtime_state = {
-+        "deferred_advisory": {
-+            "candidates": normalize_advisory_candidates(
-+                session_id="s",
-+                turn_index=1,
-+                player_input="I reassure Bran.",
-+                turn_contract={"action": "reassure"},
-+                payload={
-+                    "relationship_delta_candidates": [
-+                        {
-+                            "target": "bran",
-+                            "delta": 1,
-+                            "summary": "Bran is slightly reassured.",
-+                        }
-+                    ]
-+                },
-+            )
-+        }
-+    }
-+    simulation_state = {"npcs": {"bran": {"name": "Bran"}}}
-+
-+    updated, result = promote_advisory_candidates(
-+        simulation_state=simulation_state,
-+        runtime_state=runtime_state,
-+        current_turn=2,
-+    )
-+
-+    assert result["promoted_this_turn"] == 1
-+    assert updated["deferred_advisory"]["accepted"][0]["kind"] == "relationship_delta"
-+
-+
-+def test_promotion_gate_rejects_same_turn_candidate():
-+    runtime_state = {
-+        "deferred_advisory": {
-+            "candidates": build_deterministic_advisory_candidates(
-+                session_id="s",
-+                turn_index=3,
-+                player_input="I inspect.",
-+                turn_contract={"action": "inspect"},
-+            )
-+        }
-+    }
-+
-+    updated, result = promote_advisory_candidates(
-+        simulation_state={},
-+        runtime_state=runtime_state,
-+        current_turn=3,
-+    )
-+
-+    assert result["promoted_this_turn"] == 0
-+    assert updated["deferred_advisory"]["rejected"][0]["reason"] == "not_eligible_until_future_turn"
-+
-+
-+def test_promotion_gate_does_not_mutate_authoritative_state():
-+    simulation_state = {"inventory": {"items": []}, "currency": {"gold": 0}}
-+    runtime_state = {
-+        "deferred_advisory": {
-+            "candidates": normalize_advisory_candidates(
-+                session_id="s",
-+                turn_index=1,
-+                player_input="Give me gold.",
-+                turn_contract={"action": "ask"},
-+                payload={"future_hook_candidates": [{"summary": "Maybe discuss payment later."}]},
-+            )
-+        }
-+    }
-+
-+    original = {"inventory": {"items": []}, "currency": {"gold": 0}}
-+    promote_advisory_candidates(
-+        simulation_state=simulation_state,
-+        runtime_state=runtime_state,
-+        current_turn=2,
-+    )
-+
-+    assert simulation_state == original
-8. Add advisory summary tests
---- /dev/null
-+++ src/tests/rpg/autoplay/test_deferred_advisory_trace_summary.py
-@@ -0,0 +1,31 @@
-+from tests.rpg.autoplay_llm_campaign import _summarize_deferred_advisory_trace
-+
-+
-+def test_summarize_deferred_advisory_trace_counts_sources_and_candidates():
++def test_attach_combined_background_llm_populates_narration_and_advisory_slots():
 +    transcript = [
 +        {
-+            "deferred_advisory_result": {
-+                "ok": True,
-+                "source": "provider_deferred_advisory",
-+                "worker_ms": 1000.0,
-+                "candidates": [
-+                    {"kind": "semantic_intent"},
-+                    {"kind": "memory"},
-+                ],
-+            }
-+        },
-+        {
-+            "deferred_advisory_result": {
-+                "ok": False,
-+                "source": "deferred_advisory_error",
-+                "worker_ms": 3000.0,
-+                "error": "boom",
-+                "candidates": [],
-+            }
-+        },
++            "turn_index": 1,
++            "narration": "pending",
++            "turn_result": {
++                "narration_payload": {"source": "deferred_runtime_narration_pending"}
++            },
++        }
 +    ]
++    result = {
++        "ok": True,
++        "kind": "combined_background_llm",
++        "session_id": "s",
++        "turn_index": 1,
++        "source": "provider_combined_background_llm",
++        "narration": "The tavern quiets.",
++        "npc": {},
++        "narration_payload": {
++            "source": "provider_runtime_narration",
++            "narration": "The tavern quiets.",
++        },
++        "candidate_count": 1,
++        "candidates": [{"kind": "future_hook"}],
++        "advisory_summary": {"total": 1},
++        "worker_ms": 1000.0,
++        "queue_timing": {"queue_wait_ms": 1, "run_ms": 1000, "total_ms": 1001},
++    }
 +
-+    summary = _summarize_deferred_advisory_trace(transcript)
-+    assert summary["turns"] == 2
-+    assert summary["ok_jobs"] == 1
-+    assert summary["failed_jobs"] == 1
-+    assert summary["sources"]["provider_deferred_advisory"] == 1
-+    assert summary["candidate_count"] == 2
-+    assert summary["candidate_kinds"]["memory"] == 1
++    summary = attach_background_results_to_transcript(transcript, [result])
++
++    assert summary["combined_background_llm_jobs"] == 1
++    assert transcript[0]["resolved_narration"] == "The tavern quiets."
++    assert transcript[0]["deferred_narration_result"]["narration_payload"]["source"] == "provider_runtime_narration"
++    assert transcript[0]["deferred_advisory_result"]["candidate_count"] == 1
++    assert transcript[0]["turn_result"]["narration_payload"]["source"] == "deferred_runtime_narration_pending"
++
++
++def test_performance_budget_splits_live_autoplay_and_background():
++    transcript = [
++        {
++            "performance": {
++                "manual_turn_ms": 50.0,
++                "human_playable_blocking_ms": 50.0,
++                "player_agent_ms": 1000.0,
++                "playable_blocking_ms": 1050.0,
++            }
++        }
++    ]
++    background = {
++        "total_jobs": 1,
++        "narration_jobs": 0,
++        "advisory_jobs": 0,
++        "combined_background_llm_jobs": 1,
++        "background_job_seconds": 1.0,
++        "provider_queue_summary": {"avg_queue_wait_ms": 0.0, "avg_run_ms": 1000.0},
++    }
++    summary = _summarize_performance_budget(transcript=transcript, background_summary=background)
++    assert summary["live_blocking"]["avg_human_playable_blocking_ms"] == 50.0
++    assert summary["autoplay_only"]["avg_player_agent_ms"] == 1000.0
++    assert summary["background_llm"]["combined_background_llm_jobs"] == 1
 Validation
-python -m py_compile src\app\rpg\advisory\__init__.py src\app\rpg\advisory\candidates.py src\app\rpg\advisory\promotion.py src\tests\rpg\autoplay\parallel_pipeline.py src\tests\rpg\autoplay_llm_campaign.py src\tests\rpg\autoplay\campaign_report.py
-python -m pytest src\tests\rpg\advisory\test_deferred_advisory_candidates.py src\tests\rpg\autoplay\test_deferred_advisory_trace_summary.py src\tests\rpg\autoplay\test_autoplay_trace_summaries.py src\tests\rpg\autoplay\test_deferred_narration_detection.py src\tests\rpg\autoplay\test_parallel_pipeline.py src\tests\rpg\autoplay\test_autoplay_runner.py src\tests\rpg\autoplay\test_performance.py -q
+
+Compile:
+
+python -m py_compile src\tests\rpg\autoplay\parallel_pipeline.py src\tests\rpg\autoplay_llm_campaign.py src\tests\rpg\autoplay\campaign_report.py src\tests\rpg\autoplay\test_background_llm_consolidation.py
+
+Run tests:
+
+python -m pytest src\tests\rpg\autoplay\test_background_llm_consolidation.py src\tests\rpg\advisory\test_deferred_advisory_candidates.py src\tests\rpg\autoplay\test_deferred_advisory_json_extract.py src\tests\rpg\autoplay\test_deferred_advisory_trace_summary.py src\tests\rpg\autoplay\test_autoplay_trace_summaries.py src\tests\rpg\autoplay\test_deferred_narration_detection.py src\tests\rpg\autoplay\test_parallel_pipeline.py src\tests\rpg\autoplay\test_autoplay_runner.py src\tests\rpg\autoplay\test_performance.py -q
