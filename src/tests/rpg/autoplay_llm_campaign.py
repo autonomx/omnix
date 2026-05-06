@@ -535,6 +535,11 @@ def _summarize_quality_gates(
         background_jobs = _safe_dict(_safe_dict(performance_budget.get("background_llm")))
     player_agent_summary = _safe_dict(summary.get("player_agent_trace_summary"))
     advisory_promotion_summary = _safe_dict(summary.get("deferred_advisory_promotion_summary"))
+    evolution_mutated_authoritative_state = False
+    for row in transcript:
+        evo_result = _safe_dict(_safe_dict(row).get("npc_evolution_consumption_result"))
+        if evo_result.get("mutated_authoritative_state"):
+            evolution_mutated_authoritative_state = True
 
     gates = {
         "avg_human_playable_blocking_under_500ms": float(live.get("avg_human_playable_blocking_ms") or 0.0) < 500.0,
@@ -554,6 +559,9 @@ def _summarize_quality_gates(
         "player_agent_fallback_rate_within_limit": True,
         "deferred_advisory_promotion_did_not_mutate_authoritative_state": (
             not bool(advisory_promotion_summary.get("mutated_authoritative_state"))
+        ),
+        "npc_evolution_consumption_did_not_mutate_authoritative_state": (
+            not evolution_mutated_authoritative_state
         ),
     }
 
@@ -1728,6 +1736,17 @@ def run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
         "player_agent_prompt_budget_summary": _summarize_player_agent_prompt_budget(player_agent_prompt_rows),
         "player_agent_cache_summary": player_agent_cache.summary(),
     }
+    latest_evolution_summary = {}
+    for row in reversed(transcript):
+        latest_evolution_summary = _safe_dict(row.get("npc_evolution_summary"))
+        if latest_evolution_summary:
+            break
+    summary["npc_evolution_summary"] = {
+        "latest": latest_evolution_summary,
+        "signals_created": advisory_promotion_summary.get("evolution_signals_created", 0),
+        "signals_consumed": advisory_promotion_summary.get("evolution_signals_consumed", 0),
+    }
+    metrics["npc_evolution_summary"] = summary["npc_evolution_summary"]
     summary["quality_gate_summary"] = _summarize_quality_gates(
         args=args,
         metrics=metrics,
@@ -1975,6 +1994,7 @@ def main(argv: List[str] | None = None) -> int:
     print(f"player_agent_prompt_budget_summary: {summary.get('player_agent_prompt_budget_summary')}")
     print(f"player_agent_cache_summary: {summary.get('player_agent_cache_summary')}")
     print(f"deferred_advisory_promotion_summary: {summary.get('deferred_advisory_promotion_summary')}")
+    print(f"npc_evolution_summary: {summary.get('npc_evolution_summary')}")
     print(f"quality_gate_summary: {summary.get('quality_gate_summary')}")
 
     warnings = summary.get("health", {}).get("warnings") or []

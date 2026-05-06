@@ -5,6 +5,7 @@ from typing import Any, Dict, List
 
 from app.rpg.advisory.promotion import promote_advisory_candidates
 from app.rpg.advisory.runtime_store import compact_deferred_advisory_runtime_summary
+from app.rpg.npc_evolution.consumer import consume_accepted_advisory_projections
 
 
 def _safe_dict(value: Any) -> Dict[str, Any]:
@@ -16,16 +17,45 @@ def _safe_list(value: Any) -> List[Any]:
 
 
 def _simulation_state_from_row(row: Dict[str, Any]) -> Dict[str, Any]:
-    for key in ("simulation_state", "final_turn_state", "state_snapshot", "state"):
+    for key in ("simulation_state", "final_turn_state", "before_state", "state_snapshot", "state"):
         value = _safe_dict(row.get(key))
         if value:
+            value = deepcopy(value)
+            value.setdefault("turn_contract", _safe_dict(row.get("turn_contract")))
             return value
     turn_result = _safe_dict(row.get("turn_result"))
+    value = _safe_dict(turn_result.get("simulation_state"))
+    if value:
+        value = deepcopy(value)
+        value.setdefault("turn_contract", _safe_dict(row.get("turn_contract") or turn_result.get("turn_contract")))
+        return value
     session = _safe_dict(turn_result.get("session"))
     for key in ("simulation_state", "state"):
         value = _safe_dict(session.get(key))
         if value:
+            value = deepcopy(value)
+            value.setdefault("turn_contract", _safe_dict(row.get("turn_contract") or turn_result.get("turn_contract")))
             return value
+    raw_result = _safe_dict(row.get("raw_result")) or _safe_dict(turn_result.get("raw_result"))
+    raw_session = _safe_dict(raw_result.get("session"))
+    for key in ("simulation_state", "state"):
+        value = _safe_dict(raw_session.get(key))
+        if value:
+            value = deepcopy(value)
+            value.setdefault("turn_contract", _safe_dict(row.get("turn_contract") or turn_result.get("turn_contract")))
+            return value
+    result_session = _safe_dict(_safe_dict(turn_result.get("result")).get("session"))
+    for key in ("simulation_state", "state"):
+        value = _safe_dict(result_session.get(key))
+        if value:
+            value = deepcopy(value)
+            value.setdefault("turn_contract", _safe_dict(row.get("turn_contract") or turn_result.get("turn_contract")))
+            return value
+    story_hook_state = _safe_dict(_safe_dict(row.get("story_hook_result")).get("simulation_state"))
+    if story_hook_state:
+        story_hook_state = deepcopy(story_hook_state)
+        story_hook_state.setdefault("turn_contract", _safe_dict(row.get("turn_contract") or turn_result.get("turn_contract")))
+        return story_hook_state
     return {}
 
 
@@ -115,6 +145,8 @@ def run_deferred_advisory_promotions_for_transcript(
     accepted = 0
     rejected = 0
     pending = 0
+    evolution_signals_created = 0
+    evolution_signals_consumed = 0
 
     # Carry advisory runtime state forward across rows so turn N candidates can
     # be promoted on turn N+1.
@@ -160,6 +192,33 @@ def run_deferred_advisory_promotions_for_transcript(
         row["runtime_state"] = updated_runtime_state
         row["deferred_advisory_promotion_result"] = result
         row["deferred_advisory_runtime_summary"] = compact_deferred_advisory_runtime_summary(updated_runtime_state)
+        updated_runtime_state, evolution_result = consume_accepted_advisory_projections(
+            runtime_state=updated_runtime_state,
+            simulation_state=simulation_state_before,
+            turn_index=turn_index,
+        )
+        evolution_result["simulation_state_keys"] = sorted(list(simulation_state_before.keys()))[:80]
+        npc_progression_state = _safe_dict(simulation_state_before.get("npc_progression_state"))
+        scene = _safe_dict(simulation_state_before.get("scene"))
+        contract = _safe_dict(simulation_state_before.get("turn_contract"))
+        resolved_action_location = _safe_dict(
+            _safe_dict(_safe_dict(contract.get("resolved_action")).get("location_state")).get("current_location")
+        )
+        evolution_result["simulation_npc_count"] = len(
+            _safe_dict(simulation_state_before.get("npcs"))
+            or _safe_dict(npc_progression_state.get("npcs"))
+        )
+        evolution_result["simulation_present_npc_count"] = len(
+            _safe_list(simulation_state_before.get("present_npcs"))
+            or _safe_list(simulation_state_before.get("nearby_npcs"))
+            or _safe_list(scene.get("nearby_npcs"))
+            or _safe_list(resolved_action_location.get("present_npcs"))
+        )
+        row["runtime_state"] = updated_runtime_state
+        row["npc_evolution_consumption_result"] = evolution_result
+        row["npc_evolution_summary"] = evolution_result.get("summary") or {}
+        evolution_signals_created += int(evolution_result.get("signals_created") or 0)
+        evolution_signals_consumed += int(evolution_result.get("signals_consumed") or 0)
         carried_runtime_state = updated_runtime_state
         promotion_results.append(
             {
@@ -167,6 +226,9 @@ def run_deferred_advisory_promotions_for_transcript(
                 "promoted_this_turn": result.get("promoted_this_turn"),
                 "decision_count": len(decisions),
                 "mutated_authoritative_state": mutated_authoritative_state,
+                "evolution_signals_created": evolution_result.get("signals_created"),
+                "evolution_signals_consumed": evolution_result.get("signals_consumed"),
+                "npc_evolution_summary": evolution_result.get("summary") or {},
             }
         )
 
@@ -176,6 +238,8 @@ def run_deferred_advisory_promotions_for_transcript(
         "accepted": accepted,
         "rejected": rejected,
         "pending": pending,
+        "evolution_signals_created": evolution_signals_created,
+        "evolution_signals_consumed": evolution_signals_consumed,
         "results": promotion_results,
         "mutated_authoritative_state": any(item.get("mutated_authoritative_state") for item in promotion_results),
     }
