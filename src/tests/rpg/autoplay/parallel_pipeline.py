@@ -311,7 +311,21 @@ def _extract_nested_combined_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
             payload = nested
             break
 
-    normalized: Dict[str, Any] = {}
+    normalized: Dict[str, Any] = dict(payload)
+
+    # Preserve the exact combined schema when the model already returned it.
+    # Latest artifact showed LM Studio returned all expected keys directly, but
+    # the useful-content check still rejected it. Keep these fields explicit.
+    if "narration" in payload and isinstance(payload.get("narration"), str):
+        normalized["narration"] = payload.get("narration")
+    if "action" in payload and isinstance(payload.get("action"), str):
+        normalized["action"] = payload.get("action")
+    if "npc" in payload and isinstance(payload.get("npc"), dict):
+        normalized["npc"] = payload.get("npc")
+    if "reward" in payload and isinstance(payload.get("reward"), str):
+        normalized["reward"] = payload.get("reward")
+    if "followup_hooks" in payload:
+        normalized["followup_hooks"] = _normalize_followup_hooks(payload.get("followup_hooks"))
 
     narration_payload = _safe_dict(
         payload.get("narration_payload")
@@ -337,9 +351,8 @@ def _extract_nested_combined_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
         normalized["npc"] = _safe_dict(narration_payload.get("npc") or payload.get("npc"))
         normalized["reward"] = _safe_str(narration_payload.get("reward") or payload.get("reward"))
         normalized["followup_hooks"] = (
-            narration_payload.get("followup_hooks")
-            if isinstance(narration_payload.get("followup_hooks"), list)
-            else payload.get("followup_hooks") if isinstance(payload.get("followup_hooks"), list) else []
+            _normalize_followup_hooks(narration_payload.get("followup_hooks"))
+            or _normalize_followup_hooks(payload.get("followup_hooks"))
         )
 
     advisory_payload = _safe_dict(
@@ -367,6 +380,8 @@ def _extract_nested_combined_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
 def _combined_payload_has_useful_content(payload: Dict[str, Any]) -> bool:
     payload = _safe_dict(payload)
     return bool(
+        _has_expected_combined_provider_keys(payload)
+        or
         _safe_str(payload.get("narration"))
         or _safe_str(payload.get("action"))
         or _safe_dict(payload.get("npc"))
@@ -516,7 +531,10 @@ def _build_combined_background_payload(
         parsed = _extract_json_object_from_text(content)
         if isinstance(parsed, dict):
             normalized = _extract_nested_combined_payload(parsed)
-            if _combined_payload_has_useful_content(normalized):
+            if (
+                _combined_payload_has_useful_content(normalized)
+                or _has_expected_combined_provider_keys(parsed)
+            ):
                 normalized["ok"] = True
                 normalized.setdefault("raw_provider_shape_keys", sorted(list(parsed.keys()))[:80])
                 return normalized
@@ -678,9 +696,12 @@ def _combined_background_llm_job(
                 if isinstance(provider_payload.get("raw_provider_shape_keys"), list)
                 else []
             )
-            if not provider_payload.get("ok"):
+            if provider_payload.get("ok"):
+                source = "provider_combined_background_llm"
+            else:
                 source = "combined_background_llm_fallback"
         else:
+            diagnostics["provider_payload_error"] = "provider_missing_or_not_preferred"
             source = "combined_background_llm_fallback"
 
         if source == "provider_combined_background_llm":
@@ -691,9 +712,7 @@ def _combined_background_llm_job(
                 "action": _safe_str(provider_payload.get("action")) or "The action has been resolved.",
                 "npc": _safe_dict(provider_payload.get("npc")),
                 "reward": _safe_str(provider_payload.get("reward")),
-                "followup_hooks": provider_payload.get("followup_hooks")
-                if isinstance(provider_payload.get("followup_hooks"), list)
-                else [],
+                "followup_hooks": _normalize_followup_hooks(provider_payload.get("followup_hooks")),
             }
             candidates = normalize_advisory_candidates(
                 session_id=session_id,
