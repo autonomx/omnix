@@ -146,3 +146,90 @@ def test_promotion_gate_does_not_mutate_authoritative_state():
     )
 
     assert simulation_state == original
+
+
+def test_promotion_grounds_relationship_target_role_alias_to_present_npc():
+    candidates = normalize_advisory_candidates(
+        session_id="s",
+        turn_index=1,
+        player_input="I thank the innkeeper.",
+        turn_contract={"player_input": "I thank the innkeeper."},
+        payload={
+            "relationship_delta_candidates": [
+                {
+                    "target": "innkeeper",
+                    "axis": "trust",
+                    "delta": 1,
+                    "summary": "The innkeeper warms slightly.",
+                }
+            ]
+        },
+    )
+    runtime_state = {
+        "deferred_advisory": {
+            "candidates": candidates,
+            "accepted": [],
+            "rejected": [],
+        }
+    }
+    simulation_state = {
+        "scene": {"nearby_npcs": ["Bran"]},
+        "npc_progression_state": {
+            "npcs": {"Bran": {"name": "Bran", "role": "innkeeper"}}
+        },
+    }
+
+    updated, result = promote_advisory_candidates(
+        simulation_state=simulation_state,
+        runtime_state=runtime_state,
+        current_turn=2,
+    )
+
+    assert result["promoted_this_turn"] == 1
+    accepted = updated["deferred_advisory"]["accepted"][0]
+    assert accepted["kind"] == "relationship_delta"
+    assert accepted["projection"]["payload"]["target"] == "Bran"
+    assert accepted["target_grounding"]["reason"] in {
+        "explicit_role_alias",
+        "role_alias_mentioned_in_projection_text",
+        "single_present_npc",
+    }
+
+
+def test_promotion_grounds_relationship_target_prefixed_id_to_canonical_npc():
+    candidates = normalize_advisory_candidates(
+        session_id="s",
+        turn_index=1,
+        player_input="I reassure Bran.",
+        turn_contract={"player_input": "I reassure Bran."},
+        payload={
+            "relationship_delta_candidates": [
+                {
+                    "target": "npc:bran",
+                    "axis": "trust",
+                    "delta": 1,
+                    "summary": "Bran is reassured.",
+                }
+            ]
+        },
+    )
+    runtime_state = {
+        "deferred_advisory": {
+            "candidates": candidates,
+            "accepted": [],
+            "rejected": [],
+        }
+    }
+    simulation_state = {
+        "scene": {"nearby_npcs": ["npc:bran"]},
+        "npc_progression_state": {"npcs": {"Bran": {"name": "Bran"}}},
+    }
+
+    updated, result = promote_advisory_candidates(
+        simulation_state=simulation_state,
+        runtime_state=runtime_state,
+        current_turn=2,
+    )
+
+    assert result["promoted_this_turn"] == 1
+    assert updated["deferred_advisory"]["accepted"][0]["projection"]["payload"]["target"] == "Bran"

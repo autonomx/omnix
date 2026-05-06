@@ -90,6 +90,10 @@ def _safe_dict(value: Any) -> Dict[str, Any]:
     return value if isinstance(value, dict) else {}
 
 
+def _safe_list(value: Any) -> List[Any]:
+    return value if isinstance(value, list) else []
+
+
 def _autoplay_report_action_type(player_action: str) -> str:
     text = " ".join(str(player_action or "").lower().strip().split())
     if any(word in text for word in ["ask", "talk", "tell", "speak", "question", "report", "explain", "share", "approach"]):
@@ -484,6 +488,51 @@ def _summarize_combined_quality_shape(transcript: List[Dict[str, Any]]) -> Dict[
         "min_candidate_count": min(candidate_counts) if candidate_counts else 0,
         "candidate_kinds": candidate_kinds,
     }
+
+
+def _summarize_promotion_target_grounding(transcript: List[Dict[str, Any]]) -> Dict[str, Any]:
+    summary: Dict[str, Any] = {
+        "grounded": 0,
+        "ungrounded": 0,
+        "by_reason": {},
+        "relationship_accepted": 0,
+        "relationship_rejected": 0,
+        "examples": [],
+    }
+    for row in transcript:
+        result = _safe_dict(row.get("deferred_advisory_promotion_result"))
+        for decision in result.get("decisions") if isinstance(result.get("decisions"), list) else []:
+            decision = _safe_dict(decision)
+            grounding = _safe_dict(decision.get("target_grounding"))
+            if not grounding:
+                continue
+            reason = _safe_str(grounding.get("reason")) or "unknown"
+            summary["by_reason"][reason] = int(summary["by_reason"].get(reason) or 0) + 1
+            if grounding.get("grounded"):
+                summary["grounded"] += 1
+            else:
+                summary["ungrounded"] += 1
+            if len(summary["examples"]) < 5:
+                summary["examples"].append(
+                    {
+                        "turn_index": row.get("turn_index"),
+                        "candidate_id": decision.get("candidate_id"),
+                        "status": decision.get("status"),
+                        "reason": decision.get("reason"),
+                        "target_grounding": grounding,
+                    }
+                )
+
+        runtime_state = _safe_dict(row.get("runtime_state"))
+        accepted = _safe_list(_safe_dict(runtime_state.get("deferred_advisory")).get("accepted"))
+        rejected = _safe_list(_safe_dict(runtime_state.get("deferred_advisory")).get("rejected"))
+        summary["relationship_accepted"] += sum(
+            1 for item in accepted if _safe_dict(item).get("kind") == "relationship_delta"
+        )
+        summary["relationship_rejected"] += sum(
+            1 for item in rejected if _safe_dict(item).get("kind") == "relationship_delta"
+        )
+    return summary
 
 
 def _summarize_player_agent_prompt_budget(rows: List[Dict[str, Any]]) -> Dict[str, Any]:
@@ -1751,6 +1800,8 @@ def run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
         "signals_created": advisory_promotion_summary.get("evolution_signals_created", 0),
         "signals_consumed": advisory_promotion_summary.get("evolution_signals_consumed", 0),
     }
+    summary["promotion_target_grounding_summary"] = _summarize_promotion_target_grounding(transcript)
+    metrics["promotion_target_grounding_summary"] = summary["promotion_target_grounding_summary"]
     summary["npc_evolution_profile_persistence_summary"] = (
         advisory_promotion_summary.get("profile_persist_result") or {}
     )
@@ -2005,6 +2056,7 @@ def main(argv: List[str] | None = None) -> int:
     print(f"deferred_advisory_promotion_summary: {summary.get('deferred_advisory_promotion_summary')}")
     print(f"npc_evolution_summary: {summary.get('npc_evolution_summary')}")
     print(f"npc_evolution_profile_persistence_summary: {summary.get('npc_evolution_profile_persistence_summary')}")
+    print(f"promotion_target_grounding_summary: {summary.get('promotion_target_grounding_summary')}")
     print(f"quality_gate_summary: {summary.get('quality_gate_summary')}")
 
     warnings = summary.get("health", {}).get("warnings") or []

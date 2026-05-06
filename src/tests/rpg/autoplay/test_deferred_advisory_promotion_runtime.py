@@ -214,3 +214,59 @@ def test_promotion_runtime_extracts_nested_turn_result_simulation_state_for_evol
     assert result["evolution_signals_created"] >= 1
     assert result["evolution_signals_consumed"] >= 1
     assert transcript[1]["npc_evolution_summary"]["arcs_by_npc"] == ["bran"]
+
+
+def test_promotion_runtime_relationship_delta_advances_npc_arc_axis_after_grounding():
+    candidates = normalize_advisory_candidates(
+        session_id="s",
+        turn_index=1,
+        player_input="I thank the innkeeper.",
+        turn_contract={"player_input": "I thank the innkeeper."},
+        payload={
+            "relationship_delta_candidates": [
+                {
+                    "target": "innkeeper",
+                    "axis": "trust",
+                    "delta": 1,
+                    "summary": "The innkeeper trusts the player slightly more.",
+                }
+            ]
+        },
+    )
+    transcript = [
+        {
+            "turn_index": 1,
+            "runtime_state": {
+                "deferred_advisory": {
+                    "candidates": candidates,
+                    "accepted": [],
+                    "rejected": [],
+                }
+            },
+            "turn_result": {
+                "simulation_state": {
+                    "scene": {"nearby_npcs": ["Bran"]},
+                    "npc_progression_state": {
+                        "npcs": {"Bran": {"name": "Bran", "role": "innkeeper"}}
+                    },
+                }
+            },
+        },
+        {
+            "turn_index": 2,
+            "turn_result": {
+                "simulation_state": {
+                    "scene": {"nearby_npcs": ["Bran"]},
+                    "npc_progression_state": {
+                        "npcs": {"Bran": {"name": "Bran", "role": "innkeeper"}}
+                    },
+                }
+            },
+        },
+    ]
+
+    result = run_deferred_advisory_promotions_for_transcript(transcript=transcript)
+
+    assert result["accepted"] >= 1
+    arc = transcript[1]["runtime_state"]["npc_evolution"]["arcs"]["Bran"]
+    assert arc["axes"]["trust"] >= 1
