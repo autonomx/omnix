@@ -29,6 +29,12 @@ from tests.rpg.autoplay.report_sections import (
     summarize_quests_for_report,
     summarize_story_beats_for_report,
 )
+from tests.rpg.autoplay.hundred_turn_eval import (
+    summarize_action_diversity,
+    summarize_hundred_turn_eval,
+    summarize_long_run_warnings,
+    summarize_progress_timeline,
+)
 from app.rpg.campaign_journal_runtime import advance_campaign_journal_for_turn
 from app.rpg.quest_progress import ensure_quest_runtime_state
 from tests.rpg.autoplay.base_runtime_response import (
@@ -925,6 +931,12 @@ def _summarize_quality_gates(
     scenario_seed = _safe_str(getattr(args, "scenario_seed", ""))
     manual_turn_error_summary = _safe_dict(summary.get("manual_turn_error_summary"))
     console_log_summary = _safe_dict(summary.get("console_log_summary"))
+    action_diversity_summary = _safe_dict(summary.get("action_diversity_summary"))
+    progress_timeline_summary = _safe_dict(summary.get("progress_timeline_summary"))
+    long_run_warning_summary = _safe_dict(summary.get("long_run_warning_summary"))
+    hundred_turn_eval_summary = _safe_dict(summary.get("hundred_turn_eval_summary"))
+    strict_eval_turns = int(getattr(args, "strict_eval_turns", 100) or 100)
+    strict_100_turn_mode = len(transcript if isinstance(transcript, list) else []) >= strict_eval_turns
     evolution_mutated_authoritative_state = False
     for row in transcript:
         evo_result = _safe_dict(_safe_dict(row).get("npc_evolution_consumption_result"))
@@ -1001,6 +1013,28 @@ def _summarize_quality_gates(
         "console_log_captured_when_enabled": (
             not getattr(args, "capture_console_log", True)
             or int(console_log_summary.get("line_count") or 0) > 0
+        ),
+        "long_run_warnings_ok": (
+            not long_run_warning_summary
+            or bool(long_run_warning_summary.get("ok", True))
+        ),
+        "hundred_turn_eval_ok": (
+            not hundred_turn_eval_summary
+            or bool(hundred_turn_eval_summary.get("ok", True))
+        ),
+        "strict_100turn_meaningful_progress_rate_ok": (
+            not strict_100_turn_mode
+            or float(progress_timeline_summary.get("meaningful_progress_rate") or 0.0) >= 0.15
+        ),
+        "strict_100turn_repeat_semantic_target_streak_ok": (
+            not strict_100_turn_mode
+            or int(_safe_dict(action_diversity_summary.get("max_same_semantic_target_streak")).get("streak") or 0)
+            <= int(getattr(args, "max_100turn_repeat_semantic_target_streak", 8) or 8)
+        ),
+        "strict_100turn_no_progress_streak_ok": (
+            not strict_100_turn_mode
+            or int(progress_timeline_summary.get("max_no_progress_streak") or 0)
+            <= int(getattr(args, "max_100turn_no_progress_streak", 10) or 10)
         ),
     }
 
@@ -2470,9 +2504,28 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
         console_log_text = console_log_path.read_text(encoding="utf-8", errors="replace")
     summary["console_log_summary"] = summarize_console_log(console_log_text)
     summary["console_log_summary"]["path"] = str(console_log_path)
+    summary["action_diversity_summary"] = summarize_action_diversity(transcript)
+    summary["progress_timeline_summary"] = summarize_progress_timeline(transcript)
+    summary["long_run_warning_summary"] = summarize_long_run_warnings(
+        transcript=transcript,
+        action_diversity_summary=summary["action_diversity_summary"],
+        progress_timeline_summary=summary["progress_timeline_summary"],
+        console_log_summary=summary["console_log_summary"],
+        manual_turn_error_summary=summary["manual_turn_error_summary"],
+        turns_for_strict_gates=int(args.strict_eval_turns),
+    )
+    summary["hundred_turn_eval_summary"] = summarize_hundred_turn_eval(
+        transcript=transcript,
+        summary=summary,
+        turns_for_strict_gates=int(args.strict_eval_turns),
+    )
     metrics["story_beat_summary"] = summary["story_beat_summary"]
     metrics["manual_turn_error_summary"] = summary["manual_turn_error_summary"]
     metrics["console_log_summary"] = summary["console_log_summary"]
+    metrics["action_diversity_summary"] = summary["action_diversity_summary"]
+    metrics["progress_timeline_summary"] = summary["progress_timeline_summary"]
+    metrics["long_run_warning_summary"] = summary["long_run_warning_summary"]
+    metrics["hundred_turn_eval_summary"] = summary["hundred_turn_eval_summary"]
     if int(summary["quest_progress_summary"].get("quest_count") or 0) == 0:
         story_arc_view = _safe_dict(summary.get("story_arc_view") or metrics.get("story_arc_view"))
         if story_arc_view:
@@ -2720,6 +2773,24 @@ def build_arg_parser() -> argparse.ArgumentParser:
         default=250000,
         help="Maximum console log characters retained in console-log.txt/report summary.",
     )
+    parser.add_argument(
+        "--strict-eval-turns",
+        type=int,
+        default=100,
+        help="Turn count at which long-run/100-turn quality gates become strict errors.",
+    )
+    parser.add_argument(
+        "--max-100turn-no-progress-streak",
+        type=int,
+        default=10,
+        help="Maximum no-progress streak allowed in strict 100-turn evaluation.",
+    )
+    parser.add_argument(
+        "--max-100turn-repeat-semantic-target-streak",
+        type=int,
+        default=8,
+        help="Maximum repeated semantic action/target streak allowed in strict 100-turn evaluation.",
+    )
     return parser
 
 
@@ -2818,6 +2889,10 @@ def main(argv: List[str] | None = None) -> int:
     print(f"player_journal_quality_summary: {summary.get('player_journal_quality_summary')}")
     print(f"manual_turn_error_summary: {summary.get('manual_turn_error_summary')}")
     print(f"console_log_summary: {summary.get('console_log_summary')}")
+    print(f"action_diversity_summary: {summary.get('action_diversity_summary')}")
+    print(f"progress_timeline_summary: {summary.get('progress_timeline_summary')}")
+    print(f"long_run_warning_summary: {summary.get('long_run_warning_summary')}")
+    print(f"hundred_turn_eval_summary: {summary.get('hundred_turn_eval_summary')}")
     print(f"Wrote console log to: {Path(args.output_dir) / 'console-log.txt'}")
     print(f"promotion_target_grounding_summary: {summary.get('promotion_target_grounding_summary')}")
     print(f"quality_gate_summary: {summary.get('quality_gate_summary')}")

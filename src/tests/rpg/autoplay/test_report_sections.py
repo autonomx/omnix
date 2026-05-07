@@ -454,3 +454,65 @@ def test_report_renders_journal_multiline_sections():
     assert "What I did:" in html
     assert "What I learned:" in html
     assert "Next:" in html
+
+
+def test_report_renders_hundred_turn_eval_sections():
+    from tests.rpg.autoplay.campaign_report import render_campaign_report_html
+
+    html = render_campaign_report_html(
+        {
+            "summary": {
+                "campaign_calendar_summary": {"turns_tracked": 8, "end": {}},
+                "player_journal_summary": {"entry_count": 2, "entries": []},
+                "quest_progress_summary": {"quest_count": 1, "quests": []},
+                "npc_evolution_report_summary": {"npc_count": 1, "cards": []},
+                "hundred_turn_eval_summary": {
+                    "ok": True,
+                    "turn_count": 8,
+                    "readiness": "smoke",
+                },
+                "action_diversity_summary": {
+                    "unique_action_count": 4,
+                    "unique_semantic_action_count": 2,
+                    "unique_target_count": 1,
+                    "top_semantic_actions": [["ask", 4]],
+                    "top_semantic_targets": [["ask:Bran", 4]],
+                    "max_same_semantic_target_streak": {"value": "ask:Bran", "streak": 2},
+                },
+                "progress_timeline_summary": {
+                    "turns": 8,
+                    "meaningful_progress_turns": 6,
+                    "meaningful_progress_rate": 0.75,
+                    "story_beat_turns": 8,
+                    "story_beat_rate": 1.0,
+                    "max_no_progress_streak": 1,
+                    "timeline": [
+                        {
+                            "turn_index": 1,
+                            "semantic_action": "ask",
+                            "target": "Bran",
+                            "location": "Tavern",
+                            "meaningful_progress": True,
+                            "story_beat": True,
+                            "noop": False,
+                            "reason": "",
+                        }
+                    ],
+                },
+                "long_run_warning_summary": {
+                    "ok": True,
+                    "warnings": [],
+                },
+            },
+            "metrics": {},
+            "transcript": [],
+        }
+    )
+
+    assert 'id="hundred-turn-eval"' in html
+    assert 'id="action-diversity"' in html
+    assert 'id="progress-timeline"' in html
+    assert "100-Turn Evaluation" in html
+    assert "Action Diversity" in html
+    assert "Progress Timeline" in html
+    assert 'href="#hundred-turn-eval"' in html
