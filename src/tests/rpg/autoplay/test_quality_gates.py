@@ -523,3 +523,22 @@ def test_player_journal_quality_flags_internal_codes():
     assert result["ok"] is False
     assert result["violation_count"] == 1
     assert "target_not_found" in result["violations"][0]["tokens"]
+
+
+def test_player_journal_quality_flags_punctuation_and_missing_sections():
+    summary = {
+        "player_journal_summary": {
+            "entries": [
+                {
+                    "entry_id": "journal:turn:4",
+                    "text": "I asked Bran.. Something happened.;",
+                }
+            ]
+        }
+    }
+
+    result = _summarize_player_journal_quality(summary)
+
+    assert result["ok"] is False
+    assert result["punctuation_violation_count"] == 1
+    assert result["missing_section_count"] == 1

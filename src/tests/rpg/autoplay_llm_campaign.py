@@ -832,9 +832,16 @@ JOURNAL_FORBIDDEN_TOKENS = (
     "target_not_found",
     "no_supported_semantic_action_detected",
     "talk_handled_by_conversation_runtime",
+    "service_not_available",
+    "action_unhandled",
     "semantic_action_unsupported",
     "unsupported_action",
-    "action_unhandled",
+    "unknown_action",
+    "no_effect",
+    "no_op",
+    "noop",
+    "gold? or trouble",
+    ".gold?",
 )
 
 
@@ -842,6 +849,8 @@ def _summarize_player_journal_quality(summary: Dict[str, Any]) -> Dict[str, Any]
     journal = _safe_dict(summary.get("player_journal_summary"))
     entries = _safe_list(journal.get("entries"))
     violations: List[Dict[str, Any]] = []
+    punctuation_violations: List[Dict[str, Any]] = []
+    missing_section_entries: List[Dict[str, Any]] = []
     for entry in entries:
         entry = _safe_dict(entry)
         text = _safe_str(entry.get("text"))
@@ -855,11 +864,38 @@ def _summarize_player_journal_quality(summary: Dict[str, Any]) -> Dict[str, Any]
                     "text": text[:500],
                 }
             )
+        if (
+            ".." in text
+            or ";." in text
+            or ".;" in text
+            or "\n." in text
+            or text.strip().startswith((".", ";", ",", "?", "!"))
+            or ".gold?" in lower
+            or "gold? or trouble" in lower
+        ):
+            punctuation_violations.append(
+                {
+                    "entry_id": entry.get("entry_id"),
+                    "text": text[:500],
+                }
+            )
+        if text and "What I did:" not in text:
+            missing_section_entries.append(
+                {
+                    "entry_id": entry.get("entry_id"),
+                    "missing": "What I did",
+                    "text": text[:500],
+                }
+            )
     return {
-        "ok": not violations,
+        "ok": not violations and not punctuation_violations and not missing_section_entries,
         "entry_count": len(entries),
         "violation_count": len(violations),
+        "punctuation_violation_count": len(punctuation_violations),
+        "missing_section_count": len(missing_section_entries),
         "violations": violations[:20],
+        "punctuation_violations": punctuation_violations[:20],
+        "missing_section_entries": missing_section_entries[:20],
     }
 
 
@@ -1202,6 +1238,44 @@ def _resolve_turn_contract_for_report(
         or _safe_dict(base_response_payload.get("turn_contract"))
         or {}
     )
+
+
+def _journal_turn_result_with_narration_sources(
+    *,
+    turn_result: Dict[str, Any],
+    combined_background_result: Dict[str, Any],
+    resolved_narration_payload: Dict[str, Any],
+    narration_text: str = "",
+) -> Dict[str, Any]:
+    """Return a turn_result-shaped payload enriched with presentation-only
+    narration fields so deterministic journal generation has readable prose.
+
+    This does not mutate authoritative state.
+    """
+    out = dict(_safe_dict(turn_result))
+    combined = _safe_dict(combined_background_result)
+    resolved = _safe_dict(resolved_narration_payload)
+
+    if combined:
+        out["combined_background_llm_result"] = combined
+    if resolved:
+        out["resolved_narration_payload"] = resolved
+    if narration_text:
+        out["narration"] = _safe_str(narration_text)
+
+    narration_payload = (
+        _safe_dict(out.get("narration_payload"))
+        or _safe_dict(resolved)
+        or _safe_dict(combined.get("narration_payload"))
+    )
+    if not narration_payload and _safe_str(combined.get("narration")):
+        narration_payload = {
+            "narration": _safe_str(combined.get("narration")),
+            "npc": _safe_dict(combined.get("npc")),
+        }
+    if narration_payload:
+        out["narration_payload"] = narration_payload
+    return out
 
 
 def _merge_unique_dict_list(
@@ -1590,6 +1664,9 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
         }
         background_runtime_state: Dict[str, Any] = {}
         resolved_turn_contract: Dict[str, Any] = {}
+        resolved_narration_payload: Dict[str, Any] = {}
+        combined_background_result: Dict[str, Any] = {}
+        journal_narration_text = ""
         # The previous turn's committed state is the only valid baseline.
         # Never derive the next before_state from manual session reloads.
         expected_baseline_state = deepcopy(last_committed_state)
@@ -1918,12 +1995,18 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
             runtime_state=runtime_state,
             scenario_seed=_safe_str(args.scenario_seed),
         )
+        journal_turn_result = _journal_turn_result_with_narration_sources(
+            turn_result=turn_result,
+            combined_background_result=combined_background_result,
+            resolved_narration_payload=resolved_narration_payload,
+            narration_text=journal_narration_text,
+        )
         runtime_state = advance_campaign_journal_for_turn(
             runtime_state=runtime_state,
             turn_index=turn_index,
             player_input=player_action,
             turn_contract=resolved_turn_contract,
-            turn_result=turn_result,
+            turn_result=journal_turn_result,
             minutes_per_turn=int(args.campaign_minutes_per_turn),
             journal_every_turns=int(args.journal_every_turns),
         )
@@ -2091,6 +2174,37 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
 
     background_results = pipeline.drain()
     background_results_summary = attach_background_results_to_transcript(transcript, background_results)
+
+    # If combined results are attached after journal advancement, refresh journal entries with narration.
+    for record in transcript:
+        combined_background_result = _safe_dict(record.get("combined_background_llm_result"))
+        if combined_background_result:
+            record["combined_background_llm_result"] = combined_background_result
+
+            # If the turn just wrote a journal entry, refresh that entry with
+            # the now-available presentation narration. This is deterministic
+            # and only rewrites the same journal:turn:N text from known facts.
+            runtime_state = _safe_dict(record.get("runtime_state"))
+            journal = _safe_dict(runtime_state.get("player_journal"))
+            entries = _safe_list(journal.get("entries"))
+            entry_id = f"journal:turn:{record.get('turn_index')}"
+            for entry in entries:
+                entry = _safe_dict(entry)
+                if _safe_str(entry.get("entry_id")) != entry_id:
+                    continue
+                refreshed_turn_result = _journal_turn_result_with_narration_sources(
+                    turn_result=_safe_dict(record.get("turn_result")),
+                    combined_background_result=combined_background_result,
+                    resolved_narration_payload=_safe_dict(record.get("resolved_narration_payload")),
+                    narration_text=_safe_str(combined_background_result.get("narration")),
+                )
+                # Rebuild one-entry text using accumulated pending snapshots if
+                # present; otherwise only replace result text by appending a
+                # clean narration line to the existing entry.
+                clean_narration = _safe_str(combined_background_result.get("narration"))
+                if clean_narration and clean_narration not in _safe_str(entry.get("text")):
+                    entry["text"] = _safe_str(entry.get("text")).rstrip() + "\nWhat changed: " + clean_narration
+                break
     advisory_promotion_summary = {"ok": True, "enabled": False}
     if args.deferred_advisory_promotion == "on":
         advisory_promotion_summary = run_deferred_advisory_promotions_for_transcript(
