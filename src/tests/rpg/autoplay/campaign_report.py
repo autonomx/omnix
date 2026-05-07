@@ -1263,13 +1263,7 @@ def _render_quest_progress(summary: Dict[str, Any]) -> str:
     if not quests:
         return '<section id="quest-progress"><h2>Quest Progress</h2><p>No quest records found in this run.</p></section>'
     rows = "".join(
-        "<tr>"
-        f"<td>{_esc(str(_safe_dict(quest).get('title') or _safe_dict(quest).get('quest_id')))}</td>"
-        f"<td>{_esc(str(_safe_dict(quest).get('status') or 'unknown'))}</td>"
-        f"<td>{_esc(str(_safe_dict(quest).get('progress') or ''))}</td>"
-        f"<td>{_esc(str(_safe_dict(quest).get('giver') or ''))}</td>"
-        f"<td>{_esc(str(_safe_dict(quest).get('location') or ''))}</td>"
-        "</tr>"
+        _render_quest_row(_safe_dict(quest))
         for quest in quests
     )
     return f"""
@@ -1285,6 +1279,33 @@ def _render_quest_progress(summary: Dict[str, Any]) -> str:
       </table>
     </section>
     """
+
+
+def _render_quest_row(quest: Dict[str, Any]) -> str:
+    objectives = quest.get("objectives") if isinstance(quest.get("objectives"), list) else []
+    objective_html = ""
+    if objectives:
+        objective_html = "<ul>" + "".join(
+            "<li>"
+            + _esc(
+                f"{'✓' if _safe_dict(obj).get('completed') else '•'} "
+                f"{_safe_dict(obj).get('summary') or _safe_dict(obj).get('title') or _safe_dict(obj).get('name')}"
+            )
+            + "</li>"
+            for obj in objectives[:8]
+        ) + "</ul>"
+    progress = _esc(str(quest.get("progress") or ""))
+    if objective_html:
+        progress = progress + objective_html
+    return (
+        "<tr>"
+        f"<td>{_esc(str(quest.get('title') or quest.get('quest_id')))}</td>"
+        f"<td>{_esc(str(quest.get('status') or 'unknown'))}</td>"
+        f"<td>{progress}</td>"
+        f"<td>{_esc(str(quest.get('giver') or ''))}</td>"
+        f"<td>{_esc(str(quest.get('location') or ''))}</td>"
+        "</tr>"
+    )
 
 
 def _render_calendar_and_journal(calendar: Dict[str, Any], journal: Dict[str, Any]) -> str:

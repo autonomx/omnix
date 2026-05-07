@@ -34,6 +34,7 @@ def test_quality_gates_pass_for_fast_combined_run():
     args = SimpleNamespace(
         background_llm_mode="combined",
         max_player_agent_fallback_rate=0.25,
+        scenario_seed="",
     )
     metrics = {"real_turn_runtime_count": 2}
     summary = {
@@ -75,6 +76,7 @@ def test_quality_gates_can_read_background_jobs_from_final_summary():
     args = SimpleNamespace(
         background_llm_mode="combined",
         max_player_agent_fallback_rate=0.25,
+        scenario_seed="",
     )
     metrics = {"real_turn_runtime_count": 4}
     summary = {
@@ -118,6 +120,7 @@ def test_quality_gates_fallback_to_performance_budget_background_llm():
     args = SimpleNamespace(
         background_llm_mode="combined",
         max_player_agent_fallback_rate=0.25,
+        scenario_seed="",
     )
     metrics = {"real_turn_runtime_count": 2}
     summary = {
@@ -319,6 +322,7 @@ def test_quality_gate_requires_profile_context_when_profiles_loaded():
     args = SimpleNamespace(
         background_llm_mode="combined",
         max_player_agent_fallback_rate=0.25,
+        scenario_seed="",
     )
     metrics = {"real_turn_runtime_count": 1}
     summary = {
@@ -465,3 +469,44 @@ def test_quality_gate_fails_on_console_turn_errors():
 
     assert result["ok"] is False
     assert result["gates"]["console_turn_errors_absent"] is False
+
+
+def test_quality_gate_requires_quest_progress_for_tavern_seed():
+    from types import SimpleNamespace
+
+    args = SimpleNamespace(
+        background_llm_mode="combined",
+        max_player_agent_fallback_rate=0.25,
+        capture_console_log=True,
+        scenario_seed="tavern_story_seed",
+    )
+    summary = {
+        "performance_budget_summary": {
+            "live_blocking": {
+                "avg_human_playable_blocking_ms": 50,
+                "max_human_playable_blocking_ms": 90,
+            }
+        },
+        "background_jobs": {
+            "combined_background_llm_jobs": 1,
+            "narration_jobs": 0,
+            "advisory_jobs": 0,
+        },
+        "player_agent_trace_summary": {"turns": 1, "fallback_turns": 0},
+        "campaign_calendar_summary": {"turns_tracked": 1},
+        "player_journal_summary": {"entry_count": 1},
+        "manual_turn_error_summary": {"ok": True, "error_count": 0},
+        "console_log_summary": {"line_count": 1, "turn_error_count": 0},
+        "story_beat_summary": {"beat_count": 1},
+        "quest_progress_summary": {"quest_count": 0},
+    }
+
+    result = _summarize_quality_gates(
+        args=args,
+        metrics={"real_turn_runtime_count": 1},
+        summary=summary,
+        transcript=[{}],
+    )
+
+    assert result["ok"] is False
+    assert result["gates"]["tavern_story_seed_has_quest_progress"] is False

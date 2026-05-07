@@ -189,7 +189,7 @@ def _merge_deferred_advisory_state(
         _safe_dict(carried_runtime_state.get("player_journal")),
         _safe_dict(row_runtime_state.get("player_journal")),
     )
-    for key in ("settings", "ui_state"):
+    for key in ("quest_progress", "settings", "ui_state"):
         if key in row_runtime_state:
             merged[key] = deepcopy(row_runtime_state[key])
         elif key in carried_runtime_state and key not in merged:

@@ -123,6 +123,38 @@ def test_summarize_quests_for_report_from_state_and_contract():
     assert "objectives complete" in summary["quests"][0]["progress"]
 
 
+def test_summarize_quests_for_report_reads_runtime_quest_progress():
+    transcript = [
+        {
+            "runtime_state": {
+                "quest_progress": {
+                    "quests": {
+                        "quest:witness_search": {
+                            "quest_id": "quest:witness_search",
+                            "title": "Witness Search",
+                            "status": "active",
+                            "giver": "Bran",
+                            "location": "Rusty Flagon Tavern",
+                            "objectives": [
+                                {"summary": "Find the witness", "status": "active", "completed": False},
+                                {"summary": "Report findings to Bran", "status": "active", "completed": False},
+                            ],
+                        }
+                    },
+                    "timeline": [],
+                }
+            }
+        }
+    ]
+
+    summary = summarize_quests_for_report(transcript)
+
+    assert summary["quest_count"] == 1
+    assert summary["active_count"] == 1
+    assert summary["quests"][0]["title"] == "Witness Search"
+    assert "Find the witness" in summary["quests"][0]["progress"]
+
+
 def test_campaign_report_places_journal_quest_and_npc_sections_before_json_details():
     html = render_campaign_report_html(
         {

@@ -30,6 +30,7 @@ from tests.rpg.autoplay.report_sections import (
     summarize_story_beats_for_report,
 )
 from app.rpg.campaign_journal_runtime import advance_campaign_journal_for_turn
+from app.rpg.quest_progress import ensure_quest_runtime_state
 from tests.rpg.autoplay.base_runtime_response import (
     build_autoplay_base_response,
 )
@@ -849,6 +850,7 @@ def _summarize_quality_gates(
     journal_summary = _safe_dict(summary.get("player_journal_summary"))
     story_beat_summary = _safe_dict(summary.get("story_beat_summary"))
     quest_progress_summary = _safe_dict(summary.get("quest_progress_summary"))
+    scenario_seed = _safe_str(getattr(args, "scenario_seed", ""))
     manual_turn_error_summary = _safe_dict(summary.get("manual_turn_error_summary"))
     console_log_summary = _safe_dict(summary.get("console_log_summary"))
     evolution_mutated_authoritative_state = False
@@ -911,6 +913,7 @@ def _summarize_quality_gates(
         "quest_progress_section_present": (
             quest_progress_summary is not None
         ),
+        "tavern_story_seed_has_quest_progress": True,
         "manual_turn_runtime_errors_absent": (
             not manual_turn_error_summary
             or bool(manual_turn_error_summary.get("ok", True))
@@ -1240,6 +1243,10 @@ def _merge_base_runtime_namespaces(
         _safe_dict(carried_runtime_state.get("player_journal")),
         _safe_dict(row_runtime_state.get("player_journal")),
     )
+    if "quest_progress" in row_runtime_state:
+        merged["quest_progress"] = _safe_dict(row_runtime_state.get("quest_progress"))
+    elif "quest_progress" in carried_runtime_state:
+        merged["quest_progress"] = _safe_dict(carried_runtime_state.get("quest_progress"))
     return merged
 
 
@@ -1863,6 +1870,10 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
         runtime_state = _merge_base_runtime_namespaces(
             carried_campaign_runtime_state,
             row_runtime_state,
+        )
+        runtime_state = ensure_quest_runtime_state(
+            runtime_state=runtime_state,
+            scenario_seed=_safe_str(args.scenario_seed),
         )
         runtime_state = advance_campaign_journal_for_turn(
             runtime_state=runtime_state,

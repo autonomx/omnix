@@ -7,6 +7,11 @@ from app.rpg.campaign_journal_runtime import (
     summarize_campaign_calendar,
     summarize_player_journal,
 )
+from app.rpg.quest_progress import (
+    normalize_quest_status,
+    quest_rows_from_story_arc_view,
+    summarize_runtime_quests,
+)
 
 
 def _safe_dict(value: Any) -> Dict[str, Any]:
@@ -40,6 +45,20 @@ def _latest_runtime_state_with_journal(transcript: List[Dict[str, Any]]) -> Dict
         ]
         for runtime_state in candidates:
             if runtime_state.get("campaign_calendar") or runtime_state.get("player_journal"):
+                return runtime_state
+    return {}
+
+
+def _latest_runtime_state_with_quests(transcript: List[Dict[str, Any]]) -> Dict[str, Any]:
+    for row in reversed(transcript if isinstance(transcript, list) else []):
+        row = _safe_dict(row)
+        candidates = [
+            _safe_dict(row.get("runtime_state")),
+            _safe_dict(_safe_dict(row.get("turn_result")).get("runtime_state")),
+            _safe_dict(_safe_dict(_safe_dict(row.get("turn_result")).get("session")).get("runtime_state")),
+        ]
+        for runtime_state in candidates:
+            if _safe_dict(runtime_state.get("quest_progress")).get("quests"):
                 return runtime_state
     return {}
 
@@ -207,19 +226,13 @@ def _quest_rows_from_story_arc_view(story_arc_view: Dict[str, Any]) -> List[Dict
 
 
 def _quest_status(quest: Dict[str, Any]) -> str:
-    status = _safe_str(
+    status = normalize_quest_status(
         quest.get("status")
         or quest.get("state")
         or quest.get("phase")
         or quest.get("progress_state")
-    ).lower()
-    if status:
-        if status in {"done", "complete", "completed", "success"}:
-            return "completed"
-        if status in {"fail", "failed"}:
-            return "failed"
-        if status in {"active", "started", "in_progress", "open"}:
-            return "active"
+    )
+    if status != "unknown":
         return status
     completed = quest.get("completed")
     if completed is True:
@@ -239,7 +252,7 @@ def _quest_progress_text(quest: Dict[str, Any]) -> str:
             total += 1
             item_dict = _safe_dict(item)
             label = _safe_str(item_dict.get("summary") or item_dict.get("title") or item_dict.get("name") or item)
-            if item_dict.get("completed") is True or _safe_str(item_dict.get("status")).lower() in {"done", "complete", "completed"}:
+            if item_dict.get("completed") is True or normalize_quest_status(item_dict.get("status")) == "completed":
                 done += 1
             if label and len(labels) < 3:
                 labels.append(label)
@@ -254,6 +267,23 @@ def summarize_quests_for_report(transcript: List[Dict[str, Any]]) -> Dict[str, A
     """Best-effort quest summary from state and turn contracts."""
     quest_by_id: Dict[str, Dict[str, Any]] = {}
     timeline: List[Dict[str, Any]] = []
+
+    runtime_state = _latest_runtime_state_with_quests(transcript)
+    runtime_quest_summary = summarize_runtime_quests(runtime_state) if runtime_state else {}
+    for quest in _safe_list(runtime_quest_summary.get("quests")):
+        quest = _safe_dict(quest)
+        quest_id = _safe_str(quest.get("quest_id") or quest.get("id") or quest.get("title"))
+        if quest_id:
+            quest_by_id[quest_id] = {**quest_by_id.get(quest_id, {}), **quest, "source": quest.get("source") or "runtime_quest_progress"}
+    timeline.extend(_safe_list(runtime_quest_summary.get("timeline")))
+
+    # Story arcs often contain active unresolved objectives even when quest_state
+    # is not present. Project them into Quest Progress for report readability.
+    story_arc_view = _safe_dict(_last_nonempty_row_value(transcript, "story_arc_view"))
+    for quest in quest_rows_from_story_arc_view(story_arc_view):
+        quest_id = _safe_str(quest.get("quest_id") or quest.get("title"))
+        if quest_id and quest_id not in quest_by_id:
+            quest_by_id[quest_id] = quest
 
     # Some campaign quests are tracked as story arcs rather than quest_state.
     # Pull those into Quest Progress so active objectives do not vanish.
