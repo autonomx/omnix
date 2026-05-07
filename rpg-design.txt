@@ -1,604 +1,644 @@
-Below is N73-N75.10.1 — Journal Narration Source + Fragment Cleanup as a literal apply-this-patch diff spec.
+Below is N79-N81.1 — Semantic Action Extraction Fix for 100-Turn Eval as a literal apply-this-patch diff spec.
 
 Goal:
 
-1. Feed the journal useful narration/result prose from autoplay rows.
-2. Stop journal entries from using broken/truncated action fragments.
-3. Prefer narration/NPC line for “What I learned” and “What changed.”
-4. Keep deterministic, non-LLM journal generation.
-5. Keep quest-derived “Next” section.
+Fix 100-turn evaluation action diversity metrics.
+
+Current issue:
+  semantic_action == unknown for every turn
+
+Fix:
+  read semantic action from all known locations:
+    turn_contract.semantic_action
+    turn_contract.semantic_action_v2
+    turn_contract.resolved_action
+    fast_semantic_action
+    semantic_action_record
+    selected_player_action
+    combined background diagnostics/context
+    player-agent trace fields
+
+Normalize:
+  action kind/type names
+  targets like Bran / npc:Bran / Bran (Innkeeper) / innkeeper -> Bran when present NPC context supports it
+
+Result:
+  action_diversity_summary should show real semantic actions, not unknown:8
 
 Strict rules:
 
-Journal generation remains deterministic.
-No LLM journal authoring.
+Evaluation-only patch.
 No authoritative state mutation.
-No quest/inventory/currency/combat/location mutation.
-Only summarize already-known turn facts.
-N73-N75.10.1 — Journal Narration Source + Fragment Cleanup
-1. Patch src/app/rpg/campaign_journal.py
-1A. Add malformed-fragment detection
+No player action rewriting.
+No LLM behavior changes.
+No quest/NPC/inventory/combat mutation.
+N79-N81.1 — Semantic Action Extraction Fix for 100-Turn Eval
+1. Patch src/tests/rpg/autoplay/hundred_turn_eval.py
+1A. Add normalization helpers
 
-Add after _looks_internal_code(...):
+Add after _safe_str(...):
 
---- src/app/rpg/campaign_journal.py
-+++ src/app/rpg/campaign_journal.py
+--- src/tests/rpg/autoplay/hundred_turn_eval.py
++++ src/tests/rpg/autoplay/hundred_turn_eval.py
 @@
- def _looks_internal_code(value: str) -> bool:
-@@
-     if lower.startswith("target_") or lower.startswith("semantic_"):
-         return True
-     return False
+ def _safe_str(value: Any) -> str:
+     return value if isinstance(value, str) else ""
 +
 +
-+def _looks_malformed_journal_fragment(value: str) -> bool:
++def _norm_token(value: Any) -> str:
 +    text = _safe_str(value).strip()
 +    if not text:
-+        return True
-+    lower = text.lower()
-+
-+    # Fragments caused by prompt/action truncation or quote slicing.
-+    if text[0] in ".;,:!?)]}":
-+        return True
-+    if text.startswith(("…", "...")):
-+        return True
-+    if lower.startswith(("or trouble", "gold? or", "or gold", "and ask", "then ask")):
-+        return True
-+
-+    # Too short to be useful unless it is a normal sentence-like command.
-+    words = [part for part in text.replace("…", " ").split() if part.strip()]
-+    if len(words) <= 2 and not text.endswith((".", "!", "?")):
-+        return True
-+
-+    # Broken fragments often have no leading verb/subject and include ellipses.
-+    if "…" in text or "..." in text:
-+        if len(words) < 8:
-+            return True
-+        if text.count("…") + text.count("...") >= 2:
-+            return True
-+
-+    return False
-1B. Strengthen _clean_journal_text(...)
-
-Find _clean_journal_text(...).
-
-Patch it:
-
---- src/app/rpg/campaign_journal.py
-+++ src/app/rpg/campaign_journal.py
-@@
- def _clean_journal_text(value: Any, *, max_len: int = 700) -> str:
-     text = _safe_str(value).strip()
-     if not text:
-         return ""
-     if _looks_internal_code(text):
-         return ""
-+    if _looks_malformed_journal_fragment(text):
 +        return ""
-     # Remove isolated internal tokens from otherwise readable text.
-     parts = []
-     for token in text.replace("\n", " ").split():
-         cleaned = token.strip(".,;:()[]{}\"'")
-         if _looks_internal_code(cleaned):
-             continue
-         parts.append(token)
-     text = " ".join(parts).strip()
-     if not text:
-         return ""
-+    if _looks_malformed_journal_fragment(text):
++    text = text.replace("-", "_").replace(" ", "_").strip("_")
++    while "__" in text:
++        text = text.replace("__", "_")
++    return text.lower()
++
++
++def _clean_target_label(value: Any) -> str:
++    text = _safe_str(value).strip()
++    if not text:
 +        return ""
-     if len(text) > max_len:
--        text = text[: max_len - 1].rstrip() + "…"
-+        # Prefer cutting at a sentence boundary when possible.
-+        candidate = text[: max_len - 1].rstrip()
-+        boundary = max(candidate.rfind("."), candidate.rfind("!"), candidate.rfind("?"))
-+        if boundary >= max(80, int(max_len * 0.45)):
-+            text = candidate[: boundary + 1].strip()
-+        else:
-+            text = candidate.rstrip(" ,;:") + "…"
-     return text
-1C. Add narration source extraction helpers
-
-Add after _first_clean_text(...):
-
---- src/app/rpg/campaign_journal.py
-+++ src/app/rpg/campaign_journal.py
-@@
- def _first_clean_text(*values: Any, max_len: int = 700) -> str:
-     for value in values:
-         cleaned = _clean_journal_text(value, max_len=max_len)
-         if cleaned:
-             return cleaned
-     return ""
++    # Normalize common id/display forms.
++    if text.lower().startswith("npc:"):
++        text = text.split(":", 1)[1].strip()
++    if "(" in text and ")" in text:
++        text = text.split("(", 1)[0].strip()
++    text = text.strip(" .,:;[]{}\"'")
++    return text
 +
 +
-+def _narration_payload_candidates(turn_result: Dict[str, Any]) -> List[Dict[str, Any]]:
-+    turn_result = _safe_dict(turn_result)
-+    result = _safe_dict(turn_result.get("result"))
-+    combined = _safe_dict(turn_result.get("combined_background_llm_result"))
-+    resolved = _safe_dict(turn_result.get("resolved_narration_payload"))
-+    return [
-+        _safe_dict(turn_result.get("narration_payload")),
-+        _safe_dict(result.get("narration_payload")),
-+        _safe_dict(combined.get("narration_payload")),
-+        resolved,
++def _present_npc_aliases(row: Dict[str, Any]) -> Dict[str, str]:
++    """Return lowercase aliases -> canonical NPC display id/name."""
++    row = _safe_dict(row)
++    aliases: Dict[str, str] = {}
++
++    def add(name: Any, canonical: Any = "") -> None:
++        raw = _clean_target_label(name)
++        if not raw:
++            return
++        canon = _clean_target_label(canonical) or raw
++        aliases[raw.lower()] = canon
++        aliases[raw.replace(" ", "_").lower()] = canon
++        aliases[f"npc:{raw}".lower()] = canon
++        aliases[f"npc:{raw.replace(' ', '_')}".lower()] = canon
++
++    state_candidates = [
++        _safe_dict(row.get("simulation_state")),
++        _safe_dict(row.get("final_authoritative_state")),
++        _safe_dict(_safe_dict(row.get("turn_result")).get("simulation_state")),
++        _safe_dict(_safe_dict(_safe_dict(row.get("turn_result")).get("session")).get("simulation_state")),
 +    ]
++    runtime_state = _safe_dict(row.get("runtime_state"))
++    loaded_profiles = _safe_dict(_safe_dict(runtime_state.get("npc_evolution")).get("loaded_profiles"))
++    for npc_id, profile_row in loaded_profiles.items():
++        profile = _safe_dict(_safe_dict(profile_row).get("profile"))
++        add(npc_id)
++        add(profile.get("npc_id"), npc_id)
++        add(profile.get("name"), npc_id)
 +
++    for state in state_candidates:
++        scene = _safe_dict(state.get("scene"))
++        for npc in _safe_list(scene.get("nearby_npcs")) + _safe_list(scene.get("present_npcs")):
++            if isinstance(npc, dict):
++                add(npc.get("npc_id") or npc.get("id") or npc.get("name"))
++                add(npc.get("name"), npc.get("npc_id") or npc.get("id") or npc.get("name"))
++                add(npc.get("role"), npc.get("npc_id") or npc.get("id") or npc.get("name"))
++            else:
++                add(npc)
++        npcs = _safe_dict(_safe_dict(state.get("npc_progression_state")).get("npcs"))
++        for npc_id, npc_any in npcs.items():
++            npc = _safe_dict(npc_any)
++            add(npc_id)
++            add(npc.get("name"), npc_id)
++            add(npc.get("role"), npc_id)
 +
-+def _narration_text_candidates(turn_result: Dict[str, Any]) -> List[str]:
-+    turn_result = _safe_dict(turn_result)
-+    combined = _safe_dict(turn_result.get("combined_background_llm_result"))
-+    resolved = _safe_dict(turn_result.get("resolved_narration_payload"))
-+    candidates: List[str] = [
-+        _safe_str(turn_result.get("narration")),
-+        _safe_str(combined.get("narration")),
-+        _safe_str(resolved.get("narration")),
-+    ]
-+    for payload in _narration_payload_candidates(turn_result):
-+        npc = _safe_dict(payload.get("npc"))
-+        candidates.extend(
-+            [
-+                _safe_str(payload.get("narration")),
-+                _safe_str(payload.get("action")),
-+                _safe_str(npc.get("line")),
-+            ]
-+        )
-+    return [item for item in candidates if item]
-1D. Replace _extract_result_summary(...) to prefer injected narration sources
-
-Find _extract_result_summary(...) and replace the body with this version:
-
---- src/app/rpg/campaign_journal.py
-+++ src/app/rpg/campaign_journal.py
-@@
- def _extract_result_summary(
-     *,
-     turn_contract: Dict[str, Any] | None = None,
-     turn_result: Dict[str, Any] | None = None,
- ) -> str:
-     turn_contract = _safe_dict(turn_contract)
-     turn_result = _safe_dict(turn_result)
-     resolved_result = _safe_dict(turn_contract.get("resolved_result"))
-     resolved_action = _safe_dict(turn_contract.get("resolved_action"))
--    narration_payload = _safe_dict(turn_result.get("narration_payload"))
--    npc = _safe_dict(narration_payload.get("npc"))
--    result = _safe_dict(turn_result.get("result"))
--    nested_narration = _safe_dict(result.get("narration_payload"))
--    nested_npc = _safe_dict(nested_narration.get("npc"))
- 
-     # Prefer player-facing prose over deterministic internal reason codes.
-     return _first_clean_text(
--        narration_payload.get("narration"),
--        narration_payload.get("action"),
--        npc.get("line"),
--        nested_narration.get("narration"),
--        nested_narration.get("action"),
--        nested_npc.get("line"),
-+        *_narration_text_candidates(turn_result),
-         resolved_result.get("summary"),
-         resolved_result.get("description"),
-         resolved_action.get("summary"),
-         turn_contract.get("narration_brief"),
-         turn_contract.get("result"),
-1E. Improve learned/changed inference
-
-Find _contains_learning_signal(...).
-
-Patch token list:
-
---- src/app/rpg/campaign_journal.py
-+++ src/app/rpg/campaign_journal.py
-@@
-             "quest",
-+            "clue",
-+            "trail",
-+            "sign",
-+            "saw",
-+            "seen",
-+            "knows",
-+            "asked",
-+            "answer",
-+            "answers",
-+            "lowered his voice",
-+            "lowered her voice",
-         )
-     )
-
-Find _infer_learned_lines(...).
-
-Replace with:
-
---- src/app/rpg/campaign_journal.py
-+++ src/app/rpg/campaign_journal.py
-@@
- def _infer_learned_lines(results: List[str]) -> List[str]:
-     learned: List[str] = []
-     for result in _safe_list(results):
-         text = _clean_journal_text(result, max_len=260)
--        if text and _contains_learning_signal(text):
-+        if text and (_contains_learning_signal(text) or len(text.split()) >= 10):
-             learned.append(text)
-     return learned
-
-This lets good narration become “What I learned” even if it does not contain an explicit keyword.
-
-1F. Make “What changed” avoid duplicating “What learned”
-
-Patch _journal_text(...).
-
-Find:
-
-    changed_text = _sentence_join(clean_results, max_items=2)
-    if changed_text and changed_text != learned_text:
-        sections.append(f"What changed: {changed_text}")
-
-Replace with:
-
---- src/app/rpg/campaign_journal.py
-+++ src/app/rpg/campaign_journal.py
-@@
--    changed_text = _sentence_join(clean_results, max_items=2)
--    if changed_text and changed_text != learned_text:
-+    changed_candidates = [
-+        item for item in clean_results
-+        if item and item not in learned
-+    ] or clean_results
-+    changed_text = _sentence_join(changed_candidates, max_items=2)
-+    if changed_text and changed_text.lower() != learned_text.lower():
-         sections.append(f"What changed: {changed_text}")
-2. Patch src/tests/rpg/autoplay_llm_campaign.py
-
-The journal needs the resolved/combined narration already present in the autoplay transcript row.
-
-2A. Add helper to build journal-enriched turn result
-
-Add near _resolve_turn_contract_for_report(...):
-
---- src/tests/rpg/autoplay_llm_campaign.py
-+++ src/tests/rpg/autoplay_llm_campaign.py
-@@
- def _resolve_turn_contract_for_report(
-@@
-     return (
-         _safe_dict(turn_result.get("turn_contract"))
-         or _safe_dict(_safe_dict(turn_result.get("result")).get("turn_contract"))
-         or _safe_dict(_safe_dict(_safe_dict(turn_result.get("session")).get("last_turn")).get("turn_contract"))
-         or _safe_dict(base_response_payload.get("turn_contract"))
-         or {}
-     )
-+
-+
-+def _journal_turn_result_with_narration_sources(
-+    *,
-+    turn_result: Dict[str, Any],
-+    combined_background_result: Dict[str, Any],
-+    resolved_narration_payload: Dict[str, Any],
-+    narration_text: str = "",
-+) -> Dict[str, Any]:
-+    """Return a turn_result-shaped payload enriched with presentation-only
-+    narration fields so deterministic journal generation has readable prose.
-+
-+    This does not mutate authoritative state.
-+    """
-+    out = dict(_safe_dict(turn_result))
-+    combined = _safe_dict(combined_background_result)
-+    resolved = _safe_dict(resolved_narration_payload)
-+
-+    if combined:
-+        out["combined_background_llm_result"] = combined
-+    if resolved:
-+        out["resolved_narration_payload"] = resolved
-+    if narration_text:
-+        out["narration"] = _safe_str(narration_text)
-+
-+    narration_payload = (
-+        _safe_dict(out.get("narration_payload"))
-+        or _safe_dict(resolved)
-+        or _safe_dict(combined.get("narration_payload"))
-+    )
-+    if not narration_payload and _safe_str(combined.get("narration")):
-+        narration_payload = {
-+            "narration": _safe_str(combined.get("narration")),
-+            "npc": _safe_dict(combined.get("npc")),
-+        }
-+    if narration_payload:
-+        out["narration_payload"] = narration_payload
-+    return out
-2B. Initialize narration variables in turn loop
-
-Inside the turn loop, near other per-turn defaults:
-
---- src/tests/rpg/autoplay_llm_campaign.py
-+++ src/tests/rpg/autoplay_llm_campaign.py
-@@
-         background_runtime_state: Dict[str, Any] = {}
-         resolved_turn_contract: Dict[str, Any] = {}
-+        resolved_narration_payload: Dict[str, Any] = {}
-+        combined_background_result: Dict[str, Any] = {}
-+        journal_narration_text = ""
-
-If those variables already exist under slightly different names, reuse them.
-
-2C. Capture combined/background narration result when attached
-
-Find where combined background job result is attached to the row/turn. It likely sets something like:
-
-combined_background_llm_result = pipeline.get_result(...)
-...
-record["combined_background_llm_result"] = combined_background_llm_result
-
-or:
-
-combined_background_result = ...
-
-Make sure this variable is assigned before journal advancement:
-
---- src/tests/rpg/autoplay_llm_campaign.py
-+++ src/tests/rpg/autoplay_llm_campaign.py
-@@
--        combined_background_llm_result = ...
-+        combined_background_llm_result = ...
-+        combined_background_result = _safe_dict(combined_background_llm_result)
-+        journal_narration_text = (
-+            _safe_str(combined_background_result.get("narration"))
-+            or journal_narration_text
-+        )
-
-Since exact local names may vary, the invariant is:
-
-Before advance_campaign_journal_for_turn(...), set:
-combined_background_result = _safe_dict(<the combined background LLM result for this turn>)
-journal_narration_text = combined_background_result.get("narration") if present
-
-If the combined job is only attached after record build, use the best available narration payload already present in turn_result for now. The next section makes this safe.
-
-2D. Build enriched journal turn result before calling advance_campaign_journal_for_turn(...)
-
-Find:
-
-runtime_state = advance_campaign_journal_for_turn(
-    runtime_state=runtime_state,
-    turn_index=turn_index,
-    player_input=player_action,
-    turn_contract=resolved_turn_contract,
-    turn_result=turn_result,
-    minutes_per_turn=int(args.campaign_minutes_per_turn),
-    journal_every_turns=int(args.journal_every_turns),
-)
-
-Replace with:
-
---- src/tests/rpg/autoplay_llm_campaign.py
-+++ src/tests/rpg/autoplay_llm_campaign.py
-@@
-+        journal_turn_result = _journal_turn_result_with_narration_sources(
-+            turn_result=turn_result,
-+            combined_background_result=combined_background_result,
-+            resolved_narration_payload=resolved_narration_payload,
-+            narration_text=journal_narration_text,
-+        )
-         runtime_state = advance_campaign_journal_for_turn(
-             runtime_state=runtime_state,
-             turn_index=turn_index,
-             player_input=player_action,
-             turn_contract=resolved_turn_contract,
--            turn_result=turn_result,
-+            turn_result=journal_turn_result,
-             minutes_per_turn=int(args.campaign_minutes_per_turn),
-             journal_every_turns=int(args.journal_every_turns),
-         )
-2E. If combined result is only available after journal advancement, add post-attach journal refresh
-
-If the pipeline attaches combined_background_llm_result after the journal entry is already written, add this after combined result attachment:
-
---- src/tests/rpg/autoplay_llm_campaign.py
-+++ src/tests/rpg/autoplay_llm_campaign.py
-@@
-         if combined_background_result:
-             record["combined_background_llm_result"] = combined_background_result
-+
-+            # If the turn just wrote a journal entry, refresh that entry with
-+            # the now-available presentation narration. This is deterministic
-+            # and only rewrites the same journal:turn:N text from known facts.
-+            runtime_state = _safe_dict(record.get("runtime_state"))
-+            journal = _safe_dict(runtime_state.get("player_journal"))
-+            entries = _safe_list(journal.get("entries"))
-+            entry_id = f"journal:turn:{turn_index}"
-+            for entry in entries:
-+                entry = _safe_dict(entry)
-+                if _safe_str(entry.get("entry_id")) != entry_id:
-+                    continue
-+                refreshed_turn_result = _journal_turn_result_with_narration_sources(
-+                    turn_result=turn_result,
-+                    combined_background_result=combined_background_result,
-+                    resolved_narration_payload=resolved_narration_payload,
-+                    narration_text=_safe_str(combined_background_result.get("narration")),
-+                )
-+                # Rebuild one-entry text using accumulated pending snapshots if
-+                # present; otherwise only replace result text by appending a
-+                # clean narration line to the existing entry.
-+                clean_narration = _safe_str(combined_background_result.get("narration"))
-+                if clean_narration and clean_narration not in _safe_str(entry.get("text")):
-+                    entry["text"] = _safe_str(entry.get("text")).rstrip() + "\nWhat changed: " + clean_narration
++    # Useful role aliases for the tavern seed, but only when a matching NPC is present.
++    for alias in ("innkeeper", "barkeep", "bartender", "tavernkeeper"):
++        if alias in aliases:
++            continue
++        for _, canon in list(aliases.items()):
++            if canon.lower() == "bran":
++                aliases[alias] = canon
 +                break
++    return aliases
++
++
++def _normalize_target(value: Any, row: Dict[str, Any]) -> str:
++    text = _clean_target_label(value)
++    if not text:
++        return ""
++    aliases = _present_npc_aliases(row)
++    lower = text.lower()
++    if lower in aliases:
++        return aliases[lower]
++    lower_underscored = lower.replace(" ", "_")
++    if lower_underscored in aliases:
++        return aliases[lower_underscored]
++    if text.lower() in {"none", "unknown", "null"}:
++        return ""
++    return text
++
++
++def _first_value(*values: Any) -> str:
++    for value in values:
++        text = _safe_str(value).strip()
++        if text:
++            return text
++    return ""
+1B. Add semantic source helpers
 
-Only apply 2E if journal refresh is needed because combined results are definitely attached later. If the code can pass combined_background_result before journal advancement, skip this to avoid duplicate sections.
+Add after _player_action(...):
 
-3. Patch journal quality summary to catch fragments
-
-Patch src/tests/rpg/autoplay_llm_campaign.py.
-
-Find JOURNAL_FORBIDDEN_TOKENS.
-
-Add:
-
---- src/tests/rpg/autoplay_llm_campaign.py
-+++ src/tests/rpg/autoplay_llm_campaign.py
+--- src/tests/rpg/autoplay/hundred_turn_eval.py
++++ src/tests/rpg/autoplay/hundred_turn_eval.py
 @@
- JOURNAL_FORBIDDEN_TOKENS = (
+ def _player_action(row: Dict[str, Any]) -> str:
 @@
-     "action_unhandled",
-+    "gold? or trouble",
-+    ".gold?",
- )
-
-In _summarize_player_journal_quality(...), add fragment detection.
+         or _safe_str(_safe_dict(row.get("turn_contract")).get("action"))
+     )
++
++
++def _semantic_dict_candidates(row: Dict[str, Any]) -> List[Dict[str, Any]]:
++    row = _safe_dict(row)
++    contract = _safe_dict(row.get("turn_contract"))
++    selected = _safe_dict(row.get("selected_player_action"))
++    turn_result = _safe_dict(row.get("turn_result"))
++    combined = _safe_dict(row.get("combined_background_llm_result"))
++    diagnostics = _safe_dict(combined.get("diagnostics"))
++    context_packet = _safe_dict(diagnostics.get("context_packet"))
++    result = _safe_dict(turn_result.get("result"))
++
++    candidates: List[Dict[str, Any]] = [
++        _safe_dict(contract.get("semantic_action")),
++        _safe_dict(contract.get("semantic_action_v2")),
++        _safe_dict(contract.get("resolved_action")),
++        _safe_dict(contract.get("action")),
++        _safe_dict(row.get("semantic_action")),
++        _safe_dict(row.get("semantic_action_v2")),
++        _safe_dict(row.get("fast_semantic_action")),
++        _safe_dict(row.get("semantic_action_record")),
++        _safe_dict(row.get("background_semantic_action_record")),
++        _safe_dict(selected.get("semantic_action")),
++        _safe_dict(selected.get("semantic_action_v2")),
++        _safe_dict(selected.get("fast_semantic_action")),
++        _safe_dict(result.get("semantic_action")),
++        _safe_dict(result.get("semantic_action_v2")),
++        _safe_dict(result.get("resolved_action")),
++        _safe_dict(combined.get("semantic_action")),
++        _safe_dict(combined.get("semantic_action_v2")),
++        _safe_dict(combined.get("fast_semantic_action")),
++        _safe_dict(diagnostics.get("semantic_action")),
++        _safe_dict(diagnostics.get("fast_semantic_action")),
++        _safe_dict(context_packet.get("fast_semantic_action")),
++    ]
++
++    # Some traces store this as a row/list payload.
++    trace = _safe_dict(row.get("player_agent_trace"))
++    candidates.extend(
++        [
++            _safe_dict(trace.get("semantic_action")),
++            _safe_dict(trace.get("semantic_action_v2")),
++            _safe_dict(trace.get("selected_semantic_action")),
++        ]
++    )
++
++    return [candidate for candidate in candidates if candidate]
++
++
++def _semantic_action_from_text(action: str) -> str:
++    lower = _safe_str(action).lower().strip()
++    if not lower:
++        return "unknown"
++    # Deterministic fallback only for evaluation when structured fields are absent.
++    if lower.startswith(("ask ", "question ", "inquire ", "talk ", "speak ", "tell ")):
++        return "ask"
++    if lower.startswith(("listen", "observe", "look", "watch", "inspect", "examine", "search")):
++        return "observe"
++    if lower.startswith(("go ", "travel ", "walk ", "move ", "leave ", "enter ")):
++        return "travel"
++    if lower.startswith(("buy ", "purchase ", "rent ", "pay ")):
++        return "service"
++    if lower.startswith(("attack ", "strike ", "fight ", "punch ")):
++        return "combat"
++    if lower.startswith(("wait", "rest", "idle")):
++        return "wait"
++    return "unknown"
++
++
++def _target_from_text(action: str, row: Dict[str, Any]) -> str:
++    lower = _safe_str(action).lower()
++    aliases = _present_npc_aliases(row)
++    for alias, canon in aliases.items():
++        if alias and alias in lower:
++            return canon
++    # Common tavern role fallback, only normalized if row has Bran alias.
++    if "innkeeper" in lower or "barkeep" in lower or "bartender" in lower:
++        return _normalize_target("innkeeper", row)
++    return ""
+1C. Replace _semantic_action(...)
 
 Find:
 
-        if ".." in text or ";." in text or ".;" in text:
+def _semantic_action(row: Dict[str, Any]) -> str:
 
-Replace with:
+Replace the whole function:
+
+--- src/tests/rpg/autoplay/hundred_turn_eval.py
++++ src/tests/rpg/autoplay/hundred_turn_eval.py
+@@
+ def _semantic_action(row: Dict[str, Any]) -> str:
+-    row = _safe_dict(row)
+-    contract = _safe_dict(row.get("turn_contract"))
+-    semantic = _safe_dict(contract.get("semantic_action"))
+-    resolved = _safe_dict(contract.get("resolved_action"))
+-    selected = _safe_dict(row.get("selected_player_action"))
+-    return (
+-        _safe_str(semantic.get("type"))
+-        or _safe_str(semantic.get("kind"))
+-        or _safe_str(resolved.get("type"))
+-        or _safe_str(resolved.get("kind"))
+-        or _safe_str(selected.get("semantic_action_type"))
+-        or _safe_str(row.get("semantic_action_type"))
+-        or "unknown"
+-    )
++    row = _safe_dict(row)
++    for candidate in _semantic_dict_candidates(row):
++        value = _first_value(
++            candidate.get("semantic_action_type"),
++            candidate.get("action_type"),
++            candidate.get("type"),
++            candidate.get("kind"),
++            candidate.get("intent"),
++            candidate.get("verb"),
++            candidate.get("category"),
++        )
++        value = _norm_token(value)
++        if value and value not in {"unknown", "none", "null"}:
++            return value
++
++    selected = _safe_dict(row.get("selected_player_action"))
++    value = _norm_token(
++        _first_value(
++            selected.get("semantic_action_type"),
++            selected.get("action_type"),
++            row.get("semantic_action_type"),
++            row.get("action_type"),
++        )
++    )
++    if value and value not in {"unknown", "none", "null"}:
++        return value
++
++    return _semantic_action_from_text(_player_action(row))
+1D. Replace _target(...)
+
+Find:
+
+def _target(row: Dict[str, Any]) -> str:
+
+Replace the whole function:
+
+--- src/tests/rpg/autoplay/hundred_turn_eval.py
++++ src/tests/rpg/autoplay/hundred_turn_eval.py
+@@
+ def _target(row: Dict[str, Any]) -> str:
+-    row = _safe_dict(row)
+-    contract = _safe_dict(row.get("turn_contract"))
+-    semantic = _safe_dict(contract.get("semantic_action"))
+-    resolved = _safe_dict(contract.get("resolved_action"))
+-    selected = _safe_dict(row.get("selected_player_action"))
+-    return (
+-        _safe_str(semantic.get("target"))
+-        or _safe_str(semantic.get("target_id"))
+-        or _safe_str(resolved.get("target"))
+-        or _safe_str(resolved.get("target_id"))
+-        or _safe_str(selected.get("target"))
+-        or ""
+-    )
++    row = _safe_dict(row)
++    for candidate in _semantic_dict_candidates(row):
++        value = _first_value(
++            candidate.get("target"),
++            candidate.get("target_id"),
++            candidate.get("target_name"),
++            candidate.get("npc_id"),
++            candidate.get("object"),
++            candidate.get("entity"),
++        )
++        normalized = _normalize_target(value, row)
++        if normalized:
++            return normalized
++
++    selected = _safe_dict(row.get("selected_player_action"))
++    normalized = _normalize_target(
++        _first_value(
++            selected.get("target"),
++            selected.get("target_id"),
++            selected.get("target_name"),
++            row.get("target"),
++            row.get("target_id"),
++        ),
++        row,
++    )
++    if normalized:
++        return normalized
++
++    return _target_from_text(_player_action(row), row)
+1E. Add diagnostic source coverage to summarize_action_diversity(...)
+
+Find summarize_action_diversity(...).
+
+Patch after semantic_target_counter:
+
+--- src/tests/rpg/autoplay/hundred_turn_eval.py
++++ src/tests/rpg/autoplay/hundred_turn_eval.py
+@@
+     semantic_counter = Counter(semantics)
+     target_counter = Counter(targets)
+     semantic_target_counter = Counter(semantic_target)
++    unknown_semantic_count = semantic_counter.get("unknown", 0)
++    missing_target_count = sum(1 for target in targets if not target)
+ 
+     return {
+         "turns": len(rows),
+         "unique_action_count": len(action_counter),
+         "unique_semantic_action_count": len(semantic_counter),
+         "unique_target_count": len(target_counter),
+         "unique_semantic_target_count": len(semantic_target_counter),
++        "unknown_semantic_count": unknown_semantic_count,
++        "unknown_semantic_rate": round(unknown_semantic_count / len(rows), 4) if rows else 0.0,
++        "missing_target_count": missing_target_count,
++        "missing_target_rate": round(missing_target_count / len(rows), 4) if rows else 0.0,
+         "top_actions": action_counter.most_common(10),
+2. Improve long-run warnings for unknown semantic extraction
+
+Patch summarize_long_run_warnings(...) in src/tests/rpg/autoplay/hundred_turn_eval.py.
+
+After repeated semantic target warning block, add:
+
+--- src/tests/rpg/autoplay/hundred_turn_eval.py
++++ src/tests/rpg/autoplay/hundred_turn_eval.py
+@@
+     if same_semantic_target_streak >= (8 if strict else 5):
+         add(
+             "repeated_semantic_target_streak",
+             "error" if strict else "warning",
+             "The player-agent repeated the same semantic action/target too many times.",
+             _safe_dict(action_diversity_summary.get("max_same_semantic_target_streak")),
+         )
++
++    unknown_semantic_rate = float(action_diversity_summary.get("unknown_semantic_rate") or 0.0)
++    if unknown_semantic_rate >= (0.25 if strict else 0.75):
++        add(
++            "semantic_action_extraction_unknown_rate",
++            "error" if strict else "warning",
++            "Too many turns have unknown semantic action classification.",
++            {
++                "unknown_semantic_rate": unknown_semantic_rate,
++                "unknown_semantic_count": action_diversity_summary.get("unknown_semantic_count"),
++            },
++        )
+
+This makes 100-turn eval fail if semantic extraction breaks again.
+
+3. Add quality gate for semantic extraction
+
+Patch:
+
+src/tests/rpg/autoplay_llm_campaign.py
+
+Inside _summarize_quality_gates(...), where N79-N81 gates were added, add:
 
 --- src/tests/rpg/autoplay_llm_campaign.py
 +++ src/tests/rpg/autoplay_llm_campaign.py
 @@
--        if ".." in text or ";." in text or ".;" in text:
-+        if (
-+            ".." in text
-+            or ";." in text
-+            or ".;" in text
-+            or "\n." in text
-+            or text.strip().startswith((".", ";", ",", "?", "!"))
-+            or ".gold?" in lower
-+            or "gold? or trouble" in lower
-+        ):
+         "strict_100turn_repeat_semantic_target_streak_ok": (
+             not strict_100_turn_mode
+             or int(_safe_dict(action_diversity_summary.get("max_same_semantic_target_streak")).get("streak") or 0)
+             <= int(getattr(args, "max_100turn_repeat_semantic_target_streak", 8) or 8)
+         ),
++        "strict_100turn_semantic_action_extraction_ok": (
++            not strict_100_turn_mode
++            or float(action_diversity_summary.get("unknown_semantic_rate") or 0.0) <= 0.25
++        ),
+         "strict_100turn_no_progress_streak_ok": (
+             not strict_100_turn_mode
+             or int(progress_timeline_summary.get("max_no_progress_streak") or 0)
 
-This makes the quality gate fail if broken action fragments return.
+For 8-turn smoke, this remains non-strict, but the report shows the rate.
 
-4. Patch src/tests/rpg/autoplay/report_sections.py
+4. Improve HTML Action Diversity section
 
-The fallback journal should also reject fragments.
+Patch:
 
-If you already delegate fallback _journal_text(...) to _base_journal_text, no extra change is needed.
+src/tests/rpg/autoplay/campaign_report.py
 
-If fallback still builds text locally, apply the same _base_journal_text delegation from N73-N75.10.
+Find _render_action_diversity(...).
+
+In the paragraph that shows unique counts, add unknown/missing rates:
+
+--- src/tests/rpg/autoplay/campaign_report.py
++++ src/tests/rpg/autoplay/campaign_report.py
+@@
+       <p>
+         Unique actions: {escape(str(summary.get("unique_action_count") or 0))} ·
+         Unique semantic actions: {escape(str(summary.get("unique_semantic_action_count") or 0))} ·
+-        Unique targets: {escape(str(summary.get("unique_target_count") or 0))}
++        Unique targets: {escape(str(summary.get("unique_target_count") or 0))} ·
++        Unknown semantic rate: {escape(str(summary.get("unknown_semantic_rate") or 0))} ·
++        Missing target rate: {escape(str(summary.get("missing_target_rate") or 0))}
+       </p>
+
+This makes the original bug obvious in the report.
 
 5. Tests
-5A. Patch src/tests/rpg/test_campaign_journal.py
+5A. Patch src/tests/rpg/autoplay/test_hundred_turn_eval.py
 
-Add imports:
+Add tests for semantic extraction.
 
---- src/tests/rpg/test_campaign_journal.py
-+++ src/tests/rpg/test_campaign_journal.py
+--- src/tests/rpg/autoplay/test_hundred_turn_eval.py
++++ src/tests/rpg/autoplay/test_hundred_turn_eval.py
 @@
- from app.rpg.campaign_journal import (
-     advance_campaign_journal_for_turn,
-     campaign_time_for_turn,
-     _clean_journal_text,
-+    _looks_malformed_journal_fragment,
-     _journal_text,
-     summarize_campaign_calendar,
-     summarize_player_journal,
+ from tests.rpg.autoplay.hundred_turn_eval import (
+     summarize_action_diversity,
+     summarize_hundred_turn_eval,
+     summarize_long_run_warnings,
+     summarize_progress_timeline,
  )
-
-Add tests:
-
---- src/tests/rpg/test_campaign_journal.py
-+++ src/tests/rpg/test_campaign_journal.py
 @@
- def test_journal_text_includes_active_quest_objectives_in_next_section():
+ def test_action_diversity_detects_repeated_semantic_target_streak():
 @@
-     assert "Find the witness" in text
-     assert "Report findings to Bran" in text
+     assert summary["max_same_semantic_target_streak"]["value"] == "ask:Bran"
 +
 +
-+def test_journal_filters_malformed_action_fragments():
-+    assert _looks_malformed_journal_fragment(".gold? Or trouble, indeed.") is True
-+    assert _clean_journal_text(".gold? Or trouble, indeed.") == ""
-+    assert _clean_journal_text("Tell me something concrete about the witness.") != ""
-+
-+
-+def test_journal_prefers_narration_as_learned_and_changed_text():
-+    runtime_state = {}
-+    for turn in range(1, 5):
-+        runtime_state = advance_campaign_journal_for_turn(
-+            runtime_state=runtime_state,
-+            turn_index=turn,
-+            player_input=f"Ask Bran about the witness {turn}.",
-+            turn_contract={
-+                "turn_index": turn,
-+                "player_input": f"Ask Bran about the witness {turn}.",
-+                "resolved_result": {"summary": "target_not_found"},
-+            },
-+            turn_result={
-+                "narration_payload": {
-+                    "narration": "Bran lowered his voice and warned that someone saw strange lights near the woods.",
-+                    "npc": {"speaker": "Bran", "line": "Find the witness before the trail goes cold."},
++def test_action_diversity_reads_semantic_action_v2_and_normalizes_target():
++    transcript = [
++        {
++            "turn_index": 1,
++            "player_action": "Ask the innkeeper about the witness.",
++            "turn_contract": {
++                "semantic_action_v2": {
++                    "type": "Ask",
++                    "target": "npc:Bran",
 +                }
 +            },
-+            journal_every_turns=4,
-+        )
++            "runtime_state": {
++                "npc_evolution": {
++                    "loaded_profiles": {
++                        "Bran": {"profile": {"npc_id": "Bran", "name": "Bran"}}
++                    }
++                }
++            },
++        }
++    ]
 +
-+    text = summarize_player_journal(runtime_state)["entries"][0]["text"]
++    summary = summarize_action_diversity(transcript)
 +
-+    assert "What I learned:" in text
-+    assert "strange lights near the woods" in text
-+    assert "target_not_found" not in text
-5B. Patch src/tests/rpg/autoplay/test_quality_gates.py
++    assert summary["top_semantic_actions"][0][0] == "ask"
++    assert summary["top_targets"][0][0] == "Bran"
++    assert summary["top_semantic_targets"][0][0] == "ask:Bran"
++    assert summary["unknown_semantic_count"] == 0
++
++
++def test_action_diversity_reads_fast_semantic_action_record():
++    transcript = [
++        {
++            "turn_index": 1,
++            "player_action": "Listen for rumors.",
++            "fast_semantic_action": {
++                "semantic_action_type": "Observe",
++                "target_name": "Rusty Flagon Tavern",
++            },
++        }
++    ]
++
++    summary = summarize_action_diversity(transcript)
++
++    assert summary["top_semantic_actions"][0][0] == "observe"
++    assert summary["top_targets"][0][0] == "Rusty Flagon Tavern"
++
++
++def test_action_diversity_falls_back_to_action_text_when_structured_missing():
++    transcript = [
++        {
++            "turn_index": 1,
++            "player_action": "Ask Bran about the missing witness.",
++            "simulation_state": {
++                "scene": {"nearby_npcs": ["Bran"]},
++                "npc_progression_state": {"npcs": {"Bran": {"name": "Bran", "role": "innkeeper"}}},
++            },
++        }
++    ]
++
++    summary = summarize_action_diversity(transcript)
++
++    assert summary["top_semantic_actions"][0][0] == "ask"
++    assert summary["top_targets"][0][0] == "Bran"
++    assert summary["unknown_semantic_count"] == 0
++
++
++def test_long_run_warning_flags_unknown_semantic_rate_in_strict_mode():
++    transcript = [{"turn_index": i, "player_action": "Do something vague."} for i in range(1, 101)]
++    action = summarize_action_diversity(transcript)
++    progress = summarize_progress_timeline(transcript)
++
++    warnings = summarize_long_run_warnings(
++        transcript=transcript,
++        action_diversity_summary=action,
++        progress_timeline_summary=progress,
++        console_log_summary={"turn_error_count": 0},
++        manual_turn_error_summary={"error_count": 0},
++        turns_for_strict_gates=100,
++    )
++
++    assert any(
++        warning["code"] == "semantic_action_extraction_unknown_rate"
++        for warning in warnings["warnings"]
++    )
+5B. Patch quality gate test
 
-Add or extend a journal quality test:
+Patch src/tests/rpg/autoplay/test_quality_gates.py.
+
+In test_quality_gate_fails_strict_100_turn_repetition, add:
 
 --- src/tests/rpg/autoplay/test_quality_gates.py
 +++ src/tests/rpg/autoplay/test_quality_gates.py
 @@
- def test_player_journal_quality_flags_punctuation_and_missing_sections():
+         "action_diversity_summary": {
+             "max_same_semantic_target_streak": {"value": "ask:Bran", "streak": 20},
++            "unknown_semantic_rate": 0.0,
+         },
+
+Add new test:
+
+--- src/tests/rpg/autoplay/test_quality_gates.py
++++ src/tests/rpg/autoplay/test_quality_gates.py
 @@
-     assert result["missing_section_count"] == 1
+ def test_quality_gate_fails_strict_100_turn_repetition():
+@@
+     assert result["gates"]["strict_100turn_repeat_semantic_target_streak_ok"] is False
+     assert result["gates"]["hundred_turn_eval_ok"] is False
 +
 +
-+def test_player_journal_quality_flags_broken_action_fragments():
++def test_quality_gate_fails_strict_100_turn_unknown_semantic_rate():
++    from types import SimpleNamespace
++
++    args = SimpleNamespace(
++        background_llm_mode="combined",
++        max_player_agent_fallback_rate=0.25,
++        capture_console_log=True,
++        scenario_seed="tavern_story_seed",
++        strict_eval_turns=100,
++        max_100turn_repeat_semantic_target_streak=8,
++        max_100turn_no_progress_streak=10,
++    )
 +    summary = {
-+        "player_journal_summary": {
-+            "entries": [
-+                {
-+                    "entry_id": "journal:turn:8",
-+                    "text": "What I did: .gold? Or trouble, indeed. Next: Witness Search: Find the witness.",
-+                }
-+            ]
-+        }
++        "performance_budget_summary": {
++            "live_blocking": {
++                "avg_human_playable_blocking_ms": 50,
++                "max_human_playable_blocking_ms": 90,
++            }
++        },
++        "background_jobs": {
++            "combined_background_llm_jobs": 100,
++            "narration_jobs": 0,
++            "advisory_jobs": 0,
++        },
++        "player_agent_trace_summary": {"turns": 100, "fallback_turns": 0},
++        "campaign_calendar_summary": {"turns_tracked": 100},
++        "player_journal_summary": {"entry_count": 25},
++        "player_journal_quality_summary": {"ok": True},
++        "manual_turn_error_summary": {"ok": True, "error_count": 0},
++        "console_log_summary": {"line_count": 10, "turn_error_count": 0},
++        "story_beat_summary": {"beat_count": 100},
++        "quest_progress_summary": {"quest_count": 1},
++        "action_diversity_summary": {
++            "unknown_semantic_rate": 1.0,
++            "max_same_semantic_target_streak": {"value": "unknown:none", "streak": 100},
++        },
++        "progress_timeline_summary": {
++            "meaningful_progress_rate": 0.5,
++            "max_no_progress_streak": 1,
++        },
++        "long_run_warning_summary": {"ok": False},
++        "hundred_turn_eval_summary": {"ok": False},
 +    }
 +
-+    result = _summarize_player_journal_quality(summary)
-+
-+    assert result["ok"] is False
-+    assert result["punctuation_violation_count"] >= 1 or result["violation_count"] >= 1
-5C. Optional helper test for _journal_turn_result_with_narration_sources
-
-Patch an autoplay test file that already imports helpers from autoplay_llm_campaign.py, or create:
-
-src/tests/rpg/autoplay/test_journal_narration_sources.py
-
-Add:
-
---- /dev/null
-+++ src/tests/rpg/autoplay/test_journal_narration_sources.py
-@@
-+from tests.rpg.autoplay_llm_campaign import _journal_turn_result_with_narration_sources
-+
-+
-+def test_journal_turn_result_with_narration_sources_prefers_combined_narration():
-+    result = _journal_turn_result_with_narration_sources(
-+        turn_result={},
-+        combined_background_result={
-+            "narration": "Bran lowered his voice and mentioned a witness.",
-+            "narration_payload": {
-+                "narration": "Bran lowered his voice and mentioned a witness.",
-+                "npc": {"speaker": "Bran", "line": "Find them quickly."},
-+            },
-+        },
-+        resolved_narration_payload={},
-+        narration_text="",
++    result = _summarize_quality_gates(
++        args=args,
++        metrics={"real_turn_runtime_count": 100},
++        summary=summary,
++        transcript=[{} for _ in range(100)],
 +    )
 +
-+    assert result["narration_payload"]["narration"].startswith("Bran lowered")
-+    assert result["combined_background_llm_result"]["narration"].startswith("Bran lowered")
++    assert result["ok"] is False
++    assert result["gates"]["strict_100turn_semantic_action_extraction_ok"] is False
 6. Validation
 
 Compile:
 
-python -m py_compile src\app\rpg\campaign_journal.py src\tests\rpg\autoplay_llm_campaign.py src\tests\rpg\autoplay\report_sections.py
+python -m py_compile src\tests\rpg\autoplay\hundred_turn_eval.py src\tests\rpg\autoplay_llm_campaign.py src\tests\rpg\autoplay\campaign_report.py
 
 Run tests:
 
-python -m pytest src\tests\rpg\test_campaign_journal.py src\tests\rpg\autoplay\test_quality_gates.py src\tests\rpg\autoplay\test_journal_narration_sources.py -q
+python -m pytest src\tests\rpg\autoplay\test_hundred_turn_eval.py src\tests\rpg\autoplay\test_quality_gates.py src\tests\rpg\autoplay\test_report_sections.py -q

@@ -1085,6 +1085,22 @@ def build_campaign_report_model(
             summary.get("console_log_summary")
             or metrics.get("console_log_summary")
         ),
+        "action_diversity_summary": _safe_dict(
+            summary.get("action_diversity_summary")
+            or metrics.get("action_diversity_summary")
+        ),
+        "progress_timeline_summary": _safe_dict(
+            summary.get("progress_timeline_summary")
+            or metrics.get("progress_timeline_summary")
+        ),
+        "long_run_warning_summary": _safe_dict(
+            summary.get("long_run_warning_summary")
+            or metrics.get("long_run_warning_summary")
+        ),
+        "hundred_turn_eval_summary": _safe_dict(
+            summary.get("hundred_turn_eval_summary")
+            or metrics.get("hundred_turn_eval_summary")
+        ),
         "campaign_calendar_summary": _safe_dict(
             summary.get("campaign_calendar_summary")
             or metrics.get("campaign_calendar_summary")
@@ -1207,6 +1223,114 @@ def _render_console_log_summary(summary: Dict[str, Any]) -> str:
         <summary>Console tail</summary>
         <pre>{_esc(tail_text)}</pre>
       </details>
+    </section>
+    """
+
+
+def _render_hundred_turn_eval(model: Dict[str, Any]) -> str:
+    eval_summary = _safe_dict(model.get("hundred_turn_eval_summary"))
+    action = _safe_dict(model.get("action_diversity_summary") or eval_summary.get("action_diversity_summary"))
+    progress = _safe_dict(model.get("progress_timeline_summary") or eval_summary.get("progress_timeline_summary"))
+    warnings = _safe_dict(model.get("long_run_warning_summary") or eval_summary.get("long_run_warning_summary"))
+
+    warning_rows = ""
+    for warning in warnings.get("warnings") if isinstance(warnings.get("warnings"), list) else []:
+        warning = _safe_dict(warning)
+        warning_rows += (
+            "<tr>"
+            f"<td>{html.escape(str(warning.get('severity') or 'warning'))}</td>"
+            f"<td>{html.escape(str(warning.get('code') or ''))}</td>"
+            f"<td>{html.escape(str(warning.get('message') or ''))}</td>"
+            "</tr>"
+        )
+    if not warning_rows:
+        warning_rows = "<tr><td colspan='3'>No long-run warnings.</td></tr>"
+
+    return f"""
+    <section id="hundred-turn-eval">
+      <h2>100-Turn Evaluation</h2>
+      <p><strong>Mode:</strong> {html.escape(str(eval_summary.get("readiness") or "smoke"))}
+         · <strong>Turns:</strong> {html.escape(str(eval_summary.get("turn_count") or progress.get("turns") or 0))}
+         · <strong>OK:</strong> {html.escape(str(eval_summary.get("ok", True)))}</p>
+      <div class="metric-grid">
+        <div class="metric-card"><strong>Meaningful progress rate</strong><br>{html.escape(str(progress.get("meaningful_progress_rate") or 0))}</div>
+        <div class="metric-card"><strong>Story beat rate</strong><br>{html.escape(str(progress.get("story_beat_rate") or 0))}</div>
+        <div class="metric-card"><strong>Max no-progress streak</strong><br>{html.escape(str(progress.get("max_no_progress_streak") or 0))}</div>
+        <div class="metric-card"><strong>Max semantic-target repeat</strong><br>{html.escape(str(_safe_dict(action.get("max_same_semantic_target_streak")).get("streak") or 0))}</div>
+      </div>
+      <h3>Long-Run Warnings</h3>
+      <table>
+        <thead><tr><th>Severity</th><th>Code</th><th>Message</th></tr></thead>
+        <tbody>{warning_rows}</tbody>
+      </table>
+    </section>
+    """
+
+
+def _render_action_diversity(summary: Dict[str, Any]) -> str:
+    summary = _safe_dict(summary)
+
+    def rows(items: Any) -> str:
+        out = ""
+        for item in items if isinstance(items, list) else []:
+            if isinstance(item, (list, tuple)) and len(item) >= 2:
+                label, count = item[0], item[1]
+            else:
+                continue
+            out += f"<tr><td>{html.escape(str(label))}</td><td>{html.escape(str(count))}</td></tr>"
+        return out or "<tr><td colspan='2'>No data.</td></tr>"
+
+    return f"""
+    <section id="action-diversity">
+      <h2>Action Diversity</h2>
+      <p>
+        Unique actions: {html.escape(str(summary.get("unique_action_count") or 0))} ·
+        Unique semantic actions: {html.escape(str(summary.get("unique_semantic_action_count") or 0))} ·
+        Unique targets: {html.escape(str(summary.get("unique_target_count") or 0))}
+      </p>
+      <h3>Top Semantic Actions</h3>
+      <table><thead><tr><th>Semantic Action</th><th>Count</th></tr></thead><tbody>{rows(summary.get("top_semantic_actions"))}</tbody></table>
+      <h3>Top Semantic Targets</h3>
+      <table><thead><tr><th>Semantic Target</th><th>Count</th></tr></thead><tbody>{rows(summary.get("top_semantic_targets"))}</tbody></table>
+    </section>
+    """
+
+
+def _render_progress_timeline(summary: Dict[str, Any]) -> str:
+    summary = _safe_dict(summary)
+    timeline = summary.get("timeline") if isinstance(summary.get("timeline"), list) else []
+    rows = ""
+    for item in timeline[-40:]:
+        item = _safe_dict(item)
+        rows += (
+            "<tr>"
+            f"<td>{html.escape(str(item.get('turn_index') or ''))}</td>"
+            f"<td>{html.escape(str(item.get('semantic_action') or ''))}</td>"
+            f"<td>{html.escape(str(item.get('target') or ''))}</td>"
+            f"<td>{html.escape(str(item.get('location') or ''))}</td>"
+            f"<td>{html.escape(str(item.get('meaningful_progress')))}</td>"
+            f"<td>{html.escape(str(item.get('story_beat')))}</td>"
+            f"<td>{html.escape(str(item.get('noop')))}</td>"
+            f"<td>{html.escape(str(item.get('reason') or ''))}</td>"
+            "</tr>"
+        )
+    if not rows:
+        rows = "<tr><td colspan='8'>No progress timeline data.</td></tr>"
+
+    return f"""
+    <section id="progress-timeline">
+      <h2>Progress Timeline</h2>
+      <p>
+        Meaningful progress turns: {html.escape(str(summary.get("meaningful_progress_turns") or 0))} ·
+        Story beat turns: {html.escape(str(summary.get("story_beat_turns") or 0))} ·
+        No-op turns: {html.escape(str(summary.get("noop_turns") or 0))}
+      </p>
+      <table>
+        <thead>
+          <tr><th>Turn</th><th>Action</th><th>Target</th><th>Location</th><th>Progress</th><th>Story</th><th>No-op</th><th>Reason</th></tr>
+        </thead>
+        <tbody>{rows}</tbody>
+      </table>
     </section>
     """
 
@@ -1737,6 +1861,8 @@ def render_campaign_report_html(model: Dict[str, Any]) -> str:
     .npc-card-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px; }
     .npc-card, .journal-entry { border: 1px solid #ddd; border-radius: 8px; padding: 12px; margin: 8px 0; background: #fafafa; }
     .npc-card h3 { margin-top: 0; }
+    .metric-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; margin: 10px 0; }
+    .metric-card { border: 1px solid #ddd; border-radius: 8px; padding: 10px; background: #fafafa; }
     .report-quick-links {
       border: 1px solid #cbd5e1;
       border-radius: 10px;
@@ -1885,6 +2011,9 @@ def render_campaign_report_html(model: Dict[str, Any]) -> str:
       <a class="header-journal-link" href="#campaign-journal">Journal</a>
       <a href="#quest-progress">Quests</a>
       <a href="#npc-evolution">Evolution</a>
+      <a href="#hundred-turn-eval">100-Turn Eval</a>
+      <a href="#action-diversity">Actions</a>
+      <a href="#progress-timeline">Progress</a>
       <a href="#story-so-far">Story</a>
       <a href="#arcs">Arcs</a>
       <a href="#locations">Locations</a>
@@ -1918,6 +2047,9 @@ def render_campaign_report_html(model: Dict[str, Any]) -> str:
   {_render_calendar_and_journal(model.get("campaign_calendar_summary") or {}, model.get("player_journal_summary") or {})}
   {_render_quest_progress(model.get("quest_progress_summary") or {})}
   {_render_npc_evolution_cards(model.get("npc_evolution_report_summary") or {})}
+  {_render_hundred_turn_eval(model)}
+  {_render_action_diversity(model.get("action_diversity_summary") or {})}
+  {_render_progress_timeline(model.get("progress_timeline_summary") or {})}
 
    <section id="story-so-far">
     <h2>Story So Far</h2>
@@ -2153,6 +2285,10 @@ def render_campaign_report_html(model: Dict[str, Any]) -> str:
       {_render_json_details("Story beat fallback summary JSON", model.get("story_beat_summary") or {})}
       {_render_json_details("Player journal quality summary JSON", model.get("player_journal_quality_summary") or {})}
       {_render_json_details("Manual turn error summary JSON", model.get("manual_turn_error_summary") or {})}
+      {_render_json_details("100-turn eval summary JSON", model.get("hundred_turn_eval_summary") or {})}
+      {_render_json_details("Action diversity summary JSON", model.get("action_diversity_summary") or {})}
+      {_render_json_details("Progress timeline summary JSON", model.get("progress_timeline_summary") or {})}
+      {_render_json_details("Long-run warning summary JSON", model.get("long_run_warning_summary") or {})}
       {_render_json_details("Latest Simulation State", latest_state)}
       {_render_json_details("Summary JSON", summary)}
       {_render_json_details("Metrics JSON", metrics)}
