@@ -715,6 +715,7 @@ from app.rpg.session.turn_contract import (
     apply_state_delta,
     build_turn_contract,
 )
+from app.rpg.campaign_journal_runtime import advance_campaign_journal_for_turn
 from app.rpg.social.npc_backbone import resolve_npc_backbone_decision
 from app.rpg.world.companion_acceptance import (
     get_pending_companion_offer_debug,
@@ -6958,6 +6959,8 @@ def build_frontend_bootstrap_payload(session: Dict[str, Any]) -> Dict[str, Any]:
         },
         "grounded_scene_context": _safe_dict(runtime_state.get("grounded_scene_context")),
         "transaction_menus": transaction_menus,
+        "campaign_calendar": _safe_dict(runtime_state.get("campaign_calendar")),
+        "player_journal": _safe_dict(runtime_state.get("player_journal")),
     }
 
 
@@ -13612,6 +13615,43 @@ def apply_turn(
         )
 
     final_result["session"] = session
+
+    # Advance campaign journal after the deterministic turn result exists.
+    # Important: not every apply_turn path assigns a local named
+    # `turn_contract`, so never reference it directly here. Resolve it from
+    # returned/session structures first, with locals() as a safe last fallback.
+    journal_turn_contract = (
+        _safe_dict(final_result.get("turn_contract"))
+        or _safe_dict(_safe_dict(final_result.get("result")).get("turn_contract"))
+        or _safe_dict(_safe_dict(session.get("last_turn")).get("turn_contract"))
+        or _safe_dict(locals().get("turn_contract"))
+        or {}
+    )
+    journal_player_input = (
+        _safe_str(locals().get("player_input"))
+        or _safe_str(final_result.get("player_input"))
+        or _safe_str(journal_turn_contract.get("player_input"))
+        or _safe_str(journal_turn_contract.get("action"))
+    )
+    journal_narration_payload = _safe_dict(locals().get("narration_payload"))
+    runtime_state = session.setdefault("runtime_state", {})
+    turn_index = int(
+        journal_turn_contract.get("turn_index")
+        or final_result.get("turn_index")
+        or session.get("turn_index")
+        or len(session.get("turns", []))
+        or 1
+    )
+    session["runtime_state"] = advance_campaign_journal_for_turn(
+        runtime_state=runtime_state,
+        turn_index=turn_index,
+        player_input=journal_player_input,
+        turn_contract=journal_turn_contract,
+        turn_result={
+            "narration_payload": journal_narration_payload,
+            "player_action": journal_player_input,
+        },
+    )
 
     visible_interaction_reason = _interaction_visible_result_reason(general_interaction_result)
     if visible_interaction_reason:

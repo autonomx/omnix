@@ -74,6 +74,60 @@ def _candidate_id(candidate: Dict[str, Any]) -> str:
     return str(_safe_dict(candidate).get("candidate_id") or "")
 
 
+def _merge_unique_dict_list(left: List[Any], right: List[Any], *, key: str) -> List[Any]:
+    out: List[Any] = []
+    seen = set()
+    for item in list(left or []) + list(right or []):
+        if not isinstance(item, dict):
+            continue
+        marker = str(_safe_dict(item).get(key) or item)
+        if marker in seen:
+            continue
+        seen.add(marker)
+        out.append(deepcopy(item))
+    return out
+
+
+def _merge_campaign_calendar(left: Dict[str, Any], right: Dict[str, Any]) -> Dict[str, Any]:
+    left = _safe_dict(left)
+    right = _safe_dict(right)
+    if not left:
+        return deepcopy(right)
+    if not right:
+        return deepcopy(left)
+    merged = deepcopy(left)
+    merged.update(deepcopy(right))
+    history = _merge_unique_dict_list(
+        _safe_list(left.get("history")),
+        _safe_list(right.get("history")),
+        key="turn_index",
+    )
+    history.sort(key=lambda item: int(_safe_dict(item).get("turn_index") or 0))
+    merged["history"] = history[-500:]
+    if history:
+        merged["current"] = history[-1]
+    return merged
+
+
+def _merge_player_journal(left: Dict[str, Any], right: Dict[str, Any]) -> Dict[str, Any]:
+    left = _safe_dict(left)
+    right = _safe_dict(right)
+    if not left:
+        return deepcopy(right)
+    if not right:
+        return deepcopy(left)
+    merged = deepcopy(left)
+    merged.update(deepcopy(right))
+    merged["entries"] = _merge_unique_dict_list(
+        _safe_list(left.get("entries")),
+        _safe_list(right.get("entries")),
+        key="entry_id",
+    )[-100:]
+    merged["pending_actions"] = deepcopy(_safe_list(right.get("pending_actions")))
+    merged["pending_results"] = deepcopy(_safe_list(right.get("pending_results")))
+    return merged
+
+
 def _merge_deferred_advisory_state(
     carried_runtime_state: Dict[str, Any],
     row_runtime_state: Dict[str, Any],
@@ -126,6 +180,21 @@ def _merge_deferred_advisory_state(
         out_adv["summary"] = carried_adv.get("summary")
 
     merged["deferred_advisory"] = out_adv
+
+    merged["campaign_calendar"] = _merge_campaign_calendar(
+        _safe_dict(carried_runtime_state.get("campaign_calendar")),
+        _safe_dict(row_runtime_state.get("campaign_calendar")),
+    )
+    merged["player_journal"] = _merge_player_journal(
+        _safe_dict(carried_runtime_state.get("player_journal")),
+        _safe_dict(row_runtime_state.get("player_journal")),
+    )
+    for key in ("settings", "ui_state"):
+        if key in row_runtime_state:
+            merged[key] = deepcopy(row_runtime_state[key])
+        elif key in carried_runtime_state and key not in merged:
+            merged[key] = deepcopy(carried_runtime_state[key])
+
     return merged
 
 

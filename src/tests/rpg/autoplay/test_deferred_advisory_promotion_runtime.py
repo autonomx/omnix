@@ -332,3 +332,78 @@ def test_profile_loading_does_not_break_deferred_advisory_carry_forward(tmp_path
     assert result["evolution_signals_created"] >= 1
     assert transcript[1]["npc_profile_load_result"]["loaded_count"] == 1
     assert transcript[1]["runtime_state"]["npc_evolution"]["arcs"]["Bran"]["axes"]["trust"] >= 1
+
+
+def test_advisory_promotion_runtime_preserves_campaign_journal_namespaces():
+    transcript = [
+        {
+            "turn_index": 1,
+            "runtime_state": {
+                "campaign_calendar": {
+                    "current": {"turn_index": 1, "time_label": "00:00"},
+                    "history": [{"turn_index": 1, "time_label": "00:00"}],
+                },
+                "player_journal": {
+                    "entries": [],
+                    "pending_actions": ["I ask Bran."],
+                    "pending_results": [],
+                },
+                "deferred_advisory": {
+                    "candidates": [],
+                    "accepted": [],
+                    "rejected": [],
+                },
+            },
+            "simulation_state": {
+                "scene": {"nearby_npcs": ["Bran"]},
+                "npc_progression_state": {"npcs": {"Bran": {"name": "Bran"}}},
+            },
+        }
+    ]
+
+    run_deferred_advisory_promotions_for_transcript(transcript=transcript)
+
+    runtime_state = transcript[0]["runtime_state"]
+    assert "campaign_calendar" in runtime_state
+    assert "player_journal" in runtime_state
+    assert runtime_state["campaign_calendar"]["current"]["time_label"] == "00:00"
+
+
+def test_advisory_promotion_runtime_merges_campaign_calendar_history():
+    transcript = [
+        {
+            "turn_index": 1,
+            "runtime_state": {
+                "campaign_calendar": {
+                    "current": {"turn_index": 1, "time_label": "00:00"},
+                    "history": [{"turn_index": 1, "time_label": "00:00"}],
+                },
+                "player_journal": {"entries": [], "pending_actions": ["a1"], "pending_results": []},
+                "deferred_advisory": {"candidates": [], "accepted": [], "rejected": []},
+            },
+            "simulation_state": {
+                "scene": {"nearby_npcs": ["Bran"]},
+                "npc_progression_state": {"npcs": {"Bran": {"name": "Bran"}}},
+            },
+        },
+        {
+            "turn_index": 2,
+            "runtime_state": {
+                "campaign_calendar": {
+                    "current": {"turn_index": 2, "time_label": "01:00"},
+                    "history": [{"turn_index": 2, "time_label": "01:00"}],
+                },
+                "player_journal": {"entries": [], "pending_actions": ["a2"], "pending_results": []},
+                "deferred_advisory": {"candidates": [], "accepted": [], "rejected": []},
+            },
+            "simulation_state": {
+                "scene": {"nearby_npcs": ["Bran"]},
+                "npc_progression_state": {"npcs": {"Bran": {"name": "Bran"}}},
+            },
+        },
+    ]
+
+    run_deferred_advisory_promotions_for_transcript(transcript=transcript)
+
+    history = transcript[1]["runtime_state"]["campaign_calendar"]["history"]
+    assert [item["turn_index"] for item in history] == [1, 2]

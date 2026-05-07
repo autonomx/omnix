@@ -139,26 +139,57 @@ def _merge_duplicate_arc_ids(
             canonical_arc[key] = existing[-limit:]
 
 
-def _derive_arc_stage(axes: Dict[str, Any]) -> str:
-    trust = int(axes.get("trust") or 0)
-    fear = int(axes.get("fear") or 0)
-    resentment = int(axes.get("resentment") or 0)
-    loyalty = int(axes.get("loyalty") or 0)
-    curiosity = int(axes.get("curiosity") or 0)
+def _axis_value(axes: Dict[str, Any], key: str) -> int:
+    try:
+        return int(axes.get(key) or 0)
+    except Exception:
+        return 0
 
-    if loyalty >= 5 and trust >= 4:
-        return "ally_leaning"
+
+def _derive_arc_stage(axes: Dict[str, Any]) -> str:
+    """Deterministic stage derivation from bounded relationship axes.
+
+    Priority matters. Strong negative states should override mild positives;
+    committed positive states should override ordinary trust.
+    """
+    axes = _safe_dict(axes)
+    trust = _axis_value(axes, "trust")
+    fear = _axis_value(axes, "fear")
+    respect = _axis_value(axes, "respect")
+    curiosity = _axis_value(axes, "curiosity")
+    resentment = _axis_value(axes, "resentment")
+    loyalty = _axis_value(axes, "loyalty")
+
+    if resentment >= 6 and trust <= 0:
+        return "rival_leaning"
+    if fear >= 6:
+        return "fearful"
     if resentment >= 5:
         return "resentful"
-    if fear >= 5:
-        return "fearful"
+    if trust <= -3 or resentment >= 3:
+        return "guarded"
+    if loyalty >= 6 and trust >= 5:
+        return "attached"
+    if loyalty >= 4 and trust >= 4:
+        return "ally_leaning"
+    if trust >= 4 and respect >= 2:
+        return "trusting"
     if trust >= 4:
         return "trusting"
     if curiosity >= 4:
         return "curious"
-    if trust <= -3:
-        return "guarded"
+    if fear >= 3 and trust <= 1:
+        return "withdrawn"
     return "stable"
+
+
+def _axis_delta_reason(signal: Dict[str, Any]) -> str:
+    payload = _safe_dict(signal.get("payload"))
+    kind = _safe_str(signal.get("kind"))
+    if kind == "relationship_delta":
+        axis = _safe_str(payload.get("axis") or payload.get("relationship_axis") or "trust")
+        return f"relationship_delta:{axis}"
+    return kind or "unknown_signal"
 
 
 def _append_bounded(items: List[Dict[str, Any]], item: Dict[str, Any], limit: int) -> List[Dict[str, Any]]:
@@ -172,9 +203,38 @@ def _append_bounded(items: List[Dict[str, Any]], item: Dict[str, Any], limit: in
     return items
 
 
+def _milestone_id(*, npc_id: str, from_stage: str, to_stage: str, signal_id: str) -> str:
+    return f"npc_milestone:{npc_id}:{from_stage}:{to_stage}:{signal_id}"
+
+
+def _append_milestone_deduped(
+    milestones: List[Dict[str, Any]],
+    milestone: Dict[str, Any],
+    *,
+    limit: int = 20,
+) -> List[Dict[str, Any]]:
+    milestone_id = _safe_str(milestone.get("milestone_id"))
+    existing_ids = {
+        _safe_str(_safe_dict(item).get("milestone_id"))
+        for item in milestones
+        if isinstance(item, dict)
+    }
+    if milestone_id and milestone_id in existing_ids:
+        return milestones
+    milestones.append(milestone)
+    if len(milestones) > limit:
+        milestones = milestones[-limit:]
+    return milestones
+
+
 def _consume_relationship_delta(arc: Dict[str, Any], signal: Dict[str, Any]) -> Dict[str, Any]:
     payload = _safe_dict(signal.get("payload"))
-    axis = _safe_str(payload.get("axis") or payload.get("relationship_axis") or "trust").lower()
+    axis = _safe_str(
+        payload.get("axis")
+        or payload.get("relationship_axis")
+        or payload.get("dimension")
+        or "trust"
+    ).lower()
     if axis not in AXES:
         axis = "trust"
     try:
@@ -287,14 +347,26 @@ def consume_evolution_signal(
     after_stage = arc["arc_stage"]
     milestone = None
     if before_stage != after_stage:
+        signal_id = _safe_str(signal.get("signal_id"))
         milestone = {
+            "milestone_id": _milestone_id(
+                npc_id=npc_id,
+                from_stage=before_stage,
+                to_stage=after_stage,
+                signal_id=signal_id,
+            ),
             "turn_index": turn_index,
             "from": before_stage,
             "to": after_stage,
-            "reason": f"evolution_signal:{kind}",
-            "signal_id": signal.get("signal_id"),
+            "reason": _axis_delta_reason(signal),
+            "signal_id": signal_id,
+            "source": "npc_evolution_signal",
         }
-        arc["milestones"] = _append_bounded(_safe_list(arc.get("milestones")), milestone, 20)
+        arc["milestones"] = _append_milestone_deduped(
+            _safe_list(arc.get("milestones")),
+            milestone,
+            limit=20,
+        )
 
     signal["consumed"] = True
     signal["consumed_at_turn"] = int(turn_index)
@@ -313,6 +385,7 @@ def consume_evolution_signal(
         "effect": effect,
         "arc_stage_before": before_stage,
         "arc_stage_after": after_stage,
+        "stage_changed": before_stage != after_stage,
         "milestone": milestone,
     }
     return runtime_state, decision

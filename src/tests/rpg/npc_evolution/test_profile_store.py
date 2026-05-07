@@ -122,3 +122,45 @@ def test_persist_removes_legacy_prefixed_profile(tmp_path):
     assert (tmp_path / "bran.json").exists()
     assert not legacy_path.exists()
     assert result["written"][0]["removed_legacy_paths"]
+
+
+def test_persist_npc_evolution_profiles_writes_milestones(tmp_path):
+    runtime_state = {
+        "npc_evolution": {
+            "signals": [
+                {
+                    "signal_id": "s1",
+                    "npc_id": "Bran",
+                    "kind": "relationship_delta",
+                    "turn_index": 2,
+                    "summary": "Bran trusts the player more.",
+                    "source": "deferred_advisory_promotion",
+                    "consumed": True,
+                }
+            ],
+            "arcs": {
+                "Bran": {
+                    "npc_id": "Bran",
+                    "arc_stage": "trusting",
+                    "axes": {"trust": 4},
+                    "milestones": [
+                        {
+                            "milestone_id": "m1",
+                            "turn_index": 2,
+                            "from": "stable",
+                            "to": "trusting",
+                            "reason": "relationship_delta:trust",
+                            "signal_id": "s1",
+                        }
+                    ],
+                }
+            },
+        }
+    }
+
+    result = persist_npc_evolution_profiles(runtime_state=runtime_state, root=tmp_path)
+    profile = load_npc_profile("Bran", root=tmp_path)
+
+    assert result["ok"] is True
+    assert profile["evolution"]["arc_stage"] == "trusting"
+    assert profile["evolution"]["milestones"][0]["milestone_id"] == "m1"

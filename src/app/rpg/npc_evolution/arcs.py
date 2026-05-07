@@ -454,6 +454,39 @@ def summarize_npc_evolution_state(runtime_state: Dict[str, Any]) -> Dict[str, An
         by_npc[npc_id] = int(by_npc.get(npc_id) or 0) + 1
         if signal_dict.get("consumed"):
             consumed += 1
+    milestone_total = 0
+    duplicate_milestone_ids: List[str] = []
+    out_of_bounds_axes: List[Dict[str, Any]] = []
+    seen_milestones = set()
+    arc_stages: Dict[str, str] = {}
+    axes_by_npc: Dict[str, Dict[str, Any]] = {}
+    milestones_by_npc: Dict[str, int] = {}
+    for npc_id, arc_any in arcs.items():
+        arc = _safe_dict(arc_any)
+        arc_stages[str(npc_id)] = _safe_str(arc.get("arc_stage")) or "stable"
+        axes = _safe_dict(arc.get("axes"))
+        axes_by_npc[str(npc_id)] = axes
+        for axis, value in axes.items():
+            try:
+                int_value = int(value or 0)
+                if int_value < -10 or int_value > 10:
+                    out_of_bounds_axes.append(
+                        {"npc_id": str(npc_id), "axis": str(axis), "value": int_value}
+                    )
+            except Exception:
+                out_of_bounds_axes.append(
+                    {"npc_id": str(npc_id), "axis": str(axis), "value": value}
+                )
+        milestones = _safe_list(arc.get("milestones"))
+        milestones_by_npc[str(npc_id)] = len(milestones)
+        milestone_total += len(milestones)
+        for milestone in milestones:
+            milestone_id = _safe_str(_safe_dict(milestone).get("milestone_id"))
+            if not milestone_id:
+                continue
+            if milestone_id in seen_milestones:
+                duplicate_milestone_ids.append(milestone_id)
+            seen_milestones.add(milestone_id)
     return {
         "signal_total": len(signals),
         "signal_consumed": consumed,
@@ -463,4 +496,10 @@ def summarize_npc_evolution_state(runtime_state: Dict[str, Any]) -> Dict[str, An
         "arc_count": len(arcs),
         "arcs_by_npc": sorted(list(arcs.keys())),
         "consumed_projection_count": len(consumed_projection_ids),
+        "arc_stages": arc_stages,
+        "axes_by_npc": axes_by_npc,
+        "milestone_total": milestone_total,
+        "milestones_by_npc": milestones_by_npc,
+        "duplicate_milestone_ids": duplicate_milestone_ids,
+        "out_of_bounds_axes": out_of_bounds_axes,
     }
