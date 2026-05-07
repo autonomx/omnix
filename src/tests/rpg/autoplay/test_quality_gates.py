@@ -728,3 +728,76 @@ def test_quality_gate_fails_strict_100_turn_unknown_semantic_rate():
 
     assert result["ok"] is False
     assert result["gates"]["strict_100turn_semantic_action_extraction_ok"] is False
+
+
+def test_quality_gate_combined_background_uses_timing_tracker_for_pre_turn_drained_jobs():
+    from types import SimpleNamespace
+    from tests.rpg.autoplay_llm_campaign import _summarize_quality_gates
+
+    args = SimpleNamespace(
+        background_llm_mode="combined",
+        max_player_agent_fallback_rate=0.25,
+        capture_console_log=True,
+        scenario_seed="tavern_story_seed",
+        strict_eval_turns=100,
+        max_100turn_repeat_semantic_target_streak=8,
+        max_100turn_no_progress_streak=10,
+        background_result_max_turn_lag=5,
+        fail_if_background_results_only_finalized=False,
+    )
+    transcript = [{} for _ in range(20)]
+    metrics = {"real_turn_runtime_count": 20}
+    summary = {
+        "performance_budget_summary": {
+            "live_blocking": {
+                "avg_human_playable_blocking_ms": 50,
+                "max_human_playable_blocking_ms": 90,
+            }
+        },
+        # Simulates the old bug: final drain only saw the tail because most jobs
+        # had already been consumed pre-turn.
+        "background_jobs": {
+            "combined_background_llm_jobs": 5,
+            "total_jobs": 8,
+            "failed_jobs": 3,
+            "errors": ["final_drain_timeout"],
+        },
+        "background_result_timing_summary": {
+            "ok": True,
+            "jobs_submitted": 20,
+            "jobs_attached_total": 20,
+            "jobs_attached_pre_turn": 12,
+            "jobs_attached_final": 8,
+            "missing_job_count": 0,
+            "pre_turn_attach_rate": 0.6,
+            "max_attach_lag_turns": 7,
+            "only_finalized_count": 8,
+        },
+        "player_agent_trace_summary": {"turns": 20, "fallback_turns": 0},
+        "campaign_calendar_summary": {"turns_tracked": 20},
+        "player_journal_summary": {"entry_count": 5},
+        "player_journal_quality_summary": {"ok": True},
+        "manual_turn_error_summary": {"ok": True, "error_count": 0},
+        "console_log_summary": {"line_count": 10, "turn_error_count": 0, "error_count": 0},
+        "story_beat_summary": {"beat_count": 20},
+        "quest_progress_summary": {"quest_count": 1},
+        "action_diversity_summary": {
+            "unknown_semantic_rate": 0.0,
+            "max_same_semantic_target_streak": {"value": "ask:Bran", "streak": 1},
+        },
+        "progress_timeline_summary": {
+            "meaningful_progress_rate": 0.5,
+            "max_no_progress_streak": 1,
+        },
+        "long_run_warning_summary": {"ok": True},
+        "hundred_turn_eval_summary": {"ok": True},
+    }
+
+    result = _summarize_quality_gates(
+        args=args,
+        metrics=metrics,
+        summary=summary,
+        transcript=transcript,
+    )
+
+    assert result["gates"]["combined_background_mode_when_requested"] is True

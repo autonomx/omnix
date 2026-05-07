@@ -5,12 +5,21 @@ import os
 import shutil
 import subprocess
 import sys
+import threading
 import time
 import traceback
 import uuid
 from copy import deepcopy
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List
+
+
+def _timestamped_print(*args, **kwargs):
+    """Print with timestamp prefix."""
+    timestamp = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+    print(f"[{timestamp}]", *args, **kwargs)
+
 
 # Add src to path for imports
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', '..', 'src'))
@@ -150,6 +159,99 @@ def _baseline_mismatch_warning(
 
 def _safe_str(value: Any) -> str:
     return value if isinstance(value, str) else ""
+
+
+def _now_ms() -> int:
+    return int(time.perf_counter() * 1000)
+
+
+def _wall_ts() -> str:
+    try:
+        from datetime import datetime
+
+        return datetime.now().isoformat(timespec="seconds")
+    except Exception:
+        return ""
+
+
+def _probe_log(enabled: bool, event: str, **fields: Any) -> None:
+    if not enabled:
+        return
+    parts = [
+        f"[AUTOPLAY-PROBE]",
+        f"ts={_wall_ts()}",
+        f"event={event}",
+        f"thread={threading.current_thread().name}",
+    ]
+    for key, value in fields.items():
+        try:
+            text = str(value)
+        except Exception:
+            text = "<unprintable>"
+        if len(text) > 500:
+            text = text[:500] + "...[truncated]"
+        parts.append(f"{key}={text}")
+    print(" ".join(parts), flush=True)
+
+
+class _ProbeTimer:
+    def __init__(self, enabled: bool, event: str, **fields: Any) -> None:
+        self.enabled = enabled
+        self.event = event
+        self.fields = fields
+        self.start_ms = 0
+
+    def __enter__(self) -> "_ProbeTimer":
+        self.start_ms = _now_ms()
+        _probe_log(self.enabled, f"{self.event}.start", **self.fields)
+        return self
+
+    def __exit__(self, exc_type: Any, exc: Any, tb: Any) -> None:
+        elapsed_ms = _now_ms() - self.start_ms
+        if exc is not None:
+            _probe_log(
+                self.enabled,
+                f"{self.event}.error",
+                elapsed_ms=elapsed_ms,
+                error=f"{type(exc).__name__}: {exc}",
+                traceback="".join(traceback.format_exception(exc_type, exc, tb))[-2000:],
+                **self.fields,
+            )
+            return
+        _probe_log(self.enabled, f"{self.event}.end", elapsed_ms=elapsed_ms, **self.fields)
+
+
+def _force_exit_if_background_threads_remain(
+    *,
+    args: Any,
+    pipeline: Any,
+    exit_code: int,
+) -> None:
+    if not bool(getattr(args, "force_exit_after_artifacts_on_background_timeout", False)):
+        return
+    diagnostics: Dict[str, Any] = {}
+    try:
+        diagnostics = pipeline.executor_thread_diagnostics()
+    except Exception:
+        diagnostics = {}
+    alive = int(diagnostics.get("alive_provider_thread_count") or 0) + int(
+        diagnostics.get("alive_background_thread_count") or 0
+    )
+    pending = int(diagnostics.get("pending_job_count") or 0)
+    if alive <= 0 and pending <= 0:
+        return
+    print(
+        "[autoplay] Force-exiting after artifact write because background "
+        f"threads remain alive. alive={alive} pending={pending} "
+        f"exit_code={exit_code}",
+        flush=True,
+    )
+    try:
+        sys.stdout.flush()
+        sys.stderr.flush()
+    except Exception:
+        pass
+    os._exit(int(exit_code or 0))
 
 
 try:
@@ -917,6 +1019,7 @@ def _summarize_quality_gates(
     background_jobs = _safe_dict(summary.get("background_jobs"))
     if not background_jobs:
         background_jobs = _safe_dict(_safe_dict(performance_budget.get("background_llm")))
+    background_result_timing_summary = _safe_dict(summary.get("background_result_timing_summary"))
     player_agent_summary = _safe_dict(summary.get("player_agent_trace_summary"))
     advisory_promotion_summary = _safe_dict(summary.get("deferred_advisory_promotion_summary"))
     profile_persist_summary = _safe_dict(summary.get("npc_evolution_profile_persistence_summary"))
@@ -950,7 +1053,8 @@ def _summarize_quality_gates(
         "real_turn_runtime_used": int(metrics.get("real_turn_runtime_count") or 0) == len(transcript),
         "combined_background_mode_when_requested": (
             args.background_llm_mode != "combined"
-            or int(background_jobs.get("combined_background_llm_jobs") or 0) == len(transcript)
+            or int(background_result_timing_summary.get("jobs_submitted") or 0) >= len(transcript)
+            or int(background_jobs.get("combined_background_llm_jobs") or 0) >= len(transcript)
         ),
         "no_split_jobs_when_combined_requested": (
             args.background_llm_mode != "combined"
@@ -1432,6 +1536,63 @@ def _new_background_result_timing_tracker() -> Dict[str, Any]:
     }
 
 
+def _new_background_job_registry() -> Dict[str, Any]:
+    return {
+        "jobs": {},
+        "results": {},
+    }
+
+
+def _register_background_job(
+    registry: Dict[str, Any],
+    *,
+    job_id: str,
+    turn_index: int,
+    handle: Any = None,
+    pipeline: Any = None,
+) -> None:
+    if not job_id:
+        return
+    jobs = registry.setdefault("jobs", {})
+    jobs[job_id] = {
+        "job_id": job_id,
+        "turn_index": int(turn_index or 0),
+        "handle": handle,
+    }
+
+    # Try to capture the real Future/handle from common pipeline registries.
+    if pipeline is not None:
+        for attr in (
+            "jobs",
+            "_jobs",
+            "futures",
+            "_futures",
+            "background_jobs",
+            "_background_jobs",
+            "combined_background_jobs",
+            "_combined_background_jobs",
+            "job_futures",
+            "_job_futures",
+            "future_by_job_id",
+            "_future_by_job_id",
+        ):
+            store = getattr(pipeline, attr, None)
+            if isinstance(store, dict) and job_id in store:
+                jobs[job_id]["handle"] = store[job_id]
+                jobs[job_id]["pipeline_attr"] = attr
+                break
+
+
+def _store_background_result(
+    registry: Dict[str, Any],
+    *,
+    job_id: str,
+    result: Dict[str, Any],
+) -> None:
+    if job_id and result:
+        registry.setdefault("results", {})[job_id] = result
+
+
 def _track_background_submit(
     tracker: Dict[str, Any],
     *,
@@ -1491,6 +1652,11 @@ def _summarize_background_result_timing(
     jobs_attached_total = len(attached)
     pre_turn_events = [event for event in events if _safe_str(_safe_dict(event).get("phase")) == "pre_turn"]
     final_events = [event for event in events if _safe_str(_safe_dict(event).get("phase")) == "final"]
+    timeout_events = [
+        event for event in events
+        if _safe_str(_safe_dict(event).get("kind")) == "background_timeout"
+        or "timeout" in _safe_str(_safe_dict(event).get("error")).lower()
+    ]
     lag_values = [
         int(_safe_dict(event).get("lag_turns") or 0)
         for event in events
@@ -1569,15 +1735,178 @@ def _summarize_background_result_timing(
         "avg_attach_lag_turns": avg_lag,
         "max_attach_lag_turns": max_lag,
         "attachment_events": events[-200:],
+        "timeout_events": timeout_events[-50:],
         "warning_count": len(warnings),
         "error_count": error_count,
         "warnings": warnings,
     }
 
 
+def _summarize_reconciled_background_jobs(
+    *,
+    existing_background_jobs: Dict[str, Any],
+    background_results: List[Dict[str, Any]],
+    background_result_timing_summary: Dict[str, Any],
+    transcript: List[Dict[str, Any]],
+) -> Dict[str, Any]:
+    """Build a background job summary that includes pre-turn drained jobs.
+
+    `background_results` only contains jobs returned by the final drain. Once
+    pre-turn drain is working, many jobs are consumed before final drain and
+    therefore never appear in that final result list. The timing tracker is the
+    authoritative source for submitted/attached counts.
+    """
+    existing_background_jobs = _safe_dict(existing_background_jobs)
+    timing = _safe_dict(background_result_timing_summary)
+    results = [_safe_dict(row) for row in _safe_list(background_results)]
+    rows = [_safe_dict(row) for row in _safe_list(transcript)]
+
+    attachment_payloads: List[Dict[str, Any]] = []
+    timeout_payloads: List[Dict[str, Any]] = []
+    error_payloads: List[Dict[str, Any]] = []
+
+    for row in rows:
+        payload = _safe_dict(row.get("combined_background_llm_result"))
+        if not payload:
+            continue
+        attachment_payloads.append(payload)
+        kind = _safe_str(payload.get("kind"))
+        error = _safe_str(payload.get("error"))
+        if kind == "background_timeout" or "timeout" in error.lower():
+            timeout_payloads.append(payload)
+        elif payload.get("ok") is False or error:
+            error_payloads.append(payload)
+
+    for result in results:
+        kind = _safe_str(result.get("kind"))
+        error = _safe_str(result.get("error"))
+        if kind == "background_timeout" or "timeout" in error.lower():
+            timeout_payloads.append(result)
+        elif result.get("ok") is False or error:
+            error_payloads.append(result)
+
+    jobs_submitted = int(timing.get("jobs_submitted") or 0)
+    jobs_attached_total = int(timing.get("jobs_attached_total") or 0)
+    jobs_attached_pre_turn = int(timing.get("jobs_attached_pre_turn") or 0)
+    jobs_attached_final = int(timing.get("jobs_attached_final") or 0)
+    missing_job_count = int(timing.get("missing_job_count") or 0)
+
+    # If timing is unavailable, preserve old behavior.
+    if jobs_submitted <= 0:
+        return existing_background_jobs
+
+    errors = list(_safe_list(existing_background_jobs.get("errors")))
+    for payload in timeout_payloads:
+        message = _safe_str(payload.get("error")) or _safe_str(payload.get("kind"))
+        if message and message not in errors:
+            errors.append(message)
+    for payload in error_payloads:
+        message = _safe_str(payload.get("error")) or _safe_str(payload.get("kind"))
+        if message and message not in errors:
+            errors.append(message)
+
+    failed_jobs = max(
+        int(existing_background_jobs.get("failed_jobs") or 0),
+        len(timeout_payloads) + len(error_payloads),
+        missing_job_count,
+    )
+
+    summary = dict(existing_background_jobs)
+    summary.update(
+        {
+            "source": "background_result_timing_summary",
+            "legacy_final_drain_result_count": len(results),
+            "combined_background_llm_jobs": jobs_submitted,
+            "total_jobs": jobs_submitted,
+            "jobs_submitted": jobs_submitted,
+            "jobs_attached_total": jobs_attached_total,
+            "jobs_attached_pre_turn": jobs_attached_pre_turn,
+            "jobs_attached_final": jobs_attached_final,
+            "missing_job_count": missing_job_count,
+            "timeout_job_count": len(timeout_payloads),
+            "failed_jobs": failed_jobs,
+            "ok_jobs": max(0, jobs_attached_total - failed_jobs),
+            "errors": errors[:50],
+            "pre_turn_drain_accounted": jobs_attached_pre_turn > 0,
+        }
+    )
+    return summary
+
+
+def _future_done(handle: Any) -> bool:
+    done = getattr(handle, "done", None)
+    if callable(done):
+        try:
+            return bool(done())
+        except Exception:
+            return False
+    return False
+
+
+def _future_result_now(handle: Any) -> Dict[str, Any]:
+    result_fn = getattr(handle, "result", None)
+    if not callable(result_fn):
+        return {}
+    try:
+        return _safe_dict(result_fn(timeout=0))
+    except TypeError:
+        try:
+            return _safe_dict(result_fn())
+        except Exception:
+            return {}
+    except Exception:
+        return {}
+
+
+def _try_get_combined_background_result_from_registry(
+    *,
+    registry: Dict[str, Any],
+    pipeline: Any,
+    job_id: str,
+) -> Dict[str, Any]:
+    registry = _safe_dict(registry)
+    if not job_id:
+        return {}
+
+    cached = _safe_dict(_safe_dict(registry.get("results")).get(job_id))
+    if cached:
+        return cached
+
+    job = _safe_dict(_safe_dict(registry.get("jobs")).get(job_id))
+    handle = job.get("handle")
+    if handle is not None and _future_done(handle):
+        result = _future_result_now(handle)
+        if result:
+            _store_background_result(registry, job_id=job_id, result=result)
+            return result
+
+    # Common completed-result/result-cache stores.
+    for attr in (
+        "completed_results",
+        "_completed_results",
+        "results",
+        "_results",
+        "result_cache",
+        "_result_cache",
+        "job_results",
+        "_job_results",
+        "combined_background_results",
+        "_combined_background_results",
+    ):
+        store = getattr(pipeline, attr, None)
+        if isinstance(store, dict) and job_id in store:
+            result = _safe_dict(store.get(job_id))
+            if result:
+                _store_background_result(registry, job_id=job_id, result=result)
+                return result
+
+    return {}
+
+
 def _try_get_combined_background_result(
     *,
     pipeline: Any,
+    job_registry: Dict[str, Any],
     job_id: str,
     wait_ms: int = 0,
 ) -> Dict[str, Any]:
@@ -1589,6 +1918,14 @@ def _try_get_combined_background_result(
     """
     if not pipeline or not job_id:
         return {}
+
+    registry_result = _try_get_combined_background_result_from_registry(
+        registry=job_registry,
+        pipeline=pipeline,
+        job_id=job_id,
+    )
+    if registry_result:
+        return registry_result
 
     wait_seconds = max(0.0, float(wait_ms or 0) / 1000.0)
     method_names = (
@@ -1616,6 +1953,7 @@ def _try_get_combined_background_result(
                         result = method(job_id)
             result = _safe_dict(result)
             if result:
+                _store_background_result(job_registry, job_id=job_id, result=result)
                 return result
         except TimeoutError:
             return {}
@@ -1628,6 +1966,8 @@ def _try_get_combined_background_result(
 
 def _extract_combined_background_payload(result: Dict[str, Any]) -> Dict[str, Any]:
     result = _safe_dict(result)
+    if result.get("kind") == "background_timeout":
+        return result
     return (
         _safe_dict(result.get("combined_background_llm_result"))
         or _safe_dict(result.get("payload"))
@@ -1667,6 +2007,9 @@ def _attach_completed_background_job_to_record(
         "attach_turn": int(attach_turn or 0),
         "phase": phase,
         "lag_turns": max(0, int(attach_turn or 0) - source_turn),
+        "ok": bool(payload.get("ok", True)),
+        "kind": _safe_str(payload.get("kind")),
+        "error": _safe_str(payload.get("error")),
     }
 
     # Attach narration in the same slots used by split narration jobs.
@@ -1730,6 +2073,7 @@ def _attach_completed_background_job_to_record(
 def _drain_completed_background_jobs_for_transcript(
     *,
     pipeline: Any,
+    job_registry: Dict[str, Any],
     transcript: List[Dict[str, Any]],
     current_turn: int,
     phase: str,
@@ -1744,6 +2088,22 @@ def _drain_completed_background_jobs_for_transcript(
     """
     attached = 0
     checked = 0
+    ready = 0
+    not_ready = 0
+    completed_results_by_job_id: Dict[str, Dict[str, Any]] = {}
+    drain_completed = getattr(pipeline, "drain_completed", None)
+    if callable(drain_completed):
+        for completed in drain_completed():
+            completed = _safe_dict(completed)
+            completed_job_id = _safe_str(completed.get("job_id"))
+            if completed_job_id:
+                _store_background_result(
+                    job_registry,
+                    job_id=completed_job_id,
+                    result=completed,
+                )
+                completed_results_by_job_id[completed_job_id] = completed
+
     for row in transcript if isinstance(transcript, list) else []:
         row = _safe_dict(row)
         source_turn = int(row.get("turn_index") or 0)
@@ -1759,11 +2119,24 @@ def _drain_completed_background_jobs_for_transcript(
         if not job_id:
             continue
         checked += 1
-        result = _try_get_combined_background_result(
-            pipeline=pipeline,
-            job_id=job_id,
-            wait_ms=wait_ms if attached == 0 else 0,
+        result = (
+            _safe_dict(completed_results_by_job_id.get(job_id))
+            or _try_get_combined_background_result(
+                pipeline=pipeline,
+                job_registry=job_registry,
+                job_id=job_id,
+                wait_ms=wait_ms if attached == 0 else 0,
+            )
         )
+        if result:
+            ready += 1
+            _store_background_result(
+                job_registry,
+                job_id=job_id,
+                result=result,
+            )
+        else:
+            not_ready += 1
         if _attach_completed_background_job_to_record(
             record=row,
             job_id=job_id,
@@ -1773,11 +2146,14 @@ def _drain_completed_background_jobs_for_transcript(
             timing_tracker=timing_tracker,
         ):
             attached += 1
-            print(f"Attaching combined background LLM result for turn {source_turn} phase={phase} lag={max(0, int(current_turn or 0) - source_turn)}")
+            _timestamped_print(f"Attaching combined background LLM result for turn {source_turn} phase={phase} lag={max(0, int(current_turn or 0) - source_turn)}")
     return {
         "phase": phase,
         "current_turn": current_turn,
         "checked": checked,
+        "pipeline_completed_drained": len(completed_results_by_job_id),
+        "ready": ready,
+        "not_ready": not_ready,
         "attached": attached,
     }
 
@@ -1921,6 +2297,8 @@ def _select_compact_llm_player_action(
     max_context_chars: int,
     cache: PlayerAgentDecisionCache,
     cache_enabled: bool,
+    turn_index: int,
+    debug_autoplay_stage_timing: bool,
 ) -> Dict[str, Any]:
     context_packet = build_player_agent_context_packet(
         session=session,
@@ -1964,10 +2342,26 @@ def _select_compact_llm_player_action(
 
     try:
         provider_messages = _provider_messages(messages)
+        _probe_log(
+            debug_autoplay_stage_timing,
+            "player_agent_provider_call.start",
+            turn_index=turn_index,
+            provider_type=type(provider).__name__,
+            message_count=len(provider_messages),
+            prompt_chars=sum(len(getattr(message, "content", "") or "") for message in provider_messages),
+        )
+        provider_call_start_ms = _now_ms()
         try:
             response = provider.chat_completion(messages=provider_messages, stream=False)
         except TypeError:
             response = provider.chat_completion(provider_messages, stream=False)
+        _probe_log(
+            debug_autoplay_stage_timing,
+            "player_agent_provider_call.end",
+            turn_index=turn_index,
+            elapsed_ms=_now_ms() - provider_call_start_ms,
+            response_type=type(response).__name__,
+        )
         text = _provider_text_from_response(response)
         parsed = _extract_json_object_from_text(text)
         normalized = normalize_player_agent_payload(parsed)
@@ -2015,6 +2409,8 @@ def _select_player_action(
     max_tokens: int,
     progress_quality_metrics: Dict[str, Any] | None = None,
     diversity_metrics: Dict[str, Any] | None = None,
+    turn_index: int,
+    debug_autoplay_stage_timing: bool,
 ) -> Dict[str, Any]:
     if not use_llm_player:
         return choose_fallback_player_action(
@@ -2030,7 +2426,23 @@ def _select_player_action(
         diversity_metrics=diversity_metrics,
     )
     try:
+        _probe_log(
+            debug_autoplay_stage_timing,
+            "player_agent_provider_call.start",
+            turn_index=turn_index,
+            provider_type=type(provider).__name__,
+            message_count=1,
+            prompt_chars=len(prompt),
+        )
+        provider_call_start_ms = _now_ms()
         raw = call_provider_text(provider, prompt, max_tokens=max_tokens)
+        _probe_log(
+            debug_autoplay_stage_timing,
+            "player_agent_provider_call.end",
+            turn_index=turn_index,
+            elapsed_ms=_now_ms() - provider_call_start_ms,
+            response_type=type(raw).__name__,
+        )
         parsed = parse_player_agent_response(raw)
         if not parsed.get("ok"):
             fallback = choose_fallback_player_action(
@@ -2091,8 +2503,8 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
     provider = _load_provider() if args.player_agent == "llm" else None
     provider_shape = describe_provider_shape(provider) if provider is not None else {}
     if args.debug_provider_shape and provider_shape:
-        print("Player-agent provider shape:")
-        print(provider_shape)
+        _timestamped_print("Player-agent provider shape:")
+        _timestamped_print(provider_shape)
 
     pipeline = AutoplayBackgroundPipeline(
         background_workers=int(args.background_workers),
@@ -2104,6 +2516,7 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
     transcript: List[Dict[str, Any]] = []
     carried_campaign_runtime_state: Dict[str, Any] = {}
     background_result_timing_tracker = _new_background_result_timing_tracker()
+    background_job_registry = _new_background_job_registry()
     background_drain_events: List[Dict[str, Any]] = []
     player_agent_cache = PlayerAgentDecisionCache(max_entries=256)
     player_agent_prompt_rows: List[Dict[str, Any]] = []
@@ -2112,24 +2525,108 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
     stopped_reason = ""
 
     for turn_index in range(1, int(args.turns) + 1):
+        _probe_log(
+            bool(getattr(args, "debug_autoplay_stage_timing", False)),
+            "turn.start",
+            turn_index=turn_index,
+            transcript_len=len(transcript),
+        )
+
         if int(getattr(args, "pre_turn_background_drain_ms", 0) or 0) >= 0:
-            drain_event = _drain_completed_background_jobs_for_transcript(
-                pipeline=pipeline,
-                transcript=transcript,
-                current_turn=turn_index,
-                phase="pre_turn",
+            with _ProbeTimer(
+                bool(getattr(args, "debug_autoplay_stage_timing", False)),
+                "pre_turn_background_drain",
+                turn_index=turn_index,
                 wait_ms=int(getattr(args, "pre_turn_background_drain_ms", 0) or 0),
-                timing_tracker=background_result_timing_tracker,
-            )
+            ):
+                drain_event = _drain_completed_background_jobs_for_transcript(
+                    pipeline=pipeline,
+                    job_registry=background_job_registry,
+                    transcript=transcript,
+                    current_turn=turn_index,
+                    phase="pre_turn",
+                    wait_ms=int(getattr(args, "pre_turn_background_drain_ms", 0) or 0),
+                    timing_tracker=background_result_timing_tracker,
+                )
             background_drain_events.append(drain_event)
+            _probe_log(
+                bool(getattr(args, "debug_autoplay_stage_timing", False)),
+                "pre_turn_background_drain.result",
+                turn_index=turn_index,
+                checked=drain_event.get("checked"),
+                pipeline_completed_drained=drain_event.get("pipeline_completed_drained"),
+                ready=drain_event.get("ready"),
+                attached=drain_event.get("attached"),
+                not_ready=drain_event.get("not_ready"),
+            )
 
             # Re-run deterministic promotion/evolution over newly attached
             # advisory candidates so future turns can see promoted runtime state.
-            if int(drain_event.get("attached") or 0) > 0:
-                try:
-                    run_deferred_advisory_promotions_for_transcript(transcript=transcript)
-                except TypeError:
-                    run_deferred_advisory_promotions_for_transcript(transcript)
+            if (
+                not bool(getattr(args, "disable_pre_turn_advisory_promotion", False))
+                and int(drain_event.get("attached") or 0) > 0
+            ):
+                pre_turn_promotion_result: Dict[str, Any] = {}
+                with _ProbeTimer(
+                    bool(getattr(args, "debug_autoplay_stage_timing", False)),
+                    "pre_turn_deferred_advisory_promotion",
+                    turn_index=turn_index,
+                    transcript_len=len(transcript),
+                    attached=drain_event.get("attached"),
+                    max_rows=int(getattr(args, "pre_turn_advisory_promotion_max_rows", 6) or 6),
+                    persist_profiles=False,
+                ):
+                    pre_turn_promotion_result = run_deferred_advisory_promotions_for_transcript(
+                        transcript=transcript,
+                        max_promotions_per_turn=int(args.max_advisory_promotions_per_turn),
+                        max_rows=int(getattr(args, "pre_turn_advisory_promotion_max_rows", 6) or 6),
+                        persist_profiles=False,
+                        incremental_pre_turn=True,
+                        mark_pre_turn_promoted=True,
+                        current_turn=turn_index,
+                        carry_candidate_limit=int(
+                            getattr(args, "pre_turn_advisory_carry_candidate_limit", 30) or 30
+                        ),
+                        carry_pending_limit=int(
+                            getattr(args, "pre_turn_advisory_carry_pending_limit", 30) or 30
+                        ),
+                        carry_accepted_limit=int(
+                            getattr(args, "pre_turn_advisory_carry_accepted_limit", 60) or 60
+                        ),
+                        carry_rejected_limit=int(
+                            getattr(args, "pre_turn_advisory_carry_rejected_limit", 60) or 60
+                        ),
+                    )
+                _probe_log(
+                    bool(getattr(args, "debug_autoplay_stage_timing", False)),
+                    "pre_turn_deferred_advisory_promotion.result",
+                    turn_index=turn_index,
+                    turns=pre_turn_promotion_result.get("turns"),
+                    source_transcript_turns=pre_turn_promotion_result.get("source_transcript_turns"),
+                    incremental_pre_turn=pre_turn_promotion_result.get("incremental_pre_turn"),
+                    accepted=pre_turn_promotion_result.get("accepted"),
+                    rejected=pre_turn_promotion_result.get("rejected"),
+                    pending=pre_turn_promotion_result.get("pending"),
+                    persist_profiles=pre_turn_promotion_result.get("persist_profiles"),
+                    carry_candidate_limit=pre_turn_promotion_result.get("carry_candidate_limit"),
+                    carry_pending_limit=pre_turn_promotion_result.get("carry_pending_limit"),
+                    carry_accepted_limit=pre_turn_promotion_result.get("carry_accepted_limit"),
+                    carry_rejected_limit=pre_turn_promotion_result.get("carry_rejected_limit"),
+                )
+                drain_event["pre_turn_advisory_promotion_result"] = {
+                    "ok": pre_turn_promotion_result.get("ok"),
+                    "turns": pre_turn_promotion_result.get("turns"),
+                    "source_transcript_turns": pre_turn_promotion_result.get("source_transcript_turns"),
+                    "incremental_pre_turn": pre_turn_promotion_result.get("incremental_pre_turn"),
+                    "accepted": pre_turn_promotion_result.get("accepted"),
+                    "rejected": pre_turn_promotion_result.get("rejected"),
+                    "pending": pre_turn_promotion_result.get("pending"),
+                    "persist_profiles": pre_turn_promotion_result.get("persist_profiles"),
+                    "carry_candidate_limit": pre_turn_promotion_result.get("carry_candidate_limit"),
+                    "carry_pending_limit": pre_turn_promotion_result.get("carry_pending_limit"),
+                    "carry_accepted_limit": pre_turn_promotion_result.get("carry_accepted_limit"),
+                    "carry_rejected_limit": pre_turn_promotion_result.get("carry_rejected_limit"),
+                }
 
         turn_perf_start = now_perf()
         turn_performance: Dict[str, Any] = {
@@ -2173,35 +2670,53 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
             diversity_metrics=current_diversity_metrics,
             recent_transcript=transcript,
         )
-        with timed_stage(turn_performance, "player_agent_ms"):
-            if args.player_agent == "llm" and args.player_agent_context_mode == "compact":
-                selected = _select_compact_llm_player_action(
-                    provider=provider,
-                    session=simulation_state,
-                    transcript=transcript,
-                    latest_context=context,
-                    player_action_context=context,
-                    strategy=args.strategy,
-                    action_diversity_window=int(args.action_diversity_window),
-                    max_context_chars=int(args.player_agent_max_context_chars),
-                    cache=player_agent_cache,
-                    cache_enabled=args.player_agent_cache == "on",
-                )
-            else:
-                selected = _select_player_action(
-                    provider=provider,
-                    player_action_context=context,
-                    transcript=transcript,
-                    strategy=args.strategy,
-                    use_llm_player=args.player_agent == "llm",
-                    max_tokens=args.player_agent_max_tokens,
-                    progress_quality_metrics=current_progress_quality_metrics,
-                    diversity_metrics=current_diversity_metrics,
-                )
+        with _ProbeTimer(
+            bool(getattr(args, "debug_autoplay_stage_timing", False)),
+            "player_agent_select_action",
+            turn_index=turn_index,
+            player_agent=getattr(args, "player_agent", ""),
+            context_mode=getattr(args, "player_agent_context_mode", ""),
+        ):
+            with timed_stage(turn_performance, "player_agent_ms"):
+                if args.player_agent == "llm" and args.player_agent_context_mode == "compact":
+                    selected = _select_compact_llm_player_action(
+                        provider=provider,
+                        session=simulation_state,
+                        transcript=transcript,
+                        latest_context=context,
+                        player_action_context=context,
+                        strategy=args.strategy,
+                        action_diversity_window=int(args.action_diversity_window),
+                        max_context_chars=int(args.player_agent_max_context_chars),
+                        cache=player_agent_cache,
+                        cache_enabled=args.player_agent_cache == "on",
+                        turn_index=turn_index,
+                        debug_autoplay_stage_timing=bool(getattr(args, "debug_autoplay_stage_timing", False)),
+                    )
+                else:
+                    selected = _select_player_action(
+                        provider=provider,
+                        player_action_context=context,
+                        transcript=transcript,
+                        strategy=args.strategy,
+                        use_llm_player=args.player_agent == "llm",
+                        max_tokens=args.player_agent_max_tokens,
+                        progress_quality_metrics=current_progress_quality_metrics,
+                        diversity_metrics=current_diversity_metrics,
+                        turn_index=turn_index,
+                        debug_autoplay_stage_timing=bool(getattr(args, "debug_autoplay_stage_timing", False)),
+                    )
 
-            player_action = _safe_str(selected.get("action"))
+                player_action = _safe_str(selected.get("action"))
 
-            if isinstance(selected, dict):
+        _probe_log(
+            bool(getattr(args, "debug_autoplay_stage_timing", False)),
+            "player_agent_select_action.result",
+            turn_index=turn_index,
+            action_preview=_safe_str(player_action)[:220],
+        )
+
+        if isinstance(selected, dict):
                 player_agent_prompt_rows.append(
                     {
                         "turn_index": turn_index,
@@ -2222,14 +2737,19 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
         )
         story_hook_result: Dict[str, Any] = {}
         try:
-            with timed_stage(turn_performance, "manual_turn_ms"):
-                turn_result = _call_turn_runtime(
-                    session_id=session_id,
-                    player_action=player_action,
-                    turn_index=turn_index,
-                    runtime_narration=args.narration_mode,
-                    debug_narration_trace=args.debug_provider_shape,
-                )
+            with _ProbeTimer(
+                bool(getattr(args, "debug_autoplay_stage_timing", False)),
+                "runtime_turn_execution",
+                turn_index=turn_index,
+            ):
+                with timed_stage(turn_performance, "manual_turn_ms"):
+                    turn_result = _call_turn_runtime(
+                        session_id=session_id,
+                        player_action=player_action,
+                        turn_index=turn_index,
+                        runtime_narration=args.narration_mode,
+                        debug_narration_trace=args.debug_provider_shape,
+                    )
             returned_state = _safe_dict(turn_result.get("simulation_state"))
             if returned_state:
                 authoritative_state = merge_autoplay_simulation_state(
@@ -2263,6 +2783,14 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
                 "traceback": traceback.format_exc(),
             }
             story_hook_result = {}
+
+        _probe_log(
+            bool(getattr(args, "debug_autoplay_stage_timing", False)),
+            "runtime_turn_execution.result",
+            turn_index=turn_index,
+            ok=_safe_dict(turn_result).get("ok"),
+            keys=",".join(sorted(_safe_dict(turn_result).keys())[:80]),
+        )
 
         base_response_payload: Dict[str, Any] = {}
         raw_payload = _safe_dict(
@@ -2384,22 +2912,40 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
                         turn_result=turn_result,
                         simulation_state=final_turn_state,
                     )
-                    combined_background_llm_job_id = pipeline.submit_combined_background_llm(
-                        provider=provider,
-                        session_id=session_id,
+                    with _ProbeTimer(
+                        bool(getattr(args, "debug_autoplay_stage_timing", False)),
+                        "submit_combined_background_llm",
                         turn_index=turn_index,
-                        player_action=player_action,
-                        simulation_state=final_turn_state,
-                        runtime_state=background_runtime_state,
-                        turn_contract=resolved_turn_contract,
-                        semantic_action_record=semantic_action_record,
-                        prefer_provider=True,
-                    )
+                    ):
+                        combined_background_llm_job_id = pipeline.submit_combined_background_llm(
+                            provider=provider,
+                            session_id=session_id,
+                            turn_index=turn_index,
+                            player_action=player_action,
+                            simulation_state=final_turn_state,
+                            runtime_state=background_runtime_state,
+                            turn_contract=resolved_turn_contract,
+                            semantic_action_record=semantic_action_record,
+                            prefer_provider=True,
+                        )
                     _track_background_submit(
                         background_result_timing_tracker,
                         job_id=_safe_str(combined_background_llm_job_id),
                         turn_index=turn_index,
                         phase="turn_submit",
+                    )
+                    _register_background_job(
+                        background_job_registry,
+                        job_id=_safe_str(combined_background_llm_job_id),
+                        turn_index=turn_index,
+                        handle=combined_background_llm_job_id,
+                        pipeline=pipeline,
+                    )
+                    _probe_log(
+                        bool(getattr(args, "debug_autoplay_stage_timing", False)),
+                        "submit_combined_background_llm.result",
+                        turn_index=turn_index,
+                        job_id=_safe_str(combined_background_llm_job_id),
                     )
                     narration_job_id = combined_background_llm_job_id
                     advisory_job_id = combined_background_llm_job_id
@@ -2653,9 +3199,33 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
             stopped_reason = "runtime_error"
             break
 
-    background_results = pipeline.drain()
+    _timestamped_print(
+        "Final background drain starting "
+        f"timeout_seconds={float(args.final_background_drain_timeout_seconds)} "
+        f"cancel_unfinished={bool(args.cancel_unfinished_background_on_final_timeout)}"
+    )
+    with _ProbeTimer(
+        bool(getattr(args, "debug_autoplay_stage_timing", False)),
+        "final_background_drain",
+        timeout_seconds=float(args.final_background_drain_timeout_seconds),
+        cancel_unfinished=bool(args.cancel_unfinished_background_on_final_timeout),
+    ):
+        background_results = pipeline.drain(
+            timeout_seconds=float(args.final_background_drain_timeout_seconds),
+            cancel_unfinished=bool(args.cancel_unfinished_background_on_final_timeout),
+        )
+    _timestamped_print(f"Final background drain finished results={len(background_results)}")
+
+    background_executor_shutdown_summary = {}
+    try:
+        background_executor_shutdown_summary = pipeline.executor_thread_diagnostics()
+    except Exception as exc:
+        background_executor_shutdown_summary = {
+            "error": f"{type(exc).__name__}: {exc}",
+        }
     final_drain_event = _drain_completed_background_jobs_for_transcript(
         pipeline=pipeline,
+        job_registry=background_job_registry,
         transcript=transcript,
         current_turn=int(args.turns),
         phase="final",
@@ -2707,7 +3277,14 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
             max_promotions_per_turn=int(args.max_advisory_promotions_per_turn),
         )
         advisory_promotion_summary["enabled"] = True
-    pipeline.shutdown()
+    with _ProbeTimer(
+        bool(getattr(args, "debug_autoplay_stage_timing", False)),
+        "pipeline_shutdown",
+    ):
+        pipeline.shutdown(
+            wait=False,
+            cancel_futures=bool(args.cancel_unfinished_background_on_final_timeout),
+        )
 
     latest_context = (
         transcript[-1].get("player_action_context")
@@ -2994,7 +3571,14 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
         strict_eval_turns=int(args.strict_eval_turns),
         max_turn_lag=int(args.background_result_max_turn_lag),
     )
+    summary["background_executor_shutdown_summary"] = background_executor_shutdown_summary
     summary["background_drain_events"] = background_drain_events[-200:]
+    summary["background_jobs"] = _summarize_reconciled_background_jobs(
+        existing_background_jobs=_safe_dict(summary.get("background_jobs")),
+        background_results=background_results if isinstance(background_results, list) else [],
+        background_result_timing_summary=_safe_dict(summary.get("background_result_timing_summary")),
+        transcript=transcript,
+    )
     metrics["story_beat_summary"] = summary["story_beat_summary"]
     metrics["manual_turn_error_summary"] = summary["manual_turn_error_summary"]
     metrics["console_log_summary"] = summary["console_log_summary"]
@@ -3003,7 +3587,9 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
     metrics["long_run_warning_summary"] = summary["long_run_warning_summary"]
     metrics["hundred_turn_eval_summary"] = summary["hundred_turn_eval_summary"]
     metrics["background_result_timing_summary"] = summary["background_result_timing_summary"]
+    metrics["background_executor_shutdown_summary"] = summary["background_executor_shutdown_summary"]
     metrics["background_drain_events"] = summary["background_drain_events"]
+    metrics["background_jobs"] = summary["background_jobs"]
     if int(summary["quest_progress_summary"].get("quest_count") or 0) == 0:
         story_arc_view = _safe_dict(summary.get("story_arc_view") or metrics.get("story_arc_view"))
         if story_arc_view:
@@ -3086,7 +3672,7 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
             subprocess.run(["git", "diff"], stdout=f, check=False)
         extra_paths["code_diff_txt"] = str(diff_path)
     except Exception as e:
-        print(f"Warning: Could not write code diff: {e}")
+        _timestamped_print(f"Warning: Could not write code diff: {e}")
 
     console_log_path = Path(args.output_dir) / "console-log.txt"
     if console_log_path.exists():
@@ -3124,16 +3710,27 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
     if _ACTIVE_CONSOLE_CAPTURE is not None:
         _ACTIVE_CONSOLE_CAPTURE.write_file()
 
-    paths = write_autoplay_artifacts(
-        output_dir=Path(args.output_dir),
-        transcript=transcript,
-        summary=summary,
-        metrics=metrics,
-        health=health,
-        artifact_detail=args.artifact_detail,
-    )
+    with _ProbeTimer(
+        bool(getattr(args, "debug_autoplay_stage_timing", False)),
+        "write_results_zip",
+    ):
+        paths = write_autoplay_artifacts(
+            output_dir=Path(args.output_dir),
+            transcript=transcript,
+            summary=summary,
+            metrics=metrics,
+            health=health,
+            artifact_detail=args.artifact_detail,
+        )
     paths.update(extra_paths)
     summary["artifact_paths"] = paths
+
+    _force_exit_if_background_threads_remain(
+        args=args,
+        pipeline=pipeline,
+        exit_code=0 if bool(_safe_dict(summary.get("quality_gate_summary")).get("ok", True)) else 1,
+    )
+
     return summary
 
 
@@ -3168,6 +3765,48 @@ def build_arg_parser() -> argparse.ArgumentParser:
         type=int,
         default=5,
         help="Maximum advisory candidates promoted per turn by the deterministic gate.",
+    )
+    parser.add_argument(
+        "--pre-turn-advisory-promotion-max-rows",
+        type=int,
+        default=6,
+        help=(
+            "Maximum recent transcript rows to process during pre-turn deferred "
+            "advisory promotion. Final report promotion still processes the full transcript."
+        ),
+    )
+    parser.add_argument(
+        "--pre-turn-advisory-carry-candidate-limit",
+        type=int,
+        default=30,
+        help="Maximum deferred advisory candidates carried into incremental pre-turn promotion.",
+    )
+    parser.add_argument(
+        "--pre-turn-advisory-carry-pending-limit",
+        type=int,
+        default=30,
+        help="Maximum deferred advisory pending items carried into incremental pre-turn promotion.",
+    )
+    parser.add_argument(
+        "--pre-turn-advisory-carry-accepted-limit",
+        type=int,
+        default=60,
+        help="Maximum accepted advisory history items carried into incremental pre-turn promotion.",
+    )
+    parser.add_argument(
+        "--pre-turn-advisory-carry-rejected-limit",
+        type=int,
+        default=60,
+        help="Maximum rejected advisory history items carried into incremental pre-turn promotion.",
+    )
+    parser.add_argument(
+        "--disable-pre-turn-advisory-promotion",
+        action="store_true",
+        default=False,
+        help=(
+            "Skip pre-turn deferred advisory promotion. Final promotion still runs "
+            "for reports when --deferred-advisory-promotion is on."
+        ),
     )
     parser.add_argument(
         "--player-agent-max-context-chars",
@@ -3232,16 +3871,49 @@ def build_arg_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
+        "--final-background-drain-timeout-seconds",
+        type=float,
+        default=90.0,
+        help="Maximum seconds to wait for remaining background jobs during final artifact/report drain.",
+    )
+    parser.add_argument(
+        "--cancel-unfinished-background-on-final-timeout",
+        action="store_true",
+        default=True,
+        help="Cancel/mark unfinished background jobs when final drain timeout is reached.",
+    )
+    parser.add_argument(
+        "--no-cancel-unfinished-background-on-final-timeout",
+        action="store_false",
+        dest="cancel_unfinished_background_on_final_timeout",
+        help="Do not cancel unfinished background jobs when final drain timeout is reached.",
+    )
+    parser.add_argument(
+        "--force-exit-after-artifacts-on-background-timeout",
+        action="store_true",
+        default=True,
+        help=(
+            "After report/zip artifacts are written, force-exit the CLI if "
+            "background provider threads are still alive. This prevents "
+            "ThreadPoolExecutor provider calls from hanging autoplay forever."
+        ),
+    )
+    parser.add_argument(
+        "--no-force-exit-after-artifacts-on-background-timeout",
+        action="store_false",
+        dest="force_exit_after_artifacts_on_background_timeout",
+        help="Do not force-exit after artifact write even if background threads remain alive.",
+    )
+    parser.add_argument(
         "--background-result-max-turn-lag",
         type=int,
         default=5,
         help="Warn/fail in strict mode when a background result attaches more than this many turns late.",
     )
     parser.add_argument(
-        "--fail-if-background-results-only-finalized",
+        "--debug-autoplay-stage-timing",
         action="store_true",
-        default=False,
-        help="Fail if all/most background results are only attached during final post-run drain.",
+        help="Print detailed before/after timing probes around autoplay blocking stages.",
     )
     parser.add_argument("--provider-workers", type=int, default=1)
     parser.add_argument(
@@ -3322,95 +3994,9 @@ def main(argv: List[str] | None = None) -> int:
     args = parser.parse_args(argv)
     if getattr(args, "list_scenario_seeds", False):
         for name in available_campaign_seeds():
-            print(name)
+            _timestamped_print(name)
         return 0
     return _run_with_console_capture(args)
-
-    print("Autoplay RPG Campaign Summary")
-    print(f"session_id: {summary['session_id']}")
-    print(f"requested_turns: {summary['requested_turns']}")
-    print(f"turns_executed: {summary['turns_executed']}")
-    print(f"stopped_reason: {summary['stopped_reason']}")
-    print(f"ok: {summary['ok']}")
-    print(f"latency_profile: {summary.get('latency_profile')}")
-    print(f"narration_mode: {summary.get('narration_mode')}")
-    print(f"checkpoint_mode: {summary.get('checkpoint_mode')}")
-    artifact_paths = summary.get("artifact_paths") or {}
-    story_variety = summary.get("story_variety") or {}
-    seed_result = summary.get("seed_result") or {}
-    output_dir_abs = Path(args.output_dir).resolve()
-
-    print(f"requested_seed: {story_variety.get('requested_seed') or seed_result.get('requested_seed')}")
-    print(f"resolved_seed: {story_variety.get('resolved_seed') or seed_result.get('resolved_seed')}")
-    print(f"output_dir: {args.output_dir}")
-    print(f"output_dir_abs: {output_dir_abs}")
-    print(f"results_zip: {artifact_paths.get('zip')}")
-    print(f"results_zip_abs: {Path(artifact_paths.get('zip')).resolve() if artifact_paths.get('zip') else ''}")
-    print(f"campaign_report_html: {artifact_paths.get('campaign_report_html') or ''}")
-    print(f"campaign_report_html_abs: {Path(artifact_paths.get('campaign_report_html')).resolve() if artifact_paths.get('campaign_report_html') else ''}")
-    print(f"campaign_report_json: {artifact_paths.get('campaign_report_json') or ''}")
-    print(f"story_variety_json: {artifact_paths.get('story_variety') or ''}")
-
-    if args.artifact_detail == "full" and not artifact_paths.get("campaign_report_html"):
-        print("missing_full_artifacts: campaign_report_html")
-
-    metrics = summary.get("health", {}).get("metrics", {})
-    print(f"real_turn_runtime_count: {metrics.get('real_turn_runtime_count')}")
-    print(f"compatibility_turn_runtime_count: {metrics.get('compatibility_turn_runtime_count')}")
-    player_agent_trace_summary = summary.get("player_agent_trace_summary") or {}
-    deferred_trace_summary = summary.get("deferred_narration_trace_summary") or {}
-    print(f"player_agent_sources: {player_agent_trace_summary.get('selected_source_counts')}")
-    print(f"player_agent_fallback_reasons: {player_agent_trace_summary.get('fallback_reason_counts')}")
-    print(f"deferred_narration_sources: {deferred_trace_summary.get('sources')}")
-    print(f"deferred_narration_provider_present: {deferred_trace_summary.get('provider_present')}")
-    print(f"deferred_narration_provider_missing: {deferred_trace_summary.get('provider_missing')}")
-    print(f"deferred_narration_errors: {deferred_trace_summary.get('errors')}")
-    deferred_advisory_summary = summary.get("deferred_advisory_trace_summary") or {}
-    print(f"deferred_advisory_sources: {deferred_advisory_summary.get('sources')}")
-    print(f"deferred_advisory_candidate_count: {deferred_advisory_summary.get('candidate_count')}")
-    print(f"deferred_advisory_candidate_kinds: {deferred_advisory_summary.get('candidate_kinds')}")
-    print(f"deferred_advisory_errors: {deferred_advisory_summary.get('errors')}")
-    performance_budget = summary.get("performance_budget_summary") or {}
-    print(f"performance_budget_live_blocking: {performance_budget.get('live_blocking')}")
-    print(f"performance_budget_background_llm: {performance_budget.get('background_llm')}")
-    print(f"background_prompt_budget_summary: {summary.get('background_prompt_budget_summary')}")
-    print(f"combined_quality_shape_summary: {summary.get('combined_quality_shape_summary')}")
-    print(f"player_agent_prompt_budget_summary: {summary.get('player_agent_prompt_budget_summary')}")
-    print(f"player_agent_cache_summary: {summary.get('player_agent_cache_summary')}")
-    print(f"deferred_advisory_promotion_summary: {summary.get('deferred_advisory_promotion_summary')}")
-    print(f"npc_evolution_summary: {summary.get('npc_evolution_summary')}")
-    print(f"npc_evolution_profile_persistence_summary: {summary.get('npc_evolution_profile_persistence_summary')}")
-    print(f"npc_profile_load_summary: {summary.get('npc_profile_load_summary')}")
-    print(f"profile_grounded_output_summary: {summary.get('profile_grounded_output_summary')}")
-    print(f"npc_arc_progression_summary: {summary.get('npc_arc_progression_summary')}")
-    print(f"npc_evolution_report_summary: {summary.get('npc_evolution_report_summary')}")
-    print(f"quest_progress_summary: {summary.get('quest_progress_summary')}")
-    print(f"campaign_calendar_summary: {summary.get('campaign_calendar_summary')}")
-    print(f"player_journal_summary: {summary.get('player_journal_summary')}")
-    print(f"player_journal_quality_summary: {summary.get('player_journal_quality_summary')}")
-    print(f"manual_turn_error_summary: {summary.get('manual_turn_error_summary')}")
-    print(f"console_log_summary: {summary.get('console_log_summary')}")
-    print(f"action_diversity_summary: {summary.get('action_diversity_summary')}")
-    print(f"progress_timeline_summary: {summary.get('progress_timeline_summary')}")
-    print(f"long_run_warning_summary: {summary.get('long_run_warning_summary')}")
-    print(f"hundred_turn_eval_summary: {summary.get('hundred_turn_eval_summary')}")
-    print(f"Wrote console log to: {Path(args.output_dir) / 'console-log.txt'}")
-    print(f"promotion_target_grounding_summary: {summary.get('promotion_target_grounding_summary')}")
-    print(f"quality_gate_summary: {summary.get('quality_gate_summary')}")
-
-    warnings = summary.get("health", {}).get("warnings") or []
-    if args.fail_on_regression_warnings and warnings:
-        return 1
-    if args.fail_on_runtime_error and summary.get("health", {}).get("metrics", {}).get("runtime_errors"):
-        return 1
-    if (
-        args.fail_on_compatibility_turn_runtime
-        and summary.get("health", {}).get("metrics", {}).get("compatibility_turn_runtime_count")
-    ):
-        return 1
-    if summary.get("stopped_reason"):
-        return 1
-    return 0
 
 
 if __name__ == "__main__":

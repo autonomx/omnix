@@ -407,3 +407,209 @@ def test_advisory_promotion_runtime_merges_campaign_calendar_history():
 
     history = transcript[1]["runtime_state"]["campaign_calendar"]["history"]
     assert [item["turn_index"] for item in history] == [1, 2]
+
+
+def test_promotion_runtime_can_process_only_recent_rows_with_seeded_carry_state():
+    candidates = normalize_advisory_candidates(
+        session_id="s",
+        turn_index=1,
+        player_input="I reassure Bran.",
+        turn_contract={"player_input": "I reassure Bran."},
+        payload={
+            "relationship_delta_candidates": [
+                {
+                    "target": "bran",
+                    "delta": 1,
+                    "summary": "Bran is reassured.",
+                }
+            ]
+        },
+    )
+    transcript = [
+        {
+            "turn_index": 1,
+            "runtime_state": {
+                "deferred_advisory": {
+                    "candidates": candidates,
+                    "accepted": [],
+                    "rejected": [],
+                }
+            },
+            "simulation_state": {"npcs": {"bran": {"name": "Bran"}}},
+        },
+        {
+            "turn_index": 2,
+            "runtime_state": {},
+            "simulation_state": {"npcs": {"bran": {"name": "Bran"}}},
+        },
+        {
+            "turn_index": 3,
+            "runtime_state": {},
+            "simulation_state": {"npcs": {"bran": {"name": "Bran"}}},
+        },
+    ]
+
+    full = run_deferred_advisory_promotions_for_transcript(transcript=transcript)
+    assert full["accepted"] >= 1
+    assert transcript[1]["runtime_state"]["deferred_advisory"]["accepted"]
+
+    # Simulate a later pre-turn incremental pass: it should seed carry from
+    # row 2 and only process row 3.
+    bounded = run_deferred_advisory_promotions_for_transcript(
+        transcript=transcript,
+        max_rows=1,
+        persist_profiles=False,
+    )
+
+    assert bounded["ok"] is True
+    assert bounded["turns"] == 1
+    assert bounded["source_transcript_turns"] == 3
+    assert bounded["max_rows"] == 1
+    assert bounded["persist_profiles"] is False
+    assert transcript[2]["npc_evolution_profile_persist_result"]["skipped"] is True
+
+
+def test_promotion_runtime_can_skip_profile_persistence_for_pre_turn_pass():
+    transcript = [
+        {
+            "turn_index": 1,
+            "runtime_state": {
+                "deferred_advisory": {
+                    "candidates": [],
+                    "accepted": [],
+                    "rejected": [],
+                }
+            },
+            "simulation_state": {},
+        }
+    ]
+
+    result = run_deferred_advisory_promotions_for_transcript(
+        transcript=transcript,
+        persist_profiles=False,
+    )
+
+    assert result["ok"] is True
+    assert result["persist_profiles"] is False
+    assert transcript[0]["npc_evolution_profile_persist_result"]["ok"] is True
+    assert transcript[0]["npc_evolution_profile_persist_result"]["skipped"] is True
+    assert (
+        transcript[0]["npc_evolution_profile_persist_result"]["reason"]
+        == "pre_turn_promotion_no_disk_persist"
+    )
+
+
+def test_incremental_pre_turn_promotion_marks_rows_and_skips_reprocessing():
+    candidates = normalize_advisory_candidates(
+        session_id="s",
+        turn_index=1,
+        player_input="I reassure Bran.",
+        turn_contract={"player_input": "I reassure Bran."},
+        payload={
+            "relationship_delta_candidates": [
+                {
+                    "target": "bran",
+                    "delta": 1,
+                    "summary": "Bran is reassured.",
+                }
+            ]
+        },
+    )
+    transcript = [
+        {
+            "turn_index": 1,
+            "combined_background_llm_result": {"ok": True},
+            "combined_background_llm_attach": {"phase": "pre_turn"},
+            "runtime_state": {
+                "deferred_advisory": {
+                    "candidates": candidates,
+                    "accepted": [],
+                    "rejected": [],
+                    "pending": [],
+                }
+            },
+            "simulation_state": {"npcs": {"bran": {"name": "Bran"}}},
+        },
+    ]
+
+    first = run_deferred_advisory_promotions_for_transcript(
+        transcript=transcript,
+        max_rows=6,
+        persist_profiles=False,
+        incremental_pre_turn=True,
+        mark_pre_turn_promoted=True,
+        current_turn=2,
+    )
+
+    assert first["ok"] is True
+    assert first["turns"] == 1
+    assert first["incremental_pre_turn"] is True
+    assert transcript[0]["pre_turn_advisory_promoted"] is True
+    assert transcript[0]["pre_turn_advisory_promoted_at_turn"] == 2
+
+    second = run_deferred_advisory_promotions_for_transcript(
+        transcript=transcript,
+        max_rows=6,
+        persist_profiles=False,
+        incremental_pre_turn=True,
+        mark_pre_turn_promoted=True,
+        current_turn=3,
+    )
+
+    assert second["ok"] is True
+    assert second["turns"] == 0
+
+
+def test_incremental_pre_turn_promotion_compacts_carry_state_backlog():
+    big_candidates = [
+        {
+            "id": f"candidate:{idx}",
+            "kind": "relationship_delta",
+            "target": "bran",
+            "delta": 1,
+            "summary": f"candidate {idx}",
+        }
+        for idx in range(200)
+    ]
+    transcript = [
+        {
+            "turn_index": 1,
+            "runtime_state": {
+                "deferred_advisory": {
+                    "candidates": big_candidates,
+                    "pending": big_candidates,
+                    "accepted": big_candidates,
+                    "rejected": big_candidates,
+                }
+            },
+            "simulation_state": {"npcs": {"bran": {"name": "Bran"}}},
+        },
+        {
+            "turn_index": 2,
+            "combined_background_llm_result": {"ok": True},
+            "combined_background_llm_attach": {"phase": "pre_turn"},
+            "runtime_state": {"deferred_advisory": {"candidates": []}},
+            "simulation_state": {"npcs": {"bran": {"name": "Bran"}}},
+        },
+    ]
+
+    result = run_deferred_advisory_promotions_for_transcript(
+        transcript=transcript,
+        max_rows=6,
+        persist_profiles=False,
+        incremental_pre_turn=True,
+        mark_pre_turn_promoted=True,
+        current_turn=3,
+        carry_candidate_limit=7,
+        carry_pending_limit=8,
+        carry_accepted_limit=9,
+        carry_rejected_limit=10,
+    )
+
+    assert result["ok"] is True
+    assert result["turns"] == 1
+    advisory = transcript[1]["runtime_state"]["deferred_advisory"]
+    assert len(advisory["candidates"]) <= 7
+    assert len(advisory["pending"]) <= 8
+    assert len(advisory["accepted"]) <= 9
+    assert len(advisory["rejected"]) <= 10

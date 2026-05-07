@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import shutil
 import zipfile
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict
 
@@ -20,9 +21,11 @@ from tests.rpg.manual.safe import _safe_dict, _safe_list, _safe_str
 
 def _emit(value: Any = "", channel: str = "main") -> None:
     text = "" if value is None else str(value)
-    print(text, flush=True)
+    timestamp = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+    timestamped_text = f"[{timestamp}] {text}" if text else f"[{timestamp}]"
+    print(timestamped_text, flush=True)
     with _OUTPUT_LOCK:
-        _OUTPUTS.setdefault(channel, []).append(text)
+        _OUTPUTS.setdefault(channel, []).append(timestamped_text)
 
 
 def _reset_output(channel: str | None = None) -> None:
@@ -90,7 +93,8 @@ def _write_output(
 
     text = "\n".join(lines)
     path.write_text(text, encoding="utf-8")
-    print(f"Wrote transcript to: {path.resolve()}", flush=True)
+    timestamp = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+    print(f"[{timestamp}] Wrote transcript to: {path.resolve()}", flush=True)
 
     total_bytes = len(text.encode("utf-8"))
     artifact: Dict[str, Any] = {
@@ -211,7 +215,8 @@ def write_results_zip(path: Path = RESULTS_ZIP_PATH) -> None:
             arcname = item.relative_to(TEST_RESULTS_ROOT).as_posix()
             zf.write(item, arcname)
 
-    print(f"Wrote results zip to: {path.resolve()}", flush=True)
+    timestamp = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+    print(f"[{timestamp}] Wrote results zip to: {path.resolve()}", flush=True)
 
 
 def _assert_zip_excludes_html(path: Path = RESULTS_ZIP_PATH) -> None:

@@ -204,3 +204,18 @@ def test_journal_prefers_narration_as_learned_and_changed_text():
     assert "What I learned:" in text
     assert "strange lights near the woods" in text
     assert "target_not_found" not in text
+
+
+def test_journal_filters_quote_dot_and_fragment():
+    assert _clean_journal_text('".and what is it you find so intriguing tonight?') == ""
+
+    text = _journal_text(
+        [
+            'I will continue from where we left off: ".and what is it you find so intriguing tonight?',
+            "Ask Bran about the witness.",
+        ],
+        ["Bran lowers his voice and mentions the road."],
+    )
+
+    assert '".and' not in text
+    assert "Ask Bran about the witness" in text

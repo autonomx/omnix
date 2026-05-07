@@ -1,6 +1,13 @@
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any, Dict, List
+
+
+def _timestamped_print(*args, **kwargs):
+    """Print with timestamp prefix."""
+    timestamp = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+    print(f"[{timestamp}]", *args, **kwargs)
 
 from tests.rpg.manual import output_artifacts
 from tests.rpg.manual.campaign_director_m22_m24_checks import (
@@ -186,7 +193,7 @@ def _run_one_service_scenario(
     currency = _safe_dict(scenario.get("currency"))
     turns = _safe_list(scenario.get("turns"))
 
-    print(
+    _timestamped_print(
         f"[manual][worker {_thread_label()}] scenario {scenario_name}: "
         f"{len(turns)} turns session_id={session_id}",
         flush=True,
@@ -904,7 +911,7 @@ def _run_one_service_scenario(
             scenario_name=scenario_name, scenario_summary=summary_row,
             output_dir=str(TEST_RESULTS_ROOT), detail=artifact_detail,
         )
-        print(f"Wrote debug artifact: {debug_file}", flush=True)
+        _timestamped_print(f"Wrote debug artifact: {debug_file}", flush=True)
 
     output_artifacts._emit("", channel=target_channel)
     output_artifacts._emit("#" * 80, channel=target_channel)
