@@ -1,7 +1,14 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime
 from typing import Any, Callable, Dict
+
+
+def _timestamped_print(*args, **kwargs):
+    """Print with timestamp prefix."""
+    timestamp = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+    print(f"[{timestamp}]", *args, **kwargs)
 
 from tests.rpg.manual import output_artifacts
 from tests.rpg.manual.perf_trace import (
@@ -448,31 +455,30 @@ def _log_llm_response(
     raw_request = _one_line_text(payload.get("raw_request"), max_chars=max_chars)
 
     prefix = f"[manual][llm][{scope}:{label}][turn {turn}]"
-    print("", flush=True)
-    print(f"{prefix} PLAYER: {player_input}", flush=True)
-    print(
+    _timestamped_print("", flush=True)
+    _timestamped_print(f"{prefix} PLAYER: {player_input}", flush=True)
+    _timestamped_print(
         f"{prefix} used_llm={payload.get('used_llm')} "
         f"narration_status={payload.get('narration_status')}",
         flush=True,
     )
     if raw and raw_request:
-        print(f"{prefix} RAW LLM REQUEST:", flush=True)
-        print(raw_request, flush=True)
+        _timestamped_print(f"{prefix} RAW LLM REQUEST:", flush=True)
+        _timestamped_print(raw_request, flush=True)
     if final_text:
-        print(f"{prefix} FINAL RESPONSE:", flush=True)
-        print(final_text, flush=True)
+        _timestamped_print(f"{prefix} FINAL RESPONSE:", flush=True)
+        _timestamped_print(final_text, flush=True)
     elif json_narration or json_action or npc_line:
-        print(f"{prefix} STRUCTURED RESPONSE:", flush=True)
+        _timestamped_print(f"{prefix} STRUCTURED RESPONSE:", flush=True)
         if json_narration:
-            print(json_narration, flush=True)
+            _timestamped_print(json_narration, flush=True)
         if json_action:
-            print(f"Result: {json_action}", flush=True)
+            _timestamped_print(f"Result: {json_action}", flush=True)
         if npc_speaker and npc_line:
-            print(f'{npc_speaker}: "{npc_line}"', flush=True)
+            _timestamped_print(f'{npc_speaker}: "{npc_line}"', flush=True)
     else:
-        print(f"{prefix} FINAL RESPONSE: [no narration found]", flush=True)
-
+        _timestamped_print(f"{prefix} FINAL RESPONSE: [no narration found]", flush=True)
     if raw and raw_text:
-        print(f"{prefix} RAW LLM RESPONSE:", flush=True)
-        print(raw_text, flush=True)
-    print("", flush=True)
+        _timestamped_print(f"{prefix} RAW LLM RESPONSE:", flush=True)
+        _timestamped_print(raw_text, flush=True)
+    _timestamped_print("", flush=True)

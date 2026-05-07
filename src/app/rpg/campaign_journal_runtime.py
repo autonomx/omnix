@@ -62,6 +62,10 @@ def _looks_malformed_journal_fragment(value: str) -> bool:
     # Fragments caused by prompt/action truncation or quote slicing.
     if text[0] in ".;,:!?)]}":
         return True
+    if text.startswith(("\".", "'.", "“.", "‘.")):
+        return True
+    if ".and " in lower or "\n.and " in lower:
+        return True
     if text.startswith(("…", "...")):
         return True
     if lower.startswith(("or trouble", "gold? or", "or gold", "and ask", "then ask")):
@@ -100,6 +104,10 @@ def _clean_journal_text(value: Any, *, max_len: int = 700) -> str:
     text = " ".join(parts).strip()
     if not text:
         return ""
+    text = text.replace('".and ', '"and ')
+    text = text.replace("'.and ", "'and ")
+    text = text.replace("“.and ", "“and ")
+    text = text.replace("‘.and ", "‘and ")
     if _looks_malformed_journal_fragment(text):
         return ""
     if len(text) > max_len:
@@ -148,6 +156,8 @@ def _sentence_join(parts: List[str], *, max_items: int = 4) -> str:
     for part in _safe_list(parts):
         text = _normalize_sentence_punctuation(_clean_journal_text(part, max_len=240))
         if not text:
+            continue
+        if '".and ' in text.lower() or "'.and " in text.lower():
             continue
         marker = text.lower()
         if marker in seen:

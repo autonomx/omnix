@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import time
 import traceback
-from concurrent.futures import Future, ThreadPoolExecutor, as_completed
+from concurrent.futures import Future, ThreadPoolExecutor, TimeoutError as FuturesTimeoutError, as_completed
 from copy import deepcopy
+from datetime import datetime
 from typing import Any, Dict, List
 
 from app.rpg.narration.runtime_narration_contract import build_runtime_narration_payload
@@ -67,15 +68,6 @@ def _row_runtime_state(row: Dict[str, Any]) -> Dict[str, Any]:
         runtime_state = {}
     row["runtime_state"] = runtime_state
     return runtime_state
-
-
-def stable_json_for_prompt(value: Any, max_chars: int = 6000) -> str:
-    import json
-
-    text = json.dumps(value, sort_keys=True, ensure_ascii=False, default=str)
-    if len(text) > max_chars:
-        return text[:max_chars] + "...[truncated]"
-    return text
 
 
 def compact_json_for_prompt(value: Any, max_chars: int = 6000) -> str:
@@ -801,6 +793,7 @@ def _build_combined_background_payload(
     runtime_state: Dict[str, Any] | None = None,
     turn_contract: Dict[str, Any],
     semantic_action_record: Dict[str, Any],
+    turn_index: int,
 ) -> Dict[str, Any]:
     """One provider call that returns both narration and advisory candidates."""
     if provider is None or not callable(getattr(provider, "chat_completion", None)):
@@ -876,10 +869,29 @@ def _build_combined_background_payload(
     ]
 
     provider_messages = _provider_messages(messages)
+    started_ms = int(time.perf_counter() * 1000)
+    print(
+        "[AUTOPLAY-PROBE] "
+        f"ts={datetime.now().isoformat(timespec='seconds')} "
+        f"event=combined_background_provider_call.start "
+        f"turn_index={turn_index} "
+        f"provider_type={type(provider).__name__} "
+        f"message_count={len(provider_messages)} "
+        f"prompt_chars={sum(len(getattr(message, 'content', '') or '') for message in provider_messages)}",
+        flush=True,
+    )
     try:
         response = provider.chat_completion(messages=provider_messages, stream=False)
     except TypeError:
         response = provider.chat_completion(provider_messages, stream=False)
+    print(
+        "[AUTOPLAY-PROBE] "
+        f"ts={datetime.now().isoformat(timespec='seconds')} "
+        f"event=combined_background_provider_call.end "
+        f"turn_index={turn_index} "
+        f"elapsed_ms={int(time.perf_counter() * 1000) - started_ms}",
+        flush=True,
+    )
 
     content = _provider_text_from_response(response)
     if not content:
@@ -1053,6 +1065,7 @@ def _combined_background_llm_job(
                 runtime_state=freeze_snapshot(_safe_dict(runtime_state)),
                 turn_contract=freeze_snapshot(_safe_dict(turn_contract)),
                 semantic_action_record=freeze_snapshot(_safe_dict(semantic_action_record)),
+                turn_index=turn_index,
             )
             diagnostics["provider_combined_ms"] = elapsed_ms(provider_started)
             diagnostics["provider_payload_error"] = _safe_str(provider_payload.get("error"))
@@ -1231,6 +1244,165 @@ class AutoplayBackgroundPipeline:
             thread_name_prefix="rpg-autoplay-provider",
         )
         self._futures: List[Future] = []
+        self._future_job_ids: Dict[Future, str] = {}
+        self._job_futures: Dict[str, Future] = {}
+        self._completed_results: Dict[str, Dict[str, Any]] = {}
+
+    def _register_future(self, job_id: str, future: Future) -> str:
+        self._futures.append(future)
+        self._future_job_ids[future] = job_id
+        self._job_futures[job_id] = future
+        return job_id
+
+    def _finalize_future_result(self, future: Future) -> Dict[str, Any]:
+        job_id = self._future_job_ids.get(future, "")
+        try:
+            value = future.result()
+            result = (
+                value if isinstance(value, dict)
+                else {"ok": False, "kind": "unknown", "error": "worker_returned_non_dict"}
+            )
+        except Exception as exc:
+            result = {
+                "ok": False,
+                "kind": "unknown",
+                "error": f"{type(exc).__name__}: {exc}",
+                "traceback": traceback.format_exc(),
+            }
+        if job_id:
+            result.setdefault("job_id", job_id)
+            self._completed_results[job_id] = result
+            self._job_futures.pop(job_id, None)
+        self._future_job_ids.pop(future, None)
+        try:
+            self._futures.remove(future)
+        except ValueError:
+            pass
+        return result
+
+    def _finalize_unfinished_future(
+        self,
+        future: Future,
+        *,
+        reason: str = "final_drain_timeout",
+        cancel: bool = True,
+    ) -> Dict[str, Any]:
+        job_id = self._future_job_ids.get(future, "")
+        cancelled = False
+        if cancel:
+            try:
+                cancelled = bool(future.cancel())
+            except Exception:
+                cancelled = False
+        result = {
+            "ok": False,
+            "kind": "background_timeout",
+            "job_id": job_id,
+            "error": reason,
+            "cancelled": cancelled,
+            "done": bool(future.done()),
+        }
+        if job_id:
+            self._completed_results[job_id] = result
+            self._job_futures.pop(job_id, None)
+        self._future_job_ids.pop(future, None)
+        try:
+            self._futures.remove(future)
+        except ValueError:
+            pass
+        return result
+
+    def get_completed_result(self, job_id: str, timeout: float = 0.0) -> Dict[str, Any]:
+        """Return a completed result for job_id without waiting by default."""
+        if not job_id:
+            return {}
+        cached = self._completed_results.get(job_id)
+        if isinstance(cached, dict) and cached:
+            return cached
+        future = self._job_futures.get(job_id)
+        if future is None:
+            return {}
+        if timeout and timeout > 0:
+            try:
+                value = future.result(timeout=timeout)
+                result = (
+                    value if isinstance(value, dict)
+                    else {"ok": False, "kind": "unknown", "error": "worker_returned_non_dict"}
+                )
+                result.setdefault("job_id", job_id)
+                self._completed_results[job_id] = result
+                self._job_futures.pop(job_id, None)
+                self._future_job_ids.pop(future, None)
+                try:
+                    self._futures.remove(future)
+                except ValueError:
+                    pass
+                return result
+            except TimeoutError:
+                return {}
+            except Exception as exc:
+                result = {
+                    "ok": False,
+                    "kind": "unknown",
+                    "job_id": job_id,
+                    "error": f"{type(exc).__name__}: {exc}",
+                    "traceback": traceback.format_exc(),
+                }
+                self._completed_results[job_id] = result
+                self._job_futures.pop(job_id, None)
+                self._future_job_ids.pop(future, None)
+                try:
+                    self._futures.remove(future)
+                except ValueError:
+                    pass
+                return result
+        if not future.done():
+            return {}
+        return self._finalize_future_result(future)
+
+    def drain_completed(self) -> List[Dict[str, Any]]:
+        """Drain all currently completed futures without blocking."""
+        completed: List[Dict[str, Any]] = []
+        for future in list(self._futures):
+            if future.done():
+                completed.append(self._finalize_future_result(future))
+        return completed
+
+    def pending_job_count(self) -> int:
+        return len(list(self._futures))
+
+    def pending_job_ids(self) -> List[str]:
+        return [
+            self._future_job_ids.get(future, "")
+            for future in list(self._futures)
+            if self._future_job_ids.get(future, "")
+        ]
+
+    def executor_thread_diagnostics(self) -> Dict[str, Any]:
+        provider_threads = [
+            {
+                "name": getattr(thread, "name", ""),
+                "alive": bool(thread.is_alive()),
+                "daemon": bool(thread.daemon),
+            }
+            for thread in list(getattr(self._provider_executor, "_threads", []) or [])
+        ]
+        background_threads = [
+            {
+                "name": getattr(thread, "name", ""),
+                "alive": bool(thread.is_alive()),
+                "daemon": bool(thread.daemon),
+            }
+            for thread in list(getattr(self._background_executor, "_threads", []) or [])
+        ]
+        return {
+            "pending_job_count": self.pending_job_count(),
+            "pending_job_ids": self.pending_job_ids()[:50],
+            "provider_threads": provider_threads,
+            "background_threads": background_threads,
+            "alive_provider_thread_count": sum(1 for row in provider_threads if row.get("alive")),
+            "alive_background_thread_count": sum(1 for row in background_threads if row.get("alive")),
+        }
 
     def submit_deferred_narration(
         self,
@@ -1256,8 +1428,7 @@ class AutoplayBackgroundPipeline:
             turn_contract=freeze_snapshot(turn_contract),
             prefer_provider=prefer_provider,
         )
-        self._futures.append(future)
-        return job_id
+        return self._register_future(job_id, future)
 
     def submit_checkpoint(
         self,
@@ -1275,8 +1446,7 @@ class AutoplayBackgroundPipeline:
             checkpoint_dir=checkpoint_dir,
             simulation_state=freeze_snapshot(simulation_state),
         )
-        self._futures.append(future)
-        return job_id
+        return self._register_future(job_id, future)
 
     def submit_deferred_advisory(
         self,
@@ -1304,8 +1474,7 @@ class AutoplayBackgroundPipeline:
             semantic_action_record=freeze_snapshot(semantic_action_record),
             prefer_provider=prefer_provider,
         )
-        self._futures.append(future)
-        return job_id
+        return self._register_future(job_id, future)
 
     def submit_combined_background_llm(
         self,
@@ -1335,35 +1504,50 @@ class AutoplayBackgroundPipeline:
             semantic_action_record=freeze_snapshot(semantic_action_record),
             prefer_provider=prefer_provider,
         )
-        self._futures.append(future)
+        self._register_future(job_id, future)
         print(f"Submitted combined background LLM job {job_id}")
         return job_id
 
-    def drain(self) -> List[Dict[str, Any]]:
+    def drain(
+        self,
+        *,
+        timeout_seconds: float | None = None,
+        cancel_unfinished: bool = False,
+    ) -> List[Dict[str, Any]]:
         results: List[Dict[str, Any]] = []
         futures = list(self._futures)
-        self._futures.clear()
-        for future in as_completed(futures):
-            try:
-                value = future.result()
+        if not futures:
+            return results
+        try:
+            iterator = as_completed(futures, timeout=timeout_seconds)
+            for future in iterator:
+                results.append(self._finalize_future_result(future))
+        except FuturesTimeoutError:
+            # Attach whatever completed just before timeout; mark the rest.
+            pass
+
+        for future in list(self._futures):
+            if future.done():
+                results.append(self._finalize_future_result(future))
+            elif cancel_unfinished:
                 results.append(
-                    value if isinstance(value, dict)
-                    else {"ok": False, "error": "worker_returned_non_dict"}
-                )
-            except Exception as exc:
-                results.append(
-                    {
-                        "ok": False,
-                        "kind": "unknown",
-                        "error": f"{type(exc).__name__}: {exc}",
-                        "traceback": traceback.format_exc(),
-                    }
+                    self._finalize_unfinished_future(
+                        future,
+                        reason="final_drain_timeout",
+                        cancel=True,
+                    )
                 )
         return results
 
-    def shutdown(self) -> None:
-        self._provider_executor.shutdown(wait=True)
-        self._background_executor.shutdown(wait=True)
+    def shutdown(self, *, wait: bool = True, cancel_futures: bool = False) -> None:
+        try:
+            self._provider_executor.shutdown(wait=wait, cancel_futures=cancel_futures)
+        except TypeError:
+            self._provider_executor.shutdown(wait=wait)
+        try:
+            self._background_executor.shutdown(wait=wait, cancel_futures=cancel_futures)
+        except TypeError:
+            self._background_executor.shutdown(wait=wait)
 
 
 def attach_background_results_to_transcript(

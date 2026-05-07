@@ -1,977 +1,543 @@
-Below is N81.2 — Pre-Turn Background Drain + Future-Turn Advisory Promotion Timing as a literal apply-this-patch diff spec.
+Below is the literal patch spec for:
 
-Goal:
+N81.2.6.2 — Incremental Pre-Turn Advisory Promotion State Compaction
 
-Background jobs should not rewrite the same authoritative turn, but completed background results should be drained early enough to influence future turns.
+This fixes the remaining stall where bounded pre-turn promotion still becomes slow around turn 15/16. The last run proves the slow stage is still pre_turn_deferred_advisory_promotion, not LM Studio/player-agent/runtime/final drain. Early turns improved to 6ms / 14ms, but later promotion still grows to tens of seconds/minutes because the bounded window seeds from a huge carried runtime state.
 
-Current bad pattern:
-  submit turn 1..8 jobs during playable loop
-  attach turn 1..8 results only after playable loop ends
+Goal
+Pre-turn promotion should only process newly attached rows/candidates.
 
-Desired pattern:
-  start turn N
-  drain completed background jobs from turns < N
-  attach results to prior rows
-  run deterministic promotion/evolution/profile persistence on newly attached results
-  carry updated runtime into player-agent context
-  then choose turn N action
+It must not:
+  reprocess already-promoted rows
+  deepcopy full historical deferred_advisory state
+  carry unbounded accepted/rejected/pending/candidate lists
+  persist NPC profile files during pre-turn
 
-Strict rules:
+Final report promotion remains full and persistent.
+1. Patch src/tests/rpg/autoplay/advisory_promotion_runtime.py
+1A. Add compact list helpers
 
-Do not block indefinitely.
-Do not let LLM output mutate authoritative state directly.
-Do not let background result change the already-completed turn contract.
-Only deterministic promotion/consumption can affect future-turn runtime context.
-Final post-run drain still exists for report completeness.
-N81.2 — Pre-Turn Background Drain + Future-Turn Advisory Promotion Timing
-Acceptance goals
-autoplay-summary.json includes background_result_timing_summary
+Add near the existing helper functions:
 
-8-turn smoke:
-  background_result_timing_summary.jobs_submitted >= 8
-  background_result_timing_summary.jobs_attached_total >= 8
-  background_result_timing_summary.ok == true
-  quality_gate_summary.ok == true
+--- src/tests/rpg/autoplay/advisory_promotion_runtime.py
++++ src/tests/rpg/autoplay/advisory_promotion_runtime.py
+@@
+ def _safe_list(value: Any) -> List[Any]:
+     return value if isinstance(value, list) else []
++
++
++def _bounded_list_tail(value: Any, limit: int) -> List[Any]:
++    items = list(value) if isinstance(value, list) else []
++    if int(limit or 0) <= 0:
++        return items
++    return items[-int(limit or 0):]
++
++
++def _compact_deferred_advisory_state(
++    runtime_state: Dict[str, Any],
++    *,
++    candidate_limit: int = 50,
++    pending_limit: int = 50,
++    accepted_limit: int = 100,
++    rejected_limit: int = 100,
++) -> Dict[str, Any]:
++    """Return a small carry-state safe for pre-turn incremental promotion.
++
++    The full runtime mirror can become very large because every promotion pass
++    carries candidates, accepted/rejected history, evolution projections, and
++    profile summaries forward. Pre-turn promotion only needs recent deterministic
++    context, not the full report history.
++    """
++    runtime_state = deepcopy(runtime_state) if isinstance(runtime_state, dict) else {}
++    advisory = runtime_state.get("deferred_advisory")
++    if not isinstance(advisory, dict):
++        return runtime_state
++
++    advisory["candidates"] = _bounded_list_tail(
++        advisory.get("candidates"),
++        int(candidate_limit or 50),
++    )
++    advisory["pending"] = _bounded_list_tail(
++        advisory.get("pending"),
++        int(pending_limit or 50),
++    )
++    advisory["accepted"] = _bounded_list_tail(
++        advisory.get("accepted"),
++        int(accepted_limit or 100),
++    )
++    advisory["rejected"] = _bounded_list_tail(
++        advisory.get("rejected"),
++        int(rejected_limit or 100),
++    )
++    runtime_state["deferred_advisory"] = advisory
++    return runtime_state
++
++
++def _row_has_unpromoted_pre_turn_background_result(row: Dict[str, Any]) -> bool:
++    row = row if isinstance(row, dict) else {}
++    if bool(row.get("pre_turn_advisory_promoted")):
++        return False
++    attach = row.get("combined_background_llm_attach")
++    if isinstance(attach, dict) and str(attach.get("phase") or "") == "pre_turn":
++        return bool(row.get("combined_background_llm_result"))
++    # Defensive fallback for older rows where attach metadata was not stored.
++    return bool(row.get("combined_background_llm_result")) and not bool(
++        row.get("pre_turn_advisory_promoted")
++    )
+1B. Extend function signature
 
-For strict 100-turn run:
-  background_pre_turn_attach_rate >= 0.50
-  max_attach_lag_turns <= 5
-  only_finalized_count < jobs_submitted
-1. Patch src/tests/rpg/autoplay_llm_campaign.py
-1A. Add CLI knobs
+Find:
 
-Near other background/provider args:
+def run_deferred_advisory_promotions_for_transcript(
+    *,
+    transcript: List[Dict[str, Any]],
+    max_promotions_per_turn: int = 5,
+    max_rows: int = 0,
+    persist_profiles: bool = True,
+) -> Dict[str, Any]:
+
+Replace with:
+
+--- src/tests/rpg/autoplay/advisory_promotion_runtime.py
++++ src/tests/rpg/autoplay/advisory_promotion_runtime.py
+@@
+ def run_deferred_advisory_promotions_for_transcript(
+     *,
+     transcript: List[Dict[str, Any]],
+     max_promotions_per_turn: int = 5,
+     max_rows: int = 0,
+     persist_profiles: bool = True,
++    incremental_pre_turn: bool = False,
++    mark_pre_turn_promoted: bool = False,
++    current_turn: int = 0,
++    carry_candidate_limit: int = 50,
++    carry_pending_limit: int = 50,
++    carry_accepted_limit: int = 100,
++    carry_rejected_limit: int = 100,
+ ) -> Dict[str, Any]:
+1C. Replace row-window selection
+
+Find the bounded window block added in N81.2.6.1:
+
+    all_rows = [row for row in transcript if isinstance(row, dict)]
+    source_transcript_turns = len(all_rows)
+    window_start_index = 0
+    rows = all_rows
+    if int(max_rows or 0) > 0 and len(all_rows) > int(max_rows or 0):
+        window_start_index = len(all_rows) - int(max_rows or 0)
+        rows = all_rows[window_start_index:]
+
+    # Carry advisory runtime state forward across rows so turn N candidates can
+    # be promoted on turn N+1.
+    #
+    # For bounded pre-turn promotion, seed carry from the row immediately before
+    # the window. Previous full or prior bounded promotions already wrote the
+    # carried runtime mirror there. This avoids reprocessing every old row.
+    carried_runtime_state: Dict[str, Any] = {}
+    if window_start_index > 0:
+        carried_runtime_state = deepcopy(_runtime_state_from_row(all_rows[window_start_index - 1]))
+
+    for row in rows:
+
+Replace with:
+
+--- src/tests/rpg/autoplay/advisory_promotion_runtime.py
++++ src/tests/rpg/autoplay/advisory_promotion_runtime.py
+@@
+     all_rows = [row for row in transcript if isinstance(row, dict)]
+     source_transcript_turns = len(all_rows)
+     window_start_index = 0
+-    rows = all_rows
+-    if int(max_rows or 0) > 0 and len(all_rows) > int(max_rows or 0):
+-        window_start_index = len(all_rows) - int(max_rows or 0)
+-        rows = all_rows[window_start_index:]
++    rows = all_rows
++
++    if incremental_pre_turn:
++        # Only process rows that received a pre-turn background result and have
++        # not already had deterministic pre-turn advisory promotion applied.
++        candidate_rows = [
++            row for row in all_rows
++            if _row_has_unpromoted_pre_turn_background_result(row)
++        ]
++        if int(max_rows or 0) > 0:
++            candidate_rows = candidate_rows[-int(max_rows or 0):]
++        rows = candidate_rows
++        if rows:
++            first_row = rows[0]
++            try:
++                window_start_index = all_rows.index(first_row)
++            except ValueError:
++                window_start_index = 0
++    elif int(max_rows or 0) > 0 and len(all_rows) > int(max_rows or 0):
++        window_start_index = len(all_rows) - int(max_rows or 0)
++        rows = all_rows[window_start_index:]
+ 
+     # Carry advisory runtime state forward across rows so turn N candidates can
+     # be promoted on turn N+1.
+     #
+-    # For bounded pre-turn promotion, seed carry from the row immediately before
+-    # the window. Previous full or prior bounded promotions already wrote the
+-    # carried runtime mirror there. This avoids reprocessing every old row.
++    # For incremental pre-turn promotion, seed only a compact carry-state from
++    # the row immediately before the window. Do not copy the full historical
++    # advisory backlog into pre-turn work.
+     carried_runtime_state: Dict[str, Any] = {}
+     if window_start_index > 0:
+-        carried_runtime_state = deepcopy(_runtime_state_from_row(all_rows[window_start_index - 1]))
++        previous_runtime_state = _runtime_state_from_row(all_rows[window_start_index - 1])
++        if incremental_pre_turn:
++            carried_runtime_state = _compact_deferred_advisory_state(
++                previous_runtime_state,
++                candidate_limit=int(carry_candidate_limit or 50),
++                pending_limit=int(carry_pending_limit or 50),
++                accepted_limit=int(carry_accepted_limit or 100),
++                rejected_limit=int(carry_rejected_limit or 100),
++            )
++        else:
++            carried_runtime_state = deepcopy(previous_runtime_state)
+ 
+     for row in rows:
+1D. Mark processed rows after each row
+
+Inside the for row in rows: loop, near the end after row["npc_evolution_profile_persist_result"] = profile_persist_result, add:
+
+--- src/tests/rpg/autoplay/advisory_promotion_runtime.py
++++ src/tests/rpg/autoplay/advisory_promotion_runtime.py
+@@
+         row["npc_evolution_profile_persist_result"] = profile_persist_result
+         latest_profile_persist_result = profile_persist_result
++
++        if incremental_pre_turn and mark_pre_turn_promoted:
++            row["pre_turn_advisory_promoted"] = True
++            row["pre_turn_advisory_promoted_at_turn"] = int(current_turn or 0)
++            row["pre_turn_advisory_promotion_summary"] = {
++                "ok": True,
++                "current_turn": int(current_turn or 0),
++                "incremental_pre_turn": True,
++                "persist_profiles": bool(persist_profiles),
++                "max_rows": int(max_rows or 0),
++            }
+1E. Add metadata to return summary
+
+Find:
+
+        "max_rows": int(max_rows or 0),
+        "persist_profiles": bool(persist_profiles),
+
+Replace with:
+
+--- src/tests/rpg/autoplay/advisory_promotion_runtime.py
++++ src/tests/rpg/autoplay/advisory_promotion_runtime.py
+@@
+         "max_rows": int(max_rows or 0),
+         "persist_profiles": bool(persist_profiles),
++        "incremental_pre_turn": bool(incremental_pre_turn),
++        "mark_pre_turn_promoted": bool(mark_pre_turn_promoted),
++        "current_turn": int(current_turn or 0),
++        "carry_candidate_limit": int(carry_candidate_limit or 0),
++        "carry_pending_limit": int(carry_pending_limit or 0),
++        "carry_accepted_limit": int(carry_accepted_limit or 0),
++        "carry_rejected_limit": int(carry_rejected_limit or 0),
+         "accepted": accepted,
+2. Patch src/tests/rpg/autoplay_llm_campaign.py
+2A. Add carry-limit CLI knobs
+
+After:
+
+parser.add_argument(
+    "--pre-turn-advisory-promotion-max-rows",
+
+add:
 
 --- src/tests/rpg/autoplay_llm_campaign.py
 +++ src/tests/rpg/autoplay_llm_campaign.py
 @@
      parser.add_argument(
-         "--background-workers",
+         "--pre-turn-advisory-promotion-max-rows",
          type=int,
-         default=2,
-         help="Number of generic background workers.",
+         default=6,
+         help=(
+             "Maximum recent transcript rows to process during pre-turn deferred "
+             "advisory promotion. Final report promotion still processes the full transcript."
+         ),
      )
 +    parser.add_argument(
-+        "--pre-turn-background-drain-ms",
++        "--pre-turn-advisory-carry-candidate-limit",
 +        type=int,
-+        default=250,
-+        help=(
-+            "Small wait budget before each autoplay turn to drain completed "
-+            "background LLM results from prior turns. This lets completed "
-+            "advisory/profile/narration work affect future-turn context without "
-+            "blocking same-turn authoritative outcomes."
-+        ),
++        default=30,
++        help="Maximum deferred advisory candidates carried into incremental pre-turn promotion.",
 +    )
 +    parser.add_argument(
-+        "--background-result-max-turn-lag",
++        "--pre-turn-advisory-carry-pending-limit",
 +        type=int,
-+        default=5,
-+        help="Warn/fail in strict mode when a background result attaches more than this many turns late.",
++        default=30,
++        help="Maximum deferred advisory pending items carried into incremental pre-turn promotion.",
 +    )
 +    parser.add_argument(
-+        "--fail-if-background-results-only-finalized",
-+        action="store_true",
-+        default=False,
-+        help="Fail if all/most background results are only attached during final post-run drain.",
++        "--pre-turn-advisory-carry-accepted-limit",
++        type=int,
++        default=60,
++        help="Maximum accepted advisory history items carried into incremental pre-turn promotion.",
 +    )
-1B. Add timing tracker helpers
++    parser.add_argument(
++        "--pre-turn-advisory-carry-rejected-limit",
++        type=int,
++        default=60,
++        help="Maximum rejected advisory history items carried into incremental pre-turn promotion.",
++    )
+2B. Change pre-turn promotion call to incremental mode
 
-Add near other helper functions:
+Find the block from N81.2.6.1:
+
+pre_turn_promotion_result = run_deferred_advisory_promotions_for_transcript(
+    transcript=transcript,
+    max_promotions_per_turn=int(args.max_advisory_promotions_per_turn),
+    max_rows=int(getattr(args, "pre_turn_advisory_promotion_max_rows", 6) or 6),
+    persist_profiles=False,
+)
+
+Replace with:
 
 --- src/tests/rpg/autoplay_llm_campaign.py
 +++ src/tests/rpg/autoplay_llm_campaign.py
 @@
- def _merge_base_runtime_namespaces(
-@@
-     return merged
-+
-+
-+def _new_background_result_timing_tracker() -> Dict[str, Any]:
-+    return {
-+        "submitted": {},
-+        "attached": {},
-+        "attachment_events": [],
-+    }
-+
-+
-+def _track_background_submit(
-+    tracker: Dict[str, Any],
-+    *,
-+    job_id: str,
-+    turn_index: int,
-+    phase: str = "turn_submit",
-+) -> None:
-+    if not job_id:
-+        return
-+    submitted = tracker.setdefault("submitted", {})
-+    submitted[job_id] = {
-+        "job_id": job_id,
-+        "submitted_turn": int(turn_index or 0),
-+        "phase": phase,
-+    }
-+
-+
-+def _track_background_attach(
-+    tracker: Dict[str, Any],
-+    *,
-+    job_id: str,
-+    source_turn: int,
-+    attach_turn: int,
-+    phase: str,
-+) -> None:
-+    if not job_id:
-+        return
-+    attached = tracker.setdefault("attached", {})
-+    if job_id in attached:
-+        return
-+    source_turn = int(source_turn or 0)
-+    attach_turn = int(attach_turn or 0)
-+    event = {
-+        "job_id": job_id,
-+        "source_turn": source_turn,
-+        "attach_turn": attach_turn,
-+        "phase": phase,
-+        "lag_turns": max(0, attach_turn - source_turn),
-+    }
-+    attached[job_id] = event
-+    tracker.setdefault("attachment_events", []).append(event)
-+
-+
-+def _summarize_background_result_timing(
-+    tracker: Dict[str, Any],
-+    *,
-+    turn_count: int,
-+    strict_eval_turns: int = 100,
-+    max_turn_lag: int = 5,
-+) -> Dict[str, Any]:
-+    tracker = _safe_dict(tracker)
-+    submitted = _safe_dict(tracker.get("submitted"))
-+    attached = _safe_dict(tracker.get("attached"))
-+    events = _safe_list(tracker.get("attachment_events"))
-+
-+    jobs_submitted = len(submitted)
-+    jobs_attached_total = len(attached)
-+    pre_turn_events = [event for event in events if _safe_str(_safe_dict(event).get("phase")) == "pre_turn"]
-+    final_events = [event for event in events if _safe_str(_safe_dict(event).get("phase")) == "final"]
-+    lag_values = [
-+        int(_safe_dict(event).get("lag_turns") or 0)
-+        for event in events
-+        if isinstance(event, dict)
-+    ]
-+    pre_turn_attach_rate = (
-+        round(len(pre_turn_events) / jobs_submitted, 4)
-+        if jobs_submitted
-+        else 0.0
-+    )
-+    final_attach_rate = (
-+        round(len(final_events) / jobs_submitted, 4)
-+        if jobs_submitted
-+        else 0.0
-+    )
-+    strict = int(turn_count or 0) >= int(strict_eval_turns or 100)
-+
-+    missing_job_ids = sorted(
-+        [job_id for job_id in submitted.keys() if job_id not in attached]
-+    )
-+    only_finalized_count = len(final_events)
-+    max_lag = max(lag_values) if lag_values else 0
-+    avg_lag = round(sum(lag_values) / len(lag_values), 4) if lag_values else 0.0
-+
-+    warnings: List[Dict[str, Any]] = []
-+    if missing_job_ids:
-+        warnings.append(
-+            {
-+                "code": "background_results_missing",
-+                "severity": "error" if strict else "warning",
-+                "message": "Some submitted background jobs were never attached.",
-+                "details": {"missing_job_ids": missing_job_ids[:20]},
-+            }
-+        )
-+    if jobs_submitted and only_finalized_count == jobs_submitted:
-+        warnings.append(
-+            {
-+                "code": "background_results_only_finalized",
-+                "severity": "error" if strict else "warning",
-+                "message": "All background results attached during final drain, so they could not influence future turns.",
-+                "details": {"only_finalized_count": only_finalized_count},
-+            }
-+        )
-+    if strict and pre_turn_attach_rate < 0.50:
-+        warnings.append(
-+            {
-+                "code": "background_pre_turn_attach_rate_low",
-+                "severity": "error",
-+                "message": "Too few background results were attached before later turns.",
-+                "details": {"pre_turn_attach_rate": pre_turn_attach_rate},
-+            }
-+        )
-+    if strict and max_lag > int(max_turn_lag or 5):
-+        warnings.append(
-+            {
-+                "code": "background_attach_lag_high",
-+                "severity": "error",
-+                "message": "Background results attached too many turns after submission.",
-+                "details": {"max_attach_lag_turns": max_lag, "limit": int(max_turn_lag or 5)},
-+            }
-+        )
-+
-+    error_count = sum(1 for warning in warnings if _safe_dict(warning).get("severity") == "error")
-+    return {
-+        "ok": error_count == 0,
-+        "strict_100_turn_mode": strict,
-+        "jobs_submitted": jobs_submitted,
-+        "jobs_attached_total": jobs_attached_total,
-+        "jobs_attached_pre_turn": len(pre_turn_events),
-+        "jobs_attached_final": len(final_events),
-+        "pre_turn_attach_rate": pre_turn_attach_rate,
-+        "final_attach_rate": final_attach_rate,
-+        "only_finalized_count": only_finalized_count,
-+        "missing_job_count": len(missing_job_ids),
-+        "missing_job_ids": missing_job_ids[:50],
-+        "avg_attach_lag_turns": avg_lag,
-+        "max_attach_lag_turns": max_lag,
-+        "attachment_events": events[-200:],
-+        "warning_count": len(warnings),
-+        "error_count": error_count,
-+        "warnings": warnings,
-+    }
-1C. Add background drain/attach helper
+                     pre_turn_promotion_result = run_deferred_advisory_promotions_for_transcript(
+                         transcript=transcript,
+                         max_promotions_per_turn=int(args.max_advisory_promotions_per_turn),
+                         max_rows=int(getattr(args, "pre_turn_advisory_promotion_max_rows", 6) or 6),
+                         persist_profiles=False,
++                        incremental_pre_turn=True,
++                        mark_pre_turn_promoted=True,
++                        current_turn=turn_index,
++                        carry_candidate_limit=int(
++                            getattr(args, "pre_turn_advisory_carry_candidate_limit", 30) or 30
++                        ),
++                        carry_pending_limit=int(
++                            getattr(args, "pre_turn_advisory_carry_pending_limit", 30) or 30
++                        ),
++                        carry_accepted_limit=int(
++                            getattr(args, "pre_turn_advisory_carry_accepted_limit", 60) or 60
++                        ),
++                        carry_rejected_limit=int(
++                            getattr(args, "pre_turn_advisory_carry_rejected_limit", 60) or 60
++                        ),
+                     )
+2C. Expand pre-turn promotion result probe
 
-This helper should be low-risk and should reuse existing pipeline methods as much as possible.
+Find:
 
-Add near the timing helpers:
+_probe_log(
+    bool(getattr(args, "debug_autoplay_stage_timing", False)),
+    "pre_turn_deferred_advisory_promotion.result",
+    turn_index=turn_index,
+    turns=pre_turn_promotion_result.get("turns"),
+    source_transcript_turns=pre_turn_promotion_result.get("source_transcript_turns"),
+    accepted=pre_turn_promotion_result.get("accepted"),
+    rejected=pre_turn_promotion_result.get("rejected"),
+    pending=pre_turn_promotion_result.get("pending"),
+    persist_profiles=pre_turn_promotion_result.get("persist_profiles"),
+)
+
+Replace with:
 
 --- src/tests/rpg/autoplay_llm_campaign.py
 +++ src/tests/rpg/autoplay_llm_campaign.py
 @@
- def _summarize_background_result_timing(
-@@
-     return {
-@@
-     }
-+
-+
-+def _try_get_combined_background_result(
-+    *,
-+    pipeline: Any,
-+    job_id: str,
-+    wait_ms: int = 0,
-+) -> Dict[str, Any]:
-+    """Best-effort adapter over the background pipeline's existing result API.
-+
-+    Different local versions of the pipeline have used slightly different
-+    method names. Keep this adapter defensive so the timing patch is easy to
-+    apply over recent code.
-+    """
-+    if not pipeline or not job_id:
-+        return {}
-+
-+    wait_seconds = max(0.0, float(wait_ms or 0) / 1000.0)
-+    method_names = (
-+        "get_completed_result",
-+        "get_result_if_done",
-+        "try_get_result",
-+        "get_result",
-+        "await_result",
-+    )
-+    for name in method_names:
-+        method = getattr(pipeline, name, None)
-+        if not callable(method):
-+            continue
-+        try:
-+            # Prefer non-blocking/short-timeout forms when supported.
-+            try:
-+                result = method(job_id, timeout=wait_seconds)
-+            except TypeError:
-+                try:
-+                    result = method(job_id, timeout_seconds=wait_seconds)
-+                except TypeError:
-+                    try:
-+                        result = method(job_id, wait_seconds=wait_seconds)
-+                    except TypeError:
-+                        result = method(job_id)
-+            result = _safe_dict(result)
-+            if result:
-+                return result
-+        except TimeoutError:
-+            return {}
-+        except Exception:
-+            # Do not make drain adapter fatal; console/report gates will expose
-+            # real pipeline errors elsewhere.
-+            return {}
-+    return {}
-+
-+
-+def _extract_combined_background_payload(result: Dict[str, Any]) -> Dict[str, Any]:
-+    result = _safe_dict(result)
-+    return (
-+        _safe_dict(result.get("combined_background_llm_result"))
-+        or _safe_dict(result.get("payload"))
-+        or _safe_dict(result.get("result"))
-+        or result
-+    )
-+
-+
-+def _attach_completed_background_job_to_record(
-+    *,
-+    record: Dict[str, Any],
-+    job_id: str,
-+    result: Dict[str, Any],
-+    attach_turn: int,
-+    phase: str,
-+    timing_tracker: Dict[str, Any],
-+) -> bool:
-+    record = _safe_dict(record)
-+    if not job_id or not result:
-+        return False
-+    if _safe_dict(record.get("combined_background_llm_result")):
-+        return False
-+    payload = _extract_combined_background_payload(result)
-+    if not payload:
-+        return False
-+    source_turn = int(record.get("turn_index") or 0)
-+    record["combined_background_llm_result"] = payload
-+    record["combined_background_llm_attach"] = {
-+        "job_id": job_id,
-+        "source_turn": source_turn,
-+        "attach_turn": int(attach_turn or 0),
-+        "phase": phase,
-+        "lag_turns": max(0, int(attach_turn or 0) - source_turn),
-+    }
-+    _track_background_attach(
-+        timing_tracker,
-+        job_id=job_id,
-+        source_turn=source_turn,
-+        attach_turn=attach_turn,
-+        phase=phase,
-+    )
-+    return True
-+
-+
-+def _drain_completed_background_jobs_for_transcript(
-+    *,
-+    pipeline: Any,
-+    transcript: List[Dict[str, Any]],
-+    current_turn: int,
-+    phase: str,
-+    wait_ms: int,
-+    timing_tracker: Dict[str, Any],
-+) -> Dict[str, Any]:
-+    """Attach completed background results for prior rows.
-+
-+    This never changes authoritative turn contracts. It only attaches completed
-+    presentation/advisory payloads to previous transcript rows so deterministic
-+    promotion/evolution/report logic can consume them before future actions.
-+    """
-+    attached = 0
-+    checked = 0
-+    for row in transcript if isinstance(transcript, list) else []:
-+        row = _safe_dict(row)
-+        source_turn = int(row.get("turn_index") or 0)
-+        if phase == "pre_turn" and source_turn >= int(current_turn or 0):
-+            continue
-+        if _safe_dict(row.get("combined_background_llm_result")):
-+            continue
-+        job_id = _safe_str(
-+            row.get("combined_background_llm_job_id")
-+            or row.get("background_llm_job_id")
-+            or row.get("combined_background_job_id")
-+        )
-+        if not job_id:
-+            continue
-+        checked += 1
-+        result = _try_get_combined_background_result(
-+            pipeline=pipeline,
-+            job_id=job_id,
-+            wait_ms=wait_ms if attached == 0 else 0,
-+        )
-+        if _attach_completed_background_job_to_record(
-+            record=row,
-+            job_id=job_id,
-+            result=result,
-+            attach_turn=current_turn,
-+            phase=phase,
-+            timing_tracker=timing_tracker,
-+        ):
-+            attached += 1
-+            print(f"Attaching combined background LLM result for turn {source_turn} phase={phase} lag={max(0, int(current_turn or 0) - source_turn)}")
-+    return {
-+        "phase": phase,
-+        "current_turn": current_turn,
-+        "checked": checked,
-+        "attached": attached,
-+    }
-2. Wire pre-turn drain into the main turn loop
-2A. Create tracker before loop
-
-Find where transcript is initialized:
-
-transcript: List[Dict[str, Any]] = []
-
-Add:
-
---- src/tests/rpg/autoplay_llm_campaign.py
-+++ src/tests/rpg/autoplay_llm_campaign.py
-@@
-     transcript: List[Dict[str, Any]] = []
-     carried_campaign_runtime_state: Dict[str, Any] = {}
-+    background_result_timing_tracker = _new_background_result_timing_tracker()
-+    background_drain_events: List[Dict[str, Any]] = []
-2B. Drain at the start of each turn
-
-Inside the main turn loop, as the first thing after loop begins:
-
---- src/tests/rpg/autoplay_llm_campaign.py
-+++ src/tests/rpg/autoplay_llm_campaign.py
-@@
-     for turn_index in range(1, args.turns + 1):
-+        if int(getattr(args, "pre_turn_background_drain_ms", 0) or 0) >= 0:
-+            drain_event = _drain_completed_background_jobs_for_transcript(
-+                pipeline=pipeline,
-+                transcript=transcript,
-+                current_turn=turn_index,
-+                phase="pre_turn",
-+                wait_ms=int(getattr(args, "pre_turn_background_drain_ms", 0) or 0),
-+                timing_tracker=background_result_timing_tracker,
-+            )
-+            background_drain_events.append(drain_event)
-+
-+            # Re-run deterministic promotion/evolution over newly attached
-+            # advisory candidates so future turns can see promoted runtime state.
-+            if int(drain_event.get("attached") or 0) > 0:
-+                try:
-+                    run_deferred_advisory_promotions_for_transcript(transcript=transcript)
-+                except TypeError:
-+                    run_deferred_advisory_promotions_for_transcript(transcript)
-
-If your promotion function name differs, use the existing one. In your codebase it is likely one of:
-
-run_deferred_advisory_promotions_for_transcript
-run_deferred_advisory_promotions
-apply_deferred_advisory_promotions
-
-Use the function already used after the run completes. The important part is:
-
-after pre-turn attach
-→ run deterministic promotion/evolution
-→ carry latest runtime into future turns
-2C. Track job submission
-
-Find where combined background job is submitted:
-
-combined_background_llm_job_id = pipeline.submit_combined_background_llm(...)
-
-Immediately after it, add:
-
---- src/tests/rpg/autoplay_llm_campaign.py
-+++ src/tests/rpg/autoplay_llm_campaign.py
-@@
-                 combined_background_llm_job_id = pipeline.submit_combined_background_llm(
-                     provider=provider,
-                     session_id=session_id,
+                 _probe_log(
+                     bool(getattr(args, "debug_autoplay_stage_timing", False)),
+                     "pre_turn_deferred_advisory_promotion.result",
                      turn_index=turn_index,
-@@
-                     prefer_provider=True,
+                     turns=pre_turn_promotion_result.get("turns"),
+                     source_transcript_turns=pre_turn_promotion_result.get("source_transcript_turns"),
++                    incremental_pre_turn=pre_turn_promotion_result.get("incremental_pre_turn"),
+                     accepted=pre_turn_promotion_result.get("accepted"),
+                     rejected=pre_turn_promotion_result.get("rejected"),
+                     pending=pre_turn_promotion_result.get("pending"),
+                     persist_profiles=pre_turn_promotion_result.get("persist_profiles"),
++                    carry_candidate_limit=pre_turn_promotion_result.get("carry_candidate_limit"),
++                    carry_pending_limit=pre_turn_promotion_result.get("carry_pending_limit"),
++                    carry_accepted_limit=pre_turn_promotion_result.get("carry_accepted_limit"),
++                    carry_rejected_limit=pre_turn_promotion_result.get("carry_rejected_limit"),
                  )
-+                _track_background_submit(
-+                    background_result_timing_tracker,
-+                    job_id=_safe_str(combined_background_llm_job_id),
-+                    turn_index=turn_index,
-+                    phase="turn_submit",
-+                )
-2D. Ensure record stores the job id consistently
+2D. Expand drain event stored result
 
-Inside record = { ... }, ensure this field exists:
+Find:
 
---- src/tests/rpg/autoplay_llm_campaign.py
-+++ src/tests/rpg/autoplay_llm_campaign.py
-@@
-             "combined_background_llm_job_id": combined_background_llm_job_id,
-+            "background_result_attach_pending": bool(combined_background_llm_job_id),
+drain_event["pre_turn_advisory_promotion_result"] = {
+    "ok": pre_turn_promotion_result.get("ok"),
+    "turns": pre_turn_promotion_result.get("turns"),
+    "source_transcript_turns": pre_turn_promotion_result.get("source_transcript_turns"),
+    "accepted": pre_turn_promotion_result.get("accepted"),
+    "rejected": pre_turn_promotion_result.get("rejected"),
+    "pending": pre_turn_promotion_result.get("pending"),
+    "persist_profiles": pre_turn_promotion_result.get("persist_profiles"),
+}
 
-If combined_background_llm_job_id can be undefined in non-combined mode, initialize before the turn loop body:
-
-@@
-         background_runtime_state: Dict[str, Any] = {}
-         resolved_turn_contract: Dict[str, Any] = {}
-         resolved_narration_payload: Dict[str, Any] = {}
-         combined_background_result: Dict[str, Any] = {}
-         journal_narration_text = ""
-+        combined_background_llm_job_id = ""
-3. Final drain should use the same timing tracker
-
-Find the code after the playable loop that currently attaches all combined background results. It prints lines like:
-
-Attaching combined background LLM result for turn 3
-Attaching combined background LLM result for turn 1
-...
-
-Before or in place of that manual loop, add:
+Replace with:
 
 --- src/tests/rpg/autoplay_llm_campaign.py
 +++ src/tests/rpg/autoplay_llm_campaign.py
 @@
-+    final_drain_event = _drain_completed_background_jobs_for_transcript(
-+        pipeline=pipeline,
-+        transcript=transcript,
-+        current_turn=int(args.turns),
-+        phase="final",
-+        wait_ms=0,
-+        timing_tracker=background_result_timing_tracker,
-+    )
-+    background_drain_events.append(final_drain_event)
+                 drain_event["pre_turn_advisory_promotion_result"] = {
+                     "ok": pre_turn_promotion_result.get("ok"),
+                     "turns": pre_turn_promotion_result.get("turns"),
+                     "source_transcript_turns": pre_turn_promotion_result.get("source_transcript_turns"),
++                    "incremental_pre_turn": pre_turn_promotion_result.get("incremental_pre_turn"),
+                     "accepted": pre_turn_promotion_result.get("accepted"),
+                     "rejected": pre_turn_promotion_result.get("rejected"),
+                     "pending": pre_turn_promotion_result.get("pending"),
+                     "persist_profiles": pre_turn_promotion_result.get("persist_profiles"),
++                    "carry_candidate_limit": pre_turn_promotion_result.get("carry_candidate_limit"),
++                    "carry_pending_limit": pre_turn_promotion_result.get("carry_pending_limit"),
++                    "carry_accepted_limit": pre_turn_promotion_result.get("carry_accepted_limit"),
++                    "carry_rejected_limit": pre_turn_promotion_result.get("carry_rejected_limit"),
+                 }
+3. Add tests
 
-If the existing final loop waits for unfinished jobs, keep it, but modify its attach path so it calls _attach_completed_background_job_to_record(...) with:
+Patch:
 
-phase="final"
-attach_turn=int(args.turns)
-timing_tracker=background_result_timing_tracker
+src/tests/rpg/autoplay/test_deferred_advisory_promotion_runtime.py
+3A. Add regression test: incremental mode skips already-promoted rows
 
-Example patch inside existing final attach loop:
+Append:
 
---- src/tests/rpg/autoplay_llm_campaign.py
-+++ src/tests/rpg/autoplay_llm_campaign.py
+--- src/tests/rpg/autoplay/test_deferred_advisory_promotion_runtime.py
++++ src/tests/rpg/autoplay/test_deferred_advisory_promotion_runtime.py
 @@
--            record["combined_background_llm_result"] = combined_result
--            print(f"Attaching combined background LLM result for turn {record.get('turn_index')}")
-+            attached = _attach_completed_background_job_to_record(
-+                record=record,
-+                job_id=_safe_str(record.get("combined_background_llm_job_id")),
-+                result=combined_result,
-+                attach_turn=int(args.turns),
-+                phase="final",
-+                timing_tracker=background_result_timing_tracker,
-+            )
-+            if attached:
-+                print(f"Attaching combined background LLM result for turn {record.get('turn_index')} phase=final")
-
-The important invariant:
-
-All attachment paths call _track_background_attach exactly once per job.
-4. Summarize background result timing
-
-After all final attach/drain work and before summary/report writing, add:
-
---- src/tests/rpg/autoplay_llm_campaign.py
-+++ src/tests/rpg/autoplay_llm_campaign.py
+ def test_promotion_runtime_can_skip_profile_persistence_for_pre_turn_pass():
 @@
-     summary["long_run_warning_summary"] = summarize_long_run_warnings(
-         transcript=transcript,
-@@
-     summary["hundred_turn_eval_summary"] = summarize_hundred_turn_eval(
-         transcript=transcript,
-         summary=summary,
-         turns_for_strict_gates=int(args.strict_eval_turns),
+     assert (
+         transcript[0]["npc_evolution_profile_persist_result"]["reason"]
+         == "pre_turn_promotion_no_disk_persist"
      )
-+    summary["background_result_timing_summary"] = _summarize_background_result_timing(
-+        background_result_timing_tracker,
-+        turn_count=len(transcript),
-+        strict_eval_turns=int(args.strict_eval_turns),
-+        max_turn_lag=int(args.background_result_max_turn_lag),
++
++
++def test_incremental_pre_turn_promotion_marks_rows_and_skips_reprocessing():
++    candidates = normalize_advisory_candidates(
++        session_id="s",
++        turn_index=1,
++        player_input="I reassure Bran.",
++        turn_contract={"player_input": "I reassure Bran."},
++        payload={
++            "relationship_delta_candidates": [
++                {
++                    "target": "bran",
++                    "delta": 1,
++                    "summary": "Bran is reassured.",
++                }
++            ]
++        },
 +    )
-+    summary["background_drain_events"] = background_drain_events[-200:]
-@@
-     metrics["hundred_turn_eval_summary"] = summary["hundred_turn_eval_summary"]
-+    metrics["background_result_timing_summary"] = summary["background_result_timing_summary"]
-+    metrics["background_drain_events"] = summary["background_drain_events"]
-
-If the evaluator summaries are built before final drain in your current code, move this block so background_result_timing_summary is created after final drain, then update quality gates after it exists.
-
-5. Add quality gates
-
-Patch _summarize_quality_gates(...).
-
-Add local variables:
-
---- src/tests/rpg/autoplay_llm_campaign.py
-+++ src/tests/rpg/autoplay_llm_campaign.py
-@@
-     long_run_warning_summary = _safe_dict(summary.get("long_run_warning_summary"))
-     hundred_turn_eval_summary = _safe_dict(summary.get("hundred_turn_eval_summary"))
-+    background_result_timing_summary = _safe_dict(summary.get("background_result_timing_summary"))
-     strict_eval_turns = int(getattr(args, "strict_eval_turns", 100) or 100)
-     strict_100_turn_mode = len(transcript if isinstance(transcript, list) else []) >= strict_eval_turns
-
-Add gates:
-
---- src/tests/rpg/autoplay_llm_campaign.py
-+++ src/tests/rpg/autoplay_llm_campaign.py
-@@
-         "strict_100turn_no_progress_streak_ok": (
-             not strict_100_turn_mode
-             or int(progress_timeline_summary.get("max_no_progress_streak") or 0)
-             <= int(getattr(args, "max_100turn_no_progress_streak", 10) or 10)
-         ),
-+        "background_result_timing_ok": (
-+            not background_result_timing_summary
-+            or bool(background_result_timing_summary.get("ok", True))
-+        ),
-+        "strict_100turn_background_pre_turn_attach_rate_ok": (
-+            not strict_100_turn_mode
-+            or float(background_result_timing_summary.get("pre_turn_attach_rate") or 0.0) >= 0.50
-+        ),
-+        "strict_100turn_background_attach_lag_ok": (
-+            not strict_100_turn_mode
-+            or int(background_result_timing_summary.get("max_attach_lag_turns") or 0)
-+            <= int(getattr(args, "background_result_max_turn_lag", 5) or 5)
-+        ),
-+        "background_results_not_only_finalized": (
-+            not getattr(args, "fail_if_background_results_only_finalized", False)
-+            or int(background_result_timing_summary.get("only_finalized_count") or 0)
-+            < int(background_result_timing_summary.get("jobs_submitted") or 0)
-+        ),
-     }
-
-For 8-turn smoke, background_result_timing_ok may be warning-only through the summary’s non-strict mode. If you find this gate failing on smoke because all jobs attach at final, loosen the summary’s non-strict ok behavior by making only strict warnings errors. The provided _summarize_background_result_timing already makes “only finalized” a warning in smoke mode, so ok remains true.
-
-6. Render timing in the HTML report
-
-Patch:
-
-src/tests/rpg/autoplay/campaign_report.py
-6A. Add model fields
-
-In model construction:
-
---- src/tests/rpg/autoplay/campaign_report.py
-+++ src/tests/rpg/autoplay/campaign_report.py
-@@
-         "hundred_turn_eval_summary": _safe_dict(
-             summary.get("hundred_turn_eval_summary")
-             or metrics.get("hundred_turn_eval_summary")
-         ),
-+        "background_result_timing_summary": _safe_dict(
-+            summary.get("background_result_timing_summary")
-+            or metrics.get("background_result_timing_summary")
-+        ),
-+        "background_drain_events": (
-+            summary.get("background_drain_events")
-+            or metrics.get("background_drain_events")
-+            or []
-+        ),
-6B. Add renderer
-
-Add near other report render helpers:
-
---- src/tests/rpg/autoplay/campaign_report.py
-+++ src/tests/rpg/autoplay/campaign_report.py
-@@
- def _render_progress_timeline(summary: Dict[str, Any]) -> str:
-@@
-     """
-+
-+
-+def _render_background_result_timing(summary: Dict[str, Any]) -> str:
-+    summary = _safe_dict(summary)
-+    events = summary.get("attachment_events") if isinstance(summary.get("attachment_events"), list) else []
-+    rows = ""
-+    for event in events[-40:]:
-+        event = _safe_dict(event)
-+        rows += (
-+            "<tr>"
-+            f"<td>{escape(str(event.get('source_turn') or ''))}</td>"
-+            f"<td>{escape(str(event.get('attach_turn') or ''))}</td>"
-+            f"<td>{escape(str(event.get('phase') or ''))}</td>"
-+            f"<td>{escape(str(event.get('lag_turns') or 0))}</td>"
-+            f"<td>{escape(str(event.get('job_id') or ''))}</td>"
-+            "</tr>"
-+        )
-+    if not rows:
-+        rows = "<tr><td colspan='5'>No background attachment timing data.</td></tr>"
-+
-+    warnings = ""
-+    for warning in summary.get("warnings") if isinstance(summary.get("warnings"), list) else []:
-+        warning = _safe_dict(warning)
-+        warnings += (
-+            "<li>"
-+            f"<strong>{escape(str(warning.get('severity') or 'warning'))}</strong> "
-+            f"{escape(str(warning.get('code') or ''))}: "
-+            f"{escape(str(warning.get('message') or ''))}"
-+            "</li>"
-+        )
-+
-+    return f"""
-+    <section id="background-result-timing">
-+      <h2>Background Result Timing</h2>
-+      <p>
-+        Submitted: {escape(str(summary.get('jobs_submitted') or 0))} ·
-+        Attached: {escape(str(summary.get('jobs_attached_total') or 0))} ·
-+        Pre-turn attached: {escape(str(summary.get('jobs_attached_pre_turn') or 0))} ·
-+        Final attached: {escape(str(summary.get('jobs_attached_final') or 0))} ·
-+        Pre-turn attach rate: {escape(str(summary.get('pre_turn_attach_rate') or 0))} ·
-+        Max lag turns: {escape(str(summary.get('max_attach_lag_turns') or 0))}
-+      </p>
-+      <ul>{warnings or '<li>No timing warnings.</li>'}</ul>
-+      <table>
-+        <thead><tr><th>Source turn</th><th>Attach turn</th><th>Phase</th><th>Lag</th><th>Job</th></tr></thead>
-+        <tbody>{rows}</tbody>
-+      </table>
-+    </section>
-+    """
-6C. Add nav link
-
-In top nav:
-
---- src/tests/rpg/autoplay/campaign_report.py
-+++ src/tests/rpg/autoplay/campaign_report.py
-@@
- <a href="#progress-timeline">Progress</a>
-+<a href="#background-result-timing">Background Timing</a>
- <a href="#story-so-far">Story</a>
-
-Or list-style:
-
-@@
-     ("#progress-timeline", "Progress"),
-+    ("#background-result-timing", "Background Timing"),
-     ("#story-so-far", "Story"),
-6D. Insert section near 100-turn evaluation
-
-Place after progress timeline:
-
---- src/tests/rpg/autoplay/campaign_report.py
-+++ src/tests/rpg/autoplay/campaign_report.py
-@@
-     {_render_hundred_turn_eval(model)}
-     {_render_action_diversity(model.get("action_diversity_summary") or {})}
-     {_render_progress_timeline(model.get("progress_timeline_summary") or {})}
-+    {_render_background_result_timing(model.get("background_result_timing_summary") or {})}
-     {_render_story_so_far(model)}
-6E. Add JSON details
-
-Near debug details:
-
---- src/tests/rpg/autoplay/campaign_report.py
-+++ src/tests/rpg/autoplay/campaign_report.py
-@@
-     {_render_json_details("Progress timeline summary JSON", model.get("progress_timeline_summary") or {})}
-     {_render_json_details("Long-run warning summary JSON", model.get("long_run_warning_summary") or {})}
-+    {_render_json_details("Background result timing summary JSON", model.get("background_result_timing_summary") or {})}
-+    {_render_json_details("Background drain events JSON", {"events": model.get("background_drain_events") or []})}
-     {_render_json_details("Manual turn error summary JSON", model.get("manual_turn_error_summary") or {})}
-7. Tests
-7A. Add timing summary tests
-
-Patch or create:
-
-src/tests/rpg/autoplay/test_background_result_timing.py
-
-Add:
-
---- /dev/null
-+++ src/tests/rpg/autoplay/test_background_result_timing.py
-@@
-+from tests.rpg.autoplay_llm_campaign import (
-+    _new_background_result_timing_tracker,
-+    _summarize_background_result_timing,
-+    _track_background_attach,
-+    _track_background_submit,
-+)
-+
-+
-+def test_background_result_timing_summarizes_pre_turn_and_final_attach():
-+    tracker = _new_background_result_timing_tracker()
-+    _track_background_submit(tracker, job_id="job1", turn_index=1)
-+    _track_background_submit(tracker, job_id="job2", turn_index=2)
-+    _track_background_attach(
-+        tracker,
-+        job_id="job1",
-+        source_turn=1,
-+        attach_turn=3,
-+        phase="pre_turn",
-+    )
-+    _track_background_attach(
-+        tracker,
-+        job_id="job2",
-+        source_turn=2,
-+        attach_turn=8,
-+        phase="final",
-+    )
-+
-+    summary = _summarize_background_result_timing(
-+        tracker,
-+        turn_count=8,
-+        strict_eval_turns=100,
-+        max_turn_lag=5,
-+    )
-+
-+    assert summary["jobs_submitted"] == 2
-+    assert summary["jobs_attached_total"] == 2
-+    assert summary["jobs_attached_pre_turn"] == 1
-+    assert summary["jobs_attached_final"] == 1
-+    assert summary["pre_turn_attach_rate"] == 0.5
-+    assert summary["max_attach_lag_turns"] == 6
-+    # Smoke mode: lag is warning-only, ok remains true.
-+    assert summary["ok"] is True
-+
-+
-+def test_background_result_timing_fails_strict_when_only_finalized():
-+    tracker = _new_background_result_timing_tracker()
-+    for turn in range(1, 101):
-+        job_id = f"job{turn}"
-+        _track_background_submit(tracker, job_id=job_id, turn_index=turn)
-+        _track_background_attach(
-+            tracker,
-+            job_id=job_id,
-+            source_turn=turn,
-+            attach_turn=100,
-+            phase="final",
-+        )
-+
-+    summary = _summarize_background_result_timing(
-+        tracker,
-+        turn_count=100,
-+        strict_eval_turns=100,
-+        max_turn_lag=5,
-+    )
-+
-+    assert summary["strict_100_turn_mode"] is True
-+    assert summary["ok"] is False
-+    assert summary["jobs_attached_pre_turn"] == 0
-+    assert summary["only_finalized_count"] == 100
-+    assert any(w["code"] == "background_results_only_finalized" for w in summary["warnings"])
-7B. Patch report rendering test
-
-Patch:
-
-src/tests/rpg/autoplay/test_report_sections.py
-
-Add:
-
---- src/tests/rpg/autoplay/test_report_sections.py
-+++ src/tests/rpg/autoplay/test_report_sections.py
-@@
- def test_report_renders_hundred_turn_eval_sections():
-@@
-     assert 'href="#hundred-turn-eval"' in html
-+
-+
-+def test_report_renders_background_result_timing_section():
-+    from tests.rpg.autoplay.campaign_report import render_campaign_report_html
-+
-+    html = render_campaign_report_html(
++    transcript = [
 +        {
-+            "summary": {
-+                "campaign_calendar_summary": {"turns_tracked": 8, "end": {}},
-+                "player_journal_summary": {"entry_count": 2, "entries": []},
-+                "quest_progress_summary": {"quest_count": 1, "quests": []},
-+                "npc_evolution_report_summary": {"npc_count": 1, "cards": []},
-+                "background_result_timing_summary": {
-+                    "jobs_submitted": 2,
-+                    "jobs_attached_total": 2,
-+                    "jobs_attached_pre_turn": 1,
-+                    "jobs_attached_final": 1,
-+                    "pre_turn_attach_rate": 0.5,
-+                    "max_attach_lag_turns": 2,
-+                    "attachment_events": [
-+                        {
-+                            "job_id": "job1",
-+                            "source_turn": 1,
-+                            "attach_turn": 3,
-+                            "phase": "pre_turn",
-+                            "lag_turns": 2,
-+                        }
-+                    ],
-+                    "warnings": [],
-+                },
++            "turn_index": 1,
++            "combined_background_llm_result": {"ok": True},
++            "combined_background_llm_attach": {"phase": "pre_turn"},
++            "runtime_state": {
++                "deferred_advisory": {
++                    "candidates": candidates,
++                    "accepted": [],
++                    "rejected": [],
++                    "pending": [],
++                }
 +            },
-+            "metrics": {},
-+            "transcript": [],
++            "simulation_state": {"npcs": {"bran": {"name": "Bran"}}},
++        },
++    ]
++
++    first = run_deferred_advisory_promotions_for_transcript(
++        transcript=transcript,
++        max_rows=6,
++        persist_profiles=False,
++        incremental_pre_turn=True,
++        mark_pre_turn_promoted=True,
++        current_turn=2,
++    )
++
++    assert first["ok"] is True
++    assert first["turns"] == 1
++    assert first["incremental_pre_turn"] is True
++    assert transcript[0]["pre_turn_advisory_promoted"] is True
++    assert transcript[0]["pre_turn_advisory_promoted_at_turn"] == 2
++
++    second = run_deferred_advisory_promotions_for_transcript(
++        transcript=transcript,
++        max_rows=6,
++        persist_profiles=False,
++        incremental_pre_turn=True,
++        mark_pre_turn_promoted=True,
++        current_turn=3,
++    )
++
++    assert second["ok"] is True
++    assert second["turns"] == 0
+3B. Add regression test: compact carry state caps backlog
+
+Append:
+
+--- src/tests/rpg/autoplay/test_deferred_advisory_promotion_runtime.py
++++ src/tests/rpg/autoplay/test_deferred_advisory_promotion_runtime.py
+@@
++def test_incremental_pre_turn_promotion_compacts_carry_state_backlog():
++    big_candidates = [
++        {
++            "id": f"candidate:{idx}",
++            "kind": "relationship_delta",
++            "target": "bran",
++            "delta": 1,
++            "summary": f"candidate {idx}",
 +        }
++        for idx in range(200)
++    ]
++    transcript = [
++        {
++            "turn_index": 1,
++            "runtime_state": {
++                "deferred_advisory": {
++                    "candidates": big_candidates,
++                    "pending": big_candidates,
++                    "accepted": big_candidates,
++                    "rejected": big_candidates,
++                }
++            },
++            "simulation_state": {"npcs": {"bran": {"name": "Bran"}}},
++        },
++        {
++            "turn_index": 2,
++            "combined_background_llm_result": {"ok": True},
++            "combined_background_llm_attach": {"phase": "pre_turn"},
++            "runtime_state": {"deferred_advisory": {"candidates": []}},
++            "simulation_state": {"npcs": {"bran": {"name": "Bran"}}},
++        },
++    ]
++
++    result = run_deferred_advisory_promotions_for_transcript(
++        transcript=transcript,
++        max_rows=6,
++        persist_profiles=False,
++        incremental_pre_turn=True,
++        mark_pre_turn_promoted=True,
++        current_turn=3,
++        carry_candidate_limit=7,
++        carry_pending_limit=8,
++        carry_accepted_limit=9,
++        carry_rejected_limit=10,
 +    )
 +
-+    assert 'id="background-result-timing"' in html
-+    assert "Background Result Timing" in html
-+    assert 'href="#background-result-timing"' in html
-+    assert "Pre-turn attach rate" in html
-7C. Patch quality gate tests
-
-Patch:
-
-src/tests/rpg/autoplay/test_quality_gates.py
-
-In existing positive summary fixtures, add:
-
-"background_result_timing_summary": {"ok": True, "pre_turn_attach_rate": 1.0, "max_attach_lag_turns": 0},
-
-Add strict failure test:
-
---- src/tests/rpg/autoplay/test_quality_gates.py
-+++ src/tests/rpg/autoplay/test_quality_gates.py
-@@
- def test_quality_gate_fails_strict_100_turn_unknown_semantic_rate():
-@@
-     assert result["gates"]["strict_100turn_semantic_action_extraction_ok"] is False
-+
-+
-+def test_quality_gate_fails_strict_background_attach_lag():
-+    from types import SimpleNamespace
-+
-+    args = SimpleNamespace(
-+        background_llm_mode="combined",
-+        max_player_agent_fallback_rate=0.25,
-+        capture_console_log=True,
-+        scenario_seed="tavern_story_seed",
-+        strict_eval_turns=100,
-+        max_100turn_repeat_semantic_target_streak=8,
-+        max_100turn_no_progress_streak=10,
-+        background_result_max_turn_lag=5,
-+        fail_if_background_results_only_finalized=False,
-+    )
-+    summary = {
-+        "performance_budget_summary": {
-+            "live_blocking": {
-+                "avg_human_playable_blocking_ms": 50,
-+                "max_human_playable_blocking_ms": 90,
-+            }
-+        },
-+        "background_jobs": {
-+            "combined_background_llm_jobs": 100,
-+            "narration_jobs": 0,
-+            "advisory_jobs": 0,
-+        },
-+        "player_agent_trace_summary": {"turns": 100, "fallback_turns": 0},
-+        "campaign_calendar_summary": {"turns_tracked": 100},
-+        "player_journal_summary": {"entry_count": 25},
-+        "player_journal_quality_summary": {"ok": True},
-+        "manual_turn_error_summary": {"ok": True, "error_count": 0},
-+        "console_log_summary": {"line_count": 10, "turn_error_count": 0},
-+        "story_beat_summary": {"beat_count": 100},
-+        "quest_progress_summary": {"quest_count": 1},
-+        "action_diversity_summary": {
-+            "unknown_semantic_rate": 0.0,
-+            "max_same_semantic_target_streak": {"value": "ask:Bran", "streak": 1},
-+        },
-+        "progress_timeline_summary": {
-+            "meaningful_progress_rate": 0.5,
-+            "max_no_progress_streak": 1,
-+        },
-+        "long_run_warning_summary": {"ok": True},
-+        "hundred_turn_eval_summary": {"ok": True},
-+        "background_result_timing_summary": {
-+            "ok": False,
-+            "pre_turn_attach_rate": 0.4,
-+            "max_attach_lag_turns": 9,
-+        },
-+    }
-+
-+    result = _summarize_quality_gates(
-+        args=args,
-+        metrics={"real_turn_runtime_count": 100},
-+        summary=summary,
-+        transcript=[{} for _ in range(100)],
-+    )
-+
-+    assert result["ok"] is False
-+    assert result["gates"]["background_result_timing_ok"] is False
-+    assert result["gates"]["strict_100turn_background_pre_turn_attach_rate_ok"] is False
-+    assert result["gates"]["strict_100turn_background_attach_lag_ok"] is False
-8. Validation
++    assert result["ok"] is True
++    assert result["turns"] == 1
++    advisory = transcript[1]["runtime_state"]["deferred_advisory"]
++    assert len(advisory["candidates"]) <= 7
++    assert len(advisory["pending"]) <= 8
++    assert len(advisory["accepted"]) <= 9
++    assert len(advisory["rejected"]) <= 10
+4. Validation
 
 Compile:
 
-python -m py_compile src\tests\rpg\autoplay_llm_campaign.py src\tests\rpg\autoplay\campaign_report.py
+python -m py_compile src\tests\rpg\autoplay\advisory_promotion_runtime.py src\tests\rpg\autoplay_llm_campaign.py
 
-Run tests:
+Run focused tests:
 
-python -m pytest src\tests\rpg\autoplay\test_background_result_timing.py src\tests\rpg\autoplay\test_report_sections.py src\tests\rpg\autoplay\test_quality_gates.py -q
+python -m pytest src\tests\rpg\autoplay\test_deferred_advisory_promotion_runtime.py -q

@@ -18,6 +18,66 @@ def _safe_list(value: Any) -> List[Any]:
     return value if isinstance(value, list) else []
 
 
+def _bounded_list_tail(value: Any, limit: int) -> List[Any]:
+    items = list(value) if isinstance(value, list) else []
+    if int(limit or 0) <= 0:
+        return items
+    return items[-int(limit or 0):]
+
+
+def _compact_deferred_advisory_state(
+    runtime_state: Dict[str, Any],
+    *,
+    candidate_limit: int = 50,
+    pending_limit: int = 50,
+    accepted_limit: int = 100,
+    rejected_limit: int = 100,
+) -> Dict[str, Any]:
+    """Return a small carry-state safe for pre-turn incremental promotion.
+
+    The full runtime mirror can become very large because every promotion pass
+    carries candidates, accepted/rejected history, evolution projections, and
+    profile summaries forward. Pre-turn promotion only needs recent deterministic
+    context, not the full report history.
+    """
+    runtime_state = deepcopy(runtime_state) if isinstance(runtime_state, dict) else {}
+    advisory = runtime_state.get("deferred_advisory")
+    if not isinstance(advisory, dict):
+        return runtime_state
+
+    advisory["candidates"] = _bounded_list_tail(
+        advisory.get("candidates"),
+        int(candidate_limit or 50),
+    )
+    advisory["pending"] = _bounded_list_tail(
+        advisory.get("pending"),
+        int(pending_limit or 50),
+    )
+    advisory["accepted"] = _bounded_list_tail(
+        advisory.get("accepted"),
+        int(accepted_limit or 100),
+    )
+    advisory["rejected"] = _bounded_list_tail(
+        advisory.get("rejected"),
+        int(rejected_limit or 100),
+    )
+    runtime_state["deferred_advisory"] = advisory
+    return runtime_state
+
+
+def _row_has_unpromoted_pre_turn_background_result(row: Dict[str, Any]) -> bool:
+    row = row if isinstance(row, dict) else {}
+    if bool(row.get("pre_turn_advisory_promoted")):
+        return False
+    attach = row.get("combined_background_llm_attach")
+    if isinstance(attach, dict) and str(attach.get("phase") or "") == "pre_turn":
+        return bool(row.get("combined_background_llm_result"))
+    # Defensive fallback for older rows where attach metadata was not stored.
+    return bool(row.get("combined_background_llm_result")) and not bool(
+        row.get("pre_turn_advisory_promoted")
+    )
+
+
 def _simulation_state_from_row(row: Dict[str, Any]) -> Dict[str, Any]:
     for key in ("simulation_state", "final_turn_state", "before_state", "state_snapshot", "state"):
         value = _safe_dict(row.get(key))
@@ -202,6 +262,15 @@ def run_deferred_advisory_promotions_for_transcript(
     *,
     transcript: List[Dict[str, Any]],
     max_promotions_per_turn: int = 5,
+    max_rows: int = 0,
+    persist_profiles: bool = True,
+    incremental_pre_turn: bool = False,
+    mark_pre_turn_promoted: bool = False,
+    current_turn: int = 0,
+    carry_candidate_limit: int = 50,
+    carry_pending_limit: int = 50,
+    carry_accepted_limit: int = 100,
+    carry_rejected_limit: int = 100,
 ) -> Dict[str, Any]:
     """Run promotion gate over transcript in turn order.
 
@@ -220,11 +289,54 @@ def run_deferred_advisory_promotions_for_transcript(
     evolution_signals_consumed = 0
     latest_profile_persist_result: Dict[str, Any] = {}
 
+    all_rows = [row for row in transcript if isinstance(row, dict)]
+    source_transcript_turns = len(all_rows)
+    window_start_index = 0
+    rows = all_rows
+
+    if incremental_pre_turn:
+        # Only process rows that received a pre-turn background result and have
+        # not already had deterministic pre-turn advisory promotion applied.
+        candidate_rows = [
+            row for row in all_rows
+            if _row_has_unpromoted_pre_turn_background_result(row)
+        ]
+        if int(max_rows or 0) > 0:
+            candidate_rows = candidate_rows[-int(max_rows or 0):]
+        rows = candidate_rows
+        if rows:
+            first_row = rows[0]
+            try:
+                window_start_index = all_rows.index(first_row)
+            except ValueError:
+                window_start_index = 0
+    elif int(max_rows or 0) > 0 and len(all_rows) > int(max_rows or 0):
+        window_start_index = len(all_rows) - int(max_rows or 0)
+        rows = all_rows[window_start_index:]
+
     # Carry advisory runtime state forward across rows so turn N candidates can
     # be promoted on turn N+1.
+    #
+    # For incremental pre-turn promotion, seed only a compact carry-state from
+    # the row immediately before the window. Do not copy the full historical
+    # advisory backlog into pre-turn work.
     carried_runtime_state: Dict[str, Any] = {}
+    if window_start_index > 0:
+        previous_runtime_state = _runtime_state_from_row(all_rows[window_start_index - 1])
+        if incremental_pre_turn:
+            carried_runtime_state = _compact_deferred_advisory_state(
+                previous_runtime_state,
+                candidate_limit=int(carry_candidate_limit or 50),
+                pending_limit=int(carry_pending_limit or 50),
+                accepted_limit=int(carry_accepted_limit or 100),
+                rejected_limit=int(carry_rejected_limit or 100),
+            )
+        else:
+            carried_runtime_state = deepcopy(previous_runtime_state)
 
-    for row in transcript:
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
         if not isinstance(row, dict):
             continue
         turn_index = int(row.get("turn_index") or 0)
@@ -296,9 +408,27 @@ def run_deferred_advisory_promotions_for_transcript(
         row["runtime_state"] = updated_runtime_state
         row["npc_evolution_consumption_result"] = evolution_result
         row["npc_evolution_summary"] = evolution_result.get("summary") or {}
-        profile_persist_result = persist_npc_evolution_profiles(runtime_state=updated_runtime_state)
+        if persist_profiles:
+            profile_persist_result = persist_npc_evolution_profiles(runtime_state=updated_runtime_state)
+        else:
+            profile_persist_result = {
+                "ok": True,
+                "skipped": True,
+                "reason": "pre_turn_promotion_no_disk_persist",
+            }
         row["npc_evolution_profile_persist_result"] = profile_persist_result
         latest_profile_persist_result = profile_persist_result
+
+        if incremental_pre_turn and mark_pre_turn_promoted:
+            row["pre_turn_advisory_promoted"] = True
+            row["pre_turn_advisory_promoted_at_turn"] = int(current_turn or 0)
+            row["pre_turn_advisory_promotion_summary"] = {
+                "ok": True,
+                "current_turn": int(current_turn or 0),
+                "incremental_pre_turn": True,
+                "persist_profiles": bool(persist_profiles),
+                "max_rows": int(max_rows or 0),
+            }
         evolution_signals_created += int(evolution_result.get("signals_created") or 0)
         evolution_signals_consumed += int(evolution_result.get("signals_consumed") or 0)
         carried_runtime_state = updated_runtime_state
@@ -318,7 +448,18 @@ def run_deferred_advisory_promotions_for_transcript(
 
     return {
         "ok": True,
-        "turns": len([row for row in transcript if isinstance(row, dict)]),
+        "turns": len(rows),
+        "source_transcript_turns": source_transcript_turns,
+        "window_start_index": window_start_index,
+        "max_rows": int(max_rows or 0),
+        "persist_profiles": bool(persist_profiles),
+        "incremental_pre_turn": bool(incremental_pre_turn),
+        "mark_pre_turn_promoted": bool(mark_pre_turn_promoted),
+        "current_turn": int(current_turn or 0),
+        "carry_candidate_limit": int(carry_candidate_limit or 0),
+        "carry_pending_limit": int(carry_pending_limit or 0),
+        "carry_accepted_limit": int(carry_accepted_limit or 0),
+        "carry_rejected_limit": int(carry_rejected_limit or 0),
         "accepted": accepted,
         "rejected": rejected,
         "pending": pending,
