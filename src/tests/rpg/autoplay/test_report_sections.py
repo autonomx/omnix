@@ -516,3 +516,43 @@ def test_report_renders_hundred_turn_eval_sections():
     assert "Action Diversity" in html
     assert "Progress Timeline" in html
     assert 'href="#hundred-turn-eval"' in html
+
+
+def test_report_renders_background_result_timing_section():
+    from tests.rpg.autoplay.campaign_report import render_campaign_report_html
+
+    html = render_campaign_report_html(
+        {
+            "summary": {
+                "campaign_calendar_summary": {"turns_tracked": 8, "end": {}},
+                "player_journal_summary": {"entry_count": 2, "entries": []},
+                "quest_progress_summary": {"quest_count": 1, "quests": []},
+                "npc_evolution_report_summary": {"npc_count": 1, "cards": []},
+                "background_result_timing_summary": {
+                    "jobs_submitted": 2,
+                    "jobs_attached_total": 2,
+                    "jobs_attached_pre_turn": 1,
+                    "jobs_attached_final": 1,
+                    "pre_turn_attach_rate": 0.5,
+                    "max_attach_lag_turns": 2,
+                    "attachment_events": [
+                        {
+                            "job_id": "job1",
+                            "source_turn": 1,
+                            "attach_turn": 3,
+                            "phase": "pre_turn",
+                            "lag_turns": 2,
+                        }
+                    ],
+                    "warnings": [],
+                },
+            },
+            "metrics": {},
+            "transcript": [],
+        }
+    )
+
+    assert 'id="background-result-timing"' in html
+    assert "Background Result Timing" in html
+    assert 'href="#background-result-timing"' in html
+    assert "Pre-turn attach rate" in html

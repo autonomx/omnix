@@ -73,6 +73,7 @@ def test_quality_gates_pass_for_fast_combined_run():
         },
         "long_run_warning_summary": {"ok": True},
         "hundred_turn_eval_summary": {"ok": True},
+        "background_result_timing_summary": {"ok": True, "pre_turn_attach_rate": 1.0, "max_attach_lag_turns": 0},
     }
     result = _summarize_quality_gates(
         args=args,
@@ -570,6 +571,70 @@ def test_quality_gate_fails_strict_100_turn_repetition():
     assert result["ok"] is False
     assert result["gates"]["strict_100turn_repeat_semantic_target_streak_ok"] is False
     assert result["gates"]["hundred_turn_eval_ok"] is False
+
+
+def test_quality_gate_fails_strict_background_attach_lag():
+    from types import SimpleNamespace
+
+    args = SimpleNamespace(
+        background_llm_mode="combined",
+        max_player_agent_fallback_rate=0.25,
+        capture_console_log=True,
+        scenario_seed="tavern_story_seed",
+        strict_eval_turns=100,
+        max_100turn_repeat_semantic_target_streak=8,
+        max_100turn_no_progress_streak=10,
+        background_result_max_turn_lag=5,
+        fail_if_background_results_only_finalized=False,
+    )
+    summary = {
+        "performance_budget_summary": {
+            "live_blocking": {
+                "avg_human_playable_blocking_ms": 50,
+                "max_human_playable_blocking_ms": 90,
+            }
+        },
+        "background_jobs": {
+            "combined_background_llm_jobs": 100,
+            "narration_jobs": 0,
+            "advisory_jobs": 0,
+        },
+        "player_agent_trace_summary": {"turns": 100, "fallback_turns": 0},
+        "campaign_calendar_summary": {"turns_tracked": 100},
+        "player_journal_summary": {"entry_count": 25},
+        "player_journal_quality_summary": {"ok": True},
+        "manual_turn_error_summary": {"ok": True, "error_count": 0},
+        "console_log_summary": {"line_count": 10, "turn_error_count": 0},
+        "story_beat_summary": {"beat_count": 100},
+        "quest_progress_summary": {"quest_count": 1},
+        "action_diversity_summary": {
+            "unknown_semantic_rate": 0.0,
+            "max_same_semantic_target_streak": {"value": "ask:Bran", "streak": 1},
+        },
+        "progress_timeline_summary": {
+            "meaningful_progress_rate": 0.5,
+            "max_no_progress_streak": 1,
+        },
+        "long_run_warning_summary": {"ok": True},
+        "hundred_turn_eval_summary": {"ok": True},
+        "background_result_timing_summary": {
+            "ok": False,
+            "pre_turn_attach_rate": 0.4,
+            "max_attach_lag_turns": 9,
+        },
+    }
+
+    result = _summarize_quality_gates(
+        args=args,
+        metrics={"real_turn_runtime_count": 100},
+        summary=summary,
+        transcript=[{} for _ in range(100)],
+    )
+
+    assert result["ok"] is False
+    assert result["gates"]["background_result_timing_ok"] is False
+    assert result["gates"]["strict_100turn_background_pre_turn_attach_rate_ok"] is False
+    assert result["gates"]["strict_100turn_background_attach_lag_ok"] is False
 
 
 def test_player_journal_quality_flags_internal_codes():
