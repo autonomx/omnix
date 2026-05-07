@@ -39,6 +39,7 @@ from tests.rpg.autoplay.report_sections import (
     summarize_story_beats_for_report,
 )
 from tests.rpg.autoplay.hundred_turn_eval import (
+    canonical_semantic_pair_from_turn,
     recent_semantic_target_streak,
     summarize_action_diversity,
     summarize_hundred_turn_eval,
@@ -232,6 +233,11 @@ def _build_player_agent_anti_loop_context(
         transcript,
         window=max(int(window or 8), int(threshold or 3) + 2),
     )
+    canonical_recent_pairs = [
+        canonical_semantic_pair_from_turn(row)
+        for row in _safe_list(transcript)[-max(int(window or 8), int(threshold or 3) + 2):]
+        if isinstance(row, dict)
+    ]
     pair = _safe_str(streak.get("pair"))
     semantic_action = _safe_str(streak.get("semantic_action"))
     target = _safe_str(streak.get("target"))
@@ -265,6 +271,9 @@ def _build_player_agent_anti_loop_context(
         "streak": count,
         "threshold": int(threshold or 3),
         "alternatives": alternatives,
+        "source": _safe_str(streak.get("source")) or "canonical_semantic_pair_from_turn",
+        "recent_pairs": _safe_list(streak.get("pairs")),
+        "canonical_recent_pairs": canonical_recent_pairs[-12:],
     }
 
 
@@ -2917,6 +2926,19 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
             pair=anti_loop_context.get("pair"),
             streak=anti_loop_context.get("streak"),
             threshold=anti_loop_context.get("threshold"),
+            source=anti_loop_context.get("source"),
+            recent_pairs=",".join(
+                [
+                    _safe_str(pair)
+                    for pair in _safe_list(anti_loop_context.get("recent_pairs"))[-6:]
+                ]
+            ),
+            recent_sources=",".join(
+                [
+                    _safe_str(_safe_dict(item).get("source"))
+                    for item in _safe_list(anti_loop_context.get("canonical_recent_pairs"))[-6:]
+                ]
+            ),
         )
         with _ProbeTimer(
             bool(getattr(args, "debug_autoplay_stage_timing", False)),
