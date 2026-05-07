@@ -2,6 +2,7 @@ from types import SimpleNamespace
 
 from tests.rpg.autoplay_llm_campaign import (
     _summarize_manual_turn_errors,
+    _summarize_player_journal_quality,
     _summarize_npc_arc_progression,
     _summarize_player_agent_prompt_budget,
     _summarize_profile_grounded_output,
@@ -62,6 +63,7 @@ def test_quality_gates_pass_for_fast_combined_run():
         "profile_grounded_output_summary": {"available_turns": 0},
         "npc_arc_progression_summary": {"ok": True},
         "deferred_advisory_promotion_summary": {"mutated_authoritative_state": False},
+        "console_log_summary": {"line_count": 1},
     }
     result = _summarize_quality_gates(
         args=args,
@@ -95,14 +97,15 @@ def test_quality_gates_can_read_background_jobs_from_final_summary():
             "turns": 2,
             "fallback_turns": 0,
         },
+        "story_beat_summary": {"beat_count": 1},
+        "quest_progress_summary": {"quest_count": 0},
         "campaign_calendar_summary": {
             "turns_tracked": 4,
         },
         "player_journal_summary": {
             "entry_count": 1,
         },
-        "story_beat_summary": {"beat_count": 1},
-        "quest_progress_summary": {"quest_count": 0},
+        "console_log_summary": {"line_count": 1},
     }
 
     result = _summarize_quality_gates(
@@ -152,6 +155,7 @@ def test_quality_gates_fallback_to_performance_budget_background_llm():
         "player_journal_summary": {
             "entry_count": 1,
         },
+        "console_log_summary": {"line_count": 1},
     }
 
     result = _summarize_quality_gates(
@@ -346,23 +350,13 @@ def test_quality_gate_requires_profile_context_when_profiles_loaded():
         "campaign_calendar_summary": {"turns_tracked": 2},
         "player_journal_summary": {"entry_count": 1},
         "npc_evolution_profile_persistence_summary": {"ok": True},
-        "npc_profile_load_summary": {"ok": True, "turns_with_profiles": 0},
-        "profile_grounded_output_summary": {"available_turns": 0},
+        "npc_profile_load_summary": {"ok": True, "turns_with_profiles": 1},
+        "profile_grounded_output_summary": {"available_turns": 1},
         "npc_arc_progression_summary": {"ok": True},
         "deferred_advisory_promotion_summary": {"mutated_authoritative_state": False},
-        "npc_profile_load_summary": {
-            "ok": True,
-            "turns_with_profiles": 1,
-        },
-        "profile_grounded_output_summary": {
-            "available_turns": 1,
-        },
-        "campaign_calendar_summary": {
-            "turns_tracked": 1,
-        },
-        "player_journal_summary": {
-            "entry_count": 1,
-        },
+        "campaign_calendar_summary": {"turns_tracked": 1},
+        "player_journal_summary": {"entry_count": 1},
+        "console_log_summary": {"line_count": 1},
     }
 
     result = _summarize_quality_gates(
@@ -510,3 +504,22 @@ def test_quality_gate_requires_quest_progress_for_tavern_seed():
 
     assert result["ok"] is False
     assert result["gates"]["tavern_story_seed_has_quest_progress"] is False
+
+
+def test_player_journal_quality_flags_internal_codes():
+    summary = {
+        "player_journal_summary": {
+            "entries": [
+                {
+                    "entry_id": "journal:turn:4",
+                    "text": "What stood out: target_not_found no_supported_semantic_action_detected",
+                }
+            ]
+        }
+    }
+
+    result = _summarize_player_journal_quality(summary)
+
+    assert result["ok"] is False
+    assert result["violation_count"] == 1
+    assert "target_not_found" in result["violations"][0]["tokens"]
