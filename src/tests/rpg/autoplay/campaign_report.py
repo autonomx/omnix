@@ -1286,7 +1286,9 @@ def _render_action_diversity(summary: Dict[str, Any]) -> str:
       <p>
         Unique actions: {html.escape(str(summary.get("unique_action_count") or 0))} ·
         Unique semantic actions: {html.escape(str(summary.get("unique_semantic_action_count") or 0))} ·
-        Unique targets: {html.escape(str(summary.get("unique_target_count") or 0))}
+        Unique targets: {html.escape(str(summary.get("unique_target_count") or 0))} ·
+        Unknown semantic rate: {html.escape(str(summary.get("unknown_semantic_rate") or 0))} ·
+        Missing target rate: {html.escape(str(summary.get("missing_target_rate") or 0))}
       </p>
       <h3>Top Semantic Actions</h3>
       <table><thead><tr><th>Semantic Action</th><th>Count</th></tr></thead><tbody>{rows(summary.get("top_semantic_actions"))}</tbody></table>

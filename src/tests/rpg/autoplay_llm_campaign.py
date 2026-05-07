@@ -1031,6 +1031,10 @@ def _summarize_quality_gates(
             or int(_safe_dict(action_diversity_summary.get("max_same_semantic_target_streak")).get("streak") or 0)
             <= int(getattr(args, "max_100turn_repeat_semantic_target_streak", 8) or 8)
         ),
+        "strict_100turn_semantic_action_extraction_ok": (
+            not strict_100_turn_mode
+            or float(action_diversity_summary.get("unknown_semantic_rate") or 0.0) <= 0.25
+        ),
         "strict_100turn_no_progress_streak_ok": (
             not strict_100_turn_mode
             or int(progress_timeline_summary.get("max_no_progress_streak") or 0)

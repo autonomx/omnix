@@ -550,6 +550,7 @@ def test_quality_gate_fails_strict_100_turn_repetition():
         "quest_progress_summary": {"quest_count": 1},
         "action_diversity_summary": {
             "max_same_semantic_target_streak": {"value": "ask:Bran", "streak": 20},
+            "unknown_semantic_rate": 0.0,
         },
         "progress_timeline_summary": {
             "meaningful_progress_rate": 0.2,
@@ -607,3 +608,58 @@ def test_player_journal_quality_flags_punctuation_and_missing_sections():
     assert result["ok"] is False
     assert result["punctuation_violation_count"] == 1
     assert result["missing_section_count"] == 1
+
+
+def test_quality_gate_fails_strict_100_turn_unknown_semantic_rate():
+    from types import SimpleNamespace
+
+    args = SimpleNamespace(
+        background_llm_mode="combined",
+        max_player_agent_fallback_rate=0.25,
+        capture_console_log=True,
+        scenario_seed="tavern_story_seed",
+        strict_eval_turns=100,
+        max_100turn_repeat_semantic_target_streak=8,
+        max_100turn_no_progress_streak=10,
+    )
+    summary = {
+        "performance_budget_summary": {
+            "live_blocking": {
+                "avg_human_playable_blocking_ms": 50,
+                "max_human_playable_blocking_ms": 90,
+            }
+        },
+        "background_jobs": {
+            "combined_background_llm_jobs": 100,
+            "narration_jobs": 0,
+            "advisory_jobs": 0,
+        },
+        "player_agent_trace_summary": {"turns": 100, "fallback_turns": 0},
+        "campaign_calendar_summary": {"turns_tracked": 100},
+        "player_journal_summary": {"entry_count": 25},
+        "player_journal_quality_summary": {"ok": True},
+        "manual_turn_error_summary": {"ok": True, "error_count": 0},
+        "console_log_summary": {"line_count": 10, "turn_error_count": 0},
+        "story_beat_summary": {"beat_count": 100},
+        "quest_progress_summary": {"quest_count": 1},
+        "action_diversity_summary": {
+            "unknown_semantic_rate": 1.0,
+            "max_same_semantic_target_streak": {"value": "unknown:none", "streak": 100},
+        },
+        "progress_timeline_summary": {
+            "meaningful_progress_rate": 0.5,
+            "max_no_progress_streak": 1,
+        },
+        "long_run_warning_summary": {"ok": False},
+        "hundred_turn_eval_summary": {"ok": False},
+    }
+
+    result = _summarize_quality_gates(
+        args=args,
+        metrics={"real_turn_runtime_count": 100},
+        summary=summary,
+        transcript=[{} for _ in range(100)],
+    )
+
+    assert result["ok"] is False
+    assert result["gates"]["strict_100turn_semantic_action_extraction_ok"] is False

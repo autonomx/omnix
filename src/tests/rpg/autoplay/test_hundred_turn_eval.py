@@ -47,6 +47,72 @@ def test_action_diversity_detects_repeated_semantic_target_streak():
     assert summary["max_same_semantic_target_streak"]["value"] == "ask:Bran"
 
 
+def test_action_diversity_reads_semantic_action_v2_and_normalizes_target():
+    transcript = [
+        {
+            "turn_index": 1,
+            "player_action": "Ask the innkeeper about the witness.",
+            "turn_contract": {
+                "semantic_action_v2": {
+                    "type": "Ask",
+                    "target": "npc:Bran",
+                }
+            },
+            "runtime_state": {
+                "npc_evolution": {
+                    "loaded_profiles": {
+                        "Bran": {"profile": {"npc_id": "Bran", "name": "Bran"}}
+                    }
+                }
+            },
+        }
+    ]
+
+    summary = summarize_action_diversity(transcript)
+
+    assert summary["top_semantic_actions"][0][0] == "ask"
+    assert summary["top_targets"][0][0] == "Bran"
+    assert summary["top_semantic_targets"][0][0] == "ask:Bran"
+    assert summary["unknown_semantic_count"] == 0
+
+
+def test_action_diversity_reads_fast_semantic_action_record():
+    transcript = [
+        {
+            "turn_index": 1,
+            "player_action": "Listen for rumors.",
+            "fast_semantic_action": {
+                "semantic_action_type": "Observe",
+                "target_name": "Rusty Flagon Tavern",
+            },
+        }
+    ]
+
+    summary = summarize_action_diversity(transcript)
+
+    assert summary["top_semantic_actions"][0][0] == "observe"
+    assert summary["top_targets"][0][0] == "Rusty Flagon Tavern"
+
+
+def test_action_diversity_falls_back_to_action_text_when_structured_missing():
+    transcript = [
+        {
+            "turn_index": 1,
+            "player_action": "Ask Bran about the missing witness.",
+            "simulation_state": {
+                "scene": {"nearby_npcs": ["Bran"]},
+                "npc_progression_state": {"npcs": {"Bran": {"name": "Bran", "role": "innkeeper"}}},
+            },
+        }
+    ]
+
+    summary = summarize_action_diversity(transcript)
+
+    assert summary["top_semantic_actions"][0][0] == "ask"
+    assert summary["top_targets"][0][0] == "Bran"
+    assert summary["unknown_semantic_count"] == 0
+
+
 def test_progress_timeline_computes_progress_rates():
     transcript = [_row(i, story=True) for i in range(1, 5)]
 
@@ -106,3 +172,23 @@ def test_hundred_turn_eval_smoke_mode_allows_short_runs():
     assert summary["strict_100_turn_mode"] is False
     assert "action_diversity_summary" in summary
     assert "progress_timeline_summary" in summary
+
+
+def test_long_run_warning_flags_unknown_semantic_rate_in_strict_mode():
+    transcript = [{"turn_index": i, "player_action": "Do something vague."} for i in range(1, 101)]
+    action = summarize_action_diversity(transcript)
+    progress = summarize_progress_timeline(transcript)
+
+    warnings = summarize_long_run_warnings(
+        transcript=transcript,
+        action_diversity_summary=action,
+        progress_timeline_summary=progress,
+        console_log_summary={"turn_error_count": 0},
+        manual_turn_error_summary={"error_count": 0},
+        turns_for_strict_gates=100,
+    )
+
+    assert any(
+        warning["code"] == "semantic_action_extraction_unknown_rate"
+        for warning in warnings["warnings"]
+    )
