@@ -1,36 +1,43 @@
-N73-N75.3 — Base Game Campaign Journal + Calendar Runtime v1
-Goal
-Move campaign time + player journal from test/report-only code into base RPG runtime.
+Below is N73-N75.7 — Quest State Seeding + Story Arc Quest Projection Fix as a literal apply-this-patch diff spec.
 
-Normal game sessions should maintain:
-runtime_state.campaign_calendar
-runtime_state.player_journal
+Goal:
 
-Autoplay/report should read the same runtime data instead of inventing a separate test-only journal.
+Quest Progress should no longer stay empty when the campaign has story objectives.
+Seed deterministic starter quest state for tavern_story_seed / report scenarios.
+Project story-arc objectives into quest_progress_summary.
+Show active objectives like:
+  - Find the witness
+  - Report findings to Bran
 
 Strict rules:
 
-Journal entries are deterministic summaries of already-authoritative turn facts.
-Calendar/time is bounded runtime metadata.
-Journal/calendar cannot mutate inventory, currency, quests, combat, travel, rewards, or NPC state.
-LLM does not author journal entries in this bundle.
-1. Add base runtime module
+Quest report projection is deterministic.
+Story arcs may project readable quest progress, but do not grant rewards.
+Report projection does not complete quests unless deterministic state says completed.
+No LLM direct quest completion.
+No inventory/currency/XP/reward mutation from report-only quest projection.
+N73-N75.7 — Quest State Seeding + Story Arc Quest Projection Fix
+Acceptance goals
+quest_progress_summary.quest_count > 0 for tavern_story_seed
+Quest Progress HTML shows Witness Search / Investigation quest
+Objectives include Find the witness and Report findings to Bran
+story_arc_view objectives are projected into quest_progress_summary
+quality_gate_summary.ok == true
+no authoritative reward/item/currency mutation
+1. Add base quest progress/report model
 
 Create:
 
 --- /dev/null
-+++ src/app/rpg/campaign_journal.py
-@@ -0,0 +1,282 @@
++++ src/app/rpg/quest_progress.py
+@@ -0,0 +1,268 @@
 +from __future__ import annotations
 +
 +from copy import deepcopy
 +from typing import Any, Dict, List
 +
 +
-+CAMPAIGN_CALENDAR_VERSION = "campaign_calendar_v1"
-+PLAYER_JOURNAL_VERSION = "player_journal_v1"
-+
-+SEASONS = ("spring", "summer", "autumn", "winter")
++QUEST_PROGRESS_VERSION = "quest_progress_v1"
 +
 +
 +def _safe_dict(value: Any) -> Dict[str, Any]:
@@ -45,613 +52,584 @@ Create:
 +    return value if isinstance(value, str) else ""
 +
 +
-+def campaign_time_for_turn(
-+    *,
-+    turn_index: int,
-+    start_year: int = 1000,
-+    start_day: int = 1,
-+    minutes_per_turn: int = 30,
-+) -> Dict[str, Any]:
-+    """Deterministic lightweight fantasy calendar.
++def normalize_quest_status(value: Any) -> str:
++    status = _safe_str(value).strip().lower()
++    if status in {"done", "complete", "completed", "success", "resolved"}:
++        return "completed"
++    if status in {"fail", "failed"}:
++        return "failed"
++    if status in {"active", "started", "in_progress", "open", "ongoing"}:
++        return "active"
++    if status in {"blocked", "paused"}:
++        return status
++    return status or "unknown"
 +
-+    This is metadata only. It does not alter travel, rests, services, combat,
-+    quests, or other authoritative simulation facts.
++
++def starter_quest_state_for_seed(scenario_seed: str) -> Dict[str, Any]:
++    """Deterministic starter quest state for known autoplay/base seeds.
++
++    This is seed data, not LLM output. It does not grant rewards or mutate
++    unrelated simulation state.
 +    """
-+    turn_index = max(1, int(turn_index or 1))
-+    minutes_per_turn = max(1, int(minutes_per_turn or 30))
-+    total_minutes = (turn_index - 1) * minutes_per_turn
-+    day_offset = total_minutes // (24 * 60)
-+    minute_of_day = total_minutes % (24 * 60)
-+    hour = minute_of_day // 60
-+    minute = minute_of_day % 60
-+    day_of_year = ((start_day - 1 + day_offset) % 360) + 1
-+    year = start_year + ((start_day - 1 + day_offset) // 360)
-+    season = SEASONS[(day_of_year - 1) // 90]
-+    day = ((day_of_year - 1) % 30) + 1
-+    month = ((day_of_year - 1) // 30) + 1
-+    if 5 <= hour < 12:
-+        phase = "morning"
-+    elif 12 <= hour < 17:
-+        phase = "afternoon"
-+    elif 17 <= hour < 21:
-+        phase = "evening"
-+    else:
-+        phase = "night"
++    seed = _safe_str(scenario_seed).strip().lower()
++    if seed != "tavern_story_seed":
++        return {}
++
 +    return {
-+        "format_version": CAMPAIGN_CALENDAR_VERSION,
-+        "year": year,
-+        "season": season,
-+        "month": month,
-+        "day": day,
-+        "day_of_year": day_of_year,
-+        "hour": hour,
-+        "minute": minute,
-+        "time_label": f"{hour:02d}:{minute:02d}",
-+        "day_phase": phase,
-+        "absolute_day": int(day_offset) + 1,
-+        "turn_index": turn_index,
-+        "minutes_per_turn": minutes_per_turn,
++        "format_version": QUEST_PROGRESS_VERSION,
++        "quests": {
++            "quest:witness_search": {
++                "quest_id": "quest:witness_search",
++                "title": "Witness Search",
++                "status": "active",
++                "source": "scenario_seed",
++                "giver": "Bran",
++                "location": "Rusty Flagon Tavern",
++                "summary": "Trouble on the road has reached the tavern, and Bran needs the player to find who saw what happened.",
++                "objectives": [
++                    {
++                        "objective_id": "objective:find_witness",
++                        "summary": "Find the witness",
++                        "status": "active",
++                        "completed": False,
++                    },
++                    {
++                        "objective_id": "objective:report_to_bran",
++                        "summary": "Report findings to Bran",
++                        "status": "active",
++                        "completed": False,
++                    },
++                ],
++                "created_turn": 1,
++                "updated_turn": 1,
++            }
++        },
++        "timeline": [
++            {
++                "turn_index": 1,
++                "quest_id": "quest:witness_search",
++                "status": "active",
++                "summary": "Witness Search started.",
++                "source": "scenario_seed",
++            }
++        ],
 +    }
 +
 +
-+def campaign_journal_runtime_state(runtime_state: Dict[str, Any]) -> Dict[str, Any]:
-+    runtime_state = runtime_state if isinstance(runtime_state, dict) else {}
-+    runtime_state.setdefault(
-+        "campaign_calendar",
-+        {
-+            "format_version": CAMPAIGN_CALENDAR_VERSION,
-+            "minutes_per_turn": 30,
-+            "current": campaign_time_for_turn(turn_index=1),
-+            "history": [],
-+        },
-+    )
-+    runtime_state.setdefault(
-+        "player_journal",
-+        {
-+            "format_version": PLAYER_JOURNAL_VERSION,
-+            "entries": [],
-+            "pending_actions": [],
-+            "pending_results": [],
-+            "journal_every_turns": 4,
-+            "max_entries": 100,
-+        },
-+    )
-+    return runtime_state
-+
-+
-+def _extract_player_action(
-+    *,
-+    player_input: str = "",
-+    turn_contract: Dict[str, Any] | None = None,
-+    turn_result: Dict[str, Any] | None = None,
-+) -> str:
-+    turn_contract = _safe_dict(turn_contract)
-+    turn_result = _safe_dict(turn_result)
-+    return (
-+        _safe_str(player_input)
-+        or _safe_str(turn_contract.get("player_input"))
-+        or _safe_str(turn_contract.get("action"))
-+        or _safe_str(turn_result.get("player_action"))
-+        or _safe_str(turn_result.get("player_input"))
-+    )
-+
-+
-+def _extract_result_summary(
-+    *,
-+    turn_contract: Dict[str, Any] | None = None,
-+    turn_result: Dict[str, Any] | None = None,
-+) -> str:
-+    turn_contract = _safe_dict(turn_contract)
-+    turn_result = _safe_dict(turn_result)
-+    resolved_result = _safe_dict(turn_contract.get("resolved_result"))
-+    narration_payload = _safe_dict(turn_result.get("narration_payload"))
-+    npc = _safe_dict(narration_payload.get("npc"))
-+    parts = [
-+        _safe_str(resolved_result.get("summary")),
-+        _safe_str(resolved_result.get("description")),
-+        _safe_str(turn_contract.get("result")),
-+        _safe_str(narration_payload.get("action")),
-+        _safe_str(narration_payload.get("narration")),
-+        _safe_str(npc.get("line")),
-+    ]
-+    for part in parts:
-+        if part:
-+            return part[:700]
-+    return ""
-+
-+
-+def _journal_text(actions: List[str], results: List[str]) -> str:
-+    action_part = "; ".join(actions[-4:]).strip()
-+    result_part = " ".join(results[-2:]).strip()
-+    if action_part and result_part:
-+        return f"I focused on: {action_part}. What stood out: {result_part[:500]}"
-+    if action_part:
-+        return f"I focused on: {action_part}."
-+    if result_part:
-+        return f"What stood out: {result_part[:500]}"
-+    return "I kept moving, watching for what changed around me."
-+
-+
-+def advance_campaign_journal_for_turn(
++def ensure_quest_runtime_state(
 +    *,
 +    runtime_state: Dict[str, Any],
-+    turn_index: int,
-+    player_input: str = "",
-+    turn_contract: Dict[str, Any] | None = None,
-+    turn_result: Dict[str, Any] | None = None,
-+    minutes_per_turn: int | None = None,
-+    journal_every_turns: int | None = None,
++    scenario_seed: str = "",
 +) -> Dict[str, Any]:
-+    """Advance base-game calendar and deterministic player journal.
-+
-+    This mutates runtime_state only. It does not mutate authoritative
-+    simulation facts.
-+    """
-+    runtime_state = campaign_journal_runtime_state(runtime_state)
-+    calendar = _safe_dict(runtime_state.get("campaign_calendar"))
-+    journal = _safe_dict(runtime_state.get("player_journal"))
-+
-+    if minutes_per_turn is None:
-+        minutes_per_turn = int(calendar.get("minutes_per_turn") or 30)
-+    if journal_every_turns is None:
-+        journal_every_turns = int(journal.get("journal_every_turns") or 4)
-+
-+    time_info = campaign_time_for_turn(
-+        turn_index=int(turn_index or 1),
-+        minutes_per_turn=int(minutes_per_turn or 30),
++    runtime_state = runtime_state if isinstance(runtime_state, dict) else {}
++    quest_state = runtime_state.setdefault(
++        "quest_progress",
++        {
++            "format_version": QUEST_PROGRESS_VERSION,
++            "quests": {},
++            "timeline": [],
++        },
 +    )
-+    calendar["minutes_per_turn"] = int(minutes_per_turn or 30)
-+    calendar["current"] = time_info
-+    history = _safe_list(calendar.get("history"))
-+    if not history or _safe_dict(history[-1]).get("turn_index") != time_info["turn_index"]:
-+        history.append(time_info)
-+    calendar["history"] = history[-500:]
++    quest_state.setdefault("format_version", QUEST_PROGRESS_VERSION)
++    quest_state.setdefault("quests", {})
++    quest_state.setdefault("timeline", [])
 +
-+    action = _extract_player_action(
-+        player_input=player_input,
-+        turn_contract=_safe_dict(turn_contract),
-+        turn_result=_safe_dict(turn_result),
-+    )
-+    result = _extract_result_summary(
-+        turn_contract=_safe_dict(turn_contract),
-+        turn_result=_safe_dict(turn_result),
-+    )
-+
-+    pending_actions = _safe_list(journal.get("pending_actions"))
-+    pending_results = _safe_list(journal.get("pending_results"))
-+    if action:
-+        pending_actions.append(action[:300])
-+    if result:
-+        pending_results.append(result[:700])
-+
-+    journal["pending_actions"] = pending_actions[-12:]
-+    journal["pending_results"] = pending_results[-12:]
-+    journal["journal_every_turns"] = int(journal_every_turns or 4)
-+
-+    entries = _safe_list(journal.get("entries"))
-+    should_write = int(turn_index or 1) % max(1, int(journal_every_turns or 4)) == 0
-+    existing_entry_ids = {_safe_str(entry.get("entry_id")) for entry in entries if isinstance(entry, dict)}
-+
-+    if should_write:
-+        entry_id = f"journal:turn:{int(turn_index or 1)}"
-+        if entry_id not in existing_entry_ids:
-+            entries.append(
-+                {
-+                    "format_version": PLAYER_JOURNAL_VERSION,
-+                    "entry_id": entry_id,
-+                    "start_turn": max(1, int(turn_index or 1) - len(pending_actions) + 1),
-+                    "end_turn": int(turn_index or 1),
-+                    "time": deepcopy(time_info),
-+                    "perspective": "player",
-+                    "text": _journal_text(pending_actions, pending_results),
-+                    "source": "deterministic_runtime_journal",
-+                }
++    seeded = starter_quest_state_for_seed(scenario_seed)
++    seeded_quests = _safe_dict(seeded.get("quests"))
++    if seeded_quests:
++        for quest_id, quest_any in seeded_quests.items():
++            if quest_id not in _safe_dict(quest_state.get("quests")):
++                quest_state["quests"][quest_id] = deepcopy(_safe_dict(quest_any))
++        existing_markers = {
++            (
++                _safe_str(item.get("turn_index")),
++                _safe_str(item.get("quest_id")),
++                _safe_str(item.get("summary")),
 +            )
-+        journal["pending_actions"] = []
-+        journal["pending_results"] = []
++            for item in _safe_list(quest_state.get("timeline"))
++            if isinstance(item, dict)
++        }
++        for item in _safe_list(seeded.get("timeline")):
++            item = _safe_dict(item)
++            marker = (
++                _safe_str(item.get("turn_index")),
++                _safe_str(item.get("quest_id")),
++                _safe_str(item.get("summary")),
++            )
++            if marker not in existing_markers:
++                quest_state["timeline"].append(deepcopy(item))
++                existing_markers.add(marker)
 +
-+    max_entries = int(journal.get("max_entries") or 100)
-+    journal["entries"] = entries[-max_entries:]
-+    runtime_state["campaign_calendar"] = calendar
-+    runtime_state["player_journal"] = journal
++    runtime_state["quest_progress"] = quest_state
 +    return runtime_state
 +
 +
-+def summarize_campaign_calendar(runtime_state: Dict[str, Any]) -> Dict[str, Any]:
-+    runtime_state = _safe_dict(runtime_state)
-+    calendar = _safe_dict(runtime_state.get("campaign_calendar"))
-+    history = _safe_list(calendar.get("history"))
-+    return {
-+        "minutes_per_turn": calendar.get("minutes_per_turn", 30),
-+        "turns_tracked": len(history),
-+        "start": history[0] if history else _safe_dict(calendar.get("current")),
-+        "end": _safe_dict(calendar.get("current")),
-+        "rows": history[-20:],
-+    }
++def quest_rows_from_story_arc_view(story_arc_view: Dict[str, Any]) -> List[Dict[str, Any]]:
++    """Project story_arc_view into quest-like rows for report UX."""
++    story_arc_view = _safe_dict(story_arc_view)
++    rows: List[Dict[str, Any]] = []
++
++    for arc in _safe_list(story_arc_view.get("arcs")):
++        arc = _safe_dict(arc)
++        arc_id = _safe_str(arc.get("arc_id") or arc.get("id") or arc.get("title"))
++        if not arc_id:
++            continue
++        title = _safe_str(arc.get("title") or arc.get("name") or arc_id)
++        status = normalize_quest_status(arc.get("status") or "active")
++        objectives: List[Dict[str, Any]] = []
++
++        for milestone in _safe_list(arc.get("milestones")):
++            milestone = _safe_dict(milestone)
++            summary = _safe_str(
++                milestone.get("title")
++                or milestone.get("objective_text")
++                or milestone.get("summary")
++                or milestone.get("name")
++            )
++            if not summary:
++                continue
++            milestone_status = normalize_quest_status(milestone.get("status") or "active")
++            objectives.append(
++                {
++                    "objective_id": _safe_str(milestone.get("milestone_id") or milestone.get("id") or summary),
++                    "summary": summary,
++                    "status": milestone_status,
++                    "completed": milestone_status == "completed",
++                    "source": "story_arc_view",
++                }
++            )
++
++        # Some arc models expose unresolved objectives directly.
++        for objective in _safe_list(arc.get("objectives")):
++            objective = _safe_dict(objective)
++            summary = _safe_str(objective.get("summary") or objective.get("title") or objective.get("name"))
++            if not summary:
++                continue
++            objective_status = normalize_quest_status(objective.get("status") or "active")
++            objectives.append(
++                {
++                    "objective_id": _safe_str(objective.get("objective_id") or objective.get("id") or summary),
++                    "summary": summary,
++                    "status": objective_status,
++                    "completed": bool(objective.get("completed")) or objective_status == "completed",
++                    "source": "story_arc_view",
++                }
++            )
++
++        rows.append(
++            {
++                "quest_id": _safe_str(arc.get("quest_id") or f"quest:{arc_id}"),
++                "title": title,
++                "status": status,
++                "summary": _safe_str(arc.get("summary") or arc.get("stage") or arc.get("description")),
++                "objectives": _dedupe_objectives(objectives),
++                "source": "story_arc_view",
++            }
++        )
++
++    return rows
 +
 +
-+def summarize_player_journal(runtime_state: Dict[str, Any]) -> Dict[str, Any]:
-+    runtime_state = _safe_dict(runtime_state)
-+    journal = _safe_dict(runtime_state.get("player_journal"))
-+    entries = _safe_list(journal.get("entries"))
++def _dedupe_objectives(objectives: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
++    out: List[Dict[str, Any]] = []
++    seen = set()
++    for objective in objectives:
++        objective = _safe_dict(objective)
++        marker = _safe_str(objective.get("objective_id") or objective.get("summary")).lower()
++        if not marker or marker in seen:
++            continue
++        seen.add(marker)
++        out.append(objective)
++    return out
++
++
++def summarize_runtime_quests(runtime_state: Dict[str, Any]) -> Dict[str, Any]:
++    quest_state = _safe_dict(_safe_dict(runtime_state).get("quest_progress"))
++    quests = []
++    for quest_id, quest_any in sorted(_safe_dict(quest_state.get("quests")).items()):
++        quest = _safe_dict(quest_any)
++        quest.setdefault("quest_id", str(quest_id))
++        quests.append(quest)
 +    return {
-+        "entry_count": len(entries),
-+        "entries": entries[-20:],
-+        "pending_action_count": len(_safe_list(journal.get("pending_actions"))),
-+        "pending_result_count": len(_safe_list(journal.get("pending_results"))),
++        "format_version": QUEST_PROGRESS_VERSION,
++        "quest_count": len(quests),
++        "quests": quests,
++        "timeline": _safe_list(quest_state.get("timeline"))[-50:],
 +    }
-2. Wire journal/calendar into base session turn path
-
-You need to patch whichever base RPG session turn handler is authoritative in your app. Based on current structure, likely files are one of:
-
-src/app/rpg/session.py
-src/app/rpg/session_runtime.py
-src/app/rpg/session_turn.py
-src/app/rpg/runtime/session.py
-src/app/api/rpg_session.py
-
-Search:
-
-Select-String -Path src\app\rpg\*.py,src\app\api\*.py -Pattern "turn_contract","session_id","runtime_state","/api/rpg/session/turn" -Context 3,8
-2A. Add import to the turn handler file
-
-In the file that builds/returns turn_result, add:
-
-+from app.rpg.campaign_journal import advance_campaign_journal_for_turn
-2B. Advance journal after the authoritative turn contract is built
-
-Find the point after the turn contract/result exists and before the session is saved/returned. It will look roughly like one of these:
-
-session["turns"].append(...)
-session["turn_contract"] = turn_contract
-save_session(session)
-return {"ok": True, "session": session, "turn_contract": turn_contract}
+2. Wire quest state into autoplay runtime
 
 Patch:
 
+src/tests/rpg/autoplay_llm_campaign.py
+2A. Import quest runtime helper
+--- src/tests/rpg/autoplay_llm_campaign.py
++++ src/tests/rpg/autoplay_llm_campaign.py
 @@
-+    runtime_state = session.setdefault("runtime_state", {})
-+    turn_index = int(
-+        turn_contract.get("turn_index")
-+        or session.get("turn_index")
-+        or len(session.get("turns", []))
-+        or 1
-+    )
-+    session["runtime_state"] = advance_campaign_journal_for_turn(
-+        runtime_state=runtime_state,
-+        turn_index=turn_index,
-+        player_input=player_input,
-+        turn_contract=turn_contract,
-+        turn_result={
-+            "narration_payload": narration_payload if "narration_payload" in locals() else {},
-+            "player_action": player_input,
-+        },
-+    )
+ from app.rpg.campaign_journal import advance_campaign_journal_for_turn
++from app.rpg.quest_progress import ensure_quest_runtime_state
+2B. Seed quest runtime before journal advancement / record build
 
-If the local variable is named differently:
+Find the block where you now build cumulative runtime_state before advance_campaign_journal_for_turn(...):
 
-player_input may be action_text / input_text / command
-turn_contract may be contract
-narration_payload may be structured_narration / narration_result
-session may be state / session_state
+runtime_state = _merge_base_runtime_namespaces(
+    carried_campaign_runtime_state,
+    row_runtime_state,
+)
+runtime_state = advance_campaign_journal_for_turn(...)
 
-Use the equivalent values.
+Patch:
 
-The important invariant:
-
-advance_campaign_journal_for_turn runs after deterministic turn outcome exists,
-but before session is persisted/returned.
-2C. Include journal/calendar in session get response
-
-If /api/rpg/session/get already returns full session, nothing else is needed.
-
-If it filters runtime state, add:
-
+--- src/tests/rpg/autoplay_llm_campaign.py
++++ src/tests/rpg/autoplay_llm_campaign.py
 @@
- response["campaign_calendar"] = session.get("runtime_state", {}).get("campaign_calendar", {})
- response["player_journal"] = session.get("runtime_state", {}).get("player_journal", {})
+         runtime_state = _merge_base_runtime_namespaces(
+             carried_campaign_runtime_state,
+             row_runtime_state,
+         )
++        runtime_state = ensure_quest_runtime_state(
++            runtime_state=runtime_state,
++            scenario_seed=_safe_str(args.scenario_seed),
++        )
+         runtime_state = advance_campaign_journal_for_turn(
+             runtime_state=runtime_state,
+2C. Preserve quest_progress in base runtime merge
 
-or expose under:
+Find _merge_base_runtime_namespaces(...).
 
-{
-  "session": {
-    "runtime_state": {
-      "campaign_calendar": {},
-      "player_journal": {}
-    }
-  }
-}
-3. Update autoplay/report to read base runtime journal first
+Patch:
 
-Currently report_sections.py generates a test-only calendar/journal from transcript. Keep that as fallback, but prefer runtime state.
+--- src/tests/rpg/autoplay_llm_campaign.py
++++ src/tests/rpg/autoplay_llm_campaign.py
+@@
+ def _merge_base_runtime_namespaces(
+@@
+     merged["player_journal"] = _merge_player_journal(
+         _safe_dict(carried_runtime_state.get("player_journal")),
+         _safe_dict(row_runtime_state.get("player_journal")),
+     )
++    if "quest_progress" in row_runtime_state:
++        merged["quest_progress"] = _safe_dict(row_runtime_state.get("quest_progress"))
++    elif "quest_progress" in carried_runtime_state:
++        merged["quest_progress"] = _safe_dict(carried_runtime_state.get("quest_progress"))
+     return merged
+3. Preserve quest_progress through advisory/evolution merge
+
+Patch:
+
+src/tests/rpg/autoplay/advisory_promotion_runtime.py
+
+Find the namespace preservation block, currently likely:
+
+for key in ("settings", "ui_state"):
+
+Patch:
+
+--- src/tests/rpg/autoplay/advisory_promotion_runtime.py
++++ src/tests/rpg/autoplay/advisory_promotion_runtime.py
+@@
+-    for key in ("settings", "ui_state"):
++    for key in ("quest_progress", "settings", "ui_state"):
+         if key in row_runtime_state:
+             merged[key] = deepcopy(row_runtime_state[key])
+         elif key in carried_runtime_state and key not in merged:
+             merged[key] = deepcopy(carried_runtime_state[key])
+
+This keeps quest progress from being dropped after promotion/evolution processing.
+
+4. Fix report_sections.py quest extraction
 
 Patch:
 
 src/tests/rpg/autoplay/report_sections.py
-3A. Import base summarizers
+4A. Import shared quest helpers
 --- src/tests/rpg/autoplay/report_sections.py
 +++ src/tests/rpg/autoplay/report_sections.py
 @@
- from typing import Any, Dict, List
-+
-+from app.rpg.campaign_journal import (
-+    campaign_time_for_turn,
-+    summarize_campaign_calendar,
-+    summarize_player_journal,
+ from app.rpg.campaign_journal import (
+     campaign_time_for_turn,
+     summarize_campaign_calendar,
+     summarize_player_journal,
+ )
++from app.rpg.quest_progress import (
++    normalize_quest_status,
++    quest_rows_from_story_arc_view,
++    summarize_runtime_quests,
 +)
+4B. Delete or replace local duplicate status function
 
-Then remove or rename the duplicate local campaign_time_for_turn(...) in this file. If easier, replace the local function body with a wrapper:
+Find local _quest_status(...).
 
--def campaign_time_for_turn(...):
--    ...
-+from app.rpg.campaign_journal import campaign_time_for_turn
-3B. Add helper to find final runtime journal state
+Replace body with shared helper:
 
-Add near _last_nonempty_row_value(...):
-
+--- src/tests/rpg/autoplay/report_sections.py
++++ src/tests/rpg/autoplay/report_sections.py
 @@
- def _last_nonempty_row_value(transcript: List[Dict[str, Any]], key: str) -> Any:
+ def _quest_status(quest: Dict[str, Any]) -> str:
+-    status = _safe_str(
+-        quest.get("status")
+-        or quest.get("state")
+-        or quest.get("phase")
+-        or quest.get("progress_state")
+-    ).lower()
+-    if status:
+-        if status in {"done", "complete", "completed", "success"}:
+-            return "completed"
+-        if status in {"fail", "failed"}:
+-            return "failed"
+-        if status in {"active", "started", "in_progress", "open"}:
+-            return "active"
+-        return status
++    status = normalize_quest_status(
++        quest.get("status")
++        or quest.get("state")
++        or quest.get("phase")
++        or quest.get("progress_state")
++    )
++    if status != "unknown":
++        return status
+     completed = quest.get("completed")
+     if completed is True:
+         return "completed"
+     if completed is False:
+         return "active"
+4C. Add runtime quest state extraction
+
+Add helper near _latest_runtime_state_with_journal(...):
+
+--- src/tests/rpg/autoplay/report_sections.py
++++ src/tests/rpg/autoplay/report_sections.py
+@@
+ def _latest_runtime_state_with_journal(transcript: List[Dict[str, Any]]) -> Dict[str, Any]:
 @@
      return {}
 +
 +
-+def _latest_runtime_state_with_journal(transcript: List[Dict[str, Any]]) -> Dict[str, Any]:
++def _latest_runtime_state_with_quests(transcript: List[Dict[str, Any]]) -> Dict[str, Any]:
 +    for row in reversed(transcript if isinstance(transcript, list) else []):
 +        row = _safe_dict(row)
-+        runtime_state = _safe_dict(row.get("runtime_state"))
-+        if runtime_state.get("campaign_calendar") or runtime_state.get("player_journal"):
-+            return runtime_state
-+        turn_result = _safe_dict(row.get("turn_result"))
-+        session = _safe_dict(turn_result.get("session"))
-+        runtime_state = _safe_dict(session.get("runtime_state"))
-+        if runtime_state.get("campaign_calendar") or runtime_state.get("player_journal"):
-+            return runtime_state
++        candidates = [
++            _safe_dict(row.get("runtime_state")),
++            _safe_dict(_safe_dict(row.get("turn_result")).get("runtime_state")),
++            _safe_dict(_safe_dict(_safe_dict(row.get("turn_result")).get("session")).get("runtime_state")),
++        ]
++        for runtime_state in candidates:
++            if _safe_dict(runtime_state.get("quest_progress")).get("quests"):
++                return runtime_state
 +    return {}
-3C. Prefer base runtime journal in build_campaign_calendar_and_journal(...)
+4D. Use runtime quest state first in summarize_quests_for_report(...)
 
-At the start of build_campaign_calendar_and_journal(...), add:
+At the top of summarize_quests_for_report(...), after quest_by_id and timeline are initialized:
 
+--- src/tests/rpg/autoplay/report_sections.py
++++ src/tests/rpg/autoplay/report_sections.py
 @@
- def build_campaign_calendar_and_journal(
-     transcript: List[Dict[str, Any]],
-     *,
-     minutes_per_turn: int = 30,
-     journal_every_turns: int = 4,
- ) -> Dict[str, Any]:
-+    runtime_state = _latest_runtime_state_with_journal(transcript)
-+    if runtime_state:
-+        calendar = summarize_campaign_calendar(runtime_state)
-+        journal = summarize_player_journal(runtime_state)
-+        if calendar.get("turns_tracked") or journal.get("entry_count"):
-+            calendar["source"] = "base_runtime"
-+            journal["source"] = "base_runtime"
-+            return {
-+                "calendar": calendar,
-+                "journal": journal,
-+            }
+ def summarize_quests_for_report(transcript: List[Dict[str, Any]]) -> Dict[str, Any]:
+     """Best-effort quest summary from state and turn contracts."""
+     quest_by_id: Dict[str, Dict[str, Any]] = {}
+     timeline: List[Dict[str, Any]] = []
 +
-     calendar_rows: List[Dict[str, Any]] = []
++    runtime_state = _latest_runtime_state_with_quests(transcript)
++    runtime_quest_summary = summarize_runtime_quests(runtime_state) if runtime_state else {}
++    for quest in _safe_list(runtime_quest_summary.get("quests")):
++        quest = _safe_dict(quest)
++        quest_id = _safe_str(quest.get("quest_id") or quest.get("id") or quest.get("title"))
++        if quest_id:
++            quest_by_id[quest_id] = {**quest_by_id.get(quest_id, {}), **quest, "source": quest.get("source") or "runtime_quest_progress"}
++    timeline.extend(_safe_list(runtime_quest_summary.get("timeline")))
+4E. Add story arc projection fallback
 
-At the fallback return, add:
+Still inside summarize_quests_for_report(...), after runtime quest extraction:
 
+--- src/tests/rpg/autoplay/report_sections.py
++++ src/tests/rpg/autoplay/report_sections.py
 @@
-         "calendar": {
-+            "source": "report_fallback",
-             "minutes_per_turn": minutes_per_turn,
+     timeline.extend(_safe_list(runtime_quest_summary.get("timeline")))
++
++    # Story arcs often contain active unresolved objectives even when quest_state
++    # is not present. Project them into Quest Progress for report readability.
++    story_arc_view = _safe_dict(_last_nonempty_row_value(transcript, "story_arc_view"))
++    for quest in quest_rows_from_story_arc_view(story_arc_view):
++        quest_id = _safe_str(quest.get("quest_id") or quest.get("title"))
++        if quest_id and quest_id not in quest_by_id:
++            quest_by_id[quest_id] = quest
+
+If story_arc_view lives in final summary, not transcript rows, the runtime quest seed from step 2 already guarantees tavern quest visibility.
+
+4F. Make objective progress text more readable
+
+Patch _quest_progress_text(...).
+
+Replace objective handling with:
+
+--- src/tests/rpg/autoplay/report_sections.py
++++ src/tests/rpg/autoplay/report_sections.py
 @@
-         "journal": {
-+            "source": "report_fallback",
-             "entry_count": len(journal_entries),
-4. Add frontend UI journal panel
+     if isinstance(objectives, list) and objectives:
+         done = 0
+         total = 0
+         labels = []
+         for item in objectives:
+             total += 1
+             item_dict = _safe_dict(item)
+             label = _safe_str(item_dict.get("summary") or item_dict.get("title") or item_dict.get("name") or item)
+-            if item_dict.get("completed") is True or _safe_str(item_dict.get("status")).lower() in {"done", "complete", "completed"}:
++            if item_dict.get("completed") is True or normalize_quest_status(item_dict.get("status")) == "completed":
+                 done += 1
+             if label and len(labels) < 3:
+                 labels.append(label)
+         return f"{done}/{total} objectives complete" + (f": {'; '.join(labels)}" if labels else "")
+5. Fix HTML Quest Progress to show objectives
 
-This makes journal visible in the base game, not only report.
+Patch:
 
-Patch likely file:
+src/tests/rpg/autoplay/campaign_report.py
 
-src/static/rpg.js
+Find _render_quest_progress(...).
 
-or the RPG UI script that renders session state.
+Inside the row loop, include objectives details. Replace row generation with:
 
-Search:
+--- src/tests/rpg/autoplay/campaign_report.py
++++ src/tests/rpg/autoplay/campaign_report.py
+@@
+     rows = "".join(
+-        "<tr>"
+-        f"<td>{escape(str(_safe_dict(quest).get('title') or _safe_dict(quest).get('quest_id')))}</td>"
+-        f"<td>{escape(str(_safe_dict(quest).get('status') or 'unknown'))}</td>"
+-        f"<td>{escape(str(_safe_dict(quest).get('progress') or ''))}</td>"
+-        f"<td>{escape(str(_safe_dict(quest).get('giver') or ''))}</td>"
+-        f"<td>{escape(str(_safe_dict(quest).get('location') or ''))}</td>"
+-        "</tr>"
+-        for quest in quests
++        _render_quest_row(_safe_dict(quest))
++        for quest in quests
+     )
 
-Select-String -Path src\static\*.js -Pattern "world events","journal","rpg-top-panels","session.runtime_state","render" -Context 3,8
-4A. Add HTML container
+Add helper near _render_quest_progress(...):
 
-In the RPG page/template, likely:
-
-src/templates/rpg.html
-src/static/index.html
-
-Add near world events / journal / inspector panels:
-
-+<section id="rpg-player-journal-panel" class="rpg-panel">
-+  <h3>Player Journal</h3>
-+  <div id="rpg-campaign-time" class="rpg-campaign-time"></div>
-+  <div id="rpg-player-journal-list" class="rpg-player-journal-list"></div>
-+</section>
-
-If panels are dynamically created in JS, add the equivalent DOM creation.
-
-4B. Add JS render function
-
-Patch src/static/rpg.js:
-
-+function renderPlayerJournal(session) {
-+  const runtime = (session && session.runtime_state) || {};
-+  const calendar = runtime.campaign_calendar || {};
-+  const journal = runtime.player_journal || {};
-+  const timeEl = document.getElementById("rpg-campaign-time");
-+  const listEl = document.getElementById("rpg-player-journal-list");
-+  if (!timeEl || !listEl) return;
+--- src/tests/rpg/autoplay/campaign_report.py
++++ src/tests/rpg/autoplay/campaign_report.py
+@@
+ def _render_quest_progress(summary: Dict[str, Any]) -> str:
+@@
+     return f"""
+@@
+     """
 +
-+  const current = calendar.current || {};
-+  const timeLabel = [
-+    current.season ? String(current.season) : "",
-+    current.year ? "Year " + String(current.year) : "",
-+    current.month ? "Month " + String(current.month) : "",
-+    current.day ? "Day " + String(current.day) : "",
-+    current.time_label ? String(current.time_label) : "",
-+    current.day_phase ? "(" + String(current.day_phase) + ")" : ""
-+  ].filter(Boolean).join(" · ");
-+  timeEl.textContent = timeLabel || "Campaign time has not started yet.";
 +
-+  const entries = Array.isArray(journal.entries) ? journal.entries.slice(-8).reverse() : [];
-+  if (!entries.length) {
-+    listEl.innerHTML = '<div class="rpg-muted">No journal entries yet.</div>';
-+    return;
-+  }
-+  listEl.innerHTML = entries.map((entry) => {
-+    const time = entry.time || {};
-+    const heading = [
-+      entry.entry_id || "Journal Entry",
-+      time.time_label || "",
-+      time.day_phase || ""
-+    ].filter(Boolean).join(" · ");
-+    return `
-+      <article class="rpg-journal-entry">
-+        <h4>${escapeHtml(heading)}</h4>
-+        <p>${escapeHtml(entry.text || "")}</p>
-+      </article>
-+    `;
-+  }).join("");
-+}
++def _render_quest_row(quest: Dict[str, Any]) -> str:
++    objectives = quest.get("objectives") if isinstance(quest.get("objectives"), list) else []
++    objective_html = ""
++    if objectives:
++        objective_html = "<ul>" + "".join(
++            "<li>"
++            + escape(
++                f"{'✓' if _safe_dict(obj).get('completed') else '•'} "
++                f"{_safe_dict(obj).get('summary') or _safe_dict(obj).get('title') or _safe_dict(obj).get('name')}"
++            )
++            + "</li>"
++            for obj in objectives[:8]
++        ) + "</ul>"
++    progress = escape(str(quest.get("progress") or ""))
++    if objective_html:
++        progress = progress + objective_html
++    return (
++        "<tr>"
++        f"<td>{escape(str(quest.get('title') or quest.get('quest_id')))}</td>"
++        f"<td>{escape(str(quest.get('status') or 'unknown'))}</td>"
++        f"<td>{progress}</td>"
++        f"<td>{escape(str(quest.get('giver') or ''))}</td>"
++        f"<td>{escape(str(quest.get('location') or ''))}</td>"
++        "</tr>"
++    )
+6. Add quality gate warning for missing tavern quest
 
-If escapeHtml does not exist in rpg.js, add:
+Patch:
 
-+function escapeHtml(value) {
-+  return String(value == null ? "" : value)
-+    .replaceAll("&", "&amp;")
-+    .replaceAll("<", "&lt;")
-+    .replaceAll(">", "&gt;")
-+    .replaceAll('"', "&quot;")
-+    .replaceAll("'", "&#039;");
-+}
-4C. Call it after session updates
+src/tests/rpg/autoplay_llm_campaign.py
 
-Find where the UI renders session after /api/rpg/session/get or turn response. It may call things like:
+Inside _summarize_quality_gates(...), add:
 
-renderWorldEvents(session)
-renderInspector(session)
-renderTopPanels(session)
+--- src/tests/rpg/autoplay_llm_campaign.py
++++ src/tests/rpg/autoplay_llm_campaign.py
+@@
+     quest_progress_summary = _safe_dict(summary.get("quest_progress_summary"))
++    scenario_seed = _safe_str(getattr(args, "scenario_seed", ""))
+@@
+         "quest_progress_section_present": (
+             quest_progress_summary is not None
+         ),
++        "tavern_story_seed_has_quest_progress": (
++            scenario_seed != "tavern_story_seed"
++            or int(quest_progress_summary.get("quest_count") or 0) > 0
++        ),
 
-Add:
+This will catch the exact failure for this scenario.
 
-+renderPlayerJournal(session);
-
-For turn response shaped as { session: ... }:
-
-+if (data && data.session) renderPlayerJournal(data.session);
-4D. Add CSS
-
-Patch your RPG CSS, likely:
-
-src/static/rpg.css
-src/static/styles.css
-
-Add:
-
-+.rpg-campaign-time {
-+  font-size: 0.9rem;
-+  opacity: 0.85;
-+  margin-bottom: 0.5rem;
-+}
-+
-+.rpg-player-journal-list {
-+  display: flex;
-+  flex-direction: column;
-+  gap: 0.5rem;
-+}
-+
-+.rpg-journal-entry {
-+  border: 1px solid rgba(255,255,255,0.12);
-+  border-radius: 10px;
-+  padding: 0.65rem;
-+  background: rgba(255,255,255,0.04);
-+}
-+
-+.rpg-journal-entry h4 {
-+  margin: 0 0 0.35rem 0;
-+  font-size: 0.9rem;
-+}
-+
-+.rpg-journal-entry p {
-+  margin: 0;
-+  line-height: 1.35;
-+}
-
-Adjust colors if your UI is light themed.
-
-5. Add tests
-5A. Base journal unit tests
+7. Tests
+7A. Base quest progress tests
 
 Create:
 
 --- /dev/null
-+++ src/tests/rpg/test_campaign_journal.py
-@@ -0,0 +1,95 @@
-+from app.rpg.campaign_journal import (
-+    advance_campaign_journal_for_turn,
-+    campaign_time_for_turn,
-+    summarize_campaign_calendar,
-+    summarize_player_journal,
++++ src/tests/rpg/test_quest_progress.py
+@@ -0,0 +1,72 @@
++from app.rpg.quest_progress import (
++    ensure_quest_runtime_state,
++    quest_rows_from_story_arc_view,
++    starter_quest_state_for_seed,
++    summarize_runtime_quests,
 +)
 +
 +
-+def test_campaign_time_for_turn_tracks_phase_and_date():
-+    first = campaign_time_for_turn(turn_index=1, minutes_per_turn=60)
-+    eighth = campaign_time_for_turn(turn_index=8, minutes_per_turn=60)
++def test_starter_quest_state_for_tavern_story_seed_has_witness_objectives():
++    state = starter_quest_state_for_seed("tavern_story_seed")
 +
-+    assert first["time_label"] == "00:00"
-+    assert first["day_phase"] == "night"
-+    assert eighth["time_label"] == "07:00"
-+    assert eighth["day_phase"] == "morning"
-+    assert eighth["season"] == "spring"
++    quest = state["quests"]["quest:witness_search"]
++    objective_text = [item["summary"] for item in quest["objectives"]]
++
++    assert quest["title"] == "Witness Search"
++    assert "Find the witness" in objective_text
++    assert "Report findings to Bran" in objective_text
 +
 +
-+def test_advance_campaign_journal_writes_entry_every_n_turns():
++def test_ensure_quest_runtime_state_seeds_tavern_quest_once():
 +    runtime_state = {}
-+    for turn in range(1, 5):
-+        runtime_state = advance_campaign_journal_for_turn(
-+            runtime_state=runtime_state,
-+            turn_index=turn,
-+            player_input=f"I do thing {turn}",
-+            turn_contract={
-+                "turn_index": turn,
-+                "player_input": f"I do thing {turn}",
-+                "resolved_result": {"summary": f"Result {turn}"},
-+            },
-+            journal_every_turns=4,
-+            minutes_per_turn=60,
-+        )
++    runtime_state = ensure_quest_runtime_state(
++        runtime_state=runtime_state,
++        scenario_seed="tavern_story_seed",
++    )
++    runtime_state = ensure_quest_runtime_state(
++        runtime_state=runtime_state,
++        scenario_seed="tavern_story_seed",
++    )
 +
-+    journal = summarize_player_journal(runtime_state)
-+    calendar = summarize_campaign_calendar(runtime_state)
++    summary = summarize_runtime_quests(runtime_state)
 +
-+    assert calendar["turns_tracked"] == 4
-+    assert journal["entry_count"] == 1
-+    assert journal["entries"][0]["entry_id"] == "journal:turn:4"
-+    assert "I do thing 1" in journal["entries"][0]["text"]
-+    assert "Result" in journal["entries"][0]["text"]
++    assert summary["quest_count"] == 1
++    assert len(summary["timeline"]) == 1
++    assert summary["quests"][0]["title"] == "Witness Search"
 +
 +
-+def test_advance_campaign_journal_is_idempotent_for_same_turn_entry():
-+    runtime_state = {}
-+    for _ in range(2):
-+        runtime_state = advance_campaign_journal_for_turn(
-+            runtime_state=runtime_state,
-+            turn_index=4,
-+            player_input="I ask Bran.",
-+            turn_contract={
-+                "turn_index": 4,
-+                "player_input": "I ask Bran.",
-+                "resolved_result": {"summary": "Bran answers."},
-+            },
-+            journal_every_turns=4,
-+        )
++def test_quest_rows_from_story_arc_view_projects_milestones():
++    rows = quest_rows_from_story_arc_view(
++        {
++            "arcs": [
++                {
++                    "arc_id": "witness_search",
++                    "title": "Witness Search",
++                    "status": "active",
++                    "milestones": [
++                        {"title": "Find the witness", "status": "active"},
++                        {"title": "Report findings to Bran", "status": "active"},
++                    ],
++                }
++            ]
++        }
++    )
 +
-+    journal = summarize_player_journal(runtime_state)
-+    assert journal["entry_count"] == 1
-5B. Report fallback test
++    assert rows[0]["title"] == "Witness Search"
++    assert len(rows[0]["objectives"]) == 2
+7B. Report quest summary test
 
 Patch:
 
@@ -659,128 +637,109 @@ src/tests/rpg/autoplay/test_report_sections.py
 
 Add:
 
+--- src/tests/rpg/autoplay/test_report_sections.py
++++ src/tests/rpg/autoplay/test_report_sections.py
 @@
- def test_build_campaign_calendar_and_journal_creates_player_entries():
+ def test_summarize_quests_for_report_from_state_and_contract():
 @@
-     assert "I ask Bran" in result["journal"]["entries"][0]["text"]
+     assert "objectives complete" in summary["quests"][0]["progress"]
 +
 +
-+def test_build_campaign_calendar_and_journal_prefers_base_runtime_journal():
++def test_summarize_quests_for_report_reads_runtime_quest_progress():
 +    transcript = [
 +        {
-+            "turn_index": 4,
 +            "runtime_state": {
-+                "campaign_calendar": {
-+                    "minutes_per_turn": 60,
-+                    "current": {
-+                        "turn_index": 4,
-+                        "year": 1000,
-+                        "season": "spring",
-+                        "month": 1,
-+                        "day": 1,
-+                        "time_label": "03:00",
-+                        "day_phase": "night",
-+                    },
-+                    "history": [
-+                        {"turn_index": 1, "time_label": "00:00"},
-+                        {"turn_index": 2, "time_label": "01:00"},
-+                        {"turn_index": 3, "time_label": "02:00"},
-+                        {"turn_index": 4, "time_label": "03:00"},
-+                    ],
-+                },
-+                "player_journal": {
-+                    "entries": [
-+                        {
-+                            "entry_id": "journal:turn:4",
-+                            "text": "Base runtime journal entry.",
++                "quest_progress": {
++                    "quests": {
++                        "quest:witness_search": {
++                            "quest_id": "quest:witness_search",
++                            "title": "Witness Search",
++                            "status": "active",
++                            "giver": "Bran",
++                            "location": "Rusty Flagon Tavern",
++                            "objectives": [
++                                {"summary": "Find the witness", "status": "active", "completed": False},
++                                {"summary": "Report findings to Bran", "status": "active", "completed": False},
++                            ],
 +                        }
-+                    ]
-+                },
-+            },
++                    },
++                    "timeline": [],
++                }
++            }
 +        }
 +    ]
 +
-+    result = build_campaign_calendar_and_journal(transcript)
++    summary = summarize_quests_for_report(transcript)
 +
-+    assert result["calendar"]["source"] == "base_runtime"
-+    assert result["journal"]["source"] == "base_runtime"
-+    assert result["journal"]["entries"][0]["text"] == "Base runtime journal entry."
-5C. API/session sanity test
++    assert summary["quest_count"] == 1
++    assert summary["active_count"] == 1
++    assert summary["quests"][0]["title"] == "Witness Search"
++    assert "Find the witness" in summary["quests"][0]["progress"]
+7C. Quality gate test
 
-If you have an API sanity suite, add a test around session turn. File may be:
+Patch:
 
-src/tests/api/sanity/test_rpg_session_sanity.py
+src/tests/rpg/autoplay/test_quality_gates.py
 
-Add:
+In the fixture for _summarize_quality_gates, add:
 
-def test_rpg_turn_updates_campaign_journal(client):
-    start = client.post("/api/rpg/session/start", json={})
-    assert start.status_code == 200
-    session_id = start.json()["session_id"]
+scenario_seed="tavern_story_seed"
 
-    for i in range(4):
-        response = client.post(
-            "/api/rpg/session/turn",
-            json={"session_id": session_id, "player_input": f"I wait and observe {i}"},
-        )
-        assert response.status_code == 200
+Then add a test:
 
-    get_response = client.post("/api/rpg/session/get", json={"session_id": session_id})
-    assert get_response.status_code == 200
-    session = get_response.json()["session"]
-    runtime = session["runtime_state"]
-
-    assert "campaign_calendar" in runtime
-    assert "player_journal" in runtime
-    assert len(runtime["player_journal"]["entries"]) >= 1
-
-Adjust endpoint names/payloads if your actual API differs.
-
-6. Update autoplay to use base journal during turns
-
-If autoplay uses the same base session turn endpoint/runtime, this may happen automatically.
-
-If not, patch src/tests/rpg/autoplay_llm_campaign.py after each turn result is available:
-
-+from app.rpg.campaign_journal import advance_campaign_journal_for_turn
-
-Then after turn_result is produced and before record = { ... }:
-
-+        session_obj = _safe_dict(turn_result.get("session"))
-+        runtime_state = _safe_dict(session_obj.get("runtime_state") or turn_result.get("runtime_state"))
-+        runtime_state = advance_campaign_journal_for_turn(
-+            runtime_state=runtime_state,
-+            turn_index=turn_index,
-+            player_input=player_action,
-+            turn_contract=turn_result.get("turn_contract") or {},
-+            turn_result=turn_result,
-+            minutes_per_turn=int(args.campaign_minutes_per_turn),
-+            journal_every_turns=int(args.journal_every_turns),
-+        )
-+        if session_obj:
-+            session_obj["runtime_state"] = runtime_state
-+            turn_result["session"] = session_obj
-+        turn_result["runtime_state"] = runtime_state
-
-Also put the same runtime state into the record:
-
-         record = {
-             ...
-+            "runtime_state": runtime_state,
-         }
-
-This lets report_sections prefer source: base_runtime.
-
-7. Validation
+--- src/tests/rpg/autoplay/test_quality_gates.py
++++ src/tests/rpg/autoplay/test_quality_gates.py
+@@
+ def test_quality_gate_fails_on_console_turn_errors():
+@@
+     assert result["gates"]["console_turn_errors_absent"] is False
++
++
++def test_quality_gate_requires_quest_progress_for_tavern_seed():
++    from types import SimpleNamespace
++
++    args = SimpleNamespace(
++        background_llm_mode="combined",
++        max_player_agent_fallback_rate=0.25,
++        capture_console_log=True,
++        scenario_seed="tavern_story_seed",
++    )
++    summary = {
++        "performance_budget_summary": {
++            "live_blocking": {
++                "avg_human_playable_blocking_ms": 50,
++                "max_human_playable_blocking_ms": 90,
++            }
++        },
++        "background_jobs": {
++            "combined_background_llm_jobs": 1,
++            "narration_jobs": 0,
++            "advisory_jobs": 0,
++        },
++        "player_agent_trace_summary": {"turns": 1, "fallback_turns": 0},
++        "campaign_calendar_summary": {"turns_tracked": 1},
++        "player_journal_summary": {"entry_count": 1},
++        "manual_turn_error_summary": {"ok": True, "error_count": 0},
++        "console_log_summary": {"line_count": 1, "turn_error_count": 0},
++        "story_beat_summary": {"beat_count": 1},
++        "quest_progress_summary": {"quest_count": 0},
++    }
++
++    result = _summarize_quality_gates(
++        args=args,
++        metrics={"real_turn_runtime_count": 1},
++        summary=summary,
++        transcript=[{}],
++    )
++
++    assert result["ok"] is False
++    assert result["gates"]["tavern_story_seed_has_quest_progress"] is False
+8. Validation
 
 Compile:
 
-python -m py_compile src\app\rpg\campaign_journal.py src\tests\rpg\autoplay\report_sections.py src\tests\rpg\autoplay_llm_campaign.py
+python -m py_compile src\app\rpg\quest_progress.py src\tests\rpg\autoplay_llm_campaign.py src\tests\rpg\autoplay\report_sections.py src\tests\rpg\autoplay\campaign_report.py
 
-Run focused tests:
+Run tests:
 
-python -m pytest src\tests\rpg\test_campaign_journal.py src\tests\rpg\autoplay\test_report_sections.py -q
-
-Run API sanity if added:
-
-python -m pytest src\tests\api\sanity\test_rpg_session_sanity.py -q
+python -m pytest src\tests\rpg\test_quest_progress.py src\tests\rpg\autoplay\test_report_sections.py src\tests\rpg\autoplay\test_quality_gates.py -q
