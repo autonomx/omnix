@@ -1170,11 +1170,13 @@ def _render_console_log_summary(summary: Dict[str, Any]) -> str:
     turn_errors = summary.get("turn_errors") if isinstance(summary.get("turn_errors"), list) else []
     errors = summary.get("errors") if isinstance(summary.get("errors"), list) else []
     warnings = summary.get("warnings") if isinstance(summary.get("warnings"), list) else []
+    ignored = summary.get("ignored_error_key_lines") if isinstance(summary.get("ignored_error_key_lines"), list) else []
     tail = summary.get("tail") if isinstance(summary.get("tail"), list) else []
 
     turn_error_html = "".join(f"<li>{_esc(str(line))}</li>" for line in turn_errors[:20])
     error_html = "".join(f"<li>{_esc(str(line))}</li>" for line in errors[:20])
     warning_html = "".join(f"<li>{_esc(str(line))}</li>" for line in warnings[:20])
+    ignored_text = "\n".join(str(line) for line in ignored[:40])
     tail_text = "\n".join(str(line) for line in tail[-80:])
     return f"""
     <section id="console-log">
@@ -1184,7 +1186,8 @@ def _render_console_log_summary(summary: Dict[str, Any]) -> str:
         Lines: {_esc(str(summary.get("line_count") or 0))} ·
         Errors: {_esc(str(summary.get("error_count") or 0))} ·
         Turn errors: {_esc(str(summary.get("turn_error_count") or 0))} ·
-        Warnings: {_esc(str(summary.get("warning_count") or 0))}
+        Warnings: {_esc(str(summary.get("warning_count") or 0))} ·
+        Ignored key/debug error fields: {_esc(str(summary.get("ignored_error_key_line_count") or 0))}
       </p>
       <h3>Turn Errors</h3>
       <ul>{turn_error_html or "<li>None.</li>"}</ul>
@@ -1192,6 +1195,10 @@ def _render_console_log_summary(summary: Dict[str, Any]) -> str:
       <ul>{error_html or "<li>None.</li>"}</ul>
       <h3>Warnings</h3>
       <ul>{warning_html or "<li>None.</li>"}</ul>
+      <details>
+        <summary>Ignored debug/key lines containing "error"</summary>
+        <pre>{_esc(ignored_text or "None.")}</pre>
+      </details>
       <details>
         <summary>Console tail</summary>
         <pre>{_esc(tail_text)}</pre>
