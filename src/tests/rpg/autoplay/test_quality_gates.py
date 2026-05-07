@@ -801,3 +801,41 @@ def test_quality_gate_combined_background_uses_timing_tracker_for_pre_turn_drain
     )
 
     assert result["gates"]["combined_background_mode_when_requested"] is True
+
+
+def test_performance_budget_background_counts_can_match_reconciled_background_jobs():
+    from tests.rpg.autoplay_llm_campaign import (
+        _reconcile_performance_budget_background_llm_counts,
+    )
+
+    background_jobs = {
+        "source": "background_result_timing_summary",
+        "combined_background_llm_jobs": 20,
+        "total_jobs": 20,
+        "jobs_submitted": 20,
+        "jobs_attached_total": 20,
+        "jobs_attached_pre_turn": 12,
+        "jobs_attached_final": 8,
+        "failed_jobs": 3,
+    }
+    performance = _reconcile_performance_budget_background_llm_counts(
+        performance_budget_summary={
+            "background_llm": {
+                "combined_background_llm_jobs": 6,
+                "total_jobs": 8,
+            }
+        },
+        background_jobs=background_jobs,
+        background_result_timing_summary={
+            "jobs_submitted": 20,
+            "jobs_attached_total": 20,
+            "jobs_attached_pre_turn": 12,
+            "jobs_attached_final": 8,
+        },
+    )
+
+    assert (
+        performance["background_llm"]["combined_background_llm_jobs"]
+        == background_jobs["combined_background_llm_jobs"]
+    )
+    assert performance["background_llm"]["total_jobs"] == background_jobs["total_jobs"]

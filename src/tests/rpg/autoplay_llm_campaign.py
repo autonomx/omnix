@@ -39,6 +39,7 @@ from tests.rpg.autoplay.report_sections import (
     summarize_story_beats_for_report,
 )
 from tests.rpg.autoplay.hundred_turn_eval import (
+    recent_semantic_target_streak,
     summarize_action_diversity,
     summarize_hundred_turn_eval,
     summarize_long_run_warnings,
@@ -219,6 +220,161 @@ class _ProbeTimer:
             )
             return
         _probe_log(self.enabled, f"{self.event}.end", elapsed_ms=elapsed_ms, **self.fields)
+
+
+def _build_player_agent_anti_loop_context(
+    *,
+    transcript: List[Dict[str, Any]],
+    threshold: int,
+    window: int,
+) -> Dict[str, Any]:
+    streak = recent_semantic_target_streak(
+        transcript,
+        window=max(int(window or 8), int(threshold or 3) + 2),
+    )
+    pair = _safe_str(streak.get("pair"))
+    semantic_action = _safe_str(streak.get("semantic_action"))
+    target = _safe_str(streak.get("target"))
+    count = int(streak.get("streak") or 0)
+    active = bool(pair and count >= int(threshold or 3))
+
+    alternatives: List[str] = []
+    if active:
+        if target and target.lower() not in ("", "unknown"):
+            alternatives.extend(
+                [
+                    f"Do not repeat another {semantic_action or 'similar'} action targeting {target}.",
+                    f"Ask {target} a specific new question that changes the situation, not another observe/listen/wait action.",
+                    "Choose a different target in the location, such as another patron, the room, the notice board, the door, or the street outside.",
+                    "Use a concrete service/action: buy, pay, travel, inspect a physical clue, accept/refuse a lead, or move to a new location.",
+                ]
+            )
+        else:
+            alternatives.extend(
+                [
+                    f"Do not repeat another {semantic_action or 'same'} action with the same target.",
+                    "Choose a concrete action that changes target, location, objective, or service state.",
+                ]
+            )
+
+    return {
+        "active": active,
+        "pair": pair,
+        "semantic_action": semantic_action,
+        "target": target,
+        "streak": count,
+        "threshold": int(threshold or 3),
+        "alternatives": alternatives,
+    }
+
+
+def _format_player_agent_anti_loop_prompt(context: Dict[str, Any]) -> str:
+    context = _safe_dict(context)
+    if not context.get("active"):
+        return ""
+    alternatives = [
+        f"- {text}" for text in _safe_list(context.get("alternatives")) if _safe_str(text)
+    ]
+    return (
+        "\n\nANTI-LOOP REQUIREMENT:\n"
+        f"The recent action pattern is repeating `{_safe_str(context.get('pair'))}` "
+        f"for {_safe_str(context.get('streak'))} turns.\n"
+        "Your next action must break this semantic loop.\n"
+        "Do not use another vague observe/listen/watch/wait action against the same target.\n"
+        "Pick a concrete action that changes the target, objective, location, or service state.\n"
+        + "\n".join(alternatives[:6])
+        + "\n"
+    )
+
+
+def _rough_semantic_pair_for_player_action(action: str, *, default_target: str = "unknown") -> Dict[str, str]:
+    """Cheap deterministic classifier for anti-loop repair.
+
+    This does not replace the authoritative semantic extractor. It only catches
+    obvious soft-loop player-agent outputs before submitting the action.
+    """
+    text = _safe_str(action).strip()
+    lower = text.lower()
+    target = default_target or "unknown"
+    for name in ("bran", "silas", "patron", "innkeeper", "bartender", "guard", "merchant"):
+        if name in lower:
+            target = "Bran" if name in ("bran", "innkeeper", "bartender") else name.title()
+            break
+
+    observe_terms = (
+        "listen",
+        "watch",
+        "observe",
+        "wait",
+        "nod",
+        "scan",
+        "look around",
+        "maintaining eye contact",
+        "eye contact",
+    )
+    ask_terms = ("ask", "question", "press", "inquire", "say", "tell me")
+    travel_terms = ("leave", "go to", "travel", "head outside", "step outside", "move to")
+    service_terms = ("buy", "pay", "rent", "room", "drink", "meal", "order")
+    inspect_terms = ("inspect", "examine", "search", "check")
+
+    if any(term in lower for term in travel_terms):
+        semantic = "travel"
+    elif any(term in lower for term in service_terms):
+        semantic = "service"
+    elif any(term in lower for term in inspect_terms):
+        semantic = "inspect"
+    elif any(term in lower for term in ask_terms):
+        semantic = "ask"
+    elif any(term in lower for term in observe_terms):
+        semantic = "observe"
+    else:
+        semantic = "unknown"
+
+    return {
+        "semantic_action": semantic,
+        "target": target,
+        "pair": f"{semantic}:{target}",
+    }
+
+
+def _action_violates_anti_loop(action: str, anti_loop_context: Dict[str, Any]) -> bool:
+    context = _safe_dict(anti_loop_context)
+    if not context.get("active"):
+        return False
+    forbidden_semantic = _safe_str(context.get("semantic_action")).lower()
+    forbidden_target = _safe_str(context.get("target")).lower()
+    proposed = _rough_semantic_pair_for_player_action(
+        action,
+        default_target=_safe_str(context.get("target")) or "unknown",
+    )
+    proposed_semantic = _safe_str(proposed.get("semantic_action")).lower()
+    proposed_target = _safe_str(proposed.get("target")).lower()
+
+    if not forbidden_semantic or not forbidden_target:
+        return False
+    if proposed_semantic == forbidden_semantic and proposed_target == forbidden_target:
+        return True
+    # Catch vague observe/listen/wait text against the same target even if the
+    # proposed classifier lands on unknown.
+    if forbidden_semantic == "observe" and proposed_target == forbidden_target:
+        lower = _safe_str(action).lower()
+        if any(term in lower for term in ("listen", "watch", "observe", "wait", "nod", "eye contact")):
+            return True
+    return False
+
+
+def _deterministic_anti_loop_fallback_action(anti_loop_context: Dict[str, Any]) -> str:
+    context = _safe_dict(anti_loop_context)
+    target = _safe_str(context.get("target")) or "Bran"
+    if target.lower() == "bran":
+        return (
+            "Turn away from Bran for the moment and speak to a nearby patron, asking what they have heard "
+            "about Silas or trouble on the road."
+        )
+    return (
+        "Change focus to a different part of the scene: inspect the room, look for a notice board, "
+        "or ask a different nearby NPC about the current lead."
+    )
 
 
 def _force_exit_if_background_threads_remain(
@@ -1833,6 +1989,78 @@ def _summarize_reconciled_background_jobs(
     return summary
 
 
+def _reconcile_performance_budget_background_llm_counts(
+    *,
+    performance_budget_summary: Dict[str, Any],
+    background_jobs: Dict[str, Any],
+    background_result_timing_summary: Dict[str, Any],
+) -> Dict[str, Any]:
+    """Make performance_budget_summary.background_llm use reconciled job counts.
+
+    The background performance section originally counted only the final drain
+    result list. Once pre-turn drain consumes completed jobs during the playable
+    loop, those final-drain-only counts are no longer the correct denominator.
+    Keep any existing timing fields, but source count fields from the reconciled
+    background_jobs/timing tracker.
+    """
+    summary = deepcopy(_safe_dict(performance_budget_summary))
+    background_llm = deepcopy(_safe_dict(summary.get("background_llm")))
+    jobs = _safe_dict(background_jobs)
+    timing = _safe_dict(background_result_timing_summary)
+
+    jobs_submitted = int(
+        jobs.get("jobs_submitted")
+        or jobs.get("combined_background_llm_jobs")
+        or timing.get("jobs_submitted")
+        or 0
+    )
+    jobs_attached_total = int(
+        jobs.get("jobs_attached_total")
+        or timing.get("jobs_attached_total")
+        or 0
+    )
+    jobs_attached_pre_turn = int(
+        jobs.get("jobs_attached_pre_turn")
+        or timing.get("jobs_attached_pre_turn")
+        or 0
+    )
+    jobs_attached_final = int(
+        jobs.get("jobs_attached_final")
+        or timing.get("jobs_attached_final")
+        or 0
+    )
+    failed_jobs = int(jobs.get("failed_jobs") or background_llm.get("failed_jobs") or 0)
+    timeout_job_count = int(jobs.get("timeout_job_count") or background_llm.get("timeout_job_count") or 0)
+    missing_job_count = int(jobs.get("missing_job_count") or timing.get("missing_job_count") or 0)
+
+    if jobs_submitted > 0:
+        background_llm.update(
+            {
+                "source": "reconciled_background_jobs",
+                "legacy_final_drain_result_count": int(
+                    jobs.get("legacy_final_drain_result_count")
+                    or background_llm.get("legacy_final_drain_result_count")
+                    or background_llm.get("total_jobs")
+                    or 0
+                ),
+                "combined_background_llm_jobs": jobs_submitted,
+                "total_jobs": jobs_submitted,
+                "jobs_submitted": jobs_submitted,
+                "jobs_attached_total": jobs_attached_total,
+                "jobs_attached_pre_turn": jobs_attached_pre_turn,
+                "jobs_attached_final": jobs_attached_final,
+                "pre_turn_drain_accounted": jobs_attached_pre_turn > 0,
+                "failed_jobs": failed_jobs,
+                "timeout_job_count": timeout_job_count,
+                "missing_job_count": missing_job_count,
+                "ok_jobs": max(0, jobs_attached_total - failed_jobs),
+            }
+        )
+
+    summary["background_llm"] = background_llm
+    return summary
+
+
 def _future_done(handle: Any) -> bool:
     done = getattr(handle, "done", None)
     if callable(done):
@@ -2299,6 +2527,7 @@ def _select_compact_llm_player_action(
     cache_enabled: bool,
     turn_index: int,
     debug_autoplay_stage_timing: bool,
+    anti_loop_context: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     context_packet = build_player_agent_context_packet(
         session=session,
@@ -2311,6 +2540,11 @@ def _select_compact_llm_player_action(
         context_packet=context_packet,
         max_context_chars=max_context_chars,
     )
+    # Append anti-loop prompt to the last message (typically the user instruction)
+    if messages and anti_loop_context:
+        anti_loop_text = _format_player_agent_anti_loop_prompt(_safe_dict(anti_loop_context))
+        if anti_loop_text.strip():
+            messages[-1]["content"] = _safe_str(messages[-1].get("content", "")) + anti_loop_text
     key = player_agent_cache_key(context_packet=context_packet, strategy=strategy)
 
     cached = cache.get(key) if cache_enabled else None
@@ -2670,6 +2904,20 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
             diversity_metrics=current_diversity_metrics,
             recent_transcript=transcript,
         )
+        anti_loop_context = _build_player_agent_anti_loop_context(
+            transcript=transcript,
+            threshold=int(getattr(args, "player_agent_anti_loop_streak_threshold", 3) or 3),
+            window=int(getattr(args, "action_diversity_window", 12) or 12),
+        )
+        _probe_log(
+            bool(getattr(args, "debug_autoplay_stage_timing", False)),
+            "player_agent_anti_loop_context",
+            turn_index=turn_index,
+            active=anti_loop_context.get("active"),
+            pair=anti_loop_context.get("pair"),
+            streak=anti_loop_context.get("streak"),
+            threshold=anti_loop_context.get("threshold"),
+        )
         with _ProbeTimer(
             bool(getattr(args, "debug_autoplay_stage_timing", False)),
             "player_agent_select_action",
@@ -2692,6 +2940,7 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
                         cache_enabled=args.player_agent_cache == "on",
                         turn_index=turn_index,
                         debug_autoplay_stage_timing=bool(getattr(args, "debug_autoplay_stage_timing", False)),
+                        anti_loop_context=anti_loop_context,
                     )
                 else:
                     selected = _select_player_action(
@@ -2715,6 +2964,21 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
             turn_index=turn_index,
             action_preview=_safe_str(player_action)[:220],
         )
+
+        if (
+            bool(getattr(args, "player_agent_anti_loop_repair", True))
+            and _action_violates_anti_loop(_safe_str(player_action), anti_loop_context)
+        ):
+            repaired_action = _deterministic_anti_loop_fallback_action(anti_loop_context)
+            _probe_log(
+                bool(getattr(args, "debug_autoplay_stage_timing", False)),
+                "player_agent_anti_loop_repair.applied",
+                turn_index=turn_index,
+                forbidden_pair=anti_loop_context.get("pair"),
+                original_action=_safe_str(player_action)[:220],
+                repaired_action=repaired_action[:220],
+            )
+            player_action = repaired_action
 
         if isinstance(selected, dict):
                 player_agent_prompt_rows.append(
@@ -3061,6 +3325,7 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
             "action_diversity_before_turn": current_diversity_metrics,
             "progress_quality_before_turn": current_progress_quality_metrics,
             "player_action": player_action,
+            "player_agent_anti_loop_context": anti_loop_context,
             "turn_result": turn_result if args.artifact_detail == "full" else {
                 "ok": turn_result.get("ok"),
                 "warning": turn_result.get("warning"),
@@ -3579,6 +3844,11 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
         background_result_timing_summary=_safe_dict(summary.get("background_result_timing_summary")),
         transcript=transcript,
     )
+    summary["performance_budget_summary"] = _reconcile_performance_budget_background_llm_counts(
+        performance_budget_summary=_safe_dict(summary.get("performance_budget_summary")),
+        background_jobs=_safe_dict(summary.get("background_jobs")),
+        background_result_timing_summary=_safe_dict(summary.get("background_result_timing_summary")),
+    )
     metrics["story_beat_summary"] = summary["story_beat_summary"]
     metrics["manual_turn_error_summary"] = summary["manual_turn_error_summary"]
     metrics["console_log_summary"] = summary["console_log_summary"]
@@ -3590,6 +3860,7 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
     metrics["background_executor_shutdown_summary"] = summary["background_executor_shutdown_summary"]
     metrics["background_drain_events"] = summary["background_drain_events"]
     metrics["background_jobs"] = summary["background_jobs"]
+    metrics["performance_budget_summary"] = summary["performance_budget_summary"]
     if int(summary["quest_progress_summary"].get("quest_count") or 0) == 0:
         story_arc_view = _safe_dict(summary.get("story_arc_view") or metrics.get("story_arc_view"))
         if story_arc_view:
@@ -3848,6 +4119,27 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--fail-on-dialogue-coverage-gap", action="store_true")
     parser.add_argument("--action-diversity-window", type=int, default=12)
     parser.add_argument("--min-action-diversity-rate", type=float, default=0.0)
+    parser.add_argument(
+        "--player-agent-anti-loop-streak-threshold",
+        type=int,
+        default=3,
+        help=(
+            "When the trailing semantic_action:target streak reaches this value, "
+            "inject anti-loop pressure into the player-agent prompt."
+        ),
+    )
+    parser.add_argument(
+        "--player-agent-anti-loop-repair",
+        action="store_true",
+        default=True,
+        help="Repair the player-agent action once if it repeats the forbidden semantic target pair.",
+    )
+    parser.add_argument(
+        "--no-player-agent-anti-loop-repair",
+        action="store_false",
+        dest="player_agent_anti_loop_repair",
+        help="Disable one-shot anti-loop action repair.",
+    )
     parser.add_argument("--min-category-diversity-rate", type=float, default=0.0)
     parser.add_argument("--latency-profile", choices=["evaluation", "playable"], default="evaluation")
     parser.add_argument("--narration-mode", choices=["blocking", "deferred"], default="blocking")

@@ -1,543 +1,600 @@
 Below is the literal patch spec for:
 
-N81.2.6.2 — Incremental Pre-Turn Advisory Promotion State Compaction
-
-This fixes the remaining stall where bounded pre-turn promotion still becomes slow around turn 15/16. The last run proves the slow stage is still pre_turn_deferred_advisory_promotion, not LM Studio/player-agent/runtime/final drain. Early turns improved to 6ms / 14ms, but later promotion still grows to tens of seconds/minutes because the bounded window seeds from a huge carried runtime state.
-
+N81.2.7 — Player-Agent Anti-Loop Action Diversity Pressure
 Goal
-Pre-turn promotion should only process newly attached rows/candidates.
 
-It must not:
-  reprocess already-promoted rows
-  deepcopy full historical deferred_advisory state
-  carry unbounded accepted/rejected/pending/candidate lists
-  persist NPC profile files during pre-turn
+Fix warning:
 
-Final report promotion remains full and persistent.
-1. Patch src/tests/rpg/autoplay/advisory_promotion_runtime.py
-1A. Add compact list helpers
+repeated_semantic_target_streak: observe:Bran, streak 5
 
-Add near the existing helper functions:
+Current problem:
 
---- src/tests/rpg/autoplay/advisory_promotion_runtime.py
-+++ src/tests/rpg/autoplay/advisory_promotion_runtime.py
+The player-agent produces textually varied actions that semantically collapse to the same pair:
+  observe:Bran
+  observe:Bran
+  observe:Bran
+
+Correct behavior:
+
+Before asking the LLM for the next player action:
+  detect recent semantic_action:target streaks
+  add anti-loop pressure to the player-agent prompt
+  provide concrete alternative action families
+
+After the LLM responds:
+  if it repeats the forbidden pair, repair once
+  if repair still repeats, use deterministic fallback
+1. Patch src/tests/rpg/autoplay/hundred_turn_eval.py
+1A. Add reusable recent-streak helper
+
+Find existing semantic extraction helpers in this file, near functions like:
+
+extract_semantic_action_from_turn
+summarize_action_diversity
+
+Add:
+
+--- src/tests/rpg/autoplay/hundred_turn_eval.py
++++ src/tests/rpg/autoplay/hundred_turn_eval.py
 @@
- def _safe_list(value: Any) -> List[Any]:
-     return value if isinstance(value, list) else []
+ def _safe_str(value: Any) -> str:
+     return value if isinstance(value, str) else ""
 +
 +
-+def _bounded_list_tail(value: Any, limit: int) -> List[Any]:
-+    items = list(value) if isinstance(value, list) else []
-+    if int(limit or 0) <= 0:
-+        return items
-+    return items[-int(limit or 0):]
-+
-+
-+def _compact_deferred_advisory_state(
-+    runtime_state: Dict[str, Any],
++def recent_semantic_target_streak(
++    transcript: List[Dict[str, Any]],
 +    *,
-+    candidate_limit: int = 50,
-+    pending_limit: int = 50,
-+    accepted_limit: int = 100,
-+    rejected_limit: int = 100,
++    window: int = 8,
 +) -> Dict[str, Any]:
-+    """Return a small carry-state safe for pre-turn incremental promotion.
++    """Return the current trailing semantic_action:target streak.
 +
-+    The full runtime mirror can become very large because every promotion pass
-+    carries candidates, accepted/rejected history, evolution projections, and
-+    profile summaries forward. Pre-turn promotion only needs recent deterministic
-+    context, not the full report history.
++    This is intentionally small and deterministic so the player-agent prompt can
++    apply pressure before the run reaches long-run warning thresholds.
 +    """
-+    runtime_state = deepcopy(runtime_state) if isinstance(runtime_state, dict) else {}
-+    advisory = runtime_state.get("deferred_advisory")
-+    if not isinstance(advisory, dict):
-+        return runtime_state
++    rows = [row for row in transcript if isinstance(row, dict)]
++    if int(window or 0) > 0:
++        rows = rows[-int(window or 0):]
++    pairs: List[str] = []
++    for row in rows:
++        semantic = _safe_str(
++            row.get("semantic_action")
++            or row.get("semantic_action_type")
++            or _safe_dict(row.get("semantic_action_v2")).get("action")
++            or _safe_dict(row.get("semantic_action_v2")).get("semantic_action")
++        ).strip().lower()
++        target = _safe_str(
++            row.get("semantic_target")
++            or row.get("target")
++            or _safe_dict(row.get("semantic_action_v2")).get("target")
++            or _safe_dict(row.get("semantic_action_v2")).get("object")
++        ).strip()
++        if not semantic:
++            semantic = "unknown"
++        if not target:
++            target = "unknown"
++        pairs.append(f"{semantic}:{target}")
 +
-+    advisory["candidates"] = _bounded_list_tail(
-+        advisory.get("candidates"),
-+        int(candidate_limit or 50),
-+    )
-+    advisory["pending"] = _bounded_list_tail(
-+        advisory.get("pending"),
-+        int(pending_limit or 50),
-+    )
-+    advisory["accepted"] = _bounded_list_tail(
-+        advisory.get("accepted"),
-+        int(accepted_limit or 100),
-+    )
-+    advisory["rejected"] = _bounded_list_tail(
-+        advisory.get("rejected"),
-+        int(rejected_limit or 100),
-+    )
-+    runtime_state["deferred_advisory"] = advisory
-+    return runtime_state
++    if not pairs:
++        return {
++            "ok": True,
++            "pair": "",
++            "semantic_action": "",
++            "target": "",
++            "streak": 0,
++            "pairs": [],
++        }
 +
++    current = pairs[-1]
++    streak = 0
++    for pair in reversed(pairs):
++        if pair != current:
++            break
++        streak += 1
 +
-+def _row_has_unpromoted_pre_turn_background_result(row: Dict[str, Any]) -> bool:
-+    row = row if isinstance(row, dict) else {}
-+    if bool(row.get("pre_turn_advisory_promoted")):
-+        return False
-+    attach = row.get("combined_background_llm_attach")
-+    if isinstance(attach, dict) and str(attach.get("phase") or "") == "pre_turn":
-+        return bool(row.get("combined_background_llm_result"))
-+    # Defensive fallback for older rows where attach metadata was not stored.
-+    return bool(row.get("combined_background_llm_result")) and not bool(
-+        row.get("pre_turn_advisory_promoted")
-+    )
-1B. Extend function signature
++    semantic, _, target = current.partition(":")
++    return {
++        "ok": True,
++        "pair": current,
++        "semantic_action": semantic,
++        "target": target,
++        "streak": streak,
++        "pairs": pairs,
++    }
 
-Find:
+If _safe_dict is not available in this file, add:
 
-def run_deferred_advisory_promotions_for_transcript(
-    *,
-    transcript: List[Dict[str, Any]],
-    max_promotions_per_turn: int = 5,
-    max_rows: int = 0,
-    persist_profiles: bool = True,
-) -> Dict[str, Any]:
-
-Replace with:
-
---- src/tests/rpg/autoplay/advisory_promotion_runtime.py
-+++ src/tests/rpg/autoplay/advisory_promotion_runtime.py
 @@
- def run_deferred_advisory_promotions_for_transcript(
-     *,
-     transcript: List[Dict[str, Any]],
-     max_promotions_per_turn: int = 5,
-     max_rows: int = 0,
-     persist_profiles: bool = True,
-+    incremental_pre_turn: bool = False,
-+    mark_pre_turn_promoted: bool = False,
-+    current_turn: int = 0,
-+    carry_candidate_limit: int = 50,
-+    carry_pending_limit: int = 50,
-+    carry_accepted_limit: int = 100,
-+    carry_rejected_limit: int = 100,
- ) -> Dict[str, Any]:
-1C. Replace row-window selection
-
-Find the bounded window block added in N81.2.6.1:
-
-    all_rows = [row for row in transcript if isinstance(row, dict)]
-    source_transcript_turns = len(all_rows)
-    window_start_index = 0
-    rows = all_rows
-    if int(max_rows or 0) > 0 and len(all_rows) > int(max_rows or 0):
-        window_start_index = len(all_rows) - int(max_rows or 0)
-        rows = all_rows[window_start_index:]
-
-    # Carry advisory runtime state forward across rows so turn N candidates can
-    # be promoted on turn N+1.
-    #
-    # For bounded pre-turn promotion, seed carry from the row immediately before
-    # the window. Previous full or prior bounded promotions already wrote the
-    # carried runtime mirror there. This avoids reprocessing every old row.
-    carried_runtime_state: Dict[str, Any] = {}
-    if window_start_index > 0:
-        carried_runtime_state = deepcopy(_runtime_state_from_row(all_rows[window_start_index - 1]))
-
-    for row in rows:
-
-Replace with:
-
---- src/tests/rpg/autoplay/advisory_promotion_runtime.py
-+++ src/tests/rpg/autoplay/advisory_promotion_runtime.py
-@@
-     all_rows = [row for row in transcript if isinstance(row, dict)]
-     source_transcript_turns = len(all_rows)
-     window_start_index = 0
--    rows = all_rows
--    if int(max_rows or 0) > 0 and len(all_rows) > int(max_rows or 0):
--        window_start_index = len(all_rows) - int(max_rows or 0)
--        rows = all_rows[window_start_index:]
-+    rows = all_rows
+ def _safe_str(value: Any) -> str:
+     return value if isinstance(value, str) else ""
 +
-+    if incremental_pre_turn:
-+        # Only process rows that received a pre-turn background result and have
-+        # not already had deterministic pre-turn advisory promotion applied.
-+        candidate_rows = [
-+            row for row in all_rows
-+            if _row_has_unpromoted_pre_turn_background_result(row)
-+        ]
-+        if int(max_rows or 0) > 0:
-+            candidate_rows = candidate_rows[-int(max_rows or 0):]
-+        rows = candidate_rows
-+        if rows:
-+            first_row = rows[0]
-+            try:
-+                window_start_index = all_rows.index(first_row)
-+            except ValueError:
-+                window_start_index = 0
-+    elif int(max_rows or 0) > 0 and len(all_rows) > int(max_rows or 0):
-+        window_start_index = len(all_rows) - int(max_rows or 0)
-+        rows = all_rows[window_start_index:]
- 
-     # Carry advisory runtime state forward across rows so turn N candidates can
-     # be promoted on turn N+1.
-     #
--    # For bounded pre-turn promotion, seed carry from the row immediately before
--    # the window. Previous full or prior bounded promotions already wrote the
--    # carried runtime mirror there. This avoids reprocessing every old row.
-+    # For incremental pre-turn promotion, seed only a compact carry-state from
-+    # the row immediately before the window. Do not copy the full historical
-+    # advisory backlog into pre-turn work.
-     carried_runtime_state: Dict[str, Any] = {}
-     if window_start_index > 0:
--        carried_runtime_state = deepcopy(_runtime_state_from_row(all_rows[window_start_index - 1]))
-+        previous_runtime_state = _runtime_state_from_row(all_rows[window_start_index - 1])
-+        if incremental_pre_turn:
-+            carried_runtime_state = _compact_deferred_advisory_state(
-+                previous_runtime_state,
-+                candidate_limit=int(carry_candidate_limit or 50),
-+                pending_limit=int(carry_pending_limit or 50),
-+                accepted_limit=int(carry_accepted_limit or 100),
-+                rejected_limit=int(carry_rejected_limit or 100),
-+            )
-+        else:
-+            carried_runtime_state = deepcopy(previous_runtime_state)
- 
-     for row in rows:
-1D. Mark processed rows after each row
-
-Inside the for row in rows: loop, near the end after row["npc_evolution_profile_persist_result"] = profile_persist_result, add:
-
---- src/tests/rpg/autoplay/advisory_promotion_runtime.py
-+++ src/tests/rpg/autoplay/advisory_promotion_runtime.py
-@@
-         row["npc_evolution_profile_persist_result"] = profile_persist_result
-         latest_profile_persist_result = profile_persist_result
 +
-+        if incremental_pre_turn and mark_pre_turn_promoted:
-+            row["pre_turn_advisory_promoted"] = True
-+            row["pre_turn_advisory_promoted_at_turn"] = int(current_turn or 0)
-+            row["pre_turn_advisory_promotion_summary"] = {
-+                "ok": True,
-+                "current_turn": int(current_turn or 0),
-+                "incremental_pre_turn": True,
-+                "persist_profiles": bool(persist_profiles),
-+                "max_rows": int(max_rows or 0),
-+            }
-1E. Add metadata to return summary
-
-Find:
-
-        "max_rows": int(max_rows or 0),
-        "persist_profiles": bool(persist_profiles),
-
-Replace with:
-
---- src/tests/rpg/autoplay/advisory_promotion_runtime.py
-+++ src/tests/rpg/autoplay/advisory_promotion_runtime.py
-@@
-         "max_rows": int(max_rows or 0),
-         "persist_profiles": bool(persist_profiles),
-+        "incremental_pre_turn": bool(incremental_pre_turn),
-+        "mark_pre_turn_promoted": bool(mark_pre_turn_promoted),
-+        "current_turn": int(current_turn or 0),
-+        "carry_candidate_limit": int(carry_candidate_limit or 0),
-+        "carry_pending_limit": int(carry_pending_limit or 0),
-+        "carry_accepted_limit": int(carry_accepted_limit or 0),
-+        "carry_rejected_limit": int(carry_rejected_limit or 0),
-         "accepted": accepted,
++def _safe_dict(value: Any) -> Dict[str, Any]:
++    return value if isinstance(value, dict) else {}
 2. Patch src/tests/rpg/autoplay_llm_campaign.py
-2A. Add carry-limit CLI knobs
+2A. Import the helper
 
-After:
+Find imports from hundred_turn_eval.py, likely near:
 
-parser.add_argument(
-    "--pre-turn-advisory-promotion-max-rows",
+from tests.rpg.autoplay.hundred_turn_eval import (
+    summarize_action_diversity,
+    summarize_hundred_turn_eval,
+    summarize_progress_timeline,
+)
 
-add:
+Add recent_semantic_target_streak:
+
+--- src/tests/rpg/autoplay_llm_campaign.py
++++ src/tests/rpg/autoplay_llm_campaign.py
+@@
+ from tests.rpg.autoplay.hundred_turn_eval import (
++    recent_semantic_target_streak,
+     summarize_action_diversity,
+     summarize_hundred_turn_eval,
+     summarize_progress_timeline,
+ )
+
+Adjust exact import block shape if your file differs.
+
+2B. Add CLI knobs
+
+In build_arg_parser(), near player-agent/action diversity args, add:
 
 --- src/tests/rpg/autoplay_llm_campaign.py
 +++ src/tests/rpg/autoplay_llm_campaign.py
 @@
      parser.add_argument(
-         "--pre-turn-advisory-promotion-max-rows",
+         "--action-diversity-window",
          type=int,
-         default=6,
-         help=(
-             "Maximum recent transcript rows to process during pre-turn deferred "
-             "advisory promotion. Final report promotion still processes the full transcript."
-         ),
+         default=12,
+         help="Recent-turn window for action diversity warnings.",
      )
 +    parser.add_argument(
-+        "--pre-turn-advisory-carry-candidate-limit",
++        "--player-agent-anti-loop-streak-threshold",
 +        type=int,
-+        default=30,
-+        help="Maximum deferred advisory candidates carried into incremental pre-turn promotion.",
++        default=3,
++        help=(
++            "When the trailing semantic_action:target streak reaches this value, "
++            "inject anti-loop pressure into the player-agent prompt."
++        ),
 +    )
 +    parser.add_argument(
-+        "--pre-turn-advisory-carry-pending-limit",
-+        type=int,
-+        default=30,
-+        help="Maximum deferred advisory pending items carried into incremental pre-turn promotion.",
++        "--player-agent-anti-loop-repair",
++        action="store_true",
++        default=True,
++        help="Repair the player-agent action once if it repeats the forbidden semantic target pair.",
 +    )
 +    parser.add_argument(
-+        "--pre-turn-advisory-carry-accepted-limit",
-+        type=int,
-+        default=60,
-+        help="Maximum accepted advisory history items carried into incremental pre-turn promotion.",
++        "--no-player-agent-anti-loop-repair",
++        action="store_false",
++        dest="player_agent_anti_loop_repair",
++        help="Disable one-shot anti-loop action repair.",
 +    )
-+    parser.add_argument(
-+        "--pre-turn-advisory-carry-rejected-limit",
-+        type=int,
-+        default=60,
-+        help="Maximum rejected advisory history items carried into incremental pre-turn promotion.",
-+    )
-2B. Change pre-turn promotion call to incremental mode
+2C. Add anti-loop context helper
 
-Find the block from N81.2.6.1:
-
-pre_turn_promotion_result = run_deferred_advisory_promotions_for_transcript(
-    transcript=transcript,
-    max_promotions_per_turn=int(args.max_advisory_promotions_per_turn),
-    max_rows=int(getattr(args, "pre_turn_advisory_promotion_max_rows", 6) or 6),
-    persist_profiles=False,
-)
-
-Replace with:
+Add near other player-agent helpers:
 
 --- src/tests/rpg/autoplay_llm_campaign.py
 +++ src/tests/rpg/autoplay_llm_campaign.py
 @@
-                     pre_turn_promotion_result = run_deferred_advisory_promotions_for_transcript(
-                         transcript=transcript,
-                         max_promotions_per_turn=int(args.max_advisory_promotions_per_turn),
-                         max_rows=int(getattr(args, "pre_turn_advisory_promotion_max_rows", 6) or 6),
-                         persist_profiles=False,
-+                        incremental_pre_turn=True,
-+                        mark_pre_turn_promoted=True,
-+                        current_turn=turn_index,
-+                        carry_candidate_limit=int(
-+                            getattr(args, "pre_turn_advisory_carry_candidate_limit", 30) or 30
-+                        ),
-+                        carry_pending_limit=int(
-+                            getattr(args, "pre_turn_advisory_carry_pending_limit", 30) or 30
-+                        ),
-+                        carry_accepted_limit=int(
-+                            getattr(args, "pre_turn_advisory_carry_accepted_limit", 60) or 60
-+                        ),
-+                        carry_rejected_limit=int(
-+                            getattr(args, "pre_turn_advisory_carry_rejected_limit", 60) or 60
-+                        ),
-                     )
-2C. Expand pre-turn promotion result probe
+ def _probe_log(enabled: bool, event: str, **fields: Any) -> None:
+@@
+     print(" ".join(parts), flush=True)
++
++
++def _build_player_agent_anti_loop_context(
++    *,
++    transcript: List[Dict[str, Any]],
++    threshold: int,
++    window: int,
++) -> Dict[str, Any]:
++    streak = recent_semantic_target_streak(
++        transcript,
++        window=max(int(window or 8), int(threshold or 3) + 2),
++    )
++    pair = _safe_str(streak.get("pair"))
++    semantic_action = _safe_str(streak.get("semantic_action"))
++    target = _safe_str(streak.get("target"))
++    count = int(streak.get("streak") or 0)
++    active = bool(pair and count >= int(threshold or 3))
++
++    alternatives: List[str] = []
++    if active:
++        if target and target.lower() not in ("", "unknown"):
++            alternatives.extend(
++                [
++                    f"Do not repeat another {semantic_action or 'similar'} action targeting {target}.",
++                    f"Ask {target} a specific new question that changes the situation, not another observe/listen/wait action.",
++                    "Choose a different target in the location, such as another patron, the room, the notice board, the door, or the street outside.",
++                    "Use a concrete service/action: buy, pay, travel, inspect a physical clue, accept/refuse a lead, or move to a new location.",
++                ]
++            )
++        else:
++            alternatives.extend(
++                [
++                    f"Do not repeat another {semantic_action or 'same'} action with the same target.",
++                    "Choose a concrete action that changes target, location, objective, or service state.",
++                ]
++            )
++
++    return {
++        "active": active,
++        "pair": pair,
++        "semantic_action": semantic_action,
++        "target": target,
++        "streak": count,
++        "threshold": int(threshold or 3),
++        "alternatives": alternatives,
++    }
++
++
++def _format_player_agent_anti_loop_prompt(context: Dict[str, Any]) -> str:
++    context = _safe_dict(context)
++    if not context.get("active"):
++        return ""
++    alternatives = [
++        f"- {text}" for text in _safe_list(context.get("alternatives")) if _safe_str(text)
++    ]
++    return (
++        "\n\nANTI-LOOP REQUIREMENT:\n"
++        f"The recent action pattern is repeating `{_safe_str(context.get('pair'))}` "
++        f"for {_safe_str(context.get('streak'))} turns.\n"
++        "Your next action must break this semantic loop.\n"
++        "Do not use another vague observe/listen/watch/wait action against the same target.\n"
++        "Pick a concrete action that changes the target, objective, location, or service state.\n"
++        + "\n".join(alternatives[:6])
++        + "\n"
++    )
+
+If _safe_list is missing in this file, add:
+
+@@
+ def _safe_dict(value: Any) -> Dict[str, Any]:
+     return value if isinstance(value, dict) else {}
++
++
++def _safe_list(value: Any) -> List[Any]:
++    return value if isinstance(value, list) else []
+2D. Thread anti-loop context into player-agent prompt
+
+Find the compact LLM player-agent function. It likely contains:
+
+def _select_compact_llm_player_action(...):
+
+and builds a prompt string before:
+
+provider_messages = [...]
+response = provider.chat_completion(...)
+
+Change the function signature to accept anti-loop context.
+
+Example:
+
+--- src/tests/rpg/autoplay_llm_campaign.py
++++ src/tests/rpg/autoplay_llm_campaign.py
+@@
+ def _select_compact_llm_player_action(
+     *,
+     provider: Any,
+     transcript: List[Dict[str, Any]],
+     session_id: str,
+     turn_index: int,
+     args: Any,
++    anti_loop_context: Optional[Dict[str, Any]] = None,
+ ) -> str:
+
+If the function signature differs, add anti_loop_context: Optional[Dict[str, Any]] = None to the keyword args.
+
+Then, after the main prompt/context string is built, append:
+
+@@
+-    prompt = "\n".join(prompt_parts)
++    prompt = "\n".join(prompt_parts)
++    prompt += _format_player_agent_anti_loop_prompt(_safe_dict(anti_loop_context))
+
+If the code uses system_prompt instead of prompt, append to the user/developer instruction portion that directly guides the next action.
+
+Important: the anti-loop text must be in the message that the LLM sees when choosing the next action.
+
+2E. Build anti-loop context before player-agent selection
+
+In the main turn loop, before the player-agent selection block, add:
+
+--- src/tests/rpg/autoplay_llm_campaign.py
++++ src/tests/rpg/autoplay_llm_campaign.py
+@@
+         if int(getattr(args, "pre_turn_background_drain_ms", 0) or 0) >= 0:
+             ...
+ 
++        anti_loop_context = _build_player_agent_anti_loop_context(
++            transcript=transcript,
++            threshold=int(getattr(args, "player_agent_anti_loop_streak_threshold", 3) or 3),
++            window=int(getattr(args, "action_diversity_window", 12) or 12),
++        )
++        _probe_log(
++            bool(getattr(args, "debug_autoplay_stage_timing", False)),
++            "player_agent_anti_loop_context",
++            turn_index=turn_index,
++            active=anti_loop_context.get("active"),
++            pair=anti_loop_context.get("pair"),
++            streak=anti_loop_context.get("streak"),
++            threshold=anti_loop_context.get("threshold"),
++        )
++
+         with _ProbeTimer(
+             bool(getattr(args, "debug_autoplay_stage_timing", False)),
+             "player_agent_select_action",
+
+Then update the player-agent call.
 
 Find:
 
-_probe_log(
-    bool(getattr(args, "debug_autoplay_stage_timing", False)),
-    "pre_turn_deferred_advisory_promotion.result",
-    turn_index=turn_index,
-    turns=pre_turn_promotion_result.get("turns"),
-    source_transcript_turns=pre_turn_promotion_result.get("source_transcript_turns"),
-    accepted=pre_turn_promotion_result.get("accepted"),
-    rejected=pre_turn_promotion_result.get("rejected"),
-    pending=pre_turn_promotion_result.get("pending"),
-    persist_profiles=pre_turn_promotion_result.get("persist_profiles"),
+player_action = _select_compact_llm_player_action(
+    ...
 )
 
-Replace with:
+Add:
+
+@@
+         player_action = _select_compact_llm_player_action(
+             ...
++            anti_loop_context=anti_loop_context,
+         )
+
+If your player-agent selector returns a dict, pass the context into the specific compact LLM selector.
+
+3. Add post-generation anti-loop guard
+3A. Add semantic classifier for proposed action
+
+Add near player-agent helpers:
 
 --- src/tests/rpg/autoplay_llm_campaign.py
 +++ src/tests/rpg/autoplay_llm_campaign.py
 @@
-                 _probe_log(
-                     bool(getattr(args, "debug_autoplay_stage_timing", False)),
-                     "pre_turn_deferred_advisory_promotion.result",
-                     turn_index=turn_index,
-                     turns=pre_turn_promotion_result.get("turns"),
-                     source_transcript_turns=pre_turn_promotion_result.get("source_transcript_turns"),
-+                    incremental_pre_turn=pre_turn_promotion_result.get("incremental_pre_turn"),
-                     accepted=pre_turn_promotion_result.get("accepted"),
-                     rejected=pre_turn_promotion_result.get("rejected"),
-                     pending=pre_turn_promotion_result.get("pending"),
-                     persist_profiles=pre_turn_promotion_result.get("persist_profiles"),
-+                    carry_candidate_limit=pre_turn_promotion_result.get("carry_candidate_limit"),
-+                    carry_pending_limit=pre_turn_promotion_result.get("carry_pending_limit"),
-+                    carry_accepted_limit=pre_turn_promotion_result.get("carry_accepted_limit"),
-+                    carry_rejected_limit=pre_turn_promotion_result.get("carry_rejected_limit"),
-                 )
-2D. Expand drain event stored result
+ def _format_player_agent_anti_loop_prompt(context: Dict[str, Any]) -> str:
+@@
+     )
++
++
++def _rough_semantic_pair_for_player_action(action: str, *, default_target: str = "unknown") -> Dict[str, str]:
++    """Cheap deterministic classifier for anti-loop repair.
++
++    This does not replace the authoritative semantic extractor. It only catches
++    obvious soft-loop player-agent outputs before submitting the action.
++    """
++    text = _safe_str(action).strip()
++    lower = text.lower()
++    target = default_target or "unknown"
++    for name in ("bran", "silas", "patron", "innkeeper", "bartender", "guard", "merchant"):
++        if name in lower:
++            target = "Bran" if name in ("bran", "innkeeper", "bartender") else name.title()
++            break
++
++    observe_terms = (
++        "listen",
++        "watch",
++        "observe",
++        "wait",
++        "nod",
++        "scan",
++        "look around",
++        "maintaining eye contact",
++        "eye contact",
++    )
++    ask_terms = ("ask", "question", "press", "inquire", "say", "tell me")
++    travel_terms = ("leave", "go to", "travel", "head outside", "step outside", "move to")
++    service_terms = ("buy", "pay", "rent", "room", "drink", "meal", "order")
++    inspect_terms = ("inspect", "examine", "search", "check")
++
++    if any(term in lower for term in travel_terms):
++        semantic = "travel"
++    elif any(term in lower for term in service_terms):
++        semantic = "service"
++    elif any(term in lower for term in inspect_terms):
++        semantic = "inspect"
++    elif any(term in lower for term in ask_terms):
++        semantic = "ask"
++    elif any(term in lower for term in observe_terms):
++        semantic = "observe"
++    else:
++        semantic = "unknown"
++
++    return {
++        "semantic_action": semantic,
++        "target": target,
++        "pair": f"{semantic}:{target}",
++    }
++
++
++def _action_violates_anti_loop(action: str, anti_loop_context: Dict[str, Any]) -> bool:
++    context = _safe_dict(anti_loop_context)
++    if not context.get("active"):
++        return False
++    forbidden_semantic = _safe_str(context.get("semantic_action")).lower()
++    forbidden_target = _safe_str(context.get("target")).lower()
++    proposed = _rough_semantic_pair_for_player_action(
++        action,
++        default_target=_safe_str(context.get("target")) or "unknown",
++    )
++    proposed_semantic = _safe_str(proposed.get("semantic_action")).lower()
++    proposed_target = _safe_str(proposed.get("target")).lower()
++
++    if not forbidden_semantic or not forbidden_target:
++        return False
++    if proposed_semantic == forbidden_semantic and proposed_target == forbidden_target:
++        return True
++    # Catch vague observe/listen/wait text against the same target even if the
++    # proposed classifier lands on unknown.
++    if forbidden_semantic == "observe" and proposed_target == forbidden_target:
++        lower = _safe_str(action).lower()
++        if any(term in lower for term in ("listen", "watch", "observe", "wait", "nod", "eye contact")):
++            return True
++    return False
++
++
++def _deterministic_anti_loop_fallback_action(anti_loop_context: Dict[str, Any]) -> str:
++    context = _safe_dict(anti_loop_context)
++    target = _safe_str(context.get("target")) or "Bran"
++    if target.lower() == "bran":
++        return (
++            "Turn away from Bran for the moment and speak to a nearby patron, asking what they have heard "
++            "about Silas or trouble on the road."
++        )
++    return (
++        "Change focus to a different part of the scene: inspect the room, look for a notice board, "
++        "or ask a different nearby NPC about the current lead."
++    )
+3B. Repair or fallback after the LLM action
 
-Find:
+In the main turn loop, immediately after:
 
-drain_event["pre_turn_advisory_promotion_result"] = {
-    "ok": pre_turn_promotion_result.get("ok"),
-    "turns": pre_turn_promotion_result.get("turns"),
-    "source_transcript_turns": pre_turn_promotion_result.get("source_transcript_turns"),
-    "accepted": pre_turn_promotion_result.get("accepted"),
-    "rejected": pre_turn_promotion_result.get("rejected"),
-    "pending": pre_turn_promotion_result.get("pending"),
-    "persist_profiles": pre_turn_promotion_result.get("persist_profiles"),
-}
+player_action = ...
 
-Replace with:
+and after the existing probe result log, add:
 
 --- src/tests/rpg/autoplay_llm_campaign.py
 +++ src/tests/rpg/autoplay_llm_campaign.py
 @@
-                 drain_event["pre_turn_advisory_promotion_result"] = {
-                     "ok": pre_turn_promotion_result.get("ok"),
-                     "turns": pre_turn_promotion_result.get("turns"),
-                     "source_transcript_turns": pre_turn_promotion_result.get("source_transcript_turns"),
-+                    "incremental_pre_turn": pre_turn_promotion_result.get("incremental_pre_turn"),
-                     "accepted": pre_turn_promotion_result.get("accepted"),
-                     "rejected": pre_turn_promotion_result.get("rejected"),
-                     "pending": pre_turn_promotion_result.get("pending"),
-                     "persist_profiles": pre_turn_promotion_result.get("persist_profiles"),
-+                    "carry_candidate_limit": pre_turn_promotion_result.get("carry_candidate_limit"),
-+                    "carry_pending_limit": pre_turn_promotion_result.get("carry_pending_limit"),
-+                    "carry_accepted_limit": pre_turn_promotion_result.get("carry_accepted_limit"),
-+                    "carry_rejected_limit": pre_turn_promotion_result.get("carry_rejected_limit"),
-                 }
-3. Add tests
+         _probe_log(
+             bool(getattr(args, "debug_autoplay_stage_timing", False)),
+             "player_agent_select_action.result",
+             turn_index=turn_index,
+             action_preview=_safe_str(player_action)[:220],
+         )
++
++        if (
++            bool(getattr(args, "player_agent_anti_loop_repair", True))
++            and _action_violates_anti_loop(_safe_str(player_action), anti_loop_context)
++        ):
++            repaired_action = _deterministic_anti_loop_fallback_action(anti_loop_context)
++            _probe_log(
++                bool(getattr(args, "debug_autoplay_stage_timing", False)),
++                "player_agent_anti_loop_repair.applied",
++                turn_index=turn_index,
++                forbidden_pair=anti_loop_context.get("pair"),
++                original_action=_safe_str(player_action)[:220],
++                repaired_action=repaired_action[:220],
++            )
++            player_action = repaired_action
+
+This is deterministic fallback instead of another LLM call. That keeps the test fast and reliable.
+
+4. Add anti-loop info to transcript row
+
+Find where each transcript record / row is created. It likely includes:
+
+"player_input": player_action,
+"turn_index": turn_index,
+
+Add:
+
+@@
+             "player_input": player_action,
++            "player_agent_anti_loop_context": anti_loop_context,
+
+If there is a player-agent trace dict, also add:
+
+@@
+             "player_agent_trace": {
+                 ...
++                "anti_loop_context": anti_loop_context,
+             },
+
+Use the actual structure in your file.
+
+5. Add tests
+5A. Add anti-loop helper tests
 
 Patch:
 
-src/tests/rpg/autoplay/test_deferred_advisory_promotion_runtime.py
-3A. Add regression test: incremental mode skips already-promoted rows
+src/tests/rpg/autoplay/test_player_agent_anti_loop.py
 
-Append:
+Create file if missing:
 
---- src/tests/rpg/autoplay/test_deferred_advisory_promotion_runtime.py
-+++ src/tests/rpg/autoplay/test_deferred_advisory_promotion_runtime.py
+--- /dev/null
++++ src/tests/rpg/autoplay/test_player_agent_anti_loop.py
 @@
- def test_promotion_runtime_can_skip_profile_persistence_for_pre_turn_pass():
-@@
-     assert (
-         transcript[0]["npc_evolution_profile_persist_result"]["reason"]
-         == "pre_turn_promotion_no_disk_persist"
-     )
++from tests.rpg.autoplay_llm_campaign import (
++    _action_violates_anti_loop,
++    _build_player_agent_anti_loop_context,
++    _deterministic_anti_loop_fallback_action,
++    _rough_semantic_pair_for_player_action,
++)
 +
 +
-+def test_incremental_pre_turn_promotion_marks_rows_and_skips_reprocessing():
-+    candidates = normalize_advisory_candidates(
-+        session_id="s",
-+        turn_index=1,
-+        player_input="I reassure Bran.",
-+        turn_contract={"player_input": "I reassure Bran."},
-+        payload={
-+            "relationship_delta_candidates": [
-+                {
-+                    "target": "bran",
-+                    "delta": 1,
-+                    "summary": "Bran is reassured.",
-+                }
-+            ]
-+        },
-+    )
++def test_build_player_agent_anti_loop_context_activates_on_repeated_pair():
 +    transcript = [
-+        {
-+            "turn_index": 1,
-+            "combined_background_llm_result": {"ok": True},
-+            "combined_background_llm_attach": {"phase": "pre_turn"},
-+            "runtime_state": {
-+                "deferred_advisory": {
-+                    "candidates": candidates,
-+                    "accepted": [],
-+                    "rejected": [],
-+                    "pending": [],
-+                }
-+            },
-+            "simulation_state": {"npcs": {"bran": {"name": "Bran"}}},
-+        },
++        {"semantic_action": "observe", "semantic_target": "Bran"},
++        {"semantic_action": "observe", "semantic_target": "Bran"},
++        {"semantic_action": "observe", "semantic_target": "Bran"},
 +    ]
 +
-+    first = run_deferred_advisory_promotions_for_transcript(
++    context = _build_player_agent_anti_loop_context(
 +        transcript=transcript,
-+        max_rows=6,
-+        persist_profiles=False,
-+        incremental_pre_turn=True,
-+        mark_pre_turn_promoted=True,
-+        current_turn=2,
++        threshold=3,
++        window=8,
 +    )
 +
-+    assert first["ok"] is True
-+    assert first["turns"] == 1
-+    assert first["incremental_pre_turn"] is True
-+    assert transcript[0]["pre_turn_advisory_promoted"] is True
-+    assert transcript[0]["pre_turn_advisory_promoted_at_turn"] == 2
++    assert context["active"] is True
++    assert context["pair"] == "observe:Bran"
++    assert context["streak"] == 3
++    assert context["target"] == "Bran"
 +
-+    second = run_deferred_advisory_promotions_for_transcript(
-+        transcript=transcript,
-+        max_rows=6,
-+        persist_profiles=False,
-+        incremental_pre_turn=True,
-+        mark_pre_turn_promoted=True,
-+        current_turn=3,
++
++def test_action_violates_anti_loop_for_observe_same_target():
++    context = {
++        "active": True,
++        "pair": "observe:Bran",
++        "semantic_action": "observe",
++        "target": "Bran",
++        "streak": 4,
++    }
++
++    assert _action_violates_anti_loop(
++        "Wait patiently and maintain eye contact with Bran.",
++        context,
++    )
++    assert not _action_violates_anti_loop(
++        "Turn away from Bran and ask a nearby patron about Silas.",
++        context,
 +    )
 +
-+    assert second["ok"] is True
-+    assert second["turns"] == 0
-3B. Add regression test: compact carry state caps backlog
++
++def test_rough_semantic_pair_classifies_service_and_travel_actions():
++    assert _rough_semantic_pair_for_player_action("Pay Bran for a room.")["semantic_action"] == "service"
++    assert _rough_semantic_pair_for_player_action("Step outside and head to the road.")["semantic_action"] == "travel"
++
++
++def test_deterministic_anti_loop_fallback_changes_target_for_bran():
++    action = _deterministic_anti_loop_fallback_action(
++        {"target": "Bran", "semantic_action": "observe", "pair": "observe:Bran"}
++    )
++    assert "nearby patron" in action.lower()
++    assert "turn away from bran" in action.lower()
+5B. Add import-safe test for prompt formatting
 
-Append:
+Append to same file:
 
---- src/tests/rpg/autoplay/test_deferred_advisory_promotion_runtime.py
-+++ src/tests/rpg/autoplay/test_deferred_advisory_promotion_runtime.py
 @@
-+def test_incremental_pre_turn_promotion_compacts_carry_state_backlog():
-+    big_candidates = [
-+        {
-+            "id": f"candidate:{idx}",
-+            "kind": "relationship_delta",
-+            "target": "bran",
-+            "delta": 1,
-+            "summary": f"candidate {idx}",
-+        }
-+        for idx in range(200)
-+    ]
-+    transcript = [
-+        {
-+            "turn_index": 1,
-+            "runtime_state": {
-+                "deferred_advisory": {
-+                    "candidates": big_candidates,
-+                    "pending": big_candidates,
-+                    "accepted": big_candidates,
-+                    "rejected": big_candidates,
-+                }
-+            },
-+            "simulation_state": {"npcs": {"bran": {"name": "Bran"}}},
-+        },
-+        {
-+            "turn_index": 2,
-+            "combined_background_llm_result": {"ok": True},
-+            "combined_background_llm_attach": {"phase": "pre_turn"},
-+            "runtime_state": {"deferred_advisory": {"candidates": []}},
-+            "simulation_state": {"npcs": {"bran": {"name": "Bran"}}},
-+        },
-+    ]
-+
-+    result = run_deferred_advisory_promotions_for_transcript(
-+        transcript=transcript,
-+        max_rows=6,
-+        persist_profiles=False,
-+        incremental_pre_turn=True,
-+        mark_pre_turn_promoted=True,
-+        current_turn=3,
-+        carry_candidate_limit=7,
-+        carry_pending_limit=8,
-+        carry_accepted_limit=9,
-+        carry_rejected_limit=10,
++def test_anti_loop_context_includes_concrete_alternatives():
++    context = _build_player_agent_anti_loop_context(
++        transcript=[
++            {"semantic_action": "observe", "semantic_target": "Bran"},
++            {"semantic_action": "observe", "semantic_target": "Bran"},
++            {"semantic_action": "observe", "semantic_target": "Bran"},
++        ],
++        threshold=3,
++        window=8,
 +    )
 +
-+    assert result["ok"] is True
-+    assert result["turns"] == 1
-+    advisory = transcript[1]["runtime_state"]["deferred_advisory"]
-+    assert len(advisory["candidates"]) <= 7
-+    assert len(advisory["pending"]) <= 8
-+    assert len(advisory["accepted"]) <= 9
-+    assert len(advisory["rejected"]) <= 10
-4. Validation
++    assert context["active"] is True
++    assert any("different target" in item.lower() for item in context["alternatives"])
++    assert any("service" in item.lower() for item in context["alternatives"])
+6. Validation
 
 Compile:
 
-python -m py_compile src\tests\rpg\autoplay\advisory_promotion_runtime.py src\tests\rpg\autoplay_llm_campaign.py
+python -m py_compile src\tests\rpg\autoplay_llm_campaign.py src\tests\rpg\autoplay\hundred_turn_eval.py
 
 Run focused tests:
 
-python -m pytest src\tests\rpg\autoplay\test_deferred_advisory_promotion_runtime.py -q
+python -m pytest src\tests\rpg\autoplay\test_player_agent_anti_loop.py src\tests\rpg\autoplay\test_quality_gates.py src\tests\rpg\autoplay\test_background_result_timing.py -q
