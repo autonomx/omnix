@@ -4,6 +4,7 @@ from typing import Any, Dict, List
 
 from app.rpg.campaign_journal_runtime import (
     _clean_journal_text,
+    _journal_text as _base_journal_text,
     campaign_time_for_turn,
     summarize_campaign_calendar,
     summarize_player_journal,
@@ -509,15 +510,4 @@ def summarize_story_beats_for_report(transcript: List[Dict[str, Any]]) -> Dict[s
 
 
 def _journal_text(actions: List[str], results: List[str]) -> str:
-    clean_actions = [_clean_journal_text(action, max_len=220) for action in _safe_list(actions)[-4:]]
-    clean_actions = [action for action in clean_actions if action]
-    clean_results = [_clean_journal_text(result, max_len=360) for result in _safe_list(results)[-3:]]
-    clean_results = [result for result in clean_results if result]
-    lines: List[str] = []
-    if clean_actions:
-        lines.append("What I did: " + "; ".join(clean_actions) + ".")
-    if clean_results:
-        lines.append("What happened: " + " ".join(clean_results))
-    if not lines:
-        lines.append("I kept moving, watching for what changed around me.")
-    return " ".join(lines).strip()
+    return _base_journal_text(actions, results)

@@ -1329,7 +1329,7 @@ def _render_calendar_and_journal(calendar: Dict[str, Any], journal: Dict[str, An
         <article class="journal-entry">
           <h4>{_esc(str(_safe_dict(entry).get('entry_id') or 'Journal Entry'))}</h4>
           <p><strong>Turns:</strong> {_esc(str(_safe_dict(entry).get('start_turn')))}–{_esc(str(_safe_dict(entry).get('end_turn')))}</p>
-          <p>{_esc(str(_safe_dict(entry).get('text') or ''))}</p>
+          {_render_journal_entry_text(str(_safe_dict(entry).get('text') or ''))}
         </article>
         """
         for entry in entries[-8:]
@@ -1350,6 +1350,23 @@ def _render_calendar_and_journal(calendar: Dict[str, Any], journal: Dict[str, An
       <div>{entry_html or '<p>No journal entries yet.</p>'}</div>
     </section>
     """
+
+
+def _render_journal_entry_text(text: str) -> str:
+    text = str(text or "")
+    lines = [line.strip() for line in text.splitlines() if line.strip()]
+    if not lines:
+        return "<p></p>"
+    html_parts = []
+    for line in lines:
+        if ":" in line:
+            label, rest = line.split(":", 1)
+            html_parts.append(
+                f"<p><strong>{html.escape(label.strip())}:</strong>{html.escape(rest.strip())}</p>"
+            )
+        else:
+            html_parts.append(f"<p>{html.escape(line)}</p>")
+    return "".join(html_parts)
 
 
 def _render_report_quick_links(model: Dict[str, Any]) -> str:

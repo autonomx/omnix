@@ -413,3 +413,44 @@ def test_fallback_journal_filters_internal_codes():
     assert "target_not_found" not in text
     assert "no_supported_semantic_action_detected" not in text
     assert "Bran glances" in text
+
+
+def test_report_renders_journal_multiline_sections():
+    from tests.rpg.autoplay.campaign_report import render_campaign_report_html
+
+    html = render_campaign_report_html(
+        {
+            "summary": {
+                "campaign_calendar_summary": {
+                    "turns_tracked": 4,
+                    "end": {
+                        "year": 1000,
+                        "season": "spring",
+                        "month": 1,
+                        "day": 1,
+                        "time_label": "04:00",
+                        "day_phase": "night",
+                    },
+                },
+                "player_journal_summary": {
+                    "entry_count": 1,
+                    "entries": [
+                        {
+                            "entry_id": "journal:turn:4",
+                            "start_turn": 1,
+                            "end_turn": 4,
+                            "text": "What I did: Ask Bran.\nWhat I learned: He mentioned the road.\nNext: Find the witness.",
+                        }
+                    ],
+                },
+                "quest_progress_summary": {"quest_count": 0, "quests": []},
+                "npc_evolution_report_summary": {"npc_count": 0, "cards": []},
+            },
+            "metrics": {},
+            "transcript": [],
+        }
+    )
+
+    assert "What I did:" in html
+    assert "What I learned:" in html
+    assert "Next:" in html
