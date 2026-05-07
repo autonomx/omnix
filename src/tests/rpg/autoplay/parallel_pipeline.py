@@ -1369,6 +1369,10 @@ class AutoplayBackgroundPipeline:
 def attach_background_results_to_transcript(
     transcript: List[Dict[str, Any]],
     results: List[Dict[str, Any]],
+    *,
+    timing_tracker: Dict[str, Any] = None,
+    attach_turn: int = None,
+    session_id: str = "",
 ) -> Dict[str, Any]:
     by_turn = {
         int(row.get("turn_index") or 0): row
@@ -1457,52 +1461,76 @@ def attach_background_results_to_transcript(
                 )
         elif result.get("kind") == "combined_background_llm":
             summary["combined_background_llm_jobs"] += 1
-            row["combined_background_llm_result"] = result
-            print(f"Attaching combined background LLM result for turn {turn_index}")
-
-            # Attach narration in the same slots used by split narration jobs.
-            row["deferred_narration_result"] = {
-                "ok": result.get("ok"),
-                "kind": "deferred_narration",
-                "session_id": result.get("session_id"),
-                "turn_index": result.get("turn_index"),
-                "narration_status": "ready" if result.get("ok") else "error",
-                "narration": result.get("narration"),
-                "npc": result.get("npc") or {},
-                "narration_payload": result.get("narration_payload") or {},
-                "diagnostics": result.get("diagnostics") or {},
-                "worker_ms": result.get("worker_ms"),
-                "queue_timing": result.get("queue_timing") or {},
-            }
-            row["narration_status"] = "ready" if result.get("ok") else "error"
-            if result.get("ok") and result.get("narration"):
-                row["resolved_narration"] = result.get("narration")
-                row["resolved_narration_payload"] = result.get("narration_payload") or {}
-                row["narration"] = result.get("narration")
-
-            # Attach advisory in the same slots used by split advisory jobs.
-            row["deferred_advisory_result"] = {
-                "ok": result.get("ok"),
-                "kind": "deferred_advisory",
-                "session_id": result.get("session_id"),
-                "turn_index": result.get("turn_index"),
-                "source": result.get("source"),
-                "candidate_count": result.get("candidate_count"),
-                "candidates": result.get("candidates") or [],
-                "summary": result.get("advisory_summary") or {},
-                "diagnostics": result.get("diagnostics") or {},
-                "worker_ms": result.get("worker_ms"),
-                "queue_timing": result.get("queue_timing") or {},
-            }
-            row["deferred_advisory_status"] = "ready" if result.get("ok") else "error"
-            if result.get("ok"):
-                runtime_state = _row_runtime_state(row)
-                row["deferred_advisory_ingest_result"] = ingest_deferred_advisory_candidates(
-                    runtime_state=runtime_state,
-                    candidates=result.get("candidates") if isinstance(result.get("candidates"), list) else [],
-                    turn_index=int(result.get("turn_index") or row.get("turn_index") or 0),
-                    source=_safe_str(result.get("source")) or "combined_background_llm",
+            # Use timing-aware attachment if tracker provided
+            if timing_tracker and attach_turn is not None:
+                from tests.rpg.autoplay_llm_campaign import _attach_completed_background_job_to_record
+                attached = _attach_completed_background_job_to_record(
+                    record=row,
+                    job_id=_safe_str(
+                        row.get("combined_background_llm_job_id")
+                        or row.get("background_llm_job_id")
+                        or row.get("combined_background_job_id")
+                        or f"combined_background_llm:{session_id}:{row.get('turn_index')}"
+                    ),
+                    result=result,
+                    attach_turn=attach_turn,
+                    phase="final",
+                    timing_tracker=timing_tracker,
                 )
+                if attached:
+                    print(
+                        f"Attaching combined background LLM result for turn {row.get('turn_index')} "
+                        f"phase=final lag={max(0, attach_turn - int(row.get('turn_index') or 0))}"
+                    )
+            else:
+                # Legacy path
+                if not _safe_dict(row.get("combined_background_llm_result")):
+                    row["combined_background_llm_result"] = result
+                    print(f"Attaching combined background LLM result for turn {turn_index}")
+
+                    # Attach narration in the same slots used by split narration jobs.
+                    row["deferred_narration_result"] = {
+                        "ok": result.get("ok"),
+                        "kind": "deferred_narration",
+                        "session_id": result.get("session_id"),
+                        "turn_index": result.get("turn_index"),
+                        "narration_status": "ready" if result.get("ok") else "error",
+                        "narration": result.get("narration"),
+                        "npc": result.get("npc") or {},
+                        "narration_payload": result.get("narration_payload") or {},
+                        "diagnostics": result.get("diagnostics") or {},
+                        "worker_ms": result.get("worker_ms"),
+                        "queue_timing": result.get("queue_timing") or {},
+                    }
+                    row["narration_status"] = "ready" if result.get("ok") else "error"
+                    if result.get("ok") and result.get("narration"):
+                        row["resolved_narration"] = result.get("narration")
+                        row["resolved_narration_payload"] = result.get("narration_payload") or {}
+                        row["narration"] = result.get("narration")
+
+                    # Attach advisory in the same slots used by split advisory jobs.
+                    row["deferred_advisory_result"] = {
+                        "ok": result.get("ok"),
+                        "kind": "deferred_advisory",
+                        "session_id": result.get("session_id"),
+                        "turn_index": result.get("turn_index"),
+                        "source": result.get("source"),
+                        "candidate_count": result.get("candidate_count"),
+                        "candidates": result.get("candidates") or [],
+                        "summary": result.get("advisory_summary") or {},
+                        "diagnostics": result.get("diagnostics") or {},
+                        "worker_ms": result.get("worker_ms"),
+                        "queue_timing": result.get("queue_timing") or {},
+                    }
+                    row["deferred_advisory_status"] = "ready" if result.get("ok") else "error"
+                    if result.get("ok"):
+                        runtime_state = _row_runtime_state(row)
+                        row["deferred_advisory_ingest_result"] = ingest_deferred_advisory_candidates(
+                            runtime_state=runtime_state,
+                            candidates=result.get("candidates") if isinstance(result.get("candidates"), list) else [],
+                            turn_index=int(result.get("turn_index") or row.get("turn_index") or 0),
+                            source=_safe_str(result.get("source")) or "combined_background_llm",
+                        )
 
     provider_jobs = [
         result

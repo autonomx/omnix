@@ -935,6 +935,7 @@ def _summarize_quality_gates(
     progress_timeline_summary = _safe_dict(summary.get("progress_timeline_summary"))
     long_run_warning_summary = _safe_dict(summary.get("long_run_warning_summary"))
     hundred_turn_eval_summary = _safe_dict(summary.get("hundred_turn_eval_summary"))
+    background_result_timing_summary = _safe_dict(summary.get("background_result_timing_summary"))
     strict_eval_turns = int(getattr(args, "strict_eval_turns", 100) or 100)
     strict_100_turn_mode = len(transcript if isinstance(transcript, list) else []) >= strict_eval_turns
     evolution_mutated_authoritative_state = False
@@ -1039,6 +1040,24 @@ def _summarize_quality_gates(
             not strict_100_turn_mode
             or int(progress_timeline_summary.get("max_no_progress_streak") or 0)
             <= int(getattr(args, "max_100turn_no_progress_streak", 10) or 10)
+        ),
+        "background_result_timing_ok": (
+            not background_result_timing_summary
+            or bool(background_result_timing_summary.get("ok", True))
+        ),
+        "strict_100turn_background_pre_turn_attach_rate_ok": (
+            not strict_100_turn_mode
+            or float(background_result_timing_summary.get("pre_turn_attach_rate") or 0.0) >= 0.50
+        ),
+        "strict_100turn_background_attach_lag_ok": (
+            not strict_100_turn_mode
+            or int(background_result_timing_summary.get("max_attach_lag_turns") or 0)
+            <= int(getattr(args, "background_result_max_turn_lag", 5) or 5)
+        ),
+        "background_results_not_only_finalized": (
+            not getattr(args, "fail_if_background_results_only_finalized", False)
+            or int(background_result_timing_summary.get("only_finalized_count") or 0)
+            < int(background_result_timing_summary.get("jobs_submitted") or 0)
         ),
     }
 
@@ -1405,6 +1424,401 @@ def _merge_base_runtime_namespaces(
     return merged
 
 
+def _new_background_result_timing_tracker() -> Dict[str, Any]:
+    return {
+        "submitted": {},
+        "attached": {},
+        "attachment_events": [],
+    }
+
+
+def _track_background_submit(
+    tracker: Dict[str, Any],
+    *,
+    job_id: str,
+    turn_index: int,
+    phase: str = "turn_submit",
+) -> None:
+    if not job_id:
+        return
+    submitted = tracker.setdefault("submitted", {})
+    submitted[job_id] = {
+        "job_id": job_id,
+        "submitted_turn": int(turn_index or 0),
+        "phase": phase,
+    }
+
+
+def _track_background_attach(
+    tracker: Dict[str, Any],
+    *,
+    job_id: str,
+    source_turn: int,
+    attach_turn: int,
+    phase: str,
+) -> None:
+    if not job_id:
+        return
+    attached = tracker.setdefault("attached", {})
+    if job_id in attached:
+        return
+    source_turn = int(source_turn or 0)
+    attach_turn = int(attach_turn or 0)
+    event = {
+        "job_id": job_id,
+        "source_turn": source_turn,
+        "attach_turn": attach_turn,
+        "phase": phase,
+        "lag_turns": max(0, attach_turn - source_turn),
+    }
+    attached[job_id] = event
+    tracker.setdefault("attachment_events", []).append(event)
+
+
+def _summarize_background_result_timing(
+    tracker: Dict[str, Any],
+    *,
+    turn_count: int,
+    strict_eval_turns: int = 100,
+    max_turn_lag: int = 5,
+) -> Dict[str, Any]:
+    tracker = _safe_dict(tracker)
+    submitted = _safe_dict(tracker.get("submitted"))
+    attached = _safe_dict(tracker.get("attached"))
+    events = _safe_list(tracker.get("attachment_events"))
+
+    jobs_submitted = len(submitted)
+    jobs_attached_total = len(attached)
+    pre_turn_events = [event for event in events if _safe_str(_safe_dict(event).get("phase")) == "pre_turn"]
+    final_events = [event for event in events if _safe_str(_safe_dict(event).get("phase")) == "final"]
+    lag_values = [
+        int(_safe_dict(event).get("lag_turns") or 0)
+        for event in events
+        if isinstance(event, dict)
+    ]
+    pre_turn_attach_rate = (
+        round(len(pre_turn_events) / jobs_submitted, 4)
+        if jobs_submitted
+        else 0.0
+    )
+    final_attach_rate = (
+        round(len(final_events) / jobs_submitted, 4)
+        if jobs_submitted
+        else 0.0
+    )
+    strict = int(turn_count or 0) >= int(strict_eval_turns or 100)
+
+    missing_job_ids = sorted(
+        [job_id for job_id in submitted.keys() if job_id not in attached]
+    )
+    only_finalized_count = len(final_events)
+    max_lag = max(lag_values) if lag_values else 0
+    avg_lag = round(sum(lag_values) / len(lag_values), 4) if lag_values else 0.0
+
+    warnings: List[Dict[str, Any]] = []
+    if missing_job_ids:
+        warnings.append(
+            {
+                "code": "background_results_missing",
+                "severity": "error",
+                "message": "Some submitted background jobs were never attached.",
+                "details": {"missing_job_ids": missing_job_ids[:20]},
+            }
+        )
+    if jobs_submitted and only_finalized_count == jobs_submitted:
+        warnings.append(
+            {
+                "code": "background_results_only_finalized",
+                "severity": "error" if strict else "warning",
+                "message": "All background results attached during final drain, so they could not influence future turns.",
+                "details": {"only_finalized_count": only_finalized_count},
+            }
+        )
+    if strict and pre_turn_attach_rate < 0.50:
+        warnings.append(
+            {
+                "code": "background_pre_turn_attach_rate_low",
+                "severity": "error",
+                "message": "Too few background results were attached before later turns.",
+                "details": {"pre_turn_attach_rate": pre_turn_attach_rate},
+            }
+        )
+    if strict and max_lag > int(max_turn_lag or 5):
+        warnings.append(
+            {
+                "code": "background_attach_lag_high",
+                "severity": "error",
+                "message": "Background results attached too many turns after submission.",
+                "details": {"max_attach_lag_turns": max_lag, "limit": int(max_turn_lag or 5)},
+            }
+        )
+
+    error_count = sum(1 for warning in warnings if _safe_dict(warning).get("severity") == "error")
+    return {
+        "ok": error_count == 0,
+        "strict_100_turn_mode": strict,
+        "jobs_submitted": jobs_submitted,
+        "jobs_attached_total": jobs_attached_total,
+        "jobs_attached_pre_turn": len(pre_turn_events),
+        "jobs_attached_final": len(final_events),
+        "pre_turn_attach_rate": pre_turn_attach_rate,
+        "final_attach_rate": final_attach_rate,
+        "only_finalized_count": only_finalized_count,
+        "missing_job_count": len(missing_job_ids),
+        "missing_job_ids": missing_job_ids[:50],
+        "avg_attach_lag_turns": avg_lag,
+        "max_attach_lag_turns": max_lag,
+        "attachment_events": events[-200:],
+        "warning_count": len(warnings),
+        "error_count": error_count,
+        "warnings": warnings,
+    }
+
+
+def _try_get_combined_background_result(
+    *,
+    pipeline: Any,
+    job_id: str,
+    wait_ms: int = 0,
+) -> Dict[str, Any]:
+    """Best-effort adapter over the background pipeline's existing result API.
+
+    Different local versions of the pipeline have used slightly different
+    method names. Keep this adapter defensive so the timing patch is easy to
+    apply over recent code.
+    """
+    if not pipeline or not job_id:
+        return {}
+
+    wait_seconds = max(0.0, float(wait_ms or 0) / 1000.0)
+    method_names = (
+        "get_completed_result",
+        "get_result_if_done",
+        "try_get_result",
+        "get_result",
+        "await_result",
+    )
+    for name in method_names:
+        method = getattr(pipeline, name, None)
+        if not callable(method):
+            continue
+        try:
+            # Prefer non-blocking/short-timeout forms when supported.
+            try:
+                result = method(job_id, timeout=wait_seconds)
+            except TypeError:
+                try:
+                    result = method(job_id, timeout_seconds=wait_seconds)
+                except TypeError:
+                    try:
+                        result = method(job_id, wait_seconds=wait_seconds)
+                    except TypeError:
+                        result = method(job_id)
+            result = _safe_dict(result)
+            if result:
+                return result
+        except TimeoutError:
+            return {}
+        except Exception:
+            # Do not make drain adapter fatal; console/report gates will expose
+            # real pipeline errors elsewhere.
+            return {}
+    return {}
+
+
+def _extract_combined_background_payload(result: Dict[str, Any]) -> Dict[str, Any]:
+    result = _safe_dict(result)
+    return (
+        _safe_dict(result.get("combined_background_llm_result"))
+        or _safe_dict(result.get("payload"))
+        or _safe_dict(result.get("result"))
+        or result
+    )
+
+
+def _attach_completed_background_job_to_record(
+    *,
+    record: Dict[str, Any],
+    job_id: str,
+    result: Dict[str, Any],
+    attach_turn: int,
+    phase: str,
+    timing_tracker: Dict[str, Any],
+) -> bool:
+    record = _safe_dict(record)
+    if not job_id or not result:
+        return False
+    payload = _extract_combined_background_payload(result)
+    existing_payload = _safe_dict(record.get("combined_background_llm_result"))
+    if existing_payload:
+        payload = existing_payload
+    if not payload:
+        return False
+    source_turn = int(record.get("turn_index") or 0)
+    # Even if a legacy path already assigned the payload, still attach timing
+    # metadata exactly once.
+    already_tracked = bool(_safe_dict(record.get("combined_background_llm_attach")))
+    if already_tracked:
+        return False
+    record["combined_background_llm_result"] = payload
+    record["combined_background_llm_attach"] = {
+        "job_id": job_id,
+        "source_turn": source_turn,
+        "attach_turn": int(attach_turn or 0),
+        "phase": phase,
+        "lag_turns": max(0, int(attach_turn or 0) - source_turn),
+    }
+
+    # Attach narration in the same slots used by split narration jobs.
+    record["deferred_narration_result"] = {
+        "ok": result.get("ok"),
+        "kind": "deferred_narration",
+        "session_id": result.get("session_id"),
+        "turn_index": result.get("turn_index"),
+        "narration_status": "ready" if result.get("ok") else "error",
+        "narration": result.get("narration"),
+        "npc": result.get("npc") or {},
+        "narration_payload": result.get("narration_payload") or {},
+        "diagnostics": result.get("diagnostics") or {},
+        "worker_ms": result.get("worker_ms"),
+        "queue_timing": result.get("queue_timing") or {},
+    }
+    record["narration_status"] = "ready" if result.get("ok") else "error"
+    if result.get("ok") and result.get("narration"):
+        record["resolved_narration"] = result.get("narration")
+        record["resolved_narration_payload"] = result.get("narration_payload") or {}
+        record["narration"] = result.get("narration")
+
+    # Attach advisory in the same slots used by split advisory jobs.
+    record["deferred_advisory_result"] = {
+        "ok": result.get("ok"),
+        "kind": "deferred_advisory",
+        "session_id": result.get("session_id"),
+        "turn_index": result.get("turn_index"),
+        "source": result.get("source"),
+        "candidate_count": result.get("candidate_count"),
+        "candidates": result.get("candidates") or [],
+        "summary": result.get("advisory_summary") or {},
+        "diagnostics": result.get("diagnostics") or {},
+        "worker_ms": result.get("worker_ms"),
+        "queue_timing": result.get("queue_timing") or {},
+    }
+    record["deferred_advisory_status"] = "ready" if result.get("ok") else "error"
+    if result.get("ok"):
+        runtime_state = _safe_dict(record.get("runtime_state"))
+        try:
+            from app.rpg.advisory.runtime_store import ingest_deferred_advisory_candidates
+            record["deferred_advisory_ingest_result"] = ingest_deferred_advisory_candidates(
+                runtime_state=runtime_state,
+                candidates=result.get("candidates") if isinstance(result.get("candidates"), list) else [],
+                turn_index=int(result.get("turn_index") or record.get("turn_index") or 0),
+                source=_safe_str(result.get("source")) or "combined_background_llm",
+            )
+        except ImportError:
+            pass  # Advisory ingestion may not be available in all versions
+
+    _track_background_attach(
+        timing_tracker,
+        job_id=job_id,
+        source_turn=source_turn,
+        attach_turn=attach_turn,
+        phase=phase,
+    )
+    return True
+
+
+def _drain_completed_background_jobs_for_transcript(
+    *,
+    pipeline: Any,
+    transcript: List[Dict[str, Any]],
+    current_turn: int,
+    phase: str,
+    wait_ms: int,
+    timing_tracker: Dict[str, Any],
+) -> Dict[str, Any]:
+    """Attach completed background results for prior rows.
+
+    This never changes authoritative turn contracts. It only attaches completed
+    presentation/advisory payloads to previous transcript rows so deterministic
+    promotion/evolution/report logic can consume them before future actions.
+    """
+    attached = 0
+    checked = 0
+    for row in transcript if isinstance(transcript, list) else []:
+        row = _safe_dict(row)
+        source_turn = int(row.get("turn_index") or 0)
+        if phase == "pre_turn" and source_turn >= int(current_turn or 0):
+            continue
+        if _safe_dict(row.get("combined_background_llm_result")):
+            continue
+        job_id = _safe_str(
+            row.get("combined_background_llm_job_id")
+            or row.get("background_llm_job_id")
+            or row.get("combined_background_job_id")
+        )
+        if not job_id:
+            continue
+        checked += 1
+        result = _try_get_combined_background_result(
+            pipeline=pipeline,
+            job_id=job_id,
+            wait_ms=wait_ms if attached == 0 else 0,
+        )
+        if _attach_completed_background_job_to_record(
+            record=row,
+            job_id=job_id,
+            result=result,
+            attach_turn=current_turn,
+            phase=phase,
+            timing_tracker=timing_tracker,
+        ):
+            attached += 1
+            print(f"Attaching combined background LLM result for turn {source_turn} phase={phase} lag={max(0, int(current_turn or 0) - source_turn)}")
+    return {
+        "phase": phase,
+        "current_turn": current_turn,
+        "checked": checked,
+        "attached": attached,
+    }
+
+
+def _reconcile_existing_background_attachments(
+    *,
+    transcript: List[Dict[str, Any]],
+    timing_tracker: Dict[str, Any],
+    attach_turn: int,
+    phase: str = "final",
+) -> Dict[str, Any]:
+    reconciled = 0
+    for row in transcript if isinstance(transcript, list) else []:
+        row = _safe_dict(row)
+        if not _safe_dict(row.get("combined_background_llm_result")):
+            continue
+        if _safe_dict(row.get("combined_background_llm_attach")):
+            continue
+        job_id = _safe_str(
+            row.get("combined_background_llm_job_id")
+            or row.get("background_llm_job_id")
+            or row.get("combined_background_job_id")
+        )
+        if not job_id:
+            continue
+        if _attach_completed_background_job_to_record(
+            record=row,
+            job_id=job_id,
+            result=_safe_dict(row.get("combined_background_llm_result")),
+            attach_turn=attach_turn,
+            phase=phase,
+            timing_tracker=timing_tracker,
+        ):
+            reconciled += 1
+    return {
+        "phase": phase,
+        "attach_turn": attach_turn,
+        "reconciled": reconciled,
+    }
+
+
 def _find_narration_payload(container: Dict[str, Any]) -> Dict[str, Any]:
     """Find the actual narration payload regardless of wrapper shape.
 
@@ -1689,6 +2103,8 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
 
     transcript: List[Dict[str, Any]] = []
     carried_campaign_runtime_state: Dict[str, Any] = {}
+    background_result_timing_tracker = _new_background_result_timing_tracker()
+    background_drain_events: List[Dict[str, Any]] = []
     player_agent_cache = PlayerAgentDecisionCache(max_entries=256)
     player_agent_prompt_rows: List[Dict[str, Any]] = []
     regression_warnings: List[Dict[str, Any]] = []
@@ -1696,6 +2112,25 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
     stopped_reason = ""
 
     for turn_index in range(1, int(args.turns) + 1):
+        if int(getattr(args, "pre_turn_background_drain_ms", 0) or 0) >= 0:
+            drain_event = _drain_completed_background_jobs_for_transcript(
+                pipeline=pipeline,
+                transcript=transcript,
+                current_turn=turn_index,
+                phase="pre_turn",
+                wait_ms=int(getattr(args, "pre_turn_background_drain_ms", 0) or 0),
+                timing_tracker=background_result_timing_tracker,
+            )
+            background_drain_events.append(drain_event)
+
+            # Re-run deterministic promotion/evolution over newly attached
+            # advisory candidates so future turns can see promoted runtime state.
+            if int(drain_event.get("attached") or 0) > 0:
+                try:
+                    run_deferred_advisory_promotions_for_transcript(transcript=transcript)
+                except TypeError:
+                    run_deferred_advisory_promotions_for_transcript(transcript)
+
         turn_perf_start = now_perf()
         turn_performance: Dict[str, Any] = {
             "turn_index": turn_index,
@@ -1705,6 +2140,7 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
         resolved_narration_payload: Dict[str, Any] = {}
         combined_background_result: Dict[str, Any] = {}
         journal_narration_text = ""
+        combined_background_llm_job_id = ""
         # The previous turn's committed state is the only valid baseline.
         # Never derive the next before_state from manual session reloads.
         expected_baseline_state = deepcopy(last_committed_state)
@@ -1959,6 +2395,12 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
                         semantic_action_record=semantic_action_record,
                         prefer_provider=True,
                     )
+                    _track_background_submit(
+                        background_result_timing_tracker,
+                        job_id=_safe_str(combined_background_llm_job_id),
+                        turn_index=turn_index,
+                        phase="turn_submit",
+                    )
                     narration_job_id = combined_background_llm_job_id
                     advisory_job_id = combined_background_llm_job_id
                 else:
@@ -2095,6 +2537,7 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
             "deferred_advisory_job_id": advisory_job_id,
             "background_llm_mode": args.background_llm_mode,
             "combined_background_llm_job_id": combined_background_llm_job_id,
+            "background_result_attach_pending": bool(combined_background_llm_job_id),
             "blocking_narration_source": blocking_narration_source,
             "deferred_blocking_provider_violation": deferred_blocking_provider_violation,
             "blocking_provider_call_suppressed_after_the_fact": bool(deferred_blocking_provider_violation),
@@ -2211,7 +2654,21 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
             break
 
     background_results = pipeline.drain()
-    background_results_summary = attach_background_results_to_transcript(transcript, background_results)
+    final_drain_event = _drain_completed_background_jobs_for_transcript(
+        pipeline=pipeline,
+        transcript=transcript,
+        current_turn=int(args.turns),
+        phase="final",
+        wait_ms=0,
+        timing_tracker=background_result_timing_tracker,
+    )
+    background_drain_events.append(final_drain_event)
+    background_results_summary = attach_background_results_to_transcript(
+        transcript, background_results,
+        timing_tracker=background_result_timing_tracker,
+        attach_turn=int(args.turns),
+        session_id=session_id,
+    )
 
     # If combined results are attached after journal advancement, refresh journal entries with narration.
     for record in transcript:
@@ -2523,6 +2980,21 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
         summary=summary,
         turns_for_strict_gates=int(args.strict_eval_turns),
     )
+    background_drain_events.append(
+        _reconcile_existing_background_attachments(
+            transcript=transcript,
+            timing_tracker=background_result_timing_tracker,
+            attach_turn=int(args.turns),
+            phase="final",
+        )
+    )
+    summary["background_result_timing_summary"] = _summarize_background_result_timing(
+        background_result_timing_tracker,
+        turn_count=len(transcript),
+        strict_eval_turns=int(args.strict_eval_turns),
+        max_turn_lag=int(args.background_result_max_turn_lag),
+    )
+    summary["background_drain_events"] = background_drain_events[-200:]
     metrics["story_beat_summary"] = summary["story_beat_summary"]
     metrics["manual_turn_error_summary"] = summary["manual_turn_error_summary"]
     metrics["console_log_summary"] = summary["console_log_summary"]
@@ -2530,6 +3002,8 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
     metrics["progress_timeline_summary"] = summary["progress_timeline_summary"]
     metrics["long_run_warning_summary"] = summary["long_run_warning_summary"]
     metrics["hundred_turn_eval_summary"] = summary["hundred_turn_eval_summary"]
+    metrics["background_result_timing_summary"] = summary["background_result_timing_summary"]
+    metrics["background_drain_events"] = summary["background_drain_events"]
     if int(summary["quest_progress_summary"].get("quest_count") or 0) == 0:
         story_arc_view = _safe_dict(summary.get("story_arc_view") or metrics.get("story_arc_view"))
         if story_arc_view:
@@ -2746,6 +3220,29 @@ def build_arg_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--checkpoint-mode", choices=["blocking", "background"], default="blocking")
     parser.add_argument("--background-workers", type=int, default=4)
+    parser.add_argument(
+        "--pre-turn-background-drain-ms",
+        type=int,
+        default=250,
+        help=(
+            "Small wait budget before each autoplay turn to drain completed "
+            "background LLM results from prior turns. This lets completed "
+            "advisory/profile/narration work affect future-turn context without "
+            "blocking same-turn authoritative outcomes."
+        ),
+    )
+    parser.add_argument(
+        "--background-result-max-turn-lag",
+        type=int,
+        default=5,
+        help="Warn/fail in strict mode when a background result attaches more than this many turns late.",
+    )
+    parser.add_argument(
+        "--fail-if-background-results-only-finalized",
+        action="store_true",
+        default=False,
+        help="Fail if all/most background results are only attached during final post-run drain.",
+    )
     parser.add_argument("--provider-workers", type=int, default=1)
     parser.add_argument(
         "--campaign-minutes-per-turn",

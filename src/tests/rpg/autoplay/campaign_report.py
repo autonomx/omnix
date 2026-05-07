@@ -1101,6 +1101,15 @@ def build_campaign_report_model(
             summary.get("hundred_turn_eval_summary")
             or metrics.get("hundred_turn_eval_summary")
         ),
+        "background_result_timing_summary": _safe_dict(
+            summary.get("background_result_timing_summary")
+            or metrics.get("background_result_timing_summary")
+        ),
+        "background_drain_events": (
+            summary.get("background_drain_events")
+            or metrics.get("background_drain_events")
+            or []
+        ),
         "campaign_calendar_summary": _safe_dict(
             summary.get("campaign_calendar_summary")
             or metrics.get("campaign_calendar_summary")
@@ -1331,6 +1340,55 @@ def _render_progress_timeline(summary: Dict[str, Any]) -> str:
         <thead>
           <tr><th>Turn</th><th>Action</th><th>Target</th><th>Location</th><th>Progress</th><th>Story</th><th>No-op</th><th>Reason</th></tr>
         </thead>
+        <tbody>{rows}</tbody>
+      </table>
+    </section>
+    """
+
+
+def _render_background_result_timing(summary: Dict[str, Any]) -> str:
+    summary = _safe_dict(summary)
+    events = summary.get("attachment_events") if isinstance(summary.get("attachment_events"), list) else []
+    rows = ""
+    for event in events[-40:]:
+        event = _safe_dict(event)
+        rows += (
+            "<tr>"
+            f"<td>{html.escape(str(event.get('source_turn') or ''))}</td>"
+            f"<td>{html.escape(str(event.get('attach_turn') or ''))}</td>"
+            f"<td>{html.escape(str(event.get('phase') or ''))}</td>"
+            f"<td>{html.escape(str(event.get('lag_turns') or 0))}</td>"
+            f"<td>{html.escape(str(event.get('job_id') or ''))}</td>"
+            "</tr>"
+        )
+    if not rows:
+        rows = "<tr><td colspan='5'>No background attachment timing data.</td></tr>"
+
+    warnings = ""
+    for warning in summary.get("warnings") if isinstance(summary.get("warnings"), list) else []:
+        warning = _safe_dict(warning)
+        warnings += (
+            "<li>"
+            f"<strong>{html.escape(str(warning.get('severity') or 'warning'))}</strong> "
+            f"{html.escape(str(warning.get('code') or ''))}: "
+            f"{html.escape(str(warning.get('message') or ''))}"
+            "</li>"
+        )
+
+    return f"""
+    <section id="background-result-timing">
+      <h2>Background Result Timing</h2>
+      <p>
+        Submitted: {html.escape(str(summary.get('jobs_submitted') or 0))} ·
+        Attached: {html.escape(str(summary.get('jobs_attached_total') or 0))} ·
+        Pre-turn attached: {html.escape(str(summary.get('jobs_attached_pre_turn') or 0))} ·
+        Final attached: {html.escape(str(summary.get('jobs_attached_final') or 0))} ·
+        Pre-turn attach rate: {html.escape(str(summary.get('pre_turn_attach_rate') or 0))} ·
+        Max lag turns: {html.escape(str(summary.get('max_attach_lag_turns') or 0))}
+      </p>
+      <ul>{warnings or '<li>No timing warnings.</li>'}</ul>
+      <table>
+        <thead><tr><th>Source turn</th><th>Attach turn</th><th>Phase</th><th>Lag</th><th>Job</th></tr></thead>
         <tbody>{rows}</tbody>
       </table>
     </section>
@@ -2016,6 +2074,7 @@ def render_campaign_report_html(model: Dict[str, Any]) -> str:
       <a href="#hundred-turn-eval">100-Turn Eval</a>
       <a href="#action-diversity">Actions</a>
       <a href="#progress-timeline">Progress</a>
+<a href="#background-result-timing">Background Timing</a>
       <a href="#story-so-far">Story</a>
       <a href="#arcs">Arcs</a>
       <a href="#locations">Locations</a>
@@ -2052,8 +2111,9 @@ def render_campaign_report_html(model: Dict[str, Any]) -> str:
   {_render_hundred_turn_eval(model)}
   {_render_action_diversity(model.get("action_diversity_summary") or {})}
   {_render_progress_timeline(model.get("progress_timeline_summary") or {})}
+  {_render_background_result_timing(model.get("background_result_timing_summary") or {})}
 
-   <section id="story-so-far">
+    <section id="story-so-far">
     <h2>Story So Far</h2>
     <p class="section-lede">A readable summary of what happened in the campaign before the technical diagnostics.</p>
     {_render_paragraphs(model.get("story_so_far_paragraph"))}
@@ -2291,6 +2351,8 @@ def render_campaign_report_html(model: Dict[str, Any]) -> str:
       {_render_json_details("Action diversity summary JSON", model.get("action_diversity_summary") or {})}
       {_render_json_details("Progress timeline summary JSON", model.get("progress_timeline_summary") or {})}
       {_render_json_details("Long-run warning summary JSON", model.get("long_run_warning_summary") or {})}
+{_render_json_details("Background result timing summary JSON", model.get("background_result_timing_summary") or {})}
+{_render_json_details("Background drain events JSON", {"events": model.get("background_drain_events") or []})}
       {_render_json_details("Latest Simulation State", latest_state)}
       {_render_json_details("Summary JSON", summary)}
       {_render_json_details("Metrics JSON", metrics)}
