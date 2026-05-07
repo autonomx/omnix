@@ -16,6 +16,109 @@ def _safe_str(value: Any) -> str:
     return value if isinstance(value, str) else ""
 
 
+def _norm_token(value: Any) -> str:
+    text = _safe_str(value).strip()
+    if not text:
+        return ""
+    text = text.replace("-", "_").replace(" ", "_").strip("_")
+    while "__" in text:
+        text = text.replace("__", "_")
+    return text.lower()
+
+
+def _clean_target_label(value: Any) -> str:
+    text = _safe_str(value).strip()
+    if not text:
+        return ""
+    # Normalize common id/display forms.
+    if text.lower().startswith("npc:"):
+        text = text.split(":", 1)[1].strip()
+    if "(" in text and ")" in text:
+        text = text.split("(", 1)[0].strip()
+    text = text.strip(" .,:;[]{}\"'")
+    return text
+
+
+def _present_npc_aliases(row: Dict[str, Any]) -> Dict[str, str]:
+    """Return lowercase aliases -> canonical NPC display id/name."""
+    row = _safe_dict(row)
+    aliases: Dict[str, str] = {}
+
+    def add(name: Any, canonical: Any = "") -> None:
+        raw = _clean_target_label(name)
+        if not raw:
+            return
+        canon = _clean_target_label(canonical) or raw
+        aliases[raw.lower()] = canon
+        aliases[raw.replace(" ", "_").lower()] = canon
+        aliases[f"npc:{raw}".lower()] = canon
+        aliases[f"npc:{raw.replace(' ', '_')}".lower()] = canon
+
+    state_candidates = [
+        _safe_dict(row.get("simulation_state")),
+        _safe_dict(row.get("final_authoritative_state")),
+        _safe_dict(_safe_dict(row.get("turn_result")).get("simulation_state")),
+        _safe_dict(_safe_dict(_safe_dict(row.get("turn_result")).get("session")).get("simulation_state")),
+    ]
+    runtime_state = _safe_dict(row.get("runtime_state"))
+    loaded_profiles = _safe_dict(_safe_dict(runtime_state.get("npc_evolution")).get("loaded_profiles"))
+    for npc_id, profile_row in loaded_profiles.items():
+        profile = _safe_dict(_safe_dict(profile_row).get("profile"))
+        add(npc_id)
+        add(profile.get("npc_id"), npc_id)
+        add(profile.get("name"), npc_id)
+
+    for state in state_candidates:
+        scene = _safe_dict(state.get("scene"))
+        for npc in _safe_list(scene.get("nearby_npcs")) + _safe_list(scene.get("present_npcs")):
+            if isinstance(npc, dict):
+                add(npc.get("npc_id") or npc.get("id") or npc.get("name"))
+                add(npc.get("name"), npc.get("npc_id") or npc.get("id") or npc.get("name"))
+                add(npc.get("role"), npc.get("npc_id") or npc.get("id") or npc.get("name"))
+            else:
+                add(npc)
+        npcs = _safe_dict(_safe_dict(state.get("npc_progression_state")).get("npcs"))
+        for npc_id, npc_any in npcs.items():
+            npc = _safe_dict(npc_any)
+            add(npc_id)
+            add(npc.get("name"), npc_id)
+            add(npc.get("role"), npc_id)
+
+    # Useful role aliases for the tavern seed, but only when a matching NPC is present.
+    for alias in ("innkeeper", "barkeep", "bartender", "tavernkeeper"):
+        if alias in aliases:
+            continue
+        for _, canon in list(aliases.items()):
+            if canon.lower() == "bran":
+                aliases[alias] = canon
+                break
+    return aliases
+
+
+def _normalize_target(value: Any, row: Dict[str, Any]) -> str:
+    text = _clean_target_label(value)
+    if not text:
+        return ""
+    aliases = _present_npc_aliases(row)
+    lower = text.lower()
+    if lower in aliases:
+        return aliases[lower]
+    lower_underscored = lower.replace(" ", "_")
+    if lower_underscored in aliases:
+        return aliases[lower_underscored]
+    if text.lower() in {"none", "unknown", "null"}:
+        return ""
+    return text
+
+
+def _first_value(*values: Any) -> str:
+    for value in values:
+        text = _safe_str(value).strip()
+        if text:
+            return text
+    return ""
+
+
 def _turn_index(row: Dict[str, Any], fallback: int) -> int:
     try:
         return int(_safe_dict(row).get("turn_index") or fallback)
@@ -35,37 +138,146 @@ def _player_action(row: Dict[str, Any]) -> str:
     )
 
 
-def _semantic_action(row: Dict[str, Any]) -> str:
+def _semantic_dict_candidates(row: Dict[str, Any]) -> List[Dict[str, Any]]:
     row = _safe_dict(row)
     contract = _safe_dict(row.get("turn_contract"))
-    semantic = _safe_dict(contract.get("semantic_action"))
-    resolved = _safe_dict(contract.get("resolved_action"))
     selected = _safe_dict(row.get("selected_player_action"))
-    return (
-        _safe_str(semantic.get("type"))
-        or _safe_str(semantic.get("kind"))
-        or _safe_str(resolved.get("type"))
-        or _safe_str(resolved.get("kind"))
-        or _safe_str(selected.get("semantic_action_type"))
-        or _safe_str(row.get("semantic_action_type"))
-        or "unknown"
+    turn_result = _safe_dict(row.get("turn_result"))
+    combined = _safe_dict(row.get("combined_background_llm_result"))
+    diagnostics = _safe_dict(combined.get("diagnostics"))
+    context_packet = _safe_dict(diagnostics.get("context_packet"))
+    result = _safe_dict(turn_result.get("result"))
+
+    candidates: List[Dict[str, Any]] = [
+        _safe_dict(contract.get("semantic_action")),
+        _safe_dict(contract.get("semantic_action_v2")),
+        _safe_dict(contract.get("resolved_action")),
+        _safe_dict(contract.get("action")),
+        _safe_dict(row.get("semantic_action")),
+        _safe_dict(row.get("semantic_action_v2")),
+        _safe_dict(row.get("fast_semantic_action")),
+        _safe_dict(row.get("semantic_action_record")),
+        _safe_dict(row.get("background_semantic_action_record")),
+        _safe_dict(selected.get("semantic_action")),
+        _safe_dict(selected.get("semantic_action_v2")),
+        _safe_dict(selected.get("fast_semantic_action")),
+        _safe_dict(result.get("semantic_action")),
+        _safe_dict(result.get("semantic_action_v2")),
+        _safe_dict(result.get("resolved_action")),
+        _safe_dict(combined.get("semantic_action")),
+        _safe_dict(combined.get("semantic_action_v2")),
+        _safe_dict(combined.get("fast_semantic_action")),
+        _safe_dict(diagnostics.get("semantic_action")),
+        _safe_dict(diagnostics.get("fast_semantic_action")),
+        _safe_dict(context_packet.get("fast_semantic_action")),
+    ]
+
+    # Some traces store this as a row/list payload.
+    trace = _safe_dict(row.get("player_agent_trace"))
+    candidates.extend(
+        [
+            _safe_dict(trace.get("semantic_action")),
+            _safe_dict(trace.get("semantic_action_v2")),
+            _safe_dict(trace.get("selected_semantic_action")),
+        ]
     )
+
+    return [candidate for candidate in candidates if candidate]
+
+
+def _semantic_action_from_text(action: str) -> str:
+    lower = _safe_str(action).lower().strip()
+    if not lower:
+        return "unknown"
+    # Deterministic fallback only for evaluation when structured fields are absent.
+    if lower.startswith(("ask ", "question ", "inquire ", "talk ", "speak ", "tell ")):
+        return "ask"
+    if lower.startswith(("listen", "observe", "look", "watch", "inspect", "examine", "search")):
+        return "observe"
+    if lower.startswith(("go ", "travel ", "walk ", "move ", "leave ", "enter ")):
+        return "travel"
+    if lower.startswith(("buy ", "purchase ", "rent ", "pay ")):
+        return "service"
+    if lower.startswith(("attack ", "strike ", "fight ", "punch ")):
+        return "combat"
+    if lower.startswith(("wait", "rest", "idle")):
+        return "wait"
+    return "unknown"
+
+
+def _target_from_text(action: str, row: Dict[str, Any]) -> str:
+    lower = _safe_str(action).lower()
+    aliases = _present_npc_aliases(row)
+    for alias, canon in aliases.items():
+        if alias and alias in lower:
+            return canon
+    # Common tavern role fallback, only normalized if row has Bran alias.
+    if "innkeeper" in lower or "barkeep" in lower or "bartender" in lower:
+        return _normalize_target("innkeeper", row)
+    return ""
+
+
+def _semantic_action(row: Dict[str, Any]) -> str:
+    row = _safe_dict(row)
+    for candidate in _semantic_dict_candidates(row):
+        value = _first_value(
+            candidate.get("semantic_action_type"),
+            candidate.get("action_type"),
+            candidate.get("type"),
+            candidate.get("kind"),
+            candidate.get("intent"),
+            candidate.get("verb"),
+            candidate.get("category"),
+        )
+        value = _norm_token(value)
+        if value and value not in {"unknown", "none", "null"}:
+            return value
+
+    selected = _safe_dict(row.get("selected_player_action"))
+    value = _norm_token(
+        _first_value(
+            selected.get("semantic_action_type"),
+            selected.get("action_type"),
+            row.get("semantic_action_type"),
+            row.get("action_type"),
+        )
+    )
+    if value and value not in {"unknown", "none", "null"}:
+        return value
+
+    return _semantic_action_from_text(_player_action(row))
 
 
 def _target(row: Dict[str, Any]) -> str:
     row = _safe_dict(row)
-    contract = _safe_dict(row.get("turn_contract"))
-    semantic = _safe_dict(contract.get("semantic_action"))
-    resolved = _safe_dict(contract.get("resolved_action"))
+    for candidate in _semantic_dict_candidates(row):
+        value = _first_value(
+            candidate.get("target"),
+            candidate.get("target_id"),
+            candidate.get("target_name"),
+            candidate.get("npc_id"),
+            candidate.get("object"),
+            candidate.get("entity"),
+        )
+        normalized = _normalize_target(value, row)
+        if normalized:
+            return normalized
+
     selected = _safe_dict(row.get("selected_player_action"))
-    return (
-        _safe_str(semantic.get("target"))
-        or _safe_str(semantic.get("target_id"))
-        or _safe_str(resolved.get("target"))
-        or _safe_str(resolved.get("target_id"))
-        or _safe_str(selected.get("target"))
-        or ""
+    normalized = _normalize_target(
+        _first_value(
+            selected.get("target"),
+            selected.get("target_id"),
+            selected.get("target_name"),
+            row.get("target"),
+            row.get("target_id"),
+        ),
+        row,
     )
+    if normalized:
+        return normalized
+
+    return _target_from_text(_player_action(row), row)
 
 
 def _result_reason(row: Dict[str, Any]) -> str:
@@ -220,6 +432,8 @@ def summarize_action_diversity(transcript: List[Dict[str, Any]]) -> Dict[str, An
     semantic_counter = Counter(semantics)
     target_counter = Counter(target for target in targets if target)
     semantic_target_counter = Counter(semantic_target)
+    unknown_semantic_count = semantic_counter.get("unknown", 0)
+    missing_target_count = sum(1 for target in targets if not target)
 
     return {
         "turns": len(rows),
@@ -227,6 +441,10 @@ def summarize_action_diversity(transcript: List[Dict[str, Any]]) -> Dict[str, An
         "unique_semantic_action_count": len(semantic_counter),
         "unique_target_count": len(target_counter),
         "unique_semantic_target_count": len(semantic_target_counter),
+        "unknown_semantic_count": unknown_semantic_count,
+        "unknown_semantic_rate": round(unknown_semantic_count / len(rows), 4) if rows else 0.0,
+        "missing_target_count": missing_target_count,
+        "missing_target_rate": round(missing_target_count / len(rows), 4) if rows else 0.0,
         "top_actions": action_counter.most_common(10),
         "top_semantic_actions": semantic_counter.most_common(10),
         "top_targets": target_counter.most_common(10),
@@ -376,6 +594,18 @@ def summarize_long_run_warnings(
             "error" if strict else "warning",
             "The player-agent repeated the same semantic action/target too many times.",
             _safe_dict(action_diversity_summary.get("max_same_semantic_target_streak")),
+        )
+
+    unknown_semantic_rate = float(action_diversity_summary.get("unknown_semantic_rate") or 0.0)
+    if unknown_semantic_rate >= (0.25 if strict else 0.75):
+        add(
+            "semantic_action_extraction_unknown_rate",
+            "error" if strict else "warning",
+            "Too many turns have unknown semantic action classification.",
+            {
+                "unknown_semantic_rate": unknown_semantic_rate,
+                "unknown_semantic_count": action_diversity_summary.get("unknown_semantic_count"),
+            },
         )
 
     no_progress_streak = int(progress_timeline_summary.get("max_no_progress_streak") or 0)
