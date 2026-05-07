@@ -264,3 +264,58 @@ def test_reconciled_background_jobs_counts_pre_turn_drained_jobs():
     assert summary["pre_turn_drain_accounted"] is True
     assert summary["timeout_job_count"] >= 3
     assert "final_drain_timeout" in summary["errors"]
+
+
+def test_reconcile_performance_budget_background_llm_counts_uses_reconciled_jobs():
+    from tests.rpg.autoplay_llm_campaign import (
+        _reconcile_performance_budget_background_llm_counts,
+    )
+
+    result = _reconcile_performance_budget_background_llm_counts(
+        performance_budget_summary={
+            "live_blocking": {
+                "avg_human_playable_blocking_ms": 50,
+                "max_human_playable_blocking_ms": 90,
+            },
+            "background_llm": {
+                "combined_background_llm_jobs": 6,
+                "total_jobs": 8,
+                "failed_jobs": 3,
+                "avg_ms": 5000,
+            },
+        },
+        background_jobs={
+            "source": "background_result_timing_summary",
+            "legacy_final_drain_result_count": 8,
+            "combined_background_llm_jobs": 20,
+            "total_jobs": 20,
+            "jobs_submitted": 20,
+            "jobs_attached_total": 20,
+            "jobs_attached_pre_turn": 12,
+            "jobs_attached_final": 8,
+            "failed_jobs": 3,
+            "timeout_job_count": 3,
+            "missing_job_count": 0,
+        },
+        background_result_timing_summary={
+            "jobs_submitted": 20,
+            "jobs_attached_total": 20,
+            "jobs_attached_pre_turn": 12,
+            "jobs_attached_final": 8,
+            "missing_job_count": 0,
+        },
+    )
+
+    background_llm = result["background_llm"]
+    assert background_llm["source"] == "reconciled_background_jobs"
+    assert background_llm["legacy_final_drain_result_count"] == 8
+    assert background_llm["combined_background_llm_jobs"] == 20
+    assert background_llm["total_jobs"] == 20
+    assert background_llm["jobs_submitted"] == 20
+    assert background_llm["jobs_attached_pre_turn"] == 12
+    assert background_llm["jobs_attached_final"] == 8
+    assert background_llm["pre_turn_drain_accounted"] is True
+    assert background_llm["failed_jobs"] == 3
+    assert background_llm["timeout_job_count"] == 3
+    # Existing timing fields should be preserved.
+    assert background_llm["avg_ms"] == 5000

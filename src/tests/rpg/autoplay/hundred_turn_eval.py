@@ -456,6 +456,67 @@ def summarize_action_diversity(transcript: List[Dict[str, Any]]) -> Dict[str, An
     }
 
 
+def recent_semantic_target_streak(
+    transcript: List[Dict[str, Any]],
+    *,
+    window: int = 8,
+) -> Dict[str, Any]:
+    """Return the current trailing semantic_action:target streak.
+
+    This is intentionally small and deterministic so the player-agent prompt can
+    apply pressure before the run reaches long-run warning thresholds.
+    """
+    rows = [row for row in transcript if isinstance(row, dict)]
+    if int(window or 0) > 0:
+        rows = rows[-int(window or 0):]
+    pairs: List[str] = []
+    for row in rows:
+        semantic = _safe_str(
+            row.get("semantic_action")
+            or row.get("semantic_action_type")
+            or _safe_dict(row.get("semantic_action_v2")).get("action")
+            or _safe_dict(row.get("semantic_action_v2")).get("semantic_action")
+        ).strip().lower()
+        target = _safe_str(
+            row.get("semantic_target")
+            or row.get("target")
+            or _safe_dict(row.get("semantic_action_v2")).get("target")
+            or _safe_dict(row.get("semantic_action_v2")).get("object")
+        ).strip()
+        if not semantic:
+            semantic = "unknown"
+        if not target:
+            target = "unknown"
+        pairs.append(f"{semantic}:{target}")
+
+    if not pairs:
+        return {
+            "ok": True,
+            "pair": "",
+            "semantic_action": "",
+            "target": "",
+            "streak": 0,
+            "pairs": [],
+        }
+
+    current = pairs[-1]
+    streak = 0
+    for pair in reversed(pairs):
+        if pair != current:
+            break
+        streak += 1
+
+    semantic, _, target = current.partition(":")
+    return {
+        "ok": True,
+        "pair": current,
+        "semantic_action": semantic,
+        "target": target,
+        "streak": streak,
+        "pairs": pairs,
+    }
+
+
 def summarize_progress_timeline(transcript: List[Dict[str, Any]]) -> Dict[str, Any]:
     rows = [_safe_dict(row) for row in (transcript if isinstance(transcript, list) else [])]
     timeline: List[Dict[str, Any]] = []
