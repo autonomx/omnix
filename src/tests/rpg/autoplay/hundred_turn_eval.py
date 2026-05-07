@@ -16,6 +16,255 @@ def _safe_str(value: Any) -> str:
     return value if isinstance(value, str) else ""
 
 
+def _nested_dict(root: Dict[str, Any], *path: str) -> Dict[str, Any]:
+    value: Any = root
+    for key in path:
+        if not isinstance(value, dict):
+            return {}
+        value = value.get(key)
+    return value if isinstance(value, dict) else {}
+
+
+def _nested_value(root: Dict[str, Any], *path: str) -> Any:
+    value: Any = root
+    for key in path:
+        if not isinstance(value, dict):
+            return None
+        value = value.get(key)
+    return value
+
+
+def _normalize_semantic_action_name(value: Any) -> str:
+    text = _safe_str(value).strip()
+    if not text:
+        return ""
+    return text.lower()
+
+
+def _normalize_semantic_target_name(value: Any) -> str:
+    text = _safe_str(value).strip()
+    if not text:
+        return ""
+    if text.startswith("npc:") and len(text) > 4:
+        return text[4:]
+    return text
+
+
+def _semantic_candidate_from_mapping(
+    mapping: Dict[str, Any],
+    *,
+    source: str,
+) -> Dict[str, Any]:
+    mapping = _safe_dict(mapping)
+    if not mapping:
+        return {}
+
+    semantic_action = _normalize_semantic_action_name(
+        mapping.get("semantic_action")
+        or mapping.get("action_type")
+        or mapping.get("action")
+        or mapping.get("type")
+        or mapping.get("kind")
+        or mapping.get("name")
+    )
+    target = _normalize_semantic_target_name(
+        mapping.get("semantic_target")
+        or mapping.get("target_name")
+        or mapping.get("target")
+        or mapping.get("target_id")
+        or mapping.get("object")
+        or mapping.get("object_id")
+        or mapping.get("normalized_target")
+    )
+
+    if not semantic_action and not target:
+        return {}
+
+    if not semantic_action:
+        semantic_action = "unknown"
+    if not target:
+        target = "unknown"
+
+    return {
+        "ok": bool(semantic_action and semantic_action != "unknown"),
+        "semantic_action": semantic_action,
+        "target": target,
+        "pair": f"{semantic_action}:{target}",
+        "source": source,
+        "raw": mapping,
+    }
+
+
+def canonical_semantic_pair_from_turn(row: Dict[str, Any]) -> Dict[str, Any]:
+    """Extract canonical semantic action/target pair from an autoplay row.
+
+    The autoplay/manual harness stores semantic information in several shapes.
+    Action diversity already finds these pairs, but anti-loop previously only
+    checked shallow row fields and therefore saw unknown:unknown.
+
+    Prefer explicit/nested turn-contract semantic metadata, then fall back to
+    existing canonical extractors and shallow compatibility fields.
+    """
+    row = row if isinstance(row, dict) else {}
+
+    turn_contract = _safe_dict(row.get("turn_contract"))
+    turn_result = _safe_dict(row.get("turn_result") or row.get("result"))
+
+    candidate_mappings: List[Tuple[str, Dict[str, Any]]] = [
+        ("row.semantic_action_v2", _safe_dict(row.get("semantic_action_v2"))),
+        ("row.semantic_action_record", _safe_dict(row.get("semantic_action_record"))),
+        (
+            "row.turn_contract.action.metadata.semantic_action",
+            _nested_dict(turn_contract, "action", "metadata", "semantic_action"),
+        ),
+        (
+            "row.turn_contract.action.semantic_action",
+            _nested_dict(turn_contract, "action", "semantic_action"),
+        ),
+        ("row.turn_contract.action", _nested_dict(turn_contract, "action")),
+        (
+            "row.turn_contract.resolved_action.semantic_action",
+            _nested_dict(turn_contract, "resolved_action", "semantic_action"),
+        ),
+        ("row.turn_contract.resolved_action", _nested_dict(turn_contract, "resolved_action")),
+        (
+            "row.turn_contract.resolved_result.semantic_action",
+            _nested_dict(turn_contract, "resolved_result", "semantic_action"),
+        ),
+        ("row.turn_contract.resolved_result", _nested_dict(turn_contract, "resolved_result")),
+        (
+            "row.turn_contract.metadata.semantic_action",
+            _nested_dict(turn_contract, "metadata", "semantic_action"),
+        ),
+        ("row.turn_contract", turn_contract),
+        ("row.turn_result.semantic_action_v2", _safe_dict(turn_result.get("semantic_action_v2"))),
+        (
+            "row.turn_result.turn_contract.action.metadata.semantic_action",
+            _nested_dict(turn_result, "turn_contract", "action", "metadata", "semantic_action"),
+        ),
+        (
+            "row.result.turn_contract.action.metadata.semantic_action",
+            _nested_dict(turn_result, "turn_contract", "action", "metadata", "semantic_action"),
+        ),
+    ]
+
+    for source, mapping in candidate_mappings:
+        candidate = _semantic_candidate_from_mapping(mapping, source=source)
+        if candidate and (
+            candidate.get("semantic_action") != "unknown"
+            or candidate.get("target") != "unknown"
+        ):
+            return candidate
+
+    # Compatibility path: use existing private/public extractor if present.
+    # This is intentionally after explicit nested turn-contract metadata because
+    # some older extractors return partial/unknown data for current rows.
+    for name in (
+        "_extract_semantic_action_from_turn",
+        "extract_semantic_action_from_turn",
+        "_extract_semantic_action",
+        "extract_semantic_action",
+        "_semantic_action_from_row",
+    ):
+        fn = globals().get(name)
+        if not callable(fn):
+            continue
+        try:
+            value = fn(row)
+        except TypeError:
+            try:
+                value = fn(turn=row)
+            except Exception:
+                value = {}
+        except Exception:
+            value = {}
+        candidate = _semantic_candidate_from_mapping(
+            _safe_dict(value),
+            source=f"extractor.{name}",
+        )
+        if candidate and (
+            candidate.get("semantic_action") != "unknown"
+            or candidate.get("target") != "unknown"
+        ):
+            return candidate
+
+    # Shallow legacy fallback.
+    shallow_candidate = _semantic_candidate_from_mapping(
+        {
+            "semantic_action": (
+                row.get("semantic_action")
+                or row.get("semantic_action_type")
+                or row.get("action_type")
+                or row.get("action")
+            ),
+            "target": (
+                row.get("semantic_target")
+                or row.get("target")
+                or row.get("target_name")
+                or row.get("target_id")
+            ),
+        },
+        source="row.shallow",
+    )
+    if shallow_candidate:
+        return shallow_candidate
+
+    # Last-resort deterministic classifier from selected/player action text.
+    action_text = _safe_str(
+        row.get("selected_player_action")
+        or row.get("player_action")
+        or row.get("player_input")
+        or row.get("input")
+    )
+    if action_text:
+        lower = action_text.lower()
+        target = "unknown"
+        for name in ("bran", "silas", "cloaked traveler", "traveler", "patron", "innkeeper", "bartender", "inn"):
+            if name in lower:
+                if name in ("bran", "innkeeper", "bartender"):
+                    target = "Bran"
+                elif name == "traveler":
+                    target = "Cloaked Traveler"
+                else:
+                    target = name.title() if name != "inn" else "inn"
+                break
+
+        if any(term in lower for term in ("rent", "room", "lodging", "bed")):
+            semantic_action = "rent_room"
+            if target == "unknown":
+                target = "inn"
+        elif any(term in lower for term in ("buy", "pay", "order", "drink", "meal")):
+            semantic_action = "service_inquiry"
+        elif any(term in lower for term in ("ask", "question", "inquire", "press")):
+            semantic_action = "service_inquiry" if target == "Bran" else "ask"
+        elif any(term in lower for term in ("observe", "watch", "listen", "wait", "scan", "look")):
+            semantic_action = "observe"
+        elif any(term in lower for term in ("leave", "travel", "go to", "head outside", "step outside")):
+            semantic_action = "travel"
+        elif any(term in lower for term in ("inspect", "examine", "search", "check")):
+            semantic_action = "inspect"
+        else:
+            semantic_action = "unknown"
+
+        return {
+            "ok": semantic_action != "unknown",
+            "semantic_action": semantic_action,
+            "target": target,
+            "pair": f"{semantic_action}:{target}",
+            "source": "player_action_text_fallback",
+            "raw": {"text": action_text},
+        }
+
+    return {
+        "ok": False,
+        "semantic_action": "unknown",
+        "target": "unknown",
+        "pair": "unknown:unknown",
+        "source": "canonical_semantic_pair_from_turn.none",
+        "raw": {},
+    }
+
+
 def _norm_token(value: Any) -> str:
     text = _safe_str(value).strip()
     if not text:
@@ -470,24 +719,11 @@ def recent_semantic_target_streak(
     if int(window or 0) > 0:
         rows = rows[-int(window or 0):]
     pairs: List[str] = []
+    extracted_pairs: List[Dict[str, Any]] = []
     for row in rows:
-        semantic = _safe_str(
-            row.get("semantic_action")
-            or row.get("semantic_action_type")
-            or _safe_dict(row.get("semantic_action_v2")).get("action")
-            or _safe_dict(row.get("semantic_action_v2")).get("semantic_action")
-        ).strip().lower()
-        target = _safe_str(
-            row.get("semantic_target")
-            or row.get("target")
-            or _safe_dict(row.get("semantic_action_v2")).get("target")
-            or _safe_dict(row.get("semantic_action_v2")).get("object")
-        ).strip()
-        if not semantic:
-            semantic = "unknown"
-        if not target:
-            target = "unknown"
-        pairs.append(f"{semantic}:{target}")
+        pair = canonical_semantic_pair_from_turn(row)
+        extracted_pairs.append(pair)
+        pairs.append(_safe_str(pair.get("pair")) or "unknown:unknown")
 
     if not pairs:
         return {
@@ -497,6 +733,8 @@ def recent_semantic_target_streak(
             "target": "",
             "streak": 0,
             "pairs": [],
+            "extracted_pairs": [],
+            "source": "canonical_semantic_pair_from_turn",
         }
 
     current = pairs[-1]
@@ -514,6 +752,8 @@ def recent_semantic_target_streak(
         "target": target,
         "streak": streak,
         "pairs": pairs,
+        "extracted_pairs": extracted_pairs,
+        "source": "canonical_semantic_pair_from_turn",
     }
 
 

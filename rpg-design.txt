@@ -1,531 +1,558 @@
 Below is the literal patch spec for:
 
-N81.2.7 — Player-Agent Anti-Loop Action Diversity Pressure
+N81.2.7.2 — Nested Turn Contract Semantic Extraction for Anti-Loop
 Goal
 
-Fix warning:
+Fix remaining cleanup issue:
 
-repeated_semantic_target_streak: observe:Bran, streak 5
+player_agent_anti_loop_context active=True pair=unknown:unknown streak=12
+source=canonical_semantic_pair_from_turn
 
-Current problem:
+Current bug:
 
-The player-agent produces textually varied actions that semantically collapse to the same pair:
-  observe:Bran
-  observe:Bran
-  observe:Bran
+canonical_semantic_pair_from_turn(row) is now wired into anti-loop,
+but it still misses the actual semantic data because the data lives deeper:
+
+turn_contract.action.metadata.semantic_action.action_type
+turn_contract.action.metadata.semantic_action.target_name
+turn_contract.action.metadata.semantic_action.target_id
 
 Correct behavior:
 
-Before asking the LLM for the next player action:
-  detect recent semantic_action:target streaks
-  add anti-loop pressure to the player-agent prompt
-  provide concrete alternative action families
+Anti-loop context should read the same semantic pair that action_diversity_summary sees.
 
-After the LLM responds:
-  if it repeats the forbidden pair, repair once
-  if repair still repeats, use deterministic fallback
+Expected:
+  service_inquiry:Bran
+  observe:Bran
+  rent_room:inn
+  observe:Cloaked Traveler
+
+Not:
+  unknown:unknown
 1. Patch src/tests/rpg/autoplay/hundred_turn_eval.py
-1A. Add reusable recent-streak helper
+1A. Add nested dict/path helpers
 
-Find existing semantic extraction helpers in this file, near functions like:
-
-extract_semantic_action_from_turn
-summarize_action_diversity
-
-Add:
+Add near _safe_dict, _safe_str, and the semantic extraction helpers:
 
 --- src/tests/rpg/autoplay/hundred_turn_eval.py
 +++ src/tests/rpg/autoplay/hundred_turn_eval.py
 @@
- def _safe_str(value: Any) -> str:
-     return value if isinstance(value, str) else ""
-+
-+
-+def recent_semantic_target_streak(
-+    transcript: List[Dict[str, Any]],
-+    *,
-+    window: int = 8,
-+) -> Dict[str, Any]:
-+    """Return the current trailing semantic_action:target streak.
-+
-+    This is intentionally small and deterministic so the player-agent prompt can
-+    apply pressure before the run reaches long-run warning thresholds.
-+    """
-+    rows = [row for row in transcript if isinstance(row, dict)]
-+    if int(window or 0) > 0:
-+        rows = rows[-int(window or 0):]
-+    pairs: List[str] = []
-+    for row in rows:
-+        semantic = _safe_str(
-+            row.get("semantic_action")
-+            or row.get("semantic_action_type")
-+            or _safe_dict(row.get("semantic_action_v2")).get("action")
-+            or _safe_dict(row.get("semantic_action_v2")).get("semantic_action")
-+        ).strip().lower()
-+        target = _safe_str(
-+            row.get("semantic_target")
-+            or row.get("target")
-+            or _safe_dict(row.get("semantic_action_v2")).get("target")
-+            or _safe_dict(row.get("semantic_action_v2")).get("object")
-+        ).strip()
-+        if not semantic:
-+            semantic = "unknown"
-+        if not target:
-+            target = "unknown"
-+        pairs.append(f"{semantic}:{target}")
-+
-+    if not pairs:
-+        return {
-+            "ok": True,
-+            "pair": "",
-+            "semantic_action": "",
-+            "target": "",
-+            "streak": 0,
-+            "pairs": [],
-+        }
-+
-+    current = pairs[-1]
-+    streak = 0
-+    for pair in reversed(pairs):
-+        if pair != current:
-+            break
-+        streak += 1
-+
-+    semantic, _, target = current.partition(":")
-+    return {
-+        "ok": True,
-+        "pair": current,
-+        "semantic_action": semantic,
-+        "target": target,
-+        "streak": streak,
-+        "pairs": pairs,
-+    }
-
-If _safe_dict is not available in this file, add:
-
-@@
- def _safe_str(value: Any) -> str:
-     return value if isinstance(value, str) else ""
-+
-+
-+def _safe_dict(value: Any) -> Dict[str, Any]:
-+    return value if isinstance(value, dict) else {}
-2. Patch src/tests/rpg/autoplay_llm_campaign.py
-2A. Import the helper
-
-Find imports from hundred_turn_eval.py, likely near:
-
-from tests.rpg.autoplay.hundred_turn_eval import (
-    summarize_action_diversity,
-    summarize_hundred_turn_eval,
-    summarize_progress_timeline,
-)
-
-Add recent_semantic_target_streak:
-
---- src/tests/rpg/autoplay_llm_campaign.py
-+++ src/tests/rpg/autoplay_llm_campaign.py
-@@
- from tests.rpg.autoplay.hundred_turn_eval import (
-+    recent_semantic_target_streak,
-     summarize_action_diversity,
-     summarize_hundred_turn_eval,
-     summarize_progress_timeline,
- )
-
-Adjust exact import block shape if your file differs.
-
-2B. Add CLI knobs
-
-In build_arg_parser(), near player-agent/action diversity args, add:
-
---- src/tests/rpg/autoplay_llm_campaign.py
-+++ src/tests/rpg/autoplay_llm_campaign.py
-@@
-     parser.add_argument(
-         "--action-diversity-window",
-         type=int,
-         default=12,
-         help="Recent-turn window for action diversity warnings.",
-     )
-+    parser.add_argument(
-+        "--player-agent-anti-loop-streak-threshold",
-+        type=int,
-+        default=3,
-+        help=(
-+            "When the trailing semantic_action:target streak reaches this value, "
-+            "inject anti-loop pressure into the player-agent prompt."
-+        ),
-+    )
-+    parser.add_argument(
-+        "--player-agent-anti-loop-repair",
-+        action="store_true",
-+        default=True,
-+        help="Repair the player-agent action once if it repeats the forbidden semantic target pair.",
-+    )
-+    parser.add_argument(
-+        "--no-player-agent-anti-loop-repair",
-+        action="store_false",
-+        dest="player_agent_anti_loop_repair",
-+        help="Disable one-shot anti-loop action repair.",
-+    )
-2C. Add anti-loop context helper
-
-Add near other player-agent helpers:
-
---- src/tests/rpg/autoplay_llm_campaign.py
-+++ src/tests/rpg/autoplay_llm_campaign.py
-@@
- def _probe_log(enabled: bool, event: str, **fields: Any) -> None:
-@@
-     print(" ".join(parts), flush=True)
-+
-+
-+def _build_player_agent_anti_loop_context(
-+    *,
-+    transcript: List[Dict[str, Any]],
-+    threshold: int,
-+    window: int,
-+) -> Dict[str, Any]:
-+    streak = recent_semantic_target_streak(
-+        transcript,
-+        window=max(int(window or 8), int(threshold or 3) + 2),
-+    )
-+    pair = _safe_str(streak.get("pair"))
-+    semantic_action = _safe_str(streak.get("semantic_action"))
-+    target = _safe_str(streak.get("target"))
-+    count = int(streak.get("streak") or 0)
-+    active = bool(pair and count >= int(threshold or 3))
-+
-+    alternatives: List[str] = []
-+    if active:
-+        if target and target.lower() not in ("", "unknown"):
-+            alternatives.extend(
-+                [
-+                    f"Do not repeat another {semantic_action or 'similar'} action targeting {target}.",
-+                    f"Ask {target} a specific new question that changes the situation, not another observe/listen/wait action.",
-+                    "Choose a different target in the location, such as another patron, the room, the notice board, the door, or the street outside.",
-+                    "Use a concrete service/action: buy, pay, travel, inspect a physical clue, accept/refuse a lead, or move to a new location.",
-+                ]
-+            )
-+        else:
-+            alternatives.extend(
-+                [
-+                    f"Do not repeat another {semantic_action or 'same'} action with the same target.",
-+                    "Choose a concrete action that changes target, location, objective, or service state.",
-+                ]
-+            )
-+
-+    return {
-+        "active": active,
-+        "pair": pair,
-+        "semantic_action": semantic_action,
-+        "target": target,
-+        "streak": count,
-+        "threshold": int(threshold or 3),
-+        "alternatives": alternatives,
-+    }
-+
-+
-+def _format_player_agent_anti_loop_prompt(context: Dict[str, Any]) -> str:
-+    context = _safe_dict(context)
-+    if not context.get("active"):
-+        return ""
-+    alternatives = [
-+        f"- {text}" for text in _safe_list(context.get("alternatives")) if _safe_str(text)
-+    ]
-+    return (
-+        "\n\nANTI-LOOP REQUIREMENT:\n"
-+        f"The recent action pattern is repeating `{_safe_str(context.get('pair'))}` "
-+        f"for {_safe_str(context.get('streak'))} turns.\n"
-+        "Your next action must break this semantic loop.\n"
-+        "Do not use another vague observe/listen/watch/wait action against the same target.\n"
-+        "Pick a concrete action that changes the target, objective, location, or service state.\n"
-+        + "\n".join(alternatives[:6])
-+        + "\n"
-+    )
-
-If _safe_list is missing in this file, add:
-
-@@
  def _safe_dict(value: Any) -> Dict[str, Any]:
      return value if isinstance(value, dict) else {}
-+
-+
-+def _safe_list(value: Any) -> List[Any]:
-+    return value if isinstance(value, list) else []
-2D. Thread anti-loop context into player-agent prompt
-
-Find the compact LLM player-agent function. It likely contains:
-
-def _select_compact_llm_player_action(...):
-
-and builds a prompt string before:
-
-provider_messages = [...]
-response = provider.chat_completion(...)
-
-Change the function signature to accept anti-loop context.
-
-Example:
-
---- src/tests/rpg/autoplay_llm_campaign.py
-+++ src/tests/rpg/autoplay_llm_campaign.py
-@@
- def _select_compact_llm_player_action(
-     *,
-     provider: Any,
-     transcript: List[Dict[str, Any]],
-     session_id: str,
-     turn_index: int,
-     args: Any,
-+    anti_loop_context: Optional[Dict[str, Any]] = None,
- ) -> str:
-
-If the function signature differs, add anti_loop_context: Optional[Dict[str, Any]] = None to the keyword args.
-
-Then, after the main prompt/context string is built, append:
-
-@@
--    prompt = "\n".join(prompt_parts)
-+    prompt = "\n".join(prompt_parts)
-+    prompt += _format_player_agent_anti_loop_prompt(_safe_dict(anti_loop_context))
-
-If the code uses system_prompt instead of prompt, append to the user/developer instruction portion that directly guides the next action.
-
-Important: the anti-loop text must be in the message that the LLM sees when choosing the next action.
-
-2E. Build anti-loop context before player-agent selection
-
-In the main turn loop, before the player-agent selection block, add:
-
---- src/tests/rpg/autoplay_llm_campaign.py
-+++ src/tests/rpg/autoplay_llm_campaign.py
-@@
-         if int(getattr(args, "pre_turn_background_drain_ms", 0) or 0) >= 0:
-             ...
  
-+        anti_loop_context = _build_player_agent_anti_loop_context(
-+            transcript=transcript,
-+            threshold=int(getattr(args, "player_agent_anti_loop_streak_threshold", 3) or 3),
-+            window=int(getattr(args, "action_diversity_window", 12) or 12),
-+        )
-+        _probe_log(
-+            bool(getattr(args, "debug_autoplay_stage_timing", False)),
-+            "player_agent_anti_loop_context",
-+            turn_index=turn_index,
-+            active=anti_loop_context.get("active"),
-+            pair=anti_loop_context.get("pair"),
-+            streak=anti_loop_context.get("streak"),
-+            threshold=anti_loop_context.get("threshold"),
-+        )
+ 
+ def _safe_str(value: Any) -> str:
+     return value if isinstance(value, str) else ""
 +
-         with _ProbeTimer(
-             bool(getattr(args, "debug_autoplay_stage_timing", False)),
-             "player_agent_select_action",
++
++def _nested_dict(root: Dict[str, Any], *path: str) -> Dict[str, Any]:
++    value: Any = root
++    for key in path:
++        if not isinstance(value, dict):
++            return {}
++        value = value.get(key)
++    return value if isinstance(value, dict) else {}
++
++
++def _nested_value(root: Dict[str, Any], *path: str) -> Any:
++    value: Any = root
++    for key in path:
++        if not isinstance(value, dict):
++            return None
++        value = value.get(key)
++    return value
++
++
++def _normalize_semantic_action_name(value: Any) -> str:
++    text = _safe_str(value).strip()
++    if not text:
++        return ""
++    return text.lower()
++
++
++def _normalize_semantic_target_name(value: Any) -> str:
++    text = _safe_str(value).strip()
++    if not text:
++        return ""
++    if text.startswith("npc:") and len(text) > 4:
++        return text[4:]
++    return text
 
-Then update the player-agent call.
+If _safe_dict already appears after _safe_str, place these helpers after both exist.
 
-Find:
+1B. Add semantic candidate helper
 
-player_action = _select_compact_llm_player_action(
-    ...
-)
+Add near canonical_semantic_pair_from_turn(...):
 
-Add:
-
+--- src/tests/rpg/autoplay/hundred_turn_eval.py
++++ src/tests/rpg/autoplay/hundred_turn_eval.py
 @@
-         player_action = _select_compact_llm_player_action(
-             ...
-+            anti_loop_context=anti_loop_context,
-         )
-
-If your player-agent selector returns a dict, pass the context into the specific compact LLM selector.
-
-3. Add post-generation anti-loop guard
-3A. Add semantic classifier for proposed action
-
-Add near player-agent helpers:
-
---- src/tests/rpg/autoplay_llm_campaign.py
-+++ src/tests/rpg/autoplay_llm_campaign.py
-@@
- def _format_player_agent_anti_loop_prompt(context: Dict[str, Any]) -> str:
-@@
-     )
+ def _normalize_semantic_target_name(value: Any) -> str:
+     text = _safe_str(value).strip()
+     if not text:
+         return ""
+     if text.startswith("npc:") and len(text) > 4:
+         return text[4:]
+     return text
 +
 +
-+def _rough_semantic_pair_for_player_action(action: str, *, default_target: str = "unknown") -> Dict[str, str]:
-+    """Cheap deterministic classifier for anti-loop repair.
++def _semantic_candidate_from_mapping(
++    mapping: Dict[str, Any],
++    *,
++    source: str,
++) -> Dict[str, Any]:
++    mapping = _safe_dict(mapping)
++    if not mapping:
++        return {}
 +
-+    This does not replace the authoritative semantic extractor. It only catches
-+    obvious soft-loop player-agent outputs before submitting the action.
-+    """
-+    text = _safe_str(action).strip()
-+    lower = text.lower()
-+    target = default_target or "unknown"
-+    for name in ("bran", "silas", "patron", "innkeeper", "bartender", "guard", "merchant"):
-+        if name in lower:
-+            target = "Bran" if name in ("bran", "innkeeper", "bartender") else name.title()
-+            break
-+
-+    observe_terms = (
-+        "listen",
-+        "watch",
-+        "observe",
-+        "wait",
-+        "nod",
-+        "scan",
-+        "look around",
-+        "maintaining eye contact",
-+        "eye contact",
++    semantic_action = _normalize_semantic_action_name(
++        mapping.get("semantic_action")
++        or mapping.get("action_type")
++        or mapping.get("action")
++        or mapping.get("type")
++        or mapping.get("kind")
++        or mapping.get("name")
 +    )
-+    ask_terms = ("ask", "question", "press", "inquire", "say", "tell me")
-+    travel_terms = ("leave", "go to", "travel", "head outside", "step outside", "move to")
-+    service_terms = ("buy", "pay", "rent", "room", "drink", "meal", "order")
-+    inspect_terms = ("inspect", "examine", "search", "check")
++    target = _normalize_semantic_target_name(
++        mapping.get("semantic_target")
++        or mapping.get("target_name")
++        or mapping.get("target")
++        or mapping.get("target_id")
++        or mapping.get("object")
++        or mapping.get("object_id")
++        or mapping.get("normalized_target")
++    )
 +
-+    if any(term in lower for term in travel_terms):
-+        semantic = "travel"
-+    elif any(term in lower for term in service_terms):
-+        semantic = "service"
-+    elif any(term in lower for term in inspect_terms):
-+        semantic = "inspect"
-+    elif any(term in lower for term in ask_terms):
-+        semantic = "ask"
-+    elif any(term in lower for term in observe_terms):
-+        semantic = "observe"
-+    else:
-+        semantic = "unknown"
++    if not semantic_action and not target:
++        return {}
++
++    if not semantic_action:
++        semantic_action = "unknown"
++    if not target:
++        target = "unknown"
 +
 +    return {
-+        "semantic_action": semantic,
++        "ok": bool(semantic_action and semantic_action != "unknown"),
++        "semantic_action": semantic_action,
 +        "target": target,
-+        "pair": f"{semantic}:{target}",
++        "pair": f"{semantic_action}:{target}",
++        "source": source,
++        "raw": mapping,
 +    }
-+
-+
-+def _action_violates_anti_loop(action: str, anti_loop_context: Dict[str, Any]) -> bool:
-+    context = _safe_dict(anti_loop_context)
-+    if not context.get("active"):
-+        return False
-+    forbidden_semantic = _safe_str(context.get("semantic_action")).lower()
-+    forbidden_target = _safe_str(context.get("target")).lower()
-+    proposed = _rough_semantic_pair_for_player_action(
-+        action,
-+        default_target=_safe_str(context.get("target")) or "unknown",
-+    )
-+    proposed_semantic = _safe_str(proposed.get("semantic_action")).lower()
-+    proposed_target = _safe_str(proposed.get("target")).lower()
-+
-+    if not forbidden_semantic or not forbidden_target:
-+        return False
-+    if proposed_semantic == forbidden_semantic and proposed_target == forbidden_target:
-+        return True
-+    # Catch vague observe/listen/wait text against the same target even if the
-+    # proposed classifier lands on unknown.
-+    if forbidden_semantic == "observe" and proposed_target == forbidden_target:
-+        lower = _safe_str(action).lower()
-+        if any(term in lower for term in ("listen", "watch", "observe", "wait", "nod", "eye contact")):
-+            return True
-+    return False
-+
-+
-+def _deterministic_anti_loop_fallback_action(anti_loop_context: Dict[str, Any]) -> str:
-+    context = _safe_dict(anti_loop_context)
-+    target = _safe_str(context.get("target")) or "Bran"
-+    if target.lower() == "bran":
-+        return (
-+            "Turn away from Bran for the moment and speak to a nearby patron, asking what they have heard "
-+            "about Silas or trouble on the road."
-+        )
-+    return (
-+        "Change focus to a different part of the scene: inspect the room, look for a notice board, "
-+        "or ask a different nearby NPC about the current lead."
-+    )
-3B. Repair or fallback after the LLM action
+1C. Replace canonical_semantic_pair_from_turn(...)
 
-In the main turn loop, immediately after:
+Find the full existing function:
 
-player_action = ...
+def canonical_semantic_pair_from_turn(row: Dict[str, Any]) -> Dict[str, Any]:
+    ...
 
-and after the existing probe result log, add:
+Replace it with this version:
 
---- src/tests/rpg/autoplay_llm_campaign.py
-+++ src/tests/rpg/autoplay_llm_campaign.py
+--- src/tests/rpg/autoplay/hundred_turn_eval.py
++++ src/tests/rpg/autoplay/hundred_turn_eval.py
 @@
-         _probe_log(
-             bool(getattr(args, "debug_autoplay_stage_timing", False)),
-             "player_agent_select_action.result",
-             turn_index=turn_index,
-             action_preview=_safe_str(player_action)[:220],
-         )
+ def canonical_semantic_pair_from_turn(row: Dict[str, Any]) -> Dict[str, Any]:
+-    """Extract the same semantic action/target pair used by action diversity.
+-
+-    This intentionally prefers the existing canonical semantic extraction path
+-    rather than ad-hoc row fields. Anti-loop pressure must see the same pairs as
+-    action_diversity_summary, otherwise it can incorrectly report
+-    unknown:unknown while the summary sees observe:Bran.
+-    """
++    """Extract canonical semantic action/target pair from an autoplay row.
 +
-+        if (
-+            bool(getattr(args, "player_agent_anti_loop_repair", True))
-+            and _action_violates_anti_loop(_safe_str(player_action), anti_loop_context)
++    The autoplay/manual harness stores semantic information in several shapes.
++    Action diversity already finds these pairs, but anti-loop previously only
++    checked shallow row fields and therefore saw unknown:unknown.
++
++    Prefer explicit/nested turn-contract semantic metadata, then fall back to
++    existing canonical extractors and shallow compatibility fields.
++    """
+     row = row if isinstance(row, dict) else {}
+ 
+-    extracted: Dict[str, Any] = {}
+-
+-    # Preferred path: use the existing canonical extractor if present.
+-    for name in (
+-        "_extract_semantic_action_from_turn",
+-        "extract_semantic_action_from_turn",
+-        "_extract_semantic_action",
+-        "extract_semantic_action",
+-        "_semantic_action_from_row",
+-    ):
+-        fn = globals().get(name)
+-        if not callable(fn):
+-            continue
+-        try:
+-            value = fn(row)
+-        except TypeError:
+-            try:
+-                value = fn(turn=row)
+-            except Exception:
+-                value = {}
+-        except Exception:
+-            value = {}
+-        if isinstance(value, dict) and value:
+-            extracted = value
+-            break
+-
+-    # Fallback path mirrors the known places semantic extraction may have been
+-    # stored by the autoplay/manual harness.
+-    semantic_action = _safe_str(
+-        extracted.get("semantic_action")
+-        or extracted.get("action")
+-        or extracted.get("type")
+-        or row.get("semantic_action")
+-        or row.get("semantic_action_type")
+-        or _safe_dict(row.get("semantic_action_v2")).get("semantic_action")
+-        or _safe_dict(row.get("semantic_action_v2")).get("action")
+-        or _safe_dict(row.get("semantic_action_record")).get("semantic_action")
+-        or _safe_dict(row.get("semantic_action_record")).get("action")
+-        or _safe_dict(row.get("turn_contract")).get("semantic_action")
+-        or _safe_dict(row.get("turn_contract")).get("action_type")
+-    ).strip()
+-
+-    target = _safe_str(
+-        extracted.get("semantic_target")
+-        or extracted.get("target")
+-        or extracted.get("object")
+-        or row.get("semantic_target")
+-        or row.get("target")
+-        or _safe_dict(row.get("semantic_action_v2")).get("target")
+-        or _safe_dict(row.get("semantic_action_v2")).get("object")
+-        or _safe_dict(row.get("semantic_action_record")).get("target")
+-        or _safe_dict(row.get("semantic_action_record")).get("object")
+-        or _safe_dict(row.get("turn_contract")).get("target")
+-        or _safe_dict(row.get("turn_contract")).get("object")
+-    ).strip()
+-
+-    # Some canonical extractors return fields under normalized names.
+-    if not semantic_action:
+-        semantic_action = _safe_str(extracted.get("name") or extracted.get("kind")).strip()
+-    if not target:
+-        target = _safe_str(extracted.get("normalized_target") or extracted.get("target_id")).strip()
+-
+-    semantic_action = semantic_action.lower() if semantic_action else "unknown"
+-    target = target if target else "unknown"
+-
+-    return {
+-        "ok": bool(semantic_action and semantic_action != "unknown"),
+-        "semantic_action": semantic_action,
+-        "target": target,
+-        "pair": f"{semantic_action}:{target}",
+-        "source": _safe_str(extracted.get("source")) or "canonical_semantic_pair_from_turn",
+-        "raw": extracted,
+-    }
++    turn_contract = _safe_dict(row.get("turn_contract"))
++    turn_result = _safe_dict(row.get("turn_result") or row.get("result"))
++
++    candidate_mappings: List[Tuple[str, Dict[str, Any]]] = [
++        ("row.semantic_action_v2", _safe_dict(row.get("semantic_action_v2"))),
++        ("row.semantic_action_record", _safe_dict(row.get("semantic_action_record"))),
++        (
++            "row.turn_contract.action.metadata.semantic_action",
++            _nested_dict(turn_contract, "action", "metadata", "semantic_action"),
++        ),
++        (
++            "row.turn_contract.action.semantic_action",
++            _nested_dict(turn_contract, "action", "semantic_action"),
++        ),
++        ("row.turn_contract.action", _nested_dict(turn_contract, "action")),
++        (
++            "row.turn_contract.resolved_action.semantic_action",
++            _nested_dict(turn_contract, "resolved_action", "semantic_action"),
++        ),
++        ("row.turn_contract.resolved_action", _nested_dict(turn_contract, "resolved_action")),
++        (
++            "row.turn_contract.resolved_result.semantic_action",
++            _nested_dict(turn_contract, "resolved_result", "semantic_action"),
++        ),
++        ("row.turn_contract.resolved_result", _nested_dict(turn_contract, "resolved_result")),
++        (
++            "row.turn_contract.metadata.semantic_action",
++            _nested_dict(turn_contract, "metadata", "semantic_action"),
++        ),
++        ("row.turn_contract", turn_contract),
++        ("row.turn_result.semantic_action_v2", _safe_dict(turn_result.get("semantic_action_v2"))),
++        (
++            "row.turn_result.turn_contract.action.metadata.semantic_action",
++            _nested_dict(turn_result, "turn_contract", "action", "metadata", "semantic_action"),
++        ),
++        (
++            "row.result.turn_contract.action.metadata.semantic_action",
++            _nested_dict(turn_result, "turn_contract", "action", "metadata", "semantic_action"),
++        ),
++    ]
++
++    for source, mapping in candidate_mappings:
++        candidate = _semantic_candidate_from_mapping(mapping, source=source)
++        if candidate and (
++            candidate.get("semantic_action") != "unknown"
++            or candidate.get("target") != "unknown"
 +        ):
-+            repaired_action = _deterministic_anti_loop_fallback_action(anti_loop_context)
-+            _probe_log(
-+                bool(getattr(args, "debug_autoplay_stage_timing", False)),
-+                "player_agent_anti_loop_repair.applied",
-+                turn_index=turn_index,
-+                forbidden_pair=anti_loop_context.get("pair"),
-+                original_action=_safe_str(player_action)[:220],
-+                repaired_action=repaired_action[:220],
-+            )
-+            player_action = repaired_action
++            return candidate
++
++    # Compatibility path: use existing private/public extractor if present.
++    # This is intentionally after explicit nested turn-contract metadata because
++    # some older extractors return partial/unknown data for current rows.
++    for name in (
++        "_extract_semantic_action_from_turn",
++        "extract_semantic_action_from_turn",
++        "_extract_semantic_action",
++        "extract_semantic_action",
++        "_semantic_action_from_row",
++    ):
++        fn = globals().get(name)
++        if not callable(fn):
++            continue
++        try:
++            value = fn(row)
++        except TypeError:
++            try:
++                value = fn(turn=row)
++            except Exception:
++                value = {}
++        except Exception:
++            value = {}
++        candidate = _semantic_candidate_from_mapping(
++            _safe_dict(value),
++            source=f"extractor.{name}",
++        )
++        if candidate and (
++            candidate.get("semantic_action") != "unknown"
++            or candidate.get("target") != "unknown"
++        ):
++            return candidate
++
++    # Shallow legacy fallback.
++    shallow_candidate = _semantic_candidate_from_mapping(
++        {
++            "semantic_action": (
++                row.get("semantic_action")
++                or row.get("semantic_action_type")
++                or row.get("action_type")
++                or row.get("action")
++            ),
++            "target": (
++                row.get("semantic_target")
++                or row.get("target")
++                or row.get("target_name")
++                or row.get("target_id")
++            ),
++        },
++        source="row.shallow",
++    )
++    if shallow_candidate:
++        return shallow_candidate
++
++    # Last-resort deterministic classifier from selected/player action text.
++    action_text = _safe_str(
++        row.get("selected_player_action")
++        or row.get("player_action")
++        or row.get("player_input")
++        or row.get("input")
++    )
++    if action_text:
++        lower = action_text.lower()
++        target = "unknown"
++        for name in ("bran", "silas", "cloaked traveler", "traveler", "patron", "innkeeper", "bartender", "inn"):
++            if name in lower:
++                if name in ("bran", "innkeeper", "bartender"):
++                    target = "Bran"
++                elif name == "traveler":
++                    target = "Cloaked Traveler"
++                else:
++                    target = name.title() if name != "inn" else "inn"
++                break
++
++        if any(term in lower for term in ("rent", "room", "lodging", "bed")):
++            semantic_action = "rent_room"
++            if target == "unknown":
++                target = "inn"
++        elif any(term in lower for term in ("buy", "pay", "order", "drink", "meal")):
++            semantic_action = "service_inquiry"
++        elif any(term in lower for term in ("ask", "question", "inquire", "press")):
++            semantic_action = "service_inquiry" if target == "Bran" else "ask"
++        elif any(term in lower for term in ("observe", "watch", "listen", "wait", "scan", "look")):
++            semantic_action = "observe"
++        elif any(term in lower for term in ("leave", "travel", "go to", "head outside", "step outside")):
++            semantic_action = "travel"
++        elif any(term in lower for term in ("inspect", "examine", "search", "check")):
++            semantic_action = "inspect"
++        else:
++            semantic_action = "unknown"
++
++        return {
++            "ok": semantic_action != "unknown",
++            "semantic_action": semantic_action,
++            "target": target,
++            "pair": f"{semantic_action}:{target}",
++            "source": "player_action_text_fallback",
++            "raw": {"text": action_text},
++        }
++
++    return {
++        "ok": False,
++        "semantic_action": "unknown",
++        "target": "unknown",
++        "pair": "unknown:unknown",
++        "source": "canonical_semantic_pair_from_turn.none",
++        "raw": {},
++    }
 
-This is deterministic fallback instead of another LLM call. That keeps the test fast and reliable.
+Note: this uses Tuple, so update imports if needed.
 
-4. Add anti-loop info to transcript row
+Find top import:
 
-Find where each transcript record / row is created. It likely includes:
+from typing import Any, Dict, List
 
-"player_input": player_action,
-"turn_index": turn_index,
+Change to:
 
-Add:
-
+--- src/tests/rpg/autoplay/hundred_turn_eval.py
++++ src/tests/rpg/autoplay/hundred_turn_eval.py
 @@
-             "player_input": player_action,
-+            "player_agent_anti_loop_context": anti_loop_context,
+-from typing import Any, Dict, List
++from typing import Any, Dict, List, Tuple
 
-If there is a player-agent trace dict, also add:
+If Tuple is already imported, do not duplicate.
 
-@@
-             "player_agent_trace": {
-                 ...
-+                "anti_loop_context": anti_loop_context,
-             },
-
-Use the actual structure in your file.
-
-5. Add tests
-5A. Add anti-loop helper tests
+2. Patch tests
 
 Patch:
 
 src/tests/rpg/autoplay/test_player_agent_anti_loop.py
+2A. Add test for nested turn_contract.action.metadata.semantic_action
 
-Create file if missing:
+Append:
 
---- /dev/null
+--- src/tests/rpg/autoplay/test_player_agent_anti_loop.py
 +++ src/tests/rpg/autoplay/test_player_agent_anti_loop.py
 @@
-+from tests.rpg.autoplay_llm_campaign import (
-+    _action_violates_anti_loop,
-+    _build_player_agent_anti_loop_context,
-+    _deterministic_anti_loop_fallback_action,
-+    _rough_semantic_pair_for_player_action,
-+)
+ def test_player_agent_anti_loop_context_reports_canonical_recent_pairs():
+@@
+     assert context["recent_pairs"][-1] == "observe:Bran"
+     assert context["canonical_recent_pairs"][-1]["pair"] == "observe:Bran"
 +
 +
-+def test_build_player_agent_anti_loop_context_activates_on_repeated_pair():
++def test_canonical_semantic_pair_reads_nested_turn_contract_action_metadata_semantic_action():
++    row = {
++        "turn_contract": {
++            "action": {
++                "action_type": "service_inquiry",
++                "target": "npc:Bran",
++                "metadata": {
++                    "semantic_action": {
++                        "action_type": "service_inquiry",
++                        "target_name": "Bran",
++                        "target_id": "npc:Bran",
++                    }
++                },
++            }
++        }
++    }
++
++    result = canonical_semantic_pair_from_turn(row)
++
++    assert result["semantic_action"] == "service_inquiry"
++    assert result["target"] == "Bran"
++    assert result["pair"] == "service_inquiry:Bran"
++    assert result["source"] == "row.turn_contract.action.metadata.semantic_action"
+2B. Add test for nested turn_contract.action fallback
+
+Append:
+
+--- src/tests/rpg/autoplay/test_player_agent_anti_loop.py
++++ src/tests/rpg/autoplay/test_player_agent_anti_loop.py
+@@
++def test_canonical_semantic_pair_reads_turn_contract_action_when_metadata_missing():
++    row = {
++        "turn_contract": {
++            "action": {
++                "action_type": "rent_room",
++                "target": "inn",
++            }
++        }
++    }
++
++    result = canonical_semantic_pair_from_turn(row)
++
++    assert result["semantic_action"] == "rent_room"
++    assert result["target"] == "inn"
++    assert result["pair"] == "rent_room:inn"
++    assert result["source"] == "row.turn_contract.action"
+2C. Add test for resolved_action.semantic_action
+
+Append:
+
+--- src/tests/rpg/autoplay/test_player_agent_anti_loop.py
++++ src/tests/rpg/autoplay/test_player_agent_anti_loop.py
+@@
++def test_canonical_semantic_pair_reads_resolved_action_semantic_action():
++    row = {
++        "turn_contract": {
++            "resolved_action": {
++                "semantic_action": {
++                    "action_type": "observe",
++                    "target_name": "Cloaked Traveler",
++                }
++            }
++        }
++    }
++
++    result = canonical_semantic_pair_from_turn(row)
++
++    assert result["semantic_action"] == "observe"
++    assert result["target"] == "Cloaked Traveler"
++    assert result["pair"] == "observe:Cloaked Traveler"
++    assert result["source"] == "row.turn_contract.resolved_action.semantic_action"
+2D. Add regression test for anti-loop context with nested rows
+
+Append:
+
+--- src/tests/rpg/autoplay/test_player_agent_anti_loop.py
++++ src/tests/rpg/autoplay/test_player_agent_anti_loop.py
+@@
++def test_anti_loop_context_uses_nested_turn_contract_semantic_pairs_not_unknown_unknown():
 +    transcript = [
-+        {"semantic_action": "observe", "semantic_target": "Bran"},
-+        {"semantic_action": "observe", "semantic_target": "Bran"},
-+        {"semantic_action": "observe", "semantic_target": "Bran"},
++        {
++            "turn_contract": {
++                "action": {
++                    "metadata": {
++                        "semantic_action": {
++                            "action_type": "service_inquiry",
++                            "target_name": "Bran",
++                            "target_id": "npc:Bran",
++                        }
++                    }
++                }
++            }
++        },
++        {
++            "turn_contract": {
++                "action": {
++                    "metadata": {
++                        "semantic_action": {
++                            "action_type": "service_inquiry",
++                            "target_name": "Bran",
++                            "target_id": "npc:Bran",
++                        }
++                    }
++                }
++            }
++        },
++        {
++            "turn_contract": {
++                "action": {
++                    "metadata": {
++                        "semantic_action": {
++                            "action_type": "service_inquiry",
++                            "target_name": "Bran",
++                            "target_id": "npc:Bran",
++                        }
++                    }
++                }
++            }
++        },
 +    ]
 +
 +    context = _build_player_agent_anti_loop_context(
@@ -535,66 +562,92 @@ Create file if missing:
 +    )
 +
 +    assert context["active"] is True
-+    assert context["pair"] == "observe:Bran"
++    assert context["pair"] == "service_inquiry:Bran"
 +    assert context["streak"] == 3
-+    assert context["target"] == "Bran"
-+
-+
-+def test_action_violates_anti_loop_for_observe_same_target():
-+    context = {
-+        "active": True,
-+        "pair": "observe:Bran",
-+        "semantic_action": "observe",
-+        "target": "Bran",
-+        "streak": 4,
++    assert context["source"] == "canonical_semantic_pair_from_turn"
++    assert context["recent_pairs"][-1] == "service_inquiry:Bran"
++    assert context["canonical_recent_pairs"][-1]["source"] == (
++        "row.turn_contract.action.metadata.semantic_action"
++    )
+2E. Add text fallback regression test
+
+Append:
+
+--- src/tests/rpg/autoplay/test_player_agent_anti_loop.py
++++ src/tests/rpg/autoplay/test_player_agent_anti_loop.py
+@@
++def test_canonical_semantic_pair_text_fallback_for_player_input():
++    row = {
++        "player_input": "I ask Bran about lodging and whether I can rent a room for the night."
 +    }
 +
-+    assert _action_violates_anti_loop(
-+        "Wait patiently and maintain eye contact with Bran.",
-+        context,
-+    )
-+    assert not _action_violates_anti_loop(
-+        "Turn away from Bran and ask a nearby patron about Silas.",
-+        context,
-+    )
++    result = canonical_semantic_pair_from_turn(row)
 +
-+
-+def test_rough_semantic_pair_classifies_service_and_travel_actions():
-+    assert _rough_semantic_pair_for_player_action("Pay Bran for a room.")["semantic_action"] == "service"
-+    assert _rough_semantic_pair_for_player_action("Step outside and head to the road.")["semantic_action"] == "travel"
-+
-+
-+def test_deterministic_anti_loop_fallback_changes_target_for_bran():
-+    action = _deterministic_anti_loop_fallback_action(
-+        {"target": "Bran", "semantic_action": "observe", "pair": "observe:Bran"}
-+    )
-+    assert "nearby patron" in action.lower()
-+    assert "turn away from bran" in action.lower()
-5B. Add import-safe test for prompt formatting
++    assert result["semantic_action"] == "rent_room"
++    assert result["target"] in ("Bran", "inn")
++    assert result["pair"] != "unknown:unknown"
++    assert result["source"] == "player_action_text_fallback"
+3. Optional: add debug sample to anti-loop probe
 
-Append to same file:
+Patch:
 
+src/tests/rpg/autoplay_llm_campaign.py
+
+Find the anti-loop probe added in N81.2.7.1:
+
+_probe_log(
+    bool(getattr(args, "debug_autoplay_stage_timing", False)),
+    "player_agent_anti_loop_context",
+    turn_index=turn_index,
+    active=anti_loop_context.get("active"),
+    pair=anti_loop_context.get("pair"),
+    streak=anti_loop_context.get("streak"),
+    threshold=anti_loop_context.get("threshold"),
+    source=anti_loop_context.get("source"),
+    recent_pairs=",".join(...),
+)
+
+Add a compact source sample:
+
+--- src/tests/rpg/autoplay_llm_campaign.py
++++ src/tests/rpg/autoplay_llm_campaign.py
 @@
-+def test_anti_loop_context_includes_concrete_alternatives():
-+    context = _build_player_agent_anti_loop_context(
-+        transcript=[
-+            {"semantic_action": "observe", "semantic_target": "Bran"},
-+            {"semantic_action": "observe", "semantic_target": "Bran"},
-+            {"semantic_action": "observe", "semantic_target": "Bran"},
-+        ],
-+        threshold=3,
-+        window=8,
-+    )
-+
-+    assert context["active"] is True
-+    assert any("different target" in item.lower() for item in context["alternatives"])
-+    assert any("service" in item.lower() for item in context["alternatives"])
-6. Validation
+         _probe_log(
+             bool(getattr(args, "debug_autoplay_stage_timing", False)),
+             "player_agent_anti_loop_context",
+             turn_index=turn_index,
+             active=anti_loop_context.get("active"),
+             pair=anti_loop_context.get("pair"),
+             streak=anti_loop_context.get("streak"),
+             threshold=anti_loop_context.get("threshold"),
+             source=anti_loop_context.get("source"),
+             recent_pairs=",".join(
+                 [
+                     _safe_str(pair)
+                     for pair in _safe_list(anti_loop_context.get("recent_pairs"))[-6:]
+                 ]
+             ),
++            recent_sources=",".join(
++                [
++                    _safe_str(_safe_dict(item).get("source"))
++                    for item in _safe_list(anti_loop_context.get("canonical_recent_pairs"))[-6:]
++                ]
++            ),
+         )
+
+This gives logs like:
+
+recent_sources=row.turn_contract.action.metadata.semantic_action,...
+4. Validation
 
 Compile:
 
-python -m py_compile src\tests\rpg\autoplay_llm_campaign.py src\tests\rpg\autoplay\hundred_turn_eval.py
+python -m py_compile src\tests\rpg\autoplay\hundred_turn_eval.py src\tests\rpg\autoplay_llm_campaign.py
 
 Run focused tests:
 
-python -m pytest src\tests\rpg\autoplay\test_player_agent_anti_loop.py src\tests\rpg\autoplay\test_quality_gates.py src\tests\rpg\autoplay\test_background_result_timing.py -q
+python -m pytest src\tests\rpg\autoplay\test_player_agent_anti_loop.py -q
+
+Run broader smoke tests:
+
+python -m pytest src\tests\rpg\autoplay\test_quality_gates.py src\tests\rpg\autoplay\test_background_result_timing.py -q
