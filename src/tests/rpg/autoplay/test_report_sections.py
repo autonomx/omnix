@@ -386,3 +386,30 @@ def test_resolve_turn_contract_for_report_uses_nested_session_last_turn():
 
     assert resolved["turn_index"] == 3
     assert resolved["player_input"] == "I ask Bran."
+
+
+def test_fallback_journal_filters_internal_codes():
+    result = build_campaign_calendar_and_journal(
+        [
+            {
+                "turn_index": 1,
+                "player_action": "I ask Bran about the witness.",
+                "combined_background_llm_result": {
+                    "narration": "target_not_found no_supported_semantic_action_detected",
+                },
+            },
+            {
+                "turn_index": 2,
+                "player_action": "I listen carefully.",
+                "combined_background_llm_result": {
+                    "narration": "Bran glances at the door and lowers his voice.",
+                },
+            },
+        ],
+        journal_every_turns=2,
+    )
+
+    text = result["journal"]["entries"][0]["text"]
+    assert "target_not_found" not in text
+    assert "no_supported_semantic_action_detected" not in text
+    assert "Bran glances" in text

@@ -828,6 +828,41 @@ def _summarize_manual_turn_errors(transcript: List[Dict[str, Any]]) -> Dict[str,
     }
 
 
+JOURNAL_FORBIDDEN_TOKENS = (
+    "target_not_found",
+    "no_supported_semantic_action_detected",
+    "talk_handled_by_conversation_runtime",
+    "semantic_action_unsupported",
+    "unsupported_action",
+    "action_unhandled",
+)
+
+
+def _summarize_player_journal_quality(summary: Dict[str, Any]) -> Dict[str, Any]:
+    journal = _safe_dict(summary.get("player_journal_summary"))
+    entries = _safe_list(journal.get("entries"))
+    violations: List[Dict[str, Any]] = []
+    for entry in entries:
+        entry = _safe_dict(entry)
+        text = _safe_str(entry.get("text"))
+        lower = text.lower()
+        found = [token for token in JOURNAL_FORBIDDEN_TOKENS if token in lower]
+        if found:
+            violations.append(
+                {
+                    "entry_id": entry.get("entry_id"),
+                    "tokens": found,
+                    "text": text[:500],
+                }
+            )
+    return {
+        "ok": not violations,
+        "entry_count": len(entries),
+        "violation_count": len(violations),
+        "violations": violations[:20],
+    }
+
+
 def _summarize_quality_gates(
     *,
     args: Any,
@@ -848,6 +883,7 @@ def _summarize_quality_gates(
     arc_progression_summary = _safe_dict(summary.get("npc_arc_progression_summary"))
     calendar_summary = _safe_dict(summary.get("campaign_calendar_summary"))
     journal_summary = _safe_dict(summary.get("player_journal_summary"))
+    journal_quality_summary = _safe_dict(summary.get("player_journal_quality_summary"))
     story_beat_summary = _safe_dict(summary.get("story_beat_summary"))
     quest_progress_summary = _safe_dict(summary.get("quest_progress_summary"))
     scenario_seed = _safe_str(getattr(args, "scenario_seed", ""))
@@ -906,6 +942,10 @@ def _summarize_quality_gates(
             not transcript
             or int(journal_summary.get("entry_count") or 0) >= 1
         ),
+        "player_journal_has_no_internal_codes": (
+            "player_journal_quality_summary" not in summary
+            or bool(journal_quality_summary.get("ok", True))
+        ),
         "story_beats_or_fallback_present": (
             not transcript
             or int(story_beat_summary.get("beat_count") or 0) > 0
@@ -933,6 +973,9 @@ def _summarize_quality_gates(
     if turns:
         fallback_rate = fallback_turns / turns
         gates["player_agent_fallback_rate_within_limit"] = fallback_rate <= float(args.max_player_agent_fallback_rate)
+
+    if _safe_str(getattr(args, "scenario_seed", "")) == "tavern_story_seed":
+        gates["tavern_story_seed_has_quest_progress"] = int(quest_progress_summary.get("quest_count") or 0) > 0
 
     return {
         "ok": all(bool(value) for value in gates.values()),
@@ -2332,6 +2375,7 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
     )
     summary["campaign_calendar_summary"] = calendar_and_journal["calendar"]
     summary["player_journal_summary"] = calendar_and_journal["journal"]
+    summary["player_journal_quality_summary"] = _summarize_player_journal_quality(summary)
     metrics["npc_evolution_summary"] = summary["npc_evolution_summary"]
     metrics["npc_evolution_profile_persistence_summary"] = summary["npc_evolution_profile_persistence_summary"]
     metrics["npc_profile_load_summary"] = summary["npc_profile_load_summary"]
@@ -2341,6 +2385,7 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
     metrics["quest_progress_summary"] = summary["quest_progress_summary"]
     metrics["campaign_calendar_summary"] = summary["campaign_calendar_summary"]
     metrics["player_journal_summary"] = summary["player_journal_summary"]
+    metrics["player_journal_quality_summary"] = summary["player_journal_quality_summary"]
     summary["quality_gate_summary"] = _summarize_quality_gates(
         args=args,
         metrics=metrics,
@@ -2656,6 +2701,7 @@ def main(argv: List[str] | None = None) -> int:
     print(f"quest_progress_summary: {summary.get('quest_progress_summary')}")
     print(f"campaign_calendar_summary: {summary.get('campaign_calendar_summary')}")
     print(f"player_journal_summary: {summary.get('player_journal_summary')}")
+    print(f"player_journal_quality_summary: {summary.get('player_journal_quality_summary')}")
     print(f"manual_turn_error_summary: {summary.get('manual_turn_error_summary')}")
     print(f"console_log_summary: {summary.get('console_log_summary')}")
     print(f"Wrote console log to: {Path(args.output_dir) / 'console-log.txt'}")

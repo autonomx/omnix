@@ -1093,6 +1093,10 @@ def build_campaign_report_model(
             summary.get("player_journal_summary")
             or metrics.get("player_journal_summary")
         ),
+        "player_journal_quality_summary": _safe_dict(
+            summary.get("player_journal_quality_summary")
+            or metrics.get("player_journal_quality_summary")
+        ),
         "promotion_target_grounding_summary": _safe_dict(
             summary.get("promotion_target_grounding_summary")
             or metrics.get("promotion_target_grounding_summary")
@@ -2130,6 +2134,7 @@ def render_campaign_report_html(model: Dict[str, Any]) -> str:
       <h2>Raw Debug Appendix</h2>
       <p><strong>Latest state source:</strong> {_esc(model.get("latest_state_source"))}</p>
       {_render_json_details("Story beat fallback summary JSON", model.get("story_beat_summary") or {})}
+      {_render_json_details("Player journal quality summary JSON", model.get("player_journal_quality_summary") or {})}
       {_render_json_details("Manual turn error summary JSON", model.get("manual_turn_error_summary") or {})}
       {_render_json_details("Latest Simulation State", latest_state)}
       {_render_json_details("Summary JSON", summary)}
