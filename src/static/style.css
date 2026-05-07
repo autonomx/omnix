@@ -5672,6 +5672,35 @@ pre:hover .code-copy-btn {
     display: none;
 }
 
+.rpg-campaign-time {
+    font-size: 0.9rem;
+    opacity: 0.85;
+    margin-bottom: 0.5rem;
+}
+
+.rpg-player-journal-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.rpg-journal-entry {
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 10px;
+    padding: 0.65rem;
+    background: rgba(255,255,255,0.04);
+}
+
+.rpg-journal-entry h4 {
+    margin: 0 0 0.35rem 0;
+    font-size: 0.9rem;
+}
+
+.rpg-journal-entry p {
+    margin: 0;
+    line-height: 1.35;
+}
+
 /* ─── RPG: Adventure Setup Button ─────────────────────────────── */
 
 .rpg-setup-btn {

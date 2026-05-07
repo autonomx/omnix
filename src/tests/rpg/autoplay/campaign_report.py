@@ -435,7 +435,13 @@ def build_story_so_far_paragraph(model: Dict[str, Any]) -> str:
     if story_beats:
         investigation = " ".join(story_beats[:6])
     else:
-        investigation = "The run recorded player activity, but no major story beats were captured."
+        fallback_beats = _safe_list(_safe_dict(model.get("story_beat_summary")).get("beats"))
+        if fallback_beats:
+            investigation = "Major story beats were reconstructed from turn activity:"
+            for beat in fallback_beats[:5]:
+                investigation += f"\n- Turn {beat.get('turn_index')}: {beat.get('summary')}"
+        else:
+            investigation = "The run recorded player activity, but no major story beats were captured."
 
     outcome_parts = []
     if completed_titles:
@@ -1055,6 +1061,38 @@ def build_campaign_report_model(
             summary.get("profile_grounded_output_summary")
             or metrics.get("profile_grounded_output_summary")
         ),
+        "npc_arc_progression_summary": _safe_dict(
+            summary.get("npc_arc_progression_summary")
+            or metrics.get("npc_arc_progression_summary")
+        ),
+        "npc_evolution_report_summary": _safe_dict(
+            summary.get("npc_evolution_report_summary")
+            or metrics.get("npc_evolution_report_summary")
+        ),
+        "quest_progress_summary": _safe_dict(
+            summary.get("quest_progress_summary")
+            or metrics.get("quest_progress_summary")
+        ),
+        "story_beat_summary": _safe_dict(
+            summary.get("story_beat_summary")
+            or metrics.get("story_beat_summary")
+        ),
+        "manual_turn_error_summary": _safe_dict(
+            summary.get("manual_turn_error_summary")
+            or metrics.get("manual_turn_error_summary")
+        ),
+        "console_log_summary": _safe_dict(
+            summary.get("console_log_summary")
+            or metrics.get("console_log_summary")
+        ),
+        "campaign_calendar_summary": _safe_dict(
+            summary.get("campaign_calendar_summary")
+            or metrics.get("campaign_calendar_summary")
+        ),
+        "player_journal_summary": _safe_dict(
+            summary.get("player_journal_summary")
+            or metrics.get("player_journal_summary")
+        ),
         "promotion_target_grounding_summary": _safe_dict(
             summary.get("promotion_target_grounding_summary")
             or metrics.get("promotion_target_grounding_summary")
@@ -1118,6 +1156,187 @@ def _render_json_details(title: str, value: Any, *, open_by_default: bool = Fals
         f"<pre>{_json(value)}</pre>"
         f"</details>"
     )
+
+
+def _render_console_log_summary(summary: Dict[str, Any]) -> str:
+    summary = _safe_dict(summary)
+    if not summary:
+        return """
+        <section id="console-log">
+          <h2>Console Log</h2>
+          <p>No captured console log was found for this run.</p>
+        </section>
+        """
+    turn_errors = summary.get("turn_errors") if isinstance(summary.get("turn_errors"), list) else []
+    errors = summary.get("errors") if isinstance(summary.get("errors"), list) else []
+    warnings = summary.get("warnings") if isinstance(summary.get("warnings"), list) else []
+    tail = summary.get("tail") if isinstance(summary.get("tail"), list) else []
+
+    turn_error_html = "".join(f"<li>{_esc(str(line))}</li>" for line in turn_errors[:20])
+    error_html = "".join(f"<li>{_esc(str(line))}</li>" for line in errors[:20])
+    warning_html = "".join(f"<li>{_esc(str(line))}</li>" for line in warnings[:20])
+    tail_text = "\n".join(str(line) for line in tail[-80:])
+    return f"""
+    <section id="console-log">
+      <h2>Console Log</h2>
+      <p><strong>Captured file:</strong> {_esc(str(summary.get("path") or "console-log.txt"))}</p>
+      <p>
+        Lines: {_esc(str(summary.get("line_count") or 0))} ·
+        Errors: {_esc(str(summary.get("error_count") or 0))} ·
+        Turn errors: {_esc(str(summary.get("turn_error_count") or 0))} ·
+        Warnings: {_esc(str(summary.get("warning_count") or 0))}
+      </p>
+      <h3>Turn Errors</h3>
+      <ul>{turn_error_html or "<li>None.</li>"}</ul>
+      <h3>Errors</h3>
+      <ul>{error_html or "<li>None.</li>"}</ul>
+      <h3>Warnings</h3>
+      <ul>{warning_html or "<li>None.</li>"}</ul>
+      <details>
+        <summary>Console tail</summary>
+        <pre>{_esc(tail_text)}</pre>
+      </details>
+    </section>
+    """
+
+
+def _render_npc_evolution_cards(summary: Dict[str, Any]) -> str:
+    summary = _safe_dict(summary)
+    cards = summary.get("cards") if isinstance(summary.get("cards"), list) else []
+    if not cards:
+        return '<section id="npc-evolution"><h2>NPC Evolution</h2><p>No NPC evolution arcs found yet.</p></section>'
+    rows = []
+    for card_any in cards:
+        card = _safe_dict(card_any)
+        axes = _safe_dict(card.get("axes"))
+        axes_html = "".join(
+            f"<tr><td>{_esc(str(axis))}</td><td>{_esc(str(value))}</td></tr>"
+            for axis, value in sorted(axes.items())
+        )
+        memories = "".join(
+            f"<li>{_esc(str(_safe_dict(item).get('summary') or item))}</li>"
+            for item in (card.get("memories") if isinstance(card.get("memories"), list) else [])[-5:]
+        )
+        hooks = "".join(
+            f"<li>{_esc(str(_safe_dict(item).get('summary') or item))}</li>"
+            for item in (card.get("future_hooks") if isinstance(card.get("future_hooks"), list) else [])[-5:]
+        )
+        milestones = "".join(
+            "<li>"
+            + _esc(
+                f"{_safe_dict(item).get('from', '')} → {_safe_dict(item).get('to', '')}"
+                f" ({_safe_dict(item).get('reason', '')})"
+            )
+            + "</li>"
+            for item in (card.get("milestones") if isinstance(card.get("milestones"), list) else [])[-5:]
+        )
+        rows.append(
+            f"""
+            <article class="npc-card">
+              <h3>{_esc(str(card.get('npc_id') or 'Unknown NPC'))}</h3>
+              <p><strong>Arc stage:</strong> {_esc(str(card.get('arc_stage') or 'stable'))}</p>
+              <p><strong>Signals:</strong> {_esc(str(card.get('signal_count') or 0))}</p>
+              <p><strong>Profile:</strong> {_esc(str(card.get('profile_path') or 'not loaded'))}</p>
+              <h4>Axes</h4>
+              <table><tbody>{axes_html}</tbody></table>
+              <h4>Recent Memories</h4>
+              <ul>{memories or '<li>None yet.</li>'}</ul>
+              <h4>Future Hooks</h4>
+              <ul>{hooks or '<li>None yet.</li>'}</ul>
+              <h4>Milestones</h4>
+              <ul>{milestones or '<li>No stage changes yet.</li>'}</ul>
+            </article>
+            """
+        )
+    return f"""
+    <section id="npc-evolution">
+      <h2>NPC Evolution</h2>
+      <p>{_esc(str(summary.get('npc_count') or len(cards)))} NPC profile(s) tracked.</p>
+      <div class="npc-card-grid">{''.join(rows)}</div>
+    </section>
+    """
+
+
+def _render_quest_progress(summary: Dict[str, Any]) -> str:
+    summary = _safe_dict(summary)
+    quests = summary.get("quests") if isinstance(summary.get("quests"), list) else []
+    if not quests:
+        return '<section id="quest-progress"><h2>Quest Progress</h2><p>No quest records found in this run.</p></section>'
+    rows = "".join(
+        "<tr>"
+        f"<td>{_esc(str(_safe_dict(quest).get('title') or _safe_dict(quest).get('quest_id')))}</td>"
+        f"<td>{_esc(str(_safe_dict(quest).get('status') or 'unknown'))}</td>"
+        f"<td>{_esc(str(_safe_dict(quest).get('progress') or ''))}</td>"
+        f"<td>{_esc(str(_safe_dict(quest).get('giver') or ''))}</td>"
+        f"<td>{_esc(str(_safe_dict(quest).get('location') or ''))}</td>"
+        "</tr>"
+        for quest in quests
+    )
+    return f"""
+    <section id="quest-progress">
+      <h2>Quest Progress</h2>
+      <p>Active: {_esc(str(summary.get('active_count') or 0))} ·
+         Completed: {_esc(str(summary.get('completed_count') or 0))} ·
+         Failed: {_esc(str(summary.get('failed_count') or 0))} ·
+         Unknown: {_esc(str(summary.get('unknown_count') or 0))}</p>
+      <table>
+        <thead><tr><th>Quest</th><th>Status</th><th>Progress</th><th>Giver</th><th>Location</th></tr></thead>
+        <tbody>{rows}</tbody>
+      </table>
+    </section>
+    """
+
+
+def _render_calendar_and_journal(calendar: Dict[str, Any], journal: Dict[str, Any]) -> str:
+    calendar = _safe_dict(calendar)
+    journal = _safe_dict(journal)
+    end = _safe_dict(calendar.get("end"))
+    entries = journal.get("entries") if isinstance(journal.get("entries"), list) else []
+    entry_html = "".join(
+        f"""
+        <article class="journal-entry">
+          <h4>{_esc(str(_safe_dict(entry).get('entry_id') or 'Journal Entry'))}</h4>
+          <p><strong>Turns:</strong> {_esc(str(_safe_dict(entry).get('start_turn')))}–{_esc(str(_safe_dict(entry).get('end_turn')))}</p>
+          <p>{_esc(str(_safe_dict(entry).get('text') or ''))}</p>
+        </article>
+        """
+        for entry in entries[-8:]
+    )
+    return f"""
+    <section id="campaign-journal">
+      <h2>Campaign Calendar & Player Journal</h2>
+      <p><strong>Current campaign time:</strong>
+        Year {_esc(str(end.get('year') or ''))},
+        {_esc(str(end.get('season') or ''))},
+        month {_esc(str(end.get('month') or ''))},
+        day {_esc(str(end.get('day') or ''))},
+        {_esc(str(end.get('time_label') or ''))}
+        ({_esc(str(end.get('day_phase') or ''))})
+      </p>
+      <p><strong>Turns tracked:</strong> {_esc(str(calendar.get('turns_tracked') or 0))};
+         <strong>Journal entries:</strong> {_esc(str(journal.get('entry_count') or 0))}</p>
+      <div>{entry_html or '<p>No journal entries yet.</p>'}</div>
+    </section>
+    """
+
+
+def _render_report_quick_links(model: Dict[str, Any]) -> str:
+    journal = _safe_dict(model.get("player_journal_summary"))
+    quests = _safe_dict(model.get("quest_progress_summary"))
+    npc_evolution = _safe_dict(model.get("npc_evolution_report_summary"))
+    journal_count = int(journal.get("entry_count") or 0)
+    quest_count = int(quests.get("quest_count") or 0)
+    npc_count = int(npc_evolution.get("npc_count") or 0)
+    return f"""
+    <section class="report-quick-links">
+      <h2>Report Highlights</h2>
+      <nav>
+        <a href="#campaign-journal">Campaign Journal ({_esc(str(journal_count))})</a>
+        <a href="#quest-progress">Quest Progress ({_esc(str(quest_count))})</a>
+        <a href="#npc-evolution">NPC Evolution ({_esc(str(npc_count))})</a>
+      </nav>
+    </section>
+    """
 
 
 def _pct(value: Any) -> float:
@@ -1464,9 +1683,38 @@ def render_campaign_report_html(model: Dict[str, Any]) -> str:
      text-align: left;
      vertical-align: top;
    }
-   th { color: #334155; background: #eef2ff; }
-   tr:nth-child(even) td { background: #f8fafc; }
-   .turn-card {
+    th { color: #334155; background: #eef2ff; }
+    tr:nth-child(even) td { background: #f8fafc; }
+    .npc-card-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px; }
+    .npc-card, .journal-entry { border: 1px solid #ddd; border-radius: 8px; padding: 12px; margin: 8px 0; background: #fafafa; }
+    .npc-card h3 { margin-top: 0; }
+    .report-quick-links {
+      border: 1px solid #cbd5e1;
+      border-radius: 10px;
+      padding: 12px;
+      margin: 16px 0;
+      background: #f8fafc;
+    }
+    .report-quick-links nav {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+    .report-quick-links a {
+      display: inline-block;
+      padding: 6px 10px;
+      border: 1px solid #cbd5e1;
+      border-radius: 999px;
+      background: white;
+      text-decoration: none;
+    }
+    #campaign-journal, #quest-progress, #npc-evolution {
+      scroll-margin-top: 20px;
+    }
+    .header-journal-link {
+      font-weight: 700;
+    }
+    .turn-card {
      background: var(--panel2);
      border: 1px solid var(--border);
      border-radius: 18px;
@@ -1583,20 +1831,24 @@ def render_campaign_report_html(model: Dict[str, Any]) -> str:
  <header>
    <h1>Autoplay Campaign Report <span class="status-pill {pm_status}">{_esc(pm_summary.get("overall_status") or "unknown")}</span></h1>
    <div class="muted">Session {_esc(summary.get("session_id"))} · Strategy {_esc(summary.get("strategy_profile") or summary.get("strategy"))} · Turns {_esc(summary.get("turns_executed"))}</div>
-   <nav>
-     <a href="#summary">Summary</a>
-     <a href="#story-so-far">Story</a>
+     <nav>
+      <a href="#summary">Summary</a>
+      <a class="header-journal-link" href="#campaign-journal">Journal</a>
+      <a href="#quest-progress">Quests</a>
+      <a href="#npc-evolution">Evolution</a>
+      <a href="#story-so-far">Story</a>
       <a href="#arcs">Arcs</a>
       <a href="#locations">Locations</a>
-    <a href="#variety">Variety</a>
-      <a href="#npcs">NPCs</a>
+      <a href="#variety">Variety</a>
+      <a href="#npcs">NPC Cast</a>
      <a href="#inventory">Inventory</a>
      <a href="#dialogue-coverage">Dialogue</a>
-     <a href="#performance">Performance</a>
-     <a href="#timeline">Timeline</a>
+      <a href="#performance">Performance</a>
+      <a href="#console-log">Console</a>
+      <a href="#timeline">Timeline</a>
      <a href="#shortcomings">Shortcomings</a>
      <a href="#debug">Debug</a>
-   </nav>
+    </nav>
  </header>
  <main>
    <section id="summary" class="hero">
@@ -1610,10 +1862,15 @@ def render_campaign_report_html(model: Dict[str, Any]) -> str:
        <div class="metric"><div class="value">{_esc(_safe_dict(model.get("dialogue_coverage")).get("npc_response_rate"))}</div><div>NPC Response Rate</div></div>
        <div class="metric"><div class="value">{_esc(_safe_dict(model.get("chapter_status")).get("active_objective_count"))}</div><div>Active Objectives</div></div>
      </div>
-     {_render_json_details("Technical summary JSON", {"summary": summary, "health": health, "pm_summary": pm_summary})}
-     </section>
+      {_render_json_details("Technical summary JSON", {"summary": summary, "health": health, "pm_summary": pm_summary})}
+      </section>
 
-  <section id="story-so-far">
+  {_render_report_quick_links(model)}
+  {_render_calendar_and_journal(model.get("campaign_calendar_summary") or {}, model.get("player_journal_summary") or {})}
+  {_render_quest_progress(model.get("quest_progress_summary") or {})}
+  {_render_npc_evolution_cards(model.get("npc_evolution_report_summary") or {})}
+
+   <section id="story-so-far">
     <h2>Story So Far</h2>
     <p class="section-lede">A readable summary of what happened in the campaign before the technical diagnostics.</p>
     {_render_paragraphs(model.get("story_so_far_paragraph"))}
@@ -1757,8 +2014,8 @@ def render_campaign_report_html(model: Dict[str, Any]) -> str:
     <details>
       <summary>Dialogue coverage debug</summary>
       <pre>{_json(model.get("dialogue_coverage"))}</pre>
-     </details>
-   </section>
+      </details>
+    </section>
 
   <section id="performance">
     <h2>Performance Metrics</h2>
@@ -1804,10 +2061,11 @@ def render_campaign_report_html(model: Dict[str, Any]) -> str:
     {_render_json_details("NPC evolution profile persistence summary JSON", model.get("npc_evolution_profile_persistence_summary") or {})}
     {_render_json_details("NPC profile load summary JSON", model.get("npc_profile_load_summary") or {})}
     {_render_json_details("Profile-grounded output summary JSON", model.get("profile_grounded_output_summary") or {})}
+    {_render_json_details("NPC arc progression summary JSON", model.get("npc_arc_progression_summary") or {})}
     {_render_json_details("Promotion target grounding summary JSON", model.get("promotion_target_grounding_summary") or {})}
     {_render_json_details("Quality gate summary JSON", model.get("quality_gate_summary") or {})}
     {_render_json_details("Slowest turns JSON", performance.get("slowest_turns") or [])}
-    {_render_json_details("Background job summary JSON", model.get("background_jobs") or {})}
+     {_render_json_details("Background job summary JSON", model.get("background_jobs") or {})}
   </section>
 
   <section id="quality">
@@ -1835,11 +2093,16 @@ def render_campaign_report_html(model: Dict[str, Any]) -> str:
     <section id="timeline">
     <h2>Turn-by-Turn Story Timeline with AI/NPC Responses</h2>
     {''.join(timeline_html)}
-  </section>
+   </section>
+
+    {_render_console_log_summary(model.get("console_log_summary") or {})}
+    {_render_json_details("Console log summary JSON", model.get("console_log_summary") or {})}
 
     <section id="debug">
       <h2>Raw Debug Appendix</h2>
       <p><strong>Latest state source:</strong> {_esc(model.get("latest_state_source"))}</p>
+      {_render_json_details("Story beat fallback summary JSON", model.get("story_beat_summary") or {})}
+      {_render_json_details("Manual turn error summary JSON", model.get("manual_turn_error_summary") or {})}
       {_render_json_details("Latest Simulation State", latest_state)}
       {_render_json_details("Summary JSON", summary)}
       {_render_json_details("Metrics JSON", metrics)}

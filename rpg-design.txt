@@ -1,619 +1,786 @@
-Below is N67-N69 — Profile-Grounded NPC Behavior + Narration Context v1 as a literal apply-this-patch diff spec.
+N73-N75.3 — Base Game Campaign Journal + Calendar Runtime v1
+Goal
+Move campaign time + player journal from test/report-only code into base RPG runtime.
 
-Goal:
+Normal game sessions should maintain:
+runtime_state.campaign_calendar
+runtime_state.player_journal
 
-N67: Project loaded NPC profiles into provider narration/advisory context with explicit quality rules.
-N68: Add profile-grounded dialogue/narration validation and trace summaries.
-N69: Improve report visibility: loaded profile references, NPC arc context usage, and grounding quality score.
+Autoplay/report should read the same runtime data instead of inventing a separate test-only journal.
 
 Strict rules:
 
-Loaded NPC profiles are characterization/context only.
-They cannot mutate authoritative state.
-They cannot invent rewards, quest completion, travel, combat results, inventory, currency, XP, or service outcomes.
-Narration may reference profile memories/hooks only when those facts are present in loaded_npc_profiles or the current turn contract.
-N67-N69 — Profile-Grounded NPC Behavior + Narration Context v1
-Acceptance goals
-combined context contains loaded_npc_profiles when profiles are available
-provider prompt explicitly instructs profile-grounded characterization only
-NPC line can reflect arc_stage / axes / memories / future_hooks
-report shows profile context was available and whether narration referenced it
-quality_gate_summary.ok remains true
-avg_human_playable_blocking_ms remains low
-no authoritative mutation from loaded profile context
-N67 — Profile-grounded prompt contract
-1. Patch src/tests/rpg/autoplay/parallel_pipeline.py
-1A. Add loaded-profile prompt summary helper
+Journal entries are deterministic summaries of already-authoritative turn facts.
+Calendar/time is bounded runtime metadata.
+Journal/calendar cannot mutate inventory, currency, quests, combat, travel, rewards, or NPC state.
+LLM does not author journal entries in this bundle.
+1. Add base runtime module
 
-Add near _compact_loaded_npc_profiles(...):
+Create:
 
---- src/tests/rpg/autoplay/parallel_pipeline.py
-+++ src/tests/rpg/autoplay/parallel_pipeline.py
-@@
- def _compact_loaded_npc_profiles(runtime_state: Dict[str, Any], limit: int = 6) -> Dict[str, Any]:
-@@
-     return out
+--- /dev/null
++++ src/app/rpg/campaign_journal.py
+@@ -0,0 +1,282 @@
++from __future__ import annotations
++
++from copy import deepcopy
++from typing import Any, Dict, List
 +
 +
-+def _loaded_profile_context_summary(runtime_state: Dict[str, Any]) -> Dict[str, Any]:
-+    """Tiny diagnostic for prompt/report quality.
++CAMPAIGN_CALENDAR_VERSION = "campaign_calendar_v1"
++PLAYER_JOURNAL_VERSION = "player_journal_v1"
 +
-+    Keep this separate from the actual context payload so reports can quickly
-+    tell whether profile context was available without dumping full profile data.
++SEASONS = ("spring", "summer", "autumn", "winter")
++
++
++def _safe_dict(value: Any) -> Dict[str, Any]:
++    return value if isinstance(value, dict) else {}
++
++
++def _safe_list(value: Any) -> List[Any]:
++    return value if isinstance(value, list) else []
++
++
++def _safe_str(value: Any) -> str:
++    return value if isinstance(value, str) else ""
++
++
++def campaign_time_for_turn(
++    *,
++    turn_index: int,
++    start_year: int = 1000,
++    start_day: int = 1,
++    minutes_per_turn: int = 30,
++) -> Dict[str, Any]:
++    """Deterministic lightweight fantasy calendar.
++
++    This is metadata only. It does not alter travel, rests, services, combat,
++    quests, or other authoritative simulation facts.
 +    """
-+    loaded = _compact_loaded_npc_profiles(runtime_state, limit=12)
++    turn_index = max(1, int(turn_index or 1))
++    minutes_per_turn = max(1, int(minutes_per_turn or 30))
++    total_minutes = (turn_index - 1) * minutes_per_turn
++    day_offset = total_minutes // (24 * 60)
++    minute_of_day = total_minutes % (24 * 60)
++    hour = minute_of_day // 60
++    minute = minute_of_day % 60
++    day_of_year = ((start_day - 1 + day_offset) % 360) + 1
++    year = start_year + ((start_day - 1 + day_offset) // 360)
++    season = SEASONS[(day_of_year - 1) // 90]
++    day = ((day_of_year - 1) % 30) + 1
++    month = ((day_of_year - 1) // 30) + 1
++    if 5 <= hour < 12:
++        phase = "morning"
++    elif 12 <= hour < 17:
++        phase = "afternoon"
++    elif 17 <= hour < 21:
++        phase = "evening"
++    else:
++        phase = "night"
 +    return {
-+        "available": bool(loaded),
-+        "npc_count": len(loaded),
-+        "npc_ids": sorted(list(loaded.keys())),
-+        "arc_stages": {
-+            npc_id: _safe_str(profile.get("arc_stage")) or "stable"
-+            for npc_id, profile in loaded.items()
-+        },
-+        "memory_counts": {
-+            npc_id: len(_safe_list(profile.get("memories")))
-+            for npc_id, profile in loaded.items()
-+        },
-+        "future_hook_counts": {
-+            npc_id: len(_safe_list(profile.get("future_hooks")))
-+            for npc_id, profile in loaded.items()
-+        },
++        "format_version": CAMPAIGN_CALENDAR_VERSION,
++        "year": year,
++        "season": season,
++        "month": month,
++        "day": day,
++        "day_of_year": day_of_year,
++        "hour": hour,
++        "minute": minute,
++        "time_label": f"{hour:02d}:{minute:02d}",
++        "day_phase": phase,
++        "absolute_day": int(day_offset) + 1,
++        "turn_index": turn_index,
++        "minutes_per_turn": minutes_per_turn,
 +    }
-1B. Include profile_context_summary in the compact packet
-
-Find build_combined_background_context_packet(...) return object and patch:
-
---- src/tests/rpg/autoplay/parallel_pipeline.py
-+++ src/tests/rpg/autoplay/parallel_pipeline.py
-@@
-     return {
-         "player_action": _short_text(player_action, 800),
-         "scene": _compact_scene_context(simulation_state),
-         "present_npcs": _compact_present_npcs(simulation_state, limit=6),
-         "player_visible_state": _compact_player_visible_state(simulation_state),
-         "recent_events": _compact_recent_events(simulation_state, limit=5),
-         "loaded_npc_profiles": _compact_loaded_npc_profiles(runtime_state, limit=6),
-+        "profile_context_summary": _loaded_profile_context_summary(runtime_state),
-         "turn_contract": _compact_turn_contract(turn_contract),
-         "fast_semantic_action": semantic_action_record,
-     }
-
-Expected packet keys:
-
-loaded_npc_profiles
-profile_context_summary
-1C. Strengthen the combined background system prompt
-
-In _build_combined_background_payload(...), find the system prompt content:
-
-"You are an RPG background enrichment worker. Return JSON only. "
-...
-
-Replace the system message content with this stricter version:
-
---- src/tests/rpg/autoplay/parallel_pipeline.py
-+++ src/tests/rpg/autoplay/parallel_pipeline.py
-@@
-             "role": "system",
-             "content": (
-                 "You are an RPG background enrichment worker. Return JSON only. "
-                 "You must not assert authoritative outcomes that are not in the turn contract. "
-                 "Do not grant items, currency, quest completion, damage, travel, or rewards. "
-                 "Return one JSON object and no markdown fences, no prose, no commentary. "
-                 "Maintain rich 2-5 sentence narration quality. Use only the provided compact context. "
-                 "Return compact candidate objects. Prefer at most 1 high-quality candidate per category. "
--                "Do not include long explanations inside candidates."
-+                "Do not include long explanations inside candidates. "
-+                "Loaded NPC profiles are characterization context only. "
-+                "You may use loaded_npc_profiles to shape NPC tone, dialogue, memory continuity, and future-hook suggestions. "
-+                "You must not treat profile memories or hooks as newly resolved actions. "
-+                "You must not invent profile memories that are absent from loaded_npc_profiles or current turn facts. "
-+                "If an NPC has arc_stage, axes, memories, or future_hooks, reflect them subtly in the NPC line or candidate summaries when relevant."
-             ),
-1D. Add profile-grounding instruction to the user prompt
-
-In _build_combined_background_payload(...), find the user message section ending with:
-
-"Narration remains high quality and should not be shortened below 2 sentences."
-
-Patch:
-
---- src/tests/rpg/autoplay/parallel_pipeline.py
-+++ src/tests/rpg/autoplay/parallel_pipeline.py
-@@
-                 "Candidate limits: max 1 semantic_intent, max 1 relationship_delta, "
-                 "max 1 memory, max 1 world_signal, max 1 future_hook. "
-                 "Each candidate summary must be under 160 characters. "
--                "Narration remains high quality and should not be shortened below 2 sentences."
-+                "Narration remains high quality and should not be shortened below 2 sentences.\n\n"
-+                "Profile grounding rule: when loaded_npc_profiles is non-empty, use it only for NPC continuity. "
-+                "For example, a trusting NPC may sound warmer, a guarded NPC may be cautious, "
-+                "and a remembered prior topic may be acknowledged. "
-+                "Do not create authoritative outcomes from profile context."
-             ),
-1E. Include profile context diagnostics in provider payload
-
-After prompt_metrics = prompt_section_metrics(...), add:
-
---- src/tests/rpg/autoplay/parallel_pipeline.py
-+++ src/tests/rpg/autoplay/parallel_pipeline.py
-@@
-     prompt_metrics = prompt_section_metrics(
-         {
-             "system_contract": "combined_background_worker_v1",
-             "context_packet": context_json,
-             "output_schema": schema_text,
-         }
-     )
-+    profile_context_summary = _loaded_profile_context_summary(runtime_state or {})
-
-Then in the successful provider return, add:
-
---- src/tests/rpg/autoplay/parallel_pipeline.py
-+++ src/tests/rpg/autoplay/parallel_pipeline.py
-@@
-                 normalized["ok"] = True
-                 normalized.setdefault("raw_provider_shape_keys", sorted(list(parsed.keys()))[:80])
-                 normalized.setdefault("prompt_metrics", prompt_metrics)
-                 normalized.setdefault("context_packet_keys", sorted(list(context_packet.keys())))
-+                normalized.setdefault("profile_context_summary", profile_context_summary)
-                 return normalized
-
-Also add this field to error returns:
-
---- src/tests/rpg/autoplay/parallel_pipeline.py
-+++ src/tests/rpg/autoplay/parallel_pipeline.py
-@@
-                 "parsed_keys": sorted(list(parsed.keys()))[:80],
-                 "prompt_metrics": prompt_metrics,
-                 "context_packet_keys": sorted(list(context_packet.keys())),
-+                "profile_context_summary": profile_context_summary,
-             }
-@@
-             "raw": content[:4000],
-             "prompt_metrics": prompt_metrics,
-             "context_packet_keys": sorted(list(context_packet.keys())),
-+            "profile_context_summary": profile_context_summary,
-         }
-
-If your file has multiple parse-error return blocks, add profile_context_summary to each.
-
-1F. Copy profile context diagnostics into combined result
-
-Inside _combined_background_llm_job(...), after diagnostics gets prompt/context keys:
-
---- src/tests/rpg/autoplay/parallel_pipeline.py
-+++ src/tests/rpg/autoplay/parallel_pipeline.py
-@@
-             diagnostics["context_packet_keys"] = (
-                 provider_payload.get("context_packet_keys")
-                 if isinstance(provider_payload.get("context_packet_keys"), list)
-                 else []
-             )
-+            diagnostics["profile_context_summary"] = _safe_dict(
-+                provider_payload.get("profile_context_summary")
++
++
++def campaign_journal_runtime_state(runtime_state: Dict[str, Any]) -> Dict[str, Any]:
++    runtime_state = runtime_state if isinstance(runtime_state, dict) else {}
++    runtime_state.setdefault(
++        "campaign_calendar",
++        {
++            "format_version": CAMPAIGN_CALENDAR_VERSION,
++            "minutes_per_turn": 30,
++            "current": campaign_time_for_turn(turn_index=1),
++            "history": [],
++        },
++    )
++    runtime_state.setdefault(
++        "player_journal",
++        {
++            "format_version": PLAYER_JOURNAL_VERSION,
++            "entries": [],
++            "pending_actions": [],
++            "pending_results": [],
++            "journal_every_turns": 4,
++            "max_entries": 100,
++        },
++    )
++    return runtime_state
++
++
++def _extract_player_action(
++    *,
++    player_input: str = "",
++    turn_contract: Dict[str, Any] | None = None,
++    turn_result: Dict[str, Any] | None = None,
++) -> str:
++    turn_contract = _safe_dict(turn_contract)
++    turn_result = _safe_dict(turn_result)
++    return (
++        _safe_str(player_input)
++        or _safe_str(turn_contract.get("player_input"))
++        or _safe_str(turn_contract.get("action"))
++        or _safe_str(turn_result.get("player_action"))
++        or _safe_str(turn_result.get("player_input"))
++    )
++
++
++def _extract_result_summary(
++    *,
++    turn_contract: Dict[str, Any] | None = None,
++    turn_result: Dict[str, Any] | None = None,
++) -> str:
++    turn_contract = _safe_dict(turn_contract)
++    turn_result = _safe_dict(turn_result)
++    resolved_result = _safe_dict(turn_contract.get("resolved_result"))
++    narration_payload = _safe_dict(turn_result.get("narration_payload"))
++    npc = _safe_dict(narration_payload.get("npc"))
++    parts = [
++        _safe_str(resolved_result.get("summary")),
++        _safe_str(resolved_result.get("description")),
++        _safe_str(turn_contract.get("result")),
++        _safe_str(narration_payload.get("action")),
++        _safe_str(narration_payload.get("narration")),
++        _safe_str(npc.get("line")),
++    ]
++    for part in parts:
++        if part:
++            return part[:700]
++    return ""
++
++
++def _journal_text(actions: List[str], results: List[str]) -> str:
++    action_part = "; ".join(actions[-4:]).strip()
++    result_part = " ".join(results[-2:]).strip()
++    if action_part and result_part:
++        return f"I focused on: {action_part}. What stood out: {result_part[:500]}"
++    if action_part:
++        return f"I focused on: {action_part}."
++    if result_part:
++        return f"What stood out: {result_part[:500]}"
++    return "I kept moving, watching for what changed around me."
++
++
++def advance_campaign_journal_for_turn(
++    *,
++    runtime_state: Dict[str, Any],
++    turn_index: int,
++    player_input: str = "",
++    turn_contract: Dict[str, Any] | None = None,
++    turn_result: Dict[str, Any] | None = None,
++    minutes_per_turn: int | None = None,
++    journal_every_turns: int | None = None,
++) -> Dict[str, Any]:
++    """Advance base-game calendar and deterministic player journal.
++
++    This mutates runtime_state only. It does not mutate authoritative
++    simulation facts.
++    """
++    runtime_state = campaign_journal_runtime_state(runtime_state)
++    calendar = _safe_dict(runtime_state.get("campaign_calendar"))
++    journal = _safe_dict(runtime_state.get("player_journal"))
++
++    if minutes_per_turn is None:
++        minutes_per_turn = int(calendar.get("minutes_per_turn") or 30)
++    if journal_every_turns is None:
++        journal_every_turns = int(journal.get("journal_every_turns") or 4)
++
++    time_info = campaign_time_for_turn(
++        turn_index=int(turn_index or 1),
++        minutes_per_turn=int(minutes_per_turn or 30),
++    )
++    calendar["minutes_per_turn"] = int(minutes_per_turn or 30)
++    calendar["current"] = time_info
++    history = _safe_list(calendar.get("history"))
++    if not history or _safe_dict(history[-1]).get("turn_index") != time_info["turn_index"]:
++        history.append(time_info)
++    calendar["history"] = history[-500:]
++
++    action = _extract_player_action(
++        player_input=player_input,
++        turn_contract=_safe_dict(turn_contract),
++        turn_result=_safe_dict(turn_result),
++    )
++    result = _extract_result_summary(
++        turn_contract=_safe_dict(turn_contract),
++        turn_result=_safe_dict(turn_result),
++    )
++
++    pending_actions = _safe_list(journal.get("pending_actions"))
++    pending_results = _safe_list(journal.get("pending_results"))
++    if action:
++        pending_actions.append(action[:300])
++    if result:
++        pending_results.append(result[:700])
++
++    journal["pending_actions"] = pending_actions[-12:]
++    journal["pending_results"] = pending_results[-12:]
++    journal["journal_every_turns"] = int(journal_every_turns or 4)
++
++    entries = _safe_list(journal.get("entries"))
++    should_write = int(turn_index or 1) % max(1, int(journal_every_turns or 4)) == 0
++    existing_entry_ids = {_safe_str(entry.get("entry_id")) for entry in entries if isinstance(entry, dict)}
++
++    if should_write:
++        entry_id = f"journal:turn:{int(turn_index or 1)}"
++        if entry_id not in existing_entry_ids:
++            entries.append(
++                {
++                    "format_version": PLAYER_JOURNAL_VERSION,
++                    "entry_id": entry_id,
++                    "start_turn": max(1, int(turn_index or 1) - len(pending_actions) + 1),
++                    "end_turn": int(turn_index or 1),
++                    "time": deepcopy(time_info),
++                    "perspective": "player",
++                    "text": _journal_text(pending_actions, pending_results),
++                    "source": "deterministic_runtime_journal",
++                }
 +            )
-
-And in final return object, add:
-
---- src/tests/rpg/autoplay/parallel_pipeline.py
-+++ src/tests/rpg/autoplay/parallel_pipeline.py
-@@
-             "diagnostics": diagnostics,
-             "prompt_metrics": _safe_dict(diagnostics.get("prompt_metrics")),
-+            "profile_context_summary": _safe_dict(diagnostics.get("profile_context_summary")),
-             "worker_ms": elapsed_ms(started),
-N68 — Profile-grounded narration/dialogue trace summary
-2. Patch src/tests/rpg/autoplay_llm_campaign.py
-2A. Add profile-reference helper functions
-
-Add near other summarizer helpers:
-
---- src/tests/rpg/autoplay_llm_campaign.py
-+++ src/tests/rpg/autoplay_llm_campaign.py
-@@
- def _summarize_promotion_target_grounding(transcript: List[Dict[str, Any]]) -> Dict[str, Any]:
-@@
-     return summary
++        journal["pending_actions"] = []
++        journal["pending_results"] = []
++
++    max_entries = int(journal.get("max_entries") or 100)
++    journal["entries"] = entries[-max_entries:]
++    runtime_state["campaign_calendar"] = calendar
++    runtime_state["player_journal"] = journal
++    return runtime_state
 +
 +
-+def _safe_lower_text(value: Any) -> str:
-+    return _safe_str(value).lower()
-+
-+
-+def _profile_reference_terms(profile: Dict[str, Any]) -> List[str]:
-+    profile = _safe_dict(profile)
-+    terms: List[str] = []
-+    arc_stage = _safe_str(profile.get("arc_stage"))
-+    if arc_stage and arc_stage != "stable":
-+        terms.append(arc_stage.replace("_", " "))
-+    axes = _safe_dict(profile.get("axes"))
-+    for axis, value in axes.items():
-+        try:
-+            if abs(int(value or 0)) >= 2:
-+                terms.append(str(axis).replace("_", " "))
-+        except Exception:
-+            continue
-+    for key in ("memories", "future_hooks", "world_signals", "semantic_intents", "milestones"):
-+        for item in _safe_list(profile.get(key))[-4:]:
-+            item = _safe_dict(item)
-+            summary = _safe_str(item.get("summary"))
-+            if summary:
-+                # Keep short keyword-ish fragments. This is only a diagnostic,
-+                # not a hard correctness validator.
-+                for token in summary.replace(".", " ").replace(",", " ").split():
-+                    token = token.strip().lower()
-+                    if len(token) >= 5 and token not in {"player", "about", "later", "would", "could"}:
-+                        terms.append(token)
-+                break
-+    deduped: List[str] = []
-+    seen = set()
-+    for term in terms:
-+        marker = term.lower()
-+        if marker in seen:
-+            continue
-+        seen.add(marker)
-+        deduped.append(term)
-+    return deduped[:12]
-+
-+
-+def _summarize_profile_grounded_output(transcript: List[Dict[str, Any]]) -> Dict[str, Any]:
-+    rows: List[Dict[str, Any]] = []
-+    available_turns = 0
-+    referenced_turns = 0
-+    npc_ids = set()
-+    by_npc: Dict[str, Dict[str, Any]] = {}
-+
-+    for row in transcript if isinstance(transcript, list) else []:
-+        row = _safe_dict(row)
-+        combined = _safe_dict(row.get("combined_background_llm_result"))
-+        diagnostics = _safe_dict(combined.get("diagnostics"))
-+        profile_summary = (
-+            _safe_dict(combined.get("profile_context_summary"))
-+            or _safe_dict(diagnostics.get("profile_context_summary"))
-+        )
-+        if not profile_summary.get("available"):
-+            continue
-+
-+        available_turns += 1
-+        for npc_id in _safe_list(profile_summary.get("npc_ids")):
-+            if _safe_str(npc_id):
-+                npc_ids.add(_safe_str(npc_id))
-+
-+        runtime_state = _safe_dict(row.get("runtime_state"))
-+        loaded = _safe_dict(_safe_dict(runtime_state.get("npc_evolution")).get("loaded_profiles"))
-+
-+        narration_payload = (
-+            _safe_dict(combined.get("narration_payload"))
-+            or _safe_dict(row.get("deferred_narration_result")).get("narration_payload")
-+            or _safe_dict(_safe_dict(row.get("turn_result")).get("narration_payload"))
-+        )
-+        if not isinstance(narration_payload, dict):
-+            narration_payload = {}
-+
-+        narration = _safe_str(combined.get("narration")) or _safe_str(narration_payload.get("narration"))
-+        npc_line = _safe_str(_safe_dict(narration_payload.get("npc")).get("line"))
-+        text = _safe_lower_text(f"{narration}\n{npc_line}")
-+
-+        row_matches: Dict[str, List[str]] = {}
-+        for npc_id, loaded_row_any in loaded.items():
-+            loaded_row = _safe_dict(loaded_row_any)
-+            profile = _safe_dict(loaded_row.get("profile"))
-+            terms = _profile_reference_terms(profile)
-+            matches = [term for term in terms if term and term.lower() in text]
-+            if matches:
-+                row_matches[str(npc_id)] = matches[:6]
-+                npc_bucket = by_npc.setdefault(str(npc_id), {"referenced_turns": 0, "matches": {}})
-+                npc_bucket["referenced_turns"] += 1
-+                for match in matches[:6]:
-+                    npc_bucket["matches"][match] = int(npc_bucket["matches"].get(match) or 0) + 1
-+
-+        if row_matches:
-+            referenced_turns += 1
-+
-+        rows.append(
-+            {
-+                "turn_index": row.get("turn_index"),
-+                "profile_npcs": profile_summary.get("npc_ids") or [],
-+                "referenced": bool(row_matches),
-+                "matches": row_matches,
-+                "arc_stages": profile_summary.get("arc_stages") or {},
-+            }
-+        )
-+
++def summarize_campaign_calendar(runtime_state: Dict[str, Any]) -> Dict[str, Any]:
++    runtime_state = _safe_dict(runtime_state)
++    calendar = _safe_dict(runtime_state.get("campaign_calendar"))
++    history = _safe_list(calendar.get("history"))
 +    return {
-+        "available_turns": available_turns,
-+        "referenced_turns": referenced_turns,
-+        "reference_rate": round(referenced_turns / available_turns, 4) if available_turns else 0.0,
-+        "loaded_npc_ids": sorted(npc_ids),
-+        "by_npc": by_npc,
-+        "examples": rows[:8],
-+        "note": (
-+            "This is a soft diagnostic. It checks whether provider output appears "
-+            "to reference loaded profile context; it is not a hard requirement every turn."
-+        ),
++        "minutes_per_turn": calendar.get("minutes_per_turn", 30),
++        "turns_tracked": len(history),
++        "start": history[0] if history else _safe_dict(calendar.get("current")),
++        "end": _safe_dict(calendar.get("current")),
++        "rows": history[-20:],
 +    }
-2B. Attach summary after profile load summary
++
++
++def summarize_player_journal(runtime_state: Dict[str, Any]) -> Dict[str, Any]:
++    runtime_state = _safe_dict(runtime_state)
++    journal = _safe_dict(runtime_state.get("player_journal"))
++    entries = _safe_list(journal.get("entries"))
++    return {
++        "entry_count": len(entries),
++        "entries": entries[-20:],
++        "pending_action_count": len(_safe_list(journal.get("pending_actions"))),
++        "pending_result_count": len(_safe_list(journal.get("pending_results"))),
++    }
+2. Wire journal/calendar into base session turn path
 
-Find where you added:
+You need to patch whichever base RPG session turn handler is authoritative in your app. Based on current structure, likely files are one of:
 
-summary["npc_profile_load_summary"] = summarize_profile_loads(transcript)
+src/app/rpg/session.py
+src/app/rpg/session_runtime.py
+src/app/rpg/session_turn.py
+src/app/rpg/runtime/session.py
+src/app/api/rpg_session.py
+
+Search:
+
+Select-String -Path src\app\rpg\*.py,src\app\api\*.py -Pattern "turn_contract","session_id","runtime_state","/api/rpg/session/turn" -Context 3,8
+2A. Add import to the turn handler file
+
+In the file that builds/returns turn_result, add:
+
++from app.rpg.campaign_journal import advance_campaign_journal_for_turn
+2B. Advance journal after the authoritative turn contract is built
+
+Find the point after the turn contract/result exists and before the session is saved/returned. It will look roughly like one of these:
+
+session["turns"].append(...)
+session["turn_contract"] = turn_contract
+save_session(session)
+return {"ok": True, "session": session, "turn_contract": turn_contract}
 
 Patch:
 
---- src/tests/rpg/autoplay_llm_campaign.py
-+++ src/tests/rpg/autoplay_llm_campaign.py
 @@
-     summary["npc_profile_load_summary"] = summarize_profile_loads(transcript)
-+    summary["profile_grounded_output_summary"] = _summarize_profile_grounded_output(transcript)
-     metrics["npc_evolution_summary"] = summary["npc_evolution_summary"]
-     metrics["npc_evolution_profile_persistence_summary"] = summary["npc_evolution_profile_persistence_summary"]
-     metrics["npc_profile_load_summary"] = summary["npc_profile_load_summary"]
-+    metrics["profile_grounded_output_summary"] = summary["profile_grounded_output_summary"]
-2C. Add quality gate for profile grounding availability
++    runtime_state = session.setdefault("runtime_state", {})
++    turn_index = int(
++        turn_contract.get("turn_index")
++        or session.get("turn_index")
++        or len(session.get("turns", []))
++        or 1
++    )
++    session["runtime_state"] = advance_campaign_journal_for_turn(
++        runtime_state=runtime_state,
++        turn_index=turn_index,
++        player_input=player_input,
++        turn_contract=turn_contract,
++        turn_result={
++            "narration_payload": narration_payload if "narration_payload" in locals() else {},
++            "player_action": player_input,
++        },
++    )
 
-In _summarize_quality_gates(...), after:
+If the local variable is named differently:
 
-profile_load_summary = _safe_dict(summary.get("npc_profile_load_summary"))
+player_input may be action_text / input_text / command
+turn_contract may be contract
+narration_payload may be structured_narration / narration_result
+session may be state / session_state
 
-add:
+Use the equivalent values.
 
---- src/tests/rpg/autoplay_llm_campaign.py
-+++ src/tests/rpg/autoplay_llm_campaign.py
+The important invariant:
+
+advance_campaign_journal_for_turn runs after deterministic turn outcome exists,
+but before session is persisted/returned.
+2C. Include journal/calendar in session get response
+
+If /api/rpg/session/get already returns full session, nothing else is needed.
+
+If it filters runtime state, add:
+
 @@
-     profile_persist_summary = _safe_dict(summary.get("npc_evolution_profile_persistence_summary"))
-     profile_load_summary = _safe_dict(summary.get("npc_profile_load_summary"))
-+    profile_grounded_summary = _safe_dict(summary.get("profile_grounded_output_summary"))
+ response["campaign_calendar"] = session.get("runtime_state", {}).get("campaign_calendar", {})
+ response["player_journal"] = session.get("runtime_state", {}).get("player_journal", {})
 
-Add gate:
+or expose under:
 
---- src/tests/rpg/autoplay_llm_campaign.py
-+++ src/tests/rpg/autoplay_llm_campaign.py
-@@
-         "npc_profile_load_ok": (
-             not profile_load_summary
-             or bool(profile_load_summary.get("ok"))
-         ),
-+        "profile_grounding_context_available_when_profiles_loaded": (
-+            not profile_load_summary
-+            or int(profile_load_summary.get("turns_with_profiles") or 0) == 0
-+            or int(profile_grounded_summary.get("available_turns") or 0) > 0
-+        ),
-     }
+{
+  "session": {
+    "runtime_state": {
+      "campaign_calendar": {},
+      "player_journal": {}
+    }
+  }
+}
+3. Update autoplay/report to read base runtime journal first
 
-This does not require the model to reference profile terms every turn. It only gates that profile context made it into the combined result diagnostics when profiles were loaded.
-
-2D. Add console output
-
-Near other prints:
-
---- src/tests/rpg/autoplay_llm_campaign.py
-+++ src/tests/rpg/autoplay_llm_campaign.py
-@@
-     print(f"npc_profile_load_summary: {summary.get('npc_profile_load_summary')}")
-+    print(f"profile_grounded_output_summary: {summary.get('profile_grounded_output_summary')}")
-     print(f"promotion_target_grounding_summary: {summary.get('promotion_target_grounding_summary')}")
-N69 — Report UX
-3. Patch src/tests/rpg/autoplay/campaign_report.py
-3A. Include model field
-
-In model construction:
-
---- src/tests/rpg/autoplay/campaign_report.py
-+++ src/tests/rpg/autoplay/campaign_report.py
-@@
-         "npc_profile_load_summary": _safe_dict(
-             summary.get("npc_profile_load_summary")
-             or metrics.get("npc_profile_load_summary")
-         ),
-+        "profile_grounded_output_summary": _safe_dict(
-+            summary.get("profile_grounded_output_summary")
-+            or metrics.get("profile_grounded_output_summary")
-+        ),
-         "promotion_target_grounding_summary": _safe_dict(
-             summary.get("promotion_target_grounding_summary")
-             or metrics.get("promotion_target_grounding_summary")
-         ),
-3B. Add details section
-
-In HTML details area:
-
---- src/tests/rpg/autoplay/campaign_report.py
-+++ src/tests/rpg/autoplay/campaign_report.py
-@@
-     {_render_json_details("NPC profile load summary JSON", model.get("npc_profile_load_summary") or {})}
-+    {_render_json_details("Profile-grounded output summary JSON", model.get("profile_grounded_output_summary") or {})}
-     {_render_json_details("Promotion target grounding summary JSON", model.get("promotion_target_grounding_summary") or {})}
-Tests
-4. Patch context packet test
-
-File:
-
-src/tests/rpg/autoplay/test_combined_context_budget.py
-
-Update existing test_combined_context_packet_includes_loaded_npc_profiles to also assert profile summary:
-
---- src/tests/rpg/autoplay/test_combined_context_budget.py
-+++ src/tests/rpg/autoplay/test_combined_context_budget.py
-@@
-     assert packet["loaded_npc_profiles"]["Bran"]["arc_stage"] == "trusting"
-     assert packet["loaded_npc_profiles"]["Bran"]["axes"]["trust"] == 4
-+    assert packet["profile_context_summary"]["available"] is True
-+    assert packet["profile_context_summary"]["npc_ids"] == ["Bran"]
-+    assert packet["profile_context_summary"]["arc_stages"]["Bran"] == "trusting"
-5. Add summary tests
+Currently report_sections.py generates a test-only calendar/journal from transcript. Keep that as fallback, but prefer runtime state.
 
 Patch:
 
-src/tests/rpg/autoplay/test_quality_gates.py
-
-Add imports:
-
---- src/tests/rpg/autoplay/test_quality_gates.py
-+++ src/tests/rpg/autoplay/test_quality_gates.py
+src/tests/rpg/autoplay/report_sections.py
+3A. Import base summarizers
+--- src/tests/rpg/autoplay/report_sections.py
++++ src/tests/rpg/autoplay/report_sections.py
 @@
- from tests.rpg.autoplay_llm_campaign import (
-+    _summarize_profile_grounded_output,
-     _summarize_player_agent_prompt_budget,
-     _summarize_promotion_target_grounding,
-     _summarize_quality_gates,
- )
+ from typing import Any, Dict, List
++
++from app.rpg.campaign_journal import (
++    campaign_time_for_turn,
++    summarize_campaign_calendar,
++    summarize_player_journal,
++)
 
-Add tests:
+Then remove or rename the duplicate local campaign_time_for_turn(...) in this file. If easier, replace the local function body with a wrapper:
 
---- src/tests/rpg/autoplay/test_quality_gates.py
-+++ src/tests/rpg/autoplay/test_quality_gates.py
+-def campaign_time_for_turn(...):
+-    ...
++from app.rpg.campaign_journal import campaign_time_for_turn
+3B. Add helper to find final runtime journal state
+
+Add near _last_nonempty_row_value(...):
+
 @@
- def test_promotion_target_grounding_summary_dedupes_cumulative_runtime_state():
+ def _last_nonempty_row_value(transcript: List[Dict[str, Any]], key: str) -> Any:
 @@
-     assert len(summary["examples"]) == 2
+     return {}
 +
 +
-+def test_summarize_profile_grounded_output_detects_loaded_profile_context_and_reference():
++def _latest_runtime_state_with_journal(transcript: List[Dict[str, Any]]) -> Dict[str, Any]:
++    for row in reversed(transcript if isinstance(transcript, list) else []):
++        row = _safe_dict(row)
++        runtime_state = _safe_dict(row.get("runtime_state"))
++        if runtime_state.get("campaign_calendar") or runtime_state.get("player_journal"):
++            return runtime_state
++        turn_result = _safe_dict(row.get("turn_result"))
++        session = _safe_dict(turn_result.get("session"))
++        runtime_state = _safe_dict(session.get("runtime_state"))
++        if runtime_state.get("campaign_calendar") or runtime_state.get("player_journal"):
++            return runtime_state
++    return {}
+3C. Prefer base runtime journal in build_campaign_calendar_and_journal(...)
+
+At the start of build_campaign_calendar_and_journal(...), add:
+
+@@
+ def build_campaign_calendar_and_journal(
+     transcript: List[Dict[str, Any]],
+     *,
+     minutes_per_turn: int = 30,
+     journal_every_turns: int = 4,
+ ) -> Dict[str, Any]:
++    runtime_state = _latest_runtime_state_with_journal(transcript)
++    if runtime_state:
++        calendar = summarize_campaign_calendar(runtime_state)
++        journal = summarize_player_journal(runtime_state)
++        if calendar.get("turns_tracked") or journal.get("entry_count"):
++            calendar["source"] = "base_runtime"
++            journal["source"] = "base_runtime"
++            return {
++                "calendar": calendar,
++                "journal": journal,
++            }
++
+     calendar_rows: List[Dict[str, Any]] = []
+
+At the fallback return, add:
+
+@@
+         "calendar": {
++            "source": "report_fallback",
+             "minutes_per_turn": minutes_per_turn,
+@@
+         "journal": {
++            "source": "report_fallback",
+             "entry_count": len(journal_entries),
+4. Add frontend UI journal panel
+
+This makes journal visible in the base game, not only report.
+
+Patch likely file:
+
+src/static/rpg.js
+
+or the RPG UI script that renders session state.
+
+Search:
+
+Select-String -Path src\static\*.js -Pattern "world events","journal","rpg-top-panels","session.runtime_state","render" -Context 3,8
+4A. Add HTML container
+
+In the RPG page/template, likely:
+
+src/templates/rpg.html
+src/static/index.html
+
+Add near world events / journal / inspector panels:
+
++<section id="rpg-player-journal-panel" class="rpg-panel">
++  <h3>Player Journal</h3>
++  <div id="rpg-campaign-time" class="rpg-campaign-time"></div>
++  <div id="rpg-player-journal-list" class="rpg-player-journal-list"></div>
++</section>
+
+If panels are dynamically created in JS, add the equivalent DOM creation.
+
+4B. Add JS render function
+
+Patch src/static/rpg.js:
+
++function renderPlayerJournal(session) {
++  const runtime = (session && session.runtime_state) || {};
++  const calendar = runtime.campaign_calendar || {};
++  const journal = runtime.player_journal || {};
++  const timeEl = document.getElementById("rpg-campaign-time");
++  const listEl = document.getElementById("rpg-player-journal-list");
++  if (!timeEl || !listEl) return;
++
++  const current = calendar.current || {};
++  const timeLabel = [
++    current.season ? String(current.season) : "",
++    current.year ? "Year " + String(current.year) : "",
++    current.month ? "Month " + String(current.month) : "",
++    current.day ? "Day " + String(current.day) : "",
++    current.time_label ? String(current.time_label) : "",
++    current.day_phase ? "(" + String(current.day_phase) + ")" : ""
++  ].filter(Boolean).join(" · ");
++  timeEl.textContent = timeLabel || "Campaign time has not started yet.";
++
++  const entries = Array.isArray(journal.entries) ? journal.entries.slice(-8).reverse() : [];
++  if (!entries.length) {
++    listEl.innerHTML = '<div class="rpg-muted">No journal entries yet.</div>';
++    return;
++  }
++  listEl.innerHTML = entries.map((entry) => {
++    const time = entry.time || {};
++    const heading = [
++      entry.entry_id || "Journal Entry",
++      time.time_label || "",
++      time.day_phase || ""
++    ].filter(Boolean).join(" · ");
++    return `
++      <article class="rpg-journal-entry">
++        <h4>${escapeHtml(heading)}</h4>
++        <p>${escapeHtml(entry.text || "")}</p>
++      </article>
++    `;
++  }).join("");
++}
+
+If escapeHtml does not exist in rpg.js, add:
+
++function escapeHtml(value) {
++  return String(value == null ? "" : value)
++    .replaceAll("&", "&amp;")
++    .replaceAll("<", "&lt;")
++    .replaceAll(">", "&gt;")
++    .replaceAll('"', "&quot;")
++    .replaceAll("'", "&#039;");
++}
+4C. Call it after session updates
+
+Find where the UI renders session after /api/rpg/session/get or turn response. It may call things like:
+
+renderWorldEvents(session)
+renderInspector(session)
+renderTopPanels(session)
+
+Add:
+
++renderPlayerJournal(session);
+
+For turn response shaped as { session: ... }:
+
++if (data && data.session) renderPlayerJournal(data.session);
+4D. Add CSS
+
+Patch your RPG CSS, likely:
+
+src/static/rpg.css
+src/static/styles.css
+
+Add:
+
++.rpg-campaign-time {
++  font-size: 0.9rem;
++  opacity: 0.85;
++  margin-bottom: 0.5rem;
++}
++
++.rpg-player-journal-list {
++  display: flex;
++  flex-direction: column;
++  gap: 0.5rem;
++}
++
++.rpg-journal-entry {
++  border: 1px solid rgba(255,255,255,0.12);
++  border-radius: 10px;
++  padding: 0.65rem;
++  background: rgba(255,255,255,0.04);
++}
++
++.rpg-journal-entry h4 {
++  margin: 0 0 0.35rem 0;
++  font-size: 0.9rem;
++}
++
++.rpg-journal-entry p {
++  margin: 0;
++  line-height: 1.35;
++}
+
+Adjust colors if your UI is light themed.
+
+5. Add tests
+5A. Base journal unit tests
+
+Create:
+
+--- /dev/null
++++ src/tests/rpg/test_campaign_journal.py
+@@ -0,0 +1,95 @@
++from app.rpg.campaign_journal import (
++    advance_campaign_journal_for_turn,
++    campaign_time_for_turn,
++    summarize_campaign_calendar,
++    summarize_player_journal,
++)
++
++
++def test_campaign_time_for_turn_tracks_phase_and_date():
++    first = campaign_time_for_turn(turn_index=1, minutes_per_turn=60)
++    eighth = campaign_time_for_turn(turn_index=8, minutes_per_turn=60)
++
++    assert first["time_label"] == "00:00"
++    assert first["day_phase"] == "night"
++    assert eighth["time_label"] == "07:00"
++    assert eighth["day_phase"] == "morning"
++    assert eighth["season"] == "spring"
++
++
++def test_advance_campaign_journal_writes_entry_every_n_turns():
++    runtime_state = {}
++    for turn in range(1, 5):
++        runtime_state = advance_campaign_journal_for_turn(
++            runtime_state=runtime_state,
++            turn_index=turn,
++            player_input=f"I do thing {turn}",
++            turn_contract={
++                "turn_index": turn,
++                "player_input": f"I do thing {turn}",
++                "resolved_result": {"summary": f"Result {turn}"},
++            },
++            journal_every_turns=4,
++            minutes_per_turn=60,
++        )
++
++    journal = summarize_player_journal(runtime_state)
++    calendar = summarize_campaign_calendar(runtime_state)
++
++    assert calendar["turns_tracked"] == 4
++    assert journal["entry_count"] == 1
++    assert journal["entries"][0]["entry_id"] == "journal:turn:4"
++    assert "I do thing 1" in journal["entries"][0]["text"]
++    assert "Result" in journal["entries"][0]["text"]
++
++
++def test_advance_campaign_journal_is_idempotent_for_same_turn_entry():
++    runtime_state = {}
++    for _ in range(2):
++        runtime_state = advance_campaign_journal_for_turn(
++            runtime_state=runtime_state,
++            turn_index=4,
++            player_input="I ask Bran.",
++            turn_contract={
++                "turn_index": 4,
++                "player_input": "I ask Bran.",
++                "resolved_result": {"summary": "Bran answers."},
++            },
++            journal_every_turns=4,
++        )
++
++    journal = summarize_player_journal(runtime_state)
++    assert journal["entry_count"] == 1
+5B. Report fallback test
+
+Patch:
+
+src/tests/rpg/autoplay/test_report_sections.py
+
+Add:
+
+@@
+ def test_build_campaign_calendar_and_journal_creates_player_entries():
+@@
+     assert "I ask Bran" in result["journal"]["entries"][0]["text"]
++
++
++def test_build_campaign_calendar_and_journal_prefers_base_runtime_journal():
 +    transcript = [
 +        {
-+            "turn_index": 2,
-+            "combined_background_llm_result": {
-+                "narration": "Bran watches with guarded trust as the room settles.",
-+                "narration_payload": {
-+                    "npc": {"speaker": "Bran", "line": "I remember what you asked about the mill."}
-+                },
-+                "profile_context_summary": {
-+                    "available": True,
-+                    "npc_count": 1,
-+                    "npc_ids": ["Bran"],
-+                    "arc_stages": {"Bran": "trusting"},
-+                },
-+            },
++            "turn_index": 4,
 +            "runtime_state": {
-+                "npc_evolution": {
-+                    "loaded_profiles": {
-+                        "Bran": {
-+                            "profile": {
-+                                "npc_id": "Bran",
-+                                "arc_stage": "trusting",
-+                                "axes": {"trust": 4},
-+                                "memories": [
-+                                    {"summary": "Bran remembers the player asking about the mill."}
-+                                ],
-+                                "future_hooks": [],
-+                            }
++                "campaign_calendar": {
++                    "minutes_per_turn": 60,
++                    "current": {
++                        "turn_index": 4,
++                        "year": 1000,
++                        "season": "spring",
++                        "month": 1,
++                        "day": 1,
++                        "time_label": "03:00",
++                        "day_phase": "night",
++                    },
++                    "history": [
++                        {"turn_index": 1, "time_label": "00:00"},
++                        {"turn_index": 2, "time_label": "01:00"},
++                        {"turn_index": 3, "time_label": "02:00"},
++                        {"turn_index": 4, "time_label": "03:00"},
++                    ],
++                },
++                "player_journal": {
++                    "entries": [
++                        {
++                            "entry_id": "journal:turn:4",
++                            "text": "Base runtime journal entry.",
 +                        }
-+                    }
-+                }
++                    ]
++                },
 +            },
 +        }
 +    ]
 +
-+    summary = _summarize_profile_grounded_output(transcript)
++    result = build_campaign_calendar_and_journal(transcript)
 +
-+    assert summary["available_turns"] == 1
-+    assert summary["referenced_turns"] == 1
-+    assert summary["loaded_npc_ids"] == ["Bran"]
-+    assert summary["by_npc"]["Bran"]["referenced_turns"] == 1
-+
-+
-+def test_quality_gate_requires_profile_context_when_profiles_loaded():
-+    from types import SimpleNamespace
-+
-+    args = SimpleNamespace(
-+        background_llm_mode="combined",
-+        max_player_agent_fallback_rate=0.25,
-+    )
-+    metrics = {"real_turn_runtime_count": 1}
-+    summary = {
-+        "performance_budget_summary": {
-+            "live_blocking": {
-+                "avg_human_playable_blocking_ms": 50,
-+                "max_human_playable_blocking_ms": 90,
-+            }
-+        },
-+        "background_jobs": {
-+            "combined_background_llm_jobs": 1,
-+            "narration_jobs": 0,
-+            "advisory_jobs": 0,
-+        },
-+        "player_agent_trace_summary": {
-+            "turns": 1,
-+            "fallback_turns": 0,
-+        },
-+        "npc_profile_load_summary": {
-+            "ok": True,
-+            "turns_with_profiles": 1,
-+        },
-+        "profile_grounded_output_summary": {
-+            "available_turns": 1,
-+        },
-+    }
-+
-+    result = _summarize_quality_gates(
-+        args=args,
-+        metrics=metrics,
-+        summary=summary,
-+        transcript=[{}],
-+    )
-+
-+    assert result["ok"] is True
-+    assert result["gates"]["profile_grounding_context_available_when_profiles_loaded"] is True
-6. Add parallel pipeline parser test
++    assert result["calendar"]["source"] == "base_runtime"
++    assert result["journal"]["source"] == "base_runtime"
++    assert result["journal"]["entries"][0]["text"] == "Base runtime journal entry."
+5C. API/session sanity test
 
-File:
+If you have an API sanity suite, add a test around session turn. File may be:
 
-src/tests/rpg/autoplay/test_combined_background_payload_parser.py
+src/tests/api/sanity/test_rpg_session_sanity.py
 
-Patch the fake provider success test to verify profile_context_summary survives. If the fake call currently uses empty runtime_state, add this separate test:
+Add:
 
---- src/tests/rpg/autoplay/test_combined_background_payload_parser.py
-+++ src/tests/rpg/autoplay/test_combined_background_payload_parser.py
-@@
- def test_combined_background_job_marks_provider_success_when_payload_ok():
-@@
-     assert result["prompt_metrics"]["total_chars"] > 0
-+
-+
-+def test_combined_background_job_records_loaded_profile_context_summary():
-+    result = _combined_background_llm_job(
-+        queued_at=0.0,
-+        provider=_FakeCombinedProvider(),
-+        session_id="s",
-+        turn_index=1,
-+        player_action="I ask Bran what he remembers.",
-+        simulation_state={
-+            "scene": {"nearby_npcs": ["Bran"]},
-+            "npc_progression_state": {"npcs": {"Bran": {"name": "Bran"}}},
-+        },
-+        runtime_state={
-+            "npc_evolution": {
-+                "loaded_profiles": {
-+                    "Bran": {
-+                        "profile": {
-+                            "npc_id": "Bran",
-+                            "arc_stage": "trusting",
-+                            "axes": {"trust": 4},
-+                            "memories": [{"summary": "Bran remembers the mill question."}],
-+                        }
-+                    }
-+                }
-+            }
-+        },
-+        turn_contract={"player_input": "I ask Bran what he remembers."},
-+        semantic_action_record={"semantic_action_type": "ask"},
-+        prefer_provider=True,
-+    )
-+
-+    assert result["ok"] is True
-+    assert result["profile_context_summary"]["available"] is True
-+    assert result["profile_context_summary"]["npc_ids"] == ["Bran"]
-Validation
+def test_rpg_turn_updates_campaign_journal(client):
+    start = client.post("/api/rpg/session/start", json={})
+    assert start.status_code == 200
+    session_id = start.json()["session_id"]
+
+    for i in range(4):
+        response = client.post(
+            "/api/rpg/session/turn",
+            json={"session_id": session_id, "player_input": f"I wait and observe {i}"},
+        )
+        assert response.status_code == 200
+
+    get_response = client.post("/api/rpg/session/get", json={"session_id": session_id})
+    assert get_response.status_code == 200
+    session = get_response.json()["session"]
+    runtime = session["runtime_state"]
+
+    assert "campaign_calendar" in runtime
+    assert "player_journal" in runtime
+    assert len(runtime["player_journal"]["entries"]) >= 1
+
+Adjust endpoint names/payloads if your actual API differs.
+
+6. Update autoplay to use base journal during turns
+
+If autoplay uses the same base session turn endpoint/runtime, this may happen automatically.
+
+If not, patch src/tests/rpg/autoplay_llm_campaign.py after each turn result is available:
+
++from app.rpg.campaign_journal import advance_campaign_journal_for_turn
+
+Then after turn_result is produced and before record = { ... }:
+
++        session_obj = _safe_dict(turn_result.get("session"))
++        runtime_state = _safe_dict(session_obj.get("runtime_state") or turn_result.get("runtime_state"))
++        runtime_state = advance_campaign_journal_for_turn(
++            runtime_state=runtime_state,
++            turn_index=turn_index,
++            player_input=player_action,
++            turn_contract=turn_result.get("turn_contract") or {},
++            turn_result=turn_result,
++            minutes_per_turn=int(args.campaign_minutes_per_turn),
++            journal_every_turns=int(args.journal_every_turns),
++        )
++        if session_obj:
++            session_obj["runtime_state"] = runtime_state
++            turn_result["session"] = session_obj
++        turn_result["runtime_state"] = runtime_state
+
+Also put the same runtime state into the record:
+
+         record = {
+             ...
++            "runtime_state": runtime_state,
+         }
+
+This lets report_sections prefer source: base_runtime.
+
+7. Validation
 
 Compile:
 
-python -m py_compile src\tests\rpg\autoplay\parallel_pipeline.py src\tests\rpg\autoplay_llm_campaign.py src\tests\rpg\autoplay\campaign_report.py
+python -m py_compile src\app\rpg\campaign_journal.py src\tests\rpg\autoplay\report_sections.py src\tests\rpg\autoplay_llm_campaign.py
 
 Run focused tests:
 
-python -m pytest src\tests\rpg\autoplay\test_combined_context_budget.py src\tests\rpg\autoplay\test_combined_background_payload_parser.py src\tests\rpg\autoplay\test_quality_gates.py -q
+python -m pytest src\tests\rpg\test_campaign_journal.py src\tests\rpg\autoplay\test_report_sections.py -q
 
-Run broader regression slice:
+Run API sanity if added:
 
-python -m pytest src\tests\rpg\autoplay\test_combined_context_budget.py src\tests\rpg\autoplay\test_combined_background_payload_parser.py src\tests\rpg\autoplay\test_quality_gates.py src\tests\rpg\autoplay\test_npc_profile_runtime_loader.py src\tests\rpg\npc_evolution\test_profile_loading.py src\tests\rpg\npc_evolution\test_profile_store.py src\tests\rpg\autoplay\test_deferred_advisory_promotion_runtime.py -q
+python -m pytest src\tests\api\sanity\test_rpg_session_sanity.py -q

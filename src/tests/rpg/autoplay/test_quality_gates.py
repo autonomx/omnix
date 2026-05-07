@@ -1,6 +1,8 @@
 from types import SimpleNamespace
 
 from tests.rpg.autoplay_llm_campaign import (
+    _summarize_manual_turn_errors,
+    _summarize_npc_arc_progression,
     _summarize_player_agent_prompt_budget,
     _summarize_profile_grounded_output,
     _summarize_promotion_target_grounding,
@@ -50,6 +52,15 @@ def test_quality_gates_pass_for_fast_combined_run():
             "turns": 2,
             "fallback_turns": 0,
         },
+        "story_beat_summary": {"beat_count": 1},
+        "quest_progress_summary": {"quest_count": 0},
+        "campaign_calendar_summary": {"turns_tracked": 2},
+        "player_journal_summary": {"entry_count": 1},
+        "npc_evolution_profile_persistence_summary": {"ok": True},
+        "npc_profile_load_summary": {"ok": True, "turns_with_profiles": 0},
+        "profile_grounded_output_summary": {"available_turns": 0},
+        "npc_arc_progression_summary": {"ok": True},
+        "deferred_advisory_promotion_summary": {"mutated_authoritative_state": False},
     }
     result = _summarize_quality_gates(
         args=args,
@@ -79,9 +90,17 @@ def test_quality_gates_can_read_background_jobs_from_final_summary():
             "advisory_jobs": 0,
         },
         "player_agent_trace_summary": {
-            "turns": 4,
+            "turns": 2,
             "fallback_turns": 0,
         },
+        "campaign_calendar_summary": {
+            "turns_tracked": 4,
+        },
+        "player_journal_summary": {
+            "entry_count": 1,
+        },
+        "story_beat_summary": {"beat_count": 1},
+        "quest_progress_summary": {"quest_count": 0},
     }
 
     result = _summarize_quality_gates(
@@ -116,6 +135,19 @@ def test_quality_gates_fallback_to_performance_budget_background_llm():
         "player_agent_trace_summary": {
             "turns": 2,
             "fallback_turns": 0,
+        },
+        "story_beat_summary": {"beat_count": 1},
+        "quest_progress_summary": {"quest_count": 0},
+        "npc_evolution_profile_persistence_summary": {"ok": True},
+        "npc_profile_load_summary": {"ok": True, "turns_with_profiles": 0},
+        "profile_grounded_output_summary": {"available_turns": 0},
+        "npc_arc_progression_summary": {"ok": True},
+        "deferred_advisory_promotion_summary": {"mutated_authoritative_state": False},
+        "campaign_calendar_summary": {
+            "turns_tracked": 2,
+        },
+        "player_journal_summary": {
+            "entry_count": 1,
         },
     }
 
@@ -302,15 +334,30 @@ def test_quality_gate_requires_profile_context_when_profiles_loaded():
             "advisory_jobs": 0,
         },
         "player_agent_trace_summary": {
-            "turns": 1,
+            "turns": 2,
             "fallback_turns": 0,
         },
+        "story_beat_summary": {"beat_count": 1},
+        "quest_progress_summary": {"quest_count": 0},
+        "campaign_calendar_summary": {"turns_tracked": 2},
+        "player_journal_summary": {"entry_count": 1},
+        "npc_evolution_profile_persistence_summary": {"ok": True},
+        "npc_profile_load_summary": {"ok": True, "turns_with_profiles": 0},
+        "profile_grounded_output_summary": {"available_turns": 0},
+        "npc_arc_progression_summary": {"ok": True},
+        "deferred_advisory_promotion_summary": {"mutated_authoritative_state": False},
         "npc_profile_load_summary": {
             "ok": True,
             "turns_with_profiles": 1,
         },
         "profile_grounded_output_summary": {
             "available_turns": 1,
+        },
+        "campaign_calendar_summary": {
+            "turns_tracked": 1,
+        },
+        "player_journal_summary": {
+            "entry_count": 1,
         },
     }
 
@@ -323,3 +370,98 @@ def test_quality_gate_requires_profile_context_when_profiles_loaded():
 
     assert result["ok"] is True
     assert result["gates"]["profile_grounding_context_available_when_profiles_loaded"] is True
+
+
+def test_summarize_npc_arc_progression_detects_stage_change():
+    transcript = [
+        {
+            "turn_index": 3,
+            "npc_evolution_consumption_result": {
+                "consume_decisions": [
+                    {
+                        "ok": True,
+                        "npc_id": "Bran",
+                        "signal_id": "s1",
+                        "kind": "relationship_delta",
+                        "stage_changed": True,
+                        "arc_stage_before": "stable",
+                        "arc_stage_after": "trusting",
+                        "milestone": {
+                            "milestone_id": "m1",
+                            "from": "stable",
+                            "to": "trusting",
+                            "reason": "relationship_delta:trust",
+                            "signal_id": "s1",
+                        },
+                    }
+                ]
+            },
+            "npc_evolution_summary": {
+                "duplicate_milestone_ids": [],
+                "out_of_bounds_axes": [],
+            },
+        }
+    ]
+
+    summary = _summarize_npc_arc_progression(transcript)
+
+    assert summary["ok"] is True
+    assert summary["stage_change_count"] == 1
+    assert summary["by_npc"]["Bran"]["stage_changes"] == 1
+
+
+def test_manual_turn_error_summary_detects_manual_runtime_error():
+    summary = _summarize_manual_turn_errors(
+        [
+            {
+                "turn_index": 1,
+                "manual_turn_summary": {
+                    "error": "UnboundLocalError: cannot access local variable 'turn_contract'",
+                },
+            }
+        ]
+    )
+
+    assert summary["ok"] is False
+    assert summary["error_count"] == 1
+    assert "turn_contract" in summary["errors"][0]["error"]
+
+
+def test_quality_gate_fails_on_console_turn_errors():
+    from types import SimpleNamespace
+
+    args = SimpleNamespace(
+        background_llm_mode="combined",
+        max_player_agent_fallback_rate=0.25,
+    )
+    summary = {
+        "performance_budget_summary": {
+            "live_blocking": {
+                "avg_human_playable_blocking_ms": 50,
+                "max_human_playable_blocking_ms": 90,
+            }
+        },
+        "background_jobs": {
+            "combined_background_llm_jobs": 1,
+            "narration_jobs": 0,
+            "advisory_jobs": 0,
+        },
+        "player_agent_trace_summary": {"turns": 1, "fallback_turns": 0},
+        "campaign_calendar_summary": {"turns_tracked": 1},
+        "player_journal_summary": {"entry_count": 1},
+        "manual_turn_error_summary": {"ok": True, "error_count": 0},
+        "console_log_summary": {
+            "turn_error_count": 1,
+            "turn_errors": ["TURN 1 ERROR: boom"],
+        },
+    }
+
+    result = _summarize_quality_gates(
+        args=args,
+        metrics={"real_turn_runtime_count": 1},
+        summary=summary,
+        transcript=[{}],
+    )
+
+    assert result["ok"] is False
+    assert result["gates"]["console_turn_errors_absent"] is False

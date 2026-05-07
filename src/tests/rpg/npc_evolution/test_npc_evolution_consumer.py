@@ -240,3 +240,102 @@ def test_consumer_uses_canonical_arc_for_prefixed_npc_id():
     assert "Bran" in updated["npc_evolution"]["arcs"]
     assert "npc:bran" not in updated["npc_evolution"]["arcs"]
     assert updated["npc_evolution"]["summary"]["arcs_by_npc"] == ["Bran"]
+
+
+def test_relationship_signals_advance_arc_stage_and_create_milestone():
+    runtime_state = {}
+    simulation_state = {
+        "scene": {"nearby_npcs": ["Bran"]},
+        "npc_progression_state": {"npcs": {"Bran": {"name": "Bran"}}},
+    }
+    runtime_state["deferred_advisory"] = {
+        "accepted": [
+            {
+                "candidate_id": f"adv:{index}:relationship_delta:trust",
+                "kind": "relationship_delta",
+                "projection": {
+                    "candidate_id": f"adv:{index}:relationship_delta:trust",
+                    "kind": "relationship_delta",
+                    "payload": {
+                        "target": "Bran",
+                        "axis": "trust",
+                        "delta": 2,
+                        "summary": "Bran trusts the player more.",
+                    },
+                },
+            }
+            for index in range(1, 4)
+        ]
+    }
+
+    updated, result = consume_accepted_advisory_projections(
+        runtime_state=runtime_state,
+        simulation_state=simulation_state,
+        turn_index=5,
+    )
+
+    arc = updated["npc_evolution"]["arcs"]["Bran"]
+    assert arc["axes"]["trust"] >= 4
+    assert arc["arc_stage"] == "trusting"
+    assert len(arc["milestones"]) >= 1
+    assert arc["milestones"][0]["from"] == "stable"
+    assert arc["milestones"][0]["to"] == "trusting"
+    assert arc["milestones"][0]["milestone_id"]
+    assert result["summary"]["milestone_total"] >= 1
+
+
+def test_milestones_are_deduped_for_same_signal():
+    runtime_state = {}
+    signal = {
+        "signal_id": "s-trust-1",
+        "npc_id": "Bran",
+        "turn_index": 1,
+        "kind": "relationship_delta",
+        "summary": "Bran trusts the player more.",
+        "payload": {"target": "Bran", "axis": "trust", "delta": 2},
+        "consumed": False,
+    }
+    # Preload trust just below threshold so this signal causes a transition.
+    runtime_state["npc_evolution"] = {
+        "signals": [signal],
+        "arcs": {
+            "Bran": {
+                "npc_id": "Bran",
+                "arc_stage": "stable",
+                "axes": {
+                    "trust": 2,
+                    "fear": 0,
+                    "respect": 0,
+                    "curiosity": 0,
+                    "resentment": 0,
+                    "loyalty": 0,
+                },
+                "memories": [],
+                "world_signals": [],
+                "future_hooks": [],
+                "semantic_intents": [],
+                "milestones": [],
+            }
+        },
+    }
+
+    updated, first = consume_evolution_signal(
+        runtime_state=runtime_state,
+        signal=signal,
+        turn_index=2,
+    )
+    # Simulate accidental re-run with same signal id/stage transition.
+    signal_again = dict(signal)
+    signal_again["consumed"] = False
+    updated["npc_evolution"]["arcs"]["Bran"]["arc_stage"] = "stable"
+    updated, second = consume_evolution_signal(
+        runtime_state=updated,
+        signal=signal_again,
+        turn_index=2,
+    )
+
+    milestones = updated["npc_evolution"]["arcs"]["Bran"]["milestones"]
+    milestone_ids = [item["milestone_id"] for item in milestones]
+    assert first["ok"] is True
+    assert second["ok"] is True
+    assert len(milestone_ids) == len(set(milestone_ids))

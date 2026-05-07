@@ -116,6 +116,8 @@
         worldEventsSummary: {},
         worldEventsTab: 'local',
         narrationEventSource: null,
+        campaign_calendar: null,
+        player_journal: null,
     };
 
     let typingIdleTimer = null;
@@ -4076,6 +4078,7 @@
         if (update.map) renderMap();
         if (update.memory && update.memory.length) renderMemory();
         if (update.worldEvents && update.worldEvents.length) renderMemory();
+        renderPlayerJournal();
         if (update.session) renderRpgConversationThreads(update.session);
         if (update.turn_contract) renderRpgTurnContract(update.turn_contract);
         updateRpgServiceActionsFromPayload(update || {});
@@ -4501,6 +4504,43 @@
         }
     }
 
+    function renderPlayerJournal() {
+        var timeEl = el('rpg-campaign-time');
+        var listEl = el('rpg-player-journal-list');
+        if (!timeEl || !listEl) return;
+
+        var calendar = rpgState.campaign_calendar || {};
+        var journal = rpgState.player_journal || {};
+        var current = calendar.current || {};
+        var timeLabel = [
+            current.season ? String(current.season) : "",
+            current.year ? "Year " + String(current.year) : "",
+            current.month ? "Month " + String(current.month) : "",
+            current.day ? "Day " + String(current.day) : "",
+            current.time_label ? String(current.time_label) : "",
+            current.day_phase ? "(" + String(current.day_phase) + ")" : ""
+        ].filter(Boolean).join(" · ");
+        timeEl.textContent = timeLabel || "Campaign time has not started yet.";
+
+        var entries = Array.isArray(journal.entries) ? journal.entries.slice(-8).reverse() : [];
+        if (!entries.length) {
+            listEl.innerHTML = '<div class="rpg-muted">No journal entries yet.</div>';
+            return;
+        }
+        listEl.innerHTML = entries.map(function (entry) {
+            var time = entry.time || {};
+            var heading = [
+                entry.entry_id || "Journal Entry",
+                time.time_label || "",
+                time.day_phase || ""
+            ].filter(Boolean).join(" · ");
+            return '<article class="rpg-journal-entry">' +
+                '<h4>' + escapeHtml(heading) + '</h4>' +
+                '<p>' + escapeHtml(entry.text || "") + '</p>' +
+                '</article>';
+        }).join("");
+    }
+
     // ─── Visual Generation Implementation ─────────────────────────────────────
 
     function ensureVisualControlState() {
@@ -4840,11 +4880,14 @@
                     player: nextPlayer,
                     npcs: Array.isArray(nextNpcs) ? nextNpcs : [],
                     scene: game.scene || rpgState.scene || null,
-                    grounded_scene_context: game.grounded_scene_context || rpgState.grounded_scene_context || null
+                    grounded_scene_context: game.grounded_scene_context || rpgState.grounded_scene_context || null,
+                    campaign_calendar: game.campaign_calendar || rpgState.campaign_calendar || null,
+                    player_journal: game.player_journal || rpgState.player_journal || null
                 });
 
                 if (nextPlayer) renderPlayerPanel(nextPlayer);
                 renderNPCs();
+                renderPlayerJournal();
 
                 if (visualState) {
                     console.log("[RPG][visual refresh]", visualState);

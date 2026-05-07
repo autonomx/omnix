@@ -147,6 +147,9 @@ def write_autoplay_artifacts(
             code_diff_path = output_dir / "code-diff.txt"
             if code_diff_path.exists():
                 zf.write(code_diff_path, code_diff_path.name)
+            console_log_path = output_dir / "console-log.txt"
+            if console_log_path.exists():
+                zf.write(console_log_path, arcname="console-log.txt")
             checkpoint_dir = output_dir / "checkpoints"
             if checkpoint_dir.exists():
                 session_id = str(summary.get("session_id") or "")

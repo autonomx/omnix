@@ -23,10 +23,20 @@ from tests.rpg.autoplay.npc_profile_runtime_loader import (
     load_profiles_into_row_runtime,
     summarize_profile_loads,
 )
+from tests.rpg.autoplay.report_sections import (
+    build_campaign_calendar_and_journal,
+    summarize_npc_evolution_for_report,
+    summarize_quests_for_report,
+    summarize_story_beats_for_report,
+)
+from app.rpg.campaign_journal_runtime import advance_campaign_journal_for_turn
 from tests.rpg.autoplay.base_runtime_response import (
     build_autoplay_base_response,
 )
 from tests.rpg.autoplay.campaign_report import write_campaign_report
+from tests.rpg.autoplay.console_capture import ConsoleCapture, summarize_console_log
+
+_ACTIVE_CONSOLE_CAPTURE = None
 from tests.rpg.autoplay.checkpoints import (
     collect_state_bounds,
     validate_save_load_checkpoint,
@@ -695,6 +705,69 @@ def _summarize_profile_grounded_output(transcript: List[Dict[str, Any]]) -> Dict
     }
 
 
+def _summarize_npc_arc_progression(transcript: List[Dict[str, Any]]) -> Dict[str, Any]:
+    stage_changes: List[Dict[str, Any]] = []
+    latest_summary: Dict[str, Any] = {}
+    duplicate_milestone_ids = set()
+    out_of_bounds_axes: List[Dict[str, Any]] = []
+    by_npc: Dict[str, Dict[str, Any]] = {}
+
+    for row in transcript if isinstance(transcript, list) else []:
+        row = _safe_dict(row)
+        turn_index = row.get("turn_index")
+        evo_result = _safe_dict(row.get("npc_evolution_consumption_result"))
+        latest = _safe_dict(row.get("npc_evolution_summary"))
+        if latest:
+            latest_summary = latest
+            for dup in _safe_list(latest.get("duplicate_milestone_ids")):
+                if _safe_str(dup):
+                    duplicate_milestone_ids.add(_safe_str(dup))
+            out_of_bounds_axes.extend(_safe_list(latest.get("out_of_bounds_axes")))
+
+        for decision in _safe_list(evo_result.get("consume_decisions")):
+            decision = _safe_dict(decision)
+            if not decision.get("ok"):
+                continue
+            npc_id = _safe_str(decision.get("npc_id")) or "unknown"
+            bucket = by_npc.setdefault(
+                npc_id,
+                {
+                    "signals_consumed": 0,
+                    "stage_changes": 0,
+                    "latest_stage": "",
+                    "milestones": [],
+                },
+            )
+            bucket["signals_consumed"] += 1
+            bucket["latest_stage"] = _safe_str(decision.get("arc_stage_after"))
+            if decision.get("stage_changed"):
+                milestone = _safe_dict(decision.get("milestone"))
+                bucket["stage_changes"] += 1
+                if milestone:
+                    bucket["milestones"].append(milestone)
+                stage_changes.append(
+                    {
+                        "turn_index": turn_index,
+                        "npc_id": npc_id,
+                        "from": decision.get("arc_stage_before"),
+                        "to": decision.get("arc_stage_after"),
+                        "reason": milestone.get("reason") if milestone else "",
+                        "signal_id": decision.get("signal_id"),
+                        "milestone_id": milestone.get("milestone_id") if milestone else "",
+                    }
+                )
+
+    return {
+        "stage_change_count": len(stage_changes),
+        "stage_changes": stage_changes[:20],
+        "by_npc": by_npc,
+        "latest_summary": latest_summary,
+        "duplicate_milestone_ids": sorted(duplicate_milestone_ids),
+        "out_of_bounds_axes": out_of_bounds_axes,
+        "ok": not duplicate_milestone_ids and not out_of_bounds_axes,
+    }
+
+
 def _summarize_player_agent_prompt_budget(rows: List[Dict[str, Any]]) -> Dict[str, Any]:
     prompt_rows = [row for row in rows if isinstance(row.get("prompt_metrics"), dict)]
     if not prompt_rows:
@@ -730,6 +803,30 @@ def _summarize_player_agent_prompt_budget(rows: List[Dict[str, Any]]) -> Dict[st
     }
 
 
+def _summarize_manual_turn_errors(transcript: List[Dict[str, Any]]) -> Dict[str, Any]:
+    errors: List[Dict[str, Any]] = []
+    for row in transcript if isinstance(transcript, list) else []:
+        row = _safe_dict(row)
+        manual_summary = _safe_dict(row.get("manual_turn_summary"))
+        error = (
+            _safe_str(row.get("runtime_error"))
+            or _safe_str(manual_summary.get("error"))
+            or _safe_str(_safe_dict(row.get("turn_result")).get("error"))
+        )
+        if error:
+            errors.append(
+                {
+                    "turn_index": row.get("turn_index"),
+                    "error": error,
+                }
+            )
+    return {
+        "ok": not errors,
+        "error_count": len(errors),
+        "errors": errors[:20],
+    }
+
+
 def _summarize_quality_gates(
     *,
     args: Any,
@@ -747,6 +844,13 @@ def _summarize_quality_gates(
     profile_persist_summary = _safe_dict(summary.get("npc_evolution_profile_persistence_summary"))
     profile_load_summary = _safe_dict(summary.get("npc_profile_load_summary"))
     profile_grounded_summary = _safe_dict(summary.get("profile_grounded_output_summary"))
+    arc_progression_summary = _safe_dict(summary.get("npc_arc_progression_summary"))
+    calendar_summary = _safe_dict(summary.get("campaign_calendar_summary"))
+    journal_summary = _safe_dict(summary.get("player_journal_summary"))
+    story_beat_summary = _safe_dict(summary.get("story_beat_summary"))
+    quest_progress_summary = _safe_dict(summary.get("quest_progress_summary"))
+    manual_turn_error_summary = _safe_dict(summary.get("manual_turn_error_summary"))
+    console_log_summary = _safe_dict(summary.get("console_log_summary"))
     evolution_mutated_authoritative_state = False
     for row in transcript:
         evo_result = _safe_dict(_safe_dict(row).get("npc_evolution_consumption_result"))
@@ -787,6 +891,37 @@ def _summarize_quality_gates(
             not profile_load_summary
             or int(profile_load_summary.get("turns_with_profiles") or 0) == 0
             or int(profile_grounded_summary.get("available_turns") or 0) > 0
+        ),
+        "npc_arc_progression_health_ok": (
+            not arc_progression_summary
+            or bool(arc_progression_summary.get("ok", True))
+        ),
+        "campaign_calendar_present": (
+            not transcript
+            or int(calendar_summary.get("turns_tracked") or 0) == len(transcript)
+        ),
+        "player_journal_present": (
+            not transcript
+            or int(journal_summary.get("entry_count") or 0) >= 1
+        ),
+        "story_beats_or_fallback_present": (
+            not transcript
+            or int(story_beat_summary.get("beat_count") or 0) > 0
+        ),
+        "quest_progress_section_present": (
+            quest_progress_summary is not None
+        ),
+        "manual_turn_runtime_errors_absent": (
+            not manual_turn_error_summary
+            or bool(manual_turn_error_summary.get("ok", True))
+        ),
+        "console_turn_errors_absent": (
+            not console_log_summary
+            or int(console_log_summary.get("turn_error_count") or 0) == 0
+        ),
+        "console_log_captured_when_enabled": (
+            not getattr(args, "capture_console_log", True)
+            or int(console_log_summary.get("line_count") or 0) > 0
         ),
     }
 
@@ -1005,6 +1140,107 @@ def _runtime_state_with_loaded_profiles_for_background(
         simulation_state=_safe_dict(simulation_state),
     )
     return _safe_dict(temp_row.get("runtime_state"))
+
+
+def _resolve_turn_contract_for_report(
+    *,
+    turn_result: Dict[str, Any],
+    base_response_payload: Dict[str, Any],
+) -> Dict[str, Any]:
+    turn_result = _safe_dict(turn_result)
+    base_response_payload = _safe_dict(base_response_payload)
+    return (
+        _safe_dict(turn_result.get("turn_contract"))
+        or _safe_dict(_safe_dict(turn_result.get("result")).get("turn_contract"))
+        or _safe_dict(_safe_dict(_safe_dict(turn_result.get("session")).get("last_turn")).get("turn_contract"))
+        or _safe_dict(base_response_payload.get("turn_contract"))
+        or {}
+    )
+
+
+def _merge_unique_dict_list(
+    left: List[Any],
+    right: List[Any],
+    *,
+    key: str,
+) -> List[Any]:
+    out: List[Any] = []
+    seen = set()
+    for item in list(left or []) + list(right or []):
+        if not isinstance(item, dict):
+            continue
+        marker = _safe_str(item.get(key)) or str(item)
+        if marker in seen:
+            continue
+        seen.add(marker)
+        out.append(item)
+    return out
+
+
+def _merge_campaign_calendar(left: Dict[str, Any], right: Dict[str, Any]) -> Dict[str, Any]:
+    left = _safe_dict(left)
+    right = _safe_dict(right)
+    if not left:
+        return dict(right)
+    if not right:
+        return dict(left)
+    merged = dict(left)
+    merged.update(right)
+    history = _merge_unique_dict_list(
+        _safe_list(left.get("history")),
+        _safe_list(right.get("history")),
+        key="turn_index",
+    )
+    history.sort(key=lambda item: int(_safe_dict(item).get("turn_index") or 0))
+    merged["history"] = history[-500:]
+    if history:
+        merged["current"] = history[-1]
+    return merged
+
+
+def _merge_player_journal(left: Dict[str, Any], right: Dict[str, Any]) -> Dict[str, Any]:
+    left = _safe_dict(left)
+    right = _safe_dict(right)
+    if not left:
+        return dict(right)
+    if not right:
+        return dict(left)
+    merged = dict(left)
+    merged.update(right)
+    merged["entries"] = _merge_unique_dict_list(
+        _safe_list(left.get("entries")),
+        _safe_list(right.get("entries")),
+        key="entry_id",
+    )[-100:]
+    # Pending values should come from the most recent runtime state.
+    merged["pending_actions"] = _safe_list(right.get("pending_actions"))
+    merged["pending_results"] = _safe_list(right.get("pending_results"))
+    return merged
+
+
+def _merge_base_runtime_namespaces(
+    carried_runtime_state: Dict[str, Any],
+    row_runtime_state: Dict[str, Any],
+) -> Dict[str, Any]:
+    """Preserve base runtime namespaces across autoplay rows.
+
+    Turn results can contain fresh row-local runtime_state. This helper keeps
+    campaign calendar / player journal cumulative while preserving other row
+    runtime namespaces such as deferred_advisory and npc_evolution.
+    """
+    carried_runtime_state = _safe_dict(carried_runtime_state)
+    row_runtime_state = _safe_dict(row_runtime_state)
+    merged = dict(carried_runtime_state)
+    merged.update(row_runtime_state)
+    merged["campaign_calendar"] = _merge_campaign_calendar(
+        _safe_dict(carried_runtime_state.get("campaign_calendar")),
+        _safe_dict(row_runtime_state.get("campaign_calendar")),
+    )
+    merged["player_journal"] = _merge_player_journal(
+        _safe_dict(carried_runtime_state.get("player_journal")),
+        _safe_dict(row_runtime_state.get("player_journal")),
+    )
+    return merged
 
 
 def _find_narration_payload(container: Dict[str, Any]) -> Dict[str, Any]:
@@ -1256,7 +1492,7 @@ def _select_player_action(
         return fallback
 
 
-def run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
+def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
     campaign_perf_start = now_perf()
     artifact_write_ms = 0.0
     session_id = args.session_id or f"autoplay_{uuid.uuid4().hex[:12]}"
@@ -1290,6 +1526,7 @@ def run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
 
 
     transcript: List[Dict[str, Any]] = []
+    carried_campaign_runtime_state: Dict[str, Any] = {}
     player_agent_cache = PlayerAgentDecisionCache(max_entries=256)
     player_agent_prompt_rows: List[Dict[str, Any]] = []
     regression_warnings: List[Dict[str, Any]] = []
@@ -1302,6 +1539,7 @@ def run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
             "turn_index": turn_index,
         }
         background_runtime_state: Dict[str, Any] = {}
+        resolved_turn_contract: Dict[str, Any] = {}
         # The previous turn's committed state is the only valid baseline.
         # Never derive the next before_state from manual session reloads.
         expected_baseline_state = deepcopy(last_committed_state)
@@ -1530,6 +1768,11 @@ def run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
         advisory_status = "disabled"
         advisory_job_id = ""
         combined_background_llm_job_id = ""
+        resolved_turn_contract = _resolve_turn_contract_for_report(
+            turn_result=turn_result,
+            base_response_payload=base_response_payload,
+        )
+
         if args.narration_mode == "deferred":
             narration_status = "pending"
             advisory_status = "pending"
@@ -1547,7 +1790,7 @@ def run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
                         player_action=player_action,
                         simulation_state=final_turn_state,
                         runtime_state=background_runtime_state,
-                        turn_contract=turn_result.get("turn_contract") or {},
+                        turn_contract=resolved_turn_contract,
                         semantic_action_record=semantic_action_record,
                         prefer_provider=True,
                     )
@@ -1611,6 +1854,34 @@ def run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
             _safe_dict(background_runtime_state).get("npc_evolution", {}).get("profile_load_result")
         )
 
+        session_obj = _safe_dict(turn_result.get("session"))
+        row_runtime_state = (
+            _safe_dict(turn_result.get("runtime_state"))
+            or _safe_dict(session_obj.get("runtime_state"))
+            or {}
+        )
+        runtime_state = _merge_base_runtime_namespaces(
+            carried_campaign_runtime_state,
+            row_runtime_state,
+        )
+        runtime_state = advance_campaign_journal_for_turn(
+            runtime_state=runtime_state,
+            turn_index=turn_index,
+            player_input=player_action,
+            turn_contract=resolved_turn_contract,
+            turn_result=turn_result,
+            minutes_per_turn=int(args.campaign_minutes_per_turn),
+            journal_every_turns=int(args.journal_every_turns),
+        )
+        carried_campaign_runtime_state = _merge_base_runtime_namespaces(
+            carried_campaign_runtime_state,
+            runtime_state,
+        )
+        turn_result["runtime_state"] = runtime_state
+        if session_obj:
+            session_obj["runtime_state"] = runtime_state
+            turn_result["session"] = session_obj
+
         record = {
             "turn_index": turn_index,
             "session_id": session_id,
@@ -1640,7 +1911,7 @@ def run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
             "manual_harness_trace_summary": turn_result.get("manual_harness_trace_summary") if args.debug_provider_shape else {},
             "turn_perf_trace": turn_result.get("turn_perf_trace") if args.debug_provider_shape else [],
             "turn_perf_trace_summary": turn_result.get("turn_perf_trace_summary") if args.debug_provider_shape else {},
-            "turn_contract": turn_result.get("turn_contract") or {},
+            "turn_contract": resolved_turn_contract,
             "narration": narration,
             "narration_mode": args.narration_mode,
             "narration_status": narration_status,
@@ -1668,6 +1939,7 @@ def run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
             "story_hook_result": story_hook_result,
             "base_response_payload": base_response_payload,
             "prebackground_profile_load_result": prebackground_profile_load_result,
+            "runtime_state": runtime_state,
         }
 
         turn_performance["record_build_ms"] = elapsed_ms(record_build_start)
@@ -2016,10 +2288,48 @@ def run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
     )
     summary["npc_profile_load_summary"] = summarize_profile_loads(transcript)
     summary["profile_grounded_output_summary"] = _summarize_profile_grounded_output(transcript)
+    summary["npc_arc_progression_summary"] = _summarize_npc_arc_progression(transcript)
+    summary["npc_evolution_report_summary"] = summarize_npc_evolution_for_report(transcript)
+    summary["quest_progress_summary"] = summarize_quests_for_report(transcript)
+    summary["story_beat_summary"] = summarize_story_beats_for_report(transcript)
+    summary["manual_turn_error_summary"] = _summarize_manual_turn_errors(transcript)
+    console_log_path = Path(args.output_dir) / "console-log.txt"
+    console_log_text = ""
+    if _ACTIVE_CONSOLE_CAPTURE is not None:
+        _ACTIVE_CONSOLE_CAPTURE.write_file()
+        console_log_text = _ACTIVE_CONSOLE_CAPTURE.text()
+    elif console_log_path.exists():
+        console_log_text = console_log_path.read_text(encoding="utf-8", errors="replace")
+    summary["console_log_summary"] = summarize_console_log(console_log_text)
+    summary["console_log_summary"]["path"] = str(console_log_path)
+    metrics["story_beat_summary"] = summary["story_beat_summary"]
+    metrics["manual_turn_error_summary"] = summary["manual_turn_error_summary"]
+    metrics["console_log_summary"] = summary["console_log_summary"]
+    if int(summary["quest_progress_summary"].get("quest_count") or 0) == 0:
+        story_arc_view = _safe_dict(summary.get("story_arc_view") or metrics.get("story_arc_view"))
+        if story_arc_view:
+            from tests.rpg.autoplay.report_sections import _quest_rows_from_story_arc_view
+            arc_quests = _quest_rows_from_story_arc_view(story_arc_view)
+            if arc_quests:
+                summary["quest_progress_summary"] = summarize_quests_for_report(
+                    [{"simulation_state": {"quest_state": {q["quest_id"]: q for q in arc_quests}}}]
+                )
+    calendar_and_journal = build_campaign_calendar_and_journal(
+        transcript,
+        minutes_per_turn=int(args.campaign_minutes_per_turn),
+        journal_every_turns=int(args.journal_every_turns),
+    )
+    summary["campaign_calendar_summary"] = calendar_and_journal["calendar"]
+    summary["player_journal_summary"] = calendar_and_journal["journal"]
     metrics["npc_evolution_summary"] = summary["npc_evolution_summary"]
     metrics["npc_evolution_profile_persistence_summary"] = summary["npc_evolution_profile_persistence_summary"]
     metrics["npc_profile_load_summary"] = summary["npc_profile_load_summary"]
     metrics["profile_grounded_output_summary"] = summary["profile_grounded_output_summary"]
+    metrics["npc_arc_progression_summary"] = summary["npc_arc_progression_summary"]
+    metrics["npc_evolution_report_summary"] = summary["npc_evolution_report_summary"]
+    metrics["quest_progress_summary"] = summary["quest_progress_summary"]
+    metrics["campaign_calendar_summary"] = summary["campaign_calendar_summary"]
+    metrics["player_journal_summary"] = summary["player_journal_summary"]
     summary["quality_gate_summary"] = _summarize_quality_gates(
         args=args,
         metrics=metrics,
@@ -2077,6 +2387,10 @@ def run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
     except Exception as e:
         print(f"Warning: Could not write code diff: {e}")
 
+    console_log_path = Path(args.output_dir) / "console-log.txt"
+    if console_log_path.exists():
+        extra_paths["console_log_txt"] = str(console_log_path)
+
     # Zip archive is created by write_autoplay_artifacts
 
     artifact_write_ms = elapsed_ms(artifact_start)
@@ -2106,6 +2420,9 @@ def run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
                 health=health,
             )
         )
+    if _ACTIVE_CONSOLE_CAPTURE is not None:
+        _ACTIVE_CONSOLE_CAPTURE.write_file()
+
     paths = write_autoplay_artifacts(
         output_dir=Path(args.output_dir),
         transcript=transcript,
@@ -2203,7 +2520,59 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--checkpoint-mode", choices=["blocking", "background"], default="blocking")
     parser.add_argument("--background-workers", type=int, default=4)
     parser.add_argument("--provider-workers", type=int, default=1)
+    parser.add_argument(
+        "--campaign-minutes-per-turn",
+        type=int,
+        default=30,
+        help="Deterministic campaign calendar minutes advanced per turn for report/journal metadata.",
+    )
+    parser.add_argument(
+        "--journal-every-turns",
+        type=int,
+        default=4,
+        help="Create a deterministic player-perspective journal entry every N turns.",
+    )
+    parser.add_argument(
+        "--capture-console-log",
+        action="store_true",
+        default=True,
+        help="Capture stdout/stderr into output-dir/console-log.txt and include it in reports/artifacts.",
+    )
+    parser.add_argument(
+        "--no-capture-console-log",
+        action="store_false",
+        dest="capture_console_log",
+        help="Disable stdout/stderr capture.",
+    )
+    parser.add_argument(
+        "--console-log-max-chars",
+        type=int,
+        default=250000,
+        help="Maximum console log characters retained in console-log.txt/report summary.",
+    )
     return parser
+
+
+def _run_with_console_capture(args: argparse.Namespace) -> int:
+    global _ACTIVE_CONSOLE_CAPTURE
+    output_dir = Path(args.output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    console_log_path = output_dir / "console-log.txt"
+    if not getattr(args, "capture_console_log", True):
+        summary = _run_autoplay_campaign(args)
+        return 0 if summary.get("ok") else 1
+
+    with ConsoleCapture(
+        output_path=console_log_path,
+        max_chars=int(getattr(args, "console_log_max_chars", 250000) or 250000),
+    ) as capture:
+        _ACTIVE_CONSOLE_CAPTURE = capture
+        try:
+            summary = _run_autoplay_campaign(args)
+            capture.write_file()
+        finally:
+            _ACTIVE_CONSOLE_CAPTURE = None
+    return 0 if summary.get("ok") else 1
 
 
 def main(argv: List[str] | None = None) -> int:
@@ -2213,7 +2582,7 @@ def main(argv: List[str] | None = None) -> int:
         for name in available_campaign_seeds():
             print(name)
         return 0
-    summary = run_autoplay_campaign(args)
+    return _run_with_console_capture(args)
 
     print("Autoplay RPG Campaign Summary")
     print(f"session_id: {summary['session_id']}")
@@ -2271,6 +2640,14 @@ def main(argv: List[str] | None = None) -> int:
     print(f"npc_evolution_profile_persistence_summary: {summary.get('npc_evolution_profile_persistence_summary')}")
     print(f"npc_profile_load_summary: {summary.get('npc_profile_load_summary')}")
     print(f"profile_grounded_output_summary: {summary.get('profile_grounded_output_summary')}")
+    print(f"npc_arc_progression_summary: {summary.get('npc_arc_progression_summary')}")
+    print(f"npc_evolution_report_summary: {summary.get('npc_evolution_report_summary')}")
+    print(f"quest_progress_summary: {summary.get('quest_progress_summary')}")
+    print(f"campaign_calendar_summary: {summary.get('campaign_calendar_summary')}")
+    print(f"player_journal_summary: {summary.get('player_journal_summary')}")
+    print(f"manual_turn_error_summary: {summary.get('manual_turn_error_summary')}")
+    print(f"console_log_summary: {summary.get('console_log_summary')}")
+    print(f"Wrote console log to: {Path(args.output_dir) / 'console-log.txt'}")
     print(f"promotion_target_grounding_summary: {summary.get('promotion_target_grounding_summary')}")
     print(f"quality_gate_summary: {summary.get('quality_gate_summary')}")
 
