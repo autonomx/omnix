@@ -596,7 +596,7 @@ def _render_calendar_and_journal(calendar: Dict[str, Any], journal: Dict[str, An
         for entry in entries[-8:]
     )
     return f"""
-    <section id="campaign-journal">
+    <section class="rpg-promoted-section" id="campaign-journal">
       <h2>Campaign Calendar & Player Journal</h2>
       <p><strong>Current campaign time:</strong>
         Year {_esc(str(end.get('year') or ''))},
@@ -640,7 +640,7 @@ def _render_quest_progress(summary: Dict[str, Any]) -> str:
         for quest in quests
     )
     return f"""
-    <section id="quest-progress">
+    <section class="rpg-promoted-section" id="quest-progress">
       <h2>Quest Progress</h2>
       <p>Active: {_esc(str(summary.get('active_count') or 0))} ·
          Completed: {_esc(str(summary.get('completed_count') or 0))} ·
@@ -702,7 +702,7 @@ def _render_console_log_summary(summary: Dict[str, Any]) -> str:
     ignored_text = "\n".join(str(line) for line in ignored[:40])
     tail_text = "\n".join(str(line) for line in tail[-80:])
     return f"""
-    <section id="console-log">
+    <section class="rpg-promoted-section" id="console-log">
       <h2>Console Log</h2>
       <p><strong>Captured file:</strong> {_esc(str(summary.get("path") or "console-log.txt"))}</p>
       <p>
@@ -751,7 +751,7 @@ def _render_hundred_turn_eval(model: Dict[str, Any]) -> str:
         warning_rows = "<tr><td colspan='3'>No long-run warnings.</td></tr>"
 
     return f"""
-    <section id="hundred-turn-eval">
+    <section class="rpg-promoted-section" id="hundred-turn-eval">
       <h2>100-Turn Evaluation</h2>
       <p><strong>Mode:</strong> {html.escape(str(eval_summary.get("readiness") or "smoke"))}
          · <strong>Turns:</strong> {html.escape(str(eval_summary.get("turn_count") or progress.get("turns") or 0))}
@@ -785,7 +785,7 @@ def _render_action_diversity(summary: Dict[str, Any]) -> str:
         return out or "<tr><td colspan='2'>No data.</td></tr>"
 
     return f"""
-    <section id="action-diversity">
+    <section class="rpg-promoted-section" id="action-diversity">
       <h2>Action Diversity</h2>
       <p>
         Unique actions: {html.escape(str(summary.get("unique_action_count") or 0))} ·
@@ -824,7 +824,7 @@ def _render_progress_timeline(summary: Dict[str, Any]) -> str:
         rows = "<tr><td colspan='8'>No progress timeline data.</td></tr>"
 
     return f"""
-    <section id="progress-timeline">
+    <section class="rpg-promoted-section" id="progress-timeline">
       <h2>Progress Timeline</h2>
       <p>
         Meaningful progress turns: {html.escape(str(summary.get("meaningful_progress_turns") or 0))} ·
@@ -871,7 +871,7 @@ def _render_background_result_timing(summary: Dict[str, Any]) -> str:
         )
 
     return f"""
-    <section id="background-result-timing">
+    <section class="rpg-promoted-section" id="background-result-timing">
       <h2>Background Result Timing</h2>
       <p>
         Submitted: {html.escape(str(summary.get('jobs_submitted') or 0))} ·
@@ -939,7 +939,7 @@ def _render_npc_evolution_cards(summary: Dict[str, Any]) -> str:
             """
         )
     return f"""
-    <section id="npc-evolution">
+    <section class="rpg-promoted-section" id="npc-evolution">
       <h2>NPC Evolution</h2>
       <p>{_esc(str(summary.get('npc_count') or len(cards)))} NPC profile(s) tracked.</p>
       <div class="npc-card-grid">{''.join(rows)}</div>
@@ -1626,7 +1626,7 @@ def _render_autoplay_campaign_report_partial(summary: Dict[str, Any], metrics: D
     max_streak = _safe_dict(action.get("max_same_semantic_target_streak"))
 
     return f"""
-    <section class="rpg-card span-12" id="autoplay-campaign-report">
+    <section class="rpg-card rpg-promoted-section span-12" id="autoplay-campaign-report">
       <div class="rpg-section-title">
         <h2>Autoplay Campaign Report</h2>
         <span class="rpg-badge {_status_badge_class(quality.get('ok', True))}">
@@ -1677,7 +1677,7 @@ def _render_rpg_verdict_cards(model: Dict[str, Any]) -> str:
     streak_value = _safe_str(streak.get("value") or streak.get("pair") or "n/a")
     streak_count = _num(streak.get("streak"))
     return f"""
-    <section class="rpg-card span-12" id="verdict-cards">
+    <section class="rpg-card rpg-promoted-section span-12" id="verdict-cards">
       <div class="rpg-section-title">
         <h2>Validation Snapshot</h2>
         <span class="rpg-badge {_status_badge_class(quality_ok)}">{html.escape(_yes_no(quality_ok))}</span>
@@ -2016,7 +2016,7 @@ def _render_adventure_timeline(summary: Dict[str, Any], transcript: List[Dict[st
             )
         body = f'<ol class="rpg-timeline">{"".join(items)}</ol>'
     return f"""
-    <section class="rpg-card span-8" id="adventure-timeline">
+    <section class="rpg-card rpg-promoted-section span-8" id="adventure-timeline">
       <div class="rpg-section-title">
         <h2>Adventure Timeline</h2>
         <span class="rpg-badge neutral">Chronicle</span>
@@ -2215,7 +2215,7 @@ def _render_quest_board(summary: Dict[str, Any], metrics: Dict[str, Any], transc
         """
 
     return f"""
-    <section class="rpg-card span-4" id="quest-board">
+    <section class="rpg-card rpg-promoted-section span-4" id="quest-board">
       <div class="rpg-section-title">
         <h2>Quest Board</h2>
         <span class="rpg-badge neutral">Objectives</span>
@@ -2332,7 +2332,7 @@ def _render_npc_chronicle(summary: Dict[str, Any], metrics: Dict[str, Any]) -> s
         body = "<p>No expanded NPC cards were available yet. This section is ready for N83 NPC evolution card data.</p>"
 
     return f"""
-    <section class="rpg-card span-12" id="npc-chronicle">
+    <section class="rpg-card rpg-promoted-section span-12" id="npc-chronicle">
       <div class="rpg-section-title">
         <h2>NPC Chronicle</h2>
         <span class="rpg-badge neutral">Social State</span>
@@ -5450,14 +5450,14 @@ def render_campaign_report_html(
       {_render_background_result_timing(model.get("background_result_timing_summary") or {})}
 
 
-    <section id="story-so-far">
+    <section class="rpg-promoted-section" id="story-so-far">
     <h2>Story So Far</h2>
     <p class="section-lede">A readable summary of what happened in the campaign before the technical diagnostics.</p>
     {_render_paragraphs(model.get("story_so_far_paragraph"))}
     {_render_json_details("Story timeline summary inputs", {"milestones": model.get("milestones"), "journal_entries": model.get("journal_entries"), "hook_counts": model.get("hook_counts")})}
   </section>
 
-  <section id="setting">
+  <section class="rpg-promoted-section" id="setting">
     <h2>Lore, Setting, and Director Setup</h2>
     <p class="section-lede">The premise, stakes, and setting context that frame the campaign run.</p>
     {_render_paragraphs(model.get("lore_setting_paragraph"))}
@@ -5470,7 +5470,7 @@ def render_campaign_report_html(
     {_render_json_details("Director state JSON", _safe_dict(latest_state.get("campaign_director_state")))}
   </section>
 
-  <section id="arcs">
+  <section class="rpg-promoted-section" id="arcs">
     <h2>Story Arc Status</h2>
     <p class="section-lede">A product/story view of campaign branches, active objectives, and completed beats.</p>
     <div class="card-list">
@@ -5482,7 +5482,7 @@ def render_campaign_report_html(
     {_render_json_details("Milestones JSON", model.get("milestones"))}
    </section>
 
-  <section id="locations">
+  <section class="rpg-promoted-section" id="locations">
     <h2>Location Journey</h2>
     <p class="section-lede">Where the run traveled, what happened there, who was involved, and what objectives were tied to each place.</p>
     <div class="card-list">
@@ -5491,7 +5491,7 @@ def render_campaign_report_html(
     {_render_json_details("Location journey JSON", model.get("location_journey"))}
   </section>
 
-  <section id="variety">
+  <section class="rpg-promoted-section" id="variety">
     <h2>Story Variety</h2>
     <p class="section-lede">Identifies which campaign seed ran and gives stable signatures for comparing story setups across multiple autoplay runs.</p>
     <div class="grid">
@@ -5503,7 +5503,7 @@ def render_campaign_report_html(
     {_render_json_details("Story variety JSON", story_variety)}
   </section>
 
-    <section id="run-validity">
+    <section class="rpg-promoted-section" id="run-validity">
     <h2>Run Validity</h2>
     <div class="grid">
       <div class="metric"><div class="value">{_esc(metrics.get("player_agent_exception_count"))}</div><div>Player-Agent Exceptions</div></div>
@@ -5513,13 +5513,13 @@ def render_campaign_report_html(
     <p class="muted">A high fallback rate means this campaign reflects deterministic fallback action selection more than true LLM-player behavior.</p>
   </section>
 
-  <section id="chapter-status">
+  <section class="rpg-promoted-section" id="chapter-status">
     <h2>Chapter Status</h2>
     <p class="section-lede">Current campaign chapter, active story goals, completed goals, and recommended next direction.</p>
     {_render_chapter_status_cards(chapter_status)}
   </section>
 
-  <section id="product-evaluation">
+  <section class="rpg-promoted-section" id="product-evaluation">
     <h2>Product Evaluation</h2>
     <div class="grid">
       <div class="metric"><div class="value">{_esc(pm_summary.get("story_status"))}</div><div>Story Continuity</div></div>
@@ -5532,7 +5532,7 @@ def render_campaign_report_html(
   </section>
   """
     body_sections = f"""
-  <section id="player">
+  <section class="rpg-promoted-section" id="player">
     <h2>Player Character Progression / Stats</h2>
     <p class="section-lede">A readable snapshot of level, XP, core stats, and progression events.</p>
     {_render_paragraphs(model.get("character_progression_paragraph"))}
@@ -5551,7 +5551,7 @@ def render_campaign_report_html(
     {_render_json_details("Player progression JSON", model.get("player_progression"))}
   </section>
 
-  <section id="inventory">
+  <section class="rpg-promoted-section" id="inventory">
     <h2>Inventory: Start vs End</h2>
     <p class="muted">Shows whether the campaign changed carried items, currency, or inventory-like state during the run.</p>
     <div class="two-col">
@@ -5573,7 +5573,7 @@ def render_campaign_report_html(
     {_render_json_details("Raw inventory start/end JSON", {"start": model.get("inventory_start"), "end": model.get("inventory_end")})}
    </section>
 
-  <section id="npcs">
+  <section class="rpg-promoted-section" id="npcs">
     <h2>NPC Cast, Biography, and Growth</h2>
     <p class="muted">A product/story view of who appeared, why they matter, and how their relationship or role changed.</p>
     {_render_table(["Name", "Role", "Dialogue Turns", "History", "Biography", "Growth / Arc"], npc_rows)}
@@ -5581,7 +5581,7 @@ def render_campaign_report_html(
     {_render_json_details("NPC progression state", _safe_dict(_safe_dict(latest_state.get("npc_progression_state")).get("npcs")))}
   </section>
 
-  <section id="dialogue-coverage">
+  <section class="rpg-promoted-section" id="dialogue-coverage">
     <h2>Dialogue Coverage</h2>
     <div class="grid">
       <div class="metric"><div class="value">{_esc(_safe_dict(model.get("dialogue_coverage")).get("npc_response_turn_count"))}</div><div>Turns with NPC Response</div></div>
@@ -5598,7 +5598,7 @@ def render_campaign_report_html(
       </details>
     </section>
 
-  <section id="performance">
+  <section class="rpg-promoted-section" id="performance">
     <h2>Performance Metrics</h2>
     <p class="section-lede">Runtime speed and where time is spent. Playability latency separates the blocking turn path from background narration/checkpoint/report work.</p>
     <div class="grid">
@@ -5649,7 +5649,7 @@ def render_campaign_report_html(
      {_render_json_details("Background job summary JSON", model.get("background_jobs") or {})}
   </section>
 
-  <section id="quality">
+  <section class="rpg-promoted-section" id="quality">
     <h2>Progress Quality & Action Diversity</h2>
     <p class="section-lede">How often the campaign produced meaningful story/game progress versus weak progress, churn, or no visible change.</p>
     <div class="grid">
@@ -5665,13 +5665,13 @@ def render_campaign_report_html(
     {_render_json_details("Hook counts", model.get("hook_counts"))}
   </section>
 
-  <section id="runtime-narration-diagnostics">
+  <section class="rpg-promoted-section" id="runtime-narration-diagnostics">
     <h2>Runtime Narration Diagnostics</h2>
     <p class="muted">Provider validity, repair, fallback, and method-call diagnostics.</p>
     {_render_json_details("Runtime narration diagnostics JSON", model.get("runtime_narration_diagnostics"))}
    </section>
 
-    <section id="timeline">
+    <section class="rpg-promoted-section" id="timeline">
     <h2>Turn-by-Turn Story Timeline with AI/NPC Responses</h2>
     {''.join(timeline_html)}
    </section>
@@ -5679,7 +5679,7 @@ def render_campaign_report_html(
     {_render_console_log_summary(model.get("console_log_summary") or {})}
     {_render_json_details("Console log summary JSON", model.get("console_log_summary") or {})}
 
-    <section id="debug">
+    <section class="rpg-promoted-section" id="debug">
       <h2>Raw Debug Appendix</h2>
       <p><strong>Latest state source:</strong> {_esc(model.get("latest_state_source"))}</p>
       {_render_json_details("Story beat fallback summary JSON", model.get("story_beat_summary") or {})}
@@ -5708,10 +5708,28 @@ def render_campaign_report_html(
     appendix_links = [
         ("campaign-journal", "Journal"),
         ("quest-progress", "Quests"),
-        ("npcs", "NPCs"),
+        ("npc-evolution", "NPC Evolution"),
+        ("hundred-turn-eval", "100-Turn Eval"),
+        ("action-diversity", "Action Diversity"),
+        ("progress-timeline", "Progress Timeline"),
+        ("background-result-timing", "Background Timing"),
+        ("story-so-far", "Story So Far"),
+        ("setting", "Setting"),
+        ("arcs", "Story Arcs"),
+        ("locations", "Locations"),
+        ("variety", "Variety"),
+        ("run-validity", "Run Validity"),
+        ("chapter-status", "Chapter Status"),
+        ("product-evaluation", "Product Evaluation"),
+        ("player", "Player"),
         ("inventory", "Inventory"),
-        ("dialogue-coverage", "Dialogue"),
-        ("quality", "Quality"),
+        ("npcs", "NPC Cast"),
+        ("dialogue-coverage", "Dialogue Coverage"),
+        ("adventure-timeline", "Adventure Timeline"),
+        ("quest-board", "Quest Board"),
+        ("npc-chronicle", "NPC Chronicle"),
+        ("console-log", "Console Log"),
+        ("runtime-narration-diagnostics", "Runtime Diagnostics"),
         ("debug", "Debug"),
     ]
     html_doc = f"""<!DOCTYPE html>
