@@ -1,653 +1,600 @@
 Below is the literal patch spec for:
 
-N81.2.7.2 — Nested Turn Contract Semantic Extraction for Anti-Loop
+N83.1.2 — Timeline Title Finalizer + Location Service Extraction Row-Shape Fix
 Goal
 
-Fix remaining cleanup issue:
+Fix the two remaining visible report issues from artifact 156:
 
-player_agent_anti_loop_context active=True pair=unknown:unknown streak=12
-source=canonical_semantic_pair_from_turn
+1. Adventure Timeline still has a few generic titles:
+   Story Beat
 
-Current bug:
+   even though the body text contains useful player-action text:
+   Player: Ask Bran about any unusual activity or rumors in town.
+   Player: Lean in slightly and lower your voice...
+   Player: Listen intently to Bran's immediate elaboration...
 
-canonical_semantic_pair_from_turn(row) is now wired into anti-loop,
-but it still misses the actual semantic data because the data lives deeper:
+2. Location Journey still shows:
+   Services / Interactions:
+   No services recorded.
 
-turn_contract.action.metadata.semantic_action.action_type
-turn_contract.action.metadata.semantic_action.target_name
-turn_contract.action.metadata.semantic_action.target_id
+   even though report/transcript data clearly contains:
+   service_inquiry
+   rent_room
+   lodging
 
-Correct behavior:
+Target visible result:
 
-Anti-loop context should read the same semantic pair that action_diversity_summary sees.
+Story Beat: 0
 
-Expected:
-  service_inquiry:Bran
-  observe:Bran
-  rent_room:inn
-  observe:Cloaked Traveler
+Location Journey → Services / Interactions:
+  service_inquiry
+  rent_room
+  lodging
+1. Patch src/tests/rpg/autoplay/campaign_report.py
+1A. Add generic-title detector
 
-Not:
-  unknown:unknown
-1. Patch src/tests/rpg/autoplay/hundred_turn_eval.py
-1A. Add nested dict/path helpers
+Add near _infer_rpg_title_from_text(...):
 
-Add near _safe_dict, _safe_str, and the semantic extraction helpers:
-
---- src/tests/rpg/autoplay/hundred_turn_eval.py
-+++ src/tests/rpg/autoplay/hundred_turn_eval.py
+--- src/tests/rpg/autoplay/campaign_report.py
++++ src/tests/rpg/autoplay/campaign_report.py
 @@
- def _safe_dict(value: Any) -> Dict[str, Any]:
-     return value if isinstance(value, dict) else {}
- 
- 
- def _safe_str(value: Any) -> str:
-     return value if isinstance(value, str) else ""
+ def _infer_rpg_title_from_text(text: Any, *, fallback: str = "Story Beat") -> str:
+     lower = _safe_str(text).lower()
+     if not lower:
+         return fallback
+@@
+     if "traveler" in lower:
+         return "Engage the Traveler"
+     return _title_case_from_text(text, fallback=fallback)
 +
 +
-+def _nested_dict(root: Dict[str, Any], *path: str) -> Dict[str, Any]:
-+    value: Any = root
-+    for key in path:
-+        if not isinstance(value, dict):
-+            return {}
-+        value = value.get(key)
-+    return value if isinstance(value, dict) else {}
++def _is_generic_timeline_title(value: Any) -> bool:
++    text = _safe_str(value).strip().lower()
++    return text in {
++        "",
++        "story beat",
++        "campaign event",
++        "campaign beat",
++        "player action",
++        "turn event",
++    }
+1B. Strengthen RPG title inference for the remaining player-action shapes
+
+Find _infer_rpg_title_from_text(...).
+
+Patch the body with more specific rules.
+
+--- src/tests/rpg/autoplay/campaign_report.py
++++ src/tests/rpg/autoplay/campaign_report.py
+@@
+ def _infer_rpg_title_from_text(text: Any, *, fallback: str = "Story Beat") -> str:
+     lower = _safe_str(text).lower()
+     if not lower:
+         return fallback
++    if lower.startswith("player:"):
++        lower_action = lower.split("player:", 1)[1].strip()
++    else:
++        lower_action = lower
++
++    if "bran" in lower_action and any(term in lower_action for term in ("unusual activity", "rumor", "rumors", "town")):
++        return "Ask Bran About Rumors"
++    if "bran" in lower_action and any(term in lower_action for term in ("elaboration", "explain", "details", "more about", "follow up")):
++        return "Press Bran for Details"
++    if "bran" in lower_action and any(term in lower_action for term in ("lean in", "lower your voice", "quietly", "discreetly", "private")):
++        return "Speak Privately with Bran"
++    if any(term in lower_action for term in ("listen intently", "listen closely", "listen to bran")):
++        return "Listen to Bran"
++    if any(term in lower_action for term in ("ask bran", "question bran")):
++        return "Question Bran"
++    if any(term in lower_action for term in ("ask", "question", "inquire")) and "rumor" in lower_action:
++        return "Ask About Rumors"
++    if any(term in lower_action for term in ("lean in", "lower your voice", "whisper")):
++        return "Speak Quietly"
++    if any(term in lower_action for term in ("listen", "wait for", "hear him out")):
++        return "Listen Carefully"
+     if "bran" in lower and any(term in lower for term in ("job", "work", "task", "lead", "rumor")):
+         return "Ask Bran About Work"
+     if "bran" in lower and any(term in lower for term in ("room", "lodging", "rent", "bed")):
+         return "Ask Bran About Lodging"
+
+This specifically catches the examples from 156.
+
+1C. Add body-prefix title extraction helper
+
+Add near timeline helpers:
+
+--- src/tests/rpg/autoplay/campaign_report.py
++++ src/tests/rpg/autoplay/campaign_report.py
+@@
+ def _journal_timeline_beats(summary: Dict[str, Any]) -> List[Dict[str, Any]]:
+@@
+     return beats
 +
 +
-+def _nested_value(root: Dict[str, Any], *path: str) -> Any:
-+    value: Any = root
-+    for key in path:
-+        if not isinstance(value, dict):
-+            return None
-+        value = value.get(key)
-+    return value
++def _timeline_title_from_body(body: Any, *, fallback: str = "Story Beat") -> str:
++    text = _safe_str(body).strip()
++    if not text:
++        return fallback
++
++    # Many story summaries are shaped like:
++    # "Player: Ask Bran about any unusual activity or rumors in town. Result: ..."
++    # Use the player-action prefix as the title source when present.
++    player_match = re.search(
++        r"\bPlayer:\s*(.+?)(?:\n|\. Result:| Result:|\. Outcome:| Outcome:|$)",
++        text,
++        flags=re.IGNORECASE | re.DOTALL,
++    )
++    if player_match:
++        candidate = player_match.group(1).strip()
++        inferred = _infer_rpg_title_from_text(candidate, fallback=fallback)
++        if not _is_generic_timeline_title(inferred):
++            return inferred
++
++    action_match = re.search(
++        r"\b(?:Action|Player Action):\s*(.+?)(?:\n|\. Result:| Result:|\. Outcome:| Outcome:|$)",
++        text,
++        flags=re.IGNORECASE | re.DOTALL,
++    )
++    if action_match:
++        candidate = action_match.group(1).strip()
++        inferred = _infer_rpg_title_from_text(candidate, fallback=fallback)
++        if not _is_generic_timeline_title(inferred):
++            return inferred
++
++    inferred = _infer_rpg_title_from_text(text, fallback=fallback)
++    if not _is_generic_timeline_title(inferred):
++        return inferred
++
++    return fallback
+1D. Patch _story_event_timeline_beats(...) to final-check titles
+
+Find the title assignment inside _story_event_timeline_beats(...):
+
+title = explicit_title or _infer_rpg_title_from_text(body, fallback="Story Beat")
+
+Replace with:
+
+--- src/tests/rpg/autoplay/campaign_report.py
++++ src/tests/rpg/autoplay/campaign_report.py
+@@
+-        title = explicit_title or _infer_rpg_title_from_text(body, fallback="Story Beat")
++        title = explicit_title or _timeline_title_from_body(body, fallback="Story Beat")
++        if _is_generic_timeline_title(title):
++            title = _timeline_title_from_body(
++                _first_non_empty(
++                    beat.get("player_input"),
++                    beat.get("action"),
++                    beat.get("summary"),
++                    beat.get("text"),
++                    beat.get("description"),
++                    body,
++                ),
++                fallback="Story Event",
++            )
+1E. Patch _combined_adventure_beats(...) to finalize every title
+
+Find:
+
+beats = [beat for beat in beats if _safe_str(beat.get("title")) or _safe_str(beat.get("body"))]
+
+Replace with:
+
+--- src/tests/rpg/autoplay/campaign_report.py
++++ src/tests/rpg/autoplay/campaign_report.py
+@@
+-    beats = [beat for beat in beats if _safe_str(beat.get("title")) or _safe_str(beat.get("body"))]
++    finalized: List[Dict[str, Any]] = []
++    for beat in beats:
++        beat = _safe_dict(beat)
++        title = _safe_str(beat.get("title"))
++        body = _safe_str(beat.get("body"))
++        if _is_generic_timeline_title(title):
++            title = _timeline_title_from_body(body, fallback="Story Event")
++        if _is_generic_timeline_title(title):
++            title = "Story Event"
++        if title or body:
++            updated = dict(beat)
++            updated["title"] = title
++            finalized.append(updated)
++    beats = finalized
+
+This guarantees the visible timeline should not show Story Beat even if upstream data is generic.
+
+2. Fix Location Journey service extraction from actual row shapes
+
+The previous _services_from_row(...) only checked a few direct keys and the semantic mapping helper. In the generated report rows, service data can appear nested in many places or only as serialized metadata.
+
+2A. Add recursive service scanner helpers
+
+Add near _services_from_row(...):
+
+--- src/tests/rpg/autoplay/campaign_report.py
++++ src/tests/rpg/autoplay/campaign_report.py
+@@
+ def _npcs_from_row(row: Dict[str, Any]) -> List[str]:
+@@
+     return sorted({name for name in names if _looks_like_npc_name(name)})
 +
 +
-+def _normalize_semantic_action_name(value: Any) -> str:
++_SERVICE_ACTION_NAMES = {
++    "service_inquiry",
++    "rent_room",
++    "buy_service",
++    "purchase_service",
++    "lodging",
++}
++
++
++def _normalize_service_label(value: Any) -> str:
 +    text = _safe_str(value).strip()
 +    if not text:
 +        return ""
++    text = text.replace("-", "_").replace(" ", "_")
++    text = re.sub(r"[^A-Za-z0-9_]+", "", text)
 +    return text.lower()
 +
 +
-+def _normalize_semantic_target_name(value: Any) -> str:
-+    text = _safe_str(value).strip()
-+    if not text:
-+        return ""
-+    if text.startswith("npc:") and len(text) > 4:
-+        return text[4:]
-+    return text
-
-If _safe_dict already appears after _safe_str, place these helpers after both exist.
-
-1B. Add semantic candidate helper
-
-Add near canonical_semantic_pair_from_turn(...):
-
---- src/tests/rpg/autoplay/hundred_turn_eval.py
-+++ src/tests/rpg/autoplay/hundred_turn_eval.py
-@@
- def _normalize_semantic_target_name(value: Any) -> str:
-     text = _safe_str(value).strip()
-     if not text:
-         return ""
-     if text.startswith("npc:") and len(text) > 4:
-         return text[4:]
-     return text
-+
-+
-+def _semantic_candidate_from_mapping(
-+    mapping: Dict[str, Any],
-+    *,
-+    source: str,
-+) -> Dict[str, Any]:
++def _service_labels_from_mapping(mapping: Dict[str, Any]) -> List[str]:
 +    mapping = _safe_dict(mapping)
-+    if not mapping:
-+        return {}
++    values: List[str] = []
 +
-+    semantic_action = _normalize_semantic_action_name(
-+        mapping.get("semantic_action")
-+        or mapping.get("action_type")
-+        or mapping.get("action")
-+        or mapping.get("type")
-+        or mapping.get("kind")
-+        or mapping.get("name")
-+    )
-+    target = _normalize_semantic_target_name(
-+        mapping.get("semantic_target")
-+        or mapping.get("target_name")
-+        or mapping.get("target")
-+        or mapping.get("target_id")
-+        or mapping.get("object")
-+        or mapping.get("object_id")
-+        or mapping.get("normalized_target")
-+    )
-+
-+    if not semantic_action and not target:
-+        return {}
-+
-+    if not semantic_action:
-+        semantic_action = "unknown"
-+    if not target:
-+        target = "unknown"
-+
-+    return {
-+        "ok": bool(semantic_action and semantic_action != "unknown"),
-+        "semantic_action": semantic_action,
-+        "target": target,
-+        "pair": f"{semantic_action}:{target}",
-+        "source": source,
-+        "raw": mapping,
-+    }
-1C. Replace canonical_semantic_pair_from_turn(...)
-
-Find the full existing function:
-
-def canonical_semantic_pair_from_turn(row: Dict[str, Any]) -> Dict[str, Any]:
-    ...
-
-Replace it with this version:
-
---- src/tests/rpg/autoplay/hundred_turn_eval.py
-+++ src/tests/rpg/autoplay/hundred_turn_eval.py
-@@
- def canonical_semantic_pair_from_turn(row: Dict[str, Any]) -> Dict[str, Any]:
--    """Extract the same semantic action/target pair used by action diversity.
--
--    This intentionally prefers the existing canonical semantic extraction path
--    rather than ad-hoc row fields. Anti-loop pressure must see the same pairs as
--    action_diversity_summary, otherwise it can incorrectly report
--    unknown:unknown while the summary sees observe:Bran.
--    """
-+    """Extract canonical semantic action/target pair from an autoplay row.
-+
-+    The autoplay/manual harness stores semantic information in several shapes.
-+    Action diversity already finds these pairs, but anti-loop previously only
-+    checked shallow row fields and therefore saw unknown:unknown.
-+
-+    Prefer explicit/nested turn-contract semantic metadata, then fall back to
-+    existing canonical extractors and shallow compatibility fields.
-+    """
-     row = row if isinstance(row, dict) else {}
- 
--    extracted: Dict[str, Any] = {}
--
--    # Preferred path: use the existing canonical extractor if present.
--    for name in (
--        "_extract_semantic_action_from_turn",
--        "extract_semantic_action_from_turn",
--        "_extract_semantic_action",
--        "extract_semantic_action",
--        "_semantic_action_from_row",
--    ):
--        fn = globals().get(name)
--        if not callable(fn):
--            continue
--        try:
--            value = fn(row)
--        except TypeError:
--            try:
--                value = fn(turn=row)
--            except Exception:
--                value = {}
--        except Exception:
--            value = {}
--        if isinstance(value, dict) and value:
--            extracted = value
--            break
--
--    # Fallback path mirrors the known places semantic extraction may have been
--    # stored by the autoplay/manual harness.
--    semantic_action = _safe_str(
--        extracted.get("semantic_action")
--        or extracted.get("action")
--        or extracted.get("type")
--        or row.get("semantic_action")
--        or row.get("semantic_action_type")
--        or _safe_dict(row.get("semantic_action_v2")).get("semantic_action")
--        or _safe_dict(row.get("semantic_action_v2")).get("action")
--        or _safe_dict(row.get("semantic_action_record")).get("semantic_action")
--        or _safe_dict(row.get("semantic_action_record")).get("action")
--        or _safe_dict(row.get("turn_contract")).get("semantic_action")
--        or _safe_dict(row.get("turn_contract")).get("action_type")
--    ).strip()
--
--    target = _safe_str(
--        extracted.get("semantic_target")
--        or extracted.get("target")
--        or extracted.get("object")
--        or row.get("semantic_target")
--        or row.get("target")
--        or _safe_dict(row.get("semantic_action_v2")).get("target")
--        or _safe_dict(row.get("semantic_action_v2")).get("object")
--        or _safe_dict(row.get("semantic_action_record")).get("target")
--        or _safe_dict(row.get("semantic_action_record")).get("object")
--        or _safe_dict(row.get("turn_contract")).get("target")
--        or _safe_dict(row.get("turn_contract")).get("object")
--    ).strip()
--
--    # Some canonical extractors return fields under normalized names.
--    if not semantic_action:
--        semantic_action = _safe_str(extracted.get("name") or extracted.get("kind")).strip()
--    if not target:
--        target = _safe_str(extracted.get("normalized_target") or extracted.get("target_id")).strip()
--
--    semantic_action = semantic_action.lower() if semantic_action else "unknown"
--    target = target if target else "unknown"
--
--    return {
--        "ok": bool(semantic_action and semantic_action != "unknown"),
--        "semantic_action": semantic_action,
--        "target": target,
--        "pair": f"{semantic_action}:{target}",
--        "source": _safe_str(extracted.get("source")) or "canonical_semantic_pair_from_turn",
--        "raw": extracted,
--    }
-+    turn_contract = _safe_dict(row.get("turn_contract"))
-+    turn_result = _safe_dict(row.get("turn_result") or row.get("result"))
-+
-+    candidate_mappings: List[Tuple[str, Dict[str, Any]]] = [
-+        ("row.semantic_action_v2", _safe_dict(row.get("semantic_action_v2"))),
-+        ("row.semantic_action_record", _safe_dict(row.get("semantic_action_record"))),
-+        (
-+            "row.turn_contract.action.metadata.semantic_action",
-+            _nested_dict(turn_contract, "action", "metadata", "semantic_action"),
-+        ),
-+        (
-+            "row.turn_contract.action.semantic_action",
-+            _nested_dict(turn_contract, "action", "semantic_action"),
-+        ),
-+        ("row.turn_contract.action", _nested_dict(turn_contract, "action")),
-+        (
-+            "row.turn_contract.resolved_action.semantic_action",
-+            _nested_dict(turn_contract, "resolved_action", "semantic_action"),
-+        ),
-+        ("row.turn_contract.resolved_action", _nested_dict(turn_contract, "resolved_action")),
-+        (
-+            "row.turn_contract.resolved_result.semantic_action",
-+            _nested_dict(turn_contract, "resolved_result", "semantic_action"),
-+        ),
-+        ("row.turn_contract.resolved_result", _nested_dict(turn_contract, "resolved_result")),
-+        (
-+            "row.turn_contract.metadata.semantic_action",
-+            _nested_dict(turn_contract, "metadata", "semantic_action"),
-+        ),
-+        ("row.turn_contract", turn_contract),
-+        ("row.turn_result.semantic_action_v2", _safe_dict(turn_result.get("semantic_action_v2"))),
-+        (
-+            "row.turn_result.turn_contract.action.metadata.semantic_action",
-+            _nested_dict(turn_result, "turn_contract", "action", "metadata", "semantic_action"),
-+        ),
-+        (
-+            "row.result.turn_contract.action.metadata.semantic_action",
-+            _nested_dict(turn_result, "turn_contract", "action", "metadata", "semantic_action"),
-+        ),
-+    ]
-+
-+    for source, mapping in candidate_mappings:
-+        candidate = _semantic_candidate_from_mapping(mapping, source=source)
-+        if candidate and (
-+            candidate.get("semantic_action") != "unknown"
-+            or candidate.get("target") != "unknown"
-+        ):
-+            return candidate
-+
-+    # Compatibility path: use existing private/public extractor if present.
-+    # This is intentionally after explicit nested turn-contract metadata because
-+    # some older extractors return partial/unknown data for current rows.
-+    for name in (
-+        "_extract_semantic_action_from_turn",
-+        "extract_semantic_action_from_turn",
-+        "_extract_semantic_action",
-+        "extract_semantic_action",
-+        "_semantic_action_from_row",
++    for key in (
++        "action_type",
++        "semantic_action",
++        "action",
++        "kind",
++        "type",
++        "service_kind",
++        "service",
++        "service_id",
++        "provider_service",
++        "interaction_type",
 +    ):
-+        fn = globals().get(name)
-+        if not callable(fn):
-+            continue
-+        try:
-+            value = fn(row)
-+        except TypeError:
-+            try:
-+                value = fn(turn=row)
-+            except Exception:
-+                value = {}
-+        except Exception:
-+            value = {}
-+        candidate = _semantic_candidate_from_mapping(
-+            _safe_dict(value),
-+            source=f"extractor.{name}",
-+        )
-+        if candidate and (
-+            candidate.get("semantic_action") != "unknown"
-+            or candidate.get("target") != "unknown"
-+        ):
-+            return candidate
++        label = _normalize_service_label(mapping.get(key))
++        if label in _SERVICE_ACTION_NAMES:
++            values.append(label)
 +
-+    # Shallow legacy fallback.
-+    shallow_candidate = _semantic_candidate_from_mapping(
-+        {
-+            "semantic_action": (
-+                row.get("semantic_action")
-+                or row.get("semantic_action_type")
-+                or row.get("action_type")
-+                or row.get("action")
-+            ),
-+            "target": (
-+                row.get("semantic_target")
-+                or row.get("target")
-+                or row.get("target_name")
-+                or row.get("target_id")
-+            ),
-+        },
-+        source="row.shallow",
-+    )
-+    if shallow_candidate:
-+        return shallow_candidate
++    # If the action is service_inquiry/rent_room and metadata text mentions
++    # lodging/room/inn, include lodging as the useful RPG service label.
++    text = str(mapping).lower()
++    if any(label in values for label in ("service_inquiry", "rent_room")):
++        if any(term in text for term in ("lodging", "room", "inn", "bed")):
++            values.append("lodging")
 +
-+    # Last-resort deterministic classifier from selected/player action text.
-+    action_text = _safe_str(
-+        row.get("selected_player_action")
-+        or row.get("player_action")
-+        or row.get("player_input")
-+        or row.get("input")
-+    )
-+    if action_text:
-+        lower = action_text.lower()
-+        target = "unknown"
-+        for name in ("bran", "silas", "cloaked traveler", "traveler", "patron", "innkeeper", "bartender", "inn"):
-+            if name in lower:
-+                if name in ("bran", "innkeeper", "bartender"):
-+                    target = "Bran"
-+                elif name == "traveler":
-+                    target = "Cloaked Traveler"
-+                else:
-+                    target = name.title() if name != "inn" else "inn"
-+                break
++    if "rent_room" in text:
++        values.append("rent_room")
++        values.append("lodging")
++    if "service_inquiry" in text:
++        values.append("service_inquiry")
++    if "lodging" in text:
++        values.append("lodging")
 +
-+        if any(term in lower for term in ("rent", "room", "lodging", "bed")):
-+            semantic_action = "rent_room"
-+            if target == "unknown":
-+                target = "inn"
-+        elif any(term in lower for term in ("buy", "pay", "order", "drink", "meal")):
-+            semantic_action = "service_inquiry"
-+        elif any(term in lower for term in ("ask", "question", "inquire", "press")):
-+            semantic_action = "service_inquiry" if target == "Bran" else "ask"
-+        elif any(term in lower for term in ("observe", "watch", "listen", "wait", "scan", "look")):
-+            semantic_action = "observe"
-+        elif any(term in lower for term in ("leave", "travel", "go to", "head outside", "step outside")):
-+            semantic_action = "travel"
-+        elif any(term in lower for term in ("inspect", "examine", "search", "check")):
-+            semantic_action = "inspect"
-+        else:
-+            semantic_action = "unknown"
++    return values
 +
-+        return {
-+            "ok": semantic_action != "unknown",
-+            "semantic_action": semantic_action,
-+            "target": target,
-+            "pair": f"{semantic_action}:{target}",
-+            "source": "player_action_text_fallback",
-+            "raw": {"text": action_text},
-+        }
 +
-+    return {
-+        "ok": False,
-+        "semantic_action": "unknown",
-+        "target": "unknown",
-+        "pair": "unknown:unknown",
-+        "source": "canonical_semantic_pair_from_turn.none",
-+        "raw": {},
-+    }
++def _scan_service_labels(value: Any, *, depth: int = 0) -> List[str]:
++    if depth > 6:
++        return []
++
++    labels: List[str] = []
++
++    if isinstance(value, dict):
++        labels.extend(_service_labels_from_mapping(value))
++        for nested in value.values():
++            labels.extend(_scan_service_labels(nested, depth=depth + 1))
++    elif isinstance(value, list):
++        for item in value:
++            labels.extend(_scan_service_labels(item, depth=depth + 1))
++    elif isinstance(value, tuple):
++        for item in value:
++            labels.extend(_scan_service_labels(item, depth=depth + 1))
++    elif isinstance(value, str):
++        lower = value.lower()
++        if "service_inquiry" in lower:
++            labels.append("service_inquiry")
++        if "rent_room" in lower:
++            labels.append("rent_room")
++            labels.append("lodging")
++        if "lodging" in lower:
++            labels.append("lodging")
++
++    return labels
+2B. Replace _services_from_row(...)
 
-Note: this uses Tuple, so update imports if needed.
+Replace the full function:
 
-Find top import:
-
-from typing import Any, Dict, List
-
-Change to:
-
---- src/tests/rpg/autoplay/hundred_turn_eval.py
-+++ src/tests/rpg/autoplay/hundred_turn_eval.py
+--- src/tests/rpg/autoplay/campaign_report.py
++++ src/tests/rpg/autoplay/campaign_report.py
 @@
--from typing import Any, Dict, List
-+from typing import Any, Dict, List, Tuple
-
-If Tuple is already imported, do not duplicate.
-
-2. Patch tests
-
-Patch:
-
-src/tests/rpg/autoplay/test_player_agent_anti_loop.py
-2A. Add test for nested turn_contract.action.metadata.semantic_action
-
-Append:
-
---- src/tests/rpg/autoplay/test_player_agent_anti_loop.py
-+++ src/tests/rpg/autoplay/test_player_agent_anti_loop.py
+ def _services_from_row(row: Dict[str, Any]) -> List[str]:
+     row = _safe_dict(row)
+     values: List[str] = []
++
+     for key in ("service_result", "merchant_result", "interaction_result"):
+         result = _safe_dict(row.get(key))
+         service = _first_non_empty(
+             result.get("service_kind"),
+             result.get("service"),
 @@
- def test_player_agent_anti_loop_context_reports_canonical_recent_pairs():
-@@
-     assert context["recent_pairs"][-1] == "observe:Bran"
-     assert context["canonical_recent_pairs"][-1]["pair"] == "observe:Bran"
-+
-+
-+def test_canonical_semantic_pair_reads_nested_turn_contract_action_metadata_semantic_action():
-+    row = {
-+        "turn_contract": {
-+            "action": {
-+                "action_type": "service_inquiry",
-+                "target": "npc:Bran",
-+                "metadata": {
-+                    "semantic_action": {
-+                        "action_type": "service_inquiry",
-+                        "target_name": "Bran",
-+                        "target_id": "npc:Bran",
-+                    }
-+                },
-+            }
-+        }
-+    }
-+
-+    result = canonical_semantic_pair_from_turn(row)
-+
-+    assert result["semantic_action"] == "service_inquiry"
-+    assert result["target"] == "Bran"
-+    assert result["pair"] == "service_inquiry:Bran"
-+    assert result["source"] == "row.turn_contract.action.metadata.semantic_action"
-2B. Add test for nested turn_contract.action fallback
-
-Append:
-
---- src/tests/rpg/autoplay/test_player_agent_anti_loop.py
-+++ src/tests/rpg/autoplay/test_player_agent_anti_loop.py
-@@
-+def test_canonical_semantic_pair_reads_turn_contract_action_when_metadata_missing():
-+    row = {
-+        "turn_contract": {
-+            "action": {
-+                "action_type": "rent_room",
-+                "target": "inn",
-+            }
-+        }
-+    }
-+
-+    result = canonical_semantic_pair_from_turn(row)
-+
-+    assert result["semantic_action"] == "rent_room"
-+    assert result["target"] == "inn"
-+    assert result["pair"] == "rent_room:inn"
-+    assert result["source"] == "row.turn_contract.action"
-2C. Add test for resolved_action.semantic_action
-
-Append:
-
---- src/tests/rpg/autoplay/test_player_agent_anti_loop.py
-+++ src/tests/rpg/autoplay/test_player_agent_anti_loop.py
-@@
-+def test_canonical_semantic_pair_reads_resolved_action_semantic_action():
-+    row = {
-+        "turn_contract": {
-+            "resolved_action": {
-+                "semantic_action": {
-+                    "action_type": "observe",
-+                    "target_name": "Cloaked Traveler",
-+                }
-+            }
-+        }
-+    }
-+
-+    result = canonical_semantic_pair_from_turn(row)
-+
-+    assert result["semantic_action"] == "observe"
-+    assert result["target"] == "Cloaked Traveler"
-+    assert result["pair"] == "observe:Cloaked Traveler"
-+    assert result["source"] == "row.turn_contract.resolved_action.semantic_action"
-2D. Add regression test for anti-loop context with nested rows
-
-Append:
-
---- src/tests/rpg/autoplay/test_player_agent_anti_loop.py
-+++ src/tests/rpg/autoplay/test_player_agent_anti_loop.py
-@@
-+def test_anti_loop_context_uses_nested_turn_contract_semantic_pairs_not_unknown_unknown():
-+    transcript = [
-+        {
-+            "turn_contract": {
-+                "action": {
-+                    "metadata": {
-+                        "semantic_action": {
-+                            "action_type": "service_inquiry",
-+                            "target_name": "Bran",
-+                            "target_id": "npc:Bran",
-+                        }
-+                    }
-+                }
-+            }
-+        },
-+        {
-+            "turn_contract": {
-+                "action": {
-+                    "metadata": {
-+                        "semantic_action": {
-+                            "action_type": "service_inquiry",
-+                            "target_name": "Bran",
-+                            "target_id": "npc:Bran",
-+                        }
-+                    }
-+                }
-+            }
-+        },
-+        {
-+            "turn_contract": {
-+                "action": {
-+                    "metadata": {
-+                        "semantic_action": {
-+                            "action_type": "service_inquiry",
-+                            "target_name": "Bran",
-+                            "target_id": "npc:Bran",
-+                        }
-+                    }
-+                }
-+            }
-+        },
-+    ]
-+
-+    context = _build_player_agent_anti_loop_context(
-+        transcript=transcript,
-+        threshold=3,
-+        window=8,
-+    )
-+
-+    assert context["active"] is True
-+    assert context["pair"] == "service_inquiry:Bran"
-+    assert context["streak"] == 3
-+    assert context["source"] == "canonical_semantic_pair_from_turn"
-+    assert context["recent_pairs"][-1] == "service_inquiry:Bran"
-+    assert context["canonical_recent_pairs"][-1]["source"] == (
-+        "row.turn_contract.action.metadata.semantic_action"
-+    )
-2E. Add text fallback regression test
-
-Append:
-
---- src/tests/rpg/autoplay/test_player_agent_anti_loop.py
-+++ src/tests/rpg/autoplay/test_player_agent_anti_loop.py
-@@
-+def test_canonical_semantic_pair_text_fallback_for_player_input():
-+    row = {
-+        "player_input": "I ask Bran about lodging and whether I can rent a room for the night."
-+    }
-+
-+    result = canonical_semantic_pair_from_turn(row)
-+
-+    assert result["semantic_action"] == "rent_room"
-+    assert result["target"] in ("Bran", "inn")
-+    assert result["pair"] != "unknown:unknown"
-+    assert result["source"] == "player_action_text_fallback"
-3. Optional: add debug sample to anti-loop probe
-
-Patch:
-
-src/tests/rpg/autoplay_llm_campaign.py
-
-Find the anti-loop probe added in N81.2.7.1:
-
-_probe_log(
-    bool(getattr(args, "debug_autoplay_stage_timing", False)),
-    "player_agent_anti_loop_context",
-    turn_index=turn_index,
-    active=anti_loop_context.get("active"),
-    pair=anti_loop_context.get("pair"),
-    streak=anti_loop_context.get("streak"),
-    threshold=anti_loop_context.get("threshold"),
-    source=anti_loop_context.get("source"),
-    recent_pairs=",".join(...),
-)
-
-Add a compact source sample:
-
---- src/tests/rpg/autoplay_llm_campaign.py
-+++ src/tests/rpg/autoplay_llm_campaign.py
-@@
-         _probe_log(
-             bool(getattr(args, "debug_autoplay_stage_timing", False)),
-             "player_agent_anti_loop_context",
-             turn_index=turn_index,
-             active=anti_loop_context.get("active"),
-             pair=anti_loop_context.get("pair"),
-             streak=anti_loop_context.get("streak"),
-             threshold=anti_loop_context.get("threshold"),
-             source=anti_loop_context.get("source"),
-             recent_pairs=",".join(
-                 [
-                     _safe_str(pair)
-                     for pair in _safe_list(anti_loop_context.get("recent_pairs"))[-6:]
-                 ]
-             ),
-+            recent_sources=",".join(
-+                [
-+                    _safe_str(_safe_dict(item).get("source"))
-+                    for item in _safe_list(anti_loop_context.get("canonical_recent_pairs"))[-6:]
-+                ]
-+            ),
          )
+         if service:
+-            values.append(service)
++            values.append(_normalize_service_label(service))
++
+     semantic = _semantic_mapping_from_report_row(row)
+     action = _safe_str(semantic.get("action"))
+     raw = _safe_dict(semantic.get("raw"))
+     service_kind = _first_non_empty(
+         raw.get("service_kind"),
+@@
+         raw.get("kind"),
+     )
+     if service_kind:
+-        values.append(service_kind)
++        values.append(_normalize_service_label(service_kind))
+     if action in ("service_inquiry", "rent_room", "buy_service", "purchase_service"):
+         values.append(action)
+     if action == "service_inquiry" and _contains_any(str(raw), ["lodging", "room", "inn"]):
+         values.append("lodging")
+     if action == "rent_room":
+         values.append("lodging")
+-    return sorted(set(values))
++
++    # N83.1.2: actual report row shapes may bury semantic/service metadata
++    # under turn_contract.action.metadata.semantic_action, result.turn_contract,
++    # background attachments, or serialized debug dicts. Recursively scan the
++    # row as a last-resort structured fallback.
++    values.extend(_scan_service_labels(row))
++
++    cleaned = []
++    for value in values:
++        label = _normalize_service_label(value)
++        if label and label in _SERVICE_ACTION_NAMES and label not in cleaned:
++            cleaned.append(label)
++
++    # Stable, useful order for the visible report.
++    order = ["service_inquiry", "rent_room", "lodging", "buy_service", "purchase_service"]
++    return [label for label in order if label in cleaned]
+2C. Add location-level fallback from all transcript/report context
 
-This gives logs like:
+Sometimes per-row extraction misses service labels because the transcript used by the renderer is a simplified view. Add a context fallback.
 
-recent_sources=row.turn_contract.action.metadata.semantic_action,...
+Add near _build_location_journey_rows(...):
+
+--- src/tests/rpg/autoplay/campaign_report.py
++++ src/tests/rpg/autoplay/campaign_report.py
+@@
+ def _build_location_journey_rows(summary: Dict[str, Any], metrics: Dict[str, Any], transcript: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+@@
+     return rows
++
++
++def _campaign_service_labels_from_context(summary: Dict[str, Any], metrics: Dict[str, Any], transcript: List[Dict[str, Any]]) -> List[str]:
++    values: List[str] = []
++    values.extend(_scan_service_labels(summary))
++    values.extend(_scan_service_labels(metrics))
++    values.extend(_scan_service_labels(transcript))
++
++    cleaned = []
++    for value in values:
++        label = _normalize_service_label(value)
++        if label and label in _SERVICE_ACTION_NAMES and label not in cleaned:
++            cleaned.append(label)
++
++    order = ["service_inquiry", "rent_room", "lodging", "buy_service", "purchase_service"]
++    return [label for label in order if label in cleaned]
+
+Now patch _render_location_journey(...).
+
+Find:
+
+locations = _build_location_journey_rows(summary, metrics, transcript)
+if locations:
+    cards = ""
+    path = " → ".join(...)
+    for loc in locations[:8]:
+
+Replace with:
+
+--- src/tests/rpg/autoplay/campaign_report.py
++++ src/tests/rpg/autoplay/campaign_report.py
+@@
+     locations = _build_location_journey_rows(summary, metrics, transcript)
+     if locations:
++        campaign_services = _campaign_service_labels_from_context(summary, metrics, transcript)
+         cards = ""
+         path = " → ".join(escape(_safe_str(loc.get("name"))) for loc in locations[:12])
+         for loc in locations[:8]:
+             loc = _safe_dict(loc)
++            loc_services = _as_list(loc.get("services"))
++            if not loc_services and campaign_services:
++                loc_services = campaign_services
+             cards += f"""
+             <article class="rpg-location-card">
+               <h3>{escape(_first_non_empty(loc.get('name'), 'Unknown Location'))}</h3>
+@@
+               <h4>Services / Interactions</h4>
+-              {_html_list(_as_list(loc.get('services')), empty="No services recorded.", limit=5)}
++              {_html_list(loc_services, empty="No services recorded.", limit=5)}
+
+This ensures if report-wide context contains service metadata, the main location card no longer says “No services recorded.”
+
+3. Tests
+
+Patch:
+
+src/tests/rpg/autoplay/test_campaign_report.py
+3A. Timeline finalizer removes remaining generic Story Beat
+
+Append:
+
+--- src/tests/rpg/autoplay/test_campaign_report.py
++++ src/tests/rpg/autoplay/test_campaign_report.py
+@@
++def test_campaign_report_timeline_finalizer_replaces_story_beat_from_player_prefix():
++    html = campaign_report.render_campaign_report_html(
++        summary={
++            "ok": True,
++            "quality_gate_summary": {"ok": True, "gates": {"x": True}},
++            "background_result_timing_summary": {"jobs_submitted": 1},
++            "long_run_warning_summary": {"warning_count": 0},
++            "story_beat_summary": {
++                "beats": [
++                    {
++                        "turn_index": 2,
++                        "kind": "Story Beat",
++                        "summary": "Player: Ask Bran about any unusual activity or rumors in town. Result: Bran grows cautious.",
++                    },
++                    {
++                        "turn_index": 3,
++                        "kind": "Story Beat",
++                        "summary": "Player: Lean in slightly and lower your voice before asking Bran what he knows. Result: The conversation becomes private.",
++                    },
++                    {
++                        "turn_index": 19,
++                        "kind": "Story Beat",
++                        "summary": "Player: Listen intently to Bran's immediate elaboration. Result: Bran explains the road trouble.",
++                    },
++                ]
++            },
++        },
++        metrics={"real_turn_runtime_count": 3},
++        transcript=[],
++    )
++
++    assert "Ask Bran About Rumors" in html
++    assert "Speak Privately with Bran" in html
++    assert "Listen to Bran" in html
++    assert ">Story Beat<" not in html
+3B. Service scanner detects deeply nested semantic action metadata
+
+Append:
+
+--- src/tests/rpg/autoplay/test_campaign_report.py
++++ src/tests/rpg/autoplay/test_campaign_report.py
+@@
++def test_campaign_report_scan_service_labels_from_deep_row_shape():
++    row = {
++        "turn_index": 4,
++        "result": {
++            "turn_contract": {
++                "action": {
++                    "metadata": {
++                        "semantic_action": {
++                            "action_type": "service_inquiry",
++                            "service_kind": "lodging",
++                            "target_name": "Bran",
++                        }
++                    }
++                }
++            }
++        },
++    }
++
++    services = campaign_report._services_from_row(row)
++
++    assert "service_inquiry" in services
++    assert "lodging" in services
+3C. Service scanner detects rent_room from serialized/debug text
+
+Append:
+
+--- src/tests/rpg/autoplay/test_campaign_report.py
++++ src/tests/rpg/autoplay/test_campaign_report.py
+@@
++def test_campaign_report_services_from_serialized_row_text():
++    row = {
++        "turn_index": 5,
++        "debug": "{'semantic_action': {'action_type': 'rent_room', 'service_kind': 'lodging'}}",
++    }
++
++    services = campaign_report._services_from_row(row)
++
++    assert "rent_room" in services
++    assert "lodging" in services
+3D. Location Journey uses report-wide service fallback
+
+Append:
+
+--- src/tests/rpg/autoplay/test_campaign_report.py
++++ src/tests/rpg/autoplay/test_campaign_report.py
+@@
++def test_campaign_report_location_journey_uses_context_service_fallback():
++    html = campaign_report.render_campaign_report_html(
++        summary={
++            "ok": True,
++            "quality_gate_summary": {"ok": True, "gates": {"x": True}},
++            "background_result_timing_summary": {"jobs_submitted": 1},
++            "long_run_warning_summary": {"warning_count": 0},
++            "quest_progress_summary": {
++                "quests": [{"title": "Witness Search", "location": "Rusty Flagon Tavern"}]
++            },
++            "story_beat_summary": {
++                "beats": [
++                    {
++                        "turn_index": 4,
++                        "summary": "The player makes a service_inquiry about lodging with Bran.",
++                    },
++                    {
++                        "turn_index": 5,
++                        "summary": "The player tries to rent_room for the night.",
++                    },
++                ]
++            },
++        },
++        metrics={"real_turn_runtime_count": 5},
++        transcript=[
++            {
++                "turn_index": 1,
++                "narration": "The tavern is tense.",
++            }
++        ],
++    )
++
++    assert "Rusty Flagon Tavern" in html
++    assert "service_inquiry" in html
++    assert "rent_room" in html
++    assert "lodging" in html
++    assert "No services recorded." not in html
+3E. No generic title smoke test
+
+Append:
+
+--- src/tests/rpg/autoplay/test_campaign_report.py
++++ src/tests/rpg/autoplay/test_campaign_report.py
+@@
++def test_campaign_report_no_visible_generic_story_beat_titles_for_story_summary_rows():
++    html = campaign_report.render_campaign_report_html(
++        summary={
++            "ok": True,
++            "quality_gate_summary": {"ok": True, "gates": {"x": True}},
++            "background_result_timing_summary": {"jobs_submitted": 1},
++            "long_run_warning_summary": {"warning_count": 0},
++            "story_beat_summary": {
++                "beats": [
++                    {
++                        "turn_index": 1,
++                        "summary": "Player: Ask Bran about work. Result: Bran considers the request.",
++                    }
++                ]
++            },
++        },
++        metrics={"real_turn_runtime_count": 1},
++        transcript=[],
++    )
++
++    assert ">Story Beat<" not in html
++    assert "Ask Bran About Work" in html or "Question Bran" in html
 4. Validation
 
 Compile:
 
-python -m py_compile src\tests\rpg\autoplay\hundred_turn_eval.py src\tests\rpg\autoplay_llm_campaign.py
+python -m py_compile src\tests\rpg\autoplay\campaign_report.py
 
-Run focused tests:
+Run report tests:
 
-python -m pytest src\tests\rpg\autoplay\test_player_agent_anti_loop.py -q
+python -m pytest src\tests\rpg\autoplay\test_campaign_report.py -q
 
-Run broader smoke tests:
+Run existing safety tests:
 
-python -m pytest src\tests\rpg\autoplay\test_quality_gates.py src\tests\rpg\autoplay\test_background_result_timing.py -q
+python -m pytest src\tests\rpg\autoplay\test_player_agent_anti_loop.py src\tests\rpg\autoplay\test_quality_gates.py src\tests\rpg\autoplay\test_background_result_timing.py -q
