@@ -61,6 +61,165 @@ def _prefix_legacy_section_ids(html: str, *, prefix: str = "legacy-") -> str:
     return text
 
 
+def _strip_legacy_autoplay_report_partial(html: str) -> str:
+    """Remove the old standalone Autoplay Campaign Report shell.
+
+    The RPG report now has a unified hero that contains the campaign chronicle
+    and run-report stats. The legacy HTML still contains an older standalone
+    report header/nav and old Executive Summary hero. If preserved verbatim, it
+    appears as a second report with a different visual theme.
+
+    Keep the useful detailed legacy sections, but strip the duplicate shell:
+    - <header>Autoplay Campaign Report ... old nav ...</header>
+    - old <section class="hero">Executive Summary ...</section>
+    """
+    text = _safe_str(html)
+    if not text:
+        return ""
+
+    # Remove the old report header/nav block when it is the legacy report header.
+    text = re.sub(
+        r"<header\b[^>]*>\s*.*?Autoplay Campaign Report.*?\bstatus-pill\b.*?</header>",
+        "",
+        text,
+        count=1,
+        flags=re.IGNORECASE | re.DOTALL,
+    )
+
+    # Remove the old blue/purple Executive Summary hero block. This content is
+    # now represented by the unified RPG hero + Validation Snapshot.
+    text = re.sub(
+        r"<section\b(?=[^>]*\bclass=\"[^\"]*\bhero\b[^\"]*\")[^>]*>\s*.*?<h2>\s*Executive Summary\s*</h2>.*?</section>",
+        "",
+        text,
+        count=1,
+        flags=re.IGNORECASE | re.DOTALL,
+    )
+
+    # Some generated variants use single quotes for class.
+    text = re.sub(
+        r"<section\b(?=[^>]*\bclass='[^']*\bhero\b[^']*')[^>]*>\s*.*?<h2>\s*Executive Summary\s*</h2>.*?</section>",
+        "",
+        text,
+        count=1,
+        flags=re.IGNORECASE | re.DOTALL,
+    )
+
+    return _strip_legacy_autoplay_report_tail(text)
+
+
+def _strip_legacy_autoplay_report_tail(html: str) -> str:
+    """Remove any standalone legacy Autoplay Campaign Report partial.
+
+    The RPG report now owns the campaign overview and run-report stats.
+    The old legacy report can still be accidentally appended in several shapes:
+
+      1. inside <body> after Technical Debug
+      2. after </main>
+      3. after </body>
+      4. inside grouped debug HTML
+
+    It is identified by the old status-pill/partial header and old nav:
+
+      <h1>Autoplay Campaign Report <span class="status-pill ...">partial</span></h1>
+      Summary Journal Quests Evolution ...
+      <section ...><h2>Executive Summary</h2>...
+
+    This sanitizer removes the duplicate legacy shell while preserving the RPG
+    hero, which also legitimately contains the text "Autoplay Campaign Report".
+    """
+    text = _safe_str(html)
+    if not text:
+        return ""
+
+    # Remove old standalone report header/nav blocks anywhere in the document.
+    # This intentionally requires status-pill/partial so we do not remove the
+    # new RPG hero's "Autoplay Campaign Report" title.
+    text = re.sub(
+        r"<header\b[^>]*>\s*.*?<h1[^>]*>\s*Autoplay Campaign Report\s*"
+        r"<span\b[^>]*\bstatus-pill\b[^>]*>.*?partial.*?</span>\s*</h1>.*?</header>",
+        "",
+        text,
+        flags=re.IGNORECASE | re.DOTALL,
+    )
+
+
+
+    # Remove the old Executive Summary block. In different generations it may
+    # be class="hero", id="summary", or both.
+    text = re.sub(
+        r"<section\b(?=[^>]*\bid=[\"']summary[\"'])(?=[\s\S]*?<h2[^>]*>\s*Executive Summary\s*</h2>)[\s\S]*?</section>",
+        "",
+        text,
+        flags=re.IGNORECASE | re.DOTALL,
+    )
+    text = re.sub(
+        r"<section\b(?=[^>]*\bclass=[\"'][^\"']*\bhero\b[^\"']*[\"'])(?=[\s\S]*?<h2[^>]*>\s*Executive Summary\s*</h2>)[\s\S]*?</section>",
+        "",
+        text,
+        flags=re.IGNORECASE | re.DOTALL,
+    )
+
+    # If the legacy report is appended after the RPG shell as a raw tail, cut
+    # from the first remaining standalone legacy header marker to EOF. This is
+    # intentionally checked after the precise removals above.
+    legacy_tail = re.search(
+        r"<header\b[^>]*>\s*[\s\S]*?Autoplay Campaign Report[\s\S]*?\bstatus-pill\b[\s\S]*?\bpartial\b[\s\S]*?</header>",
+        text,
+        flags=re.IGNORECASE | re.DOTALL,
+    )
+    if legacy_tail:
+        text = text[: legacy_tail.start()]
+
+    # Clean up repeated body/html endings if a legacy full document was spliced.
+    text = re.sub(r"</body>\s*</html>\s*</body>\s*</html>\s*$", "</body>\n</html>", text, flags=re.IGNORECASE)
+
+    # N83.1.6.1: remove a second standalone legacy <main> appended after the
+    # RPG shell. Artifact 161 showed this exact shape:
+    #
+    #   <main class="rpg-shell"> ... Technical Debug ... </main>
+    #   <main>
+    #     <section id="campaign-journal">...
+    #     <section id="quest-progress">...
+    #
+    # These sections are already either promoted into the RPG shell or preserved
+    # under grouped Technical Debug as legacy-* anchors. The raw second main is
+    # the source of the washed-out old theme below the real report.
+    text = re.sub(
+        r"</main>\s*<main>\s*"
+        r"(?=\s*<section\b[^>]*\bid=[\"']campaign-journal[\"'])"
+        r"[\s\S]*?</main>",
+        "</main>",
+        text,
+        count=1,
+        flags=re.IGNORECASE,
+    )
+
+    # Defensive variant: if the second legacy main has attributes.
+    text = re.sub(
+        r"</main>\s*<main\b(?![^>]*\brpg-shell\b)[^>]*>\s*"
+        r"(?=\s*<section\b[^>]*\bid=[\"']campaign-journal[\"'])"
+        r"[\s\S]*?</main>",
+        "</main>",
+        text,
+        count=1,
+        flags=re.IGNORECASE,
+    )
+
+    # Defensive variant: if legacy sections were appended without a wrapping main.
+    text = re.sub(
+        r"(?<=</main>)\s*"
+        r"<section\b[^>]*\bid=[\"']campaign-journal[\"'][\s\S]*?"
+        r"<section\b[^>]*\bid=[\"']debug[\"'][\s\S]*?</section>",
+        "",
+        text,
+        count=1,
+        flags=re.IGNORECASE,
+    )
+
+    return text
+
+
 SOCIAL_ACTION_WORDS = {
     "ask",
     "talk",
@@ -75,6 +234,40 @@ SOCIAL_ACTION_WORDS = {
     "convince",
     "persuade",
 }
+
+RPG_PRIMARY_NAV_LINKS = [
+    ("campaign-overview", "Overview"),
+    ("verdict-cards", "Verdict"),
+    ("adventure-timeline", "Adventure"),
+    ("quest-board", "Quest Board"),
+    ("npc-chronicle", "NPC Chronicle"),
+    ("location-journey", "Journey"),
+    ("player-sheet", "Player Sheet"),
+    ("qa-dashboard", "QA Dashboard"),
+]
+
+RPG_EXTENDED_NAV_LINKS = [
+    ("campaign-journal", "Journal"),
+    ("quest-progress", "Quest Progress"),
+    ("npc-evolution", "NPC Evolution"),
+    ("hundred-turn-eval", "100-Turn Eval"),
+    ("action-diversity", "Actions"),
+    ("progress-timeline", "Progress"),
+    ("background-result-timing", "Background Timing"),
+    ("story-so-far", "Story"),
+    ("arcs", "Arcs"),
+    ("locations", "Locations"),
+    ("variety", "Variety"),
+    ("npcs", "NPC Cast"),
+    ("inventory", "Inventory"),
+    ("dialogue-coverage", "Dialogue"),
+    ("performance", "Performance"),
+    ("console-log", "Console"),
+    ("timeline", "Timeline"),
+    ("run-validity", "Shortcomings"),
+    ("debug", "Debug"),
+    ("technical-debug", "Technical Debug"),
+]
 
 
 def _norm_text(value: Any) -> str:
@@ -146,6 +339,245 @@ def _render_report_quick_links(model: Dict[str, Any]) -> str:
       </nav>
     </section>
     """
+
+
+def _render_rpg_nav_links(primary_links, appendix_links=None):
+    appendix_links = appendix_links or []
+
+    def render_links(links):
+        items = []
+        for target, label in links:
+            if not target or not label:
+                continue
+            items.append(f'<button onclick="document.getElementById(\'{html.escape(target)}\').scrollIntoView()" class="nav-link">{html.escape(label)}</button>')
+        return "".join(items)
+
+    primary_html = render_links(primary_links)
+    appendix_html = render_links(appendix_links)
+
+    appendix_block = ""
+    if appendix_html:
+        appendix_block = f"""
+        <details class="rpg-nav-appendix" open>
+          <summary>Appendix Sections</summary>
+          <div class="rpg-nav-appendix-links">
+            {appendix_html}
+          </div>
+        </details>
+        """
+
+    return f"""
+    <nav class="rpg-nav" aria-label="Campaign report sections">
+      <div class="rpg-nav-primary">
+        {primary_html}
+      </div>
+      {appendix_block}
+    </nav>
+    """
+
+
+def _extract_section_by_id(html: str, section_id: str) -> str:
+    text = _safe_str(html)
+    if not text.strip():
+        return ""
+    pattern = (
+        rf'<section\b(?=[^>]*\bid=["\']{re.escape(section_id)}["\'])[^>]*>[\s\S]*?</section>'
+    )
+    match = re.search(pattern, text, flags=re.IGNORECASE)
+    return match.group(0) if match else ""
+
+
+def _strip_outer_section_heading(section_html: str) -> str:
+    text = _safe_str(section_html)
+    if not text.strip():
+        return ""
+    text = re.sub(r"^<section\b[^>]*>", "", text, count=1, flags=re.IGNORECASE)
+    text = re.sub(r"</section>\s*$", "", text, count=1, flags=re.IGNORECASE)
+    text = re.sub(r"<h2[^>]*>.*?</h2>", "", text, count=1, flags=re.IGNORECASE | re.DOTALL)
+    return text.strip()
+
+
+def _wrap_promoted_legacy_section(
+    *,
+    section_id: str,
+    title: str,
+    body_html: str,
+    badge: str = "",
+    span_class: str = "span-12",
+) -> str:
+    if not _safe_str(body_html).strip():
+        return ""
+    badge_html = (
+        f'<span class="rpg-badge neutral">{badge}</span>' if badge else ""
+    )
+    return f"""
+    <section class="rpg-card rpg-promoted-section {span_class}" id="{section_id}">
+      <div class="rpg-section-title">
+        <h2>{title}</h2>
+        {badge_html}
+      </div>
+      <div class="rpg-promoted-body">
+        {body_html}
+      </div>
+    </section>
+    """
+
+
+def _build_promoted_legacy_sections(legacy_html: str) -> str:
+    journal_html = _extract_section_by_id(legacy_html, "campaign-journal")
+    quest_html = _extract_section_by_id(legacy_html, "quest-progress")
+    evolution_html = _extract_section_by_id(legacy_html, "npc-evolution")
+
+    promoted_sections = [
+        _wrap_promoted_legacy_section(
+            section_id="campaign-journal",
+            title="Campaign Calendar & Player Journal",
+            badge="Journal",
+            body_html=_strip_outer_section_heading(journal_html),
+        ),
+        _wrap_promoted_legacy_section(
+            section_id="quest-progress",
+            title="Quest Progress",
+            badge="Quest Board",
+            body_html=_strip_outer_section_heading(quest_html),
+        ),
+        _wrap_promoted_legacy_section(
+            section_id="npc-evolution",
+            title="NPC Evolution",
+            badge="Character Growth",
+            body_html=_strip_outer_section_heading(evolution_html),
+        ),
+    ]
+    return "\n".join(part for part in promoted_sections if part.strip())
+
+
+def _strip_report_highlights_quick_links(html: str) -> str:
+    text = _safe_str(html)
+    if not text.strip():
+        return ""
+    text = re.sub(
+        r'<section\b(?=[^>]*\bclass=["\'][^"\']*\breport-quick-links\b[^"\']*["\'])[\s\S]*?</section>',
+        "",
+        text,
+        flags=re.IGNORECASE,
+    )
+    text = re.sub(
+        r'<section\b[^>]*>\s*<h2>\s*Report Highlights\s*</h2>[\s\S]*?</section>',
+        "",
+        text,
+        flags=re.IGNORECASE,
+    )
+    return text
+
+
+def _strip_unsafe_file_urls_from_report_html(html_text: str) -> str:
+    """Make the report safe to open directly as a static file.
+
+    The report should not require a local HTTP server. Chrome can warn when a
+    file:// page tries to load another file:// URL, especially if it points back
+    to autoplay-campaign-report.html. Internal navigation must use hash links,
+    and artifact links should be relative filenames.
+    """
+    text = _safe_str(html_text)
+    if not text:
+        return ""
+
+    # A base file URL makes otherwise harmless relative/hash links resolve
+    # through file-origin navigation. Remove it.
+    text = re.sub(
+        r"<base\b[^>]*\bhref=[\"']file://[^\"']*[\"'][^>]*>\s*",
+        "",
+        text,
+        flags=re.IGNORECASE,
+    )
+
+    # Remove file-url meta refresh.
+    text = re.sub(
+        r"<meta\b(?=[^>]*http-equiv=[\"']refresh[\"'])(?=[^>]*file://)[^>]*>\s*",
+        "",
+        text,
+        flags=re.IGNORECASE,
+    )
+
+    # Rewrite self-links to this report into a normal internal top anchor.
+    text = re.sub(
+        r"href=([\"'])file://[^\"']*autoplay-campaign-report\.html(?:#[^\"']*)?\1",
+        r'href="#campaign-overview"',
+        text,
+        flags=re.IGNORECASE,
+    )
+
+    # Never embed/iframe/object local file URLs from the static report.
+    text = re.sub(
+        r"<(?:iframe|embed|object)\b(?=[^>]*(?:src|data)=[\"']file://)[\s\S]*?</(?:iframe|embed|object)>",
+        "",
+        text,
+        flags=re.IGNORECASE,
+    )
+    text = re.sub(
+        r"<(?:iframe|embed)\b(?=[^>]*src=[\"']file://)[^>]*>\s*",
+        "",
+        text,
+        flags=re.IGNORECASE,
+    )
+
+    # Convert local artifact file links to relative filenames.
+    def replace_file_href(match) -> str:
+        quote = match.group(1)
+        url = match.group(2)
+        filename = re.split(r"[\\/]", url)[-1]
+        filename = filename.replace("%20", " ").strip()
+        if not filename:
+            return 'href="#"'
+        # Prevent accidentally preserving report self-links after path trimming.
+        if filename.lower().split("#", 1)[0] == "autoplay-campaign-report.html":
+            return 'href="#campaign-overview"'
+        return f"href={quote}{html.escape(filename)}{quote}"
+
+    text = re.sub(
+        r"href=([\"'])file://([^\"']*)\1",
+        replace_file_href,
+        text,
+        flags=re.IGNORECASE,
+    )
+
+    # Remove script-driven local file navigation.
+    text = re.sub(
+        r"(?:window\.location|location\.href|top\.location|parent\.location)\s*=\s*[\"']file://[^\"']+[\"']\s*;?",
+        "",
+        text,
+        flags=re.IGNORECASE,
+    )
+    text = re.sub(
+        r"window\.open\(\s*[\"']file://[^\"']+[\"']\s*(?:,[^)]+)?\)\s*;?",
+        "",
+        text,
+        flags=re.IGNORECASE,
+    )
+
+    # Last-resort cleanup for Windows-style escaped file paths in JS strings.
+    text = re.sub(
+        r"(?:window\.location|location\.href|top\.location|parent\.location)\s*=\s*[\"']file:\\\\[^\"']+[\"']\s*;?",
+        "",
+        text,
+        flags=re.IGNORECASE,
+    )
+
+    return text
+
+
+def _finalize_campaign_report_html(html_text: str) -> str:
+    """Apply final report sanitizers to a generated HTML string.
+
+    Important: this function must receive the rendered HTML string, not the
+    imported Python html module.
+    """
+    text = _safe_str(html_text)
+    text = _strip_legacy_autoplay_report_tail(text)
+    text = _strip_legacy_autoplay_report_partial(text)
+    text = _strip_report_highlights_quick_links(text)
+    text = _strip_unsafe_file_urls_from_report_html(text)
+    return text
 
 
 def _render_calendar_and_journal(calendar: Dict[str, Any], journal: Dict[str, Any]) -> str:
@@ -823,7 +1255,7 @@ def _infer_rpg_title_from_text(text: str, *, fallback: str = "Story Beat") -> st
     if quest_match:
         quest_info = quest_match.group(1).strip()
         if len(quest_info) > 5:
-            return f"Quest Progress"
+            return "Quest Progress"
 
     # Combat or confrontation
     combat_match = re.search(r'\b(?:fights?|battles?|confronts?|attacks?|defends?)\s+(?:against|with)\s+(.+?)(?:\s*[.,;]|$)', text, re.IGNORECASE)
@@ -1100,10 +1532,15 @@ def _build_campaign_chronicle_model(summary: Dict[str, Any], metrics: Dict[str, 
         "quality_gate_count": _num(quality.get("gate_count") or len(_safe_dict(quality.get("gates")))),
         "quality_failed_count": _num(quality.get("failed_count") or quality.get("failure_count")),
         "background_jobs_submitted": _num(background_timing.get("jobs_submitted") or background_jobs.get("jobs_submitted")),
+        "background_jobs_attached_total": _num(background_timing.get("jobs_attached_total")),
+        "background_jobs_attached_pre_turn": _num(background_timing.get("jobs_attached_pre_turn")),
+        "background_jobs_attached_final": _num(background_timing.get("jobs_attached_final")),
         "background_pre_turn_attach_rate": background_timing.get("pre_turn_attach_rate") or 0,
         "background_missing_jobs": _num(background_timing.get("missing_job_count")),
         "max_semantic_streak": _safe_dict(action_diversity.get("max_same_semantic_target_streak")),
         "meaningful_progress_rate": progress.get("meaningful_progress_rate") or 0,
+        "churn_only_rate": progress.get("churn_only_rate") or 0,
+        "progress_event_count": _num(progress.get("progress_event_count")),
         "journal_entry_count": _num(journal.get("entry_count")),
         "calendar_turns_tracked": _num(calendar.get("turns_tracked")),
     }
@@ -1116,39 +1553,65 @@ def _render_rpg_hero(model: Dict[str, Any]) -> str:
     turn_count = _num(model.get("turn_count"))
     seed = _safe_str(model.get("seed")) or "default"
     session_id = _safe_str(model.get("session_id")) or "unknown"
+    max_streak = _safe_dict(model.get("max_semantic_streak"))
+    max_streak_label = _first_non_empty(max_streak.get("value"), max_streak.get("pair"), "n/a")
+    max_streak_count = _num(max_streak.get("streak"))
     return f"""
     <header class="rpg-hero" id="campaign-overview">
       <div class="rpg-kicker">Campaign Chronicle · Autoplay Validation Report</div>
-      <h1 class="rpg-title">{html.escape(_safe_str(model.get('title')))}</h1>
-      <div class="rpg-subtitle">{html.escape(_safe_str(model.get('subtitle')))}</div>
+      <h1 class="rpg-title">{_esc(_safe_str(model.get('title')))}</h1>
+      <div class="rpg-subtitle">{_esc(_safe_str(model.get('subtitle')))}</div>
       <div class="rpg-hero-meta">
-        <span class="rpg-badge {verdict_class}">{html.escape(verdict)}</span>
-        <span class="rpg-pill">{html.escape(str(turn_count))} Turns</span>
-        <span class="rpg-pill">Seed: {html.escape(seed)}</span>
-        <span class="rpg-pill">Session: {html.escape(session_id)}</span>
+        <span class="rpg-badge {verdict_class}">{_esc(verdict)}</span>
+        <span class="rpg-pill">{_esc(str(turn_count))} Turns</span>
+        <span class="rpg-pill">Seed: {_esc(seed)}</span>
+        <span class="rpg-pill">Session: {_esc(session_id)}</span>
+      </div>
+      <div class="rpg-hero-report">
+        <div class="rpg-hero-report-header">
+          <div>
+            <div class="rpg-kicker">Run Report</div>
+            <h2>Autoplay Campaign Report</h2>
+          </div>
+          <span class="rpg-badge {verdict_class}">{_esc(verdict)}</span>
+        </div>
+        <div class="rpg-hero-stat-grid">
+          <div class="rpg-hero-stat">
+            <div class="rpg-stat-label">Quality Gates</div>
+            <div class="rpg-stat-value">{_esc(verdict)}</div>
+          </div>
+          <div class="rpg-hero-stat">
+            <div class="rpg-stat-label">Background Jobs</div>
+            <div class="rpg-stat-value">{_esc(str(_num(model.get('background_jobs_submitted'))))}</div>
+            <div class="rpg-muted-line">
+              Pre-turn {_esc(str(_num(model.get('background_jobs_attached_pre_turn'))))}
+              · Final {_esc(str(_num(model.get('background_jobs_attached_final'))))}
+            </div>
+          </div>
+          <div class="rpg-hero-stat">
+            <div class="rpg-stat-label">Pre-Turn Attach Rate</div>
+            <div class="rpg-stat-value">{_esc(_pct(model.get('background_pre_turn_attach_rate')))}</div>
+          </div>
+          <div class="rpg-hero-stat">
+            <div class="rpg-stat-label">Missing BG Jobs</div>
+            <div class="rpg-stat-value">{_esc(str(_num(model.get('background_missing_jobs'))))}</div>
+          </div>
+          <div class="rpg-hero-stat">
+            <div class="rpg-stat-label">Meaningful Progress</div>
+            <div class="rpg-stat-value">{_esc(_pct(model.get('meaningful_progress_rate')))}</div>
+          </div>
+          <div class="rpg-hero-stat">
+            <div class="rpg-stat-label">Max Semantic Streak</div>
+            <div class="rpg-stat-value">{_esc(str(max_streak_count))}</div>
+            <div class="rpg-muted-line">{_esc(max_streak_label)}</div>
+          </div>
+        </div>
       </div>
     </header>
     """
 
 
-def _render_rpg_nav() -> str:
-    items = [
-        ("campaign-overview", "Overview"),
-        ("verdict-cards", "Verdict"),
-        ("autoplay-campaign-report", "Run Report"),
-        ("adventure-timeline", "Adventure"),
-        ("quest-board", "Quest Board"),
-        ("npc-chronicle", "NPC Chronicle"),
-        ("location-journey", "Journey"),
-        ("player-sheet", "Player Sheet"),
-        ("qa-dashboard", "QA Dashboard"),
-        ("technical-debug", "Technical Debug"),
-    ]
-    links = "".join(
-        f'<a href="#{html.escape(anchor)}">{html.escape(label)}</a>'
-        for anchor, label in items
-    )
-    return f'<nav class="rpg-nav" aria-label="Campaign report sections">{links}</nav>'
+
 
 
 def _render_autoplay_campaign_report_partial(summary: Dict[str, Any], metrics: Dict[str, Any]) -> str:
@@ -1216,7 +1679,7 @@ def _render_rpg_verdict_cards(model: Dict[str, Any]) -> str:
     return f"""
     <section class="rpg-card span-12" id="verdict-cards">
       <div class="rpg-section-title">
-        <h2>Run Verdict</h2>
+        <h2>Validation Snapshot</h2>
         <span class="rpg-badge {_status_badge_class(quality_ok)}">{html.escape(_yes_no(quality_ok))}</span>
       </div>
       <div class="rpg-stat-grid">
@@ -2480,6 +2943,7 @@ def _render_qa_dashboard(summary: Dict[str, Any], metrics: Dict[str, Any]) -> st
 
 
 def _legacy_section_group(title: str, html_content: str, *, open_by_default: bool = False) -> str:
+    html_content = _strip_legacy_autoplay_report_partial(html_content)
     html_content = _prefix_legacy_section_ids(html_content)
     open_attr = " open" if open_by_default else ""
     return f"""
@@ -2493,7 +2957,7 @@ def _legacy_section_group(title: str, html_content: str, *, open_by_default: boo
 
 
 def _split_legacy_html_into_debug_groups(legacy_html: str) -> Dict[str, str]:
-    text = _safe_str(legacy_html)
+    text = _strip_legacy_autoplay_report_partial(legacy_html)
     if not text.strip():
         return {}
 
@@ -2566,6 +3030,7 @@ def _wrap_technical_debug_groups(groups: Dict[str, str]) -> str:
 
 
 def _wrap_technical_debug_section(existing_html: str) -> str:
+    existing_html = _strip_legacy_autoplay_report_partial(existing_html)
     existing_html = _prefix_legacy_section_ids(existing_html)
     return f"""
     <section class="rpg-card dark span-12" id="technical-debug">
@@ -4057,6 +4522,57 @@ def render_campaign_report_html(
         margin-top: 20px;
       }
 
+      .rpg-hero-report {
+        position: relative;
+        z-index: 1;
+        margin-top: 24px;
+        padding: 18px;
+        border: 1px solid rgba(226, 191, 109, 0.28);
+        border-radius: 18px;
+        background:
+          linear-gradient(180deg, rgba(0, 0, 0, 0.22), rgba(0, 0, 0, 0.10)),
+          rgba(255, 255, 255, 0.035);
+      }
+
+      .rpg-hero-report-header {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 16px;
+        margin-bottom: 14px;
+      }
+
+      .rpg-hero-report-header h2 {
+        margin: 0;
+        color: #fff6df;
+        font-size: 1.55rem;
+      }
+
+      .rpg-hero-stat-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(165px, 1fr));
+        gap: 10px;
+      }
+
+      .rpg-hero-stat {
+        border: 1px solid rgba(226, 191, 109, 0.18);
+        background: rgba(0, 0, 0, 0.22);
+        border-radius: 14px;
+        padding: 12px;
+      }
+
+      .rpg-hero-stat .rpg-stat-label {
+        color: rgba(241, 227, 200, 0.72);
+      }
+
+      .rpg-hero-stat .rpg-stat-value {
+        color: #fff6df;
+      }
+
+      .rpg-hero-stat .rpg-muted-line {
+        color: rgba(241, 227, 200, 0.72);
+      }
+
       .rpg-pill {
         border: 1px solid rgba(226, 191, 109, 0.35);
         background: rgba(0,0,0,0.22);
@@ -4092,6 +4608,147 @@ def render_campaign_report_html(
       .rpg-nav a:hover {
         background: rgba(199, 154, 59, 0.18);
         color: #fff6df;
+      }
+
+      .rpg-nav {
+        display: block;
+      }
+
+      .rpg-nav-primary,
+      .rpg-nav-appendix-links {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        align-items: center;
+      }
+
+      .rpg-nav-primary {
+        padding-bottom: 6px;
+      }
+
+      .rpg-nav-appendix {
+        margin-top: 6px;
+        border-top: 1px solid rgba(226, 191, 109, 0.16);
+        padding-top: 8px;
+      }
+
+      .rpg-nav-appendix > summary {
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        color: #fff1d0;
+        border: 1px solid rgba(226, 191, 109, 0.22);
+        background: rgba(255,255,255,0.035);
+        border-radius: 999px;
+        padding: 7px 11px;
+        font-weight: 700;
+        list-style: none;
+      }
+
+      .rpg-nav-appendix > summary::-webkit-details-marker {
+        display: none;
+      }
+
+      .rpg-nav-appendix > summary::before {
+        content: "▸";
+        color: var(--rpg-gold);
+        font-size: 0.8rem;
+      }
+
+      .rpg-nav-appendix[open] > summary::before {
+        content: "▾";
+      }
+
+      .rpg-nav-appendix-links {
+        margin-top: 9px;
+      }
+
+      .rpg-nav-appendix-links a {
+        font-size: 0.84rem;
+        opacity: 0.92;
+      }
+
+      .rpg-nav-primary a {
+        font-size: 0.94rem;
+      }
+
+      .rpg-nav a {
+        border: 1px solid rgba(226, 191, 109, 0.18);
+        background: rgba(255,255,255,0.02);
+        font-weight: 600;
+      }
+
+      .rpg-promoted-section {
+        background:
+          linear-gradient(180deg, rgba(241, 227, 200, 0.99), rgba(233, 214, 180, 0.985));
+        color: var(--rpg-ink);
+      }
+
+      .rpg-promoted-section h2,
+      .rpg-promoted-section h3,
+      .rpg-promoted-section h4,
+      .rpg-promoted-section strong,
+      .rpg-promoted-section li,
+      .rpg-promoted-section p,
+      .rpg-promoted-section td,
+      .rpg-promoted-section th,
+      .rpg-promoted-section code {
+        color: var(--rpg-ink);
+      }
+
+      .rpg-promoted-section .rpg-promoted-body {
+        color: var(--rpg-ink);
+      }
+
+      .rpg-promoted-section .journal-entry,
+      .rpg-promoted-section .npc-card,
+      .rpg-promoted-section .metric-card {
+        background: rgba(255, 249, 238, 0.92);
+        color: var(--rpg-ink);
+        border: 1px solid rgba(120, 83, 30, 0.22);
+        border-radius: 14px;
+        box-shadow: inset 0 1px 0 rgba(255,255,255,0.35);
+      }
+
+      .rpg-promoted-section table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 10px;
+        background: rgba(255, 250, 242, 0.88);
+        color: var(--rpg-ink);
+        border-radius: 12px;
+        overflow: hidden;
+      }
+
+      .rpg-promoted-section th,
+      .rpg-promoted-section td {
+        padding: 10px 12px;
+        border-bottom: 1px solid rgba(120, 83, 30, 0.18);
+        text-align: left;
+      }
+
+      .rpg-promoted-section a {
+        color: #6b3f0b;
+        font-weight: 700;
+      }
+
+      .rpg-promoted-section a:hover {
+        color: #8a5315;
+      }
+
+      .rpg-promoted-section summary {
+        color: var(--rpg-ink);
+      }
+
+      .rpg-promoted-section pre {
+        background: rgba(33, 26, 20, 0.94);
+        color: var(--rpg-parchment);
+        border: 1px solid rgba(226, 191, 109, 0.2);
+      }
+
+      .report-quick-links {
+        display: none !important;
       }
 
       .rpg-grid {
@@ -4555,10 +5212,177 @@ def render_campaign_report_html(
         margin-top: 3px;
       }
 
+      /*
+       * Safety net: old legacy report shells should not appear as standalone
+       * report headers inside the RPG report. The Python sanitizer removes
+       * them; these rules prevent visual theme leakage if one slips through.
+       */
+      .rpg-debug-body > header,
+      .rpg-debug-group-body > header,
+      .rpg-debug-body section.hero,
+      .rpg-debug-group-body section.hero {
+        display: none !important;
+      }
+
+      body > main.rpg-shell {
+        max-width: 1480px !important;
+        padding: 28px !important;
+        margin: 0 auto !important;
+      }
+
+      body > main.rpg-shell > header.rpg-hero {
+        position: relative !important;
+        top: auto !important;
+        z-index: auto !important;
+        border: 1px solid rgba(226, 191, 109, 0.55) !important;
+        background:
+          linear-gradient(135deg, rgba(33, 26, 20, 0.96), rgba(42, 33, 25, 0.9)),
+          radial-gradient(circle at 80% 10%, rgba(199, 154, 59, 0.18), transparent 24rem) !important;
+        color: var(--rpg-parchment) !important;
+        border-radius: 22px !important;
+        box-shadow: 0 18px 50px var(--rpg-shadow) !important;
+      }
+
+      body > main.rpg-shell section.rpg-card {
+        background:
+          linear-gradient(180deg, rgba(241, 227, 200, 0.98), rgba(230, 208, 170, 0.98)) !important;
+        color: var(--rpg-ink) !important;
+        border: 1px solid rgba(120, 83, 30, 0.35) !important;
+      }
+
+      body > main.rpg-shell section.rpg-card.dark {
+        background: linear-gradient(180deg, rgba(42, 33, 25, 0.98), rgba(33, 26, 20, 0.98)) !important;
+        color: var(--rpg-parchment) !important;
+        border-color: rgba(226, 191, 109, 0.28) !important;
+      }
+
       @media print {
         body { background: #fff; color: #000; }
         .rpg-nav { display: none; }
         .rpg-card, .rpg-hero { box-shadow: none; break-inside: avoid; }
+      }
+
+      /*
+       * Last-resort guard for the old standalone partial shown in artifact 159:
+       * body > header with status-pill + old nav, followed by section#summary.
+       * Python removes it; CSS hides it if an append path reintroduces it.
+       */
+      body > header:not(.rpg-hero),
+      body > section#summary,
+      body > section.hero {
+        display: none !important;
+      }
+
+      /*
+       * N83.1.6.1 readability fix:
+       * Promoted legacy sections must be dark-on-parchment and must not inherit
+       * pale legacy text colors. This block intentionally uses high-specificity
+       * selectors and !important because the legacy report CSS still defines
+       * broad rules for section/card/journal-entry/summary/pre/table.
+       */
+      body > main.rpg-shell .rpg-promoted-section {
+        background:
+          linear-gradient(180deg, #f5ead2 0%, #ead8b8 100%) !important;
+        color: #24170d !important;
+        border: 1px solid rgba(120, 83, 30, 0.42) !important;
+      }
+
+      body > main.rpg-shell .rpg-promoted-section *,
+      body > main.rpg-shell .rpg-promoted-section p,
+      body > main.rpg-shell .rpg-promoted-section div,
+      body > main.rpg-shell .rpg-promoted-section span,
+      body > main.rpg-shell .rpg-promoted-section li,
+      body > main.rpg-shell .rpg-promoted-section td,
+      body > main.rpg-shell .rpg-promoted-section th,
+      body > main.rpg-shell .rpg-promoted-section summary {
+        color: #24170d !important;
+      }
+
+      body > main.rpg-shell .rpg-promoted-section h2,
+      body > main.rpg-shell .rpg-promoted-section h3,
+      body > main.rpg-shell .rpg-promoted-section h4,
+      body > main.rpg-shell .rpg-promoted-section strong {
+        color: #2b1607 !important;
+      }
+
+      body > main.rpg-shell .rpg-promoted-section .rpg-section-title {
+        border-bottom: 1px solid rgba(120, 83, 30, 0.35) !important;
+      }
+
+      body > main.rpg-shell .rpg-promoted-section .rpg-badge {
+        background: rgba(120, 83, 30, 0.12) !important;
+        color: #3a240f !important;
+        border: 1px solid rgba(120, 83, 30, 0.35) !important;
+      }
+
+      body > main.rpg-shell .rpg-promoted-section .journal-entry,
+      body > main.rpg-shell .rpg-promoted-section .npc-card,
+      body > main.rpg-shell .rpg-promoted-section .metric-card,
+      body > main.rpg-shell .rpg-promoted-section .turn-card,
+      body > main.rpg-shell .rpg-promoted-section article {
+        background: #fff8e9 !important;
+        color: #24170d !important;
+        border: 1px solid rgba(120, 83, 30, 0.28) !important;
+        border-radius: 14px !important;
+        box-shadow: inset 0 1px 0 rgba(255,255,255,0.65) !important;
+      }
+
+      body > main.rpg-shell .rpg-promoted-section table {
+        width: 100% !important;
+        background: #fff8e9 !important;
+        color: #24170d !important;
+        border-collapse: collapse !important;
+        border: 1px solid rgba(120, 83, 30, 0.24) !important;
+      }
+
+      body > main.rpg-shell .rpg-promoted-section th {
+        background: rgba(199, 154, 59, 0.20) !important;
+        color: #2b1607 !important;
+      }
+
+      body > main.rpg-shell .rpg-promoted-section td,
+      body > main.rpg-shell .rpg-promoted-section th {
+        padding: 10px 12px !important;
+        border-bottom: 1px solid rgba(120, 83, 30, 0.18) !important;
+      }
+
+      body > main.rpg-shell .rpg-promoted-section a {
+        color: #6b3f0b !important;
+        font-weight: 800 !important;
+        text-decoration: underline !important;
+        text-underline-offset: 2px !important;
+      }
+
+      body > main.rpg-shell .rpg-promoted-section pre,
+      body > main.rpg-shell .rpg-promoted-section code {
+        background: #211a14 !important;
+        color: #fff1d0 !important;
+        border-color: rgba(226, 191, 109, 0.24) !important;
+      }
+
+      body > main.rpg-shell .rpg-promoted-section .muted,
+      body > main.rpg-shell .rpg-promoted-section .small,
+      body > main.rpg-shell .rpg-promoted-section .subtle {
+        color: #5b4226 !important;
+      }
+
+      /*
+       * Hide any unwrapped legacy second report if it somehow survives final
+       * sanitization. Promoted sections inside .rpg-shell remain visible because
+       * they have .rpg-promoted-section.
+       */
+      body > main:not(.rpg-shell) {
+        display: none !important;
+      }
+
+      .nav-link {
+        background: none;
+        border: none;
+        color: inherit;
+        text-decoration: underline;
+        cursor: pointer;
+        padding: 0;
+        font: inherit;
       }
     """
     arc_cards_html = "".join(
@@ -4617,7 +5441,6 @@ def render_campaign_report_html(
         for key, value in _safe_dict(performance.get("stage_summary")).items()
     )
     legacy_report_sections = f"""
-      {_render_report_quick_links(model)}
       {_render_calendar_and_journal(model.get("campaign_calendar_summary") or {}, model.get("player_journal_summary") or {})}
       {_render_quest_progress(model.get("quest_progress_summary") or {})}
       {_render_npc_evolution_cards(model.get("npc_evolution_report_summary") or {})}
@@ -4626,6 +5449,7 @@ def render_campaign_report_html(
       {_render_progress_timeline(model.get("progress_timeline_summary") or {})}
       {_render_background_result_timing(model.get("background_result_timing_summary") or {})}
 
+
     <section id="story-so-far">
     <h2>Story So Far</h2>
     <p class="section-lede">A readable summary of what happened in the campaign before the technical diagnostics.</p>
@@ -4706,7 +5530,8 @@ def render_campaign_report_html(
     <h3>Top Risks / Follow-ups</h3>
     {("<ul>" + "".join(f"<li>{_esc(item)}</li>" for item in _safe_list(pm_summary.get("top_risks"))) + "</ul>") if _safe_list(pm_summary.get("top_risks")) else '<p class="good">No major PM-level risks detected.</p>'}
   </section>
-
+  """
+    body_sections = f"""
   <section id="player">
     <h2>Player Character Progression / Stats</h2>
     <p class="section-lede">A readable snapshot of level, XP, core stats, and progression events.</p>
@@ -4869,333 +5694,48 @@ def render_campaign_report_html(
       {_render_json_details("Latest Simulation State", latest_state)}
       {_render_json_details("Summary JSON", summary)}
       {_render_json_details("Metrics JSON", metrics)}
-     </section>
-"""
-    technical_debug_groups = _split_legacy_html_into_debug_groups(legacy_report_sections)
-    if not technical_debug_groups:
-        technical_debug_groups = {"legacy": legacy_report_sections}
+    </section>"""
 
-    return f"""<!doctype html>
-<html>
+    primary_links = [
+        ("campaign-overview", "Overview"),
+        ("verdict-cards", "Validation"),
+        ("autoplay-campaign-report", "Run Report"),
+        ("story-so-far", "Story"),
+        ("chapter-status", "Chapter"),
+        ("performance", "Performance"),
+        ("timeline", "Timeline"),
+    ]
+    appendix_links = [
+        ("campaign-journal", "Journal"),
+        ("quest-progress", "Quests"),
+        ("npcs", "NPCs"),
+        ("inventory", "Inventory"),
+        ("dialogue-coverage", "Dialogue"),
+        ("quality", "Quality"),
+        ("debug", "Debug"),
+    ]
+    html_doc = f"""<!DOCTYPE html>
+<html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <title>Autoplay Campaign Report</title>
-  <style>{css}</style>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{_esc(_safe_str(chronicle_model.get("title")) or "Autoplay Campaign Report")}</title>
+    <style>
+{css}
+    </style>
 </head>
 <body>
-  <main class="rpg-shell">
-    {_render_rpg_hero(chronicle_model)}
-    {_render_rpg_nav()}
-    <div class="rpg-grid">
-      {_render_rpg_verdict_cards(chronicle_model)}
-      {_render_autoplay_campaign_report_partial(report_context, report_context)}
-      {_render_adventure_timeline(report_context, _as_list(report_context.get("timeline")))}
-      {_render_quest_board(report_context, report_context, transcript)}
-      {_render_location_journey(report_context, report_context, _as_list(report_context.get("timeline")))}
-      {_render_player_sheet(report_context, report_context)}
-      {_render_qa_dashboard(report_context, report_context)}
-      {_render_npc_chronicle(summary, metrics)}
-      {_wrap_technical_debug_groups(technical_debug_groups)}
-    </div>
-  </main>
-</body>
- <header>
-   <h1>Autoplay Campaign Report <span class="status-pill {pm_status}">{_esc(pm_summary.get("overall_status") or "unknown")}</span></h1>
-   <div class="muted">Session {_esc(summary.get("session_id"))} · Strategy {_esc(summary.get("strategy_profile") or summary.get("strategy"))} · Turns {_esc(summary.get("turns_executed"))}</div>
-     <nav>
-      <a href="#summary">Summary</a>
-      <a class="header-journal-link" href="#campaign-journal">Journal</a>
-      <a href="#quest-progress">Quests</a>
-      <a href="#npc-evolution">Evolution</a>
-      <a href="#hundred-turn-eval">100-Turn Eval</a>
-      <a href="#action-diversity">Actions</a>
-      <a href="#progress-timeline">Progress</a>
-<a href="#background-result-timing">Background Timing</a>
-      <a href="#story-so-far">Story</a>
-      <a href="#arcs">Arcs</a>
-      <a href="#locations">Locations</a>
-      <a href="#variety">Variety</a>
-      <a href="#npcs">NPC Cast</a>
-     <a href="#inventory">Inventory</a>
-     <a href="#dialogue-coverage">Dialogue</a>
-      <a href="#performance">Performance</a>
-      <a href="#console-log">Console</a>
-      <a href="#timeline">Timeline</a>
-     <a href="#shortcomings">Shortcomings</a>
-     <a href="#debug">Debug</a>
-    </nav>
- </header>
- <main>
-   <section id="summary" class="hero">
-     <h2>Executive Summary</h2>
-     <p style="font-size:18px; max-width: 980px;">{_esc(pm_summary.get("headline"))}</p>
-     <div class="grid">
-       <div class="metric"><div class="value">{_esc(summary.get("turns_executed"))}</div><div>Turns Executed</div></div>
-       <div class="metric"><div class="value">{_esc(metrics.get("story_hook_fire_count"))}</div><div>Story Hooks Fired</div></div>
-       <div class="metric"><div class="value">{_esc(progress_quality.get("meaningful_turns"))}</div><div>Meaningful Turns</div></div>
-       <div class="metric"><div class="value">{_esc(progress_quality.get("meaningful_progress_rate"))}</div><div>Meaningful Progress Rate</div></div>
-       <div class="metric"><div class="value">{_esc(_safe_dict(model.get("dialogue_coverage")).get("npc_response_rate"))}</div><div>NPC Response Rate</div></div>
-       <div class="metric"><div class="value">{_esc(_safe_dict(model.get("chapter_status")).get("active_objective_count"))}</div><div>Active Objectives</div></div>
-     </div>
-      {_render_json_details("Technical summary JSON", {"summary": summary, "health": health, "pm_summary": pm_summary})}
-      </section>
-
-  {_render_report_quick_links(model)}
-  {_render_calendar_and_journal(model.get("campaign_calendar_summary") or {}, model.get("player_journal_summary") or {})}
-  {_render_quest_progress(model.get("quest_progress_summary") or {})}
-  {_render_npc_evolution_cards(model.get("npc_evolution_report_summary") or {})}
-  {_render_hundred_turn_eval(model)}
-  {_render_action_diversity(model.get("action_diversity_summary") or {})}
-  {_render_progress_timeline(model.get("progress_timeline_summary") or {})}
-  {_render_background_result_timing(model.get("background_result_timing_summary") or {})}
-
-    <section id="story-so-far">
-    <h2>Story So Far</h2>
-    <p class="section-lede">A readable summary of what happened in the campaign before the technical diagnostics.</p>
-    {_render_paragraphs(model.get("story_so_far_paragraph"))}
-    {_render_json_details("Story timeline summary inputs", {"milestones": model.get("milestones"), "journal_entries": model.get("journal_entries"), "hook_counts": model.get("hook_counts")})}
-  </section>
-
-  <section id="setting">
-    <h2>Lore, Setting, and Director Setup</h2>
-    <p class="section-lede">The premise, stakes, and setting context that frame the campaign run.</p>
-    {_render_paragraphs(model.get("lore_setting_paragraph"))}
-    <div class="card-list">
-      {''.join(
-        f'<div class="story-card"><h3>{_esc(row.get("title") or row.get("name") or row.get("id"))}</h3><p>{_esc(row.get("text") or row.get("description") or row.get("summary"))}</p></div>'
-        for row in _safe_list(model.get("lore"))
-      )}
-    </div>
-    {_render_json_details("Director state JSON", _safe_dict(latest_state.get("campaign_director_state")))}
-  </section>
-
-  <section id="arcs">
-    <h2>Story Arc Status</h2>
-    <p class="section-lede">A product/story view of campaign branches, active objectives, and completed beats.</p>
-    <div class="card-list">
-      {arc_cards_html}
-    </div>
-    <h3>Objectives / Milestones</h3>
-    {_render_table(["Arc", "Objective", "Status", "Priority", "Completed Turn"], milestone_pm_rows)}
-    {_render_json_details("Story arcs JSON", model.get("story_arcs"))}
-    {_render_json_details("Milestones JSON", model.get("milestones"))}
-   </section>
-
-  <section id="locations">
-    <h2>Location Journey</h2>
-    <p class="section-lede">Where the run traveled, what happened there, who was involved, and what objectives were tied to each place.</p>
-    <div class="card-list">
-      {location_cards_html}
-    </div>
-    {_render_json_details("Location journey JSON", model.get("location_journey"))}
-  </section>
-
-  <section id="variety">
-    <h2>Story Variety</h2>
-    <p class="section-lede">Identifies which campaign seed ran and gives stable signatures for comparing story setups across multiple autoplay runs.</p>
-    <div class="grid">
-      <div class="metric"><div class="value">{_esc(story_variety.get("resolved_seed"))}</div><div>Resolved Seed</div></div>
-      <div class="metric"><div class="value">{_esc(story_variety.get("randomized"))}</div><div>Randomized</div></div>
-      <div class="metric"><div class="value">{_esc(_safe_dict(story_variety.get("story_signature")).get("signature_hash"))}</div><div>Story Signature</div></div>
-      <div class="metric"><div class="value">{_esc(story_variety.get("branch_signature_hash"))}</div><div>Branch Signature</div></div>
-    </div>
-    {_render_json_details("Story variety JSON", story_variety)}
-  </section>
-
-    <section id="run-validity">
-    <h2>Run Validity</h2>
-    <div class="grid">
-      <div class="metric"><div class="value">{_esc(metrics.get("player_agent_exception_count"))}</div><div>Player-Agent Exceptions</div></div>
-      <div class="metric"><div class="value">{_esc(metrics.get("fallback_player_actions"))}</div><div>Fallback Player Actions</div></div>
-      <div class="metric"><div class="value">{_esc(metrics.get("fallback_player_action_rate"))}</div><div>Fallback Action Rate</div></div>
-    </div>
-    <p class="muted">A high fallback rate means this campaign reflects deterministic fallback action selection more than true LLM-player behavior.</p>
-  </section>
-
-  <section id="chapter-status">
-    <h2>Chapter Status</h2>
-    <p class="section-lede">Current campaign chapter, active story goals, completed goals, and recommended next direction.</p>
-    {_render_chapter_status_cards(chapter_status)}
-  </section>
-
-  <section id="product-evaluation">
-    <h2>Product Evaluation</h2>
-    <div class="grid">
-      <div class="metric"><div class="value">{_esc(pm_summary.get("story_status"))}</div><div>Story Continuity</div></div>
-      <div class="metric"><div class="value">{_esc(pm_summary.get("dialogue_status"))}</div><div>Dialogue Coverage</div></div>
-      <div class="metric"><div class="value">{_esc(pm_summary.get("provider_status"))}</div><div>Provider Narration</div></div>
-      <div class="metric"><div class="value">{_esc(pm_summary.get("performance_status"))}</div><div>Performance</div></div>
-    </div>
-    <h3>Top Risks / Follow-ups</h3>
-    {("<ul>" + "".join(f"<li>{_esc(item)}</li>" for item in _safe_list(pm_summary.get("top_risks"))) + "</ul>") if _safe_list(pm_summary.get("top_risks")) else '<p class="good">No major PM-level risks detected.</p>'}
-  </section>
-
-  <section id="player">
-    <h2>Player Character Progression / Stats</h2>
-    <p class="section-lede">A readable snapshot of level, XP, core stats, and progression events.</p>
-    {_render_paragraphs(model.get("character_progression_paragraph"))}
-    <div class="two-col">
-      <div>
-        <h3>Character Summary</h3>
-        {_render_key_value_table(_safe_list(player_view.get("summary_rows")))}
-      </div>
-      <div>
-        <h3>Starting Stats</h3>
-        {_render_table(["Stat", "Value"], _safe_list(player_view.get("stats_rows")))}
-      </div>
-    </div>
-    <h3>Recent Progression Events</h3>
-    {_render_table(["Turn", "Type", "Amount", "Reason", "Level"], _safe_list(player_view.get("recent_progression_rows")))}
-    {_render_json_details("Player progression JSON", model.get("player_progression"))}
-  </section>
-
-  <section id="inventory">
-    <h2>Inventory: Start vs End</h2>
-    <p class="muted">Shows whether the campaign changed carried items, currency, or inventory-like state during the run.</p>
-    <div class="two-col">
-      <div>
-        <h3>Starting Inventory</h3>
-        <h4>Currency</h4>
-        {_render_table(["Currency", "Amount"], _safe_list(inventory_start_view.get("currency_rows")))}
-        <h4>Items</h4>
-        {_render_table(["Item", "Qty", "Type", "Description"], _safe_list(inventory_start_view.get("item_rows")))}
-      </div>
-      <div>
-        <h3>Ending Inventory</h3>
-        <h4>Currency</h4>
-        {_render_table(["Currency", "Amount"], _safe_list(inventory_end_view.get("currency_rows")))}
-        <h4>Items</h4>
-        {_render_table(["Item", "Qty", "Type", "Description"], _safe_list(inventory_end_view.get("item_rows")))}
-      </div>
-    </div>
-    {_render_json_details("Raw inventory start/end JSON", {"start": model.get("inventory_start"), "end": model.get("inventory_end")})}
-   </section>
-
-  <section id="npcs">
-    <h2>NPC Cast, Biography, and Growth</h2>
-    <p class="muted">A product/story view of who appeared, why they matter, and how their relationship or role changed.</p>
-    {_render_table(["Name", "Role", "Dialogue Turns", "History", "Biography", "Growth / Arc"], npc_rows)}
-    {_render_json_details("NPC dialogue counts", model.get("npc_dialogue_counts"))}
-    {_render_json_details("NPC progression state", _safe_dict(_safe_dict(latest_state.get("npc_progression_state")).get("npcs")))}
-  </section>
-
-  <section id="dialogue-coverage">
-    <h2>Dialogue Coverage</h2>
-    <div class="grid">
-      <div class="metric"><div class="value">{_esc(_safe_dict(model.get("dialogue_coverage")).get("npc_response_turn_count"))}</div><div>Turns with NPC Response</div></div>
-      <div class="metric"><div class="value">{_esc(_safe_dict(model.get("dialogue_coverage")).get("social_turn_missing_npc_response_count"))}</div><div>Social Turns Missing NPC Response</div></div>
-      <div class="metric"><div class="value">{_esc(_safe_dict(model.get("dialogue_coverage")).get("hook_dialogue_turn_count"))}</div><div>Hook Dialogue Turns</div></div>
-      <div class="metric"><div class="value">{_esc(_safe_dict(model.get("dialogue_coverage")).get("base_runtime_dialogue_turn_count"))}</div><div>Base Runtime Dialogue Turns</div></div>
-      <div class="metric"><div class="value">{_esc(_safe_dict(model.get("dialogue_coverage")).get("real_runtime_dialogue_turn_count"))}</div><div>Real Runtime Dialogue Turns</div></div>
-      <div class="metric"><div class="value">{_esc(_safe_dict(model.get("dialogue_coverage")).get("real_runtime_provider_dialogue_turn_count"))}</div><div>Provider Runtime Dialogue Turns</div></div>
-      <div class="metric"><div class="value">{_esc(_safe_dict(model.get("dialogue_coverage")).get("echoed_narration_turn_count"))}</div><div>Echoed Narration Turns</div></div>
-    </div>
-    <details>
-      <summary>Dialogue coverage debug</summary>
-      <pre>{_json(model.get("dialogue_coverage"))}</pre>
-      </details>
-    </section>
-
-  <section id="performance">
-    <h2>Performance Metrics</h2>
-    <p class="section-lede">Runtime speed and where time is spent. Playability latency separates the blocking turn path from background narration/checkpoint/report work.</p>
-    <div class="grid">
-      <div class="metric"><div class="value">{_esc(_number(performance.get("campaign_wall_seconds"), 2))}s</div><div>Campaign Wall Time</div></div>
-      <div class="metric"><div class="value">{_esc(performance.get("turns_per_second"))}</div><div>Turns / Second</div></div>
-      <div class="metric"><div class="value">{_esc(_seconds_from_ms(performance.get("avg_turn_ms")))}</div><div>Average Turn</div></div>
-      <div class="metric"><div class="value">{_esc(_seconds_from_ms(performance.get("p95_turn_ms")))}</div><div>p95 Turn</div></div>
-      <div class="metric"><div class="value">{_esc(_seconds_from_ms(performance.get("max_turn_ms")))}</div><div>Max Turn</div></div>
-      <div class="metric"><div class="value">{_esc(_seconds_from_ms(performance.get("artifact_write_ms")))}</div><div>Report Write Time</div></div>
-    </div>
-    <h3>Playability Latency</h3>
-    <p class="muted">
-      Autoplay blocking includes the LLM player-agent. Human-equivalent blocking excludes the player-agent because a real player supplies the action.
-    </p>
-    <div class="grid">
-      <div class="metric"><div class="value">{_esc(_seconds_from_ms(performance.get("avg_human_playable_blocking_ms")))}</div><div>Avg Human-Equivalent Blocking Turn</div></div>
-      <div class="metric"><div class="value">{_esc(_seconds_from_ms(performance.get("p95_human_playable_blocking_ms")))}</div><div>p95 Human-Equivalent Blocking Turn</div></div>
-      <div class="metric"><div class="value">{_esc(_seconds_from_ms(performance.get("max_human_playable_blocking_ms")))}</div><div>Max Human-Equivalent Blocking Turn</div></div>
-      <div class="metric"><div class="value">{_esc(_seconds_from_ms(performance.get("avg_playable_blocking_ms")))}</div><div>Avg Autoplay Blocking Turn</div></div>
-      <div class="metric"><div class="value">{_esc(_seconds_from_ms(performance.get("p95_playable_blocking_ms")))}</div><div>p95 Autoplay Blocking Turn</div></div>
-      <div class="metric"><div class="value">{_esc(_seconds_from_ms(performance.get("max_playable_blocking_ms")))}</div><div>Max Autoplay Blocking Turn</div></div>
-      <div class="metric"><div class="value">{_esc(_safe_dict(model.get("background_jobs")).get("total_jobs"))}</div><div>Background Jobs</div></div>
-      <div class="metric"><div class="value">{_esc(_number(_safe_dict(model.get("background_jobs")).get("background_job_seconds"), 2))}s</div><div>Background Worker Time</div></div>
-    </div>
-    <h3>Evaluation Wall Time</h3>
-    {performance_stage_bars}
-    {_render_json_details("Stage summary JSON", performance.get("stage_summary") or {})}
-    {_render_json_details("Provider trace summary JSON", model.get("provider_trace_summary") or {})}
-    {_render_json_details("Manual harness trace summary JSON", model.get("manual_harness_trace_summary") or {})}
-    {_render_json_details("Session turn trace summary JSON", model.get("turn_perf_trace_summary") or {})}
-    {_render_json_details("Player-agent trace summary JSON", model.get("player_agent_trace_summary") or {})}
-    {_render_json_details("Deferred narration trace summary JSON", model.get("deferred_narration_trace_summary") or {})}
-    {_render_json_details("Deferred advisory trace summary JSON", model.get("deferred_advisory_trace_summary") or {})}
-    {_render_json_details("Performance budget summary JSON", model.get("performance_budget_summary") or {})}
-    {_render_json_details("Background prompt budget summary JSON", model.get("background_prompt_budget_summary") or {})}
-    {_render_json_details("Combined quality shape summary JSON", model.get("combined_quality_shape_summary") or {})}
-    {_render_json_details("Player-agent prompt budget summary JSON", model.get("player_agent_prompt_budget_summary") or {})}
-    {_render_json_details("Player-agent cache summary JSON", model.get("player_agent_cache_summary") or {})}
-    {_render_json_details("Deferred advisory promotion summary JSON", model.get("deferred_advisory_promotion_summary") or {})}
-    {_render_json_details("NPC evolution summary JSON", model.get("npc_evolution_summary") or {})}
-    {_render_json_details("NPC evolution profile persistence summary JSON", model.get("npc_evolution_profile_persistence_summary") or {})}
-    {_render_json_details("NPC profile load summary JSON", model.get("npc_profile_load_summary") or {})}
-    {_render_json_details("Profile-grounded output summary JSON", model.get("profile_grounded_output_summary") or {})}
-    {_render_json_details("NPC arc progression summary JSON", model.get("npc_arc_progression_summary") or {})}
-    {_render_json_details("Promotion target grounding summary JSON", model.get("promotion_target_grounding_summary") or {})}
-    {_render_json_details("Quality gate summary JSON", model.get("quality_gate_summary") or {})}
-    {_render_json_details("Slowest turns JSON", performance.get("slowest_turns") or [])}
-     {_render_json_details("Background job summary JSON", model.get("background_jobs") or {})}
-  </section>
-
-  <section id="quality">
-    <h2>Progress Quality & Action Diversity</h2>
-    <p class="section-lede">How often the campaign produced meaningful story/game progress versus weak progress, churn, or no visible change.</p>
-    <div class="grid">
-      <div class="metric"><div class="value">{_esc(progress_quality.get("churn_only_turns"))}</div><div>Churn-only Turns</div></div>
-      <div class="metric"><div class="value">{_esc(progress_quality.get("weak_progress_turns"))}</div><div>Weak Progress Turns</div></div>
-      <div class="metric"><div class="value">{_esc(progress_quality.get("no_change_turns"))}</div><div>No-change Turns</div></div>
-      <div class="metric"><div class="value">{_esc(_safe_dict(model.get("action_diversity")).get("action_diversity_rate"))}</div><div>Action Diversity Rate</div></div>
-    </div>
-    <h3>Progress Distribution</h3>
-    {progress_quality_bars}
-    {_render_json_details("Progress category counts", model.get("category_counts"))}
-    <h3>Hook Counts</h3>
-    {_render_json_details("Hook counts", model.get("hook_counts"))}
-  </section>
-
-  <section id="runtime-narration-diagnostics">
-    <h2>Runtime Narration Diagnostics</h2>
-    <p class="muted">Provider validity, repair, fallback, and method-call diagnostics.</p>
-    {_render_json_details("Runtime narration diagnostics JSON", model.get("runtime_narration_diagnostics"))}
-   </section>
-
-    <section id="timeline">
-    <h2>Turn-by-Turn Story Timeline with AI/NPC Responses</h2>
-    {''.join(timeline_html)}
-   </section>
-
-    {_render_console_log_summary(model.get("console_log_summary") or {})}
-    {_render_json_details("Console log summary JSON", model.get("console_log_summary") or {})}
-
-    <section id="debug">
-      <h2>Raw Debug Appendix</h2>
-      <p><strong>Latest state source:</strong> {_esc(model.get("latest_state_source"))}</p>
-      {_render_json_details("Story beat fallback summary JSON", model.get("story_beat_summary") or {})}
-      {_render_json_details("Player journal quality summary JSON", model.get("player_journal_quality_summary") or {})}
-      {_render_json_details("Manual turn error summary JSON", model.get("manual_turn_error_summary") or {})}
-      {_render_json_details("100-turn eval summary JSON", model.get("hundred_turn_eval_summary") or {})}
-      {_render_json_details("Action diversity summary JSON", model.get("action_diversity_summary") or {})}
-      {_render_json_details("Progress timeline summary JSON", model.get("progress_timeline_summary") or {})}
-      {_render_json_details("Long-run warning summary JSON", model.get("long_run_warning_summary") or {})}
-{_render_json_details("Background result timing summary JSON", model.get("background_result_timing_summary") or {})}
-{_render_json_details("Background drain events JSON", {"events": model.get("background_drain_events") or []})}
-      {_render_json_details("Latest Simulation State", latest_state)}
-      {_render_json_details("Summary JSON", summary)}
-      {_render_json_details("Metrics JSON", metrics)}
-    </section>
-</main>
+    <main class="rpg-shell">
+        {_render_rpg_hero(chronicle_model)}
+        {_render_rpg_nav_links(primary_links, appendix_links)}
+        {_render_rpg_verdict_cards(chronicle_model)}
+        {_render_autoplay_campaign_report_partial(summary, metrics)}
+        {legacy_report_sections}
+        {body_sections}
+    </main>
 </body>
 </html>"""
+    return _finalize_campaign_report_html(html_doc)
 
 
 def write_campaign_report(
@@ -5219,13 +5759,42 @@ def write_campaign_report(
         json.dumps(model, ensure_ascii=False, indent=2, sort_keys=True, default=str),
         encoding="utf-8",
     )
-    html_path.write_text(render_campaign_report_html(
+    html = render_campaign_report_html(
         summary=_safe_dict(model.get("summary")),
         metrics=_safe_dict(model.get("metrics")),
         transcript=_as_list(model.get("transcript")),
         report_model=model if isinstance(model, dict) else None,
-    ), encoding="utf-8")
+    )
+    html = _finalize_campaign_report_html(html)
+    if "status-pill" in html or "<h2>Executive Summary</h2>" in html:
+        html = re.sub(
+            r"<header\b[^>]*>\s*.*?Autoplay Campaign Report.*?\bstatus-pill\b.*$",
+            "",
+            html,
+            flags=re.IGNORECASE | re.DOTALL,
+        )
+    html = _finalize_campaign_report_html(html)
+    if len(_safe_str(html).strip()) < 1000:
+        raise RuntimeError(
+            "campaign_report_html_empty_or_too_small: "
+            f"bytes={len(_safe_str(html).encode('utf-8'))}"
+        )
+    if "<!doctype html>" not in html.lower():
+        raise RuntimeError("campaign_report_html_missing_doctype")
+    if "<style" not in html.lower():
+        raise RuntimeError("campaign_report_html_missing_style_block")
+    if "rpg-shell" not in html:
+        raise RuntimeError("campaign_report_html_missing_rpg_shell")
+    html_path.write_text(html, encoding="utf-8")
     return {
         "campaign_report_json": str(model_path),
         "campaign_report_html": str(html_path),
     }
+
+
+
+
+
+
+
+

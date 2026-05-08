@@ -43,11 +43,13 @@ class ProviderRegistry:
         self._providers = {}
         
         # Import all Python modules in the providers package
+        skip_modules = {"__init__", "base", "registry", "exceptions"}
+
         for module_file in providers_dir.glob("*.py"):
             module_name = module_file.stem
             
             # Skip these files
-            if module_name in ["__init__", "base", "registry", "exceptions"]:
+            if module_name in skip_modules or module_name.startswith("audio_"):
                 continue
                 
             try:
