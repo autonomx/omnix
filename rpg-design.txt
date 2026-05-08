@@ -1,600 +1,408 @@
-Below is the literal patch spec for:
+Use this focused patch:
 
-N83.1.2 — Timeline Title Finalizer + Location Service Extraction Row-Shape Fix
-Goal
-
-Fix the two remaining visible report issues from artifact 156:
-
-1. Adventure Timeline still has a few generic titles:
-   Story Beat
-
-   even though the body text contains useful player-action text:
-   Player: Ask Bran about any unusual activity or rumors in town.
-   Player: Lean in slightly and lower your voice...
-   Player: Listen intently to Bran's immediate elaboration...
-
-2. Location Journey still shows:
-   Services / Interactions:
-   No services recorded.
-
-   even though report/transcript data clearly contains:
-   service_inquiry
-   rent_room
-   lodging
-
-Target visible result:
-
-Story Beat: 0
-
-Location Journey → Services / Interactions:
-  service_inquiry
-  rent_room
-  lodging
+N83.1.6.1 — Kill Legacy Main Tail + High-Contrast Promoted Sections
 1. Patch src/tests/rpg/autoplay/campaign_report.py
-1A. Add generic-title detector
+1A. Add stronger final legacy-main sanitizer
 
-Add near _infer_rpg_title_from_text(...):
+Find the existing sanitizer helper:
+
+def _strip_legacy_autoplay_report_tail(html: str) -> str:
+
+At the end of the function, before:
+
+return text
+
+add this block:
 
 --- src/tests/rpg/autoplay/campaign_report.py
 +++ src/tests/rpg/autoplay/campaign_report.py
 @@
- def _infer_rpg_title_from_text(text: Any, *, fallback: str = "Story Beat") -> str:
-     lower = _safe_str(text).lower()
-     if not lower:
-         return fallback
+ def _strip_legacy_autoplay_report_tail(html: str) -> str:
 @@
-     if "traveler" in lower:
-         return "Engage the Traveler"
-     return _title_case_from_text(text, fallback=fallback)
+     # Clean up repeated body/html endings if a legacy full document was spliced.
+     text = re.sub(r"</body>\s*</html>\s*</body>\s*</html>\s*$", "</body>\n</html>", text, flags=re.IGNORECASE)
 +
++    # N83.1.6.1: remove a second standalone legacy <main> appended after the
++    # RPG shell. Artifact 161 showed this exact shape:
++    #
++    #   <main class="rpg-shell"> ... Technical Debug ... </main>
++    #   <main>
++    #     <section id="campaign-journal">...
++    #     <section id="quest-progress">...
++    #
++    # These sections are already either promoted into the RPG shell or preserved
++    # under grouped Technical Debug as legacy-* anchors. The raw second main is
++    # the source of the washed-out old theme below the real report.
++    text = re.sub(
++        r"</main>\s*<main>\s*"
++        r"(?=\s*<section\b[^>]*\bid=[\"']campaign-journal[\"'])"
++        r"[\s\S]*?</main>",
++        "</main>",
++        text,
++        count=1,
++        flags=re.IGNORECASE,
++    )
 +
-+def _is_generic_timeline_title(value: Any) -> bool:
-+    text = _safe_str(value).strip().lower()
-+    return text in {
++    # Defensive variant: if the second legacy main has attributes.
++    text = re.sub(
++        r"</main>\s*<main\b(?![^>]*\brpg-shell\b)[^>]*>\s*"
++        r"(?=\s*<section\b[^>]*\bid=[\"']campaign-journal[\"'])"
++        r"[\s\S]*?</main>",
++        "</main>",
++        text,
++        count=1,
++        flags=re.IGNORECASE,
++    )
++
++    # Defensive variant: if legacy sections were appended without a wrapping main.
++    text = re.sub(
++        r"(?<=</main>)\s*"
++        r"<section\b[^>]*\bid=[\"']campaign-journal[\"'][\s\S]*?"
++        r"<section\b[^>]*\bid=[\"']debug[\"'][\s\S]*?</section>",
 +        "",
-+        "story beat",
-+        "campaign event",
-+        "campaign beat",
-+        "player action",
-+        "turn event",
-+    }
-1B. Strengthen RPG title inference for the remaining player-action shapes
-
-Find _infer_rpg_title_from_text(...).
-
-Patch the body with more specific rules.
-
---- src/tests/rpg/autoplay/campaign_report.py
-+++ src/tests/rpg/autoplay/campaign_report.py
-@@
- def _infer_rpg_title_from_text(text: Any, *, fallback: str = "Story Beat") -> str:
-     lower = _safe_str(text).lower()
-     if not lower:
-         return fallback
-+    if lower.startswith("player:"):
-+        lower_action = lower.split("player:", 1)[1].strip()
-+    else:
-+        lower_action = lower
-+
-+    if "bran" in lower_action and any(term in lower_action for term in ("unusual activity", "rumor", "rumors", "town")):
-+        return "Ask Bran About Rumors"
-+    if "bran" in lower_action and any(term in lower_action for term in ("elaboration", "explain", "details", "more about", "follow up")):
-+        return "Press Bran for Details"
-+    if "bran" in lower_action and any(term in lower_action for term in ("lean in", "lower your voice", "quietly", "discreetly", "private")):
-+        return "Speak Privately with Bran"
-+    if any(term in lower_action for term in ("listen intently", "listen closely", "listen to bran")):
-+        return "Listen to Bran"
-+    if any(term in lower_action for term in ("ask bran", "question bran")):
-+        return "Question Bran"
-+    if any(term in lower_action for term in ("ask", "question", "inquire")) and "rumor" in lower_action:
-+        return "Ask About Rumors"
-+    if any(term in lower_action for term in ("lean in", "lower your voice", "whisper")):
-+        return "Speak Quietly"
-+    if any(term in lower_action for term in ("listen", "wait for", "hear him out")):
-+        return "Listen Carefully"
-     if "bran" in lower and any(term in lower for term in ("job", "work", "task", "lead", "rumor")):
-         return "Ask Bran About Work"
-     if "bran" in lower and any(term in lower for term in ("room", "lodging", "rent", "bed")):
-         return "Ask Bran About Lodging"
-
-This specifically catches the examples from 156.
-
-1C. Add body-prefix title extraction helper
-
-Add near timeline helpers:
-
---- src/tests/rpg/autoplay/campaign_report.py
-+++ src/tests/rpg/autoplay/campaign_report.py
-@@
- def _journal_timeline_beats(summary: Dict[str, Any]) -> List[Dict[str, Any]]:
-@@
-     return beats
-+
-+
-+def _timeline_title_from_body(body: Any, *, fallback: str = "Story Beat") -> str:
-+    text = _safe_str(body).strip()
-+    if not text:
-+        return fallback
-+
-+    # Many story summaries are shaped like:
-+    # "Player: Ask Bran about any unusual activity or rumors in town. Result: ..."
-+    # Use the player-action prefix as the title source when present.
-+    player_match = re.search(
-+        r"\bPlayer:\s*(.+?)(?:\n|\. Result:| Result:|\. Outcome:| Outcome:|$)",
 +        text,
-+        flags=re.IGNORECASE | re.DOTALL,
++        count=1,
++        flags=re.IGNORECASE,
 +    )
-+    if player_match:
-+        candidate = player_match.group(1).strip()
-+        inferred = _infer_rpg_title_from_text(candidate, fallback=fallback)
-+        if not _is_generic_timeline_title(inferred):
-+            return inferred
-+
-+    action_match = re.search(
-+        r"\b(?:Action|Player Action):\s*(.+?)(?:\n|\. Result:| Result:|\. Outcome:| Outcome:|$)",
-+        text,
-+        flags=re.IGNORECASE | re.DOTALL,
-+    )
-+    if action_match:
-+        candidate = action_match.group(1).strip()
-+        inferred = _infer_rpg_title_from_text(candidate, fallback=fallback)
-+        if not _is_generic_timeline_title(inferred):
-+            return inferred
-+
-+    inferred = _infer_rpg_title_from_text(text, fallback=fallback)
-+    if not _is_generic_timeline_title(inferred):
-+        return inferred
-+
-+    return fallback
-1D. Patch _story_event_timeline_beats(...) to final-check titles
+ 
+     return text
 
-Find the title assignment inside _story_event_timeline_beats(...):
+This removes the raw old section block that is currently appearing after Technical Debug.
 
-title = explicit_title or _infer_rpg_title_from_text(body, fallback="Story Beat")
+1B. Apply final sanitizer after the whole HTML is assembled
 
-Replace with:
+Find the final HTML render return.
+
+If it currently does:
+
+return html
+
+replace with:
 
 --- src/tests/rpg/autoplay/campaign_report.py
 +++ src/tests/rpg/autoplay/campaign_report.py
 @@
--        title = explicit_title or _infer_rpg_title_from_text(body, fallback="Story Beat")
-+        title = explicit_title or _timeline_title_from_body(body, fallback="Story Beat")
-+        if _is_generic_timeline_title(title):
-+            title = _timeline_title_from_body(
-+                _first_non_empty(
-+                    beat.get("player_input"),
-+                    beat.get("action"),
-+                    beat.get("summary"),
-+                    beat.get("text"),
-+                    beat.get("description"),
-+                    body,
-+                ),
-+                fallback="Story Event",
-+            )
-1E. Patch _combined_adventure_beats(...) to finalize every title
+-    return html
++    html = _strip_legacy_autoplay_report_tail(html)
++    html = _strip_legacy_autoplay_report_partial(html)
++    return html
 
-Find:
-
-beats = [beat for beat in beats if _safe_str(beat.get("title")) or _safe_str(beat.get("body"))]
-
-Replace with:
+If the writer function writes the file directly, also patch immediately before write_text:
 
 --- src/tests/rpg/autoplay/campaign_report.py
 +++ src/tests/rpg/autoplay/campaign_report.py
 @@
--    beats = [beat for beat in beats if _safe_str(beat.get("title")) or _safe_str(beat.get("body"))]
-+    finalized: List[Dict[str, Any]] = []
-+    for beat in beats:
-+        beat = _safe_dict(beat)
-+        title = _safe_str(beat.get("title"))
-+        body = _safe_str(beat.get("body"))
-+        if _is_generic_timeline_title(title):
-+            title = _timeline_title_from_body(body, fallback="Story Event")
-+        if _is_generic_timeline_title(title):
-+            title = "Story Event"
-+        if title or body:
-+            updated = dict(beat)
-+            updated["title"] = title
-+            finalized.append(updated)
-+    beats = finalized
+-    report_path.write_text(html, encoding="utf-8")
++    html = _strip_legacy_autoplay_report_tail(html)
++    html = _strip_legacy_autoplay_report_partial(html)
++    report_path.write_text(html, encoding="utf-8")
 
-This guarantees the visible timeline should not show Story Beat even if upstream data is generic.
+Apply this to every report HTML write path.
 
-2. Fix Location Journey service extraction from actual row shapes
+2. Fix promoted section readability
 
-The previous _services_from_row(...) only checked a few direct keys and the semantic mapping helper. In the generated report rows, service data can appear nested in many places or only as serialized metadata.
+The current promoted sections are wrapped correctly, but legacy CSS like .journal-entry, .metric-card, section, summary, and old color variables are still leaking.
 
-2A. Add recursive service scanner helpers
-
-Add near _services_from_row(...):
+Append this near the end of the <style> block, after all older CSS:
 
 --- src/tests/rpg/autoplay/campaign_report.py
 +++ src/tests/rpg/autoplay/campaign_report.py
 @@
- def _npcs_from_row(row: Dict[str, Any]) -> List[str]:
-@@
-     return sorted({name for name in names if _looks_like_npc_name(name)})
+       .rpg-nav-appendix-links a {
+         font-size: 0.84rem;
+         opacity: 0.92;
+       }
 +
++      /*
++       * N83.1.6.1 readability fix:
++       * Promoted legacy sections must be dark-on-parchment and must not inherit
++       * pale legacy text colors. This block intentionally uses high-specificity
++       * selectors and !important because the legacy report CSS still defines
++       * broad rules for section/card/journal-entry/summary/pre/table.
++       */
++      body > main.rpg-shell .rpg-promoted-section {
++        background:
++          linear-gradient(180deg, #f5ead2 0%, #ead8b8 100%) !important;
++        color: #24170d !important;
++        border: 1px solid rgba(120, 83, 30, 0.42) !important;
++      }
 +
-+_SERVICE_ACTION_NAMES = {
-+    "service_inquiry",
-+    "rent_room",
-+    "buy_service",
-+    "purchase_service",
-+    "lodging",
-+}
++      body > main.rpg-shell .rpg-promoted-section *,
++      body > main.rpg-shell .rpg-promoted-section p,
++      body > main.rpg-shell .rpg-promoted-section div,
++      body > main.rpg-shell .rpg-promoted-section span,
++      body > main.rpg-shell .rpg-promoted-section li,
++      body > main.rpg-shell .rpg-promoted-section td,
++      body > main.rpg-shell .rpg-promoted-section th,
++      body > main.rpg-shell .rpg-promoted-section summary {
++        color: #24170d !important;
++      }
 +
++      body > main.rpg-shell .rpg-promoted-section h2,
++      body > main.rpg-shell .rpg-promoted-section h3,
++      body > main.rpg-shell .rpg-promoted-section h4,
++      body > main.rpg-shell .rpg-promoted-section strong {
++        color: #2b1607 !important;
++      }
 +
-+def _normalize_service_label(value: Any) -> str:
-+    text = _safe_str(value).strip()
-+    if not text:
-+        return ""
-+    text = text.replace("-", "_").replace(" ", "_")
-+    text = re.sub(r"[^A-Za-z0-9_]+", "", text)
-+    return text.lower()
++      body > main.rpg-shell .rpg-promoted-section .rpg-section-title {
++        border-bottom: 1px solid rgba(120, 83, 30, 0.35) !important;
++      }
 +
++      body > main.rpg-shell .rpg-promoted-section .rpg-badge {
++        background: rgba(120, 83, 30, 0.12) !important;
++        color: #3a240f !important;
++        border: 1px solid rgba(120, 83, 30, 0.35) !important;
++      }
 +
-+def _service_labels_from_mapping(mapping: Dict[str, Any]) -> List[str]:
-+    mapping = _safe_dict(mapping)
-+    values: List[str] = []
++      body > main.rpg-shell .rpg-promoted-section .journal-entry,
++      body > main.rpg-shell .rpg-promoted-section .npc-card,
++      body > main.rpg-shell .rpg-promoted-section .metric-card,
++      body > main.rpg-shell .rpg-promoted-section .turn-card,
++      body > main.rpg-shell .rpg-promoted-section article {
++        background: #fff8e9 !important;
++        color: #24170d !important;
++        border: 1px solid rgba(120, 83, 30, 0.28) !important;
++        border-radius: 14px !important;
++        box-shadow: inset 0 1px 0 rgba(255,255,255,0.65) !important;
++      }
 +
-+    for key in (
-+        "action_type",
-+        "semantic_action",
-+        "action",
-+        "kind",
-+        "type",
-+        "service_kind",
-+        "service",
-+        "service_id",
-+        "provider_service",
-+        "interaction_type",
-+    ):
-+        label = _normalize_service_label(mapping.get(key))
-+        if label in _SERVICE_ACTION_NAMES:
-+            values.append(label)
++      body > main.rpg-shell .rpg-promoted-section table {
++        width: 100% !important;
++        background: #fff8e9 !important;
++        color: #24170d !important;
++        border-collapse: collapse !important;
++        border: 1px solid rgba(120, 83, 30, 0.24) !important;
++      }
 +
-+    # If the action is service_inquiry/rent_room and metadata text mentions
-+    # lodging/room/inn, include lodging as the useful RPG service label.
-+    text = str(mapping).lower()
-+    if any(label in values for label in ("service_inquiry", "rent_room")):
-+        if any(term in text for term in ("lodging", "room", "inn", "bed")):
-+            values.append("lodging")
++      body > main.rpg-shell .rpg-promoted-section th {
++        background: rgba(199, 154, 59, 0.20) !important;
++        color: #2b1607 !important;
++      }
 +
-+    if "rent_room" in text:
-+        values.append("rent_room")
-+        values.append("lodging")
-+    if "service_inquiry" in text:
-+        values.append("service_inquiry")
-+    if "lodging" in text:
-+        values.append("lodging")
++      body > main.rpg-shell .rpg-promoted-section td,
++      body > main.rpg-shell .rpg-promoted-section th {
++        padding: 10px 12px !important;
++        border-bottom: 1px solid rgba(120, 83, 30, 0.18) !important;
++      }
 +
-+    return values
++      body > main.rpg-shell .rpg-promoted-section a {
++        color: #6b3f0b !important;
++        font-weight: 800 !important;
++        text-decoration: underline !important;
++        text-underline-offset: 2px !important;
++      }
 +
++      body > main.rpg-shell .rpg-promoted-section pre,
++      body > main.rpg-shell .rpg-promoted-section code {
++        background: #211a14 !important;
++        color: #fff1d0 !important;
++        border-color: rgba(226, 191, 109, 0.24) !important;
++      }
 +
-+def _scan_service_labels(value: Any, *, depth: int = 0) -> List[str]:
-+    if depth > 6:
-+        return []
++      body > main.rpg-shell .rpg-promoted-section .muted,
++      body > main.rpg-shell .rpg-promoted-section .small,
++      body > main.rpg-shell .rpg-promoted-section .subtle {
++        color: #5b4226 !important;
++      }
 +
-+    labels: List[str] = []
-+
-+    if isinstance(value, dict):
-+        labels.extend(_service_labels_from_mapping(value))
-+        for nested in value.values():
-+            labels.extend(_scan_service_labels(nested, depth=depth + 1))
-+    elif isinstance(value, list):
-+        for item in value:
-+            labels.extend(_scan_service_labels(item, depth=depth + 1))
-+    elif isinstance(value, tuple):
-+        for item in value:
-+            labels.extend(_scan_service_labels(item, depth=depth + 1))
-+    elif isinstance(value, str):
-+        lower = value.lower()
-+        if "service_inquiry" in lower:
-+            labels.append("service_inquiry")
-+        if "rent_room" in lower:
-+            labels.append("rent_room")
-+            labels.append("lodging")
-+        if "lodging" in lower:
-+            labels.append("lodging")
-+
-+    return labels
-2B. Replace _services_from_row(...)
++      /*
++       * Hide any unwrapped legacy second report if it somehow survives final
++       * sanitization. Promoted sections inside .rpg-shell remain visible because
++       * they have .rpg-promoted-section.
++       */
++      body > main:not(.rpg-shell) {
++        display: none !important;
++      }
 
-Replace the full function:
+This directly fixes the pale text shown in your screenshot.
+
+3. Fix top nav placement and ensure all links are available there
+
+The second screenshot’s nav style is correct. The issue is that the appendix links should be part of the top rpg-nav, not local blocks lower down.
+
+Make sure _render_rpg_nav(...) has this structure:
+
+def _render_rpg_nav(primary_links, appendix_links=None):
+    appendix_links = appendix_links or []
+
+    def render_links(links):
+        items = []
+        for target, label in links:
+            if not target or not label:
+                continue
+            items.append(f'<a href="#{escape(target)}">{escape(label)}</a>')
+        return "".join(items)
+
+    primary_html = render_links(primary_links)
+    appendix_html = render_links(appendix_links)
+
+    appendix_block = ""
+    if appendix_html:
+        appendix_block = f"""
+        <details class="rpg-nav-appendix" open>
+          <summary>Appendix Sections</summary>
+          <div class="rpg-nav-appendix-links">
+            {appendix_html}
+          </div>
+        </details>
+        """
+
+    return f"""
+    <nav class="rpg-nav" aria-label="Campaign report sections">
+      <div class="rpg-nav-primary">
+        {primary_html}
+      </div>
+      {appendix_block}
+    </nav>
+    """
+
+Important change from the prior patch:
+
+-<details class="rpg-nav-appendix">
++<details class="rpg-nav-appendix" open>
+
+That makes all section links visible at the top by default, like your second screenshot, while still visually separated from the primary nav.
+
+4. Remove old local Report Highlights from HTML, not just CSS
+
+Find _strip_report_highlights_quick_links(...).
+
+Make it remove both non-prefixed and legacy-prefixed quick link sections:
 
 --- src/tests/rpg/autoplay/campaign_report.py
 +++ src/tests/rpg/autoplay/campaign_report.py
 @@
- def _services_from_row(row: Dict[str, Any]) -> List[str]:
-     row = _safe_dict(row)
-     values: List[str] = []
-+
-     for key in ("service_result", "merchant_result", "interaction_result"):
-         result = _safe_dict(row.get(key))
-         service = _first_non_empty(
-             result.get("service_kind"),
-             result.get("service"),
-@@
-         )
-         if service:
--            values.append(service)
-+            values.append(_normalize_service_label(service))
-+
-     semantic = _semantic_mapping_from_report_row(row)
-     action = _safe_str(semantic.get("action"))
-     raw = _safe_dict(semantic.get("raw"))
-     service_kind = _first_non_empty(
-         raw.get("service_kind"),
-@@
-         raw.get("kind"),
+ def _strip_report_highlights_quick_links(html: str) -> str:
+     text = _safe_str(html)
+     if not text.strip():
+         return ""
+     text = re.sub(
+         r'<section\b(?=[^>]*\bclass=["\'][^"\']*\breport-quick-links\b[^"\']*["\'])[\s\S]*?</section>',
+         "",
+         text,
+         flags=re.IGNORECASE,
      )
-     if service_kind:
--        values.append(service_kind)
-+        values.append(_normalize_service_label(service_kind))
-     if action in ("service_inquiry", "rent_room", "buy_service", "purchase_service"):
-         values.append(action)
-     if action == "service_inquiry" and _contains_any(str(raw), ["lodging", "room", "inn"]):
-         values.append("lodging")
-     if action == "rent_room":
-         values.append("lodging")
--    return sorted(set(values))
-+
-+    # N83.1.2: actual report row shapes may bury semantic/service metadata
-+    # under turn_contract.action.metadata.semantic_action, result.turn_contract,
-+    # background attachments, or serialized debug dicts. Recursively scan the
-+    # row as a last-resort structured fallback.
-+    values.extend(_scan_service_labels(row))
-+
-+    cleaned = []
-+    for value in values:
-+        label = _normalize_service_label(value)
-+        if label and label in _SERVICE_ACTION_NAMES and label not in cleaned:
-+            cleaned.append(label)
-+
-+    # Stable, useful order for the visible report.
-+    order = ["service_inquiry", "rent_room", "lodging", "buy_service", "purchase_service"]
-+    return [label for label in order if label in cleaned]
-2C. Add location-level fallback from all transcript/report context
++    text = re.sub(
++        r'<section\b[^>]*>\s*<h2>\s*Report Highlights\s*</h2>[\s\S]*?</section>',
++        "",
++        text,
++        flags=re.IGNORECASE,
++    )
+     return text
 
-Sometimes per-row extraction misses service labels because the transcript used by the renderer is a simplified view. Add a context fallback.
+Then ensure it is called on:
 
-Add near _build_location_journey_rows(...):
+legacy_report_sections
+technical_debug_groups values
+final html
+
+Example final sanitization:
 
 --- src/tests/rpg/autoplay/campaign_report.py
 +++ src/tests/rpg/autoplay/campaign_report.py
 @@
- def _build_location_journey_rows(summary: Dict[str, Any], metrics: Dict[str, Any], transcript: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-@@
-     return rows
-+
-+
-+def _campaign_service_labels_from_context(summary: Dict[str, Any], metrics: Dict[str, Any], transcript: List[Dict[str, Any]]) -> List[str]:
-+    values: List[str] = []
-+    values.extend(_scan_service_labels(summary))
-+    values.extend(_scan_service_labels(metrics))
-+    values.extend(_scan_service_labels(transcript))
-+
-+    cleaned = []
-+    for value in values:
-+        label = _normalize_service_label(value)
-+        if label and label in _SERVICE_ACTION_NAMES and label not in cleaned:
-+            cleaned.append(label)
-+
-+    order = ["service_inquiry", "rent_room", "lodging", "buy_service", "purchase_service"]
-+    return [label for label in order if label in cleaned]
+     html = _strip_legacy_autoplay_report_tail(html)
+     html = _strip_legacy_autoplay_report_partial(html)
++    html = _strip_report_highlights_quick_links(html)
+     return html
 
-Now patch _render_location_journey(...).
-
-Find:
-
-locations = _build_location_journey_rows(summary, metrics, transcript)
-if locations:
-    cards = ""
-    path = " → ".join(...)
-    for loc in locations[:8]:
-
-Replace with:
+And before writing:
 
 --- src/tests/rpg/autoplay/campaign_report.py
 +++ src/tests/rpg/autoplay/campaign_report.py
 @@
-     locations = _build_location_journey_rows(summary, metrics, transcript)
-     if locations:
-+        campaign_services = _campaign_service_labels_from_context(summary, metrics, transcript)
-         cards = ""
-         path = " → ".join(escape(_safe_str(loc.get("name"))) for loc in locations[:12])
-         for loc in locations[:8]:
-             loc = _safe_dict(loc)
-+            loc_services = _as_list(loc.get("services"))
-+            if not loc_services and campaign_services:
-+                loc_services = campaign_services
-             cards += f"""
-             <article class="rpg-location-card">
-               <h3>{escape(_first_non_empty(loc.get('name'), 'Unknown Location'))}</h3>
-@@
-               <h4>Services / Interactions</h4>
--              {_html_list(_as_list(loc.get('services')), empty="No services recorded.", limit=5)}
-+              {_html_list(loc_services, empty="No services recorded.", limit=5)}
-
-This ensures if report-wide context contains service metadata, the main location card no longer says “No services recorded.”
-
-3. Tests
+     html = _strip_legacy_autoplay_report_tail(html)
+     html = _strip_legacy_autoplay_report_partial(html)
++    html = _strip_report_highlights_quick_links(html)
+     report_path.write_text(html, encoding="utf-8")
+5. Tests
 
 Patch:
 
 src/tests/rpg/autoplay/test_campaign_report.py
-3A. Timeline finalizer removes remaining generic Story Beat
-
-Append:
-
+5A. Test second standalone legacy main is removed
 --- src/tests/rpg/autoplay/test_campaign_report.py
 +++ src/tests/rpg/autoplay/test_campaign_report.py
 @@
-+def test_campaign_report_timeline_finalizer_replaces_story_beat_from_player_prefix():
++def test_campaign_report_strips_second_legacy_main_after_rpg_shell():
++    html = """
++    <main class="rpg-shell">
++      <section id="technical-debug" class="rpg-card dark span-12">
++        <h2>Technical Debug</h2>
++      </section>
++    </main>
++    <main>
++      <section id="campaign-journal"><h2>Campaign Calendar & Player Journal</h2></section>
++      <section id="quest-progress"><h2>Quest Progress</h2></section>
++      <section id="debug"><h2>Raw Debug Appendix</h2></section>
++    </main>
++    """
++
++    cleaned = campaign_report._strip_legacy_autoplay_report_tail(html)
++
++    assert 'class="rpg-shell"' in cleaned
++    assert "Technical Debug" in cleaned
++    assert '<main>\n      <section id="campaign-journal"' not in cleaned
++    assert 'id="campaign-journal"' not in cleaned
++    assert 'id="quest-progress"' not in cleaned
++    assert 'id="debug"' not in cleaned
+5B. Test promoted sections are high-contrast and visible
+--- src/tests/rpg/autoplay/test_campaign_report.py
++++ src/tests/rpg/autoplay/test_campaign_report.py
+@@
++def test_campaign_report_promoted_sections_have_high_contrast_css():
 +    html = campaign_report.render_campaign_report_html(
-+        summary={
-+            "ok": True,
-+            "quality_gate_summary": {"ok": True, "gates": {"x": True}},
-+            "background_result_timing_summary": {"jobs_submitted": 1},
-+            "long_run_warning_summary": {"warning_count": 0},
-+            "story_beat_summary": {
-+                "beats": [
-+                    {
-+                        "turn_index": 2,
-+                        "kind": "Story Beat",
-+                        "summary": "Player: Ask Bran about any unusual activity or rumors in town. Result: Bran grows cautious.",
-+                    },
-+                    {
-+                        "turn_index": 3,
-+                        "kind": "Story Beat",
-+                        "summary": "Player: Lean in slightly and lower your voice before asking Bran what he knows. Result: The conversation becomes private.",
-+                    },
-+                    {
-+                        "turn_index": 19,
-+                        "kind": "Story Beat",
-+                        "summary": "Player: Listen intently to Bran's immediate elaboration. Result: Bran explains the road trouble.",
-+                    },
-+                ]
-+            },
-+        },
-+        metrics={"real_turn_runtime_count": 3},
++        summary={"ok": True},
++        metrics={"real_turn_runtime_count": 20},
 +        transcript=[],
 +    )
 +
-+    assert "Ask Bran About Rumors" in html
-+    assert "Speak Privately with Bran" in html
-+    assert "Listen to Bran" in html
-+    assert ">Story Beat<" not in html
-3B. Service scanner detects deeply nested semantic action metadata
-
-Append:
-
++    assert ".rpg-promoted-section *" in html
++    assert "color: #24170d !important" in html
++    assert "background: #fff8e9 !important" in html
++    assert "body > main:not(.rpg-shell)" in html
+5C. Test appendix nav is visible/open at top
 --- src/tests/rpg/autoplay/test_campaign_report.py
 +++ src/tests/rpg/autoplay/test_campaign_report.py
 @@
-+def test_campaign_report_scan_service_labels_from_deep_row_shape():
-+    row = {
-+        "turn_index": 4,
-+        "result": {
-+            "turn_contract": {
-+                "action": {
-+                    "metadata": {
-+                        "semantic_action": {
-+                            "action_type": "service_inquiry",
-+                            "service_kind": "lodging",
-+                            "target_name": "Bran",
-+                        }
-+                    }
-+                }
-+            }
-+        },
-+    }
-+
-+    services = campaign_report._services_from_row(row)
-+
-+    assert "service_inquiry" in services
-+    assert "lodging" in services
-3C. Service scanner detects rent_room from serialized/debug text
-
-Append:
-
---- src/tests/rpg/autoplay/test_campaign_report.py
-+++ src/tests/rpg/autoplay/test_campaign_report.py
-@@
-+def test_campaign_report_services_from_serialized_row_text():
-+    row = {
-+        "turn_index": 5,
-+        "debug": "{'semantic_action': {'action_type': 'rent_room', 'service_kind': 'lodging'}}",
-+    }
-+
-+    services = campaign_report._services_from_row(row)
-+
-+    assert "rent_room" in services
-+    assert "lodging" in services
-3D. Location Journey uses report-wide service fallback
-
-Append:
-
---- src/tests/rpg/autoplay/test_campaign_report.py
-+++ src/tests/rpg/autoplay/test_campaign_report.py
-@@
-+def test_campaign_report_location_journey_uses_context_service_fallback():
++def test_campaign_report_appendix_nav_is_open_and_contains_extended_links():
 +    html = campaign_report.render_campaign_report_html(
 +        summary={
 +            "ok": True,
 +            "quality_gate_summary": {"ok": True, "gates": {"x": True}},
 +            "background_result_timing_summary": {"jobs_submitted": 1},
 +            "long_run_warning_summary": {"warning_count": 0},
-+            "quest_progress_summary": {
-+                "quests": [{"title": "Witness Search", "location": "Rusty Flagon Tavern"}]
-+            },
-+            "story_beat_summary": {
-+                "beats": [
-+                    {
-+                        "turn_index": 4,
-+                        "summary": "The player makes a service_inquiry about lodging with Bran.",
-+                    },
-+                    {
-+                        "turn_index": 5,
-+                        "summary": "The player tries to rent_room for the night.",
-+                    },
-+                ]
-+            },
 +        },
-+        metrics={"real_turn_runtime_count": 5},
-+        transcript=[
-+            {
-+                "turn_index": 1,
-+                "narration": "The tavern is tense.",
-+            }
-+        ],
-+    )
-+
-+    assert "Rusty Flagon Tavern" in html
-+    assert "service_inquiry" in html
-+    assert "rent_room" in html
-+    assert "lodging" in html
-+    assert "No services recorded." not in html
-3E. No generic title smoke test
-
-Append:
-
---- src/tests/rpg/autoplay/test_campaign_report.py
-+++ src/tests/rpg/autoplay/test_campaign_report.py
-@@
-+def test_campaign_report_no_visible_generic_story_beat_titles_for_story_summary_rows():
-+    html = campaign_report.render_campaign_report_html(
-+        summary={
-+            "ok": True,
-+            "quality_gate_summary": {"ok": True, "gates": {"x": True}},
-+            "background_result_timing_summary": {"jobs_submitted": 1},
-+            "long_run_warning_summary": {"warning_count": 0},
-+            "story_beat_summary": {
-+                "beats": [
-+                    {
-+                        "turn_index": 1,
-+                        "summary": "Player: Ask Bran about work. Result: Bran considers the request.",
-+                    }
-+                ]
-+            },
-+        },
-+        metrics={"real_turn_runtime_count": 1},
++        metrics={"real_turn_runtime_count": 20},
 +        transcript=[],
 +    )
 +
-+    assert ">Story Beat<" not in html
-+    assert "Ask Bran About Work" in html or "Question Bran" in html
-4. Validation
-
-Compile:
-
++    assert '<details class="rpg-nav-appendix" open>' in html
++    nav_html = html.split('class="rpg-nav"', 1)[1].split("</nav>", 1)[0]
++    assert 'href="#campaign-journal"' in nav_html
++    assert 'href="#quest-progress"' in nav_html
++    assert 'href="#npc-evolution"' in nav_html
++    assert 'href="#performance"' in nav_html
++    assert 'href="#console-log"' in nav_html
++    assert 'href="#timeline"' in nav_html
++    assert 'href="#debug"' in nav_html
+5D. Test no Report Highlights block in final HTML
+--- src/tests/rpg/autoplay/test_campaign_report.py
++++ src/tests/rpg/autoplay/test_campaign_report.py
+@@
++def test_campaign_report_final_html_has_no_report_highlights_block():
++    html = campaign_report.render_campaign_report_html(
++        summary={"ok": True},
++        metrics={"real_turn_runtime_count": 20},
++        transcript=[],
++    )
++
++    assert "<h2>Report Highlights</h2>" not in html
++    assert 'class="report-quick-links"' not in html
++    assert "Campaign Journal (" not in html
++    assert "Quest Progress (" not in html
++    assert "NPC Evolution (" not in html
+6. Validation
 python -m py_compile src\tests\rpg\autoplay\campaign_report.py
-
-Run report tests:
-
 python -m pytest src\tests\rpg\autoplay\test_campaign_report.py -q
-
-Run existing safety tests:
-
-python -m pytest src\tests\rpg\autoplay\test_player_agent_anti_loop.py src\tests\rpg\autoplay\test_quality_gates.py src\tests\rpg\autoplay\test_background_result_timing.py -q
