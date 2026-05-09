@@ -195,3 +195,82 @@ def test_review_quest_log_meta_action_repairs_to_concrete_world_action():
     assert result["changed"] is True
     assert "review my quest log" not in result["action"].lower()
     assert result["action"].startswith("I ")
+
+
+def test_executable_action_prefers_authority_commit_handoff_quest():
+    context = {
+        "campaign_state_commit_summary": {
+            "quest_progress_summary": {
+                "quests": [
+                    {
+                        "title": "Investigate Lead: wagon ruts near old bridge",
+                        "status": "active",
+                        "completed": False,
+                        "source": "campaign_state_authority_commit",
+                        "objectives": [
+                            {
+                                "summary": "Investigate the unresolved lead: wagon ruts near old bridge.",
+                                "completed": False,
+                            }
+                        ],
+                    }
+                ]
+            }
+        },
+        "active_objectives": [{"objective_text": "Old stale objective"}],
+    }
+
+    action = executable_action_for_context(context, "travel toward the next known location")
+
+    assert "investigate" in action.lower()
+    assert "wagon ruts near old bridge" in action.lower()
+
+
+def test_repeated_old_search_repairs_to_committed_handoff_action():
+    context = {
+        "campaign_state_commit_summary": {
+            "quest_progress_summary": {
+                "quests": [
+                    {
+                        "quest_id": "quest:done",
+                        "title": "Old Quest",
+                        "status": "completed",
+                        "completed": True,
+                    },
+                    {
+                        "quest_id": "quest:investigate_lead:test",
+                        "title": "Investigate Lead: old mill bridge",
+                        "status": "active",
+                        "completed": False,
+                        "source": "campaign_state_authority_commit",
+                        "handoff_quest": True,
+                        "lead": {"name": "old mill bridge"},
+                        "objectives": [
+                            {
+                                "objective_id": "objective:lead",
+                                "summary": "Investigate the unresolved lead: old mill bridge.",
+                                "status": "active",
+                                "completed": False,
+                                "subject": "old mill bridge",
+                                "handoff_objective": True,
+                            }
+                        ],
+                    },
+                ]
+            }
+        },
+        "recent_turns": [
+            {
+                "player_action": "I inspect the road outside the tavern for fresh tracks, wagon ruts, black cord, torn cloth, ambush signs, or bridge markings."
+            }
+        ] * 4,
+    }
+
+    result = repair_action_if_needed(
+        "I inspect the road outside the tavern for fresh tracks, wagon ruts, black cord, torn cloth, ambush signs, or bridge markings.",
+        context,
+    )
+
+    assert result["changed"] is True
+    assert result["reason"] == "committed_handoff_quest_priority_repair"
+    assert "old mill bridge" in result["action"].lower()

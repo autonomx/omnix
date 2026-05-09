@@ -293,6 +293,14 @@ def collect_active_objectives(state: Dict[str, Any]) -> List[Dict[str, Any]]:
                 obj.setdefault("quest_id", _safe_str(quest.get("quest_id") or quest_id))
                 obj.setdefault("quest_title", _safe_str(quest.get("title") or quest_id))
                 obj.setdefault("quest_giver", _safe_str(quest.get("quest_giver") or quest.get("source_npc") or quest.get("giver")))
+                obj.setdefault("quest_source", _safe_str(quest.get("source")))
+                obj.setdefault("quest_priority", int(quest.get("priority") or 0))
+                obj.setdefault("handoff_quest", bool(quest.get("handoff_quest")))
+                obj.setdefault("handoff_objective", bool(obj.get("handoff_objective")))
+                obj.setdefault(
+                    "affordance_priority",
+                    int(obj.get("affordance_priority") or quest.get("priority") or 0),
+                )
                 out.append(obj)
 
     arcs = _safe_dict(_safe_dict(state.get("story_arc_milestone_state")).get("arcs"))
@@ -318,11 +326,40 @@ def collect_active_objectives(state: Dict[str, Any]) -> List[Dict[str, Any]]:
         if key:
             seen.add(key)
         deduped.append(obj)
+    deduped.sort(
+        key=lambda row: (
+            -int(_safe_dict(row).get("affordance_priority") or 0),
+            0 if _safe_dict(row).get("handoff_objective") else 1,
+            _safe_str(_safe_dict(row).get("quest_id")),
+            _safe_str(_safe_dict(row).get("objective_id")),
+        )
+    )
     return deduped
 
 def build_objective_affordances_for_state(state: Dict[str, Any], *, limit: int = 12) -> List[Dict[str, Any]]:
     actions: List[Dict[str, Any]] = []
     for index, objective in enumerate(collect_active_objectives(state)):
+        objective = _safe_dict(objective)
+        if objective.get("handoff_objective"):
+            for action in _safe_list(objective.get("suggested_actions")):
+                command = _safe_str(action).strip()
+                if command:
+                    actions.append(
+                        {
+                            "command": command,
+                            "source": "handoff_objective_suggested_action",
+                            "objective_id": _safe_str(objective.get("objective_id")),
+                            "quest_id": _safe_str(objective.get("quest_id")),
+                            "semantic": "investigate",
+                            "priority": int(objective.get("affordance_priority") or 100),
+                        }
+                    )
         actions.extend(objective_affordance_actions(objective, state, index=index))
-    actions.sort(key=lambda row: int(_safe_dict(row).get("priority") or 0), reverse=True)
+    actions.sort(
+        key=lambda row: (
+            -int(_safe_dict(row).get("priority") or 0),
+            _safe_str(_safe_dict(row).get("source")),
+            _safe_str(_safe_dict(row).get("command")),
+        )
+    )
     return actions[: max(1, int(limit or 12))]

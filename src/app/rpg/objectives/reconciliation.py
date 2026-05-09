@@ -159,6 +159,42 @@ def _promote_quest_log_to_quest_progress_if_needed(state: Dict[str, Any]) -> int
 
 
 def reconcile_objective_progression_into_quests(state: Dict[str, Any]) -> Dict[str, Any]:
+    try:
+        from app.rpg.campaign_state.authority_commit import commit_campaign_state
+
+        result = commit_campaign_state(state, phase="turn")
+        committed_state = _safe_dict(result.get("state")) or state
+        summary = _safe_dict(result.get("summary"))
+        reconciliation = _safe_dict(summary.get("quest_reconciliation_summary"))
+        return {
+            "changed": bool(
+                reconciliation.get("completed_objective_updates")
+                or reconciliation.get("partial_objective_updates")
+                or reconciliation.get("quests_completed")
+                or reconciliation.get("quest_promotions")
+            ),
+            "state": committed_state,
+            "completed_objective_ids": [
+                _safe_str(row.get("objective_id"))
+                for row in _safe_list(summary.get("objective_evidence"))
+                if _safe_dict(row).get("completed")
+            ],
+            "progressed_objective_ids": [
+                _safe_str(row.get("objective_id"))
+                for row in _safe_list(summary.get("objective_evidence"))
+                if _safe_dict(row).get("partial")
+            ],
+            "completed_objective_updates": int(reconciliation.get("completed_objective_updates") or 0),
+            "progressed_objective_updates": int(reconciliation.get("partial_objective_updates") or 0),
+            "quest_promotions": int(reconciliation.get("quest_promotions") or 0),
+            "quests_completed": int(reconciliation.get("quests_completed") or 0),
+            "authority_commit_summary": summary,
+        }
+    except RecursionError:
+        pass
+    except Exception:
+        pass
+
     """Apply objective progression diagnostics to canonical quest state."""
     state = _safe_dict(state)
     changed = False

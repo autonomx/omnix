@@ -4237,6 +4237,11 @@ def build_campaign_report_model(
         "pre_turn_advisory_promotion_performance_summary": _safe_dict(
             summary.get("pre_turn_advisory_promotion_performance_summary")
         ),
+        "campaign_state_commit_summary": _safe_dict(summary.get("campaign_state_commit_summary")),
+        "campaign_stale_state_summary": _safe_dict(summary.get("campaign_stale_state_summary")),
+        "campaign_state_commit_performance_summary": _safe_dict(
+            summary.get("campaign_state_commit_performance_summary")
+        ),
         "story_beat_summary": _safe_dict(
             summary.get("story_beat_summary")
             or metrics.get("story_beat_summary")

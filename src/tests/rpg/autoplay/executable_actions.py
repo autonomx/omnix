@@ -364,9 +364,56 @@ def suggested_executable_action(context: Dict[str, Any], transcript: List[Dict[s
     return best_command
 
 
+def _handoff_action_from_committed_context(context: Dict[str, Any]) -> str:
+    context = _safe_dict(context)
+    commit_summary = _safe_dict(context.get("campaign_state_commit_summary"))
+    quest_summary = _safe_dict(commit_summary.get("quest_progress_summary"))
+    quests = _safe_list(quest_summary.get("quests"))
+    if not quests:
+        quests = list(_safe_dict(_safe_dict(context.get("quest_progress")).get("quests")).values())
+
+    for quest in quests:
+        quest = _safe_dict(quest)
+        if quest.get("completed") or _safe_str(quest.get("status")) == "completed":
+            continue
+        title = _safe_str(quest.get("title"))
+        is_handoff = (
+            bool(quest.get("handoff_quest"))
+            or quest.get("source") == "campaign_state_authority_commit"
+            or title.startswith("Investigate Lead:")
+        )
+        if not is_handoff:
+            continue
+        lead = _safe_dict(quest.get("lead"))
+        lead_label = _safe_str(
+            lead.get("name")
+            or lead.get("title")
+            or title.replace("Investigate Lead:", "").strip()
+        )
+        for obj in _safe_list(quest.get("objectives")):
+            obj = _safe_dict(obj)
+            if obj.get("completed") or _safe_str(obj.get("status")) == "completed":
+                continue
+            suggested = _safe_list(obj.get("suggested_actions"))
+            for action in suggested:
+                action = _safe_str(action).strip()
+                if action and not is_meta_or_vague_action(action):
+                    return action
+            subject = _safe_str(obj.get("subject") or lead_label or obj.get("summary") or title)
+            if subject:
+                return (
+                    f"I investigate the lead: {subject}, checking the next place, person, "
+                    "or evidence connected to it instead of repeating the old search."
+                )
+    return ""
+
+
 def executable_action_for_context(context: Dict[str, Any], original_action: str = "") -> str:
     """Convert meta/planner text into an executable world command."""
     context = _safe_dict(context)
+    handoff_action = _handoff_action_from_committed_context(context)
+    if handoff_action:
+        return handoff_action
     lower_original = _safe_str(original_action).lower()
     objective_blob = active_objective_blob(context)
     npc = strongest_known_npc(context)
@@ -444,6 +491,7 @@ def executable_action_for_context(context: Dict[str, Any], original_action: str 
 
 
 def repair_action_if_needed(action: str, context: Dict[str, Any], transcript: List[Dict[str, Any]] | None = None) -> Dict[str, Any]:
+    context = _safe_dict(context)
     original = _safe_str(action).strip()
     normalized = normalize_command_label_action(original)
     if normalized and normalized != original and not is_meta_or_vague_action(normalized):
@@ -457,6 +505,20 @@ def repair_action_if_needed(action: str, context: Dict[str, Any], transcript: Li
     lower_action = action.lower()
     used_explicit_transcript = transcript is not None
     transcript = transcript if transcript is not None else _safe_list(context.get("recent_turns"))
+    handoff_action = _handoff_action_from_committed_context(context)
+
+    if handoff_action and (
+        is_meta_or_vague_action(original)
+        or is_repeated_affordance_action(original, transcript)
+        or "review my quest log" in original.lower()
+        or "road outside the tavern" in original.lower()
+    ):
+        return {
+            "changed": handoff_action != original,
+            "action": handoff_action,
+            "original_action": original,
+            "reason": "committed_handoff_quest_priority_repair",
+        }
 
     if transcript and is_repeated_affordance_action(action, transcript):
         repaired = choose_rotated_affordance(context, action)

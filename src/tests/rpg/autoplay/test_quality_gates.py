@@ -1,6 +1,7 @@
 from types import SimpleNamespace
 
 from tests.rpg.autoplay_llm_campaign import (
+    _final_lifecycle_quality_gates,
     _summarize_manual_turn_errors,
     _summarize_npc_arc_progression,
     _summarize_player_agent_prompt_budget,
@@ -177,6 +178,32 @@ def test_quality_gates_fallback_to_performance_budget_background_llm():
 
     assert result["ok"] is True
     assert result["gates"]["combined_background_mode_when_requested"] is True
+
+
+def test_final_lifecycle_gates_require_campaign_state_commit():
+    summary = {
+        "requested_turns": 20,
+        "quality_gate_summary": {"ok": True, "gates": {}},
+        "latest_state": {"quest_progress": {"quests": {}}},
+        "quest_progress_summary": {"active_count": 0, "completed_count": 0},
+        "objective_progression_summary": {"matched_count": 1, "ok": True},
+        "quest_reconciliation_summary": {"ok": True},
+        "quest_handoff_summary": {"ok": True},
+        "final_state_field_coverage_summary": {"ok": True},
+        "strict_progress_health_summary": {"ok": True},
+        "post_transition_action_quality_summary": {"ok": True},
+        "repeated_affordance_loop_summary": {"ok": True},
+        "pre_turn_advisory_promotion_performance_summary": {"ok": True},
+        "campaign_state_commit_summary": {"ok": False},
+        "campaign_stale_state_summary": {"ok": False},
+        "campaign_state_commit_performance_summary": {"ok": True},
+    }
+
+    result = _final_lifecycle_quality_gates(summary)
+
+    assert result["ok"] is False
+    assert result["gates"]["campaign_state_commit_ok"] is False
+    assert result["gates"]["campaign_state_not_stale_ok"] is False
 
 
 def test_promotion_target_grounding_summary_dedupes_cumulative_runtime_state():
@@ -914,6 +941,29 @@ def test_pre_turn_advisory_promotion_performance_summary_flags_slow_event():
     assert summary["slow_event_count"] == 1
     assert summary["auto_disabled"] is True
     assert summary["max_elapsed_ms"] == 9000
+
+
+def test_pre_turn_advisory_perf_ok_when_zero_slow_events_and_low_elapsed():
+    from tests.rpg.autoplay_llm_campaign import _pre_turn_advisory_promotion_performance_summary
+
+    summary = _pre_turn_advisory_promotion_performance_summary(
+        [
+            {
+                "pre_turn_advisory_promotion_result": {
+                    "elapsed_ms": 9,
+                    "fast_pre_turn": True,
+                    "slow_guard_ms": 5000,
+                }
+            }
+        ],
+        slow_events=[],
+        auto_disabled=False,
+        disable_reason="",
+    )
+
+    assert summary["ok"] is True
+    assert summary["max_elapsed_ms"] == 9
+    assert summary["slow_event_count"] == 0
 
 
 def test_final_lifecycle_quality_gates_fail_when_required_fields_missing():
