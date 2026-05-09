@@ -50,6 +50,33 @@ def test_suggested_actions_are_bounded():
     assert len(actions) <= 12
 
 
+def test_suggested_actions_use_executable_witness_objective_commands():
+    from app.rpg.player_action_context.runtime import build_suggested_actions
+
+    state = {
+        "active_objectives": [
+            {
+                "objective_id": "milestone:find_witness",
+                "title": "Find the witness",
+                "objective_text": "Find the witness.",
+                "summary": "Find the witness",
+            }
+        ],
+        "scene": {
+            "location": "Rusty Flagon Tavern",
+            "nearby_npcs": [{"name": "Bran", "npc_id": "Bran"}],
+        },
+    }
+
+    payload = build_suggested_actions(state)
+    commands = [row["command"] for row in payload]
+
+    # Check that executable actions are generated instead of meta actions
+    assert not any("current objective" in command for command in commands)
+    assert not any("choose a concrete lead" in command.lower() for command in commands)
+    assert not any("ask a named npc" in command.lower() for command in commands)
+
+
 def test_player_action_context_prefers_pinned_objective():
     simulation_state = _state_with_objective()
     add_story_arc_milestone(
@@ -96,3 +123,31 @@ def test_player_action_context_combat_mode_suggests_combat_actions():
 
     assert context["mode"] == "combat"
     assert any(row["category"] == "combat" for row in context["suggested_actions"])
+
+
+def test_suggested_actions_use_concrete_witness_objective_commands():
+    state = {
+        "quest_progress": {
+            "quests": {
+                "quest:witness_search": {
+                    "title": "Witness Search",
+                    "status": "active",
+                    "objectives": [
+                        {
+                            "objective_id": "objective:find_witness",
+                            "summary": "Find the witness",
+                            "status": "active",
+                            "completed": False,
+                        }
+                    ],
+                }
+            }
+        },
+        "npcs": {"Bran": {"name": "Bran"}},
+    }
+    actions = build_suggested_actions(state, turn_index=10)
+    commands = [row["command"] for row in actions]
+    assert any("where the witness was last seen" in command for command in commands)
+    assert any("inspect the tavern door" in command for command in commands)
+    assert not any("current objective" in command for command in commands)
+    assert not any("grounded way to make progress" in command for command in commands)

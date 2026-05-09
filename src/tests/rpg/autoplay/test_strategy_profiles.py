@@ -73,3 +73,28 @@ def test_rerank_suggested_actions_penalizes_repeated_command_when_stalled():
 
     assert ranked[0]["action_id"] == "explore:001"
     assert ranked[0]["anti_stall_applied"] is True
+
+
+def test_goal_directed_strategy_penalizes_passive_micro_actions_when_stalled():
+    actions = [
+        {"command": "I listen carefully to Bran for more elaboration.", "category": "social", "priority": 90},
+        {"command": "I follow the witness lead toward the road.", "category": "travel", "priority": 70},
+        {"command": "I report what I learned to Bran and ask what the next concrete step is.", "category": "objective", "priority": 70},
+    ]
+
+    ranked = rerank_suggested_actions_for_strategy(
+        actions,
+        strategy="goal_directed_quest_runner",
+        recent_transcript=[],
+        progress_quality_metrics={
+            "turn_count": 30,
+            "meaningful_progress_rate": 0.05,
+            "no_change_turns": 20,
+            "churn_only_streak": 0,
+            "objective_target_no_meaningful_progress_streak": 0,
+        },
+    )
+
+    assert ranked[0]["category"] in {"objective", "travel"}
+    assert "listen carefully" not in ranked[0]["command"].lower()
+    assert ranked[0]["anti_stall_applied"] is True

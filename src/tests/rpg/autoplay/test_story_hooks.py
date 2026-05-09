@@ -237,3 +237,119 @@ def test_all_campaign_seed_variants_have_director_lore_npcs_and_arc():
         assert state["story_arc_state"]["arcs"]
         assert state["story_arc_milestone_state"]["arcs"]
         assert state["player_state"]["inventory"]["items"]
+
+
+def test_story_hooks_expand_vague_current_objective_action_to_witness_terms():
+    state = {}
+    seed_witness_resolution_hooks(state)
+    result = apply_autoplay_story_hooks(
+        simulation_state=state,
+        player_action="I ask Bran if they know anything that can help with my current objective.",
+        turn_index=2,
+    )
+    assert result["changed"] is True
+    assert result["fired_hooks"][0]["hook_id"] == "hook:witness:ask_bran"
+
+
+def test_story_hooks_match_executable_witness_action_sequence():
+    state = {}
+    seed_witness_resolution_hooks(state)
+
+    result1 = apply_autoplay_story_hooks(
+        simulation_state=state,
+        player_action="I ask Bran where the cloaked traveler went after leaving by the side door.",
+        turn_index=1,
+    )
+    assert result1["changed"] is True
+    state = result1["simulation_state"]
+
+    result2 = apply_autoplay_story_hooks(
+        simulation_state=state,
+        player_action="I inspect the tavern side door and nearby street for mud, torn cloth, boot prints, or signs of a hurried exit.",
+        turn_index=2,
+    )
+    assert result2["changed"] is True
+    state = result2["simulation_state"]
+
+    result3 = apply_autoplay_story_hooks(
+        simulation_state=state,
+        player_action="I leave the Rusty Flagon and follow the road outside, looking for fresh tracks or the cloaked traveler.",
+        turn_index=3,
+    )
+    assert result3["changed"] is True
+    fired = [row["hook_id"] for row in result3["fired_hooks"]]
+    assert "hook:witness:find_witness" in fired
+
+
+def test_story_hooks_expand_repaired_report_action():
+    state = {}
+    seed_witness_resolution_hooks(state)
+    for turn_index, action in enumerate(
+        [
+            "I ask Bran where the cloaked traveler went after leaving by the side door.",
+            "I inspect the tavern side door and nearby street for mud, torn cloth, boot prints, or signs of a hurried exit.",
+            "I leave the Rusty Flagon and follow the road outside, looking for fresh tracks or the cloaked traveler.",
+        ],
+        start=1,
+    ):
+        state = apply_autoplay_story_hooks(
+            simulation_state=state,
+            player_action=action,
+            turn_index=turn_index,
+        )["simulation_state"]
+
+    result = apply_autoplay_story_hooks(
+        simulation_state=state,
+        player_action="I report to Bran that the cloaked traveler trail points toward the road and ask what danger this confirms.",
+        turn_index=4,
+    )
+
+    assert result["changed"] is True
+    fired = [row["hook_id"] for row in result["fired_hooks"]]
+    assert "hook:witness:report_to_bran" in fired
+
+
+def test_witness_story_milestones_sync_to_quest_log_completion():
+    state = {}
+    seed_witness_resolution_hooks(state)
+
+    for turn_index, action in enumerate(
+        [
+            "I ask Bran where the cloaked traveler went after leaving by the side door.",
+            "I inspect the tavern side door and nearby street for mud, torn cloth, boot prints, or signs of a hurried exit.",
+            "I leave the Rusty Flagon and follow the road outside, looking for fresh tracks or the cloaked traveler.",
+            "I report to Bran that the cloaked traveler trail points toward the road and ask what danger this confirms.",
+        ],
+        start=1,
+    ):
+        result = apply_autoplay_story_hooks(
+            simulation_state=state,
+            player_action=action,
+            turn_index=turn_index,
+        )
+        state = result["simulation_state"]
+
+    quests = state["quest_progress"]["quests"]
+    witness = quests["quest:witness_search"]
+    assert witness["status"] == "completed"
+    assert witness["completed"] is True
+    assert witness["completed_objective_count"] >= 2
+    assert all(obj["completed"] for obj in witness["objectives"])
+    assert "quest:bandit_road" in quests
+    assert quests["quest:bandit_road"]["status"] == "active"
+
+
+def test_autoplay_travel_authority_moves_player_to_road():
+    from tests.rpg.autoplay.story_hooks import apply_autoplay_travel_authority
+
+    state = {"current_location": "location:rusty_flagon", "scene": {"location": "Rusty Flagon Tavern"}}
+    result = apply_autoplay_travel_authority(
+        state,
+        player_action="I leave the Rusty Flagon and follow the road outside, looking for fresh tracks.",
+        turn_index=7,
+    )
+
+    assert result["changed"] is True
+    assert state["current_location"] == "location:east_road_outside_tavern"
+    assert state["scene"]["location"] == "East Road outside the Rusty Flagon"
+    assert state["location_history"]

@@ -20,6 +20,47 @@ def _safe_str(value: Any) -> str:
     return value if isinstance(value, str) else ""
 
 
+def repeated_npc_line_metrics(transcript: List[Dict[str, Any]], *, streak_threshold: int = 3) -> Dict[str, Any]:
+    max_streak = 0
+    max_value = ""
+    current = ""
+    streak = 0
+    counts: Dict[str, int] = {}
+
+    for row in transcript:
+        row = _safe_dict(row)
+        npc = _safe_dict(row.get("npc"))
+        speaker = _safe_str(npc.get("speaker") or row.get("npc_speaker"))
+        line = _safe_str(npc.get("line") or row.get("npc_line"))
+        value = f"{speaker}: {line}" if speaker and line else ""
+        if not value:
+            current = ""
+            streak = 0
+            continue
+        counts[value] = counts.get(value, 0) + 1
+        if value == current:
+            streak += 1
+        else:
+            current = value
+            streak = 1
+        if streak > max_streak:
+            max_streak = streak
+            max_value = value
+
+    repeated = sorted(
+        [{"value": key, "count": count} for key, count in counts.items() if count >= streak_threshold],
+        key=lambda row: int(row["count"]),
+        reverse=True,
+    )
+    return {
+        "ok": max_streak < int(streak_threshold or 3),
+        "max_streak": max_streak,
+        "max_value": max_value,
+        "repeated": repeated[:10],
+        "streak_threshold": int(streak_threshold or 3),
+    }
+
+
 def detect_repeated_action_loop(
     transcript: List[Dict[str, Any]],
     *,
@@ -211,4 +252,42 @@ def evaluate_autoplay_health(
         "warnings": warnings,
         "loop": loop,
         "metrics": metrics,
+    }
+
+
+def repeated_npc_line_metrics(transcript: List[Dict[str, Any]], *, streak_threshold: int = 3) -> Dict[str, Any]:
+    max_streak = 0
+    max_value = ""
+    current = ""
+    streak = 0
+    counts: Dict[str, int] = {}
+    for row in transcript:
+        npc = _safe_dict(row.get("npc"))
+        speaker = _safe_str(npc.get("speaker"))
+        line = _safe_str(npc.get("line"))
+        value = f"{speaker}: {line}" if speaker and line else ""
+        if not value:
+            current = ""
+            streak = 0
+            continue
+        counts[value] = counts.get(value, 0) + 1
+        if value == current:
+            streak += 1
+        else:
+            current = value
+            streak = 1
+        if streak > max_streak:
+            max_streak = streak
+            max_value = value
+    repeated = sorted(
+        [{"value": key, "count": count} for key, count in counts.items() if count >= streak_threshold],
+        key=lambda row: int(row["count"]),
+        reverse=True,
+    )
+    return {
+        "ok": max_streak < int(streak_threshold or 3),
+        "max_streak": max_streak,
+        "max_value": max_value,
+        "repeated": repeated[:10],
+        "streak_threshold": int(streak_threshold or 3),
     }

@@ -306,3 +306,23 @@ def test_canonical_semantic_pair_text_fallback_for_player_input():
     assert result["target"] in ("Bran", "inn")
     assert result["pair"] != "unknown:unknown"
     assert result["source"] == "player_action_text_fallback"
+
+
+def test_rough_semantic_pair_classifies_executable_witness_actions():
+    ask = _rough_semantic_pair_for_player_action(
+        "I ask Bran where the cloaked traveler went after leaving by the side door."
+    )
+    assert ask["semantic_action"] == "ask_witness_lead"
+    assert ask["target"] == "Bran"
+
+    inspect = _rough_semantic_pair_for_player_action(
+        "I inspect the tavern side door and nearby street for mud, torn cloth, boot prints, or signs of a hurried exit."
+    )
+    assert inspect["semantic_action"] == "inspect_witness_trail"
+    assert inspect["target"] == "tavern_exit"
+
+    follow = _rough_semantic_pair_for_player_action(
+        "I leave the Rusty Flagon and follow the road outside, looking for fresh tracks or the cloaked traveler."
+    )
+    assert follow["semantic_action"] == "follow_witness_trail"
+    assert follow["target"] == "road"

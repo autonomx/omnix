@@ -78,3 +78,24 @@ def test_player_agent_cache_key_stable_for_same_context():
         player_agent_cache_key(context_packet=packet, strategy="balanced")
         == player_agent_cache_key(context_packet=packet, strategy="balanced")
     )
+
+
+def test_compact_player_agent_context_includes_goal_pressure_and_suggestions():
+    packet = build_player_agent_context_packet(
+        session={"current_location": "Rusty Flagon Tavern"},
+        transcript_tail=[],
+        latest_context={
+            "suggested_actions": [
+                {"command": "I follow the witness lead.", "category": "travel", "priority": 90}
+            ],
+            "goal_pressure": {"active": True, "directives": ["Advance the quest."]},
+            "strategy_guidance": {"anti_stall_active": True},
+            "active_objectives": [{"objective_text": "Find the witness"}],
+        },
+        strategy="goal_directed_quest_runner",
+        action_diversity_window=12,
+    )
+
+    assert packet["goal_pressure"]["active"] is True
+    assert packet["suggested_actions"][0]["command"] == "I follow the witness lead."
+    assert packet["objectives"]["active_objectives"][0]["objective_text"] == "Find the witness"

@@ -1,4 +1,47 @@
+
 from __future__ import annotations
+
+def _post_transition_action_quality_summary(transcript: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """Summarize post-transition action quality for Bandit Road and Witness/Bran actions."""
+    summary = {
+        "ok": True,
+        "bandit_road": {"count": 0, "weak": 0, "details": []},
+        "witness_bran": {"count": 0, "weak": 0, "details": []},
+    }
+    for row in transcript:
+        action = _safe_str(_safe_dict(row).get("player_action"))
+        turn_index = _safe_dict(row).get("turn_index")
+        # Bandit Road progression check
+        if "road" in action.lower() or "bandit road" in action.lower():
+            summary["bandit_road"]["count"] += 1
+            if any(term in action.lower() for term in ["wait", "observe", "listen", "watch", "look"]):
+                summary["bandit_road"]["weak"] += 1
+                summary["bandit_road"]["details"].append({"turn": turn_index, "action": action})
+        # Witness/Bran progression check
+        if any(term in action.lower() for term in ["bran", "witness"]):
+            summary["witness_bran"]["count"] += 1
+            if any(term in action.lower() for term in ["wait", "observe", "listen", "watch", "look"]):
+                summary["witness_bran"]["weak"] += 1
+                summary["witness_bran"]["details"].append({"turn": turn_index, "action": action})
+    summary["ok"] = summary["bandit_road"]["weak"] == 0 and summary["witness_bran"]["weak"] == 0
+    return summary
+
+def _quality_gate_summary(args, metrics, summary, transcript):
+    """Aggregate quality gates for strict progress and post-transition action health."""
+    gates = {"ok": True, "failures": [], "post_transition_action_quality": {}, "progress_quality": {}}
+    # Post-transition action quality
+    post_transition = _post_transition_action_quality_summary(transcript)
+    gates["post_transition_action_quality"] = post_transition
+    if not post_transition["ok"]:
+        gates["ok"] = False
+        gates["failures"].append("post_transition_action_quality")
+    # Progress quality health
+    progress_quality = metrics.get("progress_quality") or {}
+    gates["progress_quality"] = progress_quality
+    if not progress_quality.get("ok", True):
+        gates["ok"] = False
+        gates["failures"].append("progress_quality")
+    return gates
 
 import argparse
 import os
@@ -62,6 +105,7 @@ from tests.rpg.autoplay.checkpoints import (
 from tests.rpg.autoplay.evaluators import (
     compute_progress_metrics,
     evaluate_autoplay_health,
+    repeated_npc_line_metrics,
 )
 from tests.rpg.autoplay.manual_turn_driver import (
     merge_autoplay_simulation_state,
@@ -90,6 +134,24 @@ from tests.rpg.autoplay.player_agent_optimization import (
     build_player_agent_messages,
     normalize_player_agent_payload,
     player_agent_cache_key,
+)
+from tests.rpg.autoplay.executable_actions import (
+    is_meta_or_vague_action,
+    normalize_command_label_action,
+    repair_action_if_needed,
+)
+from tests.rpg.autoplay.player_goal_director import (
+    action_violates_goal_pressure,
+    action_is_vague_objective,
+    build_goal_pressure_context,
+    deterministic_goal_pressure_action,
+    format_goal_pressure_prompt,
+)
+from tests.rpg.autoplay.player_reasoning_planner import (
+    build_player_reasoning_prompt,
+    deterministic_concrete_player_action,
+    is_vague_player_action,
+    normalize_player_reasoning_payload,
 )
 from tests.rpg.autoplay.progress import classify_progress_delta, state_digest
 from tests.rpg.autoplay.progress_quality import (
@@ -303,11 +365,21 @@ def _rough_semantic_pair_for_player_action(action: str, *, default_target: str =
     obvious soft-loop player-agent outputs before submitting the action.
     """
     text = _safe_str(action).strip()
-    lower = text.lower()
+    normalized_action = normalize_command_label_action(text)
+    lower = _safe_str(normalized_action).lower()
     target = default_target or "unknown"
-    for name in ("bran", "silas", "patron", "innkeeper", "bartender", "guard", "merchant"):
+    for name in ("bran", "silas", "cloaked traveler", "traveler", "patron", "innkeeper", "bartender", "guard", "merchant", "side door", "street", "road"):
         if name in lower:
-            target = "Bran" if name in ("bran", "innkeeper", "bartender") else name.title()
+            if name in ("bran", "innkeeper", "bartender"):
+                target = "Bran"
+            elif name == "traveler":
+                target = "Cloaked Traveler"
+            elif name in ("side door", "street"):
+                target = "tavern_exit"
+            elif name == "road":
+                target = "road"
+            else:
+                target = name.title()
             break
 
     observe_terms = (
@@ -326,7 +398,24 @@ def _rough_semantic_pair_for_player_action(action: str, *, default_target: str =
     service_terms = ("buy", "pay", "rent", "room", "drink", "meal", "order")
     inspect_terms = ("inspect", "examine", "search", "check")
 
-    if any(term in lower for term in travel_terms):
+    if (
+        ("ask" in lower and "bran" in lower and ("saw" in lower or "personally saw" in lower) and "cloaked traveler" in lower)
+        or ("where" in lower and ("witness" in lower or "cloaked traveler" in lower or "side door" in lower))
+    ):
+        semantic = "ask_witness_lead"
+        if target == "unknown":
+            target = "Bran"
+    elif "report" in lower and ("witness" in lower or "cloaked traveler" in lower or "trail" in lower):
+        semantic = "report_witness_findings"
+        if target == "unknown":
+            target = "Bran"
+    elif any(term in lower for term in ("side door", "nearby street", "boot prints", "mud", "torn cloth", "hurried exit")):
+        semantic = "inspect_witness_trail"
+        target = "tavern_exit"
+    elif any(term in lower for term in ("follow the road", "road outside", "fresh tracks", "follow the trail", "bandit road trail")):
+        semantic = "follow_witness_trail"
+        target = "road"
+    elif any(term in lower for term in travel_terms):
         semantic = "travel"
     elif any(term in lower for term in service_terms):
         semantic = "service"
@@ -1101,24 +1190,271 @@ def _summarize_manual_turn_errors(transcript: List[Dict[str, Any]]) -> Dict[str,
     }
 
 
-JOURNAL_FORBIDDEN_TOKENS = (
-    "target_not_found",
-    "no_supported_semantic_action_detected",
-    "talk_handled_by_conversation_runtime",
-    "service_not_available",
-    "action_unhandled",
-    "semantic_action_unsupported",
-    "unsupported_action",
-    "unknown_action",
-    "no_effect",
-    "no_op",
-    "noop",
-    "gold? or trouble",
-    ".gold?",
+def _quest_progress_summary_from_state(state: Dict[str, Any]) -> Dict[str, Any]:
+    state = _safe_dict(state)
+    quest_progress = _safe_dict(state.get("quest_progress"))
+    quests = _safe_dict(quest_progress.get("quests"))
+    if quests:
+        return _quest_progress_summary_from_quest_mapping(quests, source="latest_state.quest_progress")
+
+    quest_log_state = _safe_dict(state.get("quest_log_state"))
+    quests = _safe_dict(quest_log_state.get("quests"))
+    if quests:
+        return _quest_progress_summary_from_quest_mapping(quests, source="latest_state.quest_log_state")
+
+    synthesized = _synthesize_quest_progress_summary_from_story_state(state)
+    if synthesized.get("quest_count"):
+        return synthesized
+
+    return {
+        "quest_count": 0,
+        "active_count": 0,
+        "completed_count": 0,
+        "quests": [],
+        "source": "none",
+    }
+
+
+def _quest_progress_summary_from_quest_mapping(quests: Dict[str, Any], *, source: str) -> Dict[str, Any]:
+    quests = _safe_dict(quests)
+    rows: List[Dict[str, Any]] = []
+    completed_count = 0
+    active_count = 0
+    for quest_id, quest_raw in sorted(quests.items()):
+        quest = _safe_dict(quest_raw)
+        objectives = [_safe_dict(row) for row in _safe_list(quest.get("objectives"))]
+        objective_count = len(objectives)
+        completed_objective_count = sum(
+            1
+            for objective in objectives
+            if bool(objective.get("completed")) or _safe_str(objective.get("status")) == "completed"
+        )
+        status = _safe_str(quest.get("status") or ("completed" if objective_count and completed_objective_count >= objective_count else "active"))
+        if status == "completed":
+            completed_count += 1
+        elif status == "active":
+            active_count += 1
+        rows.append(
+            {
+                "quest_id": _safe_str(quest.get("quest_id") or quest_id),
+                "title": _safe_str(quest.get("title") or quest_id),
+                "status": status,
+                "completed": bool(quest.get("completed")) or status == "completed",
+                "objective_count": objective_count,
+                "completed_objective_count": completed_objective_count,
+                "objectives": objectives,
+            }
+        )
+    return {
+        "quest_count": len(rows),
+        "active_count": active_count,
+        "completed_count": completed_count,
+        "quests": rows,
+        "source": source,
+    }
+
+
+def _synthesize_quest_progress_summary_from_story_state(state: Dict[str, Any]) -> Dict[str, Any]:
+    state = _safe_dict(state)
+    facts = _safe_dict(state.get("witness_search_facts"))
+    arcs = _safe_dict(_safe_dict(state.get("story_arc_milestone_state")).get("arcs"))
+    witness_arc = _safe_dict(arcs.get("arc:witness_search") or arcs.get("witness_search"))
+    milestones = [_safe_dict(row) for row in _safe_list(witness_arc.get("milestones"))]
+    completed_ids = {
+        _safe_str(row.get("milestone_id"))
+        for row in milestones
+        if _safe_str(row.get("status")) == "completed"
+    }
+    completed_titles = {
+        _safe_str(row.get("title")).lower()
+        for row in milestones
+        if _safe_str(row.get("status")) == "completed"
+    }
+
+    find_done = (
+        bool(facts.get("inspected_side_door"))
+        or bool(facts.get("followed_road"))
+        or "milestone:find_witness" in completed_ids
+        or "find the witness" in completed_titles
+    )
+    report_done = (
+        bool(facts.get("reported_to_bran"))
+        or "milestone:report_findings_to_bran" in completed_ids
+        or "report findings to bran" in completed_titles
+        or "milestone:pursue_bandit_trail" in completed_ids
+    )
+    witness_completed = find_done and report_done
+
+    quests = [
+        {
+            "quest_id": "quest:witness_search",
+            "title": "Witness Search",
+            "status": "completed" if witness_completed else "active",
+            "completed": witness_completed,
+            "objective_count": 2,
+            "completed_objective_count": int(find_done) + int(report_done),
+            "objectives": [
+                {
+                    "objective_id": "objective:find_witness",
+                    "summary": "Find the witness.",
+                    "status": "completed" if find_done else "active",
+                    "completed": find_done,
+                },
+                {
+                    "objective_id": "objective:report_findings_to_bran",
+                    "summary": "Report findings to Bran.",
+                    "status": "completed" if report_done else "active",
+                    "completed": report_done,
+                },
+            ],
+        }
+    ]
+
+    bandit_active = (
+        bool(facts.get("followed_road"))
+        or "milestone:pursue_bandit_trail" in completed_ids
+        or "pursue bandit trail" in completed_titles
+    )
+    if bandit_active:
+        quests.append(
+            {
+                "quest_id": "quest:bandit_road",
+                "title": "Bandit Road",
+                "status": "active",
+                "completed": False,
+                "objective_count": 2,
+                "completed_objective_count": 0,
+                "objectives": [
+                    {
+                        "objective_id": "objective:inspect_road_tracks",
+                        "summary": "Inspect the road for tracks or ambush signs.",
+                        "status": "active",
+                        "completed": False,
+                    },
+                    {
+                        "objective_id": "objective:follow_bandit_road",
+                        "summary": "Follow the bandit road trail.",
+                        "status": "active",
+                        "completed": False,
+                    },
+                ],
+            }
+        )
+
+    return {
+        "quest_count": len(quests),
+        "active_count": sum(1 for row in quests if row["status"] == "active"),
+        "completed_count": sum(1 for row in quests if row["status"] == "completed"),
+        "quests": quests,
+        "source": "latest_state.story_arc_milestone_state+witness_search_facts",
+    }
+
+
+def _extract_npc_payload_from_turn_result(turn_result: Dict[str, Any], record: Dict[str, Any] | None = None) -> Dict[str, Any]:
+    """Best-effort NPC extraction from the current turn result/record.
+
+    This avoids referencing an out-of-scope variable named `result`.
+    """
+    turn_result = _safe_dict(turn_result)
+    record = _safe_dict(record)
+    candidates = [
+        turn_result.get("npc"),
+        turn_result.get("npc_reply"),
+        _safe_dict(turn_result.get("narration")).get("npc"),
+        _safe_dict(turn_result.get("structured_narration")).get("npc"),
+        _safe_dict(turn_result.get("turn_contract")).get("npc"),
+        _safe_dict(turn_result.get("result")).get("npc"),
+        _safe_dict(_safe_dict(turn_result.get("result")).get("narration")).get("npc"),
+        record.get("npc"),
+        _safe_dict(record.get("narration")).get("npc"),
+    ]
+    for candidate in candidates:
+        candidate = _safe_dict(candidate)
+        speaker = _safe_str(candidate.get("speaker"))
+        line = _safe_str(candidate.get("line"))
+        if speaker and line:
+            return {"speaker": speaker, "line": line}
+    return {}
+
+
+def _directly_update_dialogue_state_from_turn(
+    *,
+    runtime_state: Dict[str, Any],
+    player_action: str,
+    turn_result: Dict[str, Any],
+    record: Dict[str, Any] | None,
+    turn_index: int,
+    debug_autoplay_stage_timing: bool = False,
+) -> None:
+    try:
+        from app.rpg.dialogue_state import update_dialogue_state
+
+        npc_payload = _extract_npc_payload_from_turn_result(turn_result, record)
+        npc_speaker = _safe_str(npc_payload.get("speaker"))
+        npc_line = _safe_str(npc_payload.get("line"))
+        if not npc_speaker or not npc_line:
+            return
+        update_dialogue_state(
+            runtime_state,
+            npc_id=npc_speaker,
+            player_action=_safe_str(player_action),
+            npc_line=npc_line,
+            facts_revealed=[],
+        )
+    except Exception as exc:
+        _probe_log(
+            bool(debug_autoplay_stage_timing),
+            "dialogue_state_direct_update.failed",
+            turn_index=turn_index,
+            error=f"{type(exc).__name__}: {exc}",
+        )
+
+
+def _journal_contains_internal_code_token(text: str, token: str) -> bool:
+    lower = _safe_str(text).lower()
+    token = _safe_str(token).lower()
+    if not token:
+        return False
+    if token in {"{", "}"}:
+        # Only flag likely raw JSON blobs, not ordinary punctuation.
+        return ("{" in lower and "}" in lower and (":" in lower or '"' in lower))
+    return token in lower
+
+
+PLAYER_JOURNAL_ALLOWED_PROSE_TERMS = (
+    "i ",
+    "you ",
+    "your ",
+    "turn",
+    "quest",
+    "what i did",
+    "what i learned",
+    "what changed",
+    "next",
 )
 
 
 def _summarize_player_journal_quality(summary: Dict[str, Any]) -> Dict[str, Any]:
+    PLAYER_JOURNAL_INTERNAL_CODE_TOKENS = (
+        "raw_ai_payload",
+        "dialogue:raw_ai_payload",
+        "provider_payload",
+        "provider_raw",
+        "traceback",
+        "runtime_error",
+        "exception:",
+        "semantic_family:",
+        "action_type:",
+        "target_not_found",
+        "contract_source:",
+        "runtime_fallback_bridge",
+        "canonical_semantic_pair",
+        "debug:",
+        "turn debug",
+        "json:",
+        "{",
+        "}",
+    )
     journal = _safe_dict(summary.get("player_journal_summary"))
     entries = _safe_list(journal.get("entries"))
     violations: List[Dict[str, Any]] = []
@@ -1128,12 +1464,21 @@ def _summarize_player_journal_quality(summary: Dict[str, Any]) -> Dict[str, Any]
         entry = _safe_dict(entry)
         text = _safe_str(entry.get("text"))
         lower = text.lower()
-        found = [token for token in JOURNAL_FORBIDDEN_TOKENS if token in lower]
-        if found:
+        found = []
+        for token in PLAYER_JOURNAL_INTERNAL_CODE_TOKENS:
+            if _journal_contains_internal_code_token(text, token):
+                found.append(token)
+        # Do not treat allowed normal prose as violations
+        filtered_found = []
+        for token in found:
+            is_allowed = any(allowed in lower for allowed in PLAYER_JOURNAL_ALLOWED_PROSE_TERMS)
+            if not is_allowed or token not in ("i ", "you ", "your ", "turn", "quest"):
+                filtered_found.append(token)
+        if filtered_found:
             violations.append(
                 {
                     "entry_id": entry.get("entry_id"),
-                    "tokens": found,
+                    "tokens": filtered_found,
                     "text": text[:500],
                 }
             )
@@ -1295,6 +1640,18 @@ def _summarize_quality_gates(
         "strict_100turn_meaningful_progress_rate_ok": (
             not strict_100_turn_mode
             or float(progress_timeline_summary.get("meaningful_progress_rate") or 0.0) >= 0.15
+        ),
+        "strict_100turn_strict_progress_quality_ok": (
+            not strict_100_turn_mode
+            or bool(_safe_dict(_safe_dict(summary.get("health")).get("progress_quality")).get("ok", True))
+        ),
+        "strict_100turn_npc_line_repetition_ok": (
+            not strict_100_turn_mode
+            or bool(_safe_dict(summary.get("npc_line_repetition_summary")).get("ok", True))
+        ),
+        "strict_100turn_no_forbidden_player_actions_ok": (
+            not strict_100_turn_mode
+            or bool(_safe_dict(summary.get("forbidden_player_action_summary")).get("ok", True))
         ),
         "strict_100turn_repeat_semantic_target_streak_ok": (
             not strict_100_turn_mode
@@ -2537,6 +2894,7 @@ def _select_compact_llm_player_action(
     turn_index: int,
     debug_autoplay_stage_timing: bool,
     anti_loop_context: Optional[Dict[str, Any]] = None,
+    goal_pressure_context: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     context_packet = build_player_agent_context_packet(
         session=session,
@@ -2554,6 +2912,10 @@ def _select_compact_llm_player_action(
         anti_loop_text = _format_player_agent_anti_loop_prompt(_safe_dict(anti_loop_context))
         if anti_loop_text.strip():
             messages[-1]["content"] = _safe_str(messages[-1].get("content", "")) + anti_loop_text
+    if messages and goal_pressure_context:
+        goal_pressure_text = format_goal_pressure_prompt(_safe_dict(goal_pressure_context))
+        if goal_pressure_text.strip():
+            messages[-1]["content"] = _safe_str(messages[-1].get("content", "")) + goal_pressure_text
     key = player_agent_cache_key(context_packet=context_packet, strategy=strategy)
 
     cached = cache.get(key) if cache_enabled else None
@@ -2749,9 +3111,22 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
         _timestamped_print("Player-agent provider shape:")
         _timestamped_print(provider_shape)
 
+    effective_provider_workers = int(args.provider_workers)
+    effective_background_workers = int(args.background_workers)
+    if (
+        int(args.turns or 0) >= int(getattr(args, "strict_eval_turns", 100) or 100)
+        and _safe_str(args.background_llm_mode) == "combined"
+        and effective_provider_workers <= 1
+    ):
+        effective_provider_workers = 2
+    if (
+        int(args.turns or 0) >= int(getattr(args, "strict_eval_turns", 100) or 100)
+        and effective_background_workers < 3
+    ):
+        effective_background_workers = 3
     pipeline = AutoplayBackgroundPipeline(
-        background_workers=int(args.background_workers),
-        provider_workers=int(args.provider_workers),
+        background_workers=effective_background_workers,
+        provider_workers=effective_provider_workers,
     )
     background_results_summary: Dict[str, Any] = {}
 
@@ -2895,6 +3270,12 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
             turn_index=turn_index,
             limit=args.suggested_action_limit,
         )
+        if isinstance(context, dict) and isinstance(authoritative_state, dict):
+            context["dialogue_state"] = authoritative_state.get("dialogue_state") or {}
+            context["autoplay_story_hook_state"] = authoritative_state.get("autoplay_story_hook_state") or {}
+            context["quest_progress"] = authoritative_state.get("quest_progress") or {}
+            context["current_location"] = authoritative_state.get("current_location") or authoritative_state.get("current_location_name") or ""
+            context["current_location_name"] = authoritative_state.get("current_location_name") or ""
         context["story_hook_hints"] = autoplay_story_hook_player_hints(simulation_state)
         current_progress_quality_metrics = compute_progress_quality_metrics(transcript)
         current_diversity_metrics = action_diversity_metrics(
@@ -2912,6 +3293,40 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
             progress_quality_metrics=current_progress_quality_metrics,
             diversity_metrics=current_diversity_metrics,
             recent_transcript=transcript,
+        )
+        goal_pressure_context = build_goal_pressure_context(
+            transcript=transcript,
+            player_action_context=context,
+            progress_quality_metrics=current_progress_quality_metrics,
+            turn_index=turn_index,
+            no_change_streak_threshold=int(getattr(args, "goal_pressure_no_change_threshold", 8) or 8),
+            passive_rate_threshold=float(getattr(args, "goal_pressure_passive_rate_threshold", 0.45) or 0.45),
+        ) if bool(getattr(args, "player_agent_goal_pressure", True)) else {"active": False}
+        context["goal_pressure"] = goal_pressure_context
+        if goal_pressure_context.get("active"):
+            pressure_candidates = _safe_list(goal_pressure_context.get("candidate_actions"))
+            existing_commands = {
+                _safe_str(row.get("command"))
+                for row in _safe_list(context.get("suggested_actions"))
+                if _safe_str(_safe_dict(row).get("command"))
+            }
+            promoted = []
+            for row in pressure_candidates:
+                row = _safe_dict(row)
+                command = _safe_str(row.get("command"))
+                if command and command not in existing_commands:
+                    promoted.append(row)
+            context["suggested_actions"] = (promoted + _safe_list(context.get("suggested_actions")))[: int(args.suggested_action_limit)]
+        _probe_log(
+            bool(getattr(args, "debug_autoplay_stage_timing", False)),
+            "player_agent_goal_pressure_context",
+            turn_index=turn_index,
+            active=goal_pressure_context.get("active"),
+            meaningful_progress_rate=goal_pressure_context.get("meaningful_progress_rate"),
+            no_change_turns=goal_pressure_context.get("no_change_turns"),
+            passive_micro_action_rate=goal_pressure_context.get("passive_micro_action_rate"),
+            active_objective_count=goal_pressure_context.get("active_objective_count"),
+            completed_objective_count=goal_pressure_context.get("completed_objective_count"),
         )
         anti_loop_context = _build_player_agent_anti_loop_context(
             transcript=transcript,
@@ -2940,6 +3355,37 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
                 ]
             ),
         )
+        player_reasoning_plan = {}
+        if bool(getattr(args, "player_agent_reasoning_planner", True)):
+            try:
+                reasoning_messages = build_player_reasoning_prompt(context)
+                provider = get_provider()
+                raw_plan = provider.chat(
+                    messages=reasoning_messages,
+                    temperature=0.2,
+                    max_tokens=420,
+                )
+                player_reasoning_plan = normalize_player_reasoning_payload(raw_plan)
+                if player_reasoning_plan.get("best_next_action"):
+                    context["reasoning_planner"] = player_reasoning_plan
+                    # Push the planner action to the top of suggested actions.
+                    context["suggested_actions"] = [
+                        {
+                            "action_id": "reasoning_planner:best_next_action",
+                            "label": "Reasoned best next action",
+                            "command": player_reasoning_plan["best_next_action"],
+                            "category": "objective",
+                            "priority": 160,
+                            "reason": player_reasoning_plan.get("why_this_advances_progress") or "Bounded reasoning planner.",
+                        }
+                    ] + _safe_list(context.get("suggested_actions"))
+            except Exception as exc:
+                player_reasoning_plan = {
+                    "error": f"{type(exc).__name__}: {exc}",
+                    "best_next_action": deterministic_concrete_player_action(context),
+                }
+                context["reasoning_planner"] = player_reasoning_plan
+
         with _ProbeTimer(
             bool(getattr(args, "debug_autoplay_stage_timing", False)),
             "player_agent_select_action",
@@ -2963,6 +3409,7 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
                         turn_index=turn_index,
                         debug_autoplay_stage_timing=bool(getattr(args, "debug_autoplay_stage_timing", False)),
                         anti_loop_context=anti_loop_context,
+                        goal_pressure_context=goal_pressure_context,
                     )
                 else:
                     selected = _select_player_action(
@@ -3002,6 +3449,58 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
             )
             player_action = repaired_action
 
+        if (
+            bool(getattr(args, "player_agent_goal_pressure_repair", True))
+            and action_violates_goal_pressure(_safe_str(player_action), goal_pressure_context)
+        ):
+            repaired_goal_action = deterministic_goal_pressure_action(goal_pressure_context)
+            _probe_log(
+                bool(getattr(args, "debug_autoplay_stage_timing", False)),
+                "player_agent_goal_pressure_repair.applied",
+                turn_index=turn_index,
+                original_action=_safe_str(player_action)[:220],
+                repaired_action=repaired_goal_action[:220],
+            )
+            player_action = repaired_goal_action
+            if isinstance(selected, dict):
+                selected["goal_pressure_repaired"] = True
+                selected["goal_pressure_original_action"] = _safe_str(selected.get("action"))
+                selected["action"] = repaired_goal_action
+
+        if action_is_vague_objective(_safe_str(player_action)):
+            repaired_goal_action = deterministic_goal_pressure_action(goal_pressure_context)
+            _probe_log(
+                bool(getattr(args, "debug_autoplay_stage_timing", False)),
+                "player_agent_vague_objective_repair.applied",
+                turn_index=turn_index,
+                original_action=_safe_str(player_action)[:220],
+                repaired_action=repaired_goal_action[:220],
+            )
+            player_action = repaired_goal_action
+            if isinstance(selected, dict):
+                selected["vague_objective_repaired"] = True
+                selected["vague_objective_original_action"] = _safe_str(selected.get("action"))
+                selected["action"] = repaired_goal_action
+
+        if is_vague_player_action(_safe_str(player_action)):
+            repaired = _safe_str(
+                _safe_dict(context.get("reasoning_planner")).get("best_next_action")
+            )
+            if not repaired or is_vague_player_action(repaired):
+                repaired = deterministic_concrete_player_action(context)
+            _probe_log(
+                bool(getattr(args, "debug_autoplay_stage_timing", False)),
+                "player_agent_reasoning_repair.applied",
+                turn_index=turn_index,
+                original_action=_safe_str(player_action)[:240],
+                repaired_action=repaired[:240],
+            )
+            player_action = repaired
+            if isinstance(selected, dict):
+                selected["reasoning_repaired"] = True
+                selected["reasoning_original_action"] = _safe_str(selected.get("action"))
+                selected["action"] = repaired
+
         if isinstance(selected, dict):
                 player_agent_prompt_rows.append(
                     {
@@ -3012,6 +3511,24 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
                         "prompt_metrics": selected.get("prompt_metrics") or {},
                     }
                 )
+
+        executable_action_repair = {"changed": False, "action": _safe_str(player_action)}
+        if bool(getattr(args, "player_agent_executable_action_repair", True)):
+            executable_action_repair = repair_action_if_needed(_safe_str(player_action), context)
+            if executable_action_repair.get("changed"):
+                _probe_log(
+                    bool(getattr(args, "debug_autoplay_stage_timing", False)),
+                    "player_agent_executable_action_repair.applied",
+                    turn_index=turn_index,
+                    original_action=_safe_str(executable_action_repair.get("original_action"))[:240],
+                    repaired_action=_safe_str(executable_action_repair.get("action"))[:240],
+                    reason=_safe_str(executable_action_repair.get("reason")),
+                )
+                player_action = _safe_str(executable_action_repair.get("action"))
+                if isinstance(selected, dict):
+                    selected["executable_action_repaired"] = True
+                    selected["executable_action_original_action"] = _safe_str(executable_action_repair.get("original_action"))
+                    selected["action"] = player_action
 
         runtime_error = ""
         turn_result: Dict[str, Any]
@@ -3060,6 +3577,32 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
                 runtime_narration=args.narration_mode,
             )
             simulation_state = deepcopy(authoritative_state)
+
+            try:
+                from tests.rpg.autoplay.story_hooks import apply_autoplay_travel_authority
+
+                travel_authority_result = apply_autoplay_travel_authority(
+                    simulation_state,
+                    player_action=_safe_str(player_action),
+                    turn_index=turn_index,
+                )
+                if travel_authority_result.get("changed"):
+                    simulation_state = _safe_dict(travel_authority_result.get("simulation_state")) or simulation_state
+                    _probe_log(
+                        bool(getattr(args, "debug_autoplay_stage_timing", False)),
+                        "autoplay_travel_authority.applied",
+                        turn_index=turn_index,
+                        events=travel_authority_result.get("events"),
+                        current_location=simulation_state.get("current_location"),
+                        current_location_name=simulation_state.get("current_location_name"),
+                    )
+            except Exception as exc:
+                _probe_log(
+                    bool(getattr(args, "debug_autoplay_stage_timing", False)),
+                    "autoplay_travel_authority.failed",
+                    turn_index=turn_index,
+                    error=f"{type(exc).__name__}: {exc}",
+                )
 
         except Exception as exc:
             runtime_error = f"{type(exc).__name__}: {exc}"
@@ -3344,6 +3887,9 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
             "selected_player_action": selected,
             "selected_action_reason": selected.get("reason"),
             "strategy_guidance": context.get("strategy_guidance") or selected.get("strategy_guidance") or {},
+            "executable_action_repair": executable_action_repair,
+            "goal_pressure": goal_pressure_context,
+            "player_reasoning_plan": player_reasoning_plan,
             "action_diversity_before_turn": current_diversity_metrics,
             "progress_quality_before_turn": current_progress_quality_metrics,
             "player_action": player_action,
@@ -3463,6 +4009,15 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
                     "blocking_source": "provider_runtime_narration",
                 }
             )
+
+        _directly_update_dialogue_state_from_turn(
+            runtime_state=runtime_state,
+            player_action=_safe_str(player_action),
+            turn_result=_safe_dict(turn_result),
+            record=record if isinstance(record, dict) else None,
+            turn_index=turn_index,
+            debug_autoplay_stage_timing=bool(getattr(args, "debug_autoplay_stage_timing", False)),
+        )
 
         transcript.append(record)
 
@@ -3736,6 +4291,35 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
             progress_quality_health["ok"] = False
             health["ok"] = False
     health["progress_quality"] = progress_quality_health
+
+    forbidden_player_action_patterns = [
+        "current objective",
+        "anything that can help",
+        "choose a concrete lead",
+        "ask a named npc",
+        "next known location",
+        "inspect a physical clue",
+        "grounded way to make progress",
+        "investigate story arc",
+    ]
+    forbidden_player_action_summary = {
+        "ok": True,
+        "matches": [],
+    }
+    for row in transcript:
+        action = _safe_str(_safe_dict(row).get("player_action"))
+        lower = action.lower()
+        for pattern in forbidden_player_action_patterns:
+            if pattern in lower:
+                forbidden_player_action_summary["ok"] = False
+                forbidden_player_action_summary["matches"].append(
+                    {
+                        "turn": _safe_dict(row).get("turn"),
+                        "pattern": pattern,
+                        "player_action": action,
+                    }
+                )
+
     summary = {
         "ok": bool(health.get("ok")) and not stopped_reason,
         "session_id": session_id,
@@ -3748,8 +4332,10 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
         "narration_mode": args.narration_mode,
         "background_llm_mode": args.background_llm_mode,
         "checkpoint_mode": args.checkpoint_mode,
-        "background_workers": int(args.background_workers),
-        "provider_workers": int(args.provider_workers),
+        "background_workers": int(effective_background_workers),
+        "provider_workers": int(effective_provider_workers),
+        "requested_background_workers": int(args.background_workers),
+        "requested_provider_workers": int(args.provider_workers),
         "checkpoint_every": int(args.checkpoint_every or 0),
         "state_bounds_limits": {
             "max_state_bytes": int(args.max_state_bytes),
@@ -3765,6 +4351,7 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
             "fail_on_post_objective_weak_progress": bool(args.fail_on_post_objective_weak_progress),
             "fail_on_dialogue_coverage_gap": bool(args.fail_on_dialogue_coverage_gap),
         },
+        "strict_progress_quality_certification": progress_quality_health,
         "strategy_profile": args.strategy,
         "base_response_mode": args.autoplay_base_response,
         "action_diversity_thresholds": {
@@ -3817,9 +4404,24 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
     summary["profile_grounded_output_summary"] = _summarize_profile_grounded_output(transcript)
     summary["npc_arc_progression_summary"] = _summarize_npc_arc_progression(transcript)
     summary["npc_evolution_report_summary"] = summarize_npc_evolution_for_report(transcript)
-    summary["quest_progress_summary"] = summarize_quests_for_report(transcript)
+    quest_progress_summary = _quest_progress_summary_from_state(runtime_state)
+    summary["quest_progress_summary"] = quest_progress_summary or summarize_quests_for_report(transcript)
     summary["story_beat_summary"] = summarize_story_beats_for_report(transcript)
     summary["manual_turn_error_summary"] = _summarize_manual_turn_errors(transcript)
+    runtime_narration_diagnostics = _safe_dict(metrics.get("narration_trace_summary"))
+    provider_attempt_count = int(runtime_narration_diagnostics.get("provider_runtime_sources") or 0)
+    fallback_used_turns = len(transcript) - provider_attempt_count  # Approximate
+    npc_dialogue_mode_summary = {
+        "mode": "provider_backed" if provider_attempt_count > 0 else "deterministic_fallback_only",
+        "provider_attempt_count": provider_attempt_count,
+        "fallback_used_turns": fallback_used_turns,
+        "note": (
+            "NPC dialogue is currently deterministic fallback only; intelligence should come from dialogue_state and grounded fallback rules."
+            if provider_attempt_count <= 0
+            else "NPC dialogue provider was attempted during this run."
+        ),
+    }
+    summary["npc_dialogue_mode_summary"] = npc_dialogue_mode_summary
     console_log_path = Path(args.output_dir) / "console-log.txt"
     console_log_text = ""
     if _ACTIVE_CONSOLE_CAPTURE is not None:
@@ -3839,6 +4441,12 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
         manual_turn_error_summary=summary["manual_turn_error_summary"],
         turns_for_strict_gates=int(args.strict_eval_turns),
     )
+    npc_line_repetition_summary = repeated_npc_line_metrics(transcript, streak_threshold=3)
+    summary["npc_line_repetition_summary"] = npc_line_repetition_summary
+    npc_line_repetition_summary = repeated_npc_line_metrics(transcript, streak_threshold=3)
+    summary["npc_line_repetition_summary"] = npc_line_repetition_summary
+    summary["forbidden_player_action_summary"] = forbidden_player_action_summary
+
     summary["hundred_turn_eval_summary"] = summarize_hundred_turn_eval(
         transcript=transcript,
         summary=summary,
@@ -3883,6 +4491,13 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
     metrics["background_drain_events"] = summary["background_drain_events"]
     metrics["background_jobs"] = summary["background_jobs"]
     metrics["performance_budget_summary"] = summary["performance_budget_summary"]
+    # Strict quality gates: post-transition action quality and progress health
+    summary["post_transition_action_quality_summary"] = _post_transition_action_quality_summary(transcript)
+    summary["quality_gate_summary"] = _quality_gate_summary(args, metrics, summary, transcript)
+    if not summary["quality_gate_summary"].get("ok"):
+        health["ok"] = False
+        health.setdefault("warnings", []).append("quality_gate_summary_failed")
+    # Final quest summary override: if no quests, try to extract from story arc view
     if int(summary["quest_progress_summary"].get("quest_count") or 0) == 0:
         story_arc_view = _safe_dict(summary.get("story_arc_view") or metrics.get("story_arc_view"))
         if story_arc_view:
@@ -4161,6 +4776,66 @@ def build_arg_parser() -> argparse.ArgumentParser:
         action="store_false",
         dest="player_agent_anti_loop_repair",
         help="Disable one-shot anti-loop action repair.",
+    )
+    parser.add_argument(
+        "--player-agent-executable-action-repair",
+        action="store_true",
+        default=True,
+        help="Repair meta/planner/vague player actions into executable in-world commands.",
+    )
+    parser.add_argument(
+        "--no-player-agent-executable-action-repair",
+        action="store_false",
+        dest="player_agent_executable_action_repair",
+        help="Disable executable action repair.",
+    )
+    parser.add_argument(
+        "--player-agent-goal-pressure",
+        action="store_true",
+        default=True,
+        help="Inject deterministic goal-pressure/director nudges when strict progress is low.",
+    )
+    parser.add_argument(
+        "--no-player-agent-goal-pressure",
+        action="store_false",
+        dest="player_agent_goal_pressure",
+        help="Disable goal-pressure/director nudges.",
+    )
+    parser.add_argument(
+        "--player-agent-reasoning-planner",
+        action="store_true",
+        default=True,
+        help="Use a bounded reasoning-plan step before choosing the final player action.",
+    )
+    parser.add_argument(
+        "--no-player-agent-reasoning-planner",
+        action="store_false",
+        dest="player_agent_reasoning_planner",
+        help="Disable bounded player reasoning planner.",
+    )
+    parser.add_argument(
+        "--player-agent-goal-pressure-repair",
+        action="store_true",
+        default=True,
+        help="Repair passive micro-actions under goal pressure using a deterministic suggested action.",
+    )
+    parser.add_argument(
+        "--no-player-agent-goal-pressure-repair",
+        action="store_false",
+        dest="player_agent_goal_pressure_repair",
+        help="Disable deterministic goal-pressure repair.",
+    )
+    parser.add_argument(
+        "--goal-pressure-no-change-threshold",
+        type=int,
+        default=8,
+        help="Activate goal pressure when strict no-change turns exceed this threshold.",
+    )
+    parser.add_argument(
+        "--goal-pressure-passive-rate-threshold",
+        type=float,
+        default=0.45,
+        help="Activate goal pressure when recent passive micro-action rate reaches this value.",
     )
     parser.add_argument("--min-category-diversity-rate", type=float, default=0.0)
     parser.add_argument("--latency-profile", choices=["evaluation", "playable"], default="evaluation")

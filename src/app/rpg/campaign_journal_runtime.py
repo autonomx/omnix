@@ -108,6 +108,16 @@ def _clean_journal_text(value: Any, *, max_len: int = 700) -> str:
     text = text.replace("'.and ", "'and ")
     text = text.replace("“.and ", "“and ")
     text = text.replace("‘.and ", "‘and ")
+    text = text.replace(': ".', ": ")
+    text = text.replace(": '.", ": ")
+    text = text.replace('".what', "what")
+    text = text.replace("'.what", "what")
+    text = text.replace('".What', "What")
+    text = text.replace("'.What", "What")
+    text = text.replace('".', "")
+    text = text.replace("'.", "")
+    while "  " in text:
+        text = text.replace("  ", " ")
     if _looks_malformed_journal_fragment(text):
         return ""
     if len(text) > max_len:
@@ -469,7 +479,57 @@ def _journal_text(
     if not sections:
         sections.append("I kept moving, watching for what changed around me.")
 
-    return "\n".join(_normalize_sentence_punctuation(section) for section in sections if section).strip()
+    raw = "\n".join(_normalize_sentence_punctuation(section) for section in sections if section).strip()
+    return _repair_required_journal_sections(
+        raw,
+        actions=actions,
+        results=results,
+        runtime_state=_safe_dict(runtime_state),
+    )
+
+
+def _repair_required_journal_sections(
+    text: str,
+    *,
+    actions: List[str],
+    results: List[str],
+    runtime_state: Dict[str, Any] | None = None,
+) -> str:
+    text = _safe_str(text).strip()
+    lines = [line.strip() for line in text.splitlines() if line.strip()]
+    by_prefix: Dict[str, str] = {}
+    for line in lines:
+        lower = line.lower()
+        for prefix in ("what i did:", "what i learned:", "what changed:", "next:"):
+            if lower.startswith(prefix) and prefix not in by_prefix:
+                by_prefix[prefix] = line
+
+    clean_actions = [_clean_journal_text(item, max_len=220) for item in _safe_list(actions)[-4:]]
+    clean_actions = [item for item in clean_actions if item]
+    clean_results = [_clean_journal_text(item, max_len=300) for item in _safe_list(results)[-4:]]
+    clean_results = [item for item in clean_results if item]
+    quest_lines = _quest_progress_lines(_safe_dict(runtime_state))
+
+    if "what i did:" not in by_prefix:
+        fallback = _sentence_join(clean_actions, max_items=2) or "I pursued the strongest available lead."
+        by_prefix["what i did:"] = "What I did: " + fallback
+    if "what i learned:" not in by_prefix:
+        learned = _sentence_join(_infer_learned_lines(clean_results), max_items=2)
+        by_prefix["what i learned:"] = "What I learned: " + (learned or "I reviewed the current situation for actionable clues.")
+    if "what changed:" not in by_prefix:
+        changed = _sentence_join(clean_results, max_items=2)
+        by_prefix["what changed:"] = "What changed: " + (changed or "The campaign state remained stable while I looked for a stronger lead.")
+    if "next:" not in by_prefix:
+        next_text = _sentence_join(quest_lines + _infer_next_lines(clean_actions, clean_results), max_items=2)
+        by_prefix["next:"] = "Next: " + (next_text or "I should take a concrete action that advances a quest, location, or story lead.")
+
+    ordered = [
+        by_prefix["what i did:"],
+        by_prefix["what i learned:"],
+        by_prefix["what changed:"],
+        by_prefix["next:"],
+    ]
+    return "\n".join(_normalize_sentence_punctuation(line) for line in ordered if line).strip()
 
 
 def advance_campaign_journal_for_turn(

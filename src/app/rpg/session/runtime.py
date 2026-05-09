@@ -1661,6 +1661,120 @@ def _runtime_compact_save_enabled(runtime_state: Dict[str, Any]) -> bool:
     return _normalize_performance_settings(runtime_state)["compact_save"]
 
 
+def _dialogue_semantic_action_from_player_input(player_input: str) -> Dict[str, Any] | None:
+    text = str(player_input or "").strip()
+    lower = " ".join(text.lower().split())
+    if not lower:
+        return None
+
+    target_name = ""
+    target_id = ""
+    if "bran" in lower or "innkeeper" in lower or "bartender" in lower:
+        target_name = "Bran"
+        target_id = "npc:bran"
+    elif "mira" in lower:
+        target_name = "Mira"
+        target_id = "npc:mira"
+    elif "cloaked traveler" in lower or "traveler" in lower:
+        target_name = "Cloaked Traveler"
+        target_id = "npc:cloaked_traveler"
+    elif "patron" in lower:
+        target_name = "Local Patron"
+        target_id = "npc:local_patron"
+
+    is_question = (
+        lower.startswith("i ask ")
+        or lower.startswith("ask ")
+        or " ask " in lower
+        or "where " in lower
+        or "what " in lower
+        or "who " in lower
+        or "why " in lower
+        or "how " in lower
+    )
+    is_report = lower.startswith("i report ") or lower.startswith("report ") or " report to " in lower
+    is_tell = lower.startswith("i tell ") or lower.startswith("tell ")
+    mentions_witness_thread = any(
+        term in lower
+        for term in (
+            "cloaked traveler",
+            "witness",
+            "side door",
+            "trail points toward the road",
+            "road danger",
+            "what danger this confirms",
+            "leaving by the side door",
+            "fresh tracks",
+        )
+    )
+
+    if not target_name and not mentions_witness_thread:
+        return None
+    if not (is_question or is_report or is_tell or mentions_witness_thread):
+        return None
+
+    if is_report:
+        activity_label = "report_witness_findings" if mentions_witness_thread else "report"
+        semantic_family = "social"
+        interaction_mode = "dialogue"
+    elif is_question:
+        activity_label = "ask_witness_lead" if mentions_witness_thread else "ask"
+        semantic_family = "social"
+        interaction_mode = "dialogue"
+    else:
+        activity_label = "discuss_witness_lead" if mentions_witness_thread else "talk"
+        semantic_family = "social"
+        interaction_mode = "dialogue"
+
+    if not target_name:
+        target_name = "Bran"
+        target_id = "npc:bran"
+
+    return {
+        "action_type": "social",
+        "activity_label": activity_label,
+        "semantic_family": semantic_family,
+        "interaction_mode": interaction_mode,
+        "target_name": target_name,
+        "target_id": target_id,
+        "secondary_actor_ids": [target_id] if target_id else [],
+        "summary": text,
+        "reason": "dialogue_semantic_action_from_player_input",
+        "tags": ["social", "dialogue", "npc", activity_label],
+        "stakes": 2,
+        "intensity": 1,
+        "visibility": "local",
+        "scene_impact": "dialogue",
+        "player_input": text,
+    }
+
+
+def _build_dialogue_state_update_payload(
+    *,
+    simulation_state: Dict[str, Any],
+    speaker: str,
+    player_action: str,
+    npc_line: str,
+) -> Dict[str, Any]:
+    if not speaker or not npc_line:
+        return {}
+    return _safe_dict(_safe_dict(simulation_state).get("dialogue_state"))
+
+
+def _apply_dialogue_state_update_from_narration(
+    simulation_state: Dict[str, Any],
+    runtime_state: Dict[str, Any],
+    narration_payload: Dict[str, Any],
+) -> None:
+    update = narration_payload.get("dialogue_state_update") if isinstance(narration_payload, dict) else None
+    if isinstance(update, dict) and update:
+        simulation_state["dialogue_state"] = dict(update)
+        player_state = _safe_dict(simulation_state.get("player_state"))
+        player_state["dialogue_state"] = dict(update)
+        simulation_state["player_state"] = player_state
+        runtime_state["dialogue_state"] = update
+
+
 def _build_fast_semantic_action_record(
     player_input: str,
     action: Dict[str, Any],
@@ -1674,6 +1788,9 @@ def _build_fast_semantic_action_record(
     """
     action = _safe_dict(action)
     simulation_state = _safe_dict(simulation_state)
+    dialogue_semantic = _dialogue_semantic_action_from_player_input(player_input)
+    if dialogue_semantic:
+        return dialogue_semantic
     action_type = _safe_str(action.get("action_type")).strip().lower() or "observe"
     target_id = _safe_str(action.get("target_id")).strip()
     location_id = _safe_str(
@@ -2452,6 +2569,19 @@ def _compile_semantic_action_record(
     runtime_state = _safe_dict(runtime_state)
     action = _safe_dict(action)
     semantic_advisory = _safe_dict(semantic_advisory)
+    dialogue_semantic = _safe_dict(_dialogue_semantic_action_from_player_input(player_input))
+
+    if dialogue_semantic:
+        semantic_advisory = {
+            **semantic_advisory,
+            **dialogue_semantic,
+        }
+        action = {
+            **action,
+            "action_type": _safe_str(dialogue_semantic.get("action_type")) or _safe_str(action.get("action_type")),
+            "target_id": _safe_str(dialogue_semantic.get("target_id")) or _safe_str(action.get("target_id")),
+            "target_name": _safe_str(dialogue_semantic.get("target_name")) or _safe_str(action.get("target_name")),
+        }
 
     tick = int(simulation_state.get("tick", runtime_state.get("tick", 0)) or 0) + 1
     player_state = _safe_dict(simulation_state.get("player_state"))
@@ -2464,6 +2594,18 @@ def _compile_semantic_action_record(
         target_id = _find_npc_target_by_name(simulation_state, player_input)
 
     npc_index = _safe_dict(simulation_state.get("npc_index"))
+    if target_id and target_id not in npc_index:
+        target_name_hint = _safe_str(
+            semantic_advisory.get("target_name")
+            or action.get("target_name")
+            or dialogue_semantic.get("target_name")
+        ).strip()
+        normalized_target_id = _find_npc_target_by_name(
+            simulation_state,
+            target_name_hint or player_input,
+        )
+        if normalized_target_id:
+            target_id = normalized_target_id
     target_npc = _safe_dict(npc_index.get(target_id))
     target_name = _safe_str(
         semantic_advisory.get("target_name")
@@ -2508,6 +2650,7 @@ def _compile_semantic_action_record(
         "semantic_action_id": semantic_action_id,
         "tick": tick,
         "player_input": _safe_str(player_input).strip(),
+        "semantic_action": activity_label or action_type,
         "action_type": action_type,
         "semantic_family": semantic_family,
         "interaction_mode": interaction_mode,
@@ -13763,6 +13906,7 @@ def apply_turn(
         turn_contract=turn_contract,
         prefer_provider=not _defer_trace_value,
     )
+    _apply_dialogue_state_update_from_narration(simulation_state, runtime_state, narration_payload)
     record_narration_trace(
         "after_build_runtime_narration_payload",
         source=(narration_payload.get("source") if isinstance(narration_payload, dict) else ""),

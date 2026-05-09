@@ -68,6 +68,7 @@ def build_player_agent_prompt(
         "- Prefer actions that pursue active objectives, interact with nearby NPCs, or investigate grounded story leads.\n"
         "- Avoid repeating the same action unless there is a clear reason.\n"
         "- If the strategy guidance says anti-stall is active, choose a meaningfully different approach from recent actions.\n"
+        "- If goal_pressure is active, do not waste the turn on passive observation or vague conversation; choose a concrete objective/quest/travel/inspection/service action.\n"
         "- If objective-focused turns are not advancing, try a different grounded route: inspect, ask someone else, travel, review clues, or change the question.\n"
         "- Return JSON only.\n\n"
         "Required JSON format:\n"

@@ -3,6 +3,7 @@ from tests.rpg.autoplay.evaluators import (
     detect_repeated_action_loop,
     evaluate_autoplay_health,
 )
+from tests.rpg.autoplay_llm_campaign import _extract_npc_payload_from_turn_result
 
 
 def test_detect_repeated_action_loop_flags_streak():
@@ -141,4 +142,19 @@ def test_evaluate_autoplay_health_can_fail_on_action_diversity():
     )
 
     assert health["ok"] is False
+
+
+def test_extract_npc_payload_from_turn_result_uses_current_turn_result_not_result_variable():
+    payload = _extract_npc_payload_from_turn_result(
+        {
+            "narration": {
+                "npc": {
+                    "speaker": "Bran",
+                    "line": "The road is the danger.",
+                }
+            }
+        }
+    )
+
+    assert payload == {"speaker": "Bran", "line": "The road is the danger."}
     assert "action_diversity_rate_below_threshold" in health["warnings"]

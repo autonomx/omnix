@@ -2154,6 +2154,156 @@ def _infer_quest_evidence_turns_from_transcript(
     return sorted(set(turns))
 
 
+def _quest_summary_from_latest_state(report_model: Dict[str, Any]) -> Dict[str, Any]:
+    latest_state = _safe_dict(
+        report_model.get("latest_state")
+        or report_model.get("final_state")
+        or report_model.get("final_authoritative_state")
+    )
+    quest_progress = _safe_dict(latest_state.get("quest_progress"))
+    quests = _safe_dict(quest_progress.get("quests"))
+    if quests:
+        return _quest_summary_from_quest_mapping(quests, source="latest_state.quest_progress")
+
+    quest_log_state = _safe_dict(latest_state.get("quest_log_state"))
+    quests = _safe_dict(quest_log_state.get("quests"))
+    if quests:
+        return _quest_summary_from_quest_mapping(quests, source="latest_state.quest_log_state")
+
+    synthesized = _quest_summary_from_story_state(latest_state)
+    if synthesized.get("quest_count"):
+        return synthesized
+    return {}
+
+
+def _quest_summary_from_quest_mapping(quests: Dict[str, Any], *, source: str) -> Dict[str, Any]:
+    quests = _safe_dict(quests)
+    rows: List[Dict[str, Any]] = []
+    active_count = 0
+    completed_count = 0
+    for quest_id, quest_raw in sorted(quests.items()):
+        quest = _safe_dict(quest_raw)
+        objectives = [_safe_dict(row) for row in _safe_list(quest.get("objectives"))]
+        objective_count = len(objectives)
+        completed_objective_count = sum(
+            1
+            for obj in objectives
+            if bool(obj.get("completed")) or _safe_str(obj.get("status")) == "completed"
+        )
+        status = _safe_str(quest.get("status") or ("completed" if objective_count and completed_objective_count >= objective_count else "active"))
+        if status == "completed":
+            completed_count += 1
+        elif status == "active":
+            active_count += 1
+        rows.append(
+            {
+                "quest_id": _safe_str(quest.get("quest_id") or quest_id),
+                "title": _safe_str(quest.get("title") or quest_id),
+                "status": status,
+                "completed": bool(quest.get("completed")) or status == "completed",
+                "objective_count": objective_count,
+                "completed_objective_count": completed_objective_count,
+                "objectives": objectives,
+            }
+        )
+    return {
+        "quest_count": len(rows),
+        "active_count": active_count,
+        "completed_count": completed_count,
+        "quests": rows,
+        "source": source,
+    }
+
+
+def _quest_summary_from_story_state(latest_state: Dict[str, Any]) -> Dict[str, Any]:
+    latest_state = _safe_dict(latest_state)
+    facts = _safe_dict(latest_state.get("witness_search_facts"))
+    arcs = _safe_dict(_safe_dict(latest_state.get("story_arc_milestone_state")).get("arcs"))
+    witness_arc = _safe_dict(arcs.get("arc:witness_search") or arcs.get("witness_search"))
+    milestones = [_safe_dict(row) for row in _safe_list(witness_arc.get("milestones"))]
+    completed_ids = {
+        _safe_str(row.get("milestone_id"))
+        for row in milestones
+        if _safe_str(row.get("status")) == "completed"
+    }
+    completed_titles = {
+        _safe_str(row.get("title")).lower()
+        for row in milestones
+        if _safe_str(row.get("status")) == "completed"
+    }
+    find_done = (
+        bool(facts.get("inspected_side_door"))
+        or bool(facts.get("followed_road"))
+        or "milestone:find_witness" in completed_ids
+        or "find the witness" in completed_titles
+    )
+    report_done = (
+        bool(facts.get("reported_to_bran"))
+        or "milestone:report_findings_to_bran" in completed_ids
+        or "report findings to bran" in completed_titles
+        or "milestone:pursue_bandit_trail" in completed_ids
+    )
+    if not (find_done or report_done or facts):
+        return {}
+    witness_completed = bool(find_done and report_done)
+    quests = [
+        {
+            "quest_id": "quest:witness_search",
+            "title": "Witness Search",
+            "status": "completed" if witness_completed else "active",
+            "completed": witness_completed,
+            "objective_count": 2,
+            "completed_objective_count": int(find_done) + int(report_done),
+            "objectives": [
+                {
+                    "objective_id": "objective:find_witness",
+                    "summary": "Find the witness.",
+                    "status": "completed" if find_done else "active",
+                    "completed": find_done,
+                },
+                {
+                    "objective_id": "objective:report_findings_to_bran",
+                    "summary": "Report findings to Bran.",
+                    "status": "completed" if report_done else "active",
+                    "completed": report_done,
+                },
+            ],
+        }
+    ]
+    if bool(facts.get("followed_road")) or "milestone:pursue_bandit_trail" in completed_ids:
+        quests.append(
+            {
+                "quest_id": "quest:bandit_road",
+                "title": "Bandit Road",
+                "status": "active",
+                "completed": False,
+                "objective_count": 2,
+                "completed_objective_count": 0,
+                "objectives": [
+                    {
+                        "objective_id": "objective:inspect_road_tracks",
+                        "summary": "Inspect the road for tracks or ambush signs.",
+                        "status": "active",
+                        "completed": False,
+                    },
+                    {
+                        "objective_id": "objective:follow_bandit_road",
+                        "summary": "Follow the bandit road trail.",
+                        "status": "active",
+                        "completed": False,
+                    },
+                ],
+            }
+        )
+    return {
+        "quest_count": len(quests),
+        "active_count": sum(1 for row in quests if row["status"] == "active"),
+        "completed_count": sum(1 for row in quests if row["status"] == "completed"),
+        "quests": quests,
+        "source": "latest_state.story_arc_milestone_state+witness_search_facts",
+    }
+
+
 def _render_quest_board(summary: Dict[str, Any], metrics: Dict[str, Any], transcript: List[Dict[str, Any]]) -> str:
     quest_summary = _safe_dict(
         _safe_dict(summary).get("quest_progress_summary")
@@ -3704,6 +3854,10 @@ def extract_turn_ai_payload(row: Dict[str, Any]) -> Dict[str, Any]:
         _nested_get(raw_result, "session", "runtime_state", "last_structured_narration"),
         manual_summary.get("raw_narration_payload"),
         result.get("narration_payload"),
+        _nested_get(turn_result, "deferred_narration_result", "narration_payload"),
+        _nested_get(turn_result, "combined_background_llm_result", "narration_payload"),
+        row.get("deferred_narration_result", {}).get("narration_payload") if isinstance(row.get("deferred_narration_result"), dict) else {},
+        row.get("combined_background_llm_result", {}).get("narration_payload") if isinstance(row.get("combined_background_llm_result"), dict) else {},
     ]
     for candidate in candidates:
         if isinstance(candidate, dict) and candidate:
@@ -5442,7 +5596,7 @@ def render_campaign_report_html(
     )
     legacy_report_sections = f"""
       {_render_calendar_and_journal(model.get("campaign_calendar_summary") or {}, model.get("player_journal_summary") or {})}
-      {_render_quest_progress(model.get("quest_progress_summary") or {})}
+      {_render_quest_progress(_quest_summary_from_latest_state(model) or model.get("quest_progress_summary") or {})}
       {_render_npc_evolution_cards(model.get("npc_evolution_report_summary") or {})}
       {_render_hundred_turn_eval(model)}
       {_render_action_diversity(model.get("action_diversity_summary") or {})}

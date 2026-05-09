@@ -3,6 +3,8 @@ from __future__ import annotations
 from collections import Counter, defaultdict
 from typing import Any, Dict, List, Tuple
 
+from tests.rpg.autoplay.executable_actions import normalize_command_label_action
+
 
 def _safe_dict(value: Any) -> Dict[str, Any]:
     return value if isinstance(value, dict) else {}
@@ -210,26 +212,47 @@ def canonical_semantic_pair_from_turn(row: Dict[str, Any]) -> Dict[str, Any]:
         return shallow_candidate
 
     # Last-resort deterministic classifier from selected/player action text.
-    action_text = _safe_str(
+    action_text = normalize_command_label_action(_safe_str(
         row.get("selected_player_action")
         or row.get("player_action")
         or row.get("player_input")
         or row.get("input")
-    )
+    ))
     if action_text:
         lower = action_text.lower()
         target = "unknown"
-        for name in ("bran", "silas", "cloaked traveler", "traveler", "patron", "innkeeper", "bartender", "inn"):
+        for name in ("bran", "silas", "cloaked traveler", "traveler", "patron", "innkeeper", "bartender", "side door", "street", "road", "inn"):
             if name in lower:
                 if name in ("bran", "innkeeper", "bartender"):
                     target = "Bran"
                 elif name == "traveler":
                     target = "Cloaked Traveler"
+                elif name in ("side door", "street"):
+                    target = "tavern_exit"
+                elif name == "road":
+                    target = "road"
                 else:
                     target = name.title() if name != "inn" else "inn"
                 break
 
-        if any(term in lower for term in ("rent", "room", "lodging", "bed")):
+        if (
+            ("ask" in lower and "bran" in lower and ("saw" in lower or "personally saw" in lower) and "cloaked traveler" in lower)
+            or ("where" in lower and ("witness" in lower or "cloaked traveler" in lower or "side door" in lower))
+        ):
+            semantic_action = "ask_witness_lead"
+            if target == "unknown":
+                target = "Bran"
+        elif "report" in lower and ("witness" in lower or "cloaked traveler" in lower or "trail" in lower):
+            semantic_action = "report_witness_findings"
+            if target == "unknown":
+                target = "Bran"
+        elif any(term in lower for term in ("side door", "nearby street", "boot prints", "mud", "torn cloth", "hurried exit")):
+            semantic_action = "inspect_witness_trail"
+            target = "tavern_exit"
+        elif any(term in lower for term in ("follow the road", "road outside", "fresh tracks", "follow the trail", "bandit road trail")):
+            semantic_action = "follow_witness_trail"
+            target = "road"
+        elif any(term in lower for term in ("rent", "room", "lodging", "bed")):
             semantic_action = "rent_room"
             if target == "unknown":
                 target = "inn"
