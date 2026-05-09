@@ -1,31 +1,171 @@
-N89.1 — Turn-Level Commit Visibility + Handoff Affordance Priority
+N89.3 — Generic Handoff Lead Quality + Semantic Action Rotation
 Goal
 
-N89 fixed canonical truth at final artifact time:
+Fix run 188 without hardcoding the tavern/witness/road scenario.
 
-PASS:
-  objective hooks reconcile into quest_progress
-  Witness Search completes canonically
-  generic handoff quest is created
-  latest_state is preserved
-  final authority gates work
+N89.2 fixed state authority and handoff activation, but the generic handoff created a low-information lead:
 
-But run 186 still fails because action selection during the run does not reliably see the committed handoff state:
+Investigate Lead: toward
+I follow up on the lead: toward.
 
-FAIL:
-  per-turn action context still sees stale active Witness Search
-  handoff quest appears in final state, but player-agent keeps inspecting old road clue
-  handoff lead quality is weak because recent repeated actions outrank story/fact evidence
-  pre_turn_advisory_promotion_fast_ok is falsely red
+Then action selection repeated that same handoff action 19 times.
 
-This patch makes committed state visible before the next action, prioritizes active handoff affordances, ranks deterministic leads above recent action text, and fixes the pre-turn performance gate.
+This patch adds a scenario-agnostic handoff framework:
+
+1. Reject low-information leads.
+2. Prefer concrete multi-token entities/places/items/factions/events.
+3. Generate semantic action variants for any lead.
+4. Rotate handoff actions when one repeats.
+5. Track handoff semantic action history.
+6. Mark generic handoff progress from distinct future semantic actions.
+7. Complete/advance handoff after enough distinct meaningful actions.
+
+No scenario-specific strings like Bran, witness, tavern, Bandit Road, bridge, or road should be required.
 
 1. Patch src/app/rpg/campaign_state/authority_commit.py
-1A. Add lead priority scoring
+1A. Add generic lead quality helpers
 
-Find derive_unresolved_leads(...).
+Add near lead helpers:
 
-Add these helpers before it:
+--- src/app/rpg/campaign_state/authority_commit.py
++++ src/app/rpg/campaign_state/authority_commit.py
+@@
+ def _token_set(text: str) -> Set[str]:
+@@
+     }
++
++
++LOW_INFORMATION_LEAD_TOKENS = {
++    "toward",
++    "near",
++    "nearby",
++    "outside",
++    "inside",
++    "around",
++    "ahead",
++    "behind",
++    "there",
++    "here",
++    "place",
++    "person",
++    "thing",
++    "someone",
++    "something",
++    "lead",
++    "clue",
++    "trail",
++    "evidence",
++    "sign",
++    "signs",
++    "track",
++    "tracks",
++    "route",
++    "path",
++    "road",
++    "area",
++    "location",
++    "direction",
++    "matter",
++    "issue",
++    "problem",
++    "danger",
++    "trouble",
++    "inspect",
++    "ask",
++    "follow",
++    "investigate",
++    "search",
++    "check",
++    "checking",
++}
++
++
++LEAD_CONNECTOR_TOKENS = {
++    "the",
++    "a",
++    "an",
++    "of",
++    "to",
++    "from",
++    "for",
++    "with",
++    "and",
++    "or",
++    "in",
++    "on",
++    "at",
++    "by",
++    "near",
++    "toward",
++    "towards",
++}
++
++
++def _lead_label(lead: Dict[str, Any]) -> str:
++    lead = _safe_dict(lead)
++    return _safe_str(lead.get("name") or lead.get("title") or lead.get("label") or lead.get("id")).strip()
++
++
++def _lead_content_tokens(label: str) -> List[str]:
++    tokens = [
++        token.strip(".,;:!?()[]{}\"'").lower()
++        for token in _safe_str(label).replace("_", " ").split()
++    ]
++    return [
++        token
++        for token in tokens
++        if token
++        and token not in LEAD_CONNECTOR_TOKENS
++        and token not in LOW_INFORMATION_LEAD_TOKENS
++        and len(token) >= 3
++    ]
++
++
++def _is_low_information_lead_label(label: str) -> bool:
++    label = " ".join(_safe_str(label).strip().split())
++    if not label:
++        return True
++    norm = _norm(label)
++    raw_tokens = [token for token in norm.split() if token]
++    content_tokens = _lead_content_tokens(label)
++
++    if len(raw_tokens) <= 1:
++        return True
++    if not content_tokens:
++        return True
++    if len(content_tokens) == 1 and content_tokens[0] in LOW_INFORMATION_LEAD_TOKENS:
++        return True
++
++    # Generic phrases like "the clue", "the evidence", "the trail" are not a
++    # good handoff subject unless paired with a concrete entity/place/item.
++    if len(raw_tokens) <= 3 and all(
++        token in LOW_INFORMATION_LEAD_TOKENS or token in LEAD_CONNECTOR_TOKENS
++        for token in raw_tokens
++    ):
++        return True
++
++    return False
++
++
++def _lead_specificity_score(label: str) -> int:
++    label = _safe_str(label)
++    content_tokens = _lead_content_tokens(label)
++    raw_tokens = [token for token in _norm(label).split() if token]
++    score = 0
++    score += min(len(content_tokens), 6) * 10
++    score += min(len(raw_tokens), 8) * 2
++    if any(ch.isupper() for ch in label):
++        score += 10
++    if any(char.isdigit() for char in label):
++        score += 5
++    if len(content_tokens) >= 2:
++        score += 15
++    if _is_low_information_lead_label(label):
++        score -= 100
++    return score
+1B. Replace one-token lead creation with phrase extraction
+
+Add generic phrase extractor near _lead_from_text(...):
 
 --- src/app/rpg/campaign_state/authority_commit.py
 +++ src/app/rpg/campaign_state/authority_commit.py
@@ -40,507 +180,702 @@ Add these helpers before it:
      }
 +
 +
-+LEAD_SOURCE_PRIORITY = {
-+    "explicit": 100,
-+    "known_leads": 100,
-+    "unresolved_leads": 100,
-+    "quest_leads": 95,
-+    "story_leads": 95,
-+    "autoplay_story_hook_state": 90,
-+    "objective_evidence": 85,
-+    "objective_progression_log": 85,
-+    "completed_objective_summary": 75,
-+    "scene": 50,
-+    "location_history": 45,
-+    "recent_action": 20,
-+    "generic_local_fallback": 10,
-+}
++def _candidate_lead_phrases_from_text(text: str) -> List[str]:
++    """Extract generic concrete-ish lead phrases from deterministic text.
++
++    This deliberately avoids scenario-specific words. It prefers multi-token
++    noun-like spans and phrases after directional/result cues.
++    """
++    text = " ".join(_safe_str(text).replace("_", " ").replace(":", " ").split())
++    if not text:
++        return []
++
++    norm = _norm(text)
++    candidates: List[str] = []
++
++    cue_phrases = (
++        "points toward",
++        "point toward",
++        "points to",
++        "point to",
++        "leads toward",
++        "lead toward",
++        "leads to",
++        "lead to",
++        "indicates",
++        "suggests",
++        "reveals",
++        "mentions",
++        "names",
++        "identifies",
++        "connects to",
++        "connected to",
++        "near",
++        "at",
++        "in",
++    )
++
++    lowered = text.lower()
++    for cue in cue_phrases:
++        index = lowered.find(cue)
++        if index < 0:
++            continue
++        after = text[index + len(cue):].strip(" .,:;!?-")
++        if not after:
++            continue
++        words = after.split()
++        for size in (5, 4, 3, 2):
++            if len(words) >= size:
++                phrase = " ".join(words[:size]).strip(" .,:;!?-")
++                if phrase and not _is_low_information_lead_label(phrase):
++                    candidates.append(phrase)
++                    break
++
++    # Also extract capitalized multi-token spans as generic entity/location/faction candidates.
++    words = text.split()
++    span: List[str] = []
++    for word in words + [""]:
++        stripped = word.strip(".,;:!?()[]{}\"'")
++        if stripped[:1].isupper() and stripped.lower() not in {"i", "the", "a", "an"}:
++            span.append(stripped)
++            continue
++        if len(span) >= 2:
++            phrase = " ".join(span)
++            if not _is_low_information_lead_label(phrase):
++                candidates.append(phrase)
++        span = []
++
++    # Fallback: longest useful content-token phrase, but never one generic token.
++    content = _lead_content_tokens(text)
++    if len(content) >= 2:
++        candidates.append(" ".join(content[:5]))
++
++    deduped: List[str] = []
++    seen = set()
++    for phrase in candidates:
++        phrase = " ".join(_safe_str(phrase).strip().split())
++        key = _norm(phrase)
++        if not key or key in seen or _is_low_information_lead_label(phrase):
++            continue
++        seen.add(key)
++        deduped.append(phrase)
++    deduped.sort(key=lambda phrase: -_lead_specificity_score(phrase))
++    return deduped[:5]
 +
 +
-+def _lead_priority(lead: Dict[str, Any]) -> int:
-+    lead = _safe_dict(lead)
-+    source = _safe_str(lead.get("source"))
-+    kind = _safe_str(lead.get("kind"))
-+    base = int(LEAD_SOURCE_PRIORITY.get(source, 25))
-+    label = _norm(lead.get("name") or lead.get("title") or lead.get("id"))
-+
-+    # Penalize leads that are clearly just a repeated action bag.
-+    repeated_action_terms = {
-+        "inspect",
-+        "checking",
-+        "nearby",
-+        "fresh",
-+        "tracks",
-+        "wagon",
-+        "ruts",
-+        "cord",
-+        "cloth",
-+        "markings",
-+        "signs",
-+    }
-+    action_term_count = len(set(label.split()) & repeated_action_terms)
-+    if source == "recent_action":
-+        base -= min(15, action_term_count * 2)
-+
-+    if kind in {"hook", "fact", "topic", "target", "location"}:
-+        base += 5
-+    return base
-+
-+
-+def _sort_leads(leads: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-+    enriched: List[Dict[str, Any]] = []
-+    for index, lead in enumerate(leads):
-+        lead = dict(_safe_dict(lead))
-+        lead.setdefault("priority", _lead_priority(lead))
-+        lead.setdefault("rank_index", index)
-+        enriched.append(lead)
-+    enriched.sort(key=lambda row: (-int(row.get("priority") or 0), int(row.get("rank_index") or 0)))
-+    return enriched
-1B. Add hook-derived leads explicitly
++def _lead_candidates_from_text(text: str, *, source: str, kind: str) -> List[Dict[str, Any]]:
++    leads: List[Dict[str, Any]] = []
++    for phrase in _candidate_lead_phrases_from_text(text):
++        lead = _lead_from_text(phrase, source=source, kind=kind)
++        if lead and not _is_low_information_lead_label(_lead_label(lead)):
++            leads.append(lead)
++    return leads
+1C. Harden _lead_from_text(...)
 
-Inside derive_unresolved_leads(...), after explicit lead bags are read, add:
+Inside _lead_from_text(...), reject low-information labels:
 
 --- src/app/rpg/campaign_state/authority_commit.py
 +++ src/app/rpg/campaign_state/authority_commit.py
 @@
-     for key in ("known_leads", "unresolved_leads", "quest_leads", "story_leads"):
-         for row in _safe_list(state.get(key)):
-             lead = dict(row) if isinstance(row, dict) else {"name": _safe_str(row)}
+     cleaned = " ".join(text.replace("_", " ").replace(":", " ").split())
+     if len(cleaned) > 80:
+         cleaned = cleaned[:80].rsplit(" ", 1)[0]
++    if _is_low_information_lead_label(cleaned):
++        return {}
+     return {
+1D. Use phrase candidates in derive_unresolved_leads(...)
+
+In derive_unresolved_leads(...), patch explicit lead handling:
+
+--- src/app/rpg/campaign_state/authority_commit.py
++++ src/app/rpg/campaign_state/authority_commit.py
+@@
              if lead.get("resolved") or _safe_str(lead.get("status")) == "completed":
                  continue
-             if _safe_str(lead.get("name") or lead.get("title") or lead.get("id")):
-+                lead.setdefault("source", key)
-+                lead.setdefault("kind", "explicit")
+-            if _safe_str(lead.get("name") or lead.get("title") or lead.get("id")):
++            if _safe_str(lead.get("name") or lead.get("title") or lead.get("id")):
+                 lead.setdefault("source", key)
+                 lead.setdefault("kind", "explicit")
+-                leads.append(lead)
++                if not _is_low_information_lead_label(_lead_label(lead)):
++                    leads.append(lead)
+
+Patch hook-derived lead handling:
+
+--- src/app/rpg/campaign_state/authority_commit.py
++++ src/app/rpg/campaign_state/authority_commit.py
+@@
+         if is_completion_only and not is_forward_lead:
+             continue
+         if any(term in lower for term in ("lead", "trail", "road", "bridge", "toward", "points", "location", "route")):
+             lead_text = summary or hook_id.replace("hook:", "").replace("_", " ")
+-            lead = _lead_from_text(lead_text, source="autoplay_story_hook_state", kind="hook")
+-            if lead:
++            for lead in _lead_candidates_from_text(lead_text, source="autoplay_story_hook_state", kind="hook"):
+                 lead["hook_id"] = hook_id
                  leads.append(lead)
+
+Patch evidence topic handling:
+
+--- src/app/rpg/campaign_state/authority_commit.py
++++ src/app/rpg/campaign_state/authority_commit.py
+@@
+         event = _safe_dict(row.get("event"))
+         for topic in _safe_list(event.get("topics")):
+             topic = _safe_str(topic)
+             if len(topic) >= 4:
+-                lead = _lead_from_text(topic, source="objective_evidence", kind="topic")
+-                if lead:
+-                    leads.append(lead)
++                leads.extend(_lead_candidates_from_text(topic, source="objective_evidence", kind="topic"))
+         for key in ("target", "target_name", "location", "location_name"):
+             value = _safe_str(event.get(key))
+             if value:
+-                lead = _lead_from_text(value, source="objective_evidence", kind=key)
+-                if lead:
+-                    leads.append(lead)
++                leads.extend(_lead_candidates_from_text(value, source="objective_evidence", kind=key))
+         summary = _safe_str(row.get("summary"))
+         if summary and row.get("completed"):
+-            tokens = list(_token_set(summary))
+-            if tokens:
+-                lead = _lead_from_text(" ".join(tokens[:6]), source="completed_objective_summary", kind="summary")
+-                if lead:
+-                    leads.append(lead)
++            leads.extend(_lead_candidates_from_text(summary, source="completed_objective_summary", kind="summary"))
+
+Patch recent action handling so it cannot produce a low-info one-token lead:
+
+--- src/app/rpg/campaign_state/authority_commit.py
++++ src/app/rpg/campaign_state/authority_commit.py
+@@
+     for row in _safe_list(transcript_tail)[-12:]:
+         action = _safe_str(_safe_dict(row).get("player_action") or _safe_dict(row).get("action"))
+         if action:
+-            tokens = list(_token_set(action))
+-            if tokens:
+-                lead = _lead_from_text(" ".join(tokens[:8]), source="recent_action", kind="action")
+-                if lead:
+-                    leads.append(lead)
++            leads.extend(_lead_candidates_from_text(action, source="recent_action", kind="action"))
+
+Patch dedupe to reject low-info labels and keep higher-quality duplicate:
+
+--- src/app/rpg/campaign_state/authority_commit.py
++++ src/app/rpg/campaign_state/authority_commit.py
+@@
+-    deduped: List[Dict[str, Any]] = []
+-    seen = set()
++    deduped_by_label: Dict[str, Dict[str, Any]] = {}
+     for lead in leads:
+         lead = _safe_dict(lead)
+-        label = _norm(lead.get("name") or lead.get("title") or lead.get("id"))
+-        if not label or label in seen:
++        label_raw = _lead_label(lead)
++        if _is_low_information_lead_label(label_raw):
+             continue
+-        seen.add(label)
+-        deduped.append(lead)
+-    return _sort_leads(deduped)[:25]
++        label = _norm(label_raw)
++        existing = deduped_by_label.get(label)
++        if not existing or _lead_priority(lead) > _lead_priority(existing):
++            deduped_by_label[label] = lead
++    return _sort_leads(list(deduped_by_label.values()))[:25]
+1E. Improve _lead_priority(...) generically
+
+Patch _lead_priority(...) to use specificity:
+
+--- src/app/rpg/campaign_state/authority_commit.py
++++ src/app/rpg/campaign_state/authority_commit.py
+@@
+     source = _safe_str(lead.get("source"))
+     kind = _safe_str(lead.get("kind"))
+     base = int(LEAD_SOURCE_PRIORITY.get(source, 25))
+-    label = _norm(lead.get("name") or lead.get("title") or lead.get("id"))
++    raw_label = _lead_label(lead)
++    label = _norm(raw_label)
++    base += _lead_specificity_score(raw_label)
+@@
+     if kind in {"hook", "fact", "topic", "target", "location"}:
+         base += 5
+     return max(0, base)
+1F. Add semantic action rotation helpers
+
+Add near handoff helpers:
+
+--- src/app/rpg/campaign_state/authority_commit.py
++++ src/app/rpg/campaign_state/authority_commit.py
+@@
+ def _has_active_quest(state: Dict[str, Any]) -> bool:
+@@
+     return False
 +
-+    hook_state = _safe_dict(state.get("autoplay_story_hook_state"))
-+    fired_hooks = _safe_dict(hook_state.get("fired_hooks"))
-+    for hook_id, payload in fired_hooks.items():
-+        hook_id = _safe_str(hook_id)
-+        payload = _safe_dict(payload)
-+        summary = _safe_str(payload.get("summary"))
-+        lower = _norm(f"{hook_id} {summary}")
-+        if any(term in lower for term in ("lead", "trail", "road", "bridge", "toward", "points", "location", "route")):
-+            lead_text = summary or hook_id.replace("hook:", "").replace("_", " ")
-+            lead = _lead_from_text(lead_text, source="autoplay_story_hook_state", kind="hook")
-+            if lead:
-+                lead["hook_id"] = hook_id
-+                leads.append(lead)
-1C. Sort leads by priority before choosing handoff
-
-At the end of derive_unresolved_leads(...), replace:
-
-return deduped[:25]
-
-with:
-
---- src/app/rpg/campaign_state/authority_commit.py
-+++ src/app/rpg/campaign_state/authority_commit.py
-@@
--    return deduped[:25]
-+    return _sort_leads(deduped)[:25]
-1D. Improve handoff objective command metadata
-
-In apply_generic_handoff_from_leads(...), inside the new handoff objective dict, add explicit affordance hints:
-
---- src/app/rpg/campaign_state/authority_commit.py
-+++ src/app/rpg/campaign_state/authority_commit.py
-@@
-             {
-                 "objective_id": objective_id,
-                 "summary": f"Investigate the unresolved lead: {label}.",
-                 "objective_type": "investigate",
-                 "subject": label,
-+                "affordance_priority": 100,
-+                "handoff_objective": True,
-+                "suggested_actions": [
-+                    f"I follow up on the lead: {label}.",
-+                    f"I ask nearby people what they know about {label}.",
-+                    f"I inspect the place or evidence connected to {label}.",
-+                ],
-                 "status": "active",
-                 "completed": False,
-                 "known_leads": [lead],
-
-Also add priority to the quest:
-
---- src/app/rpg/campaign_state/authority_commit.py
-+++ src/app/rpg/campaign_state/authority_commit.py
-@@
-         "status": "active",
-         "completed": False,
-         "source": "campaign_state_authority_commit",
-+        "priority": 100,
-+        "handoff_quest": True,
-         "lead": lead,
-2. Patch src/app/rpg/objectives/affordances.py
-2A. Prioritize active authority handoff quests
-
-Find the function that collects active objectives, likely collect_active_objectives(...).
-
-Inside the loop where objective rows are appended to out, add fields from quest/objective:
-
---- src/app/rpg/objectives/affordances.py
-+++ src/app/rpg/objectives/affordances.py
-@@
-             out.append(
-                 {
-                     ...
-+                    "quest_source": _safe_str(quest.get("source")),
-+                    "quest_priority": int(quest.get("priority") or 0),
-+                    "handoff_quest": bool(quest.get("handoff_quest")),
-+                    "handoff_objective": bool(obj.get("handoff_objective")),
-+                    "affordance_priority": int(obj.get("affordance_priority") or quest.get("priority") or 0),
-                 }
-             )
-
-If your append shape differs, add those keys to the row that represents an active objective.
-
-After all objectives are collected, sort before return:
-
---- src/app/rpg/objectives/affordances.py
-+++ src/app/rpg/objectives/affordances.py
-@@
--    return out
-+    out.sort(
-+        key=lambda row: (
-+            -int(_safe_dict(row).get("affordance_priority") or 0),
-+            0 if _safe_dict(row).get("handoff_objective") else 1,
-+            _safe_str(_safe_dict(row).get("quest_id")),
-+            _safe_str(_safe_dict(row).get("objective_id")),
-+        )
-+    )
-+    return out
-2B. Prefer suggested actions for handoff objectives
-
-Find where build_objective_affordances_for_state(...) builds commands from active objectives.
-
-Before generic template generation for an objective, add:
-
---- src/app/rpg/objectives/affordances.py
-+++ src/app/rpg/objectives/affordances.py
-@@
-     for objective in active_objectives:
-+        if _safe_dict(objective).get("handoff_objective"):
-+            for action in _safe_list(_safe_dict(objective).get("suggested_actions")):
-+                command = _safe_str(action).strip()
-+                if command:
-+                    affordances.append(
-+                        {
-+                            "command": command,
-+                            "source": "handoff_objective_suggested_action",
-+                            "objective_id": _safe_str(objective.get("objective_id")),
-+                            "quest_id": _safe_str(objective.get("quest_id")),
-+                            "semantic": "investigate",
-+                            "priority": int(objective.get("affordance_priority") or 100),
-+                        }
-+                    )
-
-Then before returning affordances, sort by priority:
-
---- src/app/rpg/objectives/affordances.py
-+++ src/app/rpg/objectives/affordances.py
-@@
--    return affordances[:limit]
-+    affordances.sort(
-+        key=lambda row: (
-+            -int(_safe_dict(row).get("priority") or 0),
-+            _safe_str(_safe_dict(row).get("source")),
-+            _safe_str(_safe_dict(row).get("command")),
-+        )
-+    )
-+    return affordances[:limit]
-
-If affordances is named differently, apply the same sort to the list returned by the function.
-
-3. Patch src/tests/rpg/autoplay_llm_campaign.py
-3A. Merge authoritative simulation/runtime state from turn result before commit
-
-Find the block after runtime turn execution where turn_result is available and before record is created.
-
-Add this helper near runtime-state helpers:
-
---- src/tests/rpg/autoplay_llm_campaign.py
-+++ src/tests/rpg/autoplay_llm_campaign.py
-@@
-+def _merge_turn_result_authoritative_state(
-+    runtime_state: Dict[str, Any],
-+    turn_result: Dict[str, Any],
-+) -> Dict[str, Any]:
-+    runtime_state = _safe_dict(runtime_state)
-+    turn_result = _safe_dict(turn_result)
-+    candidates = [
-+        _safe_dict(turn_result.get("simulation_state")),
-+        _safe_dict(turn_result.get("runtime_state")),
-+        _safe_dict(_safe_dict(turn_result.get("result")).get("simulation_state")),
-+        _safe_dict(_safe_dict(turn_result.get("result")).get("runtime_state")),
-+        _safe_dict(_safe_dict(turn_result.get("resolved_result")).get("simulation_state")),
-+        _safe_dict(_safe_dict(turn_result.get("resolved_result")).get("runtime_state")),
++
++HANDOFF_SEMANTIC_ACTIONS = (
++    "ask_about_lead",
++    "inspect_lead",
++    "travel_to_lead",
++    "follow_route",
++    "consult_journal",
++    "compare_evidence",
++    "search_related_location",
++    "question_related_person",
++)
++
++
++def _handoff_action_templates(label: str) -> List[Dict[str, str]]:
++    label = _safe_str(label).strip() or "the unresolved lead"
++    return [
++        {
++            "semantic": "ask_about_lead",
++            "command": f"I ask nearby people what they know about {label}.",
++        },
++        {
++            "semantic": "inspect_lead",
++            "command": f"I inspect evidence connected to {label}, looking for concrete next steps.",
++        },
++        {
++            "semantic": "travel_to_lead",
++            "command": f"I move toward {label} and watch for signs that confirm the lead.",
++        },
++        {
++            "semantic": "follow_route",
++            "command": f"I follow the route or trail connected to {label}.",
++        },
++        {
++            "semantic": "consult_journal",
++            "command": f"I compare {label} against my journal, clues, and current objectives.",
++        },
++        {
++            "semantic": "compare_evidence",
++            "command": f"I compare the evidence around {label} with what I already know.",
++        },
++        {
++            "semantic": "search_related_location",
++            "command": f"I search the location most closely connected to {label}.",
++        },
++        {
++            "semantic": "question_related_person",
++            "command": f"I question someone connected to {label} for a specific next lead.",
++        },
 +    ]
-+    merged = dict(runtime_state)
-+    for candidate in candidates:
-+        if not candidate:
-+            continue
-+        merged = _merge_preserving_runtime_state(merged, candidate)
-+    return merged
+1G. Generate rich handoff objective actions
 
-After runtime_turn_execution completes and turn_result exists, add:
+In apply_generic_handoff_from_leads(...), replace the current suggested_actions list:
 
---- src/tests/rpg/autoplay_llm_campaign.py
-+++ src/tests/rpg/autoplay_llm_campaign.py
+--- src/app/rpg/campaign_state/authority_commit.py
++++ src/app/rpg/campaign_state/authority_commit.py
 @@
-         with _ProbeTimer(
-             bool(getattr(args, "debug_autoplay_stage_timing", False)),
-             "runtime_turn_execution",
+     lead = _safe_dict(leads[0])
+     label = _safe_str(lead.get("name") or lead.get("title") or lead.get("id") or "unresolved lead")
++    action_templates = _handoff_action_templates(label)
 @@
-             turn_result = ...
- 
-+        runtime_state = _merge_turn_result_authoritative_state(runtime_state, turn_result)
-+        runtime_state = _commit_campaign_state_authority(
-+            runtime_state,
-+            transcript_tail=transcript[-12:],
-+            phase="turn",
-+        )
+-                "suggested_actions": [
+-                    f"I follow up on the lead: {label}.",
+-                    f"I ask nearby people what they know about {label}.",
+-                    f"I inspect the place or evidence connected to {label}.",
+-                ],
++                "suggested_actions": [row["command"] for row in action_templates],
++                "semantic_action_templates": action_templates,
++                "handoff_semantic_history": [],
++                "distinct_semantic_actions": [],
++                "handoff_progress_count": 0,
+1H. Add generic handoff progress from future distinct semantic actions
 
-If the exact assignment is not turn_result = ..., place this immediately after the variable containing the runtime execution result is assigned.
+Add helpers after _objective_is_handoff_guarded(...):
 
-3B. Commit again after record creation with the record evidence
-
-You already added a post-append commit in N89. Keep it, but make sure it uses the merged authoritative state and writes back to context-visible runtime state:
-
---- src/tests/rpg/autoplay_llm_campaign.py
-+++ src/tests/rpg/autoplay_llm_campaign.py
+--- src/app/rpg/campaign_state/authority_commit.py
++++ src/app/rpg/campaign_state/authority_commit.py
 @@
-         runtime_state = _commit_campaign_state_authority(
-             runtime_state,
-             turn_record=record,
-             transcript_tail=transcript[-12:],
-             phase="turn",
-         )
-         record["campaign_state_commit_summary"] = _safe_dict(
-             runtime_state.get("campaign_state_commit_summary")
-         )
-+        record["quest_progress_after_commit"] = _safe_dict(runtime_state.get("quest_progress"))
-3C. Commit before every player-agent context build and attach commit summary to context
-
-Find the player-agent context creation block. Before it, ensure:
-
---- src/tests/rpg/autoplay_llm_campaign.py
-+++ src/tests/rpg/autoplay_llm_campaign.py
+ def _objective_is_handoff_guarded(obj: Dict[str, Any], evidence: Dict[str, Any], *, current_sequence: int) -> bool:
 @@
-+        runtime_state = _commit_campaign_state_authority(
-+            runtime_state,
-+            transcript_tail=transcript[-12:],
-+            phase="turn",
-+        )
-         player_context = ...
-
-After player_context is built, inject committed state fields if they are missing:
-
---- src/tests/rpg/autoplay_llm_campaign.py
-+++ src/tests/rpg/autoplay_llm_campaign.py
-@@
-         player_context = ...
-+        if isinstance(player_context, dict):
-+            player_context["quest_progress"] = runtime_state.get("quest_progress")
-+            player_context["campaign_state_commit_summary"] = runtime_state.get("campaign_state_commit_summary")
-+            player_context["unresolved_leads"] = runtime_state.get("unresolved_leads")
-
-If the context variable is named action_context, player_agent_context, or context, patch that variable.
-
-3D. Include committed state in executable repair context
-
-Find the call to repair_action_if_needed(...) or executable_action_for_context(...).
-
-Before the call, add:
-
---- src/tests/rpg/autoplay_llm_campaign.py
-+++ src/tests/rpg/autoplay_llm_campaign.py
-@@
-         repair_context = {
-             ...
-         }
-+        repair_context["quest_progress"] = runtime_state.get("quest_progress")
-+        repair_context["campaign_state_commit_summary"] = runtime_state.get("campaign_state_commit_summary")
-+        repair_context["unresolved_leads"] = runtime_state.get("unresolved_leads")
-
-If repair context is just player_context, make sure those fields are already injected there.
-
-3E. Add per-turn commit visibility diagnostics
-
-After post-append commit, add:
-
---- src/tests/rpg/autoplay_llm_campaign.py
-+++ src/tests/rpg/autoplay_llm_campaign.py
-@@
-         record["campaign_state_commit_summary"] = _safe_dict(
-             runtime_state.get("campaign_state_commit_summary")
-         )
-+        commit_summary = _safe_dict(runtime_state.get("campaign_state_commit_summary"))
-+        commit_qps = _safe_dict(commit_summary.get("quest_progress_summary"))
-+        _probe_log(
-+            bool(getattr(args, "debug_autoplay_stage_timing", False)),
-+            "campaign_state_commit.visible_to_next_turn",
-+            turn_index=turn_index,
-+            active_count=commit_qps.get("active_count"),
-+            completed_count=commit_qps.get("completed_count"),
-+            handoff_reason=_safe_str(_safe_dict(commit_summary.get("handoff_summary")).get("reason")),
-+            handoff_changed=bool(_safe_dict(commit_summary.get("handoff_summary")).get("changed")),
-+        )
-
-Acceptance signal in logs:
-
-After Witness Search completes:
-campaign_state_commit.visible_to_next_turn active_count=1 completed_count=1 handoff_changed=True
-4. Patch src/tests/rpg/autoplay/executable_actions.py
-4A. Make handoff action priority unconditional
-
-Find executable_action_for_context(...).
-
-At the very top after context = _safe_dict(context), replace the previous N89 handoff block with this stronger version:
-
---- src/tests/rpg/autoplay/executable_actions.py
-+++ src/tests/rpg/autoplay/executable_actions.py
-@@
- def executable_action_for_context(context: Dict[str, Any], original_action: str = "") -> str:
-     context = _safe_dict(context)
-+    handoff_action = _handoff_action_from_committed_context(context)
-+    if handoff_action:
-+        return handoff_action
-
-Add helper before executable_action_for_context(...):
-
---- src/tests/rpg/autoplay/executable_actions.py
-+++ src/tests/rpg/autoplay/executable_actions.py
-@@
-+def _handoff_action_from_committed_context(context: Dict[str, Any]) -> str:
-+    context = _safe_dict(context)
-+    commit_summary = _safe_dict(context.get("campaign_state_commit_summary"))
-+    quest_summary = _safe_dict(commit_summary.get("quest_progress_summary"))
-+    quests = _safe_list(quest_summary.get("quests"))
-+    if not quests:
-+        quests = list(_safe_dict(_safe_dict(context.get("quest_progress")).get("quests")).values())
+     return False
 +
-+    for quest in quests:
++
++def _semantic_for_handoff_action(action_text: str) -> str:
++    action = _norm(action_text)
++    if not action:
++        return ""
++    if any(word in action for word in ("ask", "question", "speak", "talk")):
++        return "ask_about_lead"
++    if any(word in action for word in ("inspect", "examine", "look", "search")):
++        return "inspect_lead"
++    if any(word in action for word in ("travel", "move toward", "go to", "head to")):
++        return "travel_to_lead"
++    if any(word in action for word in ("follow", "track", "trail", "route")):
++        return "follow_route"
++    if any(word in action for word in ("journal", "notes", "objective")):
++        return "consult_journal"
++    if any(word in action for word in ("compare", "connect", "cross-check")):
++        return "compare_evidence"
++    return "investigate_lead"
++
++
++def _action_mentions_lead(action_text: str, lead_label: str) -> bool:
++    action_tokens = set(_lead_content_tokens(action_text))
++    lead_tokens = set(_lead_content_tokens(lead_label))
++    if not action_tokens or not lead_tokens:
++        return False
++    return bool(action_tokens & lead_tokens)
++
++
++def _record_handoff_action_progress(
++    state: Dict[str, Any],
++    *,
++    turn_record: Optional[Dict[str, Any]],
++    current_sequence: int,
++) -> Dict[str, Any]:
++    row = _safe_dict(turn_record)
++    action_text = _safe_str(row.get("player_action") or row.get("action"))
++    if not action_text:
++        return {"changed": False, "reason": "no_action"}
++
++    changed = False
++    progressed_objectives: List[Dict[str, Any]] = []
++    turn = int(row.get("turn") or row.get("turn_index") or state.get("turn_index") or 0)
++    semantic = _semantic_for_handoff_action(action_text)
++
++    for quest_id, quest, obj in _iter_objectives(state):
 +        quest = _safe_dict(quest)
-+        if quest.get("completed") or _safe_str(quest.get("status")) == "completed":
++        obj = _safe_dict(obj)
++        if not bool(obj.get("handoff_objective")) or _objective_done(obj):
 +            continue
-+        title = _safe_str(quest.get("title"))
-+        is_handoff = (
-+            bool(quest.get("handoff_quest"))
-+            or quest.get("source") == "campaign_state_authority_commit"
-+            or title.startswith("Investigate Lead:")
-+        )
-+        if not is_handoff:
++        created_sequence = int(obj.get("created_commit_sequence") or 0)
++        if created_sequence and current_sequence <= created_sequence:
 +            continue
-+        lead = _safe_dict(quest.get("lead"))
-+        lead_label = _safe_str(lead.get("name") or lead.get("title") or title.replace("Investigate Lead:", "").strip())
-+        for obj in _safe_list(quest.get("objectives")):
-+            obj = _safe_dict(obj)
-+            if obj.get("completed") or _safe_str(obj.get("status")) == "completed":
-+                continue
-+            suggested = _safe_list(obj.get("suggested_actions"))
-+            for action in suggested:
-+                action = _safe_str(action).strip()
-+                if action and not is_meta_or_vague_action(action):
-+                    return action
-+            subject = _safe_str(obj.get("subject") or lead_label or obj.get("summary") or title)
-+            if subject:
-+                return (
-+                    f"I follow up on the lead: {subject}, checking the next place, person, "
-+                    "or evidence connected to it instead of repeating the old search."
-+                )
-+    return ""
-4B. Repair repeated old objective into handoff action
-
-Inside repair_action_if_needed(...), at the top after context is normalized, add:
-
---- src/tests/rpg/autoplay/executable_actions.py
-+++ src/tests/rpg/autoplay/executable_actions.py
-@@
- def repair_action_if_needed(action: str, context: Dict[str, Any]) -> Dict[str, Any]:
-     context = _safe_dict(context)
-     original = _safe_str(action)
-+    handoff_action = _handoff_action_from_committed_context(context)
-+    if handoff_action and (
-+        is_meta_or_vague_action(original)
-+        or is_repeated_affordance_action(original, context)
-+        or "review my quest log" in original.lower()
-+        or "road outside the tavern" in original.lower()
-+    ):
-+        return {
-+            "changed": handoff_action != original,
-+            "action": handoff_action,
-+            "original_action": original,
-+            "reason": "committed_handoff_quest_priority_repair",
-+        }
-
-This makes active handoff quests override stale road-inspection repairs.
-
-5. Fix pre-turn advisory performance false fail
-
-Patch src/tests/rpg/autoplay_llm_campaign.py.
-
-Find _pre_turn_advisory_promotion_performance_summary(...).
-
-Replace the return calculation with:
-
---- src/tests/rpg/autoplay_llm_campaign.py
-+++ src/tests/rpg/autoplay_llm_campaign.py
-@@
- def _pre_turn_advisory_promotion_performance_summary(
-@@
--    return {
--        "ok": not bool(slow_events),
-+    slow_guard_ms = 5000
-+    for row in promotions:
-+        if int(row.get("slow_guard_ms") or 0) > 0:
-+            slow_guard_ms = int(row.get("slow_guard_ms") or 0)
-+            break
++        lead = _safe_dict(quest.get("lead") or (obj.get("known_leads") or [{}])[0])
++        label = _lead_label(lead) or _safe_str(obj.get("subject") or obj.get("summary"))
++        if not _action_mentions_lead(action_text, label):
++            continue
 +
-+    max_elapsed_ms = max(elapsed_values) if elapsed_values else 0
-+    slow_event_count = len(slow_events)
-+    ok = slow_event_count == 0 and max_elapsed_ms <= slow_guard_ms
++        history = obj.setdefault("handoff_semantic_history", [])
++        if not isinstance(history, list):
++            history = []
++            obj["handoff_semantic_history"] = history
++
++        previous_semantics = {
++            _safe_str(item.get("semantic"))
++            for item in history
++            if isinstance(item, dict)
++        }
++        history.append(
++            {
++                "turn": turn,
++                "commit_sequence": current_sequence,
++                "semantic": semantic,
++                "action": action_text,
++            }
++        )
++        del history[:-20]
++
++        distinct = sorted({sem for sem in previous_semantics | {semantic} if sem})
++        obj["distinct_semantic_actions"] = distinct
++        obj["handoff_progress_count"] = len(distinct)
++        obj["status"] = "active"
++        obj["progress_evidence"] = {
++            "source": "handoff_semantic_action_rotation",
++            "turn": turn,
++            "semantic": semantic,
++            "action": action_text,
++        }
++
++        if len(distinct) >= 2:
++            obj["completed"] = True
++            obj["status"] = "completed"
++            obj["completion_evidence"] = {
++                "source": "handoff_semantic_action_rotation",
++                "turn": turn,
++                "distinct_semantic_actions": distinct,
++            }
++
++        progressed_objectives.append(
++            {
++                "quest_id": quest_id,
++                "objective_id": _objective_id(obj),
++                "semantic": semantic,
++                "distinct_semantic_count": len(distinct),
++                "completed": _objective_done(obj),
++            }
++        )
++        changed = True
++
++    for _quest_id, quest in _iter_quests(state):
++        _sync_quest_completion(quest)
 +
 +    return {
-+        "ok": ok,
-         "promotion_count": len(promotions),
--        "fast_path_count": sum(1 for row in promotions if bool(row.get("fast_pre_turn"))),
--        "max_elapsed_ms": max(elapsed_values) if elapsed_values else 0,
-+        "fast_path_count": sum(1 for row in promotions if bool(row.get("fast_pre_turn"))),
-+        "max_elapsed_ms": max_elapsed_ms,
-         "avg_elapsed_ms": round(sum(elapsed_values) / len(elapsed_values), 3) if elapsed_values else 0.0,
--        "slow_event_count": len(slow_events),
-+        "slow_guard_ms": slow_guard_ms,
-+        "slow_event_count": slow_event_count,
-         "slow_events": slow_events[-10:],
-         "auto_disabled": bool(auto_disabled),
-         "disable_reason": _safe_str(disable_reason),
-     }
++        "changed": changed,
++        "reason": "handoff_progress_recorded" if changed else "no_matching_handoff_objective",
++        "progressed_objectives": progressed_objectives,
++    }
+1I. Call handoff progress before stale summary
 
-Also make sure drain_event["pre_turn_advisory_promotion_result"] includes slow_guard_ms:
+In commit_campaign_state(...), after handoff and second reconciliation, add:
+
+--- src/app/rpg/campaign_state/authority_commit.py
++++ src/app/rpg/campaign_state/authority_commit.py
+@@
+     reconciliation_after_handoff = reconcile_quests_from_evidence(
+         state,
+         evidence,
+         current_sequence=current_sequence,
+     )
++    handoff_progress = _record_handoff_action_progress(
++        state,
++        turn_record=turn_record,
++        current_sequence=current_sequence,
++    )
+     quest_summary = _quest_progress_summary(state)
+     stale_state = _stale_state_summary(state, evidence, handoff)
+@@
+         "handoff_summary": handoff,
++        "handoff_progress_summary": handoff_progress,
+         "quest_progress_summary": quest_summary,
+2. Patch src/tests/rpg/autoplay/executable_actions.py
+2A. Add generic semantic rotation helpers
+
+Add near handoff helpers:
+
+--- src/tests/rpg/autoplay/executable_actions.py
++++ src/tests/rpg/autoplay/executable_actions.py
+@@
+ def _has_active_committed_handoff_quest(context: Dict[str, Any]) -> bool:
+@@
+     return False
++
++
++def _recent_handoff_semantics(context: Dict[str, Any]) -> List[str]:
++    context = _safe_dict(context)
++    recent = []
++    for row in _safe_list(context.get("recent_turns"))[-6:]:
++        row = _safe_dict(row)
++        semantic = _safe_str(row.get("handoff_semantic") or row.get("semantic"))
++        if semantic:
++            recent.append(semantic)
++            continue
++        action = _safe_str(row.get("player_action") or row.get("action"))
++        if action:
++            recent.append(_semantic_for_action_text(action))
++    return recent
++
++
++def _semantic_for_action_text(action: str) -> str:
++    text = _safe_str(action).lower()
++    if any(word in text for word in ("ask", "question", "speak", "talk")):
++        return "ask_about_lead"
++    if any(word in text for word in ("inspect", "examine", "look", "search")):
++        return "inspect_lead"
++    if any(word in text for word in ("travel", "move toward", "go to", "head to")):
++        return "travel_to_lead"
++    if any(word in text for word in ("follow", "track", "trail", "route")):
++        return "follow_route"
++    if any(word in text for word in ("journal", "notes", "objective")):
++        return "consult_journal"
++    if any(word in text for word in ("compare", "connect", "cross-check")):
++        return "compare_evidence"
++    return "investigate_lead"
++
++
++def _choose_rotated_handoff_action(obj: Dict[str, Any], context: Dict[str, Any], fallback_subject: str) -> str:
++    obj = _safe_dict(obj)
++    templates = _safe_list(obj.get("semantic_action_templates"))
++    if not templates:
++        suggested = _safe_list(obj.get("suggested_actions"))
++        templates = [
++            {"semantic": _semantic_for_action_text(_safe_str(action)), "command": _safe_str(action)}
++            for action in suggested
++        ]
++
++    recent_semantics = _recent_handoff_semantics(context)
++    recent_set = set(recent_semantics[-3:])
++    history = _safe_list(obj.get("handoff_semantic_history"))
++    used_set = {
++        _safe_str(row.get("semantic"))
++        for row in history
++        if isinstance(row, dict)
++    }
++
++    # Prefer a semantic that was not just used and not already credited.
++    for template in templates:
++        template = _safe_dict(template)
++        semantic = _safe_str(template.get("semantic"))
++        command = _safe_str(template.get("command")).strip()
++        if command and semantic not in recent_set and semantic not in used_set:
++            return command
++
++    # Then allow previously credited semantics, but avoid exact recent repetition.
++    recent_actions = {
++        _safe_str(_safe_dict(row).get("player_action") or _safe_dict(row).get("action")).strip().lower()
++        for row in _safe_list(context.get("recent_turns"))[-4:]
++    }
++    for template in templates:
++        command = _safe_str(_safe_dict(template).get("command")).strip()
++        if command and command.lower() not in recent_actions:
++            return command
++
++    subject = _safe_str(fallback_subject or obj.get("subject") or "the unresolved lead")
++    return f"I take a different approach to {subject}, changing who I ask, where I search, or what evidence I compare."
+2B. Use rotated action in _handoff_action_from_committed_context(...)
+
+Find where _handoff_action_from_committed_context(...) returns suggested actions. Replace that loop with rotation:
+
+--- src/tests/rpg/autoplay/executable_actions.py
++++ src/tests/rpg/autoplay/executable_actions.py
+@@
+         for obj in _safe_list(quest.get("objectives")):
+             obj = _safe_dict(obj)
+             if obj.get("completed") or _safe_str(obj.get("status")) == "completed":
+                 continue
+-            suggested = _safe_list(obj.get("suggested_actions"))
+-            for action in suggested:
+-                action = _safe_str(action).strip()
+-                if action and not is_meta_or_vague_action(action):
+-                    return action
+             subject = _safe_str(obj.get("subject") or lead_label or obj.get("summary") or title)
++            rotated = _choose_rotated_handoff_action(obj, context, subject)
++            if rotated and not is_meta_or_vague_action(rotated):
++                return rotated
+             if subject:
+                 return (
+                     f"I follow up on the lead: {subject}, checking the next place, person, "
+                     "or evidence connected to it instead of repeating the old search."
+                 )
+2C. Tag repaired action with semantic reason
+
+In repair_action_if_needed(...), where it returns committed_handoff_quest_priority_repair, add semantic if your result shape allows arbitrary fields:
+
+--- src/tests/rpg/autoplay/executable_actions.py
++++ src/tests/rpg/autoplay/executable_actions.py
+@@
+         return {
+             "changed": handoff_action != original,
+             "action": handoff_action,
+             "original_action": original,
+             "reason": "committed_handoff_quest_priority_repair",
++            "handoff_semantic": _semantic_for_action_text(handoff_action),
+         }
+
+Apply this to every return path with reason committed_handoff_quest_priority_repair.
+
+3. Patch src/tests/rpg/autoplay_llm_campaign.py
+3A. Store repair semantic on turn record
+
+Where repair result is applied to the final player action, add:
 
 --- src/tests/rpg/autoplay_llm_campaign.py
 +++ src/tests/rpg/autoplay_llm_campaign.py
 @@
-                     "fast_pre_turn": pre_turn_promotion_result.get("fast_pre_turn"),
-                     "elapsed_ms": pre_turn_promotion_result.get("elapsed_ms"),
-+                    "slow_guard_ms": int(getattr(args, "pre_turn_advisory_slow_guard_ms", 5000) or 5000),
-                     "timing_breakdown": pre_turn_promotion_result.get("timing_breakdown"),
-                 }
+         if repair_result.get("changed"):
+             player_action = _safe_str(repair_result.get("action") or player_action)
++            handoff_semantic = _safe_str(repair_result.get("handoff_semantic"))
 
-If your current parser branch still lacks pre_turn_advisory_slow_guard_ms, use:
+Initialize before repair if needed:
 
-int(getattr(args, "pre_turn_advisory_slow_guard_ms", 5000) or 5000)
+--- src/tests/rpg/autoplay_llm_campaign.py
++++ src/tests/rpg/autoplay_llm_campaign.py
+@@
+-        repair_result = {}
++        repair_result = {}
++        handoff_semantic = ""
 
-as shown.
+When creating record, add:
 
-6. Tests
-6A. Patch src/tests/rpg/test_campaign_state_authority_commit.py
+--- src/tests/rpg/autoplay_llm_campaign.py
++++ src/tests/rpg/autoplay_llm_campaign.py
+@@
+             "player_action": player_action,
++            "handoff_semantic": handoff_semantic,
 
-Add:
+If the record is assembled in a different shape, add the same key to the transcript row.
 
-def test_commit_prefers_hook_lead_over_recent_repeated_action_lead():
+3B. Add handoff progress summary to final summary
+
+In _build_authoritative_final_lifecycle_summary(...), after commit summary extraction, add:
+
+--- src/tests/rpg/autoplay_llm_campaign.py
++++ src/tests/rpg/autoplay_llm_campaign.py
+@@
+     summary["campaign_state_commit_summary"] = campaign_commit_summary
++    summary["handoff_progress_summary"] = _safe_dict(
++        campaign_commit_summary.get("handoff_progress_summary")
++    )
+
+Add to final lifecycle required fields:
+
+--- src/tests/rpg/autoplay_llm_campaign.py
++++ src/tests/rpg/autoplay_llm_campaign.py
+@@
+     "campaign_state_commit_summary",
+     "campaign_stale_state_summary",
+     "campaign_state_commit_performance_summary",
++    "handoff_progress_summary",
+     "quality_gate_summary",
+ )
+
+In report model sync:
+
+--- src/tests/rpg/autoplay_llm_campaign.py
++++ src/tests/rpg/autoplay_llm_campaign.py
+@@
+         report_model["campaign_state_commit_performance_summary"] = summary.get(
+             "campaign_state_commit_performance_summary"
+         )
++        report_model["handoff_progress_summary"] = summary.get("handoff_progress_summary")
+         report_model["quality_gate_summary"] = summary.get("quality_gate_summary")
+4. Patch src/app/rpg/objectives/affordances.py
+
+Where handoff objective suggested actions are converted into affordances, preserve semantic metadata:
+
+--- src/app/rpg/objectives/affordances.py
++++ src/app/rpg/objectives/affordances.py
+@@
+         if _safe_dict(objective).get("handoff_objective"):
+-            for action in _safe_list(_safe_dict(objective).get("suggested_actions")):
+-                command = _safe_str(action).strip()
++            templates = _safe_list(_safe_dict(objective).get("semantic_action_templates"))
++            if not templates:
++                templates = [
++                    {"semantic": "investigate_lead", "command": _safe_str(action)}
++                    for action in _safe_list(_safe_dict(objective).get("suggested_actions"))
++                ]
++            for template in templates:
++                template = _safe_dict(template)
++                command = _safe_str(template.get("command")).strip()
+                 if command:
+                     affordances.append(
+                         {
+                             "command": command,
+                             "source": "handoff_objective_suggested_action",
+                             "objective_id": _safe_str(objective.get("objective_id")),
+                             "quest_id": _safe_str(objective.get("quest_id")),
+-                            "semantic": "investigate",
++                            "semantic": _safe_str(template.get("semantic") or "investigate_lead"),
+                             "priority": int(objective.get("affordance_priority") or 100),
+                         }
+                     )
+5. Tests
+5A. Patch src/tests/rpg/test_campaign_state_authority_commit.py
+
+Add generic lead quality tests:
+
+def test_low_information_lead_labels_are_rejected():
+    from app.rpg.campaign_state.authority_commit import (
+        _candidate_lead_phrases_from_text,
+        _is_low_information_lead_label,
+    )
+
+    assert _is_low_information_lead_label("toward") is True
+    assert _is_low_information_lead_label("the clue") is True
+    assert _is_low_information_lead_label("the evidence") is True
+    assert _is_low_information_lead_label("the ruined observatory") is False
+    assert _is_low_information_lead_label("Captain Mara") is False
+
+    phrases = _candidate_lead_phrases_from_text("The trail now points toward the ruined observatory.")
+    assert "toward" not in [p.lower() for p in phrases]
+    assert any("ruined observatory" in p.lower() for p in phrases)
+
+
+def test_handoff_uses_specific_multitoken_lead_not_direction_word():
     from app.rpg.campaign_state.authority_commit import commit_campaign_state
 
     state = {
@@ -554,7 +889,7 @@ def test_commit_prefers_hook_lead_over_recent_repeated_action_lead():
                     "objectives": [
                         {
                             "objective_id": "objective:first",
-                            "summary": "Find the clue.",
+                            "summary": "Finish the first lead.",
                             "status": "completed",
                             "completed": True,
                         }
@@ -564,39 +899,85 @@ def test_commit_prefers_hook_lead_over_recent_repeated_action_lead():
         },
         "autoplay_story_hook_state": {
             "fired_hooks": {
-                "hook:lead:next_location": {
-                    "summary": "The trail points toward the old mill bridge.",
+                "hook:lead:next": {
+                    "summary": "The trail now points toward the ruined observatory.",
                 }
             }
         },
-        "current_location_name": "Road Outside Tavern",
     }
 
-    transcript_tail = [
-        {
-            "turn": 1,
-            "player_action": "I inspect the road outside the tavern for fresh tracks, wagon ruts, black cord, torn cloth, ambush signs, or bridge markings.",
-        }
-    ] * 5
-
-    result = commit_campaign_state(
-        state,
-        transcript_tail=transcript_tail,
-        phase="turn",
-    )
-
-    handoff = result["summary"]["handoff_summary"]
-    assert handoff["changed"] is True
-    quest = [
-        q for q in result["state"]["quest_progress"]["quests"].values()
-        if q.get("source") == "campaign_state_authority_commit"
+    result = commit_campaign_state(state, phase="turn")
+    handoff = [
+        quest for quest in result["state"]["quest_progress"]["quests"].values()
+        if quest.get("source") == "campaign_state_authority_commit"
     ][0]
-    assert "old mill bridge" in quest["title"].lower()
-6B. Patch src/tests/rpg/autoplay/test_executable_actions.py
 
-Add:
+    assert "toward" != handoff["lead"]["name"].lower()
+    assert "ruined observatory" in handoff["title"].lower()
+    assert handoff["objectives"][0]["semantic_action_templates"]
 
-def test_repeated_old_search_repairs_to_committed_handoff_action():
+
+def test_handoff_progresses_after_two_distinct_future_semantic_actions():
+    from app.rpg.campaign_state.authority_commit import commit_campaign_state
+
+    state = {
+        "quest_progress": {
+            "quests": {
+                "quest:first": {
+                    "quest_id": "quest:first",
+                    "title": "First Quest",
+                    "status": "completed",
+                    "completed": True,
+                    "objectives": [
+                        {"objective_id": "objective:first", "summary": "Done.", "completed": True, "status": "completed"}
+                    ],
+                }
+            }
+        },
+        "autoplay_story_hook_state": {
+            "fired_hooks": {
+                "hook:lead:next": {
+                    "summary": "The clue points toward the ruined observatory.",
+                }
+            }
+        },
+    }
+
+    first = commit_campaign_state(state, phase="turn", turn_record={"turn": 1})
+    handoff = [
+        quest for quest in first["state"]["quest_progress"]["quests"].values()
+        if quest.get("source") == "campaign_state_authority_commit"
+    ][0]
+    assert handoff["status"] == "active"
+
+    second = commit_campaign_state(
+        first["state"],
+        phase="turn",
+        turn_record={
+            "turn": 2,
+            "player_action": "I ask nearby people what they know about the ruined observatory.",
+        },
+    )
+    handoff = second["state"]["quest_progress"]["quests"][handoff["quest_id"]]
+    assert handoff["objectives"][0]["handoff_progress_count"] == 1
+    assert handoff["objectives"][0]["completed"] is False
+
+    third = commit_campaign_state(
+        second["state"],
+        phase="turn",
+        turn_record={
+            "turn": 3,
+            "player_action": "I inspect evidence connected to the ruined observatory, looking for concrete next steps.",
+        },
+    )
+    handoff = third["state"]["quest_progress"]["quests"][handoff["quest_id"]]
+    assert handoff["objectives"][0]["completed"] is True
+    assert handoff["completed"] is True
+5B. Patch src/tests/rpg/autoplay/test_executable_actions.py
+
+Add rotation tests:
+
+def test_handoff_action_rotation_avoids_recent_semantic_repeat():
     from tests.rpg.autoplay.executable_actions import repair_action_if_needed
 
     context = {
@@ -604,79 +985,63 @@ def test_repeated_old_search_repairs_to_committed_handoff_action():
             "quest_progress_summary": {
                 "quests": [
                     {
-                        "quest_id": "quest:done",
-                        "title": "Old Quest",
-                        "status": "completed",
-                        "completed": True,
-                    },
-                    {
                         "quest_id": "quest:investigate_lead:test",
-                        "title": "Investigate Lead: old mill bridge",
+                        "title": "Investigate Lead: ruined observatory",
                         "status": "active",
                         "completed": False,
                         "source": "campaign_state_authority_commit",
                         "handoff_quest": True,
-                        "lead": {"name": "old mill bridge"},
+                        "lead": {"name": "ruined observatory"},
                         "objectives": [
                             {
                                 "objective_id": "objective:lead",
-                                "summary": "Investigate the unresolved lead: old mill bridge.",
+                                "summary": "Investigate the unresolved lead: ruined observatory.",
                                 "status": "active",
                                 "completed": False,
-                                "subject": "old mill bridge",
+                                "subject": "ruined observatory",
                                 "handoff_objective": True,
+                                "semantic_action_templates": [
+                                    {
+                                        "semantic": "ask_about_lead",
+                                        "command": "I ask nearby people what they know about ruined observatory.",
+                                    },
+                                    {
+                                        "semantic": "inspect_lead",
+                                        "command": "I inspect evidence connected to ruined observatory, looking for concrete next steps.",
+                                    },
+                                ],
+                                "handoff_semantic_history": [
+                                    {"semantic": "ask_about_lead", "turn": 2}
+                                ],
                             }
                         ],
-                    },
+                    }
                 ]
             }
         },
         "recent_turns": [
             {
-                "player_action": "I inspect the road outside the tavern for fresh tracks, wagon ruts, black cord, torn cloth, ambush signs, or bridge markings."
+                "player_action": "I ask nearby people what they know about ruined observatory.",
+                "handoff_semantic": "ask_about_lead",
             }
-        ] * 4,
+        ],
     }
 
     result = repair_action_if_needed(
-        "I inspect the road outside the tavern for fresh tracks, wagon ruts, black cord, torn cloth, ambush signs, or bridge markings.",
+        "I ask nearby people what they know about ruined observatory.",
         context,
     )
 
     assert result["changed"] is True
     assert result["reason"] == "committed_handoff_quest_priority_repair"
-    assert "old mill bridge" in result["action"].lower()
-6C. Patch pre-turn performance summary test
+    assert result["handoff_semantic"] == "inspect_lead"
+    assert "inspect" in result["action"].lower()
+6. Validation
 
-Add to src/tests/rpg/autoplay/test_quality_gates.py:
-
-def test_pre_turn_advisory_perf_ok_when_zero_slow_events_and_low_elapsed():
-    from tests.rpg.autoplay_llm_campaign import _pre_turn_advisory_promotion_performance_summary
-
-    summary = _pre_turn_advisory_promotion_performance_summary(
-        [
-            {
-                "pre_turn_advisory_promotion_result": {
-                    "elapsed_ms": 9,
-                    "fast_pre_turn": True,
-                    "slow_guard_ms": 5000,
-                }
-            }
-        ],
-        slow_events=[],
-        auto_disabled=False,
-        disable_reason="",
-    )
-
-    assert summary["ok"] is True
-    assert summary["max_elapsed_ms"] == 9
-    assert summary["slow_event_count"] == 0
-7. Validation
-
-Run compile:
+Compile:
 
 python -m py_compile src\app\rpg\campaign_state\authority_commit.py src\app\rpg\objectives\affordances.py src\tests\rpg\autoplay_llm_campaign.py src\tests\rpg\autoplay\executable_actions.py
 
 Run focused tests:
 
-python -m pytest src\tests\rpg\test_campaign_state_authority_commit.py src\tests\rpg\autoplay\test_executable_actions.py src\tests\rpg\autoplay\test_quality_gates.py -q
+python -m pytest src\tests\rpg\test_campaign_state_authority_commit.py src\tests\rpg\autoplay\test_executable_actions.py -q

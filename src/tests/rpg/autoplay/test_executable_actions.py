@@ -274,3 +274,51 @@ def test_repeated_old_search_repairs_to_committed_handoff_action():
     assert result["changed"] is True
     assert result["reason"] == "committed_handoff_quest_priority_repair"
     assert "old mill bridge" in result["action"].lower()
+
+
+def test_scenario_specific_witness_repair_disabled_when_handoff_active():
+    context = {
+        "campaign_state_commit_summary": {
+            "quest_progress_summary": {
+                "quests": [
+                    {
+                        "quest_id": "quest:investigate_lead:test",
+                        "title": "Investigate Lead: Bandit Road",
+                        "status": "active",
+                        "completed": False,
+                        "source": "campaign_state_authority_commit",
+                        "handoff_quest": True,
+                        "lead": {"name": "Bandit Road"},
+                        "objectives": [
+                            {
+                                "objective_id": "objective:lead",
+                                "summary": "Investigate the unresolved lead: Bandit Road.",
+                                "status": "active",
+                                "completed": False,
+                                "subject": "Bandit Road",
+                                "handoff_objective": True,
+                            }
+                        ],
+                    }
+                ]
+            }
+        },
+        "quest_progress": {
+            "quests": {
+                "quest:witness_search": {"status": "completed", "completed": True},
+            }
+        },
+        "recent_turns": [
+            {
+                "player_action": "I inspect the road outside the tavern for fresh tracks, wagon ruts, black cord, torn cloth, ambush signs, or bridge markings."
+            }
+        ] * 4,
+    }
+
+    result = repair_action_if_needed(
+        "I ask Bran where the cloaked traveler went after leaving by the side door.",
+        context,
+    )
+
+    assert result["reason"] == "committed_handoff_quest_priority_repair"
+    assert "bandit road" in result["action"].lower()

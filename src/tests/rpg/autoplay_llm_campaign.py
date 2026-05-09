@@ -4773,8 +4773,18 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
             runtime_state.get("campaign_state_commit_summary")
         )
         record["quest_progress_after_commit"] = _safe_dict(runtime_state.get("quest_progress"))
+        record["campaign_state_commit_sequence"] = int(runtime_state.get("campaign_state_commit_sequence") or 0)
         commit_summary = _safe_dict(runtime_state.get("campaign_state_commit_summary"))
         commit_qps = _safe_dict(commit_summary.get("quest_progress_summary"))
+        active_handoff_count = 0
+        for quest in _safe_list(commit_qps.get("quests")):
+            quest = _safe_dict(quest)
+            if not quest.get("completed") and (
+                quest.get("handoff_quest")
+                or quest.get("source") == "campaign_state_authority_commit"
+                or _safe_str(quest.get("title")).startswith("Investigate Lead:")
+            ):
+                active_handoff_count += 1
         committed_digest = state_digest(last_committed_state)
         record["final_authoritative_state"] = last_committed_state
         record["after_state_digest"] = committed_digest
@@ -4787,6 +4797,7 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
             turn_index=turn_index,
             active_count=commit_qps.get("active_count"),
             completed_count=commit_qps.get("completed_count"),
+            active_handoff_count=active_handoff_count,
             handoff_reason=_safe_str(_safe_dict(commit_summary.get("handoff_summary")).get("reason")),
             handoff_changed=bool(_safe_dict(commit_summary.get("handoff_summary")).get("changed")),
         )

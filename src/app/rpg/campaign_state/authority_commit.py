@@ -33,6 +33,17 @@ def _bounded_append(state: Dict[str, Any], key: str, row: Dict[str, Any], *, lim
         del log[:-limit]
 
 
+def _next_commit_sequence(state: Dict[str, Any]) -> int:
+    current = int(_safe_dict(state).get("campaign_state_commit_sequence") or 0)
+    current += 1
+    state["campaign_state_commit_sequence"] = current
+    return current
+
+
+def _current_commit_sequence(state: Dict[str, Any]) -> int:
+    return int(_safe_dict(state).get("campaign_state_commit_sequence") or 0)
+
+
 def _quest_progress(state: Dict[str, Any]) -> Dict[str, Any]:
     state = _safe_dict(state)
     qp = state.setdefault("quest_progress", {})
@@ -158,6 +169,28 @@ def _evidence_matches_objective(evidence: Dict[str, Any], obj: Dict[str, Any]) -
     return len(overlap) >= 2 or (len(obj_tokens) <= 3 and bool(overlap))
 
 
+def _objective_is_handoff_guarded(obj: Dict[str, Any], evidence: Dict[str, Any], *, current_sequence: int) -> bool:
+    obj = _safe_dict(obj)
+    if not bool(obj.get("handoff_objective")):
+        return False
+
+    created_sequence = int(obj.get("created_commit_sequence") or 0)
+    evidence_generation = int(_safe_dict(evidence).get("generation") or 0)
+    activated_after_turn = int(obj.get("activated_after_turn") or 0)
+    evidence_turn = int(_safe_dict(evidence).get("turn") or 0)
+
+    if created_sequence and evidence_generation <= created_sequence:
+        return True
+
+    if activated_after_turn and evidence_turn and evidence_turn <= activated_after_turn:
+        return True
+
+    if created_sequence and current_sequence <= created_sequence:
+        return True
+
+    return False
+
+
 def _collect_evidence_from_progression_log(state: Dict[str, Any]) -> List[Dict[str, Any]]:
     evidence: List[Dict[str, Any]] = []
     for row in _safe_list(state.get("objective_progression_log"))[-100:]:
@@ -174,6 +207,7 @@ def _collect_evidence_from_progression_log(state: Dict[str, Any]) -> List[Dict[s
                 "summary": _safe_str(row.get("summary")),
                 "event": _safe_dict(row.get("event")),
                 "turn": row.get("turn"),
+                "generation": int(row.get("generation") or row.get("commit_sequence") or 0),
                 "raw": row,
             }
         )
@@ -207,6 +241,7 @@ def _collect_evidence_from_hooks(state: Dict[str, Any]) -> List[Dict[str, Any]]:
                 "partial": partial,
                 "summary": _safe_str(payload.get("summary") or hook_id.replace("hook:", "").replace("_", " ")),
                 "turn": payload.get("turn"),
+                "generation": int(payload.get("generation") or payload.get("commit_sequence") or 0),
                 "raw": payload,
             }
         )
@@ -230,6 +265,7 @@ def _collect_evidence_from_turn_record(turn_record: Optional[Dict[str, Any]]) ->
                 "partial": False,
                 "summary": _safe_str(completed.get("summary")),
                 "turn": row.get("turn") or row.get("turn_index"),
+                "generation": int(row.get("campaign_state_commit_sequence") or 0),
                 "raw": completed,
             }
         )
@@ -244,6 +280,7 @@ def _collect_evidence_from_turn_record(turn_record: Optional[Dict[str, Any]]) ->
                 "partial": True,
                 "summary": _safe_str(progressed.get("summary")),
                 "turn": row.get("turn") or row.get("turn_index"),
+                "generation": int(row.get("campaign_state_commit_sequence") or 0),
                 "raw": progressed,
             }
         )
@@ -291,17 +328,26 @@ def collect_objective_evidence(
     return deduped[-200:]
 
 
-def reconcile_quests_from_evidence(state: Dict[str, Any], evidence: List[Dict[str, Any]]) -> Dict[str, Any]:
+def reconcile_quests_from_evidence(
+    state: Dict[str, Any],
+    evidence: List[Dict[str, Any]],
+    *,
+    current_sequence: int = 0,
+) -> Dict[str, Any]:
     promoted = _promote_quest_log_state_to_quest_progress(state)
     completed_updates = 0
     partial_updates = 0
     matched_evidence = 0
+    guarded_handoff_evidence = 0
 
     for row in evidence:
         row = _safe_dict(row)
         matched_this_row = False
         for _quest_id, _quest, obj in _iter_objectives(state):
             if not _evidence_matches_objective(row, obj):
+                continue
+            if _objective_is_handoff_guarded(obj, row, current_sequence=current_sequence):
+                guarded_handoff_evidence += 1
                 continue
             matched_this_row = True
             if row.get("completed"):
@@ -322,6 +368,7 @@ def reconcile_quests_from_evidence(state: Dict[str, Any], evidence: List[Dict[st
         "ok": True,
         "evidence_count": len(evidence),
         "matched_evidence_count": matched_evidence,
+        "guarded_handoff_evidence_count": guarded_handoff_evidence,
         "quest_promotions": promoted,
         "completed_objective_updates": completed_updates,
         "partial_objective_updates": partial_updates,
@@ -394,6 +441,38 @@ def _lead_priority(lead: Dict[str, Any]) -> int:
     kind = _safe_str(lead.get("kind"))
     base = int(LEAD_SOURCE_PRIORITY.get(source, 25))
     label = _norm(lead.get("name") or lead.get("title") or lead.get("id"))
+    forward_terms = (
+        "points toward",
+        "trail now points",
+        "now points",
+        "toward",
+        "leads to",
+        "route",
+        "destination",
+        "next",
+        "bridge",
+        "road",
+        "crossing",
+        "settlement",
+        "camp",
+        "hideout",
+        "mill",
+    )
+    completion_terms = (
+        "reported to",
+        "findings were reported",
+        "reported",
+        "completed",
+        "quest complete",
+        "objective complete",
+        "told bran",
+        "report to",
+    )
+
+    if any(term in label for term in forward_terms):
+        base += 35
+    if any(term in label for term in completion_terms):
+        base -= 45
 
     repeated_action_terms = {
         "inspect",
@@ -414,7 +493,7 @@ def _lead_priority(lead: Dict[str, Any]) -> int:
 
     if kind in {"hook", "fact", "topic", "target", "location"}:
         base += 5
-    return base
+    return max(0, base)
 
 
 def _sort_leads(leads: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
@@ -458,6 +537,36 @@ def derive_unresolved_leads(
         payload = _safe_dict(payload)
         summary = _safe_str(payload.get("summary"))
         lower = _norm(f"{hook_id} {summary}")
+        is_completion_only = any(
+            phrase in lower
+            for phrase in (
+                "reported to",
+                "findings were reported",
+                "objective completed",
+                "quest completed",
+                "completed",
+                "report to bran completed",
+            )
+        )
+        is_forward_lead = any(
+            phrase in lower
+            for phrase in (
+                "points toward",
+                "trail now points",
+                "now points",
+                "leads to",
+                "toward the",
+                "route",
+                "destination",
+                "bridge",
+                "road",
+                "camp",
+                "hideout",
+                "mill",
+            )
+        )
+        if is_completion_only and not is_forward_lead:
+            continue
         if any(
             term in lower
             for term in ("lead", "trail", "road", "bridge", "toward", "points", "location", "route")
@@ -551,7 +660,13 @@ def _has_active_quest(state: Dict[str, Any]) -> bool:
     return False
 
 
-def apply_generic_handoff_from_leads(state: Dict[str, Any], leads: List[Dict[str, Any]]) -> Dict[str, Any]:
+def apply_generic_handoff_from_leads(
+    state: Dict[str, Any],
+    leads: List[Dict[str, Any]],
+    *,
+    current_sequence: int = 0,
+    current_turn: int = 0,
+) -> Dict[str, Any]:
     counts = _quest_counts(state)
     if _has_active_quest(state):
         return {"ok": True, "changed": False, "reason": "active_quest_exists", **counts}
@@ -579,6 +694,8 @@ def apply_generic_handoff_from_leads(state: Dict[str, Any], leads: List[Dict[str
         "source": "campaign_state_authority_commit",
         "priority": 100,
         "handoff_quest": True,
+        "created_commit_sequence": int(current_sequence or 0),
+        "activated_after_turn": int(current_turn or 0),
         "lead": lead,
         "objectives": [
             {
@@ -588,6 +705,13 @@ def apply_generic_handoff_from_leads(state: Dict[str, Any], leads: List[Dict[str
                 "subject": label,
                 "affordance_priority": 100,
                 "handoff_objective": True,
+                "created_commit_sequence": int(current_sequence or 0),
+                "activated_after_turn": int(current_turn or 0),
+                "completion_guard": {
+                    "kind": "requires_future_evidence",
+                    "created_commit_sequence": int(current_sequence or 0),
+                    "activated_after_turn": int(current_turn or 0),
+                },
                 "suggested_actions": [
                     f"I follow up on the lead: {label}.",
                     f"I ask nearby people what they know about {label}.",
@@ -611,6 +735,8 @@ def apply_generic_handoff_from_leads(state: Dict[str, Any], leads: List[Dict[str
         "lead": lead,
         "summary": f"Activated generic investigation quest for unresolved lead: {label}.",
         "source": "campaign_state_authority_commit",
+        "created_commit_sequence": int(current_sequence or 0),
+        "activated_after_turn": int(current_turn or 0),
     }
     _bounded_append(state, "quest_handoff_log", row, limit=100)
     _bounded_append(state, "campaign_state_commit_handoff_log", row, limit=100)
@@ -699,7 +825,8 @@ def _stale_state_summary(state: Dict[str, Any], evidence: List[Dict[str, Any]], 
     completed_without_next = (
         counts["completed_quest_count"] > 0
         and counts["active_quest_count"] <= 0
-        and not _safe_dict(handoff).get("changed")
+        and not bool(_safe_dict(handoff).get("changed"))
+        and _safe_str(_safe_dict(handoff).get("reason")) != "handoff_already_exists"
     )
     return {
         "ok": not stale_active_objectives and not completed_without_next,
@@ -727,6 +854,13 @@ def commit_campaign_state(
     start = time.perf_counter()
     state = _safe_dict(runtime_state)
     phase = "final" if phase == "final" else "turn"
+    current_sequence = _next_commit_sequence(state)
+    current_turn = int(
+        _safe_dict(turn_record).get("turn")
+        or _safe_dict(turn_record).get("turn_index")
+        or state.get("turn_index")
+        or 0
+    )
 
     evidence = collect_objective_evidence(
         state,
@@ -735,13 +869,26 @@ def commit_campaign_state(
         transcript=transcript,
         phase=phase,
     )
-    reconciliation = reconcile_quests_from_evidence(state, evidence)
+    reconciliation = reconcile_quests_from_evidence(
+        state,
+        evidence,
+        current_sequence=current_sequence,
+    )
     leads = derive_unresolved_leads(state, evidence, transcript_tail=transcript_tail)
     if leads:
         state["unresolved_leads"] = leads[:25]
-    handoff = apply_generic_handoff_from_leads(state, leads)
+    handoff = apply_generic_handoff_from_leads(
+        state,
+        leads,
+        current_sequence=current_sequence,
+        current_turn=current_turn,
+    )
 
-    reconciliation_after_handoff = reconcile_quests_from_evidence(state, evidence)
+    reconciliation_after_handoff = reconcile_quests_from_evidence(
+        state,
+        evidence,
+        current_sequence=current_sequence,
+    )
     quest_summary = _quest_progress_summary(state)
     stale_state = _stale_state_summary(state, evidence, handoff)
 
@@ -756,6 +903,8 @@ def commit_campaign_state(
     commit_summary = {
         "ok": bool(reconciliation.get("ok", True)) and bool(handoff.get("ok", True)) and bool(stale_state.get("ok", True)),
         "phase": phase,
+        "commit_sequence": current_sequence,
+        "current_turn": current_turn,
         "evidence_count": len(evidence),
         "objective_evidence": evidence[-25:],
         "quest_reconciliation_summary": reconciliation,
@@ -775,6 +924,8 @@ def commit_campaign_state(
         {
             "phase": phase,
             "ok": commit_summary["ok"],
+            "commit_sequence": current_sequence,
+            "current_turn": current_turn,
             "elapsed_ms": elapsed_ms,
             "evidence_count": len(evidence),
             "handoff_changed": bool(handoff.get("changed")),
