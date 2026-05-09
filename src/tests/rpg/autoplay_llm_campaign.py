@@ -1206,6 +1206,55 @@ def _summarize_manual_turn_errors(transcript: List[Dict[str, Any]]) -> Dict[str,
     }
 
 
+REQUIRED_FINAL_LIFECYCLE_SUMMARY_FIELDS = (
+    "latest_state",
+    "quest_progress_summary",
+    "objective_progression_summary",
+    "quest_reconciliation_summary",
+    "quest_handoff_summary",
+    "final_state_field_coverage_summary",
+    "strict_progress_health_summary",
+    "post_transition_action_quality_summary",
+    "repeated_affordance_loop_summary",
+    "pre_turn_advisory_promotion_performance_summary",
+    "quality_gate_summary",
+)
+
+
+REQUIRED_FINAL_LIFECYCLE_GATES = (
+    "strict_progress_health_ok",
+    "post_transition_action_quality_ok",
+    "objective_progression_present_ok",
+    "repeated_affordance_loop_ok",
+    "quest_handoff_available_after_completion_ok",
+    "no_completed_without_next_objective_ok",
+    "final_state_field_coverage_ok",
+    "pre_turn_advisory_promotion_fast_ok",
+    "final_lifecycle_summary_fields_present_ok",
+)
+
+
+def _final_lifecycle_field_presence_summary(summary: Dict[str, Any]) -> Dict[str, Any]:
+    summary = _safe_dict(summary)
+    present = []
+    missing = []
+    empty = []
+    for key in REQUIRED_FINAL_LIFECYCLE_SUMMARY_FIELDS:
+        value = summary.get(key)
+        if key not in summary:
+            missing.append(key)
+        elif value in (None, {}, []):
+            empty.append(key)
+        else:
+            present.append(key)
+    return {
+        "ok": not missing and not empty,
+        "present": present,
+        "missing": missing,
+        "empty": empty,
+    }
+
+
 def _quest_progress_summary_from_state(state: Dict[str, Any]) -> Dict[str, Any]:
     state = _safe_dict(state)
     quest_progress = _safe_dict(state.get("quest_progress"))
@@ -1231,7 +1280,10 @@ def _quest_progress_summary_from_state(state: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
-def _objective_progression_summary_from_state(state: Dict[str, Any]) -> Dict[str, Any]:
+def _objective_progression_summary_from_state(
+    state: Dict[str, Any],
+    transcript: List[Dict[str, Any]] | None = None,
+) -> Dict[str, Any]:
     state = _safe_dict(state)
     log = _safe_list(state.get("objective_progression_log"))
     hook_state = _safe_dict(state.get("autoplay_story_hook_state"))
@@ -1245,6 +1297,7 @@ def _objective_progression_summary_from_state(state: Dict[str, Any]) -> Dict[str
         "count": len(log) + len(objective_hooks),
         "recent": log[-10:],
         "objective_hooks": objective_hooks[-10:],
+        "transcript_turns": len(_safe_list(transcript)),
         "ok": bool(log or objective_hooks),
     }
 
@@ -1291,6 +1344,427 @@ def _repeated_affordance_loop_summary(transcript: List[Dict[str, Any]], *, thres
         "repeated": repeated[:10],
         "threshold": int(threshold or 4),
     }
+
+
+def _quest_reconciliation_summary_from_state(state: Dict[str, Any]) -> Dict[str, Any]:
+    state = _safe_dict(state)
+    log = [_safe_dict(row) for row in _safe_list(state.get("quest_reconciliation_log"))]
+    errors = [row for row in log if _safe_str(row.get("error"))]
+    return {
+        "ok": not errors,
+        "count": len(log),
+        "changed_count": sum(1 for row in log if bool(row.get("changed"))),
+        "errors": errors[:20],
+        "recent": log[-10:],
+    }
+
+
+def _quest_handoff_summary_from_state(state: Dict[str, Any]) -> Dict[str, Any]:
+    state = _safe_dict(state)
+    log = [_safe_dict(row) for row in _safe_list(state.get("quest_handoff_log"))]
+    quest_rows = _safe_dict(_safe_dict(state.get("quest_progress")).get("quests"))
+    active_handoff_quests = []
+    for quest_id, raw in quest_rows.items():
+        quest = _safe_dict(raw)
+        if _safe_str(quest.get("source")) != "generic_quest_handoff":
+            continue
+        if bool(quest.get("completed")) or _safe_str(quest.get("status")) == "completed":
+            continue
+        active_handoff_quests.append(_safe_str(quest.get("quest_id") or quest_id))
+    return {
+        "ok": True,
+        "count": len(log),
+        "recent": log[-10:],
+        "active_handoff_quests": active_handoff_quests[:20],
+        "available_after_completion": bool(log or active_handoff_quests),
+    }
+
+
+def _final_state_field_coverage_summary(state: Dict[str, Any]) -> Dict[str, Any]:
+    state = _safe_dict(state)
+    required_fields = (
+        "quest_progress",
+        "dialogue_state",
+        "objective_progression_log",
+        "quest_reconciliation_log",
+        "quest_handoff_log",
+        "autoplay_story_hook_state",
+        "location_history",
+        "recent_turns",
+        "action_history",
+    )
+    presence_only_fields = {
+        "quest_handoff_log",
+    }
+    present = []
+    missing = []
+    empty = []
+    for key in required_fields:
+        value = state.get(key)
+        if key not in state:
+            missing.append(key)
+        elif key in presence_only_fields:
+            present.append(key)
+        elif value in (None, {}, []):
+            empty.append(key)
+        else:
+            present.append(key)
+    return {
+        "ok": not missing and not empty,
+        "present": present,
+        "missing": missing,
+        "empty": empty,
+    }
+
+
+def _ensure_runtime_state_tracking_fields(
+    runtime_state: Dict[str, Any],
+    transcript: List[Dict[str, Any]],
+) -> Dict[str, Any]:
+    state = deepcopy(_safe_dict(runtime_state))
+    if "quest_handoff_log" not in state:
+        state["quest_handoff_log"] = []
+    if _safe_list(state.get("action_history")):
+        return state
+
+    action_history = []
+    for row in _safe_list(transcript):
+        row = _safe_dict(row)
+        player_action = _safe_str(row.get("player_action"))
+        if not player_action:
+            continue
+        turn_index = int(row.get("turn_index") or row.get("turn") or 0)
+        action_history.append(
+            {
+                "turn": turn_index,
+                "turn_index": turn_index,
+                "player_action": player_action,
+            }
+        )
+    if action_history:
+        state["action_history"] = action_history[-200:]
+    return state
+
+
+def _strict_progress_health_summary_from_summary(summary: Dict[str, Any]) -> Dict[str, Any]:
+    summary = _safe_dict(summary)
+    progress_quality = _safe_dict(_safe_dict(summary.get("health")).get("progress_quality"))
+    metrics = _safe_dict(progress_quality.get("metrics"))
+    objective_progression = _safe_dict(summary.get("objective_progression_summary"))
+    quest_progress_summary = _safe_dict(summary.get("quest_progress_summary"))
+    violations = []
+    for quest in _safe_list(quest_progress_summary.get("quests")):
+        quest = _safe_dict(quest)
+        if _safe_str(quest.get("status")) != "active":
+            continue
+        objectives = [_safe_dict(row) for row in _safe_list(quest.get("objectives"))]
+        if not objectives:
+            continue
+        has_completed = any(
+            bool(row.get("completed")) or _safe_str(row.get("status")) == "completed"
+            for row in objectives
+        )
+        has_next = any(
+            not bool(row.get("completed")) and _safe_str(row.get("status")) != "completed"
+            for row in objectives
+        )
+        if has_completed and not has_next:
+            violations.append(
+                {
+                    "quest_id": _safe_str(quest.get("quest_id")),
+                    "title": _safe_str(quest.get("title")),
+                }
+            )
+    ok = bool(progress_quality.get("ok", True)) and (bool(objective_progression.get("ok")) or not summary.get("requested_turns"))
+    ok = ok and not violations
+    return {
+        "ok": ok,
+        "metrics": metrics,
+        "objective_progression_present": bool(objective_progression.get("ok")),
+        "no_completed_without_next_objective_violations": violations[:20],
+        "quest_count": int(quest_progress_summary.get("quest_count") or 0),
+    }
+
+
+def _pre_turn_advisory_promotion_performance_summary(
+    background_drain_events: List[Dict[str, Any]],
+    *,
+    slow_events: List[Dict[str, Any]],
+    auto_disabled: bool,
+    disable_reason: str,
+) -> Dict[str, Any]:
+    promotion_results = []
+    for row in _safe_list(background_drain_events):
+        result = _safe_dict(_safe_dict(row).get("pre_turn_advisory_promotion_result"))
+        if result:
+            promotion_results.append(result)
+    elapsed_values = [float(_safe_dict(row).get("elapsed_ms") or 0.0) for row in promotion_results]
+    fast_count = sum(1 for row in promotion_results if bool(_safe_dict(row).get("fast_pre_turn")))
+    return {
+        "ok": (not promotion_results or fast_count == len(promotion_results)) and not slow_events and not auto_disabled,
+        "count": len(promotion_results),
+        "fast_count": fast_count,
+        "slow_event_count": len(_safe_list(slow_events)),
+        "auto_disabled": bool(auto_disabled),
+        "disable_reason": _safe_str(disable_reason),
+        "max_elapsed_ms": max(elapsed_values, default=0.0),
+    }
+
+
+def _merge_preserving_runtime_state(
+    previous_state: Dict[str, Any],
+    runtime_state: Dict[str, Any],
+) -> Dict[str, Any]:
+    previous_state = _safe_dict(previous_state)
+    runtime_state = _safe_dict(runtime_state)
+    if not previous_state:
+        return deepcopy(runtime_state)
+    if not runtime_state:
+        return deepcopy(previous_state)
+
+    merged = deepcopy(previous_state)
+    for key, value in runtime_state.items():
+        if key == "campaign_calendar":
+            merged[key] = _merge_campaign_calendar(_safe_dict(merged.get(key)), _safe_dict(value))
+            continue
+        if key == "player_journal":
+            merged[key] = _merge_player_journal(_safe_dict(merged.get(key)), _safe_dict(value))
+            continue
+        existing_value = merged.get(key)
+        if value in (None, {}, []) and existing_value not in (None, {}, []):
+            continue
+        if isinstance(merged.get(key), dict) and isinstance(value, dict):
+            merged[key] = _merge_preserving_runtime_state(_safe_dict(merged.get(key)), _safe_dict(value))
+            continue
+        merged[key] = deepcopy(value)
+    return merged
+
+
+def _reconcile_and_apply_handoff(runtime_state: Dict[str, Any]) -> Dict[str, Any]:
+    state = deepcopy(_safe_dict(runtime_state))
+    try:
+        from app.rpg.objectives.reconciliation import reconcile_objective_progression_into_quests
+
+        reconciled = _safe_dict(reconcile_objective_progression_into_quests(state))
+        state = _safe_dict(reconciled.get("state")) or state
+    except Exception:
+        pass
+    try:
+        from app.rpg.objectives.handoff import apply_generic_quest_handoff
+
+        handoff = _safe_dict(apply_generic_quest_handoff(state))
+        state = _safe_dict(handoff.get("state")) or state
+    except Exception:
+        pass
+    return state
+
+
+def _runtime_state_from_transcript(transcript: List[Dict[str, Any]]) -> Dict[str, Any]:
+    merged: Dict[str, Any] = {}
+    for row in _safe_list(transcript):
+        row = _safe_dict(row)
+        row_turn_result = _safe_dict(row.get("turn_result"))
+        manual_summary = _safe_dict(row_turn_result.get("manual_turn_summary"))
+        row_runtime_state = (
+            _safe_dict(row.get("final_authoritative_state"))
+            or _safe_dict(row.get("authoritative_state"))
+            or _safe_dict(row.get("after_state"))
+            or _safe_dict(row.get("runtime_state"))
+            or _safe_dict(row_turn_result.get("runtime_state"))
+            or _safe_dict(manual_summary.get("runtime_state"))
+            or _safe_dict(manual_summary.get("simulation_state"))
+            or _safe_dict(row_turn_result.get("simulation_state"))
+        )
+        if row_runtime_state:
+            merged = _merge_preserving_runtime_state(merged, row_runtime_state)
+    return merged
+
+
+def _guard_quest_summary_source(summary: Dict[str, Any], runtime_state: Dict[str, Any]) -> None:
+    quest_summary = _safe_dict(summary.get("quest_progress_summary"))
+    runtime_state = _safe_dict(runtime_state)
+    derived_source = _safe_str(_quest_progress_summary_from_state(runtime_state).get("source"))
+    current_source = _safe_str(quest_summary.get("source"))
+    if not current_source or current_source == "latest_state.quest_progress":
+        quest_summary["source"] = derived_source or "latest_state"
+    summary["quest_progress_summary"] = quest_summary
+
+
+def _final_lifecycle_quality_gates(summary: Dict[str, Any]) -> Dict[str, Any]:
+    summary = _safe_dict(summary)
+    existing = _safe_dict(summary.get("quality_gate_summary"))
+    gates = dict(_safe_dict(existing.get("gates")))
+    requested_turns = int(summary.get("requested_turns") or summary.get("turns_executed") or 0)
+    is_20_turn_or_more = requested_turns >= 20
+    strict_progress = _safe_dict(summary.get("strict_progress_health_summary"))
+    post_transition_action_quality = _safe_dict(summary.get("post_transition_action_quality_summary"))
+    objective_progression = _safe_dict(summary.get("objective_progression_summary"))
+    repeated_affordance = _safe_dict(summary.get("repeated_affordance_loop_summary"))
+    quest_handoff = _safe_dict(summary.get("quest_handoff_summary"))
+    field_coverage = _safe_dict(summary.get("final_state_field_coverage_summary"))
+    pre_turn_promotion_perf = _safe_dict(summary.get("pre_turn_advisory_promotion_performance_summary"))
+    final_field_presence = _final_lifecycle_field_presence_summary(summary)
+
+    quest_progress_summary = _safe_dict(summary.get("quest_progress_summary"))
+    active_quests = 0
+    completed_quests = 0
+    completed_without_next_objective = []
+    for row in _safe_list(quest_progress_summary.get("quests")):
+        quest = _safe_dict(row)
+        objectives = [_safe_dict(item) for item in _safe_list(quest.get("objectives"))]
+        status = _safe_str(quest.get("status"))
+        completed = bool(quest.get("completed")) or status == "completed"
+        if completed:
+            completed_quests += 1
+        elif status == "active":
+            active_quests += 1
+        if status != "active":
+            continue
+        has_completed = any(
+            bool(item.get("completed")) or _safe_str(item.get("status")) == "completed"
+            for item in objectives
+        )
+        has_next = any(
+            not bool(item.get("completed")) and _safe_str(item.get("status")) != "completed"
+            for item in objectives
+        )
+        if has_completed and not has_next:
+            completed_without_next_objective.append(_safe_str(quest.get("quest_id") or quest.get("title")))
+
+    gates["strict_progress_health_ok"] = (
+        not is_20_turn_or_more
+        or bool(strict_progress.get("ok", False))
+    )
+    gates["post_transition_action_quality_ok"] = (
+        not is_20_turn_or_more
+        or bool(post_transition_action_quality.get("ok", False))
+    )
+    gates["objective_progression_present_ok"] = (
+        not is_20_turn_or_more
+        or bool(objective_progression.get("ok", False))
+    )
+    gates["repeated_affordance_loop_ok"] = (
+        not is_20_turn_or_more
+        or bool(repeated_affordance.get("ok", True))
+    )
+    gates["quest_handoff_available_after_completion_ok"] = (
+        completed_quests == 0
+        or active_quests > 0
+        or bool(quest_handoff.get("count") or quest_handoff.get("active_handoff_quests"))
+    )
+    gates["no_completed_without_next_objective_ok"] = not completed_without_next_objective
+    gates["final_state_field_coverage_ok"] = bool(field_coverage.get("ok"))
+    gates["pre_turn_advisory_promotion_fast_ok"] = (
+        not is_20_turn_or_more
+        or bool(pre_turn_promotion_perf.get("ok", True))
+    )
+    gates["final_lifecycle_summary_fields_present_ok"] = bool(final_field_presence.get("ok"))
+
+    for required_gate in REQUIRED_FINAL_LIFECYCLE_GATES:
+        gates.setdefault(required_gate, False)
+
+    failed = [name for name, ok in gates.items() if not bool(ok)]
+    return {
+        **existing,
+        "ok": not failed,
+        "gates": gates,
+        "failed_gates": failed,
+        "final_lifecycle_field_presence": final_field_presence,
+        "source": "final_lifecycle_quality_gates",
+    }
+
+
+def _build_authoritative_final_lifecycle_summary(
+    *,
+    summary: Dict[str, Any],
+    runtime_state: Dict[str, Any],
+    transcript: List[Dict[str, Any]],
+    background_drain_events: List[Dict[str, Any]],
+    pre_turn_advisory_promotion_slow_events: List[Dict[str, Any]],
+    pre_turn_advisory_promotion_auto_disabled: bool,
+    pre_turn_advisory_promotion_disable_reason: str,
+) -> Dict[str, Any]:
+    """Final authoritative summary override.
+
+    This must be called after all state merges and immediately before artifact
+    writes. It intentionally recomputes lifecycle summaries from runtime_state
+    instead of trusting earlier partial summary fields.
+    """
+    summary = _safe_dict(summary)
+    runtime_state = _safe_dict(runtime_state)
+    transcript_state = _runtime_state_from_transcript(transcript)
+    runtime_state = _merge_preserving_runtime_state(transcript_state, runtime_state)
+    runtime_state = _ensure_runtime_state_tracking_fields(runtime_state, transcript)
+
+    runtime_state = _reconcile_and_apply_handoff(runtime_state)
+
+    previous_latest_state = _safe_dict(summary.get("latest_state"))
+    runtime_state = _merge_preserving_runtime_state(previous_latest_state, runtime_state)
+    runtime_state = _reconcile_and_apply_handoff(runtime_state)
+
+    summary["latest_state"] = runtime_state
+    summary["quest_progress_summary"] = _quest_progress_summary_from_state(runtime_state)
+    _guard_quest_summary_source(summary, runtime_state)
+    summary["objective_progression_summary"] = _objective_progression_summary_from_state(
+        runtime_state,
+        transcript,
+    )
+    summary["quest_reconciliation_summary"] = _quest_reconciliation_summary_from_state(runtime_state)
+    summary["quest_handoff_summary"] = _quest_handoff_summary_from_state(runtime_state)
+    if not isinstance(summary["quest_handoff_summary"], dict):
+        summary["quest_handoff_summary"] = {
+            "ok": False,
+            "count": 0,
+            "recent": [],
+            "active_handoff_quests": [],
+        }
+    summary["final_state_field_coverage_summary"] = _final_state_field_coverage_summary(runtime_state)
+    summary["strict_progress_health_summary"] = _strict_progress_health_summary_from_summary(summary)
+    summary["post_transition_action_quality"] = _post_transition_action_quality_summary(transcript)
+    summary["post_transition_action_quality_summary"] = summary["post_transition_action_quality"]
+    summary["repeated_affordance_loop_summary"] = _repeated_affordance_loop_summary(
+        transcript,
+        threshold=4,
+    )
+    summary["pre_turn_advisory_promotion_performance_summary"] = (
+        _pre_turn_advisory_promotion_performance_summary(
+            background_drain_events,
+            slow_events=pre_turn_advisory_promotion_slow_events,
+            auto_disabled=pre_turn_advisory_promotion_auto_disabled,
+            disable_reason=pre_turn_advisory_promotion_disable_reason,
+        )
+    )
+    summary["final_lifecycle_field_presence_summary"] = _final_lifecycle_field_presence_summary(summary)
+    summary["quality_gate_summary"] = _final_lifecycle_quality_gates(summary)
+    summary["ok"] = bool(_safe_dict(summary["quality_gate_summary"]).get("ok"))
+    return summary
+
+
+def _assert_final_lifecycle_summary_authority(summary: Dict[str, Any]) -> None:
+    summary = _safe_dict(summary)
+    field_presence = _final_lifecycle_field_presence_summary(summary)
+    if not field_presence.get("ok"):
+        raise RuntimeError(
+            "final_lifecycle_summary_missing_fields:"
+            f"missing={field_presence.get('missing')}:"
+            f"empty={field_presence.get('empty')}"
+        )
+
+    qgs = _safe_dict(summary.get("quality_gate_summary"))
+    gates = _safe_dict(qgs.get("gates"))
+    missing_gates = [gate for gate in REQUIRED_FINAL_LIFECYCLE_GATES if gate not in gates]
+    if missing_gates:
+        raise RuntimeError(
+            "final_lifecycle_quality_gates_missing:"
+            f"missing_gates={missing_gates}"
+        )
+
+    if bool(summary.get("ok")) != bool(qgs.get("ok")):
+        raise RuntimeError(
+            "summary_ok_mismatch:"
+            f"summary_ok={summary.get('ok')}:"
+            f"quality_gate_ok={qgs.get('ok')}"
+        )
 
 
 def _quest_progress_summary_from_quest_mapping(quests: Dict[str, Any], *, source: str) -> Dict[str, Any]:
@@ -4689,6 +5163,20 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
     summary["story_variety"] = metrics["story_variety"]
     metrics["background_jobs"] = background_results_summary
 
+    # N88.5.2: authoritative final lifecycle summary.
+    # This must be the last summary recomputation before artifact writes.
+    summary = _build_authoritative_final_lifecycle_summary(
+        summary=summary,
+        runtime_state=runtime_state,
+        transcript=transcript,
+        background_drain_events=background_drain_events,
+        pre_turn_advisory_promotion_slow_events=pre_turn_advisory_promotion_slow_events,
+        pre_turn_advisory_promotion_auto_disabled=pre_turn_advisory_promotion_auto_disabled,
+        pre_turn_advisory_promotion_disable_reason=pre_turn_advisory_promotion_disable_reason,
+    )
+    runtime_state = _safe_dict(summary.get("latest_state"))
+    _assert_final_lifecycle_summary_authority(summary)
+
     # Write the campaign report once for human-readable output.
     if args.artifact_detail == "full":
         extra_paths.update(
@@ -5015,7 +5503,25 @@ def build_arg_parser() -> argparse.ArgumentParser:
         "--pre-turn-advisory-skip-mutation-compare",
         action=argparse.BooleanOptionalAction,
         default=True,
-        help="Skip mutation comparison during pre-turn advisory promotion.",
+        help="Skip expensive authoritative-state deep comparison during pre-turn fast advisory promotion.",
+    )
+    parser.add_argument(
+        "--pre-turn-advisory-slow-guard-ms",
+        type=int,
+        default=5000,
+        help=(
+            "Auto-disable pre-turn advisory promotion if one promotion pass exceeds "
+            "this many milliseconds."
+        ),
+    )
+    parser.add_argument(
+        "--pre-turn-advisory-auto-disable-on-slow",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help=(
+            "Auto-disable pre-turn advisory promotion for the rest of the run after "
+            "one slow pre-turn promotion pass."
+        ),
     )
     parser.add_argument(
         "--final-background-drain-timeout-seconds",

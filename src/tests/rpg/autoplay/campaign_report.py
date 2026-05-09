@@ -4229,6 +4229,14 @@ def build_campaign_report_model(
         ),
         "quest_reconciliation_summary": _safe_dict(summary.get("quest_reconciliation_summary")),
         "quest_handoff_summary": _safe_dict(summary.get("quest_handoff_summary")),
+        "objective_progression_summary": _safe_dict(summary.get("objective_progression_summary")),
+        "final_state_field_coverage_summary": _safe_dict(summary.get("final_state_field_coverage_summary")),
+        "strict_progress_health_summary": _safe_dict(summary.get("strict_progress_health_summary")),
+        "post_transition_action_quality_summary": _safe_dict(summary.get("post_transition_action_quality_summary")),
+        "repeated_affordance_loop_summary": _safe_dict(summary.get("repeated_affordance_loop_summary")),
+        "pre_turn_advisory_promotion_performance_summary": _safe_dict(
+            summary.get("pre_turn_advisory_promotion_performance_summary")
+        ),
         "story_beat_summary": _safe_dict(
             summary.get("story_beat_summary")
             or metrics.get("story_beat_summary")

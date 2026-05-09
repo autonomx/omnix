@@ -172,6 +172,35 @@ def test_campaign_report_model_prefers_summary_latest_state_and_surfaces_reconci
     assert model["quest_reconciliation_summary"]["count"] == 3
 
 
+def test_campaign_report_model_surfaces_final_lifecycle_sections():
+    model = build_campaign_report_model(
+        transcript=[],
+        summary={
+            "session_id": "s",
+            "turns_executed": 1,
+            "ok": True,
+            "latest_state": {"quest_progress": {"quests": {}}},
+            "objective_progression_summary": {"ok": True, "count": 1},
+            "quest_reconciliation_summary": {"ok": True, "count": 2},
+            "quest_handoff_summary": {"ok": True, "count": 1},
+            "final_state_field_coverage_summary": {"ok": True, "present": ["quest_progress"]},
+            "strict_progress_health_summary": {"ok": True, "quest_count": 1},
+            "post_transition_action_quality_summary": {"ok": True, "bandit_road": {"count": 0}},
+            "repeated_affordance_loop_summary": {"ok": True, "max_streak": 1},
+            "pre_turn_advisory_promotion_performance_summary": {"ok": True, "count": 1},
+            "quality_gate_summary": {"ok": True, "gates": {}},
+        },
+        metrics={"progress_quality": {"meaningful_turns": 1}},
+        health={"warnings": []},
+    )
+
+    assert model["objective_progression_summary"]["count"] == 1
+    assert model["quest_handoff_summary"]["count"] == 1
+    assert model["final_state_field_coverage_summary"]["ok"] is True
+    assert model["strict_progress_health_summary"]["ok"] is True
+    assert model["pre_turn_advisory_promotion_performance_summary"]["count"] == 1
+
+
 def test_render_campaign_report_html_contains_major_sections():
     model = {
         "summary": {"session_id": "s", "turns_executed": 1, "ok": True},

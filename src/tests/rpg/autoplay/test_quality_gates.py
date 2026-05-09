@@ -914,3 +914,111 @@ def test_pre_turn_advisory_promotion_performance_summary_flags_slow_event():
     assert summary["slow_event_count"] == 1
     assert summary["auto_disabled"] is True
     assert summary["max_elapsed_ms"] == 9000
+
+
+def test_final_lifecycle_quality_gates_fail_when_required_fields_missing():
+    from tests.rpg.autoplay_llm_campaign import _final_lifecycle_quality_gates
+
+    summary = {
+        "requested_turns": 20,
+        "quality_gate_summary": {"ok": True, "gates": {}},
+    }
+
+    result = _final_lifecycle_quality_gates(summary)
+
+    assert result["ok"] is False
+    assert result["gates"]["final_lifecycle_summary_fields_present_ok"] is False
+    assert "final_lifecycle_summary_fields_present_ok" in result["failed_gates"]
+
+
+def test_authoritative_final_lifecycle_summary_populates_required_fields():
+    from tests.rpg.autoplay_llm_campaign import (
+        REQUIRED_FINAL_LIFECYCLE_SUMMARY_FIELDS,
+        _build_authoritative_final_lifecycle_summary,
+    )
+
+    runtime_state = {
+        "quest_progress": {
+            "quests": {
+                "quest:test": {
+                    "quest_id": "quest:test",
+                    "title": "Test Quest",
+                    "status": "active",
+                    "completed": False,
+                    "objectives": [
+                        {
+                            "objective_id": "objective:test",
+                            "summary": "Inspect the test clue.",
+                            "status": "active",
+                            "completed": False,
+                        }
+                    ],
+                }
+            }
+        },
+        "dialogue_state": {"recent_exchanges": [{"npc": "npc:test"}]},
+        "objective_progression_log": [
+            {"objective_id": "objective:test", "matched": True, "partial": True}
+        ],
+        "quest_reconciliation_log": [{"changed": False}],
+        "quest_handoff_log": [{"quest_id": "quest:test"}],
+        "autoplay_story_hook_state": {"fired_hooks": {"hook:test": {}}},
+        "location_history": [{"location_id": "location:test"}],
+        "recent_turns": [{"turn": 1, "player_action": "I inspect the test clue."}],
+        "action_history": [{"turn": 1, "player_action": "I inspect the test clue."}],
+    }
+
+    summary = {
+        "requested_turns": 20,
+        "health": {
+            "progress_quality": {
+                "ok": True,
+                "metrics": {
+                    "meaningful_progress_rate": 0.2,
+                    "meaningful_turns": 4,
+                    "no_change_turns": 2,
+                    "churn_only_turns": 1,
+                },
+            }
+        },
+        "quality_gate_summary": {"ok": True, "gates": {}},
+    }
+
+    final = _build_authoritative_final_lifecycle_summary(
+        summary=summary,
+        runtime_state=runtime_state,
+        transcript=[{"turn": 1, "player_action": "I inspect the test clue."}],
+        background_drain_events=[
+            {
+                "pre_turn_advisory_promotion_result": {
+                    "elapsed_ms": 5,
+                    "fast_pre_turn": True,
+                }
+            }
+        ],
+        pre_turn_advisory_promotion_slow_events=[],
+        pre_turn_advisory_promotion_auto_disabled=False,
+        pre_turn_advisory_promotion_disable_reason="",
+    )
+
+    for key in REQUIRED_FINAL_LIFECYCLE_SUMMARY_FIELDS:
+        assert key in final
+        assert final[key] not in (None, {}, [])
+
+    assert final["latest_state"]["quest_progress"]["quests"]
+    assert final["quality_gate_summary"]["gates"]["final_lifecycle_summary_fields_present_ok"] is True
+    assert final["ok"] == final["quality_gate_summary"]["ok"]
+
+
+def test_assert_final_lifecycle_summary_authority_raises_on_false_green():
+    import pytest
+
+    from tests.rpg.autoplay_llm_campaign import _assert_final_lifecycle_summary_authority
+
+    summary = {
+        "ok": True,
+        "quality_gate_summary": {"ok": True, "gates": {}},
+    }
+
+    with pytest.raises(RuntimeError, match="final_lifecycle_summary_missing_fields"):
+        _assert_final_lifecycle_summary_authority(summary)
