@@ -113,3 +113,59 @@ def test_sidecar_update_accepts_newer_candidate():
 
     assert _progression_node_count(updated) == 2
     assert "ask_bran_who_left_side_door" in updated["progression_completed_nodes"]
+
+
+def test_sidecar_preserves_graph_created_warn_wagon_quest():
+    from tests.rpg.autoplay_llm_campaign import (
+        _extract_progression_authority_sidecar,
+        _overlay_progression_authority_sidecar,
+    )
+
+    advanced = {
+        "quest_progress": {
+            "quests": {
+                "quest:witness_search": {
+                    "quest_id": "quest:witness_search",
+                    "status": "completed",
+                    "completed": True,
+                    "source": "scenario_progression_graph",
+                },
+                "quest:warn_wagon": {
+                    "quest_id": "quest:warn_wagon",
+                    "title": "Warn the Wagon",
+                    "status": "active",
+                    "completed": False,
+                    "source": "scenario_progression_graph",
+                    "objectives": [
+                        {"objective_id": "objective:warn_garran", "status": "active", "completed": False}
+                    ],
+                },
+            }
+        },
+        "progression_completed_nodes": {"report_findings_to_bran": {}},
+    }
+    sidecar = _extract_progression_authority_sidecar(advanced)
+
+    stale_runtime = {
+        "quest_progress": {
+            "quests": {
+                "quest:witness_search": {
+                    "quest_id": "quest:witness_search",
+                    "status": "completed",
+                    "completed": True,
+                }
+            }
+        },
+        "progression_completed_nodes": {"report_findings_to_bran": {}},
+    }
+
+    restored = _overlay_progression_authority_sidecar(
+        stale_runtime,
+        sidecar,
+        reason="test",
+        turn_index=9,
+    )
+
+    quests = restored["quest_progress"]["quests"]
+    assert "quest:warn_wagon" in quests
+    assert quests["quest:warn_wagon"]["status"] == "active"

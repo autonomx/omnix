@@ -60,10 +60,12 @@ def test_behavioral_eval_fails_repeated_graph_node():
         "scenario_progression_log": [
             {
                 "changed": True,
+                "turn_index": 1,
                 "matched_node_ids": ["ask_bran_about_tension"],
             },
             {
                 "changed": True,
+                "turn_index": 2,
                 "matched_node_ids": ["ask_bran_about_tension"],
             },
         ],
@@ -110,3 +112,40 @@ def test_behavioral_eval_fails_when_sidecar_fields_missing():
     result = evaluate_behavioral_autoplay(transcript, latest_state, requested_turns=20)
 
     assert result["gates"]["progression_sidecar_fields_present_ok"] is False
+
+
+def test_behavioral_eval_deduplicates_same_turn_node_log_duplicates():
+    latest_state = {
+        "scenario_progression_log": [
+            {"changed": True, "turn_index": 1, "matched_node_ids": ["ask_bran_about_tension"]},
+            {"changed": True, "turn_index": 1, "matched_node_ids": ["ask_bran_about_tension"]},
+            {"changed": True, "turn_index": 2, "matched_node_ids": ["ask_bran_who_left_side_door"]},
+            {"changed": True, "turn_index": 2, "matched_node_ids": ["ask_bran_who_left_side_door"]},
+        ],
+        "progression_completed_nodes": {
+            "ask_bran_about_tension": {},
+            "ask_bran_who_left_side_door": {},
+            "ask_bran_direction": {},
+        },
+        "quest_progress": {
+            "quests": {
+                "quest:witness_search": {"status": "completed", "completed": True},
+                "quest:warn_wagon": {"status": "active", "completed": False},
+            }
+        },
+        "progression_unlocked_npcs": {"npc:mira": {}, "npc:garran": {}},
+        "progression_unlocked_locations": {"location:side_door": {}, "location:garran_wagon_yard": {}},
+        "progression_facts": {"fact:1": {}, "fact:2": {}, "fact:3": {}},
+        "location_history": [{"location_id": "location:garran_wagon_yard"}],
+    }
+    transcript = [
+        {"player_action": "I ask Bran why the tavern is tense.", "progression_sidecar_completed_node_count": 1},
+        {"player_action": "I ask Bran who left.", "progression_sidecar_completed_node_count": 2},
+        {"player_action": "I ask Bran where they went.", "progression_sidecar_completed_node_count": 3},
+    ]
+
+    result = evaluate_behavioral_autoplay(transcript, latest_state, requested_turns=20)
+
+    assert result["metrics"]["matched_node_counts"]["ask_bran_about_tension"] == 1
+    assert result["metrics"]["matched_node_counts"]["ask_bran_who_left_side_door"] == 1
+    assert result["gates"]["no_repeated_nonrepeatable_node_ok"] is True

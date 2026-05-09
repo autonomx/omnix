@@ -320,29 +320,35 @@ def _rusty_flagon_graph() -> ScenarioProgressionGraph:
                     {"complete_objective": "objective:find_witness"},
                     {"complete_quest": "quest:witness_search"},
                     {"start_quest": "quest:warn_wagon", "title": "Warn the Wagon"},
+                    {"unlock_objective": "objective:travel_to_wagon_yard", "summary": "Travel to Garran's wagon yard."},
                     {"unlock_objective": "objective:warn_garran"},
                     {"unlock_npc": "npc:garran", "name": "Garran"},
-                    {
-                        "unlock_location": "location:garran_wagon_yard",
-                        "name": "Garran's Wagon Yard",
-                    },
-                    {
-                        "unlock_lead": "lead:ask_bran_garran",
-                        "text": "Ask Bran who travels the road before dawn.",
-                    },
+                    {"unlock_location": "location:garran_wagon_yard", "name": "Garran's Wagon Yard"},
+                    {"unlock_lead": "lead:ask_bran_garran", "text": "Ask Bran who travels the road before dawn."},
                 ],
                 priority=110,
             ),
             ProgressionNode(
                 node_id="ask_bran_garran",
                 title="Ask Bran who will travel the road before dawn.",
-                requires=[{"quest": "quest:warn_wagon", "status": "active"}],
+                requires=[{"lead": "lead:ask_bran_garran"}],
                 action_patterns=[
                     {
                         "semantic": "ask",
                         "target_id": "npc:bran",
                         "topics_any": ["wagon", "road", "dawn", "traveler", "who"],
                     },
+                    {
+                        "semantic": "ask",
+                        "target_id": "npc:bran",
+                        "topics_any": ["most likely", "travel the road", "before dawn"],
+                    },
+                    {
+                        "semantic": "ask",
+                        "target_id": "npc:bran",
+                        "topics_any": ["who is most likely", "road before dawn"],
+                    },
+                    {"semantic": "ask", "topics_any": ["bran", "who", "road", "dawn"]},
                 ],
                 suggested_actions=[
                     _a(
@@ -363,6 +369,10 @@ def _rusty_flagon_graph() -> ScenarioProgressionGraph:
                         "unlock_lead": "lead:travel_wagon_yard",
                         "text": "Go to Garran's wagon yard.",
                     },
+                    {
+                        "unlock_objective": "objective:travel_to_wagon_yard",
+                        "summary": "Travel to Garran's wagon yard.",
+                    },
                 ],
                 priority=105,
             ),
@@ -380,6 +390,9 @@ def _rusty_flagon_graph() -> ScenarioProgressionGraph:
                         "semantic": "travel",
                         "topics_any": ["wagon yard", "garran"],
                     },
+                    {"semantic": "travel", "topics_any": ["leave the tavern", "garran"]},
+                    {"semantic": "travel", "topics_any": ["travel toward", "wagon yard"]},
+                    {"semantic": "travel", "topics_any": ["go to", "wagon yard"]},
                 ],
                 suggested_actions=[
                     _a(
@@ -401,6 +414,7 @@ def _rusty_flagon_graph() -> ScenarioProgressionGraph:
                         "text": "The player reached Garran's wagon yard.",
                     },
                     {"unlock_lead": "lead:warn_garran", "text": "Warn Garran about the bridge ambush."},
+                    {"advance_objective": "objective:travel_to_wagon_yard", "amount": 1},
                 ],
                 priority=110,
             ),
@@ -419,6 +433,9 @@ def _rusty_flagon_graph() -> ScenarioProgressionGraph:
                         "target_id": "npc:garran",
                         "topics_any": ["bridge", "ambush", "bandits", "wagon"],
                     },
+                    {"semantic": "warn", "topics_any": ["garran", "bridge", "ambush"]},
+                    {"semantic": "tell", "topics_any": ["garran", "bridge", "ambush"]},
+                    {"semantic": "report", "topics_any": ["garran", "bridge", "ambush"]},
                 ],
                 suggested_actions=[
                     _a(
@@ -432,6 +449,7 @@ def _rusty_flagon_graph() -> ScenarioProgressionGraph:
                 ],
                 effects=[
                     {"advance_objective": "objective:warn_garran", "amount": 1},
+                    {"complete_objective": "objective:travel_to_wagon_yard"},
                     {
                         "unlock_fact": "fact:garran_warned",
                         "text": "Garran has been warned about the ambush.",
@@ -454,6 +472,9 @@ def _rusty_flagon_graph() -> ScenarioProgressionGraph:
                         "target_id": "npc:garran",
                         "topics_any": ["route", "around", "bridge", "safe", "alternate"],
                     },
+                    {"semantic": "ask", "topics_any": ["garran", "another route"]},
+                    {"semantic": "ask", "topics_any": ["garran", "alternate route"]},
+                    {"semantic": "ask", "topics_any": ["route around", "bridge"]},
                 ],
                 suggested_actions=[
                     _a(
@@ -489,6 +510,10 @@ def _rusty_flagon_graph() -> ScenarioProgressionGraph:
                         "target_id": "location:quarry_road",
                         "topics_any": ["quarry road", "leave"],
                     },
+                    {"semantic": "prepare", "topics_any": ["prepare", "wagon", "safer route"]},
+                    {"semantic": "prepare", "topics_any": ["help", "wagon", "route"]},
+                    {"semantic": "travel", "topics_any": ["leave by", "quarry road"]},
+                    {"semantic": "travel", "topics_any": ["quarry road", "now"]},
                 ],
                 suggested_actions=[
                     _a(

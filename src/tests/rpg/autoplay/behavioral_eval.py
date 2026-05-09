@@ -63,18 +63,20 @@ def evaluate_behavioral_autoplay(
     progression_logs = _safe_list(_safe_dict(latest_state).get("scenario_progression_log"))
     progression_changed = [row for row in progression_logs if _safe_dict(row).get("changed")]
     completed_nodes = _safe_dict(latest_state.get("progression_completed_nodes"))
-    matched_node_ids: List[str] = []
+    matched_node_events: List[tuple] = []
     for row in progression_changed:
         row = _safe_dict(row)
+        turn_index = int(row.get("turn_index") or 0)
         for node_id in _safe_list(row.get("matched_node_ids")):
             if _safe_str(node_id):
-                matched_node_ids.append(_safe_str(node_id))
+                matched_node_events.append((turn_index, _safe_str(node_id)))
         for node in _safe_list(row.get("matched_nodes")):
             node_id = _safe_str(_safe_dict(node).get("node_id"))
             if node_id:
-                matched_node_ids.append(node_id)
+                matched_node_events.append((turn_index, node_id))
+    matched_node_events = sorted(set(matched_node_events))
     matched_node_counts: Dict[str, int] = {}
-    for node_id in matched_node_ids:
+    for _turn_index, node_id in matched_node_events:
         matched_node_counts[node_id] = matched_node_counts.get(node_id, 0) + 1
     repeated_node_ids = [
         node_id for node_id, count in matched_node_counts.items()
@@ -83,6 +85,11 @@ def evaluate_behavioral_autoplay(
 
     qp = _safe_dict(_safe_dict(latest_state).get("quest_progress"))
     quests = _safe_dict(qp.get("quests"))
+    graph_quest_state = _safe_dict(latest_state.get("scenario_progression_quest_state"))
+    if graph_quest_state:
+        merged_quests = dict(quests)
+        merged_quests.update(graph_quest_state)
+        quests = merged_quests
     completed_quests = [
         quest_id
         for quest_id, quest in quests.items()
@@ -112,7 +119,8 @@ def evaluate_behavioral_autoplay(
     same_action_too_much = bool(exact_counts and max(exact_counts.values()) > max(3, requested_turns // 4))
     exact_streak_bad = max_exact_streak > 3
     no_progression = len(progression_changed) < 3 if requested_turns >= 10 else False
-    low_unique_nodes = len(completed_nodes) < 3 if requested_turns >= 10 else False
+    unique_node_count = len(completed_nodes) or len({node_id for _turn, node_id in matched_node_events})
+    low_unique_nodes = unique_node_count < 3 if requested_turns >= 10 else False
     repeated_graph_node = bool(repeated_node_ids)
     no_quest_transition = not completed_quests if requested_turns >= 10 else False
     no_second_stage = len(quests) < 2 if requested_turns >= 15 else False
@@ -144,7 +152,7 @@ def evaluate_behavioral_autoplay(
             "max_exact_action_count": max(exact_counts.values()) if exact_counts else 0,
             "semantic_diversity": semantic_diversity,
             "progression_changed_count": len(progression_changed),
-            "unique_progression_node_count": len(completed_nodes),
+            "unique_progression_node_count": unique_node_count,
             "matched_node_counts": matched_node_counts,
             "repeated_node_ids": repeated_node_ids,
             "quest_count": len(quests),

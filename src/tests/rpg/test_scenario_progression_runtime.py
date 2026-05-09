@@ -217,3 +217,142 @@ def test_progression_revision_increases_as_nodes_advance():
     assert state["progression_state_revision"] > first_revision
     assert state["progression_completed_node_count"] == 2
     assert second["summary"]["matched_node_ids"] == ["ask_bran_who_left_side_door"]
+
+
+def test_progression_continues_into_second_stage_after_report_to_bran():
+    state = {}
+    actions = [
+        "I ask Bran for a room, but I also ask why the tavern feels so tense tonight.",
+        "I ask Bran who left through the side door and why they were afraid.",
+        "I ask Bran what direction the cloaked traveler went after leaving.",
+        "I turn to Mira and ask what she saw near the side door.",
+        "I inspect the side door, latch, and threshold for blood, tracks, or torn cloth.",
+        "I ask Bran if the old east road leads to a bridge.",
+        "I approach the local patron and quietly ask what he knows about the mill bridge.",
+        "I report to Bran that the traveler's trail, the blood, and the bridge story point to an ambush.",
+        "I ask Bran who is most likely to travel the road before dawn.",
+    ]
+
+    for turn, action in enumerate(actions, start=1):
+        result = apply_progression_for_action(
+            state,
+            scenario_seed="tavern_story_seed",
+            player_action=action,
+            turn_index=turn,
+        )
+        state = result["state"]
+
+    assert "ask_bran_garran" in state["progression_completed_nodes"]
+    assert "fact:garran_supply_wagon" in state["progression_facts"]
+    assert "lead:travel_wagon_yard" in state["progression_leads"]
+
+    next_actions = get_active_progression_actions(
+        state,
+        scenario_seed="tavern_story_seed",
+        limit=8,
+    )
+    action_ids = [row["action_id"] for row in next_actions]
+    assert "travel_to_wagon_yard" in action_ids
+
+
+def test_progression_reaches_wagon_yard_and_warns_garran():
+    state = {}
+    actions = [
+        "I ask Bran for a room, but I also ask why the tavern feels so tense tonight.",
+        "I ask Bran who left through the side door and why they were afraid.",
+        "I ask Bran what direction the cloaked traveler went after leaving.",
+        "I turn to Mira and ask what she saw near the side door.",
+        "I inspect the side door, latch, and threshold for blood, tracks, or torn cloth.",
+        "I ask Bran if the old east road leads to a bridge.",
+        "I approach the local patron and quietly ask what he knows about the mill bridge.",
+        "I report to Bran that the traveler's trail, the blood, and the bridge story point to an ambush.",
+        "I ask Bran who is most likely to travel the road before dawn.",
+        "I leave the tavern and travel toward Garran's wagon yard.",
+        "I tell Garran the mill bridge may be an ambush and show him the evidence.",
+        "I ask Garran if there is another route around the bridge.",
+    ]
+
+    for turn, action in enumerate(actions, start=1):
+        result = apply_progression_for_action(
+            state,
+            scenario_seed="tavern_story_seed",
+            player_action=action,
+            turn_index=turn,
+        )
+        state = result["state"]
+
+    completed = state["progression_completed_nodes"]
+    assert "travel_to_wagon_yard" in completed
+    assert "warn_garran" in completed
+    assert "ask_alternate_route" in completed
+    assert state["current_location"] == "location:garran_wagon_yard"
+    assert "fact:quarry_road_option" in state["progression_facts"]
+
+
+def test_report_findings_starts_warn_wagon_quest_and_objectives():
+    from app.rpg.progression.runtime import apply_progression_for_action, get_active_progression_actions
+
+    state = {}
+    actions = [
+        "I ask Bran for a room, but I also ask why the tavern feels so tense tonight.",
+        "I ask Bran who left through the side door and why they were afraid.",
+        "I ask Bran what direction the cloaked traveler went after leaving.",
+        "I turn to Mira and ask what she saw near the side door.",
+        "I inspect the side door, latch, and threshold for blood, tracks, or torn cloth.",
+        "I ask Bran if the old east road leads to a bridge.",
+        "I approach the local patron and quietly ask what he knows about the mill bridge.",
+        "I report to Bran that the traveler's trail, the blood, and the bridge story point to an ambush.",
+    ]
+
+    for turn, action in enumerate(actions, start=1):
+        result = apply_progression_for_action(
+            state,
+            scenario_seed="tavern_story_seed",
+            player_action=action,
+            turn_index=turn,
+        )
+        state = result["state"]
+
+    quests = state["quest_progress"]["quests"]
+    assert quests["quest:witness_search"]["completed"] is True
+    assert quests["quest:warn_wagon"]["status"] == "active"
+    assert quests["quest:warn_wagon"]["completed"] is False
+
+    objective_ids = {
+        obj["objective_id"]
+        for obj in quests["quest:warn_wagon"]["objectives"]
+    }
+    assert "objective:travel_to_wagon_yard" in objective_ids
+    assert "objective:warn_garran" in objective_ids
+
+    next_actions = get_active_progression_actions(
+        state,
+        scenario_seed="tavern_story_seed",
+        limit=8,
+    )
+    action_ids = [row["action_id"] for row in next_actions]
+    assert "ask_bran_garran" in action_ids
+
+
+def test_ask_bran_garran_can_match_from_lead_even_if_quest_state_lags():
+    from app.rpg.progression.runtime import apply_progression_for_action
+
+    state = {
+        "progression_leads": {
+            "lead:ask_bran_garran": {
+                "lead_id": "lead:ask_bran_garran",
+                "text": "Ask Bran who travels the road before dawn.",
+            }
+        }
+    }
+
+    result = apply_progression_for_action(
+        state,
+        scenario_seed="tavern_story_seed",
+        player_action="I ask Bran who is most likely to travel the road before dawn.",
+        turn_index=9,
+    )
+
+    assert result["changed"] is True
+    assert result["summary"]["matched_node_ids"] == ["ask_bran_garran"]
+    assert "lead:travel_wagon_yard" in result["state"]["progression_leads"]

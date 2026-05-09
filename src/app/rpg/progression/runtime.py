@@ -24,6 +24,28 @@ def _norm(value: Any) -> str:
     return " ".join(_safe_str(value).lower().strip().split())
 
 
+def _semantic_aliases(semantic: str) -> List[str]:
+    semantic = _safe_str(semantic)
+    return {
+        "ask": ["ask", "question", "talk", "speak", "who", "what", "where", "whether"],
+        "inspect": ["inspect", "examine", "look", "search", "check"],
+        "travel": ["travel", "leave", "go", "head", "move", "walk", "set out"],
+        "report": ["report", "tell", "explain", "show", "warn"],
+        "warn": ["warn", "tell", "alert", "show", "explain"],
+        "tell": ["tell", "warn", "explain", "show"],
+        "prepare": ["prepare", "ready", "help", "load", "tighten", "pack"],
+    }.get(semantic, [semantic])
+
+
+def _topic_matches(action_norm: str, topics: List[str]) -> bool:
+    if not topics:
+        return True
+    normalized_topics = [_norm(topic) for topic in topics if _safe_str(topic)]
+    if not normalized_topics:
+        return True
+    return any(topic in action_norm for topic in normalized_topics)
+
+
 def _bag(state: Dict[str, Any], key: str) -> Dict[str, Any]:
     bag = state.setdefault(key, {})
     if not isinstance(bag, dict):
@@ -100,6 +122,8 @@ def _ensure_quest(state: Dict[str, Any], quest_id: str, title: str) -> Dict[str,
     )
     quest["status"] = "active" if not quest.get("completed") else "completed"
     quest.setdefault("source", "scenario_progression_graph")
+    if quest.get("source") == "scenario_progression_graph" and not quest.get("completed"):
+        quest["status"] = "active"
     quest.setdefault("objectives", [])
     return quest
 
@@ -120,6 +144,11 @@ def _ensure_objective(
     quest_id: str = "",
     summary: str = "",
 ) -> Dict[str, Any]:
+    if not quest_id:
+        if objective_id in {"objective:warn_garran", "objective:travel_to_wagon_yard", "objective:choose_safe_route"}:
+            quest_id = "quest:warn_wagon"
+        elif objective_id in {"objective:find_witness", "objective:ask_mira", "objective:inspect_side_door"}:
+            quest_id = "quest:witness_search"
     quest_id = quest_id or _infer_active_quest_id(state) or "quest:scenario_progression"
     quest = _ensure_quest(
         state,
@@ -253,23 +282,42 @@ def get_active_progression_actions(
     return out[:limit]
 
 
+def _progression_log_marker(row: Dict[str, Any]) -> tuple:
+    row = _safe_dict(row)
+    node_ids = tuple(_safe_str(node_id) for node_id in _safe_list(row.get("matched_node_ids")))
+    if not node_ids:
+        node_ids = tuple(
+            _safe_str(_safe_dict(node).get("node_id"))
+            for node in _safe_list(row.get("matched_nodes"))
+        )
+    return (
+        _safe_str(row.get("graph_id")),
+        int(row.get("turn_index") or 0),
+        node_ids,
+    )
+
+
+def _append_progression_log(state: Dict[str, Any], summary: Dict[str, Any]) -> None:
+    log = state.setdefault("scenario_progression_log", [])
+    if not isinstance(log, list):
+        log = []
+        state["scenario_progression_log"] = log
+    marker = _progression_log_marker(summary)
+    existing_markers = {_progression_log_marker(_safe_dict(row)) for row in log}
+    if marker not in existing_markers:
+        log.append(summary)
+    del log[:-100]
+
+
 def _action_matches_pattern(action: str, pattern: Dict[str, Any]) -> bool:
     pattern = _safe_dict(pattern)
     action_norm = _norm(action)
     semantic = _safe_str(pattern.get("semantic"))
-    if semantic and semantic not in action_norm:
-        semantic_aliases = {
-            "ask": ["ask", "question", "talk", "speak"],
-            "inspect": ["inspect", "examine", "look", "search"],
-            "travel": ["travel", "leave", "go", "head", "move"],
-            "report": ["report", "tell", "explain"],
-            "warn": ["warn", "tell"],
-            "prepare": ["prepare", "ready", "help"],
-        }
-        if not any(alias in action_norm for alias in semantic_aliases.get(semantic, [semantic])):
+    if semantic:
+        if not any(alias in action_norm for alias in _semantic_aliases(semantic)):
             return False
-    topics = [_norm(topic) for topic in _safe_list(pattern.get("topics_any")) if _safe_str(topic)]
-    if topics and not any(topic in action_norm for topic in topics):
+    topics = [_safe_str(topic) for topic in _safe_list(pattern.get("topics_any")) if _safe_str(topic)]
+    if not _topic_matches(action_norm, topics):
         return False
     target_id = _safe_str(pattern.get("target_id"))
     if target_id:
@@ -281,6 +329,7 @@ def _action_matches_pattern(action: str, pattern: Dict[str, Any]) -> bool:
             "garran": ["garran", "wagoner", "merchant", "driver"],
             "side door latch": ["side door", "latch", "threshold"],
             "garran wagon yard": ["wagon yard", "garran", "yard"],
+            "quarry road": ["quarry road", "safer route", "alternate route"],
         }
         aliases = target_aliases.get(target_label, [target_label])
         if target_label and not any(alias in action_norm for alias in aliases):
@@ -437,6 +486,10 @@ def apply_progression_for_action(
         scenario_seed=scenario_seed,
         limit=8,
     )
+    graph_quest_ids = [
+        quest_id for quest_id, quest in _safe_dict(_quest_progress(state).get("quests")).items()
+        if _safe_str(_safe_dict(quest).get("source")) == "scenario_progression_graph"
+    ]
     summary = {
         "ok": True,
         "changed": bool(matched_nodes or applied_effects),
@@ -451,13 +504,16 @@ def apply_progression_for_action(
         "applied_effect_count": len(applied_effects),
         "applied_effects": applied_effects[-20:],
         "next_action_ids": [_safe_str(row.get("action_id")) for row in next_actions],
+        "graph_quest_ids": sorted(graph_quest_ids),
         "elapsed_ms": elapsed_ms,
     }
     if summary["changed"]:
-        log = state.setdefault("scenario_progression_log", [])
-        if isinstance(log, list):
-            log.append(summary)
-            del log[:-100]
+        state["scenario_progression_quest_ids"] = sorted(graph_quest_ids)
+        state["scenario_progression_quest_state"] = {
+            quest_id: _safe_dict(_safe_dict(_quest_progress(state).get("quests")).get(quest_id))
+            for quest_id in graph_quest_ids
+        }
+        _append_progression_log(state, summary)
         state["scenario_progression_summary"] = summary
         state["scenario_progression_current_turn_summary"] = summary
     else:

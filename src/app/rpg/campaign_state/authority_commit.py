@@ -608,6 +608,12 @@ def reconcile_quests_from_evidence(
 
     quests_completed = 0
     for _quest_id, quest in _iter_quests(state):
+        if _safe_str(quest.get("source")) == "scenario_progression_graph":
+            objectives = [_safe_dict(row) for row in _safe_list(quest.get("objectives"))]
+            if objectives and not all(_objective_done(obj) for obj in objectives):
+                quest["completed"] = False
+                quest["status"] = "active"
+                continue
         if _sync_quest_completion(quest):
             quests_completed += 1
 
@@ -1051,6 +1057,17 @@ def apply_generic_handoff_from_leads(
     current_turn: int = 0,
 ) -> Dict[str, Any]:
     counts = _quest_counts(state)
+    if (
+        _safe_dict(state.get("progression_completed_nodes"))
+        or _safe_dict(state.get("progression_facts"))
+        or _safe_list(state.get("scenario_progression_actions"))
+    ):
+        return {
+            "ok": True,
+            "changed": False,
+            "reason": "suppressed_by_scenario_progression_graph",
+            **counts,
+        }
     if _has_active_quest(state):
         return {"ok": True, "changed": False, "reason": "active_quest_exists", **counts}
     if counts["completed_quest_count"] <= 0:
@@ -1188,6 +1205,28 @@ def _quest_progress_summary(state: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
+def _preserve_scenario_progression_graph_quests(state: Dict[str, Any]) -> Dict[str, Any]:
+    state = _safe_dict(state)
+    graph_quest_state = _safe_dict(state.get("scenario_progression_quest_state"))
+    if not graph_quest_state:
+        return state
+    quests = _safe_dict(_quest_progress(state).get("quests"))
+    for quest_id, graph_quest in graph_quest_state.items():
+        graph_quest = _safe_dict(graph_quest)
+        existing = _safe_dict(quests.get(quest_id))
+        existing_completed = bool(existing.get("completed")) or _safe_str(existing.get("status")) == "completed"
+        graph_completed = bool(graph_quest.get("completed")) or _safe_str(graph_quest.get("status")) == "completed"
+        if existing_completed and not graph_completed:
+            continue
+        merged = dict(existing)
+        merged.update(graph_quest)
+        merged.setdefault("quest_id", quest_id)
+        merged.setdefault("source", "scenario_progression_graph")
+        quests[quest_id] = merged
+    state["quest_progress"]["quests"] = quests
+    return state
+
+
 def _stale_state_summary(state: Dict[str, Any], evidence: List[Dict[str, Any]], handoff: Dict[str, Any]) -> Dict[str, Any]:
     counts = _quest_counts(state)
     completed_evidence_count = sum(1 for row in evidence if _safe_dict(row).get("completed"))
@@ -1273,6 +1312,7 @@ def commit_campaign_state(
         evidence,
         current_sequence=current_sequence,
     )
+    state = _preserve_scenario_progression_graph_quests(state)
     handoff_progress = _record_handoff_action_progress(
         state,
         turn_record=turn_record,
