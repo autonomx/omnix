@@ -7,7 +7,6 @@ from contextlib import contextmanager
 from contextvars import ContextVar
 from typing import Any, Dict, Iterator, List
 
-
 _TURN_TRACE_ROWS: ContextVar[List[Dict[str, Any]] | None] = ContextVar(
     "RPG_SESSION_TURN_PERF_TRACE_ROWS",
     default=None,

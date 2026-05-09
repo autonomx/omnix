@@ -1,6 +1,7 @@
 
 from __future__ import annotations
 
+
 def _post_transition_action_quality_summary(transcript: List[Dict[str, Any]]) -> Dict[str, Any]:
     """Summarize post-transition action quality for Bandit Road and Witness/Bran actions."""
     summary = {
@@ -41,6 +42,21 @@ def _quality_gate_summary(args, metrics, summary, transcript):
     if not progress_quality.get("ok", True):
         gates["ok"] = False
         gates["failures"].append("progress_quality")
+    # Objective progression gates
+    gates["objective_progression_present_ok"] = (
+        int(summary.get("requested_turns") or summary.get("turns_executed") or 0) < 20
+        or bool(_safe_dict(summary.get("objective_progression_summary")).get("ok", False))
+    )
+    if not gates["objective_progression_present_ok"]:
+        gates["ok"] = False
+        gates["failures"].append("objective_progression_present_ok")
+    gates["repeated_affordance_loop_ok"] = (
+        int(summary.get("requested_turns") or summary.get("turns_executed") or 0) < 20
+        or bool(_safe_dict(summary.get("repeated_affordance_loop_summary")).get("ok", True))
+    )
+    if not gates["repeated_affordance_loop_ok"]:
+        gates["ok"] = False
+        gates["failures"].append("repeated_affordance_loop_ok")
     return gates
 
 import argparse
@@ -67,9 +83,24 @@ def _timestamped_print(*args, **kwargs):
 # Add src to path for imports
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', '..', 'src'))
 
+from app.rpg.campaign_journal_runtime import advance_campaign_journal_for_turn
 from app.rpg.player_action_context.runtime import build_player_action_context
+from app.rpg.quest_progress import ensure_quest_runtime_state
 from tests.rpg.autoplay.advisory_promotion_runtime import (
     run_deferred_advisory_promotions_for_transcript,
+)
+from tests.rpg.autoplay.base_runtime_response import (
+    build_autoplay_base_response,
+)
+from tests.rpg.autoplay.campaign_report import write_campaign_report
+from tests.rpg.autoplay.console_capture import ConsoleCapture, summarize_console_log
+from tests.rpg.autoplay.hundred_turn_eval import (
+    canonical_semantic_pair_from_turn,
+    recent_semantic_target_streak,
+    summarize_action_diversity,
+    summarize_hundred_turn_eval,
+    summarize_long_run_warnings,
+    summarize_progress_timeline,
 )
 from tests.rpg.autoplay.npc_profile_runtime_loader import (
     load_profiles_into_row_runtime,
@@ -81,21 +112,6 @@ from tests.rpg.autoplay.report_sections import (
     summarize_quests_for_report,
     summarize_story_beats_for_report,
 )
-from tests.rpg.autoplay.hundred_turn_eval import (
-    canonical_semantic_pair_from_turn,
-    recent_semantic_target_streak,
-    summarize_action_diversity,
-    summarize_hundred_turn_eval,
-    summarize_long_run_warnings,
-    summarize_progress_timeline,
-)
-from app.rpg.campaign_journal_runtime import advance_campaign_journal_for_turn
-from app.rpg.quest_progress import ensure_quest_runtime_state
-from tests.rpg.autoplay.base_runtime_response import (
-    build_autoplay_base_response,
-)
-from tests.rpg.autoplay.campaign_report import write_campaign_report
-from tests.rpg.autoplay.console_capture import ConsoleCapture, summarize_console_log
 
 _ACTIVE_CONSOLE_CAPTURE = None
 from tests.rpg.autoplay.checkpoints import (
@@ -106,6 +122,11 @@ from tests.rpg.autoplay.evaluators import (
     compute_progress_metrics,
     evaluate_autoplay_health,
     repeated_npc_line_metrics,
+)
+from tests.rpg.autoplay.executable_actions import (
+    is_meta_or_vague_action,
+    normalize_command_label_action,
+    repair_action_if_needed,
 )
 from tests.rpg.autoplay.manual_turn_driver import (
     merge_autoplay_simulation_state,
@@ -135,14 +156,9 @@ from tests.rpg.autoplay.player_agent_optimization import (
     normalize_player_agent_payload,
     player_agent_cache_key,
 )
-from tests.rpg.autoplay.executable_actions import (
-    is_meta_or_vague_action,
-    normalize_command_label_action,
-    repair_action_if_needed,
-)
 from tests.rpg.autoplay.player_goal_director import (
-    action_violates_goal_pressure,
     action_is_vague_objective,
+    action_violates_goal_pressure,
     build_goal_pressure_context,
     deterministic_goal_pressure_action,
     format_goal_pressure_prompt,
@@ -1212,6 +1228,68 @@ def _quest_progress_summary_from_state(state: Dict[str, Any]) -> Dict[str, Any]:
         "completed_count": 0,
         "quests": [],
         "source": "none",
+    }
+
+
+def _objective_progression_summary_from_state(state: Dict[str, Any]) -> Dict[str, Any]:
+    state = _safe_dict(state)
+    log = _safe_list(state.get("objective_progression_log"))
+    hook_state = _safe_dict(state.get("autoplay_story_hook_state"))
+    fired_hooks = _safe_dict(hook_state.get("fired_hooks"))
+    objective_hooks = [
+        {"hook_id": hook_id, **_safe_dict(payload)}
+        for hook_id, payload in fired_hooks.items()
+        if _safe_str(hook_id).startswith("hook:objective")
+    ]
+    return {
+        "count": len(log) + len(objective_hooks),
+        "recent": log[-10:],
+        "objective_hooks": objective_hooks[-10:],
+        "ok": bool(log or objective_hooks),
+    }
+
+
+def _repeated_affordance_loop_summary(transcript: List[Dict[str, Any]], *, threshold: int = 4) -> Dict[str, Any]:
+    try:
+        from tests.rpg.autoplay.executable_actions import action_signature
+    except Exception:
+        action_signature = lambda value: _safe_str(value).lower()
+
+    counts: Dict[str, int] = {}
+    max_streak = 0
+    max_signature = ""
+    current_signature = ""
+    current_streak = 0
+    examples: Dict[str, str] = {}
+    for row in _safe_list(transcript):
+        action = _safe_str(_safe_dict(row).get("player_action"))
+        if not action:
+            current_signature = ""
+            current_streak = 0
+            continue
+        sig = action_signature(action)
+        counts[sig] = counts.get(sig, 0) + 1
+        examples.setdefault(sig, action)
+        if sig == current_signature:
+            current_streak += 1
+        else:
+            current_signature = sig
+            current_streak = 1
+        if current_streak > max_streak:
+            max_streak = current_streak
+            max_signature = sig
+
+    repeated = [
+        {"signature": sig, "count": count, "example": examples.get(sig, "")}
+        for sig, count in sorted(counts.items(), key=lambda item: item[1], reverse=True)
+        if count >= int(threshold or 4)
+    ]
+    return {
+        "ok": max_streak < int(threshold or 4),
+        "max_streak": max_streak,
+        "max_signature": max_signature,
+        "repeated": repeated[:10],
+        "threshold": int(threshold or 4),
     }
 
 
@@ -2644,7 +2722,9 @@ def _attach_completed_background_job_to_record(
     if result.get("ok"):
         runtime_state = _safe_dict(record.get("runtime_state"))
         try:
-            from app.rpg.advisory.runtime_store import ingest_deferred_advisory_candidates
+            from app.rpg.advisory.runtime_store import (
+                ingest_deferred_advisory_candidates,
+            )
             record["deferred_advisory_ingest_result"] = ingest_deferred_advisory_candidates(
                 runtime_state=runtime_state,
                 candidates=result.get("candidates") if isinstance(result.get("candidates"), list) else [],
@@ -3276,6 +3356,11 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
             context["quest_progress"] = authoritative_state.get("quest_progress") or {}
             context["current_location"] = authoritative_state.get("current_location") or authoritative_state.get("current_location_name") or ""
             context["current_location_name"] = authoritative_state.get("current_location_name") or ""
+            # Limit recent_turns to prevent memory explosion in long campaigns
+            context["recent_turns"] = [
+                {k: v for k, v in turn.items() if k in {"turn_index", "player_action", "narration"}}
+                for turn in transcript[-5:]
+            ]
         context["story_hook_hints"] = autoplay_story_hook_player_hints(simulation_state)
         current_progress_quality_metrics = compute_progress_quality_metrics(transcript)
         current_diversity_metrics = action_diversity_metrics(
@@ -3514,7 +3599,7 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
 
         executable_action_repair = {"changed": False, "action": _safe_str(player_action)}
         if bool(getattr(args, "player_agent_executable_action_repair", True)):
-            executable_action_repair = repair_action_if_needed(_safe_str(player_action), context)
+            executable_action_repair = repair_action_if_needed(_safe_str(player_action), context, transcript)
             if executable_action_repair.get("changed"):
                 _probe_log(
                     bool(getattr(args, "debug_autoplay_stage_timing", False)),
@@ -3579,7 +3664,9 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
             simulation_state = deepcopy(authoritative_state)
 
             try:
-                from tests.rpg.autoplay.story_hooks import apply_autoplay_travel_authority
+                from tests.rpg.autoplay.story_hooks import (
+                    apply_autoplay_travel_authority,
+                )
 
                 travel_authority_result = apply_autoplay_travel_authority(
                     simulation_state,
@@ -4492,7 +4579,10 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
     metrics["background_jobs"] = summary["background_jobs"]
     metrics["performance_budget_summary"] = summary["performance_budget_summary"]
     # Strict quality gates: post-transition action quality and progress health
-    summary["post_transition_action_quality_summary"] = _post_transition_action_quality_summary(transcript)
+    summary["objective_progression_summary"] = _objective_progression_summary_from_state(runtime_state)
+    summary["repeated_affordance_loop_summary"] = _repeated_affordance_loop_summary(transcript, threshold=4)
+    summary["post_transition_action_quality"] = _post_transition_action_quality_summary(transcript)
+    summary["post_transition_action_quality_summary"] = summary["post_transition_action_quality"]
     summary["quality_gate_summary"] = _quality_gate_summary(args, metrics, summary, transcript)
     if not summary["quality_gate_summary"].get("ok"):
         health["ok"] = False
@@ -4501,7 +4591,9 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
     if int(summary["quest_progress_summary"].get("quest_count") or 0) == 0:
         story_arc_view = _safe_dict(summary.get("story_arc_view") or metrics.get("story_arc_view"))
         if story_arc_view:
-            from tests.rpg.autoplay.report_sections import _quest_rows_from_story_arc_view
+            from tests.rpg.autoplay.report_sections import (
+                _quest_rows_from_story_arc_view,
+            )
             arc_quests = _quest_rows_from_story_arc_view(story_arc_view)
             if arc_quests:
                 summary["quest_progress_summary"] = summarize_quests_for_report(

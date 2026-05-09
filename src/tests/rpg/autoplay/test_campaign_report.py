@@ -3,20 +3,20 @@ from pathlib import Path
 from tests.rpg.autoplay import campaign_report
 from tests.rpg.autoplay.campaign_report import (
     build_campaign_report_model,
-    render_campaign_report_html,
-    write_campaign_report,
-    extract_narration,
-    extract_dialogue,
-    extract_story_hook_display,
-    extract_conversation_beat,
-    build_story_so_far_paragraph,
-    compute_dialogue_coverage,
-    classify_dialogue_source,
-    extract_base_response_payload,
     build_chapter_status,
     build_inventory_rows,
-    build_player_progression_rows,
     build_location_journey_model,
+    build_player_progression_rows,
+    build_story_so_far_paragraph,
+    classify_dialogue_source,
+    compute_dialogue_coverage,
+    extract_base_response_payload,
+    extract_conversation_beat,
+    extract_dialogue,
+    extract_narration,
+    extract_story_hook_display,
+    render_campaign_report_html,
+    write_campaign_report,
 )
 
 

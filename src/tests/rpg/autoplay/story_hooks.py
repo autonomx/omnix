@@ -3,6 +3,8 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any, Dict, List
 
+from app.rpg.objectives.progression_rules import apply_objective_progression_rules
+
 
 def _safe_dict(value: Any) -> Dict[str, Any]:
     return value if isinstance(value, dict) else {}
@@ -1123,6 +1125,29 @@ def apply_autoplay_story_hooks(
                 changed = True
 
     _sync_witness_quest_from_milestones(state)
+
+    generic_progression = apply_objective_progression_rules(
+        simulation_state,
+        player_action=player_action,
+        semantic_pair=_safe_dict(locals().get("semantic_pair") or {}),
+    )
+    if generic_progression.get("changed"):
+        changed = True
+        for completed in _safe_list(generic_progression.get("completed_objectives")):
+            fired_hooks.append({
+                "hook_id": f"hook:objective:{_safe_str(_safe_dict(completed).get('objective_id'))}",
+                "turn_index": int(turn_index or 0),
+                "summary": f"Objective completed: {_safe_str(_safe_dict(completed).get('summary'))}",
+                "source": "generic_objective_progression",
+            })
+        for progressed in _safe_list(generic_progression.get("progressed_objectives")):
+            fired_hooks.append({
+                "hook_id": f"hook:objective_progress:{_safe_str(_safe_dict(progressed).get('objective_id'))}",
+                "turn_index": int(turn_index or 0),
+                "summary": f"Objective progressed: {_safe_str(_safe_dict(progressed).get('summary'))}",
+                "source": "generic_objective_progression",
+            })
+
     # Persist fact-derived hooks into hook state
     hook_state = simulation_state.setdefault("autoplay_story_hook_state", {})
     if isinstance(hook_state, dict):
@@ -1132,6 +1157,13 @@ def apply_autoplay_story_hooks(
                 hook_id = _safe_str(_safe_dict(row).get("hook_id"))
                 if hook_id:
                     fired_map.setdefault(hook_id, row)
+            # Limit fired hooks to prevent memory growth in long campaigns
+            if len(fired_map) > 200:
+                # Keep only the most recent 200 hooks
+                items = list(fired_map.items())
+                items.sort(key=lambda x: _safe_dict(x[1]).get("turn_index", 0), reverse=True)
+                fired_map.clear()
+                fired_map.update(dict(items[:200]))
     return {
         "ok": True,
         "changed": changed,

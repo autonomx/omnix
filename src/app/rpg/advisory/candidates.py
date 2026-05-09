@@ -6,7 +6,6 @@ from copy import deepcopy
 from datetime import datetime, timezone
 from typing import Any, Dict, List
 
-
 ADVISORY_CANDIDATE_VERSION = "deferred_advisory_candidates_v1"
 
 ALLOWED_CANDIDATE_KINDS = {

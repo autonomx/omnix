@@ -378,7 +378,9 @@ def test_bran_fallback_dialogue_varies_for_repeated_objective_questions():
 
 
 def test_bran_fallback_dialogue_varies_for_repeated_objective_questions():
-    from app.rpg.narration.runtime_narration_contract import build_deterministic_narration_payload
+    from app.rpg.narration.runtime_narration_contract import (
+        build_deterministic_narration_payload,
+    )
 
     state = {
         "recent_turns": [
@@ -404,7 +406,9 @@ def test_bran_fallback_dialogue_varies_for_repeated_objective_questions():
 
 
 def test_bran_fallback_dialogue_uses_executable_witness_question():
-    from app.rpg.narration.runtime_narration_contract import build_deterministic_narration_payload
+    from app.rpg.narration.runtime_narration_contract import (
+        build_deterministic_narration_payload,
+    )
 
     payload = build_deterministic_narration_payload(
         player_action="I ask Bran where the cloaked traveler went after leaving by the side door.",
@@ -417,7 +421,9 @@ def test_bran_fallback_dialogue_uses_executable_witness_question():
 
 
 def test_bran_acknowledges_repeated_cloaked_traveler_question():
-    from app.rpg.narration.runtime_narration_contract import build_deterministic_narration_payload
+    from app.rpg.narration.runtime_narration_contract import (
+        build_deterministic_narration_payload,
+    )
 
     state = {}
     first = build_deterministic_narration_payload(
@@ -449,7 +455,9 @@ def test_bran_acknowledges_repeated_cloaked_traveler_question():
 
 
 def test_narration_payload_contains_dialogue_state_update_for_bran_reply():
-    from app.rpg.narration.runtime_narration_contract import build_deterministic_narration_payload
+    from app.rpg.narration.runtime_narration_contract import (
+        build_deterministic_narration_payload,
+    )
 
     state = {}
     payload = build_deterministic_narration_payload(
@@ -465,7 +473,9 @@ def test_narration_payload_contains_dialogue_state_update_for_bran_reply():
 
 
 def test_bran_acknowledges_repeated_report_loop():
-    from app.rpg.narration.runtime_narration_contract import build_deterministic_narration_payload
+    from app.rpg.narration.runtime_narration_contract import (
+        build_deterministic_narration_payload,
+    )
 
     state = {}
     action = "I report to Bran that the cloaked traveler trail points toward the road and ask what danger this confirms."

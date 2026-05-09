@@ -1,6 +1,5 @@
 from app.rpg.session import runtime as rt
 from app.rpg.session.runtime import _dialogue_semantic_action_from_player_input
-from app.rpg.session.runtime import _dialogue_semantic_action_from_player_input
 
 
 def test_dialogue_semantic_parser_classifies_bran_report():

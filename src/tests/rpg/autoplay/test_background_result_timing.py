@@ -183,6 +183,7 @@ def test_pipeline_drain_completed_returns_finished_future_without_final_drain():
 
 def test_pipeline_drain_timeout_marks_unfinished_future():
     import time
+
     from tests.rpg.autoplay.parallel_pipeline import AutoplayBackgroundPipeline
 
     pipeline = AutoplayBackgroundPipeline(background_workers=1, provider_workers=1)

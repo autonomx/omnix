@@ -1,4 +1,7 @@
-from app.rpg.npc_dialogue.intelligence import npc_line_is_invalid, normalize_npc_intelligence_payload
+from app.rpg.npc_dialogue.intelligence import (
+    normalize_npc_intelligence_payload,
+    npc_line_is_invalid,
+)
 
 
 def test_npc_line_validator_rejects_repeated_lines():

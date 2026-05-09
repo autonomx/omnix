@@ -1,12 +1,12 @@
+from tests.rpg.autoplay.campaign_report import render_campaign_report_html
 from tests.rpg.autoplay.report_sections import (
+    _quest_rows_from_story_arc_view,
     build_campaign_calendar_and_journal,
     campaign_time_for_turn,
     summarize_npc_evolution_for_report,
     summarize_quests_for_report,
     summarize_story_beats_for_report,
-    _quest_rows_from_story_arc_view,
 )
-from tests.rpg.autoplay.campaign_report import render_campaign_report_html
 from tests.rpg.autoplay_llm_campaign import _resolve_turn_contract_for_report
 
 

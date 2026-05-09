@@ -2,6 +2,12 @@ from __future__ import annotations
 
 from typing import Any, Dict, List
 
+from app.rpg.objectives.affordances import build_objective_affordances_for_state
+from app.rpg.objectives.progression_rules import (
+    extract_action_topics,
+    infer_semantic_action,
+)
+
 
 def _safe_dict(value: Any) -> Dict[str, Any]:
     return value if isinstance(value, dict) else {}
@@ -13,6 +19,31 @@ def _safe_list(value: Any) -> List[Any]:
 
 def _safe_str(value: Any) -> str:
     return value if isinstance(value, str) else ""
+
+
+def action_signature(action: str) -> str:
+    lower = _safe_str(action).lower()
+    semantic = infer_semantic_action(lower)
+    topics = extract_action_topics(lower)
+    return f"{semantic}:{':'.join(topics[:4])}"
+
+
+def recent_action_signature_counts(transcript: List[Dict[str, Any]], *, limit: int = 8) -> Dict[str, int]:
+    counts: Dict[str, int] = {}
+    recent = _safe_list(transcript)
+    for row in recent[-max(1, int(limit or 8)):]:
+        row = _safe_dict(row)
+        action = _safe_str(row.get("player_action") or row.get("action"))
+        if not action:
+            continue
+        sig = action_signature(action)
+        counts[sig] = counts.get(sig, 0) + 1
+    return counts
+
+
+def is_repeated_affordance_action(action: str, transcript: List[Dict[str, Any]], *, threshold: int = 2) -> bool:
+    sig = action_signature(action)
+    return recent_action_signature_counts(transcript).get(sig, 0) >= int(threshold or 2)
 
 
 def _dialogue_topic_repeat_count(context: Dict[str, Any], npc_id: str, topic: str) -> int:
@@ -235,7 +266,7 @@ def strongest_known_npc(context: Dict[str, Any]) -> str:
     return "Bran"
 
 
-def suggested_executable_action(context: Dict[str, Any]) -> str:
+def suggested_executable_action(context: Dict[str, Any], transcript: List[Dict[str, Any]] | None = None) -> str:
     """Pick an executable suggested action, ignoring planner/meta labels."""
     best_command = ""
     best_score = -10_000
@@ -258,6 +289,8 @@ def suggested_executable_action(context: Dict[str, Any]) -> str:
                 "side door",
             )
         ):
+            continue
+        if transcript and is_repeated_affordance_action(command, transcript):
             continue
         category = _safe_str(row.get("category"))
         score = int(row.get("goal_pressure_score") or row.get("strategy_score") or row.get("priority") or 0)
@@ -319,7 +352,7 @@ def executable_action_for_context(context: Dict[str, Any], original_action: str 
     return f"I ask {npc} for one specific fact about the strongest lead, then immediately act on that answer."
 
 
-def repair_action_if_needed(action: str, context: Dict[str, Any]) -> Dict[str, Any]:
+def repair_action_if_needed(action: str, context: Dict[str, Any], transcript: List[Dict[str, Any]] | None = None) -> Dict[str, Any]:
     original = _safe_str(action).strip()
     normalized = normalize_command_label_action(original)
     if normalized and normalized != original and not is_meta_or_vague_action(normalized):
@@ -331,6 +364,22 @@ def repair_action_if_needed(action: str, context: Dict[str, Any]) -> Dict[str, A
         }
     action = normalized.strip()
     lower_action = action.lower()
+
+    if transcript and is_repeated_affordance_action(action, transcript):
+        repaired = ""
+        for row in build_objective_affordances_for_state(context, limit=10):
+            candidate = _safe_str(_safe_dict(row).get("command"))
+            if candidate and action_signature(candidate) != action_signature(action) and not (transcript and is_repeated_affordance_action(candidate, transcript)):
+                repaired = candidate
+                break
+        if not repaired:
+            repaired = executable_action_for_context(context, action)
+        return {
+            "changed": repaired != action,
+            "action": repaired,
+            "original_action": original,
+            "reason": "repeated_affordance_action_repaired_to_alternate_objective_affordance",
+        }
     if _post_witness_road_transition_active(context) and _post_transition_forbidden_bran_or_witness_action(action):
         repaired = _road_progression_action(context, action)
         return {

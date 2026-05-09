@@ -1,8 +1,8 @@
+from app.rpg.npc_evolution.arcs import ingest_evolution_signals
 from app.rpg.npc_evolution.consumer import (
     consume_accepted_advisory_projections,
     consume_evolution_signal,
 )
-from app.rpg.npc_evolution.arcs import ingest_evolution_signals
 
 
 def test_consume_relationship_signal_updates_npc_arc_not_authoritative_state():

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-import time
 import os
+import time
 from copy import deepcopy
 from typing import Any, Dict
 
@@ -13,15 +13,15 @@ from app.rpg.session.narration_trace import (
     get_narration_trace,
     record_narration_trace,
 )
-from tests.rpg.manual.perf_trace import (
-    clear_manual_harness_trace,
-    get_manual_harness_trace,
-    summarize_manual_harness_trace,
-)
 from app.rpg.session.turn_perf_trace import (
     clear_turn_perf_trace,
     get_turn_perf_trace,
     summarize_turn_perf_trace,
+)
+from tests.rpg.manual.perf_trace import (
+    clear_manual_harness_trace,
+    get_manual_harness_trace,
+    summarize_manual_harness_trace,
 )
 from tests.rpg.manual.session_helpers import (
     _ensure_manual_session,

@@ -467,6 +467,7 @@ from app.rpg.ai.scene_weaver import (
 )
 from app.rpg.ai.semantic_action_intelligence import get_semantic_action_advisory
 from app.rpg.ai.world_scene_narrator import narrate_ambient_update, narrate_scene
+from app.rpg.campaign_journal_runtime import advance_campaign_journal_for_turn
 from app.rpg.combat.abilities import (
     decrement_participant_cooldowns,
     resolve_combat_ability,
@@ -715,7 +716,6 @@ from app.rpg.session.turn_contract import (
     apply_state_delta,
     build_turn_contract,
 )
-from app.rpg.campaign_journal_runtime import advance_campaign_journal_for_turn
 from app.rpg.social.npc_backbone import resolve_npc_backbone_decision
 from app.rpg.world.companion_acceptance import (
     get_pending_companion_offer_debug,

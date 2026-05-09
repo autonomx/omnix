@@ -1,12 +1,12 @@
+from tests.rpg.autoplay.hundred_turn_eval import (
+    canonical_semantic_pair_from_turn,
+    recent_semantic_target_streak,
+)
 from tests.rpg.autoplay_llm_campaign import (
     _action_violates_anti_loop,
     _build_player_agent_anti_loop_context,
     _deterministic_anti_loop_fallback_action,
     _rough_semantic_pair_for_player_action,
-)
-from tests.rpg.autoplay.hundred_turn_eval import (
-    canonical_semantic_pair_from_turn,
-    recent_semantic_target_streak,
 )
 
 

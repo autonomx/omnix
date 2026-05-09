@@ -1,8 +1,8 @@
 from app.rpg.npc_evolution.arcs import (
     canonical_npc_id,
     evolution_signal_id,
-    ingest_evolution_signals,
     infer_npc_target_for_projection,
+    ingest_evolution_signals,
     normalize_projection_to_evolution_signal,
     summarize_npc_evolution_state,
 )

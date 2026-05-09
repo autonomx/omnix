@@ -3,7 +3,6 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any, Dict, List
 
-
 QUEST_PROGRESS_VERSION = "quest_progress_v1"
 
 

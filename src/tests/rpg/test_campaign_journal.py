@@ -1,9 +1,9 @@
 from app.rpg.campaign_journal_runtime import (
+    _clean_journal_text,
+    _journal_text,
+    _looks_malformed_journal_fragment,
     advance_campaign_journal_for_turn,
     campaign_time_for_turn,
-    _clean_journal_text,
-    _looks_malformed_journal_fragment,
-    _journal_text,
     summarize_campaign_calendar,
     summarize_player_journal,
 )
