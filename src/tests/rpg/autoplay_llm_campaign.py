@@ -1015,6 +1015,35 @@ def _scenario_progression_arc_summary(
         }
 
 
+def _arc_complete_graph_action_from_state(runtime_state: Dict[str, Any]) -> str:
+    runtime_state = _safe_dict(runtime_state)
+    for action in _safe_list(runtime_state.get("scenario_progression_actions")):
+        action = _safe_dict(action)
+        source = _safe_str(action.get("source"))
+        action_id = _safe_str(action.get("action_id"))
+        command = _safe_str(action.get("command"))
+        if command and (
+            source in {
+                "scenario_progression_arc_complete_idle",
+                "scenario_progression_arc_complete_bridge",
+            }
+            or action_id in {
+                "arc_complete_regroup",
+                "arc_complete_ask_next_lead",
+            }
+        ):
+            return command
+    return ""
+
+
+def _scenario_arc_complete_from_state(runtime_state: Dict[str, Any], args: Any) -> bool:
+    arc = _scenario_progression_arc_summary(
+        runtime_state,
+        scenario_seed=str(getattr(args, "scenario_seed", "") or ""),
+    )
+    return bool(arc.get("arc_complete"))
+
+
 def _assert_graph_actions_available_for_active_objectives(
     runtime_state: Dict[str, Any],
     *,
@@ -5232,6 +5261,22 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
                     }
                 )
 
+        player_agent_debug = _safe_dict(selected.get("debug")) if isinstance(selected, dict) else {}
+
+        arc_complete_action = _arc_complete_graph_action_from_state(authoritative_state)
+        if arc_complete_action and _scenario_arc_complete_from_state(authoritative_state, args):
+            original_player_action = _safe_str(player_action)
+            if original_player_action.strip() != arc_complete_action.strip():
+                player_action = arc_complete_action
+                player_agent_selection_source = "scenario_progression_arc_complete_bridge"
+                player_agent_selection_reason = "arc_complete_graph_action_preferred_over_llm"
+                player_agent_debug["arc_complete_graph_action_preferred"] = {
+                    "changed": True,
+                    "original_action": original_player_action,
+                    "replacement_action": arc_complete_action,
+                    "reason": "arc_complete_graph_action_preferred_over_llm",
+                }
+
         executable_action_repair = {"changed": False, "action": _safe_str(player_action)}
         handoff_semantic = ""
         if bool(getattr(args, "player_agent_executable_action_repair", True)):
@@ -5257,6 +5302,13 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
             context["scenario_progression_active"] = _scenario_progression_active(authoritative_state)
             context["current_location"] = authoritative_state.get("current_location") or authoritative_state.get("current_location_name") or ""
             context["scenario_progression_actions"] = authoritative_state.get("scenario_progression_actions") or []
+            context["scenario_progression_arc_summary"] = _scenario_progression_arc_summary(
+                authoritative_state,
+                scenario_seed=str(getattr(args, "scenario_seed", "") or ""),
+            )
+            context["scenario_arc_complete"] = bool(
+                _safe_dict(context.get("scenario_progression_arc_summary")).get("arc_complete")
+            )
             executable_action_repair = repair_action_if_needed(_safe_str(player_action), context, transcript)
             if executable_action_repair.get("changed"):
                 _probe_log(
@@ -5760,6 +5812,10 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
             "scenario_progression_actions_empty_with_active_objectives": (
                 _active_graph_objective_count_from_state(authoritative_state) > 0
                 and not bool(_safe_list(authoritative_state.get("scenario_progression_actions")))
+            ),
+            "scenario_arc_complete": _scenario_arc_complete_from_state(authoritative_state, args),
+            "arc_complete_graph_action_available": bool(
+                _arc_complete_graph_action_from_state(authoritative_state)
             ),
             "handoff_semantic": handoff_semantic,
             "player_agent_anti_loop_context": anti_loop_context,

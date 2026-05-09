@@ -383,3 +383,26 @@ def test_handoff_action_rotation_avoids_recent_semantic_repeat():
     assert result["reason"] == "committed_handoff_quest_priority_repair"
     assert result["handoff_semantic"] == "inspect_lead"
     assert "inspect" in result["action"].lower()
+
+
+def test_repair_replaces_stale_active_wagon_objective_after_arc_complete():
+    from tests.rpg.autoplay.executable_actions import repair_action_if_needed
+
+    result = repair_action_if_needed(
+        "I check in with Garran and focus on the active wagon-road objective.",
+        {
+            "scenario_arc_complete": True,
+            "scenario_progression_arc_summary": {"arc_complete": True},
+            "scenario_progression_actions": [
+                {
+                    "action_id": "arc_complete_ask_next_lead",
+                    "command": "I ask Garran what threat or lead we should follow next now that the wagon is safe.",
+                    "source": "scenario_progression_arc_complete_bridge",
+                }
+            ],
+        },
+    )
+
+    assert result["changed"] is True
+    assert result["reason"] == "scenario_progression_arc_complete_repaired_stale_objective_text"
+    assert "next" in result["action"].lower()

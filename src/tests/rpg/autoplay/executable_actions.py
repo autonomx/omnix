@@ -638,6 +638,30 @@ def repair_action_if_needed(action: str, context: Dict[str, Any], transcript: Li
     lower_action = action.lower()
     used_explicit_transcript = transcript is not None
     transcript = transcript if transcript is not None else _safe_list(context.get("recent_turns"))
+
+    arc_summary = _safe_dict(context.get("scenario_progression_arc_summary"))
+    if bool(context.get("scenario_arc_complete")) or bool(arc_summary.get("arc_complete")):
+        original_norm = original.strip().lower()
+        if (
+            "active wagon-road objective" in original_norm
+            or "active wagon road objective" in original_norm
+            or "focus on the active" in original_norm
+        ):
+            progression_action = _scenario_progression_action_from_context(context)
+            if progression_action:
+                return {
+                    "changed": True,
+                    "action": progression_action,
+                    "original_action": original,
+                    "reason": "scenario_progression_arc_complete_repaired_stale_objective_text",
+                }
+            return {
+                "changed": True,
+                "action": "I ask Garran what threat or lead we should follow next now that the wagon is safe.",
+                "original_action": original,
+                "reason": "scenario_progression_arc_complete_next_lead_bridge",
+            }
+
     progression_action = _scenario_progression_action_from_context(context)
     if progression_action:
         original_norm = original.strip().lower()
