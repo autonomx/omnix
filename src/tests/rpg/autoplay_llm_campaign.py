@@ -19,6 +19,8 @@ PROGRESSION_STATE_PRESERVE_KEYS = (
     "scenario_progression_current_turn_summary",
     "scenario_progression_last_no_match",
     "scenario_progression_action_debug",
+    "scenario_progression_quest_state",
+    "scenario_progression_quest_ids",
 )
 
 
@@ -79,6 +81,15 @@ def _progression_revision(state: Dict[str, Any]) -> int:
         + _progression_lead_count(state)
     )
     return max(explicit, derived)
+
+
+def _scenario_progression_active(runtime_state: Dict[str, Any]) -> bool:
+    runtime_state = _safe_dict(runtime_state)
+    return bool(
+        _safe_list(runtime_state.get("scenario_progression_actions"))
+        or _safe_dict(runtime_state.get("progression_completed_nodes"))
+        or _safe_dict(runtime_state.get("progression_facts"))
+    )
 
 
 def _stamp_progression_authority(
@@ -173,20 +184,26 @@ def _preserve_progression_state_fields(
             # Preserve earlier progression logs while accepting new rows.
             if key == "scenario_progression_log":
                 combined = list(base_value)
-                seen = {
-                    (
-                        _safe_str(_safe_dict(row).get("turn_index")),
-                        _safe_str(_safe_dict(row).get("matched_nodes")),
-                        _safe_str(_safe_dict(row).get("changed")),
+                def _marker(row: Any) -> tuple:
+                    row = _safe_dict(row)
+                    node_ids = tuple(
+                        _safe_str(node_id)
+                        for node_id in _safe_list(row.get("matched_node_ids"))
                     )
-                    for row in combined
-                }
+                    if not node_ids:
+                        node_ids = tuple(
+                            _safe_str(_safe_dict(node).get("node_id"))
+                            for node in _safe_list(row.get("matched_nodes"))
+                        )
+                    return (
+                        _safe_str(row.get("graph_id")),
+                        int(row.get("turn_index") or 0),
+                        node_ids,
+                    )
+
+                seen = {_marker(row) for row in combined}
                 for row in candidate_value:
-                    marker = (
-                        _safe_str(_safe_dict(row).get("turn_index")),
-                        _safe_str(_safe_dict(row).get("matched_nodes")),
-                        _safe_str(_safe_dict(row).get("changed")),
-                    )
+                    marker = _marker(row)
                     if marker not in seen:
                         combined.append(row)
                         seen.add(marker)
@@ -252,6 +269,10 @@ def _extract_progression_authority_sidecar(runtime_state: Dict[str, Any]) -> Dic
     for key in ("progression_stale_merge_log", "progression_overlay_log"):
         if key in runtime_state:
             sidecar[key] = deepcopy(runtime_state.get(key))
+    graph_quest_state = _extract_scenario_progression_quest_state(runtime_state)
+    if graph_quest_state:
+        sidecar["scenario_progression_quest_state"] = graph_quest_state
+        sidecar["scenario_progression_quest_ids"] = sorted(graph_quest_state.keys())
     return _stamp_progression_authority(
         sidecar,
         reason="progression_sidecar_extracted",
@@ -289,6 +310,10 @@ def _overlay_progression_authority_sidecar(
                 }
             )
             del stale_log[:-50]
+    merged = _overlay_scenario_progression_quests(
+        merged,
+        _safe_dict(progression_authority_state.get("scenario_progression_quest_state")),
+    )
     return _stamp_progression_authority(
         merged,
         reason=reason,
@@ -306,6 +331,26 @@ def _update_progression_authority_sidecar(
     existing_sidecar = _extract_progression_authority_sidecar(progression_authority_state)
     runtime_sidecar = _extract_progression_authority_sidecar(runtime_state)
     merged = _sidecar_progression_overlay(existing_sidecar, runtime_sidecar)
+
+    current_graph_quests = _safe_dict(existing_sidecar.get("scenario_progression_quest_state"))
+    candidate_graph_quests = _safe_dict(runtime_sidecar.get("scenario_progression_quest_state"))
+    graph_quests = dict(current_graph_quests)
+    for quest_id, quest in candidate_graph_quests.items():
+        existing = _safe_dict(graph_quests.get(quest_id))
+        quest = _safe_dict(quest)
+        existing_completed = bool(existing.get("completed")) or _safe_str(existing.get("status")) == "completed"
+        quest_completed = bool(quest.get("completed")) or _safe_str(quest.get("status")) == "completed"
+        if existing_completed and not quest_completed:
+            continue
+        merged_quest = dict(existing)
+        merged_quest.update(quest)
+        merged_quest.setdefault("source", "scenario_progression_graph")
+        graph_quests[quest_id] = merged_quest
+
+    if graph_quests:
+        merged["scenario_progression_quest_state"] = graph_quests
+        merged["scenario_progression_quest_ids"] = sorted(graph_quests.keys())
+
     return _stamp_progression_authority(
         merged,
         reason=reason,
@@ -404,6 +449,11 @@ def _overlay_and_assert_progression_sidecar(
     _assert_runtime_not_below_sidecar(
         overlaid,
         progression_authority_state,
+        turn_index=turn_index,
+        stage=reason,
+    )
+    _assert_graph_second_quest_invariant(
+        overlaid,
         turn_index=turn_index,
         stage=reason,
     )
@@ -771,6 +821,101 @@ def _baseline_mismatch_warning(
 
 def _safe_str(value: Any) -> str:
     return value if isinstance(value, str) else ""
+
+
+def _quest_progress_quests(state: Dict[str, Any]) -> Dict[str, Any]:
+    return _safe_dict(_safe_dict(_safe_dict(state).get("quest_progress")).get("quests"))
+
+
+def _is_scenario_progression_quest(quest_id: str, quest: Dict[str, Any]) -> bool:
+    quest = _safe_dict(quest)
+    quest_id = _safe_str(quest_id)
+    return (
+        _safe_str(quest.get("source")) == "scenario_progression_graph"
+        or quest_id in {
+            "quest:witness_search",
+            "quest:warn_wagon",
+            "quest:quarry_road_ambush",
+        }
+    )
+
+
+def _extract_scenario_progression_quest_state(state: Dict[str, Any]) -> Dict[str, Any]:
+    state = _safe_dict(state)
+    quests = _quest_progress_quests(state)
+    graph_quests: Dict[str, Any] = {}
+    for quest_id, quest in quests.items():
+        quest = _safe_dict(quest)
+        if _is_scenario_progression_quest(_safe_str(quest_id), quest):
+            graph_quests[_safe_str(quest_id)] = dict(quest)
+    return graph_quests
+
+
+def _overlay_scenario_progression_quests(
+    runtime_state: Dict[str, Any],
+    graph_quest_state: Dict[str, Any],
+) -> Dict[str, Any]:
+    runtime_state = _safe_dict(runtime_state)
+    graph_quest_state = _safe_dict(graph_quest_state)
+    if not graph_quest_state:
+        return runtime_state
+
+    out = dict(runtime_state)
+    quest_progress = dict(_safe_dict(out.get("quest_progress")))
+    quests = dict(_safe_dict(quest_progress.get("quests")))
+
+    for quest_id, sidecar_quest in graph_quest_state.items():
+        sidecar_quest = _safe_dict(sidecar_quest)
+        existing = _safe_dict(quests.get(quest_id))
+
+        # Do not overwrite a completed graph quest with an older active copy.
+        existing_completed = bool(existing.get("completed")) or _safe_str(existing.get("status")) == "completed"
+        sidecar_completed = bool(sidecar_quest.get("completed")) or _safe_str(sidecar_quest.get("status")) == "completed"
+        if existing_completed and not sidecar_completed:
+            continue
+
+        merged = dict(existing)
+        merged.update(sidecar_quest)
+        merged.setdefault("quest_id", quest_id)
+        merged.setdefault("source", "scenario_progression_graph")
+        quests[quest_id] = merged
+
+    quest_progress["quests"] = quests
+    out["quest_progress"] = quest_progress
+    out["scenario_progression_quest_state"] = graph_quest_state
+    out["scenario_progression_quest_ids"] = sorted(graph_quest_state.keys())
+    return out
+
+
+def _assert_graph_second_quest_invariant(
+    runtime_state: Dict[str, Any],
+    *,
+    turn_index: int,
+    stage: str,
+) -> None:
+    completed_nodes = _safe_dict(_safe_dict(runtime_state).get("progression_completed_nodes"))
+    if "report_findings_to_bran" not in completed_nodes:
+        return
+
+    quests = _quest_progress_quests(runtime_state)
+    warn_wagon = _safe_dict(quests.get("quest:warn_wagon"))
+    quarry = _safe_dict(quests.get("quest:quarry_road_ambush"))
+
+    warn_completed = bool(warn_wagon.get("completed")) or _safe_str(warn_wagon.get("status")) == "completed"
+    quarry_started = bool(quarry)
+
+    if not warn_wagon and not quarry_started:
+        raise RuntimeError(
+            "graph_second_quest_missing_after_report:"
+            f"turn={turn_index}:stage={stage}"
+        )
+
+    if warn_wagon and not warn_completed and _safe_str(warn_wagon.get("status")) != "active":
+        raise RuntimeError(
+            "graph_second_quest_not_active_after_report:"
+            f"turn={turn_index}:stage={stage}:"
+            f"status={warn_wagon.get('status')}"
+        )
 
 
 def _now_ms() -> int:
@@ -1757,6 +1902,7 @@ REQUIRED_FINAL_LIFECYCLE_SUMMARY_FIELDS = (
     "scenario_progression_action_debug",
     "progression_authority_summary",
     "progression_authority_sidecar_present",
+    "scenario_progression_quest_state",
     "behavioral_autoplay_eval_summary",
     "quality_gate_summary",
 )
@@ -2261,6 +2407,14 @@ def _final_lifecycle_quality_gates(summary: Dict[str, Any]) -> Dict[str, Any]:
     behavioral_eval = _safe_dict(summary.get("behavioral_autoplay_eval_summary"))
 
     quest_progress_summary = _safe_dict(summary.get("quest_progress_summary"))
+    scenario_progression = _safe_dict(summary.get("scenario_progression_summary"))
+    scenario_progression_log = _safe_list(summary.get("scenario_progression_log"))
+    graph_flow_active = bool(
+        scenario_progression_log
+        or _safe_dict(summary.get("progression_completed_nodes"))
+        or _safe_dict(summary.get("progression_facts"))
+        or bool(scenario_progression.get("changed"))
+    )
     active_quests = 0
     completed_quests = 0
     completed_without_next_objective = []
@@ -2303,9 +2457,11 @@ def _final_lifecycle_quality_gates(summary: Dict[str, Any]) -> Dict[str, Any]:
         or bool(repeated_affordance.get("ok", True))
     )
     gates["quest_handoff_available_after_completion_ok"] = (
-        completed_quests == 0
+        graph_flow_active
+        or completed_quests == 0
         or active_quests > 0
-        or bool(quest_handoff.get("count") or quest_handoff.get("active_handoff_quests"))
+        or bool(quest_handoff.get("changed"))
+        or bool(quest_handoff.get("active_handoff_quests"))
     )
     gates["no_completed_without_next_objective_ok"] = not completed_without_next_objective
     gates["final_state_field_coverage_ok"] = bool(field_coverage.get("ok"))
@@ -2410,6 +2566,12 @@ def _build_authoritative_final_lifecycle_summary(
     )
     summary["progression_runtime_completed_node_count"] = _progression_node_count(runtime_state)
     summary["progression_runtime_revision"] = _progression_revision(runtime_state)
+    summary["scenario_progression_quest_state"] = _safe_dict(
+        runtime_state.get("scenario_progression_quest_state")
+    )
+    summary["scenario_progression_quest_ids"] = _safe_list(
+        runtime_state.get("scenario_progression_quest_ids")
+    )
     commit_summary = _safe_dict(runtime_state.get("campaign_state_commit_summary"))
     summary["quest_progress_summary"] = (
         _safe_dict(commit_summary.get("quest_progress_summary"))
@@ -4644,6 +4806,7 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
             context["current_location_name"] = authoritative_state.get("current_location_name") or ""
             context["scenario_progression_actions"] = authoritative_state.get("scenario_progression_actions") or []
             context["scenario_progression_summary"] = authoritative_state.get("scenario_progression_summary") or {}
+            context["scenario_progression_active"] = _scenario_progression_active(authoritative_state)
             context["progression_authority_summary"] = authoritative_state.get("progression_authority_summary") or {}
             context["progression_sidecar_completed_node_count"] = _progression_node_count(
                 progression_authority_state
@@ -4931,6 +5094,7 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
             context["progression_sidecar_revision"] = _progression_revision(
                 progression_authority_state
             )
+            context["scenario_progression_active"] = _scenario_progression_active(authoritative_state)
             executable_action_repair = repair_action_if_needed(_safe_str(player_action), context, transcript)
             if executable_action_repair.get("changed"):
                 _probe_log(

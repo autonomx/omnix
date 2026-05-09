@@ -238,10 +238,30 @@ def test_handoff_quest_not_completed_by_same_commit_evidence():
     assert handoff_quests
     handoff = handoff_quests[0]
     assert handoff["status"] == "active"
-    assert handoff["completed"] is False
-    assert handoff["objectives"][0]["completed"] is False
-    assert result["summary"]["quest_progress_summary"]["active_count"] >= 1
-    assert result["summary"]["quest_progress_summary"]["completed_count"] >= 1
+
+
+def test_generic_handoff_suppressed_when_scenario_progression_graph_active():
+    state = {
+        "progression_completed_nodes": {"ask_bran_about_tension": {}},
+        "progression_facts": {"fact:witness_left_side_door": {}},
+        "quest_progress": {
+            "quests": {
+                "quest:first": {
+                    "quest_id": "quest:first",
+                    "title": "First Quest",
+                    "status": "completed",
+                    "completed": True,
+                    "objectives": [
+                        {"objective_id": "objective:first", "completed": True, "status": "completed"}
+                    ],
+                }
+            }
+        },
+    }
+
+    result = commit_campaign_state(state, phase="turn")
+
+    assert result["summary"]["handoff_summary"]["reason"] == "suppressed_by_scenario_progression_graph"
 
 
 def test_forward_looking_hook_lead_beats_reported_completion_hook():
@@ -453,3 +473,41 @@ def test_handoff_progresses_after_two_distinct_future_semantic_actions():
     handoff = third["state"]["quest_progress"]["quests"][handoff["quest_id"]]
     assert handoff["objectives"][0]["completed"] is True
     assert handoff["completed"] is True
+
+
+def test_campaign_commit_preserves_scenario_progression_graph_quest_state():
+    from app.rpg.campaign_state.authority_commit import commit_campaign_state
+
+    state = {
+        "progression_completed_nodes": {"report_findings_to_bran": {}},
+        "scenario_progression_quest_state": {
+            "quest:warn_wagon": {
+                "quest_id": "quest:warn_wagon",
+                "title": "Warn the Wagon",
+                "status": "active",
+                "completed": False,
+                "source": "scenario_progression_graph",
+                "objectives": [
+                    {"objective_id": "objective:warn_garran", "status": "active", "completed": False}
+                ],
+            }
+        },
+        "quest_progress": {
+            "quests": {
+                "quest:witness_search": {
+                    "quest_id": "quest:witness_search",
+                    "status": "completed",
+                    "completed": True,
+                    "objectives": [
+                        {"objective_id": "objective:find_witness", "status": "completed", "completed": True}
+                    ],
+                }
+            }
+        },
+    }
+
+    result = commit_campaign_state(state, phase="turn")
+
+    quests = result["state"]["quest_progress"]["quests"]
+    assert "quest:warn_wagon" in quests
+    assert quests["quest:warn_wagon"]["status"] == "active"

@@ -1,671 +1,664 @@
-N90.3.1 — Sidecar Wiring Audit + Mandatory Runtime Assertions
+N90.5 — Graph Quest State Preservation + Second Quest Activation
 Goal
 
-Run 193 proved the sidecar helpers may exist, but the real autoplay loop is not using them.
+Fix run 195.
 
-The failure signal is:
+N90.4 got the graph cleanly through the first quest, but the graph stalls after report_findings_to_bran because the graph-created second quest does not survive canonical state reconciliation:
 
-Turn 2:
-  completed_node_count=2
-  next_actions=['ask_bran_direction']
+Expected after report_findings_to_bran:
+  quest:warn_wagon active
+  objective:warn_garran active
+  lead:ask_bran_garran present
+  next action: ask_bran_garran
 
-Turn 3:
-  completed_node_count=1
-  next_actions=['ask_bran_who_left_side_door']
+Actual:
+  quest:warn_wagon missing
+  ask_bran_garran blocked by missing active quest
+  graph actions become empty
 
-That must become impossible.
-
-This patch makes the sidecar mandatory. If stale runtime state regresses below the sidecar, the run either overlays the sidecar immediately or crashes at the exact overwrite point.
+The target behavior requires the campaign to move from Witness Search into the wagon/Garran/route-planning stage, not fall back into road inspection loops.
 
 1. Patch src/tests/rpg/autoplay_llm_campaign.py
-1A. Add mandatory sidecar overlay/assert helpers
+1A. Add graph quest sidecar keys
 
-Add near the N90 progression helpers:
+Extend the progression sidecar key list so graph-created quests survive runtime/session merges.
 
 --- src/tests/rpg/autoplay_llm_campaign.py
 +++ src/tests/rpg/autoplay_llm_campaign.py
 @@
-+def _require_progression_sidecar_present(
-+    progression_authority_state: Dict[str, Any],
-+    *,
-+    turn_index: int,
-+    stage: str,
-+) -> None:
-+    if not isinstance(progression_authority_state, dict):
-+        raise RuntimeError(
-+            f"progression_sidecar_missing:turn={turn_index}:stage={stage}:not_dict"
-+        )
-+    if turn_index > 1 and not progression_authority_state:
-+        raise RuntimeError(
-+            f"progression_sidecar_missing:turn={turn_index}:stage={stage}:empty"
-+        )
+ PROGRESSION_STATE_PRESERVE_KEYS = (
+@@
+     "scenario_progression_action_debug",
++    "scenario_progression_quest_state",
++    "scenario_progression_quest_ids",
+ )
+1B. Add graph quest extraction helpers
+
+Add near the progression sidecar helpers:
+
+--- src/tests/rpg/autoplay_llm_campaign.py
++++ src/tests/rpg/autoplay_llm_campaign.py
+@@
++def _quest_progress_quests(state: Dict[str, Any]) -> Dict[str, Any]:
++    return _safe_dict(_safe_dict(_safe_dict(state).get("quest_progress")).get("quests"))
 +
 +
-+def _assert_runtime_not_below_sidecar(
++def _is_scenario_progression_quest(quest_id: str, quest: Dict[str, Any]) -> bool:
++    quest = _safe_dict(quest)
++    quest_id = _safe_str(quest_id)
++    return (
++        _safe_str(quest.get("source")) == "scenario_progression_graph"
++        or quest_id in {
++            "quest:witness_search",
++            "quest:warn_wagon",
++            "quest:quarry_road_ambush",
++        }
++    )
++
++
++def _extract_scenario_progression_quest_state(state: Dict[str, Any]) -> Dict[str, Any]:
++    state = _safe_dict(state)
++    quests = _quest_progress_quests(state)
++    graph_quests: Dict[str, Any] = {}
++    for quest_id, quest in quests.items():
++        quest = _safe_dict(quest)
++        if _is_scenario_progression_quest(_safe_str(quest_id), quest):
++            graph_quests[_safe_str(quest_id)] = dict(quest)
++    return graph_quests
++
++
++def _overlay_scenario_progression_quests(
 +    runtime_state: Dict[str, Any],
-+    progression_authority_state: Dict[str, Any],
-+    *,
-+    turn_index: int,
-+    stage: str,
-+) -> None:
-+    runtime_nodes = _progression_node_count(runtime_state)
-+    sidecar_nodes = _progression_node_count(progression_authority_state)
-+    runtime_revision = _progression_revision(runtime_state)
-+    sidecar_revision = _progression_revision(progression_authority_state)
-+
-+    if runtime_nodes < sidecar_nodes:
-+        raise RuntimeError(
-+            "progression_runtime_below_sidecar_nodes:"
-+            f"turn={turn_index}:stage={stage}:"
-+            f"runtime_nodes={runtime_nodes}:sidecar_nodes={sidecar_nodes}:"
-+            f"runtime_revision={runtime_revision}:sidecar_revision={sidecar_revision}"
-+        )
-+
-+    if runtime_revision < sidecar_revision:
-+        raise RuntimeError(
-+            "progression_runtime_below_sidecar_revision:"
-+            f"turn={turn_index}:stage={stage}:"
-+            f"runtime_nodes={runtime_nodes}:sidecar_nodes={sidecar_nodes}:"
-+            f"runtime_revision={runtime_revision}:sidecar_revision={sidecar_revision}"
-+        )
-+
-+
-+def _overlay_and_assert_progression_sidecar(
-+    runtime_state: Dict[str, Any],
-+    progression_authority_state: Dict[str, Any],
-+    *,
-+    reason: str,
-+    turn_index: int,
++    graph_quest_state: Dict[str, Any],
 +) -> Dict[str, Any]:
-+    _require_progression_sidecar_present(
-+        progression_authority_state,
-+        turn_index=turn_index,
-+        stage=reason,
-+    )
-+    overlaid = _overlay_progression_authority_sidecar(
-+        runtime_state,
-+        progression_authority_state,
-+        reason=reason,
-+        turn_index=turn_index,
-+    )
-+    _assert_runtime_not_below_sidecar(
-+        overlaid,
-+        progression_authority_state,
-+        turn_index=turn_index,
-+        stage=reason,
-+    )
-+    return overlaid
++    runtime_state = _safe_dict(runtime_state)
++    graph_quest_state = _safe_dict(graph_quest_state)
++    if not graph_quest_state:
++        return runtime_state
 +
++    out = dict(runtime_state)
++    quest_progress = dict(_safe_dict(out.get("quest_progress")))
++    quests = dict(_safe_dict(quest_progress.get("quests")))
 +
-+def _update_sidecar_and_overlay(
++    for quest_id, sidecar_quest in graph_quest_state.items():
++        sidecar_quest = _safe_dict(sidecar_quest)
++        existing = _safe_dict(quests.get(quest_id))
++
++        # Do not overwrite a completed graph quest with an older active copy.
++        existing_completed = bool(existing.get("completed")) or _safe_str(existing.get("status")) == "completed"
++        sidecar_completed = bool(sidecar_quest.get("completed")) or _safe_str(sidecar_quest.get("status")) == "completed"
++        if existing_completed and not sidecar_completed:
++            continue
++
++        merged = dict(existing)
++        merged.update(sidecar_quest)
++        merged.setdefault("quest_id", quest_id)
++        merged.setdefault("source", "scenario_progression_graph")
++        quests[quest_id] = merged
++
++    quest_progress["quests"] = quests
++    out["quest_progress"] = quest_progress
++    out["scenario_progression_quest_state"] = graph_quest_state
++    out["scenario_progression_quest_ids"] = sorted(graph_quest_state.keys())
++    return out
+1C. Patch _extract_progression_authority_sidecar(...)
+
+Inside _extract_progression_authority_sidecar(...), after the normal field extraction, add graph quest extraction:
+
+--- src/tests/rpg/autoplay_llm_campaign.py
++++ src/tests/rpg/autoplay_llm_campaign.py
+@@
+ def _extract_progression_authority_sidecar(state: Dict[str, Any]) -> Dict[str, Any]:
+     state = _safe_dict(state)
+     sidecar: Dict[str, Any] = {}
+@@
+         if value not in (None, {}, []):
+             sidecar[key] = value
++    graph_quest_state = _extract_scenario_progression_quest_state(state)
++    if graph_quest_state:
++        sidecar["scenario_progression_quest_state"] = graph_quest_state
++        sidecar["scenario_progression_quest_ids"] = sorted(graph_quest_state.keys())
+     return _stamp_progression_authority(
+         sidecar,
+         reason="extract_progression_authority_sidecar",
+1D. Patch _overlay_progression_authority_sidecar(...)
+
+After progression fields are overlaid from sidecar, also overlay graph-created quests:
+
+--- src/tests/rpg/autoplay_llm_campaign.py
++++ src/tests/rpg/autoplay_llm_campaign.py
+@@
+     if should_overlay:
+         for key in PROGRESSION_AUTHORITY_SIDECAR_KEYS:
+             if key in sidecar:
+                 out[key] = sidecar[key]
++        out = _overlay_scenario_progression_quests(
++            out,
++            _safe_dict(sidecar.get("scenario_progression_quest_state")),
++        )
+@@
+     return _stamp_progression_authority(
+         out,
+         reason=reason,
+         turn_index=turn_index,
+     )
+
+Also overlay graph quests even when should_overlay is false but sidecar has graph quests:
+
+--- src/tests/rpg/autoplay_llm_campaign.py
++++ src/tests/rpg/autoplay_llm_campaign.py
+@@
+-    return _stamp_progression_authority(
++    if _safe_dict(sidecar.get("scenario_progression_quest_state")):
++        out = _overlay_scenario_progression_quests(
++            out,
++            _safe_dict(sidecar.get("scenario_progression_quest_state")),
++        )
++
++    return _stamp_progression_authority(
+         out,
+         reason=reason,
+         turn_index=turn_index,
+     )
+1E. Patch _update_progression_authority_sidecar(...)
+
+After merging candidate/sidecar, ensure graph quest state is preserved into the sidecar:
+
+--- src/tests/rpg/autoplay_llm_campaign.py
++++ src/tests/rpg/autoplay_llm_campaign.py
+@@
+ def _update_progression_authority_sidecar(
+@@
+     candidate = _extract_progression_authority_sidecar(runtime_state)
+@@
+     if _sidecar_is_newer_or_equal(current, candidate):
+         merged = _preserve_progression_state_fields(candidate, current)
+ 
++    current_graph_quests = _safe_dict(current.get("scenario_progression_quest_state"))
++    candidate_graph_quests = _safe_dict(candidate.get("scenario_progression_quest_state"))
++    graph_quests = dict(current_graph_quests)
++    for quest_id, quest in candidate_graph_quests.items():
++        existing = _safe_dict(graph_quests.get(quest_id))
++        quest = _safe_dict(quest)
++        existing_completed = bool(existing.get("completed")) or _safe_str(existing.get("status")) == "completed"
++        quest_completed = bool(quest.get("completed")) or _safe_str(quest.get("status")) == "completed"
++        if existing_completed and not quest_completed:
++            continue
++        merged_quest = dict(existing)
++        merged_quest.update(quest)
++        merged_quest.setdefault("source", "scenario_progression_graph")
++        graph_quests[quest_id] = merged_quest
++
++    if graph_quests:
++        merged["scenario_progression_quest_state"] = graph_quests
++        merged["scenario_progression_quest_ids"] = sorted(graph_quests.keys())
++
+     return _stamp_progression_authority(
+         merged,
+         reason=reason,
+1F. Add invariant for second quest activation
+
+Add helper:
+
+--- src/tests/rpg/autoplay_llm_campaign.py
++++ src/tests/rpg/autoplay_llm_campaign.py
+@@
++def _assert_graph_second_quest_invariant(
 +    runtime_state: Dict[str, Any],
-+    progression_authority_state: Dict[str, Any],
 +    *,
-+    reason: str,
 +    turn_index: int,
-+) -> tuple[Dict[str, Any], Dict[str, Any]]:
-+    progression_authority_state = _update_progression_authority_sidecar(
-+        progression_authority_state,
-+        runtime_state,
-+        reason=reason,
-+        turn_index=turn_index,
-+    )
-+    runtime_state = _overlay_and_assert_progression_sidecar(
-+        runtime_state,
-+        progression_authority_state,
-+        reason=f"{reason}:overlay",
-+        turn_index=turn_index,
-+    )
-+    return runtime_state, progression_authority_state
-1B. Make sidecar initialization impossible to miss
-
-Find the main autoplay function where runtime_state is initialized and where the main loop starts.
-
-Immediately before:
-
-for turn_index in range(1, requested_turns + 1):
-
-insert:
-
---- src/tests/rpg/autoplay_llm_campaign.py
-+++ src/tests/rpg/autoplay_llm_campaign.py
-@@
-+    progression_authority_state: Dict[str, Any] = _extract_progression_authority_sidecar(runtime_state)
-+    progression_authority_state = _stamp_progression_authority(
-+        progression_authority_state,
-+        reason="main_loop_sidecar_initialized",
-+        turn_index=0,
-+    )
-+    runtime_state = _overlay_progression_authority_sidecar(
-+        runtime_state,
-+        progression_authority_state,
-+        reason="main_loop_initial_overlay",
-+        turn_index=0,
-+    )
-+    progression_sidecar_max_node_count = _progression_node_count(progression_authority_state)
-+    progression_sidecar_max_revision = _progression_revision(progression_authority_state)
++    stage: str,
++) -> None:
++    completed_nodes = _safe_dict(_safe_dict(runtime_state).get("progression_completed_nodes"))
++    if "report_findings_to_bran" not in completed_nodes:
++        return
 +
-     for turn_index in range(1, requested_turns + 1):
-
-If a prior N90.3 sidecar initialization already exists, replace it with the block above.
-
-1C. Add mandatory turn-start sidecar probe and assert
-
-At the top of the turn loop, before any pre-turn drain, player-agent work, or runtime merge:
-
---- src/tests/rpg/autoplay_llm_campaign.py
-+++ src/tests/rpg/autoplay_llm_campaign.py
-@@
-     for turn_index in range(1, requested_turns + 1):
-+        runtime_state = _overlay_and_assert_progression_sidecar(
-+            runtime_state,
-+            progression_authority_state,
-+            reason="turn_start",
-+            turn_index=turn_index,
-+        )
-+        _probe_log(
-+            bool(getattr(args, "debug_autoplay_stage_timing", False)),
-+            "scenario_progression.sidecar.start",
-+            turn_index=turn_index,
-+            runtime_revision=_progression_revision(runtime_state),
-+            sidecar_revision=_progression_revision(progression_authority_state),
-+            runtime_completed_node_count=_progression_node_count(runtime_state),
-+            sidecar_completed_node_count=_progression_node_count(progression_authority_state),
-+            runtime_fact_count=_progression_fact_count(runtime_state),
-+            sidecar_fact_count=_progression_fact_count(progression_authority_state),
-+            next_actions=[
-+                _safe_str(_safe_dict(row).get("action_id"))
-+                for row in _safe_list(runtime_state.get("scenario_progression_actions"))[:5]
-+            ],
-+        )
-
-Remove any duplicate old turn-start overlay block that does not call _overlay_and_assert_progression_sidecar.
-
-1D. Add audit wrapper after every runtime_state = ... risky assignment
-
-Search:
-
-Select-String -Path src\tests\rpg\autoplay_llm_campaign.py -Pattern "runtime_state\s*=" -Context 1,2
-
-For every assignment where runtime_state is replaced from another source, immediately overlay/assert.
-
-After campaign-state commit
-
-Patch every block like:
-
-runtime_state = _commit_campaign_state_authority(...)
-
-to:
-
---- src/tests/rpg/autoplay_llm_campaign.py
-+++ src/tests/rpg/autoplay_llm_campaign.py
-@@
-         runtime_state = _commit_campaign_state_authority(
-             runtime_state,
-             transcript_tail=transcript[-12:],
-             phase="turn",
-         )
-+        runtime_state = _overlay_and_assert_progression_sidecar(
-+            runtime_state,
-+            progression_authority_state,
-+            reason="after_campaign_state_commit",
-+            turn_index=turn_index,
-+        )
-After turn-result merge
-
-Patch:
-
---- src/tests/rpg/autoplay_llm_campaign.py
-+++ src/tests/rpg/autoplay_llm_campaign.py
-@@
-         runtime_state = _merge_turn_result_authoritative_state(runtime_state, turn_result)
-+        runtime_state = _overlay_and_assert_progression_sidecar(
-+            runtime_state,
-+            progression_authority_state,
-+            reason="after_turn_result_merge",
-+            turn_index=turn_index,
-+        )
-After scenario progression apply
-
-Patch:
-
---- src/tests/rpg/autoplay_llm_campaign.py
-+++ src/tests/rpg/autoplay_llm_campaign.py
-@@
-         runtime_state = _apply_scenario_progression_for_action(
-             runtime_state,
-             scenario_seed=str(getattr(args, "scenario_seed", "") or ""),
-             player_action=player_action,
-             turn_index=turn_index,
-         )
-+        runtime_state, progression_authority_state = _update_sidecar_and_overlay(
-+            runtime_state,
-+            progression_authority_state,
-+            reason="after_scenario_progression_apply",
-+            turn_index=turn_index,
-+        )
-After recomputing progression actions
-
-Patch:
-
---- src/tests/rpg/autoplay_llm_campaign.py
-+++ src/tests/rpg/autoplay_llm_campaign.py
-@@
-         runtime_state["scenario_progression_actions"] = _get_scenario_progression_actions(
-             runtime_state,
-             scenario_seed=str(getattr(args, "scenario_seed", "") or ""),
-             limit=int(getattr(args, "suggested_action_limit", 8) or 8),
-         )
-+        runtime_state = _stamp_progression_authority(
-+            runtime_state,
-+            reason="scenario_progression_actions_recomputed",
-+            turn_index=turn_index,
-+        )
-+        runtime_state, progression_authority_state = _update_sidecar_and_overlay(
-+            runtime_state,
-+            progression_authority_state,
-+            reason="after_scenario_progression_actions_recomputed",
-+            turn_index=turn_index,
-+        )
-After post-append commit
-
-Patch:
-
---- src/tests/rpg/autoplay_llm_campaign.py
-+++ src/tests/rpg/autoplay_llm_campaign.py
-@@
-         runtime_state = _commit_campaign_state_authority(
-             runtime_state,
-             turn_record=record,
-             transcript_tail=transcript[-12:],
-             phase="turn",
-         )
-+        runtime_state, progression_authority_state = _update_sidecar_and_overlay(
-+            runtime_state,
-+            progression_authority_state,
-+            reason="after_post_append_commit",
-+            turn_index=turn_index,
-+        )
-1E. Add mandatory context overlay before player-agent and repair
-
-Before player context creation:
-
---- src/tests/rpg/autoplay_llm_campaign.py
-+++ src/tests/rpg/autoplay_llm_campaign.py
-@@
-+        runtime_state = _overlay_and_assert_progression_sidecar(
-+            runtime_state,
-+            progression_authority_state,
-+            reason="before_player_context",
-+            turn_index=turn_index,
-+        )
-         player_context = ...
-
-After player context creation:
-
---- src/tests/rpg/autoplay_llm_campaign.py
-+++ src/tests/rpg/autoplay_llm_campaign.py
-@@
-         if isinstance(player_context, dict):
-             player_context["quest_progress"] = runtime_state.get("quest_progress")
-             player_context["campaign_state_commit_summary"] = runtime_state.get("campaign_state_commit_summary")
-             player_context["unresolved_leads"] = runtime_state.get("unresolved_leads")
-             player_context["scenario_progression_actions"] = runtime_state.get("scenario_progression_actions")
-             player_context["scenario_progression_summary"] = runtime_state.get("scenario_progression_summary")
-+            player_context["progression_authority_summary"] = runtime_state.get("progression_authority_summary")
-+            player_context["progression_sidecar_completed_node_count"] = _progression_node_count(
-+                progression_authority_state
-+            )
-+            player_context["progression_sidecar_revision"] = _progression_revision(
-+                progression_authority_state
-+            )
-
-Before repair:
-
---- src/tests/rpg/autoplay_llm_campaign.py
-+++ src/tests/rpg/autoplay_llm_campaign.py
-@@
-+        runtime_state = _overlay_and_assert_progression_sidecar(
-+            runtime_state,
-+            progression_authority_state,
-+            reason="before_executable_repair",
-+            turn_index=turn_index,
-+        )
-
-And ensure repair context gets the same fields:
-
---- src/tests/rpg/autoplay_llm_campaign.py
-+++ src/tests/rpg/autoplay_llm_campaign.py
-@@
-         repair_context["scenario_progression_actions"] = runtime_state.get("scenario_progression_actions")
-         repair_context["scenario_progression_summary"] = runtime_state.get("scenario_progression_summary")
-+        repair_context["progression_authority_summary"] = runtime_state.get("progression_authority_summary")
-+        repair_context["progression_sidecar_completed_node_count"] = _progression_node_count(
-+            progression_authority_state
-+        )
-+        repair_context["progression_sidecar_revision"] = _progression_revision(
-+            progression_authority_state
-+        )
-1F. Make missing sidecar fields in transcript impossible
-
-When creating record, add these fields unconditionally:
-
---- src/tests/rpg/autoplay_llm_campaign.py
-+++ src/tests/rpg/autoplay_llm_campaign.py
-@@
-             "scenario_progression_actions": _safe_list(runtime_state.get("scenario_progression_actions"))[:8],
-+            "progression_sidecar_completed_node_count": _progression_node_count(
-+                progression_authority_state
-+            ),
-+            "progression_sidecar_revision": _progression_revision(
-+                progression_authority_state
-+            ),
-+            "progression_authority_sidecar_summary": _safe_dict(
-+                progression_authority_state.get("progression_authority_summary")
-+            ),
-+            "progression_runtime_completed_node_count": _progression_node_count(runtime_state),
-+            "progression_runtime_revision": _progression_revision(runtime_state),
-
-Then immediately after record is built, before transcript.append(record), assert:
-
---- src/tests/rpg/autoplay_llm_campaign.py
-+++ src/tests/rpg/autoplay_llm_campaign.py
-@@
-+        if "progression_sidecar_completed_node_count" not in record:
-+            raise RuntimeError(
-+                f"progression_sidecar_fields_missing_from_record:turn={turn_index}"
-+            )
-         transcript.append(record)
-1G. Add mandatory sidecar end probe and global monotonic assert
-
-At the end of the turn loop, after all commits/record updates:
-
---- src/tests/rpg/autoplay_llm_campaign.py
-+++ src/tests/rpg/autoplay_llm_campaign.py
-@@
-+        runtime_state = _overlay_and_assert_progression_sidecar(
-+            runtime_state,
-+            progression_authority_state,
-+            reason="turn_end",
-+            turn_index=turn_index,
-+        )
-+        _probe_log(
-+            bool(getattr(args, "debug_autoplay_stage_timing", False)),
-+            "scenario_progression.sidecar.end",
-+            turn_index=turn_index,
-+            runtime_revision=_progression_revision(runtime_state),
-+            sidecar_revision=_progression_revision(progression_authority_state),
-+            runtime_completed_node_count=_progression_node_count(runtime_state),
-+            sidecar_completed_node_count=_progression_node_count(progression_authority_state),
-+            runtime_fact_count=_progression_fact_count(runtime_state),
-+            sidecar_fact_count=_progression_fact_count(progression_authority_state),
-+            next_actions=[
-+                _safe_str(_safe_dict(row).get("action_id"))
-+                for row in _safe_list(runtime_state.get("scenario_progression_actions"))[:5]
-+            ],
++    quests = _quest_progress_quests(runtime_state)
++    warn_wagon = _safe_dict(quests.get("quest:warn_wagon"))
++    quarry = _safe_dict(quests.get("quest:quarry_road_ambush"))
++
++    warn_completed = bool(warn_wagon.get("completed")) or _safe_str(warn_wagon.get("status")) == "completed"
++    quarry_started = bool(quarry)
++
++    if not warn_wagon and not quarry_started:
++        raise RuntimeError(
++            "graph_second_quest_missing_after_report:"
++            f"turn={turn_index}:stage={stage}"
 +        )
 +
-+        _assert_progression_sidecar_monotonic(
-+            progression_authority_state,
-+            turn_index=turn_index,
-+            previous_node_count=progression_sidecar_max_node_count,
-+            previous_revision=progression_sidecar_max_revision,
-+        )
-+        progression_sidecar_max_node_count = max(
-+            progression_sidecar_max_node_count,
-+            _progression_node_count(progression_authority_state),
-+        )
-+        progression_sidecar_max_revision = max(
-+            progression_sidecar_max_revision,
-+            _progression_revision(progression_authority_state),
++    if warn_wagon and not warn_completed and _safe_str(warn_wagon.get("status")) != "active":
++        raise RuntimeError(
++            "graph_second_quest_not_active_after_report:"
++            f"turn={turn_index}:stage={stage}:"
++            f"status={warn_wagon.get('status')}"
 +        )
 
-Remove the older per-turn runtime-only monotonic assert if it creates duplicate/conflicting behavior.
-
-1H. Overlay sidecar before final summary
-
-Immediately before final summary builder call:
+Call it inside _overlay_and_assert_progression_sidecar(...), after _assert_runtime_not_below_sidecar(...):
 
 --- src/tests/rpg/autoplay_llm_campaign.py
 +++ src/tests/rpg/autoplay_llm_campaign.py
 @@
-+    runtime_state = _overlay_and_assert_progression_sidecar(
-+        runtime_state,
-+        progression_authority_state,
-+        reason="before_final_summary",
-+        turn_index=int(requested_turns or len(transcript)),
+     _assert_runtime_not_below_sidecar(
+         overlaid,
+         progression_authority_state,
+         turn_index=turn_index,
+         stage=reason,
+     )
++    _assert_graph_second_quest_invariant(
++        overlaid,
++        turn_index=turn_index,
++        stage=reason,
++    )
+     return overlaid
+1G. Add final summary fields
+
+Inside _build_authoritative_final_lifecycle_summary(...), after progression fields:
+
+--- src/tests/rpg/autoplay_llm_campaign.py
++++ src/tests/rpg/autoplay_llm_campaign.py
+@@
+     summary["progression_runtime_completed_node_count"] = _progression_node_count(runtime_state)
+     summary["progression_runtime_revision"] = _progression_revision(runtime_state)
++    summary["scenario_progression_quest_state"] = _safe_dict(
++        runtime_state.get("scenario_progression_quest_state")
++    )
++    summary["scenario_progression_quest_ids"] = _safe_list(
++        runtime_state.get("scenario_progression_quest_ids")
 +    )
 
-If final summary builder is called in multiple branches, add this before every branch that writes artifacts.
-
-1I. Add final summary sidecar fields
-
-Inside _build_authoritative_final_lifecycle_summary(...), add:
+Add required field:
 
 --- src/tests/rpg/autoplay_llm_campaign.py
 +++ src/tests/rpg/autoplay_llm_campaign.py
 @@
-     summary["progression_authority_summary"] = _safe_dict(runtime_state.get("progression_authority_summary"))
-     summary["progression_stale_merge_log"] = _safe_list(runtime_state.get("progression_stale_merge_log"))[-50:]
-+    summary["progression_authority_sidecar_present"] = bool(
-+        runtime_state.get("progression_authority_summary")
-+    )
-+    summary["progression_runtime_completed_node_count"] = _progression_node_count(runtime_state)
-+    summary["progression_runtime_revision"] = _progression_revision(runtime_state)
-
-Add to required lifecycle fields:
-
---- src/tests/rpg/autoplay_llm_campaign.py
-+++ src/tests/rpg/autoplay_llm_campaign.py
-@@
-     "progression_authority_summary",
-+    "progression_authority_sidecar_present",
+     "progression_authority_sidecar_present",
++    "scenario_progression_quest_state",
      "behavioral_autoplay_eval_summary",
-2. Patch src/tests/rpg/autoplay/executable_actions.py
-2A. Hard-disable old witness/road repair when graph actions exist
+2. Patch src/app/rpg/progression/runtime.py
+2A. Make graph-created objectives attach to the intended quest
 
-At the top of repair_action_if_needed(...), immediately after:
+Patch _ensure_objective(...) to infer quest id from objective id where possible:
 
-context = _safe_dict(context)
-original = _safe_str(action)
-
-add:
-
---- src/tests/rpg/autoplay/executable_actions.py
-+++ src/tests/rpg/autoplay/executable_actions.py
+--- src/app/rpg/progression/runtime.py
++++ src/app/rpg/progression/runtime.py
 @@
-+    progression_action = _scenario_progression_action_from_context(context)
-+    if progression_action:
-+        original_norm = original.strip().lower()
-+        progression_norm = progression_action.strip().lower()
-+        if progression_norm != original_norm and (
-+            is_meta_or_vague_action(original)
-+            or is_repeated_affordance_action(original, context)
-+            or "follow up on the lead" in original_norm
-+            or "review my quest log" in original_norm
-+            or "road outside the tavern" in original_norm
-+            or "fresh tracks" in original_norm
-+            or "wagon ruts" in original_norm
-+            or "black cord" in original_norm
-+        ):
-+            return {
-+                "changed": True,
-+                "action": progression_action,
-+                "original_action": original,
-+                "reason": "scenario_progression_graph_priority_repair",
-+            }
+ def _ensure_objective(state: Dict[str, Any], objective_id: str, *, quest_id: str = "", summary: str = "") -> Dict[str, Any]:
+-    quest_id = quest_id or _infer_active_quest_id(state) or "quest:scenario_progression"
++    if not quest_id:
++        if objective_id in {"objective:warn_garran", "objective:travel_to_wagon_yard", "objective:choose_safe_route"}:
++            quest_id = "quest:warn_wagon"
++        elif objective_id in {"objective:find_witness", "objective:ask_mira", "objective:inspect_side_door"}:
++            quest_id = "quest:witness_search"
++    quest_id = quest_id or _infer_active_quest_id(state) or "quest:scenario_progression"
+2B. Patch _ensure_quest(...) to preserve graph-created active quest
 
-Then search for the old repair reason:
+Make sure graph quests keep source and do not get overwritten as completed unless explicitly completed:
 
-Select-String -Path src\tests\rpg\autoplay\executable_actions.py -Pattern "completed_witness_search_action_repaired_to_bandit_road_progression" -Context 10,10
-
-Before every return with that reason, add:
-
---- src/tests/rpg/autoplay/executable_actions.py
-+++ src/tests/rpg/autoplay/executable_actions.py
+--- src/app/rpg/progression/runtime.py
++++ src/app/rpg/progression/runtime.py
 @@
-+        if _has_scenario_progression_actions(context):
-+            progression_action = _scenario_progression_action_from_context(context)
-+            if progression_action:
-+                return {
-+                    "changed": progression_action.strip().lower() != original.strip().lower(),
-+                    "action": progression_action,
-+                    "original_action": original,
-+                    "reason": "scenario_progression_graph_priority_repair",
-+                }
-         return {
-             ...
-             "reason": "completed_witness_search_action_repaired_to_bandit_road_progression",
-         }
+ def _ensure_quest(state: Dict[str, Any], quest_id: str, title: str) -> Dict[str, Any]:
+@@
+     quest["status"] = "active" if not quest.get("completed") else "completed"
+     quest.setdefault("source", "scenario_progression_graph")
++    if quest.get("source") == "scenario_progression_graph" and not quest.get("completed"):
++        quest["status"] = "active"
+     return quest
+2C. Patch _complete_objective(...) so completing old quest does not complete newly started quest accidentally
 
-If there are several old repair branches, patch all of them.
+Replace quest completion auto-sync block:
 
-3. Patch src/tests/rpg/autoplay/behavioral_eval.py
-3A. Make missing sidecar fields a failure for N90+ runs
+objectives = [_safe_dict(row) for row in _safe_list(quest.get("objectives"))]
+if objectives and all(bool(obj.get("completed")) for obj in objectives):
+    quest["completed"] = True
+    quest["status"] = "completed"
 
-Add after sidecar count extraction:
+with:
+
+--- src/app/rpg/progression/runtime.py
++++ src/app/rpg/progression/runtime.py
+@@
+         objectives = [_safe_dict(row) for row in _safe_list(quest.get("objectives"))]
+-        if objectives and all(bool(obj.get("completed")) for obj in objectives):
++        if objectives and all(bool(obj.get("completed")) for obj in objectives):
+             quest["completed"] = True
+             quest["status"] = "completed"
+
+If it already looks identical, leave it. The real key is _ensure_objective attaches second-stage objectives to quest:warn_wagon, not the completed quest:witness_search.
+
+2D. Add graph quest state to runtime summary
+
+In apply_progression_for_action(...), after next_actions, add:
+
+--- src/app/rpg/progression/runtime.py
++++ src/app/rpg/progression/runtime.py
+@@
+     next_actions = get_active_progression_actions(
+         state,
+         scenario_seed=scenario_seed,
+         limit=8,
+     )
++    graph_quest_ids = [
++        quest_id for quest_id, quest in _safe_dict(_quest_progress(state).get("quests")).items()
++        if _safe_str(_safe_dict(quest).get("source")) == "scenario_progression_graph"
++    ]
+     summary = {
+@@
+         "next_action_ids": [_safe_str(row.get("action_id")) for row in next_actions],
++        "graph_quest_ids": sorted(graph_quest_ids),
+         "elapsed_ms": elapsed_ms,
+     }
+
+Also store these in state:
+
+--- src/app/rpg/progression/runtime.py
++++ src/app/rpg/progression/runtime.py
+@@
+     if summary["changed"]:
++        state["scenario_progression_quest_ids"] = sorted(graph_quest_ids)
++        state["scenario_progression_quest_state"] = {
++            quest_id: _safe_dict(_safe_dict(_quest_progress(state).get("quests")).get(quest_id))
++            for quest_id in graph_quest_ids
++        }
+         _append_progression_log(state, summary)
+3. Patch src/app/rpg/progression/graph_registry.py
+3A. Make report_findings_to_bran explicitly creates second quest/objective
+
+Patch effects:
+
+--- src/app/rpg/progression/graph_registry.py
++++ src/app/rpg/progression/graph_registry.py
+@@
+                 effects=[
+                     {"complete_objective": "objective:find_witness"},
+                     {"complete_quest": "quest:witness_search"},
+                     {"start_quest": "quest:warn_wagon", "title": "Warn the Wagon"},
++                    {"unlock_objective": "objective:travel_to_wagon_yard", "summary": "Travel to Garran’s wagon yard."},
+                     {"unlock_objective": "objective:warn_garran"},
+                     {"unlock_npc": "npc:garran", "name": "Garran"},
+                     {"unlock_location": "location:garran_wagon_yard", "name": "Garran’s Wagon Yard"},
+                     {"unlock_lead": "lead:ask_bran_garran", "text": "Ask Bran who travels the road before dawn."},
+                 ],
+3B. Relax ask_bran_garran requirements
+
+Replace:
+
+requires=[{"quest": "quest:warn_wagon", "status": "active"}],
+
+with lead-based requirement:
+
+--- src/app/rpg/progression/graph_registry.py
++++ src/app/rpg/progression/graph_registry.py
+@@
+-                requires=[{"quest": "quest:warn_wagon", "status": "active"}],
++                requires=[{"lead": "lead:ask_bran_garran"}],
+
+This makes the graph robust even if quest state is temporarily late; the sidecar invariant will still enforce quest preservation.
+
+3C. Make travel/warn chain requirements lead-based
+
+Confirm these already are lead-based. If not, patch:
+
+--- src/app/rpg/progression/graph_registry.py
++++ src/app/rpg/progression/graph_registry.py
+@@
+-                requires=[{"quest": "quest:warn_wagon", "status": "active"}],
++                requires=[{"lead": "lead:travel_wagon_yard"}],
+
+Only apply where needed. travel_to_wagon_yard, warn_garran, ask_alternate_route, and prepare_quarry_road should all be driven by leads/facts, not direct quest status.
+
+4. Patch src/app/rpg/campaign_state/authority_commit.py
+4A. Do not remove/complete active graph-created quests
+
+In reconcile_quests_from_evidence(...), before syncing quest completion, skip graph-created active quests with no completed objectives:
+
+--- src/app/rpg/campaign_state/authority_commit.py
++++ src/app/rpg/campaign_state/authority_commit.py
+@@
+     quests_completed = 0
+     for _quest_id, quest in _iter_quests(state):
++        if _safe_str(quest.get("source")) == "scenario_progression_graph":
++            objectives = [_safe_dict(row) for row in _safe_list(quest.get("objectives"))]
++            if objectives and not all(_objective_done(obj) for obj in objectives):
++                quest["completed"] = False
++                quest["status"] = "active"
++                continue
+         if _sync_quest_completion(quest):
+             quests_completed += 1
+4B. Add graph quest preservation after reconciliation
+
+Add helper:
+
+--- src/app/rpg/campaign_state/authority_commit.py
++++ src/app/rpg/campaign_state/authority_commit.py
+@@
++def _preserve_scenario_progression_graph_quests(state: Dict[str, Any]) -> Dict[str, Any]:
++    state = _safe_dict(state)
++    graph_quest_state = _safe_dict(state.get("scenario_progression_quest_state"))
++    if not graph_quest_state:
++        return state
++    quests = _safe_dict(_quest_progress(state).get("quests"))
++    for quest_id, graph_quest in graph_quest_state.items():
++        graph_quest = _safe_dict(graph_quest)
++        existing = _safe_dict(quests.get(quest_id))
++        existing_completed = bool(existing.get("completed")) or _safe_str(existing.get("status")) == "completed"
++        graph_completed = bool(graph_quest.get("completed")) or _safe_str(graph_quest.get("status")) == "completed"
++        if existing_completed and not graph_completed:
++            continue
++        merged = dict(existing)
++        merged.update(graph_quest)
++        merged.setdefault("quest_id", quest_id)
++        merged.setdefault("source", "scenario_progression_graph")
++        quests[quest_id] = merged
++    state["quest_progress"]["quests"] = quests
++    return state
+
+In commit_campaign_state(...), after both reconciliation calls and before quest summary:
+
+--- src/app/rpg/campaign_state/authority_commit.py
++++ src/app/rpg/campaign_state/authority_commit.py
+@@
+     handoff_progress = _record_handoff_action_progress(
+         state,
+         turn_record=turn_record,
+         current_sequence=current_sequence,
+     )
++    state = _preserve_scenario_progression_graph_quests(state)
+     quest_summary = _quest_progress_summary(state)
+5. Patch src/tests/rpg/autoplay/behavioral_eval.py
+5A. Make second-stage quest gate accept graph quest sidecar
+
+Patch where quests is loaded:
 
 --- src/tests/rpg/autoplay/behavioral_eval.py
 +++ src/tests/rpg/autoplay/behavioral_eval.py
 @@
-     sidecar_counts = [
-         int(_safe_dict(row).get("progression_sidecar_completed_node_count") or 0)
-         for row in rows
-         if "progression_sidecar_completed_node_count" in _safe_dict(row)
-     ]
-+    sidecar_fields_present = len(sidecar_counts) == len(rows) if rows else False
-     sidecar_decreased = any(
-         later < earlier
-         for earlier, later in zip(sidecar_counts, sidecar_counts[1:])
-     )
-@@
-         "progression_sidecar_monotonic_ok": not sidecar_decreased,
-+        "progression_sidecar_fields_present_ok": sidecar_fields_present,
-         "quest_transition_ok": not no_quest_transition,
-@@
-             "progression_sidecar_counts": sidecar_counts,
-+            "progression_sidecar_fields_present": sidecar_fields_present,
-             "progression_sidecar_max_count": max(sidecar_counts) if sidecar_counts else 0,
+     qp = _safe_dict(_safe_dict(latest_state).get("quest_progress"))
+     quests = _safe_dict(qp.get("quests"))
++    graph_quest_state = _safe_dict(latest_state.get("scenario_progression_quest_state"))
++    if graph_quest_state:
++        merged_quests = dict(quests)
++        merged_quests.update(graph_quest_state)
++        quests = merged_quests
 
-This catches future runs where the sidecar helper exists but transcript rows never get sidecar fields.
+This prevents eval from missing graph-created quests if report JSON includes the sidecar but not canonical quest state.
 
-4. Add tests
-4A. Create or patch src/tests/rpg/test_progression_sidecar_wiring.py
---- /dev/null
-+++ src/tests/rpg/test_progression_sidecar_wiring.py
-@@
-+from tests.rpg.autoplay_llm_campaign import (
-+    _extract_progression_authority_sidecar,
-+    _overlay_and_assert_progression_sidecar,
-+    _progression_node_count,
-+    _progression_revision,
-+    _update_sidecar_and_overlay,
-+)
-+
-+
-+def test_overlay_and_assert_restores_runtime_from_sidecar():
-+    sidecar = _extract_progression_authority_sidecar(
-+        {
-+            "progression_completed_nodes": {
-+                "ask_bran_about_tension": {},
-+                "ask_bran_who_left_side_door": {},
-+            },
-+            "progression_facts": {
-+                "fact:witness_left_side_door": {},
-+                "fact:cloaked_traveler": {},
-+            },
-+            "scenario_progression_actions": [
-+                {"action_id": "ask_bran_direction", "command": "I ask Bran where the traveler went."}
-+            ],
-+        }
-+    )
-+    stale_runtime = {
-+        "progression_completed_nodes": {
-+            "ask_bran_about_tension": {},
-+        },
-+        "progression_facts": {
-+            "fact:witness_left_side_door": {},
-+        },
-+        "scenario_progression_actions": [
-+            {"action_id": "ask_bran_who_left_side_door", "command": "I ask Bran who left."}
-+        ],
-+    }
-+
-+    restored = _overlay_and_assert_progression_sidecar(
-+        stale_runtime,
-+        sidecar,
-+        reason="test",
-+        turn_index=3,
-+    )
-+
-+    assert _progression_node_count(restored) == 2
-+    assert restored["scenario_progression_actions"][0]["action_id"] == "ask_bran_direction"
-+
-+
-+def test_update_sidecar_and_overlay_accepts_newer_runtime():
-+    sidecar = _extract_progression_authority_sidecar(
-+        {
-+            "progression_completed_nodes": {
-+                "ask_bran_about_tension": {},
-+            },
-+            "progression_facts": {
-+                "fact:witness_left_side_door": {},
-+            },
-+        }
-+    )
-+    newer_runtime = {
-+        "progression_completed_nodes": {
-+            "ask_bran_about_tension": {},
-+            "ask_bran_who_left_side_door": {},
-+        },
-+        "progression_facts": {
-+            "fact:witness_left_side_door": {},
-+            "fact:cloaked_traveler": {},
-+        },
-+    }
-+
-+    runtime, updated_sidecar = _update_sidecar_and_overlay(
-+        newer_runtime,
-+        sidecar,
-+        reason="test_update",
-+        turn_index=2,
-+    )
-+
-+    assert _progression_node_count(updated_sidecar) == 2
-+    assert _progression_node_count(runtime) == 2
-+    assert _progression_revision(runtime) >= _progression_revision(sidecar)
-4B. Patch src/tests/rpg/autoplay/test_behavioral_eval.py
+6. Tests
+6A. Patch src/tests/rpg/test_scenario_progression_runtime.py
 
 Add:
 
-def test_behavioral_eval_fails_when_sidecar_fields_missing():
-    from tests.rpg.autoplay.behavioral_eval import evaluate_behavioral_autoplay
+def test_report_findings_starts_warn_wagon_quest_and_objectives():
+    from app.rpg.progression.runtime import apply_progression_for_action, get_active_progression_actions
 
-    transcript = [
-        {"player_action": "I ask Bran why the tavern is tense."},
-        {"player_action": "I ask Bran who left through the side door."},
+    state = {}
+    actions = [
+        "I ask Bran for a room, but I also ask why the tavern feels so tense tonight.",
+        "I ask Bran who left through the side door and why they were afraid.",
+        "I ask Bran what direction the cloaked traveler went after leaving.",
+        "I turn to Mira and ask what she saw near the side door.",
+        "I inspect the side door, latch, and threshold for blood, tracks, or torn cloth.",
+        "I ask Bran if the old east road leads to a bridge.",
+        "I approach the local patron and quietly ask what he knows about the mill bridge.",
+        "I report to Bran that the traveler’s trail, the blood, and the bridge story point to an ambush.",
     ]
-    latest_state = {
-        "scenario_progression_log": [
-            {"changed": True, "matched_node_ids": ["ask_bran_about_tension"]},
-            {"changed": True, "matched_node_ids": ["ask_bran_who_left_side_door"]},
-        ],
-        "progression_completed_nodes": {
-            "ask_bran_about_tension": {},
-            "ask_bran_who_left_side_door": {},
-        },
-        "quest_progress": {"quests": {}},
+
+    for turn, action in enumerate(actions, start=1):
+        result = apply_progression_for_action(
+            state,
+            scenario_seed="tavern_story_seed",
+            player_action=action,
+            turn_index=turn,
+        )
+        state = result["state"]
+
+    quests = state["quest_progress"]["quests"]
+    assert quests["quest:witness_search"]["completed"] is True
+    assert quests["quest:warn_wagon"]["status"] == "active"
+    assert quests["quest:warn_wagon"]["completed"] is False
+
+    objective_ids = {
+        obj["objective_id"]
+        for obj in quests["quest:warn_wagon"]["objectives"]
+    }
+    assert "objective:travel_to_wagon_yard" in objective_ids
+    assert "objective:warn_garran" in objective_ids
+
+    next_actions = get_active_progression_actions(
+        state,
+        scenario_seed="tavern_story_seed",
+        limit=8,
+    )
+    action_ids = [row["action_id"] for row in next_actions]
+    assert "ask_bran_garran" in action_ids
+
+
+def test_ask_bran_garran_can_match_from_lead_even_if_quest_state_lags():
+    from app.rpg.progression.runtime import apply_progression_for_action
+
+    state = {
+        "progression_leads": {
+            "lead:ask_bran_garran": {
+                "lead_id": "lead:ask_bran_garran",
+                "text": "Ask Bran who travels the road before dawn.",
+            }
+        }
     }
 
-    result = evaluate_behavioral_autoplay(transcript, latest_state, requested_turns=20)
+    result = apply_progression_for_action(
+        state,
+        scenario_seed="tavern_story_seed",
+        player_action="I ask Bran who is most likely to travel the road before dawn.",
+        turn_index=9,
+    )
 
-    assert result["gates"]["progression_sidecar_fields_present_ok"] is False
-5. Validation
+    assert result["changed"] is True
+    assert result["summary"]["matched_node_ids"] == ["ask_bran_garran"]
+    assert "lead:travel_wagon_yard" in result["state"]["progression_leads"]
+6B. Patch sidecar tests
+
+Add to src/tests/rpg/test_progression_authority_sidecar.py:
+
+def test_sidecar_preserves_graph_created_warn_wagon_quest():
+    from tests.rpg.autoplay_llm_campaign import (
+        _extract_progression_authority_sidecar,
+        _overlay_progression_authority_sidecar,
+    )
+
+    advanced = {
+        "quest_progress": {
+            "quests": {
+                "quest:witness_search": {
+                    "quest_id": "quest:witness_search",
+                    "status": "completed",
+                    "completed": True,
+                    "source": "scenario_progression_graph",
+                },
+                "quest:warn_wagon": {
+                    "quest_id": "quest:warn_wagon",
+                    "title": "Warn the Wagon",
+                    "status": "active",
+                    "completed": False,
+                    "source": "scenario_progression_graph",
+                    "objectives": [
+                        {"objective_id": "objective:warn_garran", "status": "active", "completed": False}
+                    ],
+                },
+            }
+        },
+        "progression_completed_nodes": {"report_findings_to_bran": {}},
+    }
+    sidecar = _extract_progression_authority_sidecar(advanced)
+
+    stale_runtime = {
+        "quest_progress": {
+            "quests": {
+                "quest:witness_search": {
+                    "quest_id": "quest:witness_search",
+                    "status": "completed",
+                    "completed": True,
+                }
+            }
+        },
+        "progression_completed_nodes": {"report_findings_to_bran": {}},
+    }
+
+    restored = _overlay_progression_authority_sidecar(
+        stale_runtime,
+        sidecar,
+        reason="test",
+        turn_index=9,
+    )
+
+    quests = restored["quest_progress"]["quests"]
+    assert "quest:warn_wagon" in quests
+    assert quests["quest:warn_wagon"]["status"] == "active"
+6C. Patch campaign-state authority tests
+
+Add to src/tests/rpg/test_campaign_state_authority_commit.py:
+
+def test_campaign_commit_preserves_scenario_progression_graph_quest_state():
+    from app.rpg.campaign_state.authority_commit import commit_campaign_state
+
+    state = {
+        "progression_completed_nodes": {"report_findings_to_bran": {}},
+        "scenario_progression_quest_state": {
+            "quest:warn_wagon": {
+                "quest_id": "quest:warn_wagon",
+                "title": "Warn the Wagon",
+                "status": "active",
+                "completed": False,
+                "source": "scenario_progression_graph",
+                "objectives": [
+                    {"objective_id": "objective:warn_garran", "status": "active", "completed": False}
+                ],
+            }
+        },
+        "quest_progress": {
+            "quests": {
+                "quest:witness_search": {
+                    "quest_id": "quest:witness_search",
+                    "status": "completed",
+                    "completed": True,
+                    "objectives": [
+                        {"objective_id": "objective:find_witness", "status": "completed", "completed": True}
+                    ],
+                }
+            }
+        },
+    }
+
+    result = commit_campaign_state(state, phase="turn")
+
+    quests = result["state"]["quest_progress"]["quests"]
+    assert "quest:warn_wagon" in quests
+    assert quests["quest:warn_wagon"]["status"] == "active"
+7. Validation
 
 Compile:
 
-python -m py_compile src\tests\rpg\autoplay_llm_campaign.py src\tests\rpg\autoplay\executable_actions.py src\tests\rpg\autoplay\behavioral_eval.py
+python -m py_compile src\app\rpg\progression\runtime.py src\app\rpg\progression\graph_registry.py src\app\rpg\campaign_state\authority_commit.py src\tests\rpg\autoplay_llm_campaign.py src\tests\rpg\autoplay\behavioral_eval.py
 
-Run focused tests:
+Run tests:
 
-python -m pytest src\tests\rpg\test_progression_sidecar_wiring.py src\tests\rpg\test_progression_authority_sidecar.py src\tests\rpg\test_progression_state_authority.py src\tests\rpg\test_scenario_progression_runtime.py src\tests\rpg\autoplay\test_behavioral_eval.py -q
+python -m pytest src\tests\rpg\test_scenario_progression_runtime.py src\tests\rpg\test_progression_authority_sidecar.py src\tests\rpg\test_campaign_state_authority_commit.py src\tests\rpg\autoplay\test_behavioral_eval.py -q

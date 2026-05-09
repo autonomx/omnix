@@ -123,7 +123,12 @@ def _scenario_progression_action_from_context(context: Dict[str, Any]) -> str:
 
 
 def _has_scenario_progression_actions(context: Dict[str, Any]) -> bool:
-    return bool(_safe_list(_safe_dict(context).get("scenario_progression_actions")))
+    context = _safe_dict(context)
+    return bool(
+        _safe_list(context.get("scenario_progression_actions"))
+        or context.get("scenario_progression_active")
+        or _safe_dict(context.get("progression_authority_summary"))
+    )
 
 
 def _quest_status(context: Dict[str, Any], quest_id: str) -> str:
@@ -720,6 +725,12 @@ def repair_action_if_needed(action: str, context: Dict[str, Any], transcript: Li
                     "original_action": original,
                     "reason": "scenario_progression_graph_priority_repair",
                 }
+            return {
+                "changed": False,
+                "action": original,
+                "original_action": original,
+                "reason": "scenario_progression_graph_active_suppressed_legacy_witness_repair",
+            }
         repaired = executable_action_for_context(context, action)
         return {
             "changed": repaired != action,
