@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
+from time import perf_counter
 from typing import Any, Dict, List
 
 from app.rpg.advisory.promotion import promote_advisory_candidates
@@ -16,6 +17,10 @@ def _safe_dict(value: Any) -> Dict[str, Any]:
 
 def _safe_list(value: Any) -> List[Any]:
     return value if isinstance(value, list) else []
+
+
+def _elapsed_ms(start: float) -> int:
+    return int(round((perf_counter() - start) * 1000))
 
 
 def _bounded_list_tail(value: Any, limit: int) -> List[Any]:
@@ -63,6 +68,60 @@ def _compact_deferred_advisory_state(
     )
     runtime_state["deferred_advisory"] = advisory
     return runtime_state
+
+
+def _compact_pre_turn_runtime_state(runtime_state: Dict[str, Any]) -> Dict[str, Any]:
+    """Keep only the namespaces needed by pre-turn advisory promotion.
+
+    Full runtime_state can include profile stores, journal history, report state,
+    large quest/event mirrors, and evolution projections. Pre-turn promotion
+    only needs enough state to validate/accept recent advisory candidates.
+    """
+    runtime_state = _safe_dict(runtime_state)
+    keep_keys = (
+        "deferred_advisory",
+        "quest_progress",
+        "quest_log_state",
+        "settings",
+        "ui_state",
+        "current_location",
+        "current_location_name",
+        "scene",
+        "dialogue_state",
+        "autoplay_story_hook_state",
+        "objective_progression_log",
+        "quest_reconciliation_log",
+        "quest_handoff_log",
+    )
+    compact: Dict[str, Any] = {}
+    for key in keep_keys:
+        if key in runtime_state:
+            compact[key] = deepcopy(runtime_state[key])
+    return compact
+
+
+def _compact_pre_turn_simulation_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
+    """Small simulation-state view for deterministic promotion validation."""
+    simulation_state = _safe_dict(simulation_state)
+    keep_keys = (
+        "turn_contract",
+        "npcs",
+        "present_npcs",
+        "nearby_npcs",
+        "visible_npcs",
+        "scene",
+        "current_location",
+        "current_location_name",
+        "quest_progress",
+        "quest_log_state",
+        "npc_progression_state",
+        "npc_profile_state",
+    )
+    compact: Dict[str, Any] = {}
+    for key in keep_keys:
+        if key in simulation_state:
+            compact[key] = deepcopy(simulation_state[key])
+    return compact
 
 
 def _row_has_unpromoted_pre_turn_background_result(row: Dict[str, Any]) -> bool:
@@ -271,6 +330,10 @@ def run_deferred_advisory_promotions_for_transcript(
     carry_pending_limit: int = 50,
     carry_accepted_limit: int = 100,
     carry_rejected_limit: int = 100,
+    fast_pre_turn: bool = False,
+    skip_profile_load_for_pre_turn: bool = True,
+    skip_evolution_for_pre_turn: bool = True,
+    skip_mutation_compare_for_pre_turn: bool = True,
 ) -> Dict[str, Any]:
     """Run promotion gate over transcript in turn order.
 
@@ -288,6 +351,16 @@ def run_deferred_advisory_promotions_for_transcript(
     evolution_signals_created = 0
     evolution_signals_consumed = 0
     latest_profile_persist_result: Dict[str, Any] = {}
+    timing_breakdown: Dict[str, int] = {
+        "row_total_ms": 0,
+        "merge_runtime_ms": 0,
+        "simulation_state_ms": 0,
+        "profile_load_ms": 0,
+        "promotion_ms": 0,
+        "evolution_consume_ms": 0,
+        "profile_persist_ms": 0,
+    }
+    fast_path_used = bool(incremental_pre_turn and fast_pre_turn)
 
     all_rows = [row for row in transcript if isinstance(row, dict)]
     source_transcript_turns = len(all_rows)
@@ -331,6 +404,8 @@ def run_deferred_advisory_promotions_for_transcript(
                 accepted_limit=int(carry_accepted_limit or 100),
                 rejected_limit=int(carry_rejected_limit or 100),
             )
+            if fast_path_used:
+                carried_runtime_state = _compact_pre_turn_runtime_state(carried_runtime_state)
         else:
             carried_runtime_state = deepcopy(previous_runtime_state)
 
@@ -340,23 +415,55 @@ def run_deferred_advisory_promotions_for_transcript(
         if not isinstance(row, dict):
             continue
         turn_index = int(row.get("turn_index") or 0)
+        row_start = perf_counter()
+
+        merge_start = perf_counter()
+        row_runtime_state = _runtime_state_from_row(row)
+        if fast_path_used:
+            row_runtime_state = _compact_pre_turn_runtime_state(row_runtime_state)
         runtime_state = _merge_deferred_advisory_state(
             carried_runtime_state,
-            _runtime_state_from_row(row),
+            row_runtime_state,
         )
+        if fast_path_used:
+            runtime_state = _compact_deferred_advisory_state(
+                _compact_pre_turn_runtime_state(runtime_state),
+                candidate_limit=int(carry_candidate_limit or 50),
+                pending_limit=int(carry_pending_limit or 50),
+                accepted_limit=int(carry_accepted_limit or 100),
+                rejected_limit=int(carry_rejected_limit or 100),
+            )
+        timing_breakdown["merge_runtime_ms"] += _elapsed_ms(merge_start)
 
+        sim_start = perf_counter()
         simulation_state_before = _simulation_state_from_row(row)
-        # Important: profile loading must enrich the already-merged runtime
-        # state. If it reads only the row-local runtime_state, it can drop
-        # carried deferred_advisory candidates from previous turns, causing all
-        # candidates to remain same-turn pending forever.
+        if fast_path_used:
+            simulation_state_before = _compact_pre_turn_simulation_state(simulation_state_before)
+        timing_breakdown["simulation_state_ms"] += _elapsed_ms(sim_start)
+
+        # Important for full/final promotion: profile loading enriches merged
+        # runtime state. For pre-turn fast path, skip disk/profile work.
         row["runtime_state"] = runtime_state
-        profile_load_summary = load_profiles_into_row_runtime(
-            row=row,
-            simulation_state=simulation_state_before,
-        )
-        runtime_state = _safe_dict(row.get("runtime_state")) or runtime_state
-        simulation_state_after_probe = deepcopy(simulation_state_before)
+        profile_load_start = perf_counter()
+        if fast_path_used and skip_profile_load_for_pre_turn:
+            profile_load_summary = {
+                "ok": True,
+                "skipped": True,
+                "reason": "fast_pre_turn_skip_profile_load",
+            }
+        else:
+            profile_load_summary = load_profiles_into_row_runtime(
+                row=row,
+                simulation_state=simulation_state_before,
+            )
+            runtime_state = _safe_dict(row.get("runtime_state")) or runtime_state
+        timing_breakdown["profile_load_ms"] += _elapsed_ms(profile_load_start)
+
+        promotion_start = perf_counter()
+        if fast_path_used and skip_mutation_compare_for_pre_turn:
+            simulation_state_after_probe = simulation_state_before
+        else:
+            simulation_state_after_probe = deepcopy(simulation_state_before)
 
         updated_runtime_state, result = promote_advisory_candidates(
             simulation_state=simulation_state_after_probe,
@@ -364,10 +471,18 @@ def run_deferred_advisory_promotions_for_transcript(
             current_turn=turn_index,
             max_promotions_per_turn=max_promotions_per_turn,
         )
+        timing_breakdown["promotion_ms"] += _elapsed_ms(promotion_start)
 
-        # Safety: promotion must not mutate simulation_state.
-        mutated_authoritative_state = simulation_state_after_probe != simulation_state_before
+        # Safety: full/final promotion checks simulation mutation. Fast pre-turn
+        # promotion skips expensive deep comparison and remains non-authoritative.
+        if fast_path_used and skip_mutation_compare_for_pre_turn:
+            mutated_authoritative_state = False
+            result["mutation_compare_skipped"] = True
+            result["mutation_compare_skip_reason"] = "fast_pre_turn"
+        else:
+            mutated_authoritative_state = simulation_state_after_probe != simulation_state_before
         result["mutated_authoritative_state"] = mutated_authoritative_state
+        result["fast_pre_turn"] = bool(fast_path_used)
 
         decisions = _safe_list(result.get("decisions"))
         accepted += sum(1 for decision in decisions if _safe_dict(decision).get("status") == "accepted")
@@ -383,31 +498,44 @@ def run_deferred_advisory_promotions_for_transcript(
         row["runtime_state"] = updated_runtime_state
         row["deferred_advisory_promotion_result"] = result
         row["deferred_advisory_runtime_summary"] = compact_deferred_advisory_runtime_summary(updated_runtime_state)
-        updated_runtime_state, evolution_result = consume_accepted_advisory_projections(
-            runtime_state=updated_runtime_state,
-            simulation_state=simulation_state_before,
-            turn_index=turn_index,
-        )
-        evolution_result["simulation_state_keys"] = sorted(list(simulation_state_before.keys()))[:80]
-        npc_progression_state = _safe_dict(simulation_state_before.get("npc_progression_state"))
-        scene = _safe_dict(simulation_state_before.get("scene"))
-        contract = _safe_dict(simulation_state_before.get("turn_contract"))
-        resolved_action_location = _safe_dict(
-            _safe_dict(_safe_dict(contract.get("resolved_action")).get("location_state")).get("current_location")
-        )
-        evolution_result["simulation_npc_count"] = len(
-            _safe_dict(simulation_state_before.get("npcs"))
-            or _safe_dict(npc_progression_state.get("npcs"))
-        )
-        evolution_result["simulation_present_npc_count"] = len(
-            _safe_list(simulation_state_before.get("present_npcs"))
-            or _safe_list(simulation_state_before.get("nearby_npcs"))
-            or _safe_list(scene.get("nearby_npcs"))
-            or _safe_list(resolved_action_location.get("present_npcs"))
-        )
+        evolution_start = perf_counter()
+        if fast_path_used and skip_evolution_for_pre_turn:
+            evolution_result = {
+                "ok": True,
+                "skipped": True,
+                "reason": "fast_pre_turn_skip_evolution_consumption",
+                "signals_created": 0,
+                "signals_consumed": 0,
+                "summary": {},
+            }
+        else:
+            updated_runtime_state, evolution_result = consume_accepted_advisory_projections(
+                runtime_state=updated_runtime_state,
+                simulation_state=simulation_state_before,
+                turn_index=turn_index,
+            )
+            evolution_result["simulation_state_keys"] = sorted(list(simulation_state_before.keys()))[:80]
+            npc_progression_state = _safe_dict(simulation_state_before.get("npc_progression_state"))
+            scene = _safe_dict(simulation_state_before.get("scene"))
+            contract = _safe_dict(simulation_state_before.get("turn_contract"))
+            resolved_action_location = _safe_dict(
+                _safe_dict(_safe_dict(contract.get("resolved_action")).get("location_state")).get("current_location")
+            )
+            evolution_result["simulation_npc_count"] = len(
+                _safe_dict(simulation_state_before.get("npcs"))
+                or _safe_dict(npc_progression_state.get("npcs"))
+            )
+            evolution_result["simulation_present_npc_count"] = len(
+                _safe_list(simulation_state_before.get("present_npcs"))
+                or _safe_list(simulation_state_before.get("nearby_npcs"))
+                or _safe_list(scene.get("nearby_npcs"))
+                or _safe_list(resolved_action_location.get("present_npcs"))
+            )
+        timing_breakdown["evolution_consume_ms"] += _elapsed_ms(evolution_start)
         row["runtime_state"] = updated_runtime_state
         row["npc_evolution_consumption_result"] = evolution_result
         row["npc_evolution_summary"] = evolution_result.get("summary") or {}
+        persist_start = perf_counter()
         if persist_profiles:
             profile_persist_result = persist_npc_evolution_profiles(runtime_state=updated_runtime_state)
         else:
@@ -416,6 +544,7 @@ def run_deferred_advisory_promotions_for_transcript(
                 "skipped": True,
                 "reason": "pre_turn_promotion_no_disk_persist",
             }
+        timing_breakdown["profile_persist_ms"] += _elapsed_ms(persist_start)
         row["npc_evolution_profile_persist_result"] = profile_persist_result
         latest_profile_persist_result = profile_persist_result
 
@@ -429,8 +558,8 @@ def run_deferred_advisory_promotions_for_transcript(
                 "persist_profiles": bool(persist_profiles),
                 "max_rows": int(max_rows or 0),
             }
-        evolution_signals_created += int(evolution_result.get("signals_created") or 0)
-        evolution_signals_consumed += int(evolution_result.get("signals_consumed") or 0)
+        evolution_signals_created += int(_safe_dict(evolution_result).get("signals_created") or 0)
+        evolution_signals_consumed += int(_safe_dict(evolution_result).get("signals_consumed") or 0)
         carried_runtime_state = updated_runtime_state
         promotion_results.append(
             {
@@ -443,8 +572,11 @@ def run_deferred_advisory_promotions_for_transcript(
                 "npc_evolution_summary": evolution_result.get("summary") or {},
                 "profile_persist_result": profile_persist_result,
                 "profile_load_summary": profile_load_summary,
+                "row_elapsed_ms": _elapsed_ms(row_start),
+                "fast_pre_turn": bool(fast_path_used),
             }
         )
+        timing_breakdown["row_total_ms"] += _elapsed_ms(row_start)
 
     return {
         "ok": True,
@@ -466,6 +598,11 @@ def run_deferred_advisory_promotions_for_transcript(
         "evolution_signals_created": evolution_signals_created,
         "evolution_signals_consumed": evolution_signals_consumed,
         "profile_persist_result": latest_profile_persist_result,
+        "timing_breakdown": timing_breakdown,
+        "fast_pre_turn": bool(fast_path_used),
+        "skip_profile_load_for_pre_turn": bool(skip_profile_load_for_pre_turn),
+        "skip_evolution_for_pre_turn": bool(skip_evolution_for_pre_turn),
+        "skip_mutation_compare_for_pre_turn": bool(skip_mutation_compare_for_pre_turn),
         "results": promotion_results,
         "mutated_authoritative_state": any(item.get("mutated_authoritative_state") for item in promotion_results),
     }

@@ -3166,6 +3166,8 @@ def _select_player_action(
 
 
 def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
+    from app.shared import get_provider
+
     campaign_perf_start = now_perf()
     artifact_write_ms = 0.0
     session_id = args.session_id or f"autoplay_{uuid.uuid4().hex[:12]}"
@@ -3219,6 +3221,9 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
     player_agent_cache = PlayerAgentDecisionCache(max_entries=256)
     player_agent_prompt_rows: List[Dict[str, Any]] = []
     regression_warnings: List[Dict[str, Any]] = []
+    pre_turn_advisory_promotion_auto_disabled = False
+    pre_turn_advisory_promotion_disable_reason = ""
+    pre_turn_advisory_promotion_slow_events: List[Dict[str, Any]] = []
     started = time.time()
     stopped_reason = ""
 
@@ -3229,6 +3234,7 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
             turn_index=turn_index,
             transcript_len=len(transcript),
         )
+        transcript_len_at_turn_start = len(transcript)
 
         if int(getattr(args, "pre_turn_background_drain_ms", 0) or 0) >= 0:
             with _ProbeTimer(
@@ -3260,8 +3266,10 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
 
             # Re-run deterministic promotion/evolution over newly attached
             # advisory candidates so future turns can see promoted runtime state.
+            pre_turn_promotion_start = now_perf()
             if (
                 not bool(getattr(args, "disable_pre_turn_advisory_promotion", False))
+                and not bool(pre_turn_advisory_promotion_auto_disabled)
                 and int(drain_event.get("attached") or 0) > 0
             ):
                 pre_turn_promotion_result: Dict[str, Any] = {}
@@ -3294,6 +3302,16 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
                         carry_rejected_limit=int(
                             getattr(args, "pre_turn_advisory_carry_rejected_limit", 60) or 60
                         ),
+                        fast_pre_turn=bool(getattr(args, "pre_turn_advisory_fast_path", True)),
+                        skip_profile_load_for_pre_turn=bool(
+                            getattr(args, "pre_turn_advisory_skip_profile_load", True)
+                        ),
+                        skip_evolution_for_pre_turn=bool(
+                            getattr(args, "pre_turn_advisory_skip_evolution", True)
+                        ),
+                        skip_mutation_compare_for_pre_turn=bool(
+                            getattr(args, "pre_turn_advisory_skip_mutation_compare", True)
+                        ),
                     )
                 _probe_log(
                     bool(getattr(args, "debug_autoplay_stage_timing", False)),
@@ -3325,6 +3343,15 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
                     "carry_accepted_limit": pre_turn_promotion_result.get("carry_accepted_limit"),
                     "carry_rejected_limit": pre_turn_promotion_result.get("carry_rejected_limit"),
                 }
+
+                if pre_turn_promotion_result.get("slow", False):
+                    pre_turn_advisory_promotion_auto_disabled = True
+                    pre_turn_advisory_promotion_disable_reason = "slow pre-turn promotion"
+                    pre_turn_advisory_promotion_slow_events.append({
+                        "turn_index": turn_index,
+                        "reason": "slow pre-turn promotion",
+                        "elapsed_ms": elapsed_ms(pre_turn_promotion_start),
+                    })
 
         turn_perf_start = now_perf()
         turn_performance: Dict[str, Any] = {
@@ -4107,6 +4134,21 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
         )
 
         transcript.append(record)
+
+        _probe_log(
+            bool(getattr(args, "debug_autoplay_stage_timing", False)),
+            "turn.end",
+            turn_index=turn_index,
+            transcript_len=len(transcript),
+        )
+
+        if len(transcript) <= transcript_len_at_turn_start:
+            raise RuntimeError(
+                "autoplay_turn_did_not_append_transcript_row:"
+                f"turn_index={turn_index}:"
+                f"start_len={transcript_len_at_turn_start}:"
+                f"end_len={len(transcript)}"
+            )
 
         health = evaluate_autoplay_health(
             transcript,
@@ -4950,6 +4992,30 @@ def build_arg_parser() -> argparse.ArgumentParser:
             "advisory/profile/narration work affect future-turn context without "
             "blocking same-turn authoritative outcomes."
         ),
+    )
+    parser.add_argument(
+        "--pre-turn-advisory-fast-path",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Enable the fast pre-turn deferred advisory promotion path.",
+    )
+    parser.add_argument(
+        "--pre-turn-advisory-skip-profile-load",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Skip NPC profile loads during pre-turn advisory promotion.",
+    )
+    parser.add_argument(
+        "--pre-turn-advisory-skip-evolution",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Skip NPC evolution work during pre-turn advisory promotion.",
+    )
+    parser.add_argument(
+        "--pre-turn-advisory-skip-mutation-compare",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Skip mutation comparison during pre-turn advisory promotion.",
     )
     parser.add_argument(
         "--final-background-drain-timeout-seconds",

@@ -74,3 +74,35 @@ def test_affordance_commands_do_not_use_planner_language():
     assert actions
     assert all(not command_has_planner_language(row["command"]) for row in actions)
     assert not any("what concrete lead I should act on next" in row["command"] for row in actions)
+
+
+def test_build_objective_affordances_ignores_objective_completed_only_in_progression_log():
+    state = {
+        "quest_progress": {
+            "quests": {
+                "quest:witness": {
+                    "title": "Witness",
+                    "status": "active",
+                    "completed": False,
+                    "objectives": [
+                        {
+                            "objective_id": "objective:find_witness",
+                            "summary": "Find the witness.",
+                            "objective_type": "find",
+                            "subject": "witness",
+                            "known_leads": ["alley"],
+                            "completed": False,
+                            "status": "active",
+                        }
+                    ],
+                }
+            }
+        },
+        "objective_progression_log": [
+            {"objective_id": "objective:find_witness", "matched": True, "completed": True}
+        ],
+    }
+
+    actions = build_objective_affordances_for_state(state)
+
+    assert actions == []

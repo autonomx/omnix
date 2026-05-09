@@ -840,3 +840,77 @@ def test_performance_budget_background_counts_can_match_reconciled_background_jo
         == background_jobs["combined_background_llm_jobs"]
     )
     assert performance["background_llm"]["total_jobs"] == background_jobs["total_jobs"]
+
+
+def test_final_lifecycle_quality_gates_fail_when_lifecycle_red():
+    from tests.rpg.autoplay_llm_campaign import _final_lifecycle_quality_gates
+
+    summary = {
+        "requested_turns": 20,
+        "turns_executed": 20,
+        "quality_gate_summary": {"gates": {"existing_gate": True}, "ok": True},
+        "strict_progress_health_summary": {"ok": False},
+        "post_transition_action_quality_summary": {"ok": False},
+        "objective_progression_summary": {"ok": False},
+        "repeated_affordance_loop_summary": {"ok": False},
+    }
+
+    gates = _final_lifecycle_quality_gates(summary)
+
+    assert gates["ok"] is False
+    assert gates["gates"]["strict_progress_health_ok"] is False
+    assert gates["gates"]["post_transition_action_quality_ok"] is False
+    assert gates["gates"]["objective_progression_present_ok"] is False
+    assert gates["gates"]["repeated_affordance_loop_ok"] is False
+
+
+def test_guard_quest_summary_source_replaces_false_latest_quest_progress_source():
+    from tests.rpg.autoplay_llm_campaign import _guard_quest_summary_source
+
+    latest_state = {
+        "witness_search_facts": {
+            "inspected_side_door": True,
+            "followed_road": True,
+            "reported_to_bran": True,
+        },
+        "autoplay_story_hook_state": {
+            "fired_hooks": {
+                "hook:witness:pursue_bandit_trail": {"turn_index": 4}
+            }
+        },
+    }
+    summary = {
+        "quest_progress_summary": {
+            "source": "latest_state.quest_progress",
+            "quest_count": 1,
+            "quests": [],
+        }
+    }
+
+    _guard_quest_summary_source(summary, latest_state)
+
+    assert summary["quest_progress_summary"]["source"] != "latest_state.quest_progress"
+
+
+def test_pre_turn_advisory_promotion_performance_summary_flags_slow_event():
+    from tests.rpg.autoplay_llm_campaign import _pre_turn_advisory_promotion_performance_summary
+
+    summary = _pre_turn_advisory_promotion_performance_summary(
+        [
+            {
+                "pre_turn_advisory_promotion_result": {
+                    "elapsed_ms": 9000,
+                    "fast_pre_turn": True,
+                    "turns": 1,
+                }
+            }
+        ],
+        slow_events=[{"turn_index": 3, "elapsed_ms": 9000}],
+        auto_disabled=True,
+        disable_reason="slow_pre_turn_advisory_promotion:9000ms",
+    )
+
+    assert summary["ok"] is False
+    assert summary["slow_event_count"] == 1
+    assert summary["auto_disabled"] is True
+    assert summary["max_elapsed_ms"] == 9000

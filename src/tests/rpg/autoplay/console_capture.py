@@ -75,6 +75,14 @@ class ConsoleCapture(AbstractContextManager):
         self.write_file()
         return False
 
+    def stop(self) -> None:
+        """Stop console capture and restore original streams."""
+        if self._stdout_original is not None:
+            sys.stdout = self._stdout_original
+        if self._stderr_original is not None:
+            sys.stderr = self._stderr_original
+        self.write_file()
+
     def text(self) -> str:
         value = self._buffer.getvalue()
         if len(value) > self.max_chars:

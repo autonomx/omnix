@@ -115,6 +115,63 @@ def test_campaign_report_model_collects_core_sections():
     assert model["hook_counts"]["hook:witness:ask_bran"] == 1
 
 
+def test_campaign_report_model_prefers_summary_latest_state_and_surfaces_reconciliation():
+    transcript = [
+        {
+            "turn_index": 1,
+            "turn_result": {
+                "manual_turn_summary": {
+                    "simulation_state": {
+                        "quest_progress": {
+                            "quests": {
+                                "quest:stale": {
+                                    "title": "Stale",
+                                    "status": "active",
+                                    "objectives": [
+                                        {"objective_id": "objective:stale", "status": "active", "completed": False}
+                                    ],
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+        }
+    ]
+
+    summary = {
+        "session_id": "s",
+        "turns_executed": 1,
+        "ok": True,
+        "latest_state": {
+            "quest_progress": {
+                "quests": {
+                    "quest:authoritative": {
+                        "title": "Authoritative",
+                        "status": "completed",
+                        "completed": True,
+                        "objectives": [
+                            {"objective_id": "objective:authoritative", "status": "completed", "completed": True}
+                        ],
+                    }
+                }
+            }
+        },
+        "quest_reconciliation_summary": {"ok": True, "count": 3, "errors": []},
+    }
+
+    model = build_campaign_report_model(
+        transcript=transcript,
+        summary=summary,
+        metrics={"progress_quality": {"meaningful_turns": 1}},
+        health={"warnings": []},
+    )
+
+    assert model["latest_state_source"] == "summary.latest_state"
+    assert "quest:authoritative" in model["latest_state"]["quest_progress"]["quests"]
+    assert model["quest_reconciliation_summary"]["count"] == 3
+
+
 def test_render_campaign_report_html_contains_major_sections():
     model = {
         "summary": {"session_id": "s", "turns_executed": 1, "ok": True},
@@ -145,6 +202,32 @@ def test_render_campaign_report_html_contains_major_sections():
     assert "NPC Cast, Biography, and Growth" in html
     assert "Lore, Setting, and Director Setup" in html
     assert "Turn-by-Turn Story Timeline" in html
+
+
+def test_render_campaign_report_html_contains_quest_reconciliation_stats():
+    model = build_campaign_report_model(
+        transcript=[],
+        summary={
+            "session_id": "s",
+            "turns_executed": 0,
+            "ok": True,
+            "latest_state": {},
+            "quest_reconciliation_summary": {"ok": True, "count": 4, "errors": []},
+            "quality_gate_summary": {"ok": True, "gates": {}},
+            "background_result_timing_summary": {},
+            "performance_budget_summary": {},
+        },
+        metrics={
+            "progress_quality": {"meaningful_turns": 0},
+            "performance": {"avg_turn_ms": 1.0, "stage_summary": {}, "slowest_turns": []},
+        },
+        health={"warnings": []},
+    )
+
+    html = render_campaign_report_html(model)
+
+    assert "Quest Reconciliation" in html
+    assert "Reconciliation Errors" in html
 
 
 def test_write_campaign_report_creates_files(tmp_path: Path):

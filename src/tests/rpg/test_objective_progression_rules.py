@@ -102,3 +102,70 @@ def test_progression_rules_record_partial_progress_for_matching_action():
     assert result["changed"] is True
     assert state["objective_progression_log"]
     assert result["progressed_objectives"] or result["completed_objectives"]
+
+
+def test_progression_rules_persist_evaluation_log_even_when_no_match():
+    from app.rpg.objectives.progression_rules import apply_objective_progression_rules
+
+    state = {
+        "quest_log_state": {
+            "quests": {
+                "quest:scout": {
+                    "title": "Missing Scout",
+                    "objectives": [
+                        {
+                            "objective_id": "objective:find_scout",
+                            "summary": "Find the missing scout.",
+                            "objective_type": "find",
+                            "subject": "missing scout",
+                        }
+                    ],
+                }
+            }
+        }
+    }
+
+    result = apply_objective_progression_rules(
+        state,
+        player_action="I play a lute in the corner.",
+    )
+
+    assert "objective_progression_log" in state
+    assert state["objective_progression_log"]
+    assert state["objective_progression_log"][-1]["matched"] is False
+    assert result["event"]["semantic_action"]
+
+
+def test_objective_progression_summary_requires_matched_rows_for_ok():
+    from tests.rpg.autoplay_llm_campaign import _objective_progression_summary_from_state
+
+    state = {
+        "objective_progression_log": [
+            {"matched": False, "summary": "evaluated but no match"},
+            {"matched": False, "summary": "evaluated but no match"},
+        ]
+    }
+
+    summary = _objective_progression_summary_from_state(state)
+
+    assert summary["evaluated_count"] == 2
+    assert summary["matched_count"] == 0
+    assert summary["unmatched_count"] == 2
+    assert summary["ok"] is False
+
+
+def test_objective_progression_summary_ok_with_partial_or_completed_match():
+    from tests.rpg.autoplay_llm_campaign import _objective_progression_summary_from_state
+
+    state = {
+        "objective_progression_log": [
+            {"matched": False, "summary": "evaluated but no match"},
+            {"matched": True, "partial": True, "summary": "objective progressed"},
+        ]
+    }
+
+    summary = _objective_progression_summary_from_state(state)
+
+    assert summary["matched_count"] == 1
+    assert summary["partial_count"] == 1
+    assert summary["ok"] is True
