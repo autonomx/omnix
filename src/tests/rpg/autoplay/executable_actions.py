@@ -408,6 +408,26 @@ def _handoff_action_from_committed_context(context: Dict[str, Any]) -> str:
     return ""
 
 
+def _has_active_committed_handoff_quest(context: Dict[str, Any]) -> bool:
+    context = _safe_dict(context)
+    commit_summary = _safe_dict(context.get("campaign_state_commit_summary"))
+    quest_summary = _safe_dict(commit_summary.get("quest_progress_summary"))
+    quests = _safe_list(quest_summary.get("quests"))
+    if not quests:
+        quests = list(_safe_dict(_safe_dict(context.get("quest_progress")).get("quests")).values())
+    for quest in quests:
+        quest = _safe_dict(quest)
+        if quest.get("completed") or _safe_str(quest.get("status")) == "completed":
+            continue
+        if (
+            bool(quest.get("handoff_quest"))
+            or quest.get("source") == "campaign_state_authority_commit"
+            or _safe_str(quest.get("title")).startswith("Investigate Lead:")
+        ):
+            return True
+    return False
+
+
 def executable_action_for_context(context: Dict[str, Any], original_action: str = "") -> str:
     """Convert meta/planner text into an executable world command."""
     context = _safe_dict(context)
@@ -537,6 +557,15 @@ def repair_action_if_needed(action: str, context: Dict[str, Any], transcript: Li
             "reason": reason,
         }
     if _post_witness_road_transition_active(context) and _post_transition_forbidden_bran_or_witness_action(action):
+        if _has_active_committed_handoff_quest(context):
+            handoff_action = _handoff_action_from_committed_context(context)
+            if handoff_action:
+                return {
+                    "changed": handoff_action != original,
+                    "action": handoff_action,
+                    "original_action": original,
+                    "reason": "committed_handoff_quest_priority_repair",
+                }
         repaired = _road_progression_action(context, action)
         return {
             "changed": repaired != action,
@@ -557,6 +586,15 @@ def repair_action_if_needed(action: str, context: Dict[str, Any], transcript: Li
             "bran where",
         )
     ):
+        if _has_active_committed_handoff_quest(context):
+            handoff_action = _handoff_action_from_committed_context(context)
+            if handoff_action:
+                return {
+                    "changed": handoff_action != original,
+                    "action": handoff_action,
+                    "original_action": original,
+                    "reason": "committed_handoff_quest_priority_repair",
+                }
         repaired = executable_action_for_context(context, action)
         return {
             "changed": repaired != action,

@@ -187,3 +187,152 @@ def test_commit_prefers_hook_lead_over_recent_repeated_action_lead():
         if q.get("source") == "campaign_state_authority_commit"
     ][0]
     assert "old mill bridge" in quest["title"].lower()
+
+
+def test_handoff_quest_not_completed_by_same_commit_evidence():
+    state = {
+        "quest_progress": {
+            "quests": {
+                "quest:first": {
+                    "quest_id": "quest:first",
+                    "title": "First Quest",
+                    "status": "active",
+                    "completed": False,
+                    "objectives": [
+                        {
+                            "objective_id": "objective:first",
+                            "summary": "Find the witness trail.",
+                            "status": "active",
+                            "completed": False,
+                        }
+                    ],
+                }
+            }
+        },
+        "objective_progression_log": [
+            {
+                "objective_id": "objective:first",
+                "matched": True,
+                "completed": True,
+                "summary": "Find the witness trail completed.",
+                "event": {"topics": ["witness trail", "old bridge"]},
+            }
+        ],
+        "autoplay_story_hook_state": {
+            "fired_hooks": {
+                "hook:lead:next_location": {
+                    "summary": "The witness trail now points toward the old bridge.",
+                }
+            }
+        },
+        "current_location_name": "Road Outside Tavern",
+    }
+
+    result = commit_campaign_state(state, phase="turn")
+
+    quests = result["state"]["quest_progress"]["quests"]
+    handoff_quests = [
+        quest for quest in quests.values()
+        if quest.get("source") == "campaign_state_authority_commit"
+    ]
+    assert handoff_quests
+    handoff = handoff_quests[0]
+    assert handoff["status"] == "active"
+    assert handoff["completed"] is False
+    assert handoff["objectives"][0]["completed"] is False
+    assert result["summary"]["quest_progress_summary"]["active_count"] >= 1
+    assert result["summary"]["quest_progress_summary"]["completed_count"] >= 1
+
+
+def test_forward_looking_hook_lead_beats_reported_completion_hook():
+    state = {
+        "quest_progress": {
+            "quests": {
+                "quest:first": {
+                    "quest_id": "quest:first",
+                    "title": "First Quest",
+                    "status": "completed",
+                    "completed": True,
+                    "objectives": [
+                        {
+                            "objective_id": "objective:first",
+                            "summary": "Report findings.",
+                            "status": "completed",
+                            "completed": True,
+                        }
+                    ],
+                }
+            }
+        },
+        "autoplay_story_hook_state": {
+            "fired_hooks": {
+                "hook:objective:report:completed": {
+                    "summary": "The witness trail findings were reported to Bran.",
+                    "completed": True,
+                },
+                "hook:lead:bandit_road": {
+                    "summary": "The witness trail now points toward the Bandit Road.",
+                },
+            }
+        },
+        "current_location_name": "Road Outside Tavern",
+    }
+
+    result = commit_campaign_state(state, phase="turn")
+
+    handoff_quests = [
+        quest for quest in result["state"]["quest_progress"]["quests"].values()
+        if quest.get("source") == "campaign_state_authority_commit"
+    ]
+    assert handoff_quests
+    assert "bandit road" in handoff_quests[0]["title"].lower()
+    assert "reported to bran" not in handoff_quests[0]["title"].lower()
+
+
+def test_handoff_guard_allows_future_evidence_to_complete_handoff():
+    state = {
+        "quest_progress": {
+            "quests": {
+                "quest:first": {
+                    "quest_id": "quest:first",
+                    "title": "First Quest",
+                    "status": "completed",
+                    "completed": True,
+                    "objectives": [
+                        {"objective_id": "objective:first", "summary": "Done.", "completed": True, "status": "completed"}
+                    ],
+                }
+            }
+        },
+        "autoplay_story_hook_state": {
+            "fired_hooks": {
+                "hook:lead:bridge": {
+                    "summary": "The trail now points toward the old bridge.",
+                }
+            }
+        },
+        "current_location_name": "Road",
+    }
+
+    first = commit_campaign_state(state, phase="turn")
+    handoff_quest = [
+        quest for quest in first["state"]["quest_progress"]["quests"].values()
+        if quest.get("source") == "campaign_state_authority_commit"
+    ][0]
+    handoff_obj = handoff_quest["objectives"][0]
+    assert handoff_obj["completed"] is False
+
+    state.setdefault("objective_progression_log", []).append(
+        {
+            "objective_id": handoff_obj["objective_id"],
+            "matched": True,
+            "completed": True,
+            "summary": handoff_obj["summary"],
+            "turn": int(handoff_obj.get("activated_after_turn") or 0) + 1,
+            "generation": int(handoff_obj.get("created_commit_sequence") or 0) + 1,
+        }
+    )
+
+    second = commit_campaign_state(state, phase="turn")
+    handoff_quest = second["state"]["quest_progress"]["quests"][handoff_quest["quest_id"]]
+    assert handoff_quest["objectives"][0]["completed"] is True
