@@ -219,3 +219,30 @@ def test_journal_filters_quote_dot_and_fragment():
 
     assert '".and' not in text
     assert "Ask Bran about the witness" in text
+
+
+def test_player_journal_repairs_required_sections_and_malformed_quotes():
+    text = _journal_text(
+        [
+            'I follow up with a more direct question: ".',
+            '".what does that interest lead to?',
+        ],
+        ["Bran mentions the witness and the road."],
+        runtime_state={
+            "quest_progress": {
+                "quests": {
+                    "witness": {
+                        "title": "Witness Search",
+                        "objectives": [{"summary": "Find the witness", "status": "active"}],
+                    }
+                }
+            }
+        },
+    )
+
+    assert "What I did:" in text
+    assert "What I learned:" in text
+    assert "What changed:" in text
+    assert "Next:" in text
+    assert ': ".' not in text
+    assert '".what' not in text

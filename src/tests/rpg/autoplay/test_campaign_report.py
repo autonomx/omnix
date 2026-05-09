@@ -5,6 +5,18 @@ from tests.rpg.autoplay.campaign_report import (
     build_campaign_report_model,
     render_campaign_report_html,
     write_campaign_report,
+    extract_narration,
+    extract_dialogue,
+    extract_story_hook_display,
+    extract_conversation_beat,
+    build_story_so_far_paragraph,
+    compute_dialogue_coverage,
+    classify_dialogue_source,
+    extract_base_response_payload,
+    build_chapter_status,
+    build_inventory_rows,
+    build_player_progression_rows,
+    build_location_journey_model,
 )
 
 
@@ -577,6 +589,43 @@ def test_runtime_diagnostics_count_repaired_provider_payloads():
     assert diagnostics["provider_repaired_turns"] == 1
     assert diagnostics["provider_original_error_counts"]["followup_hooks_not_empty"] == 1
     assert diagnostics["provider_repair_action_counts"]["cleared_followup_hooks"] == 1
+
+
+def test_runtime_diagnostics_read_combined_background_narration_payloads():
+    transcript = [
+        {
+            "turn_index": 1,
+            "player_action": "I ask Bran about the witness.",
+            "combined_background_llm_result": {
+                "narration_payload": {
+                    "format_version": "rpg_narration_v2",
+                    "source": "provider_runtime_narration",
+                    "narration": "Bran answers with a guarded glance.",
+                    "npc": {"speaker": "Bran", "line": "The road is the danger."},
+                    "runtime_narration_diagnostics": {
+                        "provider_requested": True,
+                        "provider_present": True,
+                        "provider_attempted": True,
+                        "provider_valid": True,
+                        "provider_attempt_count": 1,
+                        "fallback_used": False,
+                    },
+                }
+            },
+        }
+    ]
+
+    model = build_campaign_report_model(
+        transcript=transcript,
+        summary={"session_id": "s"},
+        metrics={},
+        health={},
+    )
+
+    diagnostics = model["runtime_narration_diagnostics"]
+    assert diagnostics["provider_valid_turns"] == 1
+    assert diagnostics["provider_attempted_turns"] == 1
+    assert diagnostics["provider_attempt_count"] == 1
 
 
 def test_campaign_report_model_includes_pm_summary_and_inventory():
@@ -2258,3 +2307,53 @@ def test_campaign_report_write_outputs_full_html_document(tmp_path):
     assert 'class="rpg-shell"' in html
     assert "file:///" not in html
     assert result["campaign_report_html"].endswith("autoplay-campaign-report.html")
+
+
+def test_campaign_report_prefers_latest_state_quest_progress_summary():
+    model = {
+        "quest_progress_summary": {
+            "quest_count": 1,
+            "completed_count": 0,
+            "active_count": 1,
+            "quests": [
+                {
+                    "quest_id": "quest:witness_search",
+                    "title": "Witness Search",
+                    "status": "active",
+                    "objective_count": 2,
+                    "completed_objective_count": 0,
+                }
+            ],
+        },
+        "latest_state": {
+            "quest_progress": {
+                "quests": {
+                    "quest:witness_search": {
+                        "quest_id": "quest:witness_search",
+                        "title": "Witness Search",
+                        "status": "completed",
+                        "completed": True,
+                        "objectives": [
+                            {"summary": "Find the witness.", "status": "completed", "completed": True},
+                            {"summary": "Report findings to Bran.", "status": "completed", "completed": True},
+                        ],
+                    },
+                    "quest:bandit_road": {
+                        "quest_id": "quest:bandit_road",
+                        "title": "Bandit Road",
+                        "status": "active",
+                        "objectives": [
+                            {"summary": "Prepare for the bandit road.", "status": "active", "completed": False}
+                        ],
+                    },
+                }
+            }
+        },
+    }
+
+    summary = campaign_report._quest_summary_from_latest_state(model)
+    assert summary["completed_count"] == 1
+    assert summary["active_count"] == 1
+    witness = [row for row in summary["quests"] if row["quest_id"] == "quest:witness_search"][0]
+    assert witness["status"] == "completed"
+    assert witness["completed_objective_count"] == 2

@@ -1,408 +1,709 @@
-Use this focused patch:
+N87.2.6 — Hard Post-Transition Action Filter + Strict Progress Gate Sync
+Goal
 
-N83.1.6.1 — Kill Legacy Main Tail + High-Contrast Promoted Sections
-1. Patch src/tests/rpg/autoplay/campaign_report.py
-1A. Add stronger final legacy-main sanitizer
+Fix the current 177 state:
 
-Find the existing sanitizer helper:
+1. Quest hooks/facts are mostly firing, but quest_progress_summary is still stale.
+2. Player still targets Bran too much after the road transition.
+3. “I stop repeating...” became a repeated meta-repair action.
+4. Dialogue memory only records 2 exchanges despite many Bran turns.
+5. health.progress_quality.ok is false, but top-level gates still pass.
+6. Suggested actions still include stale Witness Search / Bran actions after transition.
 
-def _strip_legacy_autoplay_report_tail(html: str) -> str:
+This patch makes the post-transition state authoritative:
 
-At the end of the function, before:
+Once the player has reached the road or the Bandit Road hook is active:
+  - hard-block Bran/witness-repeat actions
+  - force road/track/bridge/wagon/next-lead actions
+  - repair “stop repeating...” into concrete road investigation
+  - rebuild quest summary from latest state/facts at the final write point
+  - include strict health.progress_quality in quality gates
+1. Patch src/tests/rpg/autoplay/executable_actions.py
+1A. Add hard post-transition detector
 
-return text
+Add near the helper functions:
 
-add this block:
-
---- src/tests/rpg/autoplay/campaign_report.py
-+++ src/tests/rpg/autoplay/campaign_report.py
+--- src/tests/rpg/autoplay/executable_actions.py
++++ src/tests/rpg/autoplay/executable_actions.py
 @@
- def _strip_legacy_autoplay_report_tail(html: str) -> str:
+ def _current_location(context: Dict[str, Any]) -> str:
+     return _safe_str(
+         context.get("current_location")
+         or context.get("current_location_name")
+         or _safe_dict(context.get("scene")).get("location")
+         or _safe_dict(context.get("player_visible")).get("location")
+     ).lower()
++
++
++def _witness_facts(context: Dict[str, Any]) -> Dict[str, Any]:
++    return _safe_dict(context.get("witness_search_facts"))
++
++
++def _post_witness_road_transition_active(context: Dict[str, Any]) -> bool:
++    location = _current_location(context)
++    facts = _witness_facts(context)
++    return bool(
++        _quest_completed(context, "quest:witness_search")
++        or _quest_status(context, "quest:bandit_road") == "active"
++        or _story_hook_fired(context, "hook:witness:pursue_bandit_trail")
++        or _story_hook_fired(context, "hook:travel:location:east_road_outside_tavern")
++        or bool(facts.get("followed_road"))
++        or "east_road" in location
++        or "road outside" in location
++        or "outside the rusty flagon" in location
++    )
++
++
++def _post_transition_forbidden_bran_or_witness_action(action: str) -> bool:
++    lower = _safe_str(action).lower()
++    forbidden = (
++        "ask bran where the cloaked traveler",
++        "ask bran what he personally saw",
++        "ask bran what they personally saw",
++        "report to bran that the cloaked traveler trail",
++        "stop repeating the report to bran",
++        "where the cloaked traveler went",
++        "cloak markings",
++        "witness search",
++        "side door",
++        "cloaked traveler went",
++    )
++    return any(term in lower for term in forbidden)
++
++
++def _road_progression_action(context: Dict[str, Any], original_action: str = "") -> str:
++    lower = _safe_str(original_action).lower()
++    location = _current_location(context)
++
++    if "road" not in location and "outside" not in location:
++        return (
++            "I leave the Rusty Flagon and follow the road outside, "
++            "looking for fresh tracks, wagon ruts, black cord, or bridge signs."
++        )
++
++    if "prepare" in active_objective_blob(context):
++        return (
++            "I check my supplies, secure food and water, and prepare to follow "
++            "the bandit road trail."
++        )
++
++    if "bridge" in lower:
++        return (
++            "I follow the road toward the mill bridge, watching for ambush signs, "
++            "lantern marks, wagon ruts, or bandit tracks."
++        )
++
++    return (
++        "I inspect the road outside the tavern for fresh tracks, wagon ruts, "
++        "black cord, torn cloth, ambush signs, or bridge markings."
++    )
+1B. Make is_meta_or_vague_action catch “stop repeating”
+
+Patch the constants:
+
+--- src/tests/rpg/autoplay/executable_actions.py
++++ src/tests/rpg/autoplay/executable_actions.py
 @@
-     # Clean up repeated body/html endings if a legacy full document was spliced.
-     text = re.sub(r"</body>\s*</html>\s*</body>\s*</html>\s*$", "</body>\n</html>", text, flags=re.IGNORECASE)
+ META_ACTION_PATTERNS = (
+@@
+     "next concrete lead",
++    "stop repeating",
++    "stop repeating the report",
++    "stop repeating the report to bran",
+ )
+1C. Hard-block stale Bran/Witness actions after transition
+
+Patch suggested_executable_action(...).
+
+Inside the loop after command = ...:
+
+--- src/tests/rpg/autoplay/executable_actions.py
++++ src/tests/rpg/autoplay/executable_actions.py
+@@
+         command = _safe_str(row.get("command")).strip()
+         if not command or is_meta_or_vague_action(command):
+             continue
+         lower_command = command.lower()
++        if _post_witness_road_transition_active(context) and _post_transition_forbidden_bran_or_witness_action(command):
++            continue
+         if _quest_completed(context, "quest:witness_search") and any(
+             phrase in lower_command
+             for phrase in (
+1D. Replace “stop repeating...” repair with road action
+
+Patch executable_action_for_context(...).
+
+At the top, after location = _current_location(context):
+
+--- src/tests/rpg/autoplay/executable_actions.py
++++ src/tests/rpg/autoplay/executable_actions.py
+@@
+     objective_blob = active_objective_blob(context)
+     npc = strongest_known_npc(context)
+     location = _current_location(context)
 +
-+    # N83.1.6.1: remove a second standalone legacy <main> appended after the
-+    # RPG shell. Artifact 161 showed this exact shape:
-+    #
-+    #   <main class="rpg-shell"> ... Technical Debug ... </main>
-+    #   <main>
-+    #     <section id="campaign-journal">...
-+    #     <section id="quest-progress">...
-+    #
-+    # These sections are already either promoted into the RPG shell or preserved
-+    # under grouped Technical Debug as legacy-* anchors. The raw second main is
-+    # the source of the washed-out old theme below the real report.
-+    text = re.sub(
-+        r"</main>\s*<main>\s*"
-+        r"(?=\s*<section\b[^>]*\bid=[\"']campaign-journal[\"'])"
-+        r"[\s\S]*?</main>",
-+        "</main>",
-+        text,
-+        count=1,
-+        flags=re.IGNORECASE,
-+    )
-+
-+    # Defensive variant: if the second legacy main has attributes.
-+    text = re.sub(
-+        r"</main>\s*<main\b(?![^>]*\brpg-shell\b)[^>]*>\s*"
-+        r"(?=\s*<section\b[^>]*\bid=[\"']campaign-journal[\"'])"
-+        r"[\s\S]*?</main>",
-+        "</main>",
-+        text,
-+        count=1,
-+        flags=re.IGNORECASE,
-+    )
-+
-+    # Defensive variant: if legacy sections were appended without a wrapping main.
-+    text = re.sub(
-+        r"(?<=</main>)\s*"
-+        r"<section\b[^>]*\bid=[\"']campaign-journal[\"'][\s\S]*?"
-+        r"<section\b[^>]*\bid=[\"']debug[\"'][\s\S]*?</section>",
-+        "",
-+        text,
-+        count=1,
-+        flags=re.IGNORECASE,
-+    )
++    if _post_witness_road_transition_active(context):
++        if _post_transition_forbidden_bran_or_witness_action(original_action) or is_meta_or_vague_action(original_action):
++            return _road_progression_action(context, original_action)
  
-     return text
+     if _quest_completed(context, "quest:witness_search"):
+         if "road" not in location and "outside" not in location:
 
-This removes the raw old section block that is currently appearing after Technical Debug.
+Then replace this older repeated-report repair text if present:
 
-1B. Apply final sanitizer after the whole HTML is assembled
-
-Find the final HTML render return.
-
-If it currently does:
-
-return html
-
-replace with:
-
---- src/tests/rpg/autoplay/campaign_report.py
-+++ src/tests/rpg/autoplay/campaign_report.py
+--- src/tests/rpg/autoplay/executable_actions.py
++++ src/tests/rpg/autoplay/executable_actions.py
 @@
--    return html
-+    html = _strip_legacy_autoplay_report_tail(html)
-+    html = _strip_legacy_autoplay_report_partial(html)
-+    return html
+-        return "I stop repeating the report to Bran and leave the tavern to follow the road trail toward the next lead."
++        return _road_progression_action(context, original_action)
 
-If the writer function writes the file directly, also patch immediately before write_text:
+Also patch repair_action_if_needed(...) before the generic meta/vague branch:
 
---- src/tests/rpg/autoplay/campaign_report.py
-+++ src/tests/rpg/autoplay/campaign_report.py
+--- src/tests/rpg/autoplay/executable_actions.py
++++ src/tests/rpg/autoplay/executable_actions.py
 @@
--    report_path.write_text(html, encoding="utf-8")
-+    html = _strip_legacy_autoplay_report_tail(html)
-+    html = _strip_legacy_autoplay_report_partial(html)
-+    report_path.write_text(html, encoding="utf-8")
+     action = normalized.strip()
+     lower_action = action.lower()
++    if _post_witness_road_transition_active(context) and _post_transition_forbidden_bran_or_witness_action(action):
++        repaired = _road_progression_action(context, action)
++        return {
++            "changed": repaired != action,
++            "action": repaired,
++            "original_action": original,
++            "reason": "post_transition_bran_witness_action_repaired_to_road_progression",
++        }
+     if _quest_completed(context, "quest:witness_search") and any(
+1E. Make unchanged “stop repeating” impossible
 
-Apply this to every report HTML write path.
+Patch the bottom unchanged return:
 
-2. Fix promoted section readability
-
-The current promoted sections are wrapped correctly, but legacy CSS like .journal-entry, .metric-card, section, summary, and old color variables are still leaking.
-
-Append this near the end of the <style> block, after all older CSS:
-
---- src/tests/rpg/autoplay/campaign_report.py
-+++ src/tests/rpg/autoplay/campaign_report.py
+--- src/tests/rpg/autoplay/executable_actions.py
++++ src/tests/rpg/autoplay/executable_actions.py
 @@
-       .rpg-nav-appendix-links a {
-         font-size: 0.84rem;
-         opacity: 0.92;
-       }
-+
-+      /*
-+       * N83.1.6.1 readability fix:
-+       * Promoted legacy sections must be dark-on-parchment and must not inherit
-+       * pale legacy text colors. This block intentionally uses high-specificity
-+       * selectors and !important because the legacy report CSS still defines
-+       * broad rules for section/card/journal-entry/summary/pre/table.
-+       */
-+      body > main.rpg-shell .rpg-promoted-section {
-+        background:
-+          linear-gradient(180deg, #f5ead2 0%, #ead8b8 100%) !important;
-+        color: #24170d !important;
-+        border: 1px solid rgba(120, 83, 30, 0.42) !important;
-+      }
-+
-+      body > main.rpg-shell .rpg-promoted-section *,
-+      body > main.rpg-shell .rpg-promoted-section p,
-+      body > main.rpg-shell .rpg-promoted-section div,
-+      body > main.rpg-shell .rpg-promoted-section span,
-+      body > main.rpg-shell .rpg-promoted-section li,
-+      body > main.rpg-shell .rpg-promoted-section td,
-+      body > main.rpg-shell .rpg-promoted-section th,
-+      body > main.rpg-shell .rpg-promoted-section summary {
-+        color: #24170d !important;
-+      }
-+
-+      body > main.rpg-shell .rpg-promoted-section h2,
-+      body > main.rpg-shell .rpg-promoted-section h3,
-+      body > main.rpg-shell .rpg-promoted-section h4,
-+      body > main.rpg-shell .rpg-promoted-section strong {
-+        color: #2b1607 !important;
-+      }
-+
-+      body > main.rpg-shell .rpg-promoted-section .rpg-section-title {
-+        border-bottom: 1px solid rgba(120, 83, 30, 0.35) !important;
-+      }
-+
-+      body > main.rpg-shell .rpg-promoted-section .rpg-badge {
-+        background: rgba(120, 83, 30, 0.12) !important;
-+        color: #3a240f !important;
-+        border: 1px solid rgba(120, 83, 30, 0.35) !important;
-+      }
-+
-+      body > main.rpg-shell .rpg-promoted-section .journal-entry,
-+      body > main.rpg-shell .rpg-promoted-section .npc-card,
-+      body > main.rpg-shell .rpg-promoted-section .metric-card,
-+      body > main.rpg-shell .rpg-promoted-section .turn-card,
-+      body > main.rpg-shell .rpg-promoted-section article {
-+        background: #fff8e9 !important;
-+        color: #24170d !important;
-+        border: 1px solid rgba(120, 83, 30, 0.28) !important;
-+        border-radius: 14px !important;
-+        box-shadow: inset 0 1px 0 rgba(255,255,255,0.65) !important;
-+      }
-+
-+      body > main.rpg-shell .rpg-promoted-section table {
-+        width: 100% !important;
-+        background: #fff8e9 !important;
-+        color: #24170d !important;
-+        border-collapse: collapse !important;
-+        border: 1px solid rgba(120, 83, 30, 0.24) !important;
-+      }
-+
-+      body > main.rpg-shell .rpg-promoted-section th {
-+        background: rgba(199, 154, 59, 0.20) !important;
-+        color: #2b1607 !important;
-+      }
-+
-+      body > main.rpg-shell .rpg-promoted-section td,
-+      body > main.rpg-shell .rpg-promoted-section th {
-+        padding: 10px 12px !important;
-+        border-bottom: 1px solid rgba(120, 83, 30, 0.18) !important;
-+      }
-+
-+      body > main.rpg-shell .rpg-promoted-section a {
-+        color: #6b3f0b !important;
-+        font-weight: 800 !important;
-+        text-decoration: underline !important;
-+        text-underline-offset: 2px !important;
-+      }
-+
-+      body > main.rpg-shell .rpg-promoted-section pre,
-+      body > main.rpg-shell .rpg-promoted-section code {
-+        background: #211a14 !important;
-+        color: #fff1d0 !important;
-+        border-color: rgba(226, 191, 109, 0.24) !important;
-+      }
-+
-+      body > main.rpg-shell .rpg-promoted-section .muted,
-+      body > main.rpg-shell .rpg-promoted-section .small,
-+      body > main.rpg-shell .rpg-promoted-section .subtle {
-+        color: #5b4226 !important;
-+      }
-+
-+      /*
-+       * Hide any unwrapped legacy second report if it somehow survives final
-+       * sanitization. Promoted sections inside .rpg-shell remain visible because
-+       * they have .rpg-promoted-section.
-+       */
-+      body > main:not(.rpg-shell) {
-+        display: none !important;
-+      }
+     return {
+         "changed": False,
+         "action": action,
+         "original_action": original,
+         "reason": "",
+     }
 
-This directly fixes the pale text shown in your screenshot.
+Replace with:
 
-3. Fix top nav placement and ensure all links are available there
-
-The second screenshot’s nav style is correct. The issue is that the appendix links should be part of the top rpg-nav, not local blocks lower down.
-
-Make sure _render_rpg_nav(...) has this structure:
-
-def _render_rpg_nav(primary_links, appendix_links=None):
-    appendix_links = appendix_links or []
-
-    def render_links(links):
-        items = []
-        for target, label in links:
-            if not target or not label:
-                continue
-            items.append(f'<a href="#{escape(target)}">{escape(label)}</a>')
-        return "".join(items)
-
-    primary_html = render_links(primary_links)
-    appendix_html = render_links(appendix_links)
-
-    appendix_block = ""
-    if appendix_html:
-        appendix_block = f"""
-        <details class="rpg-nav-appendix" open>
-          <summary>Appendix Sections</summary>
-          <div class="rpg-nav-appendix-links">
-            {appendix_html}
-          </div>
-        </details>
-        """
-
-    return f"""
-    <nav class="rpg-nav" aria-label="Campaign report sections">
-      <div class="rpg-nav-primary">
-        {primary_html}
-      </div>
-      {appendix_block}
-    </nav>
-    """
-
-Important change from the prior patch:
-
--<details class="rpg-nav-appendix">
-+<details class="rpg-nav-appendix" open>
-
-That makes all section links visible at the top by default, like your second screenshot, while still visually separated from the primary nav.
-
-4. Remove old local Report Highlights from HTML, not just CSS
-
-Find _strip_report_highlights_quick_links(...).
-
-Make it remove both non-prefixed and legacy-prefixed quick link sections:
-
---- src/tests/rpg/autoplay/campaign_report.py
-+++ src/tests/rpg/autoplay/campaign_report.py
+--- src/tests/rpg/autoplay/executable_actions.py
++++ src/tests/rpg/autoplay/executable_actions.py
 @@
- def _strip_report_highlights_quick_links(html: str) -> str:
-     text = _safe_str(html)
-     if not text.strip():
-         return ""
-     text = re.sub(
-         r'<section\b(?=[^>]*\bclass=["\'][^"\']*\breport-quick-links\b[^"\']*["\'])[\s\S]*?</section>',
-         "",
-         text,
-         flags=re.IGNORECASE,
++    if "stop repeating" in lower_action:
++        repaired = _road_progression_action(context, action)
++        return {
++            "changed": repaired != action,
++            "action": repaired,
++            "original_action": original,
++            "reason": "stop_repeating_meta_action_repaired_to_concrete_road_action",
++        }
+     return {
+         "changed": False,
+         "action": action,
+         "original_action": original,
+         "reason": "",
+2. Patch src/app/rpg/player_action_context/runtime.py
+2A. Add post-transition detector
+
+Add near helper functions:
+
+--- src/app/rpg/player_action_context/runtime.py
++++ src/app/rpg/player_action_context/runtime.py
+@@
+ def _bandit_road_active_in_state(state: Dict[str, Any]) -> bool:
+     quests = _safe_dict(_safe_dict(state).get("quest_progress")).get("quests")
+     quest = _safe_dict(_safe_dict(quests).get("quest:bandit_road"))
+     return _safe_str(quest.get("status")) == "active"
++
++
++def _post_witness_road_transition_active_in_state(state: Dict[str, Any]) -> bool:
++    state = _safe_dict(state)
++    facts = _safe_dict(state.get("witness_search_facts"))
++    hook_state = _safe_dict(state.get("autoplay_story_hook_state"))
++    fired_hooks = _safe_dict(hook_state.get("fired_hooks"))
++    location = _safe_str(
++        state.get("current_location")
++        or state.get("current_location_name")
++        or _safe_dict(state.get("scene")).get("location")
++    ).lower()
++    return bool(
++        _quest_completed_in_state(state, "quest:witness_search")
++        or _bandit_road_active_in_state(state)
++        or "hook:witness:pursue_bandit_trail" in fired_hooks
++        or "hook:travel:location:east_road_outside_tavern" in fired_hooks
++        or facts.get("followed_road")
++        or "east_road" in location
++        or "road outside" in location
++        or "outside the rusty flagon" in location
++    )
++
++
++def _is_stale_witness_or_bran_action_command(command: str) -> bool:
++    lower = _safe_str(command).lower()
++    stale = (
++        "ask bran where the cloaked traveler",
++        "ask bran what he personally saw",
++        "ask bran what they personally saw",
++        "report to bran that the cloaked traveler trail",
++        "stop repeating the report to bran",
++        "where the cloaked traveler went",
++        "cloak markings",
++        "witness search",
++        "side door",
++    )
++    return any(term in lower for term in stale)
+2B. Filter stale actions before return
+
+At the top-level suggested action builder, immediately before sorting/returning the action list, add:
+
+--- src/app/rpg/player_action_context/runtime.py
++++ src/app/rpg/player_action_context/runtime.py
+@@
++    if _post_witness_road_transition_active_in_state(state):
++        actions = [
++            action
++            for action in actions
++            if not _is_stale_witness_or_bran_action_command(_safe_str(_safe_dict(action).get("command")))
++        ]
++        actions = _bandit_road_transition_actions(state) + actions
+
+If your list variable is named suggested_actions, use that instead of actions.
+
+2C. Strengthen Bandit Road actions
+
+Patch _bandit_road_transition_actions(...) priorities and commands:
+
+--- src/app/rpg/player_action_context/runtime.py
++++ src/app/rpg/player_action_context/runtime.py
+@@
+     add(
+         "bandit_road:leave_tavern",
+         "Leave the tavern for the road",
+-        "I leave the Rusty Flagon and follow the road outside, looking for fresh tracks, bridge signs, or the next bandit lead.",
++        "I leave the Rusty Flagon and follow the road outside, looking for fresh tracks, wagon ruts, black cord, or bridge signs.",
+         "travel",
+-        140,
++        170,
+         "Witness Search is complete; transition to the Bandit Road lead.",
      )
-+    text = re.sub(
-+        r'<section\b[^>]*>\s*<h2>\s*Report Highlights\s*</h2>[\s\S]*?</section>',
-+        "",
-+        text,
-+        flags=re.IGNORECASE,
+@@
+         "bandit_road:inspect_tracks",
+         "Inspect the road for bandit signs",
+-        "I inspect the road outside the tavern for tracks, ambush signs, black cord, wagon ruts, or bridge markings.",
++        "I inspect the road outside the tavern for fresh tracks, wagon ruts, black cord, torn cloth, ambush signs, or bridge markings.",
+         "exploration",
+-        136,
++        168,
+         "Find concrete evidence for the Bandit Road quest.",
+     )
+@@
+         "bandit_road:ask_travelers",
+         "Ask who travels before dawn",
+         "I ask Bran who is likely to travel the road before dawn and who needs warning first.",
+         "objective",
+-        132,
++        130,
+         "Identify the next person or place tied to the Bandit Road threat.",
+     )
+3. Patch src/tests/rpg/autoplay_llm_campaign.py
+3A. Add strict post-transition transcript repair summary
+
+Add helper near other summary helpers:
+
+--- src/tests/rpg/autoplay_llm_campaign.py
++++ src/tests/rpg/autoplay_llm_campaign.py
+@@
++def _post_transition_action_quality_summary(transcript: List[Dict[str, Any]], latest_state: Dict[str, Any]) -> Dict[str, Any]:
++    latest_state = _safe_dict(latest_state)
++    facts = _safe_dict(latest_state.get("witness_search_facts"))
++    hook_state = _safe_dict(latest_state.get("autoplay_story_hook_state"))
++    fired_hooks = _safe_dict(hook_state.get("fired_hooks"))
++    location = _safe_str(
++        latest_state.get("current_location")
++        or latest_state.get("current_location_name")
++        or _safe_dict(latest_state.get("scene")).get("location")
++    ).lower()
++    transition_active = bool(
++        facts.get("followed_road")
++        or "hook:witness:pursue_bandit_trail" in fired_hooks
++        or "hook:travel:location:east_road_outside_tavern" in fired_hooks
++        or "east_road" in location
++        or "road outside" in location
 +    )
-     return text
++
++    stale_patterns = (
++        "ask bran where the cloaked traveler",
++        "report to bran that the cloaked traveler trail",
++        "stop repeating the report to bran",
++        "where the cloaked traveler went",
++        "cloak markings",
++    )
++    stale_after_transition: List[Dict[str, Any]] = []
++    saw_transition = False
++    for row in _safe_list(transcript):
++        action = _safe_str(_safe_dict(row).get("player_action"))
++        lower = action.lower()
++        if any(
++            phrase in lower
++            for phrase in (
++                "leave the rusty flagon",
++                "follow the road outside",
++                "road outside",
++                "follow the road trail",
++                "travel to the road",
++            )
++        ):
++            saw_transition = True
++        if saw_transition and any(pattern in lower for pattern in stale_patterns):
++            stale_after_transition.append(
++                {
++                    "turn": _safe_dict(row).get("turn"),
++                    "player_action": action,
++                }
++            )
++
++    return {
++        "ok": not stale_after_transition,
++        "transition_active": transition_active,
++        "stale_after_transition_count": len(stale_after_transition),
++        "stale_after_transition": stale_after_transition[:20],
++    }
+3B. Ensure context has latest facts
 
-Then ensure it is called on:
+Where you already add context fields from runtime_state, add:
 
-legacy_report_sections
-technical_debug_groups values
-final html
+--- src/tests/rpg/autoplay_llm_campaign.py
++++ src/tests/rpg/autoplay_llm_campaign.py
+@@
+         if isinstance(context, dict) and isinstance(runtime_state, dict):
+             context["dialogue_state"] = runtime_state.get("dialogue_state") or {}
+             context["autoplay_story_hook_state"] = runtime_state.get("autoplay_story_hook_state") or {}
+             context["quest_progress"] = runtime_state.get("quest_progress") or {}
++            context["quest_log_state"] = runtime_state.get("quest_log_state") or {}
++            context["witness_search_facts"] = runtime_state.get("witness_search_facts") or {}
+             context["current_location"] = runtime_state.get("current_location") or runtime_state.get("current_location_name") or ""
+             context["current_location_name"] = runtime_state.get("current_location_name") or ""
+3C. Make final executable repair run twice
 
-Example final sanitization:
+The action can be repaired once into “stop repeating...” by an older layer, so enforce final repair one more time immediately before turn execution.
+
+Find final repair block:
+
+executable_action_repair = repair_action_if_needed(...)
+...
+player_action = ...
+
+After that block, add:
+
+--- src/tests/rpg/autoplay_llm_campaign.py
++++ src/tests/rpg/autoplay_llm_campaign.py
+@@
+         if bool(getattr(args, "player_agent_executable_action_repair", True)):
+             executable_action_repair = repair_action_if_needed(_safe_str(player_action), context)
+             if executable_action_repair.get("changed"):
+@@
+                 if isinstance(selected, dict):
+                     selected["executable_action_repaired"] = True
+                     selected["executable_action_original_action"] = _safe_str(executable_action_repair.get("original_action"))
+                     selected["action"] = player_action
++
++            # Second pass: older repair layers may produce a self-referential
++            # "stop repeating..." command. That must never reach the runtime.
++            second_pass_repair = repair_action_if_needed(_safe_str(player_action), context)
++            if second_pass_repair.get("changed"):
++                _probe_log(
++                    bool(getattr(args, "debug_autoplay_stage_timing", False)),
++                    "player_agent_executable_action_repair.second_pass_applied",
++                    turn_index=turn_index,
++                    original_action=_safe_str(second_pass_repair.get("original_action"))[:240],
++                    repaired_action=_safe_str(second_pass_repair.get("action"))[:240],
++                    reason=_safe_str(second_pass_repair.get("reason")),
++                )
++                player_action = _safe_str(second_pass_repair.get("action"))
++                if isinstance(selected, dict):
++                    selected["executable_action_second_pass_repaired"] = True
++                    selected["executable_action_second_pass_original_action"] = _safe_str(second_pass_repair.get("original_action"))
++                    selected["action"] = player_action
+3D. Fix final quest summary overwrite
+
+Find final summary creation and after all progress metrics are attached, add this as the final override before writing artifacts:
+
+--- src/tests/rpg/autoplay_llm_campaign.py
++++ src/tests/rpg/autoplay_llm_campaign.py
+@@
+     summary = {
+         ...
+     }
++
++    # Final authoritative quest summary override. This must run after any
++    # progress-metrics merge so stale pre-sync summaries cannot overwrite it.
++    summary["quest_progress_summary"] = _quest_progress_summary_from_state(runtime_state)
+
+If there is a later line assigning summary["quest_progress_summary"], move this block to below that later line.
+
+3E. Add post-transition and strict progress to summary
+
+Before quality gate computation or final summary write:
+
+--- src/tests/rpg/autoplay_llm_campaign.py
++++ src/tests/rpg/autoplay_llm_campaign.py
+@@
++    post_transition_action_quality = _post_transition_action_quality_summary(transcript, runtime_state)
++    summary["post_transition_action_quality"] = post_transition_action_quality
++
++    health_progress_quality = _safe_dict(_safe_dict(summary.get("health")).get("progress_quality"))
++    summary["strict_progress_health_summary"] = {
++        "ok": bool(health_progress_quality.get("ok", True)),
++        "meaningful_progress_rate": health_progress_quality.get("meaningful_progress_rate"),
++        "meaningful_turns": health_progress_quality.get("meaningful_turns"),
++        "no_change_turns": health_progress_quality.get("no_change_turns"),
++        "source": "health.progress_quality",
++    }
+3F. Gate top-level quality on strict progress health for 20+ turns
+
+In _quality_gate_summary(...), add gates:
+
+--- src/tests/rpg/autoplay_llm_campaign.py
++++ src/tests/rpg/autoplay_llm_campaign.py
+@@
+         "strict_100turn_no_forbidden_player_actions_ok": (
+             not strict_100_turn_mode
+             or bool(_safe_dict(summary.get("forbidden_player_action_summary")).get("ok", True))
+         ),
++        "strict_progress_health_ok": (
++            int(summary.get("requested_turns") or summary.get("turns_executed") or 0) < 20
++            or bool(_safe_dict(summary.get("strict_progress_health_summary")).get("ok", True))
++        ),
++        "post_transition_action_quality_ok": (
++            int(summary.get("requested_turns") or summary.get("turns_executed") or 0) < 20
++            or bool(_safe_dict(summary.get("post_transition_action_quality")).get("ok", True))
++        ),
+
+If _quality_gate_summary is called before these fields are added, either move the field creation before the call or compute these two gates inside _quality_gate_summary directly from summary["health"] and summary["post_transition_action_quality"].
+
+4. Patch dialogue-memory extraction to include resolved narration
+
+177 still has only 2 dialogue exchanges. The visible NPC lines may live in resolved narration fields.
+
+Patch _extract_npc_payload_from_turn_result(...).
+
+Add these candidates:
+
+--- src/tests/rpg/autoplay_llm_campaign.py
++++ src/tests/rpg/autoplay_llm_campaign.py
+@@
+     candidates = [
+         turn_result.get("npc"),
+         turn_result.get("npc_reply"),
+         _safe_dict(turn_result.get("narration")).get("npc"),
+         _safe_dict(turn_result.get("structured_narration")).get("npc"),
++        _safe_dict(turn_result.get("resolved_narration_payload")).get("npc"),
++        _safe_dict(turn_result.get("resolved_narration")).get("npc"),
++        _safe_dict(turn_result.get("background_narration_payload")).get("npc"),
++        _safe_dict(turn_result.get("combined_background_llm_result")).get("npc"),
++        _safe_dict(_safe_dict(turn_result.get("combined_background_llm_result")).get("narration")).get("npc"),
+         _safe_dict(turn_result.get("turn_contract")).get("npc"),
+         _safe_dict(turn_result.get("result")).get("npc"),
+         _safe_dict(_safe_dict(turn_result.get("result")).get("narration")).get("npc"),
++        _safe_dict(_safe_dict(turn_result.get("result")).get("resolved_narration_payload")).get("npc"),
+         record.get("npc"),
+         _safe_dict(record.get("narration")).get("npc"),
++        _safe_dict(record.get("resolved_narration_payload")).get("npc"),
+     ]
+
+Also support flattened fields:
+
+--- src/tests/rpg/autoplay_llm_campaign.py
++++ src/tests/rpg/autoplay_llm_campaign.py
+@@
+     for candidate in candidates:
+         candidate = _safe_dict(candidate)
+         speaker = _safe_str(candidate.get("speaker"))
+         line = _safe_str(candidate.get("line"))
+         if speaker and line:
+             return {"speaker": speaker, "line": line}
++    speaker = _safe_str(turn_result.get("npc_speaker") or record.get("npc_speaker"))
++    line = _safe_str(turn_result.get("npc_line") or record.get("npc_line"))
++    if speaker and line:
++        return {"speaker": speaker, "line": line}
+     return {}
+5. Patch src/tests/rpg/autoplay/campaign_report.py
+5A. Prefer strict summary fields in report
+
+Where report context/model is built, ensure these fields are surfaced:
 
 --- src/tests/rpg/autoplay/campaign_report.py
 +++ src/tests/rpg/autoplay/campaign_report.py
 @@
-     html = _strip_legacy_autoplay_report_tail(html)
-     html = _strip_legacy_autoplay_report_partial(html)
-+    html = _strip_report_highlights_quick_links(html)
-     return html
+     report_context = {
+         ...
++        "post_transition_action_quality": _safe_dict(report_model.get("post_transition_action_quality")),
++        "strict_progress_health_summary": _safe_dict(report_model.get("strict_progress_health_summary")),
++        "npc_dialogue_mode_summary": _safe_dict(report_model.get("npc_dialogue_mode_summary")),
+     }
 
-And before writing:
+If there is no central report_context, add the fields wherever summary cards are built.
+
+5B. Add a strict-progress card to QA dashboard
+
+In _render_qa_dashboard(...), add:
 
 --- src/tests/rpg/autoplay/campaign_report.py
 +++ src/tests/rpg/autoplay/campaign_report.py
 @@
-     html = _strip_legacy_autoplay_report_tail(html)
-     html = _strip_legacy_autoplay_report_partial(html)
-+    html = _strip_report_highlights_quick_links(html)
-     report_path.write_text(html, encoding="utf-8")
-5. Tests
-
-Patch:
-
-src/tests/rpg/autoplay/test_campaign_report.py
-5A. Test second standalone legacy main is removed
---- src/tests/rpg/autoplay/test_campaign_report.py
-+++ src/tests/rpg/autoplay/test_campaign_report.py
-@@
-+def test_campaign_report_strips_second_legacy_main_after_rpg_shell():
-+    html = """
-+    <main class="rpg-shell">
-+      <section id="technical-debug" class="rpg-card dark span-12">
-+        <h2>Technical Debug</h2>
-+      </section>
-+    </main>
-+    <main>
-+      <section id="campaign-journal"><h2>Campaign Calendar & Player Journal</h2></section>
-+      <section id="quest-progress"><h2>Quest Progress</h2></section>
-+      <section id="debug"><h2>Raw Debug Appendix</h2></section>
-+    </main>
-+    """
-+
-+    cleaned = campaign_report._strip_legacy_autoplay_report_tail(html)
-+
-+    assert 'class="rpg-shell"' in cleaned
-+    assert "Technical Debug" in cleaned
-+    assert '<main>\n      <section id="campaign-journal"' not in cleaned
-+    assert 'id="campaign-journal"' not in cleaned
-+    assert 'id="quest-progress"' not in cleaned
-+    assert 'id="debug"' not in cleaned
-5B. Test promoted sections are high-contrast and visible
---- src/tests/rpg/autoplay/test_campaign_report.py
-+++ src/tests/rpg/autoplay/test_campaign_report.py
-@@
-+def test_campaign_report_promoted_sections_have_high_contrast_css():
-+    html = campaign_report.render_campaign_report_html(
-+        summary={"ok": True},
-+        metrics={"real_turn_runtime_count": 20},
-+        transcript=[],
++    strict_progress = _safe_dict(report_context.get("strict_progress_health_summary"))
++    post_transition = _safe_dict(report_context.get("post_transition_action_quality"))
++    cards.append(
++        _render_metric_card(
++            "Strict Progress Health",
++            "PASS" if strict_progress.get("ok", True) else "FAIL",
++            [
++                f"meaningful_progress_rate: {_esc(strict_progress.get('meaningful_progress_rate'))}",
++                f"meaningful_turns: {_esc(strict_progress.get('meaningful_turns'))}",
++                f"no_change_turns: {_esc(strict_progress.get('no_change_turns'))}",
++            ],
++            status="ok" if strict_progress.get("ok", True) else "fail",
++        )
 +    )
-+
-+    assert ".rpg-promoted-section *" in html
-+    assert "color: #24170d !important" in html
-+    assert "background: #fff8e9 !important" in html
-+    assert "body > main:not(.rpg-shell)" in html
-5C. Test appendix nav is visible/open at top
---- src/tests/rpg/autoplay/test_campaign_report.py
-+++ src/tests/rpg/autoplay/test_campaign_report.py
++    cards.append(
++        _render_metric_card(
++            "Post-Transition Actions",
++            "PASS" if post_transition.get("ok", True) else "FAIL",
++            [
++                f"stale_after_transition_count: {_esc(post_transition.get('stale_after_transition_count'))}",
++                f"transition_active: {_esc(post_transition.get('transition_active'))}",
++            ],
++            status="ok" if post_transition.get("ok", True) else "fail",
++        )
++    )
+
+If your dashboard uses a different card helper, adapt this but include these metrics visibly.
+
+6. Tests
+6A. Patch src/tests/rpg/autoplay/test_executable_actions.py
+
+Add:
+
+--- src/tests/rpg/autoplay/test_executable_actions.py
++++ src/tests/rpg/autoplay/test_executable_actions.py
 @@
-+def test_campaign_report_appendix_nav_is_open_and_contains_extended_links():
-+    html = campaign_report.render_campaign_report_html(
-+        summary={
-+            "ok": True,
-+            "quality_gate_summary": {"ok": True, "gates": {"x": True}},
-+            "background_result_timing_summary": {"jobs_submitted": 1},
-+            "long_run_warning_summary": {"warning_count": 0},
++def test_post_transition_blocks_bran_witness_action_to_road_inspection():
++    context = {
++        "quest_progress": {
++            "quests": {
++                "quest:witness_search": {"status": "completed", "completed": True},
++                "quest:bandit_road": {"status": "active"},
++            }
 +        },
-+        metrics={"real_turn_runtime_count": 20},
-+        transcript=[],
++        "witness_search_facts": {"followed_road": True, "reported_to_bran": True},
++        "current_location": "location:east_road_outside_tavern",
++    }
++
++    result = repair_action_if_needed(
++        "I ask Bran where the cloaked traveler went after leaving by the side door.",
++        context,
 +    )
 +
-+    assert '<details class="rpg-nav-appendix" open>' in html
-+    nav_html = html.split('class="rpg-nav"', 1)[1].split("</nav>", 1)[0]
-+    assert 'href="#campaign-journal"' in nav_html
-+    assert 'href="#quest-progress"' in nav_html
-+    assert 'href="#npc-evolution"' in nav_html
-+    assert 'href="#performance"' in nav_html
-+    assert 'href="#console-log"' in nav_html
-+    assert 'href="#timeline"' in nav_html
-+    assert 'href="#debug"' in nav_html
-5D. Test no Report Highlights block in final HTML
---- src/tests/rpg/autoplay/test_campaign_report.py
-+++ src/tests/rpg/autoplay/test_campaign_report.py
-@@
-+def test_campaign_report_final_html_has_no_report_highlights_block():
-+    html = campaign_report.render_campaign_report_html(
-+        summary={"ok": True},
-+        metrics={"real_turn_runtime_count": 20},
-+        transcript=[],
++    assert result["changed"] is True
++    assert "inspect the road" in result["action"].lower()
++    assert "ask bran" not in result["action"].lower()
++    assert "cloaked traveler went" not in result["action"].lower()
++
++
++def test_stop_repeating_meta_action_repairs_to_concrete_road_action():
++    context = {
++        "quest_progress": {
++            "quests": {
++                "quest:witness_search": {"status": "completed", "completed": True},
++                "quest:bandit_road": {"status": "active"},
++            }
++        },
++        "current_location": "location:east_road_outside_tavern",
++    }
++
++    result = repair_action_if_needed(
++        "I stop repeating the report to Bran and leave the tavern to follow the road trail toward the next lead.",
++        context,
 +    )
 +
-+    assert "<h2>Report Highlights</h2>" not in html
-+    assert 'class="report-quick-links"' not in html
-+    assert "Campaign Journal (" not in html
-+    assert "Quest Progress (" not in html
-+    assert "NPC Evolution (" not in html
-6. Validation
-python -m py_compile src\tests\rpg\autoplay\campaign_report.py
-python -m pytest src\tests\rpg\autoplay\test_campaign_report.py -q
++    assert result["changed"] is True
++    assert "stop repeating" not in result["action"].lower()
++    assert "inspect the road" in result["action"].lower() or "follow the road" in result["action"].lower()
+6B. Add summary helper test
+
+Patch an autoplay test file:
+
+def test_post_transition_action_quality_flags_stale_bran_after_road_transition():
+    from tests.rpg.autoplay_llm_campaign import _post_transition_action_quality_summary
+
+    transcript = [
+        {"turn": 1, "player_action": "I leave the Rusty Flagon and follow the road outside."},
+        {"turn": 2, "player_action": "I ask Bran where the cloaked traveler went after leaving by the side door."},
+    ]
+    latest_state = {
+        "current_location": "location:east_road_outside_tavern",
+        "witness_search_facts": {"followed_road": True},
+        "autoplay_story_hook_state": {
+            "fired_hooks": {"hook:witness:pursue_bandit_trail": {"turn_index": 1}}
+        },
+    }
+
+    summary = _post_transition_action_quality_summary(transcript, latest_state)
+
+    assert summary["ok"] is False
+    assert summary["stale_after_transition_count"] == 1
+6C. Patch dialogue extraction test
+def test_extract_npc_payload_reads_resolved_narration_payload():
+    from tests.rpg.autoplay_llm_campaign import _extract_npc_payload_from_turn_result
+
+    payload = _extract_npc_payload_from_turn_result(
+        {
+            "resolved_narration_payload": {
+                "npc": {
+                    "speaker": "Bran",
+                    "line": "The road is the danger.",
+                }
+            }
+        }
+    )
+
+    assert payload == {"speaker": "Bran", "line": "The road is the danger."}
+6D. Patch quality gate test
+
+Add to the test file that covers quality gates:
+
+def test_quality_gate_fails_20_turn_when_strict_progress_health_fails():
+    from tests.rpg.autoplay_llm_campaign import _quality_gate_summary
+
+    summary = {
+        "requested_turns": 20,
+        "turns_executed": 20,
+        "health": {
+            "progress_quality": {
+                "ok": False,
+                "meaningful_progress_rate": 0.0,
+            }
+        },
+        "strict_progress_health_summary": {"ok": False},
+        "post_transition_action_quality": {"ok": True},
+        "forbidden_player_action_summary": {"ok": True},
+        "npc_line_repetition_summary": {"ok": True},
+    }
+
+    gates = _quality_gate_summary(summary, strict_100_turn_mode=False)
+
+    assert gates["gates"]["strict_progress_health_ok"] is False
+    assert gates["ok"] is False
+
+Adapt call signature if _quality_gate_summary uses different parameters.
+
+7. Validation
+
+Run:
+
+python -m py_compile src\tests\rpg\autoplay\executable_actions.py src\app\rpg\player_action_context\runtime.py src\tests\rpg\autoplay_llm_campaign.py src\tests\rpg\autoplay\campaign_report.py
+
+python -m pytest src\tests\rpg\autoplay\test_executable_actions.py src\tests\rpg\autoplay\test_campaign_report.py -q

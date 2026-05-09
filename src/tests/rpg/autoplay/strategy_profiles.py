@@ -50,6 +50,32 @@ STRATEGY_PROFILES: Dict[str, Dict[str, Any]] = {
             "travel_or_leave",
         ],
     },
+    "goal_directed_quest_runner": {
+        "profile_id": "goal_directed_quest_runner",
+        "description": (
+            "Aggressively pursue quest/objective completion, avoid passive social micro-actions, "
+            "and move to new grounded leads once an objective stalls."
+        ),
+        "category_weights": {
+            "objective": 135,
+            "quest_log": 110,
+            "story_arc": 105,
+            "travel": 92,
+            "exploration": 88,
+            "service": 68,
+            "social": 56,
+            "combat": 45,
+        },
+        "anti_stall_priority_order": [
+            "complete_current_objective",
+            "report_completed_objective",
+            "travel_to_next_lead",
+            "inspect_physical_clue",
+            "ask_specific_objective_question",
+            "switch_to_new_quest_hook",
+            "stop_micro_conversation",
+        ],
+    },
     "explorer": {
         "profile_id": "explorer",
         "description": "Prefer observing, inspecting, moving through the world, and uncovering grounded leads.",
@@ -204,12 +230,17 @@ def build_strategy_guidance(
 
     churn_streak = int(progress_quality_metrics.get("churn_only_streak") or 0)
     objective_stall_streak = int(progress_quality_metrics.get("objective_target_no_meaningful_progress_streak") or 0)
+    no_change_turns = int(progress_quality_metrics.get("no_change_turns") or 0)
+    turn_count = int(progress_quality_metrics.get("turn_count") or len(recent_transcript) or 0)
+    meaningful_rate = float(progress_quality_metrics.get("meaningful_progress_rate") or 0.0)
     diversity_rate = float(diversity_metrics.get("action_diversity_rate") or 1.0)
     repeated_actions = _safe_dict(diversity_metrics.get("repeated_actions"))
 
     anti_stall_active = bool(
         churn_streak >= 3
         or objective_stall_streak >= 3
+        or (turn_count >= 12 and meaningful_rate < 0.15)
+        or (turn_count >= 20 and no_change_turns >= max(10, int(turn_count * 0.50)))
         or diversity_rate < 0.75
         or repeated_actions
     )
@@ -224,9 +255,13 @@ def build_strategy_guidance(
     if anti_stall_active:
         hints.append("Do not repeat the same action or same question.")
         hints.append("Choose a different action category than the last repeated pattern when possible.")
-        hints.append("If an objective-focused action has not produced meaningful progress, try a new angle: inspect, ask a different NPC, move location, or review clues.")
+        hints.append("Stop micro-conversation. Do not just listen, nod, maintain eye contact, or ask for vague elaboration.")
+        hints.append("Choose an action likely to complete or advance a quest objective within 1-3 turns.")
+        hints.append("Prefer concrete verbs: report, accept, travel, inspect, search, confront, buy/rent, follow the lead, or ask a named NPC a specific objective question.")
+        hints.append("If the current NPC is repeating, switch target or location. Ask a different NPC, leave the tavern, inspect a clue, or follow the road/lead.")
+        hints.append("If all objectives are complete, seek a new quest hook or travel to the next chapter lead.")
     else:
-        hints.append("Prefer active objectives, but vary your approach when recent turns did not advance the story.")
+        hints.append("Prefer active objectives. Avoid spending more than 2 turns on the same conversation angle.")
 
     return {
         "strategy_profile": profile,
@@ -234,6 +269,9 @@ def build_strategy_guidance(
         "anti_stall_reasons": {
             "churn_only_streak": churn_streak,
             "objective_target_no_meaningful_progress_streak": objective_stall_streak,
+            "no_change_turns": no_change_turns,
+            "turn_count": turn_count,
+            "meaningful_progress_rate": meaningful_rate,
             "action_diversity_rate": diversity_rate,
             "repeated_actions": repeated_actions,
         },
@@ -262,7 +300,15 @@ def rerank_suggested_actions_for_strategy(
     recent_counts = Counter(recent_actions)
     churn_streak = int(progress_quality_metrics.get("churn_only_streak") or 0)
     objective_stall_streak = int(progress_quality_metrics.get("objective_target_no_meaningful_progress_streak") or 0)
-    anti_stall = churn_streak >= 3 or objective_stall_streak >= 3
+    no_change_turns = int(progress_quality_metrics.get("no_change_turns") or 0)
+    turn_count = int(progress_quality_metrics.get("turn_count") or 0)
+    meaningful_rate = float(progress_quality_metrics.get("meaningful_progress_rate") or 0.0)
+    anti_stall = (
+        churn_streak >= 3
+        or objective_stall_streak >= 3
+        or (turn_count >= 12 and meaningful_rate < 0.15)
+        or (turn_count >= 20 and no_change_turns >= max(10, int(turn_count * 0.50)))
+    )
 
     ranked = []
     for index, action in enumerate(suggested_actions):
@@ -272,15 +318,49 @@ def rerank_suggested_actions_for_strategy(
         base_priority = int(action.get("priority") or 0)
         category_weight = int(category_weights.get(category, 50))
         repeat_penalty = recent_counts.get(command, 0) * (40 if anti_stall else 20)
-        objective_penalty = 0
-        if anti_stall and category == "objective":
-            objective_penalty = 12
-        diversity_bonus = 10 if anti_stall and category in {"exploration", "social", "travel", "story_arc"} else 0
-        strategy_score = base_priority + category_weight + diversity_bonus - repeat_penalty - objective_penalty
+        passive_terms = (
+            "observe",
+            "listen",
+            "watch",
+            "wait",
+            "nod",
+            "maintaining eye contact",
+            "lean slightly",
+            "ask what they know",
+            "ask for elaboration",
+            "tell me more",
+        )
+        passive_penalty = 0
+        if anti_stall and any(term in command for term in passive_terms):
+            passive_penalty = 45
+        social_penalty = 0
+        if anti_stall and category == "social" and not any(
+            term in command
+            for term in ("objective", "witness", "report", "road", "bandit", "quest", "specific", "where", "who", "when")
+        ):
+            social_penalty = 30
+        progress_bonus = 0
+        if anti_stall and category in {"objective", "quest_log", "story_arc", "travel"}:
+            progress_bonus += 35
+        if anti_stall and any(term in command for term in ("report", "complete", "follow", "travel", "leave", "inspect", "search", "witness", "bandit", "road")):
+            progress_bonus += 25
+        diversity_bonus = 10 if anti_stall and category in {"exploration", "travel", "story_arc", "objective", "quest_log"} else 0
+        strategy_score = (
+            base_priority
+            + category_weight
+            + diversity_bonus
+            + progress_bonus
+            - repeat_penalty
+            - passive_penalty
+            - social_penalty
+        )
         action["strategy_score"] = strategy_score
         action["strategy_profile_id"] = profile["profile_id"]
         action["repeat_penalty"] = repeat_penalty
         action["anti_stall_applied"] = anti_stall
+        action["passive_penalty"] = passive_penalty
+        action["social_penalty"] = social_penalty
+        action["progress_bonus"] = progress_bonus
         ranked.append((strategy_score, -index, action))
 
     ranked.sort(reverse=True, key=lambda item: (item[0], item[1]))

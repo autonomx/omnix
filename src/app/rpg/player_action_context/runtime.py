@@ -1,4 +1,42 @@
+
 from __future__ import annotations
+
+def _post_witness_road_transition_active_in_state(state: Dict[str, Any]) -> bool:
+    state = _safe_dict(state)
+    facts = _safe_dict(state.get("witness_search_facts"))
+    hook_state = _safe_dict(state.get("autoplay_story_hook_state"))
+    fired_hooks = _safe_dict(hook_state.get("fired_hooks"))
+    location = _safe_str(
+        state.get("current_location")
+        or state.get("current_location_name")
+        or _safe_dict(state.get("scene")).get("location")
+    ).lower()
+    return bool(
+        _quest_completed_in_state(state, "quest:witness_search")
+        or _bandit_road_active_in_state(state)
+        or "hook:witness:pursue_bandit_trail" in fired_hooks
+        or "hook:travel:location:east_road_outside_tavern" in fired_hooks
+        or facts.get("followed_road")
+        or "east_road" in location
+        or "road outside" in location
+        or "outside the rusty flagon" in location
+    )
+
+
+def _is_stale_witness_or_bran_action_command(command: str) -> bool:
+    lower = _safe_str(command).lower()
+    stale = (
+        "ask bran where the cloaked traveler",
+        "ask bran what he personally saw",
+        "ask bran what they personally saw",
+        "report to bran that the cloaked traveler trail",
+        "stop repeating the report to bran",
+        "where the cloaked traveler went",
+        "cloak markings",
+        "witness search",
+        "side door",
+    )
+    return any(term in lower for term in stale)
 
 from typing import Any, Dict, List
 
@@ -26,6 +64,166 @@ def _safe_str(value: Any) -> str:
 
 def _unique_action_id(prefix: str, index: int) -> str:
     return f"{prefix}:{int(index or 0):03d}"
+
+
+def _objective_text_blob(objective: Dict[str, Any]) -> str:
+    objective = _safe_dict(objective)
+    parts = [
+        objective.get("objective_id"),
+        objective.get("title"),
+        objective.get("summary"),
+        objective.get("objective_text"),
+        objective.get("description"),
+    ]
+    return " ".join(_safe_str(part) for part in parts if _safe_str(part)).lower()
+
+
+def _quest_completed_in_state(state: Dict[str, Any], quest_id: str) -> bool:
+    quests = _safe_dict(_safe_dict(state).get("quest_progress")).get("quests")
+    quest = _safe_dict(_safe_dict(quests).get(quest_id))
+    return bool(quest.get("completed")) or _safe_str(quest.get("status")) == "completed"
+
+
+def _bandit_road_active_in_state(state: Dict[str, Any]) -> bool:
+    quests = _safe_dict(_safe_dict(state).get("quest_progress")).get("quests")
+    quest = _safe_dict(_safe_dict(quests).get("quest:bandit_road"))
+    return _safe_str(quest.get("status")) == "active"
+
+
+def _quest_specific_objective_actions(objective: Dict[str, Any], index: int) -> List[Dict[str, Any]]:
+    objective = _safe_dict(objective)
+    text = _objective_text_blob(objective)
+    objective_id = _safe_str(objective.get("objective_id"))
+    actions: List[Dict[str, Any]] = []
+
+    def add(
+        *,
+        action_id: str,
+        label: str,
+        command: str,
+        category: str,
+        priority: int,
+        reason: str,
+    ) -> None:
+        _append_action(
+            actions,
+            action_id=action_id,
+            label=label,
+            command=command,
+            category=category,
+            priority=priority,
+            reason=reason,
+            objective_id=objective_id,
+            metadata={"executable_objective_action": True},
+        )
+
+    if "witness" in text and ("find" in text or "search" in text):
+        add(
+            action_id=_unique_action_id("objective_witness_ask_bran", index),
+            label="Ask Bran for the witness lead",
+            command="I ask Bran where the cloaked traveler went after leaving by the side door.",
+            category="objective",
+            priority=100 - index,
+            reason="Executable Witness Search action: asks a named NPC for a precise lead.",
+        )
+        add(
+            action_id=_unique_action_id("objective_witness_inspect_exit", index),
+            label="Inspect the tavern exit for the witness trail",
+            command="I inspect the tavern side door and nearby street for mud, torn cloth, boot prints, or signs of a hurried exit.",
+            category="exploration",
+            priority=99 - index,
+            reason="Executable Witness Search action: investigates a concrete physical clue site.",
+        )
+        add(
+            action_id=_unique_action_id("objective_witness_follow_trail", index),
+            label="Follow the witness trail outside",
+            command="I leave the Rusty Flagon and follow the road outside, looking for fresh tracks or the cloaked traveler.",
+            category="travel",
+            priority=98 - index,
+            reason="Executable Witness Search action: changes location and follows the known lead.",
+        )
+
+    if ("report" in text or "findings" in text or "bran" in text) and "witness" in text:
+        add(
+            action_id=_unique_action_id("objective_witness_report_bran", index),
+            label="Report witness findings to Bran",
+            command="I report to Bran that the cloaked traveler trail points toward the road and ask what danger this confirms.",
+            category="objective",
+            priority=100 - index,
+            reason="Executable Witness Search action: reports findings to the quest giver.",
+        )
+
+    if "bandit" in text or "road" in text or "trail" in text:
+        add(
+            action_id=_unique_action_id("objective_bandit_follow_road", index),
+            label="Follow the bandit road trail",
+            command="I leave the tavern and follow the bandit road trail, watching for tracks, ambush signs, or anyone connected to the attack.",
+            category="travel",
+            priority=97 - index,
+            reason="Executable branch action: follows the next grounded story lead.",
+        )
+        add(
+            action_id=_unique_action_id("objective_bandit_prepare", index),
+            label="Prepare for the bandit road",
+            command="I ask Bran what supplies, allies, or warnings I need before pursuing the bandit road.",
+            category="objective",
+            priority=94 - index,
+            reason="Executable branch action: prepares for the next objective.",
+        )
+
+    return actions
+
+
+def _bandit_road_transition_actions(state: Dict[str, Any]) -> List[Dict[str, Any]]:
+    if not _bandit_road_active_in_state(state):
+        return []
+    actions: List[Dict[str, Any]] = []
+
+    def add(action_id: str, label: str, command: str, category: str, priority: int, reason: str) -> None:
+        _append_action(
+            actions,
+            action_id=action_id,
+            label=label,
+            command=command,
+            category=category,
+            priority=priority,
+            reason=reason,
+            metadata={"post_quest_transition": "bandit_road"},
+        )
+
+    add(
+        "bandit_road:leave_tavern",
+        "Leave the tavern for the road",
+        "I leave the Rusty Flagon and follow the road outside, looking for fresh tracks, wagon ruts, black cord, or bridge signs.",
+        "travel",
+        170,
+        "Witness Search is complete; transition to the Bandit Road lead.",
+    )
+    add(
+        "bandit_road:inspect_tracks",
+        "Inspect the road for bandit signs",
+        "I inspect the road outside the tavern for fresh tracks, wagon ruts, black cord, torn cloth, ambush signs, or bridge markings.",
+        "exploration",
+        168,
+        "Find concrete evidence for the Bandit Road quest.",
+    )
+    add(
+        "bandit_road:ask_travelers",
+        "Ask who travels before dawn",
+        "I ask Bran who is likely to travel the road before dawn and who needs warning first.",
+        "objective",
+        130,
+        "Identify the next person or place tied to the Bandit Road threat.",
+    )
+    add(
+        "bandit_road:prepare",
+        "Prepare for the road",
+        "I check my supplies, secure food and water, and prepare to follow the bandit road trail.",
+        "service",
+        124,
+        "Prepare before leaving the safety of the tavern.",
+    )
+    return actions
 
 
 def _append_action(
@@ -196,23 +394,30 @@ def _active_arc_rows(recap: Dict[str, Any]) -> List[Dict[str, Any]]:
     return rows
 
 
-def _objective_actions(objectives: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+def _objective_actions(objectives: List[Dict[str, Any]], state: Dict[str, Any]) -> List[Dict[str, Any]]:
     actions: List[Dict[str, Any]] = []
     for index, objective in enumerate(objectives[:5]):
         objective_id = _safe_str(objective.get("objective_id"))
-        text = _safe_str(objective.get("objective_text")) or _safe_str(objective.get("title"))
-        title = _safe_str(objective.get("title")) or text
-        if not text:
-            continue
+        title = _safe_str(objective.get("title") or objective.get("summary") or objective_id or "objective")
+        text = _safe_str(objective.get("objective_text") or objective.get("summary") or title)
+        if _quest_completed_in_state(state, "quest:witness_search"):
+            blob = _objective_text_blob(objective)
+            if "witness" in blob or "cloaked traveler" in blob or "side door" in blob:
+                continue
+        for specific in _quest_specific_objective_actions(objective, index):
+            actions.append(specific)
+        for specific in _quest_specific_objective_actions(objective, index):
+            actions.append(specific)
         _append_action(
             actions,
             action_id=_unique_action_id("objective", index),
             label=f"Pursue objective: {title}",
-            command=f"I focus on the objective: {text}",
+            command=f"I take a concrete in-world step toward this objective: {text}",
             category="objective",
-            priority=95 - index,
-            reason="Active objective from quest log.",
+            priority=70 - index,
+            reason="Low-priority fallback objective action. Specific executable objective actions should rank higher.",
             objective_id=objective_id,
+            metadata={"fallback_objective_action": True},
         )
     return actions
 
@@ -237,12 +442,13 @@ def _npc_actions(npcs: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         _append_action(
             actions,
             action_id=_unique_action_id("npc_ask_objective", index),
-            label=f"Ask {name} about current objectives",
-            command=f"I ask {name} if they know anything that can help with my current objective.",
+            label=f"Ask {name} a specific lead question",
+            command=f"I ask {name} what they personally saw about the cloaked traveler, the witness trail, or the road danger.",
             category="social",
-            priority=65 - index,
-            reason="NPC may provide grounded context or rumors.",
+            priority=48 - index,
+            reason="Specific NPC question. Generic current-objective questions are forbidden.",
             npc_id=npc_id,
+            metadata={"forbid_generic_objective_question": True},
         )
     return actions
 
@@ -314,7 +520,7 @@ def _mode_actions(mode: str, location: Dict[str, Any]) -> List[Dict[str, Any]]:
         actions,
         action_id="mode:listen",
         label="Listen for rumors or trouble",
-        command="I listen for rumors, signs of danger, or anything connected to my current objectives.",
+        command="I listen for a named lead about the cloaked traveler, the witness trail, or the road danger, then act on the clearest one.",
         category="exploration",
         priority=55,
         reason="General story discovery fallback.",
@@ -344,9 +550,9 @@ def _arc_actions(arcs: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
             actions,
             action_id=_unique_action_id("arc", index),
             label=f"Investigate story arc: {title}",
-            command=f"I look for a grounded way to make progress on {title}.",
+            command=f"I pursue {title} by asking a named NPC about the lead, inspecting a physical clue, or traveling toward the known danger.",
             category="story_arc",
-            priority=62 - index,
+            priority=50 - index,
             reason=f"Active story arc stage: {stage}",
             metadata={"arc_id": arc.get("arc_id"), "stage": stage},
         )
@@ -368,7 +574,7 @@ def build_suggested_actions(
     arcs = _active_arc_rows(recap)
 
     actions: List[Dict[str, Any]] = []
-    for row in _objective_actions(objectives):
+    for row in _objective_actions(objectives, simulation_state):
         actions.append(row)
     for row in _npc_actions(npcs):
         actions.append(row)
@@ -376,6 +582,17 @@ def build_suggested_actions(
         actions.append(row)
     for row in _mode_actions(mode, location):
         actions.append(row)
+
+    # Filter stale actions after post-transition
+    if _post_witness_road_transition_active_in_state(simulation_state):
+        actions = [
+            action
+            for action in actions
+            if not _is_stale_witness_or_bran_action_command(_safe_str(_safe_dict(action).get("command")))
+        ]
+        actions = _bandit_road_transition_actions(simulation_state) + actions
+    else:
+        actions = _bandit_road_transition_actions(simulation_state) + actions
 
     actions.sort(
         key=lambda row: (

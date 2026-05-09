@@ -353,3 +353,133 @@ def test_runtime_narration_accepts_repaired_provider_payload():
     assert diagnostics["provider_valid"] is True
     assert diagnostics["provider_repaired"] is True
     assert "cleared_followup_hooks" in diagnostics["provider_repair_actions"]
+
+
+def test_bran_fallback_dialogue_varies_for_repeated_objective_questions():
+    state = {
+        "recent_turns": [
+            {
+                "npc": {
+                    "speaker": "Bran",
+                    "line": "Ask me plainly: are you looking for the witness, the road, or the one who frightened them?",
+                }
+            }
+        ]
+    }
+    payload = build_deterministic_narration_payload(
+        player_action="I ask Bran if they know anything that can help with my current objective.",
+        simulation_state=state,
+        turn_contract={},
+    )
+    line = payload["npc"]["line"]
+    assert line
+    assert line != "Ask me plainly: are you looking for the witness, the road, or the one who frightened them?"
+    assert "room" not in line.lower()
+
+
+def test_bran_fallback_dialogue_varies_for_repeated_objective_questions():
+    from app.rpg.narration.runtime_narration_contract import build_deterministic_narration_payload
+
+    state = {
+        "recent_turns": [
+            {
+                "npc": {
+                    "speaker": "Bran",
+                    "line": "Be specific. Are you asking about the witness, the road, or the person who left by the side door?",
+                }
+            }
+        ]
+    }
+
+    payload = build_deterministic_narration_payload(
+        player_action="I ask Bran if they know anything that can help with my current objective.",
+        simulation_state=state,
+        turn_contract={},
+    )
+
+    line = payload["npc"]["line"]
+    assert line
+    assert line != "Be specific. Are you asking about the witness, the road, or the person who left by the side door?"
+    assert "room" not in line.lower()
+
+
+def test_bran_fallback_dialogue_uses_executable_witness_question():
+    from app.rpg.narration.runtime_narration_contract import build_deterministic_narration_payload
+
+    payload = build_deterministic_narration_payload(
+        player_action="I ask Bran where the cloaked traveler went after leaving by the side door.",
+        simulation_state={},
+        turn_contract={},
+    )
+
+    assert payload["npc"]["speaker"] == "Bran"
+    assert "side door" in payload["npc"]["line"].lower() or "traveler" in payload["npc"]["line"].lower()
+
+
+def test_bran_acknowledges_repeated_cloaked_traveler_question():
+    from app.rpg.narration.runtime_narration_contract import build_deterministic_narration_payload
+
+    state = {}
+    first = build_deterministic_narration_payload(
+        player_action="I ask Bran what he personally saw about the cloaked traveler, especially which door they used and where they went next.",
+        simulation_state=state,
+        turn_contract={},
+    )
+    second = build_deterministic_narration_payload(
+        player_action="I ask Bran what he personally saw about the cloaked traveler, especially which door they used and where they went next.",
+        simulation_state=state,
+        turn_contract={},
+    )
+    third = build_deterministic_narration_payload(
+        player_action="I ask Bran what he personally saw about the cloaked traveler, especially which door they used and where they went next.",
+        simulation_state=state,
+        turn_contract={},
+    )
+
+    assert first["npc"]["line"]
+    assert second["npc"]["line"]
+    assert third["npc"]["line"]
+    assert len({first["npc"]["line"], second["npc"]["line"], third["npc"]["line"]}) >= 2
+    assert (
+        "already" in third["npc"]["line"].lower()
+        or "same answer" in third["npc"]["line"].lower()
+        or "keep asking" in third["npc"]["line"].lower()
+        or "asked" in third["npc"]["line"].lower()
+    )
+
+
+def test_narration_payload_contains_dialogue_state_update_for_bran_reply():
+    from app.rpg.narration.runtime_narration_contract import build_deterministic_narration_payload
+
+    state = {}
+    payload = build_deterministic_narration_payload(
+        player_action="I report to Bran that the cloaked traveler trail points toward the road and ask what danger this confirms.",
+        simulation_state=state,
+        turn_contract={},
+    )
+
+    update = payload.get("dialogue_state_update")
+    assert isinstance(update, dict)
+    assert update.get("recent_exchanges")
+    assert update.get("npc_topics")
+
+
+def test_bran_acknowledges_repeated_report_loop():
+    from app.rpg.narration.runtime_narration_contract import build_deterministic_narration_payload
+
+    state = {}
+    action = "I report to Bran that the cloaked traveler trail points toward the road and ask what danger this confirms."
+    first = build_deterministic_narration_payload(player_action=action, simulation_state=state, turn_contract={})
+    second = build_deterministic_narration_payload(player_action=action, simulation_state=state, turn_contract={})
+    third = build_deterministic_narration_payload(player_action=action, simulation_state=state, turn_contract={})
+
+    assert first["npc"]["line"]
+    assert second["npc"]["line"]
+    assert third["npc"]["line"]
+    assert len({first["npc"]["line"], second["npc"]["line"], third["npc"]["line"]}) >= 2
+    assert (
+        "already" in third["npc"]["line"].lower()
+        or "same answer" in third["npc"]["line"].lower()
+        or "stop reporting" in third["npc"]["line"].lower()
+        or "heard you" in third["npc"]["line"].lower()
+    )

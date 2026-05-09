@@ -1,4 +1,5 @@
 from tests.rpg.autoplay.hundred_turn_eval import (
+    canonical_semantic_pair_from_turn,
     summarize_action_diversity,
     summarize_hundred_turn_eval,
     summarize_long_run_warnings,
@@ -192,3 +193,30 @@ def test_long_run_warning_flags_unknown_semantic_rate_in_strict_mode():
         warning["code"] == "semantic_action_extraction_unknown_rate"
         for warning in warnings["warnings"]
     )
+
+
+def test_canonical_semantic_pair_classifies_executable_witness_actions():
+    row = {
+        "player_action": "I inspect the tavern side door and nearby street for mud, torn cloth, boot prints, or signs of a hurried exit."
+    }
+    result = canonical_semantic_pair_from_turn(row)
+    assert result["semantic_action"] == "inspect_witness_trail"
+    assert result["target"] == "tavern_exit"
+    assert result["ok"] is True
+
+    row = {
+        "player_action": "I leave the Rusty Flagon and follow the road outside, looking for fresh tracks or the cloaked traveler."
+    }
+    result = canonical_semantic_pair_from_turn(row)
+    assert result["semantic_action"] == "follow_witness_trail"
+    assert result["target"] == "road"
+    assert result["ok"] is True
+
+
+def test_canonical_semantic_pair_normalizes_command_label_ask_bran():
+    result = canonical_semantic_pair_from_turn(
+        {"player_action": "Ask Bran what they personally saw about the cloaked traveler"}
+    )
+    assert result["semantic_action"] == "ask_witness_lead"
+    assert result["target"] == "Bran"
+    assert result["ok"] is True

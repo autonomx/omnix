@@ -152,7 +152,29 @@ def _compact_objectives(latest_context: Dict[str, Any]) -> Dict[str, Any]:
         "active_objective": _short_text(context.get("active_objective") or context.get("objective"), 300),
         "known_goal": _short_text(context.get("known_goal") or context.get("goal"), 300),
         "strategy_hint": _short_text(context.get("strategy_hint"), 300),
+        "active_objectives": _safe_list(context.get("active_objectives"))[:6],
+        "quest_log_summary": _safe_dict(context.get("quest_log_summary")),
     }
+
+
+def _compact_suggested_actions(latest_context: Dict[str, Any], limit: int = 8) -> List[Dict[str, Any]]:
+    out: List[Dict[str, Any]] = []
+    for row in _safe_list(_safe_dict(latest_context).get("suggested_actions"))[: max(1, int(limit or 8))]:
+        row = _safe_dict(row)
+        out.append(
+            {
+                "action_id": _safe_str(row.get("action_id")),
+                "label": _short_text(row.get("label"), 120),
+                "command": _short_text(row.get("command"), 260),
+                "category": _safe_str(row.get("category")),
+                "priority": row.get("priority"),
+                "strategy_score": row.get("strategy_score"),
+                "goal_pressure_score": row.get("goal_pressure_score"),
+                "objective_id": _safe_str(row.get("objective_id")),
+                "reason": _short_text(row.get("reason"), 160),
+            }
+        )
+    return out
 
 
 def build_player_agent_context_packet(
@@ -177,6 +199,9 @@ def build_player_agent_context_packet(
         "present_npcs": _compact_npcs(state, limit=6),
         "recent_turns": _compact_recent_turns(transcript_tail, limit=max(2, min(action_diversity_window, 6))),
         "objectives": _compact_objectives(latest_context),
+        "suggested_actions": _compact_suggested_actions(latest_context, limit=8),
+        "strategy_guidance": _safe_dict(latest_context.get("strategy_guidance")),
+        "goal_pressure": _safe_dict(latest_context.get("goal_pressure")),
         "player_visible": {
             "status": _safe_str(_safe_dict(state.get("player")).get("status")),
             "location": _safe_str(state.get("current_location")),
@@ -207,10 +232,17 @@ def build_player_agent_messages(
         "Choose one concrete next player action. Return JSON only. "
         "Do not narrate. Do not explain outside JSON. "
         "Do not repeat a recent action unless it clearly advances the objective. "
-        "Prefer actions that create meaningful progress through conversation, investigation, travel, service use, or combat when appropriate."
+        "Prefer actions that create strict meaningful progress: objective completion, quest log changes, travel/location changes, story arc changes, service completion, combat lifecycle changes, or grounded clue discovery. "
+        "Do not waste turns on vague listening, nodding, observing, maintaining eye contact, or asking for generic elaboration. "
+        "When goal_pressure is active, choose one of the suggested concrete actions or a similarly direct action likely to complete/advance a quest within 1-3 turns."
     )
     user = (
         "Choose the next player action from this compact context.\n\n"
+        "Decision policy:\n"
+        "1. If active objectives exist, choose an action that directly advances or completes one.\n"
+        "2. If no active objective exists, seek a new quest hook or travel to a lead.\n"
+        "3. Prefer concrete verbs: report, accept, travel, inspect, search, confront, buy/rent, follow, ask specifically.\n"
+        "4. Avoid passive micro-actions unless paired with a concrete progress verb.\n\n"
         "CONTEXT_JSON:\n"
         f"{context_json}\n\n"
         "Return exactly this JSON shape:\n"
