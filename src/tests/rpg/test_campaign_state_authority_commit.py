@@ -336,3 +336,120 @@ def test_handoff_guard_allows_future_evidence_to_complete_handoff():
     second = commit_campaign_state(state, phase="turn")
     handoff_quest = second["state"]["quest_progress"]["quests"][handoff_quest["quest_id"]]
     assert handoff_quest["objectives"][0]["completed"] is True
+
+
+def test_low_information_lead_labels_are_rejected():
+    from app.rpg.campaign_state.authority_commit import (
+        _candidate_lead_phrases_from_text,
+        _is_low_information_lead_label,
+    )
+
+    assert _is_low_information_lead_label("toward") is True
+    assert _is_low_information_lead_label("the clue") is True
+    assert _is_low_information_lead_label("the evidence") is True
+    assert _is_low_information_lead_label("the ruined observatory") is False
+    assert _is_low_information_lead_label("Captain Mara") is False
+
+    phrases = _candidate_lead_phrases_from_text("The trail now points toward the ruined observatory.")
+    assert "toward" not in [p.lower() for p in phrases]
+    assert any("ruined observatory" in p.lower() for p in phrases)
+
+
+def test_handoff_uses_specific_multitoken_lead_not_direction_word():
+    from app.rpg.campaign_state.authority_commit import commit_campaign_state
+
+    state = {
+        "quest_progress": {
+            "quests": {
+                "quest:first": {
+                    "quest_id": "quest:first",
+                    "title": "First Quest",
+                    "status": "completed",
+                    "completed": True,
+                    "objectives": [
+                        {
+                            "objective_id": "objective:first",
+                            "summary": "Finish the first lead.",
+                            "status": "completed",
+                            "completed": True,
+                        }
+                    ],
+                }
+            }
+        },
+        "autoplay_story_hook_state": {
+            "fired_hooks": {
+                "hook:lead:next": {
+                    "summary": "The trail now points toward the ruined observatory.",
+                }
+            }
+        },
+    }
+
+    result = commit_campaign_state(state, phase="turn")
+    handoff = [
+        quest for quest in result["state"]["quest_progress"]["quests"].values()
+        if quest.get("source") == "campaign_state_authority_commit"
+    ][0]
+
+    assert "toward" != handoff["lead"]["name"].lower()
+    assert "ruined observatory" in handoff["title"].lower()
+    assert handoff["objectives"][0]["semantic_action_templates"]
+
+
+def test_handoff_progresses_after_two_distinct_future_semantic_actions():
+    from app.rpg.campaign_state.authority_commit import commit_campaign_state
+
+    state = {
+        "quest_progress": {
+            "quests": {
+                "quest:first": {
+                    "quest_id": "quest:first",
+                    "title": "First Quest",
+                    "status": "completed",
+                    "completed": True,
+                    "objectives": [
+                        {"objective_id": "objective:first", "summary": "Done.", "completed": True, "status": "completed"}
+                    ],
+                }
+            }
+        },
+        "autoplay_story_hook_state": {
+            "fired_hooks": {
+                "hook:lead:next": {
+                    "summary": "The clue points toward the ruined observatory.",
+                }
+            }
+        },
+    }
+
+    first = commit_campaign_state(state, phase="turn", turn_record={"turn": 1})
+    handoff = [
+        quest for quest in first["state"]["quest_progress"]["quests"].values()
+        if quest.get("source") == "campaign_state_authority_commit"
+    ][0]
+    assert handoff["status"] == "active"
+
+    second = commit_campaign_state(
+        first["state"],
+        phase="turn",
+        turn_record={
+            "turn": 2,
+            "player_action": "I ask nearby people what they know about the ruined observatory.",
+        },
+    )
+    handoff = second["state"]["quest_progress"]["quests"][handoff["quest_id"]]
+    assert handoff["objectives"][0]["handoff_progress_count"] == 1
+    assert handoff["objectives"][0]["completed"] is False
+
+    third = commit_campaign_state(
+        second["state"],
+        phase="turn",
+        turn_record={
+            "turn": 3,
+            "player_action": "I inspect evidence connected to the ruined observatory, looking for concrete next steps.",
+        },
+    )
+    handoff = third["state"]["quest_progress"]["quests"][handoff["quest_id"]]
+    assert handoff["objectives"][0]["completed"] is True
+    assert handoff["completed"] is True

@@ -108,6 +108,24 @@ def _story_hook_fired(context: Dict[str, Any], hook_id: str) -> bool:
     return hook_id in fired
 
 
+def _scenario_progression_action_from_context(context: Dict[str, Any]) -> str:
+    context = _safe_dict(context)
+    recent = {
+        _safe_str(_safe_dict(row).get("player_action") or _safe_dict(row).get("action")).strip().lower()
+        for row in _safe_list(context.get("recent_turns"))[-4:]
+    }
+    for candidate in _safe_list(context.get("scenario_progression_actions")):
+        candidate = _safe_dict(candidate)
+        command = _safe_str(candidate.get("command")).strip()
+        if command and command.lower() not in recent and not is_meta_or_vague_action(command):
+            return command
+    return ""
+
+
+def _has_scenario_progression_actions(context: Dict[str, Any]) -> bool:
+    return bool(_safe_list(_safe_dict(context).get("scenario_progression_actions")))
+
+
 def _quest_status(context: Dict[str, Any], quest_id: str) -> str:
     quest_progress = _safe_dict(context.get("quest_progress"))
     quests = _safe_dict(quest_progress.get("quests"))
@@ -394,18 +412,92 @@ def _handoff_action_from_committed_context(context: Dict[str, Any]) -> str:
             obj = _safe_dict(obj)
             if obj.get("completed") or _safe_str(obj.get("status")) == "completed":
                 continue
-            suggested = _safe_list(obj.get("suggested_actions"))
-            for action in suggested:
-                action = _safe_str(action).strip()
-                if action and not is_meta_or_vague_action(action):
-                    return action
             subject = _safe_str(obj.get("subject") or lead_label or obj.get("summary") or title)
+            rotated = _choose_rotated_handoff_action(obj, context, subject)
+            if rotated and not is_meta_or_vague_action(rotated):
+                return rotated
             if subject:
                 return (
                     f"I investigate the lead: {subject}, checking the next place, person, "
                     "or evidence connected to it instead of repeating the old search."
                 )
     return ""
+
+
+def _recent_handoff_semantics(context: Dict[str, Any]) -> List[str]:
+    context = _safe_dict(context)
+    recent = []
+    for row in _safe_list(context.get("recent_turns"))[-6:]:
+        row = _safe_dict(row)
+        semantic = _safe_str(row.get("handoff_semantic") or row.get("semantic"))
+        if semantic:
+            recent.append(semantic)
+            continue
+        action = _safe_str(row.get("player_action") or row.get("action"))
+        if action:
+            recent.append(_semantic_for_action_text(action))
+    return recent
+
+
+def _semantic_for_action_text(action: str) -> str:
+    text = _safe_str(action).lower()
+    if any(word in text for word in ("ask", "question", "speak", "talk")):
+        return "ask_about_lead"
+    if any(word in text for word in ("inspect", "examine", "look", "search")):
+        return "inspect_lead"
+    if any(word in text for word in ("travel", "move toward", "go to", "head to")):
+        return "travel_to_lead"
+    if any(word in text for word in ("follow", "track", "trail", "route")):
+        return "follow_route"
+    if any(word in text for word in ("journal", "notes", "objective")):
+        return "consult_journal"
+    if any(word in text for word in ("compare", "connect", "cross-check")):
+        return "compare_evidence"
+    return "investigate_lead"
+
+
+def _choose_rotated_handoff_action(obj: Dict[str, Any], context: Dict[str, Any], fallback_subject: str) -> str:
+    obj = _safe_dict(obj)
+    templates = _safe_list(obj.get("semantic_action_templates"))
+    if not templates:
+        suggested = _safe_list(obj.get("suggested_actions"))
+        templates = [
+            {"semantic": _semantic_for_action_text(_safe_str(action)), "command": _safe_str(action)}
+            for action in suggested
+        ]
+
+    if not templates:
+        return ""
+
+    recent_semantics = _recent_handoff_semantics(context)
+    recent_set = set(recent_semantics[-3:])
+    history = _safe_list(obj.get("handoff_semantic_history"))
+    used_set = {
+        _safe_str(row.get("semantic"))
+        for row in history
+        if isinstance(row, dict)
+    }
+
+    # Prefer a semantic that was not just used and not already credited.
+    for template in templates:
+        template = _safe_dict(template)
+        semantic = _safe_str(template.get("semantic"))
+        command = _safe_str(template.get("command")).strip()
+        if command and semantic not in recent_set and semantic not in used_set:
+            return command
+
+    # Then allow previously credited semantics, but avoid exact recent repetition.
+    recent_actions = {
+        _safe_str(_safe_dict(row).get("player_action") or _safe_dict(row).get("action")).strip().lower()
+        for row in _safe_list(context.get("recent_turns"))[-4:]
+    }
+    for template in templates:
+        command = _safe_str(_safe_dict(template).get("command")).strip()
+        if command and command.lower() not in recent_actions:
+            return command
+
+    subject = _safe_str(fallback_subject or obj.get("subject") or "the unresolved lead")
+    return f"I take a different approach to {subject}, changing who I ask, where I search, or what evidence I compare."
 
 
 def _has_active_committed_handoff_quest(context: Dict[str, Any]) -> bool:
@@ -431,6 +523,9 @@ def _has_active_committed_handoff_quest(context: Dict[str, Any]) -> bool:
 def executable_action_for_context(context: Dict[str, Any], original_action: str = "") -> str:
     """Convert meta/planner text into an executable world command."""
     context = _safe_dict(context)
+    progression_action = _scenario_progression_action_from_context(context)
+    if progression_action:
+        return progression_action
     handoff_action = _handoff_action_from_committed_context(context)
     if handoff_action:
         return handoff_action
@@ -525,6 +620,26 @@ def repair_action_if_needed(action: str, context: Dict[str, Any], transcript: Li
     lower_action = action.lower()
     used_explicit_transcript = transcript is not None
     transcript = transcript if transcript is not None else _safe_list(context.get("recent_turns"))
+    progression_action = _scenario_progression_action_from_context(context)
+    if progression_action:
+        original_norm = original.strip().lower()
+        progression_norm = progression_action.strip().lower()
+        if progression_norm != original_norm and (
+            is_meta_or_vague_action(original)
+            or is_repeated_affordance_action(original, transcript)
+            or "follow up on the lead" in original_norm
+            or "review my quest log" in original_norm
+            or "road outside the tavern" in original_norm
+            or "fresh tracks" in original_norm
+            or "wagon ruts" in original_norm
+            or "black cord" in original_norm
+        ):
+            return {
+                "changed": True,
+                "action": progression_action,
+                "original_action": original,
+                "reason": "scenario_progression_graph_priority_repair",
+            }
     handoff_action = _handoff_action_from_committed_context(context)
 
     if handoff_action and (
@@ -533,12 +648,13 @@ def repair_action_if_needed(action: str, context: Dict[str, Any], transcript: Li
         or "review my quest log" in original.lower()
         or "road outside the tavern" in original.lower()
     ):
-        return {
-            "changed": handoff_action != original,
-            "action": handoff_action,
-            "original_action": original,
-            "reason": "committed_handoff_quest_priority_repair",
-        }
+                return {
+                    "changed": handoff_action != original,
+                    "action": handoff_action,
+                    "original_action": original,
+                    "reason": "committed_handoff_quest_priority_repair",
+                    "handoff_semantic": _semantic_for_action_text(handoff_action),
+                }
 
     if transcript and is_repeated_affordance_action(action, transcript):
         repaired = choose_rotated_affordance(context, action)
@@ -594,6 +710,15 @@ def repair_action_if_needed(action: str, context: Dict[str, Any], transcript: Li
                     "action": handoff_action,
                     "original_action": original,
                     "reason": "committed_handoff_quest_priority_repair",
+                }
+        if _has_scenario_progression_actions(context):
+            progression_action = _scenario_progression_action_from_context(context)
+            if progression_action:
+                return {
+                    "changed": progression_action.strip().lower() != original.strip().lower(),
+                    "action": progression_action,
+                    "original_action": original,
+                    "reason": "scenario_progression_graph_priority_repair",
                 }
         repaired = executable_action_for_context(context, action)
         return {

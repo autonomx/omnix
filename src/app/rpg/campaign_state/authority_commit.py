@@ -150,6 +150,136 @@ def _token_set(text: str) -> Set[str]:
     }
 
 
+LOW_INFORMATION_LEAD_TOKENS = {
+    "toward",
+    "near",
+    "nearby",
+    "outside",
+    "inside",
+    "around",
+    "ahead",
+    "behind",
+    "there",
+    "here",
+    "place",
+    "person",
+    "thing",
+    "someone",
+    "something",
+    "lead",
+    "clue",
+    "trail",
+    "evidence",
+    "sign",
+    "signs",
+    "track",
+    "tracks",
+    "route",
+    "path",
+    "road",
+    "area",
+    "location",
+    "direction",
+    "matter",
+    "issue",
+    "problem",
+    "danger",
+    "trouble",
+    "inspect",
+    "ask",
+    "follow",
+    "investigate",
+    "search",
+    "check",
+    "checking",
+}
+
+
+LEAD_CONNECTOR_TOKENS = {
+    "the",
+    "a",
+    "an",
+    "of",
+    "to",
+    "from",
+    "for",
+    "with",
+    "and",
+    "or",
+    "in",
+    "on",
+    "at",
+    "by",
+    "near",
+    "toward",
+    "towards",
+}
+
+
+def _lead_label(lead: Dict[str, Any]) -> str:
+    lead = _safe_dict(lead)
+    return _safe_str(lead.get("name") or lead.get("title") or lead.get("label") or lead.get("id")).strip()
+
+
+def _lead_content_tokens(label: str) -> List[str]:
+    tokens = [
+        token.strip(".,;:!?()[]{}\"'").lower()
+        for token in _safe_str(label).replace("_", " ").split()
+    ]
+    return [
+        token
+        for token in tokens
+        if token
+        and token not in LEAD_CONNECTOR_TOKENS
+        and token not in LOW_INFORMATION_LEAD_TOKENS
+        and len(token) >= 3
+    ]
+
+
+def _is_low_information_lead_label(label: str) -> bool:
+    label = " ".join(_safe_str(label).strip().split())
+    if not label:
+        return True
+    norm = _norm(label)
+    raw_tokens = [token for token in norm.split() if token]
+    content_tokens = _lead_content_tokens(label)
+
+    if len(raw_tokens) <= 1:
+        return True
+    if not content_tokens:
+        return True
+    if len(content_tokens) == 1 and content_tokens[0] in LOW_INFORMATION_LEAD_TOKENS:
+        return True
+
+    # Generic phrases like "the clue", "the evidence", "the trail" are not a
+    # good handoff subject unless paired with a concrete entity/place/item.
+    if len(raw_tokens) <= 3 and all(
+        token in LOW_INFORMATION_LEAD_TOKENS or token in LEAD_CONNECTOR_TOKENS
+        for token in raw_tokens
+    ):
+        return True
+
+    return False
+
+
+def _lead_specificity_score(label: str) -> int:
+    label = _safe_str(label)
+    content_tokens = _lead_content_tokens(label)
+    raw_tokens = [token for token in _norm(label).split() if token]
+    score = 0
+    score += min(len(content_tokens), 6) * 10
+    score += min(len(raw_tokens), 8) * 2
+    if any(ch.isupper() for ch in label):
+        score += 10
+    if any(char.isdigit() for char in label):
+        score += 5
+    if len(content_tokens) >= 2:
+        score += 15
+    if _is_low_information_lead_label(label):
+        score -= 100
+    return score
+
+
 def _evidence_matches_objective(evidence: Dict[str, Any], obj: Dict[str, Any]) -> bool:
     evidence_obj_id = _safe_str(evidence.get("objective_id"))
     if evidence_obj_id and evidence_obj_id == _objective_id(obj):
@@ -189,6 +319,123 @@ def _objective_is_handoff_guarded(obj: Dict[str, Any], evidence: Dict[str, Any],
         return True
 
     return False
+
+
+def _semantic_for_handoff_action(action_text: str) -> str:
+    action = _norm(action_text)
+    if not action:
+        return ""
+    if any(word in action for word in ("ask", "question", "speak", "talk")):
+        return "ask_about_lead"
+    if any(word in action for word in ("inspect", "examine", "look", "search")):
+        return "inspect_lead"
+    if any(word in action for word in ("travel", "move toward", "go to", "head to")):
+        return "travel_to_lead"
+    if any(word in action for word in ("follow", "track", "trail", "route")):
+        return "follow_route"
+    if any(word in action for word in ("journal", "notes", "objective")):
+        return "consult_journal"
+    if any(word in action for word in ("compare", "connect", "cross-check")):
+        return "compare_evidence"
+    return "investigate_lead"
+
+
+def _action_mentions_lead(action_text: str, lead_label: str) -> bool:
+    action_tokens = set(_lead_content_tokens(action_text))
+    lead_tokens = set(_lead_content_tokens(lead_label))
+    if not action_tokens or not lead_tokens:
+        return False
+    return bool(action_tokens & lead_tokens)
+
+
+def _record_handoff_action_progress(
+    state: Dict[str, Any],
+    *,
+    turn_record: Optional[Dict[str, Any]],
+    current_sequence: int,
+) -> Dict[str, Any]:
+    row = _safe_dict(turn_record)
+    action_text = _safe_str(row.get("player_action") or row.get("action"))
+    if not action_text:
+        return {"changed": False, "reason": "no_action"}
+
+    changed = False
+    progressed_objectives: List[Dict[str, Any]] = []
+    turn = int(row.get("turn") or row.get("turn_index") or state.get("turn_index") or 0)
+    semantic = _semantic_for_handoff_action(action_text)
+
+    for quest_id, quest, obj in _iter_objectives(state):
+        quest = _safe_dict(quest)
+        obj = _safe_dict(obj)
+        if not bool(obj.get("handoff_objective")) or _objective_done(obj):
+            continue
+        created_sequence = int(obj.get("created_commit_sequence") or 0)
+        if created_sequence and current_sequence <= created_sequence:
+            continue
+        lead = _safe_dict(quest.get("lead") or (obj.get("known_leads") or [{}])[0])
+        label = _lead_label(lead) or _safe_str(obj.get("subject") or obj.get("summary"))
+        if not _action_mentions_lead(action_text, label):
+            continue
+
+        history = obj.setdefault("handoff_semantic_history", [])
+        if not isinstance(history, list):
+            history = []
+            obj["handoff_semantic_history"] = history
+
+        previous_semantics = {
+            _safe_str(item.get("semantic"))
+            for item in history
+            if isinstance(item, dict)
+        }
+        history.append(
+            {
+                "turn": turn,
+                "commit_sequence": current_sequence,
+                "semantic": semantic,
+                "action": action_text,
+            }
+        )
+        del history[:-20]
+
+        distinct = sorted({sem for sem in previous_semantics | {semantic} if sem})
+        obj["distinct_semantic_actions"] = distinct
+        obj["handoff_progress_count"] = len(distinct)
+        obj["status"] = "active"
+        obj["progress_evidence"] = {
+            "source": "handoff_semantic_action_rotation",
+            "turn": turn,
+            "semantic": semantic,
+            "action": action_text,
+        }
+
+        if len(distinct) >= 2:
+            obj["completed"] = True
+            obj["status"] = "completed"
+            obj["completion_evidence"] = {
+                "source": "handoff_semantic_action_rotation",
+                "turn": turn,
+                "distinct_semantic_actions": distinct,
+            }
+
+        progressed_objectives.append(
+            {
+                "quest_id": quest_id,
+                "objective_id": _objective_id(obj),
+                "semantic": semantic,
+                "distinct_semantic_count": len(distinct),
+                "completed": _objective_done(obj),
+            }
+        )
+        changed = True
+
+    for _quest_id, quest in _iter_quests(state):
+        _sync_quest_completion(quest)
+
+    return {
+        "changed": changed,
+        "reason": "handoff_progress_recorded" if changed else "no_matching_handoff_objective",
+        "progressed_objectives": progressed_objectives,
+    }
 
 
 def _collect_evidence_from_progression_log(state: Dict[str, Any]) -> List[Dict[str, Any]]:
@@ -403,6 +650,99 @@ def _quest_counts(state: Dict[str, Any]) -> Dict[str, int]:
     }
 
 
+def _candidate_lead_phrases_from_text(text: str) -> List[str]:
+    """Extract generic concrete-ish lead phrases from deterministic text.
+
+    This deliberately avoids scenario-specific words. It prefers multi-token
+    noun-like spans and phrases after directional/result cues.
+    """
+    text = " ".join(_safe_str(text).replace("_", " ").replace(":", " ").split())
+    if not text:
+        return []
+
+    norm = _norm(text)
+    candidates: List[str] = []
+
+    cue_phrases = (
+        "points toward",
+        "point toward",
+        "points to",
+        "point to",
+        "leads toward",
+        "lead toward",
+        "leads to",
+        "lead to",
+        "indicates",
+        "suggests",
+        "reveals",
+        "mentions",
+        "names",
+        "identifies",
+        "connects to",
+        "connected to",
+        "near",
+        "at",
+        "in",
+    )
+
+    lowered = text.lower()
+    for cue in cue_phrases:
+        index = lowered.find(cue)
+        if index < 0:
+            continue
+        after = text[index + len(cue):].strip(" .,:;!?-")
+        if not after:
+            continue
+        words = after.split()
+        for size in (5, 4, 3, 2):
+            if len(words) >= size:
+                phrase = " ".join(words[:size]).strip(" .,:;!?-")
+                if phrase and not _is_low_information_lead_label(phrase):
+                    candidates.append(phrase)
+                    break
+
+    # Also extract capitalized multi-token spans as generic entity/location/faction candidates.
+    words = text.split()
+    span: List[str] = []
+    for word in words + [""]:
+        stripped = word.strip(".,;:!?()[]{}\"'")
+        if stripped[:1].isupper() and stripped.lower() not in {"i", "the", "a", "an"}:
+            span.append(stripped)
+            continue
+        if len(span) >= 2:
+            phrase = " ".join(span)
+            if not _is_low_information_lead_label(phrase):
+                candidates.append(phrase)
+        span = []
+
+    # Fallback: longest useful content-token phrase, but never one generic token.
+    if not candidates:
+        content = _lead_content_tokens(text)
+        if len(content) >= 2:
+            candidates.append(" ".join(content[:5]))
+
+    deduped: List[str] = []
+    seen = set()
+    for phrase in candidates:
+        phrase = " ".join(_safe_str(phrase).strip().split())
+        key = _norm(phrase)
+        if not key or key in seen or _is_low_information_lead_label(phrase):
+            continue
+        seen.add(key)
+        deduped.append(phrase)
+    deduped.sort(key=lambda phrase: -_lead_specificity_score(phrase))
+    return deduped[:5]
+
+
+def _lead_candidates_from_text(text: str, *, source: str, kind: str) -> List[Dict[str, Any]]:
+    leads: List[Dict[str, Any]] = []
+    for phrase in _candidate_lead_phrases_from_text(text):
+        lead = _lead_from_text(phrase, source=source, kind=kind)
+        if lead and not _is_low_information_lead_label(_lead_label(lead)):
+            leads.append(lead)
+    return leads
+
+
 def _lead_from_text(text: str, *, source: str, kind: str = "text") -> Dict[str, Any]:
     text = _safe_str(text).strip()
     if not text:
@@ -410,6 +750,8 @@ def _lead_from_text(text: str, *, source: str, kind: str = "text") -> Dict[str, 
     cleaned = " ".join(text.replace("_", " ").replace(":", " ").split())
     if len(cleaned) > 80:
         cleaned = cleaned[:80].rsplit(" ", 1)[0]
+    if _is_low_information_lead_label(cleaned):
+        return {}
     return {
         "id": _stable_id(f"lead:{source}", cleaned),
         "name": cleaned,
@@ -440,7 +782,9 @@ def _lead_priority(lead: Dict[str, Any]) -> int:
     source = _safe_str(lead.get("source"))
     kind = _safe_str(lead.get("kind"))
     base = int(LEAD_SOURCE_PRIORITY.get(source, 25))
-    label = _norm(lead.get("name") or lead.get("title") or lead.get("id"))
+    raw_label = _lead_label(lead)
+    label = _norm(raw_label)
+    base += _lead_specificity_score(raw_label)
     forward_terms = (
         "points toward",
         "trail now points",
@@ -528,7 +872,8 @@ def derive_unresolved_leads(
             if _safe_str(lead.get("name") or lead.get("title") or lead.get("id")):
                 lead.setdefault("source", key)
                 lead.setdefault("kind", "explicit")
-                leads.append(lead)
+                if not _is_low_information_lead_label(_lead_label(lead)):
+                    leads.append(lead)
 
     hook_state = _safe_dict(state.get("autoplay_story_hook_state"))
     fired_hooks = _safe_dict(hook_state.get("fired_hooks"))
@@ -572,8 +917,7 @@ def derive_unresolved_leads(
             for term in ("lead", "trail", "road", "bridge", "toward", "points", "location", "route")
         ):
             lead_text = summary or hook_id.replace("hook:", "").replace("_", " ")
-            lead = _lead_from_text(lead_text, source="autoplay_story_hook_state", kind="hook")
-            if lead:
+            for lead in _lead_candidates_from_text(lead_text, source="autoplay_story_hook_state", kind="hook"):
                 lead["hook_id"] = hook_id
                 leads.append(lead)
 
@@ -583,35 +927,23 @@ def derive_unresolved_leads(
         for topic in _safe_list(event.get("topics")):
             topic = _safe_str(topic)
             if len(topic) >= 4:
-                lead = _lead_from_text(topic, source="objective_evidence", kind="topic")
-                if lead:
-                    leads.append(lead)
+                leads.extend(_lead_candidates_from_text(topic, source="objective_evidence", kind="topic"))
         for key in ("target", "target_name", "location", "location_name"):
             value = _safe_str(event.get(key))
             if value:
-                lead = _lead_from_text(value, source="objective_evidence", kind=key)
-                if lead:
-                    leads.append(lead)
+                leads.extend(_lead_candidates_from_text(value, source="objective_evidence", kind=key))
         summary = _safe_str(row.get("summary"))
         if _safe_str(row.get("source")) == "objective_progression_log" and summary:
             lead = _lead_from_text(summary, source="objective_progression_log", kind="summary")
             if lead:
                 leads.append(lead)
         if summary and row.get("completed"):
-            tokens = list(_token_set(summary))
-            if tokens:
-                lead = _lead_from_text(" ".join(tokens[:6]), source="completed_objective_summary", kind="summary")
-                if lead:
-                    leads.append(lead)
+            leads.extend(_lead_candidates_from_text(summary, source="completed_objective_summary", kind="summary"))
 
     for row in _safe_list(transcript_tail)[-12:]:
         action = _safe_str(_safe_dict(row).get("player_action") or _safe_dict(row).get("action"))
         if action:
-            tokens = list(_token_set(action))
-            if tokens:
-                lead = _lead_from_text(" ".join(tokens[:8]), source="recent_action", kind="action")
-                if lead:
-                    leads.append(lead)
+            leads.extend(_lead_candidates_from_text(action, source="recent_action", kind="action"))
 
     scene = _safe_dict(state.get("scene"))
     scene_label = _safe_str(
@@ -637,16 +969,67 @@ def derive_unresolved_leads(
             }
         )
 
-    deduped: List[Dict[str, Any]] = []
-    seen = set()
+    deduped_by_label: Dict[str, Dict[str, Any]] = {}
     for lead in leads:
         lead = _safe_dict(lead)
-        label = _norm(lead.get("name") or lead.get("title") or lead.get("id"))
-        if not label or label in seen:
+        label_raw = _lead_label(lead)
+        if _is_low_information_lead_label(label_raw):
             continue
-        seen.add(label)
-        deduped.append(lead)
-    return _sort_leads(deduped)[:25]
+        label = _norm(label_raw)
+        existing = deduped_by_label.get(label)
+        if not existing or _lead_priority(lead) > _lead_priority(existing):
+            deduped_by_label[label] = lead
+    return _sort_leads(list(deduped_by_label.values()))[:25]
+
+
+HANDOFF_SEMANTIC_ACTIONS = (
+    "ask_about_lead",
+    "inspect_lead",
+    "travel_to_lead",
+    "follow_route",
+    "consult_journal",
+    "compare_evidence",
+    "search_related_location",
+    "question_related_person",
+)
+
+
+def _handoff_action_templates(label: str) -> List[Dict[str, str]]:
+    label = _safe_str(label).strip() or "the unresolved lead"
+    return [
+        {
+            "semantic": "ask_about_lead",
+            "command": f"I ask nearby people what they know about {label}.",
+        },
+        {
+            "semantic": "inspect_lead",
+            "command": f"I inspect evidence connected to {label}, looking for concrete next steps.",
+        },
+        {
+            "semantic": "travel_to_lead",
+            "command": f"I move toward {label} and watch for signs that confirm the lead.",
+        },
+        {
+            "semantic": "follow_route",
+            "command": f"I follow the route or trail connected to {label}.",
+        },
+        {
+            "semantic": "consult_journal",
+            "command": f"I compare {label} against my journal, clues, and current objectives.",
+        },
+        {
+            "semantic": "compare_evidence",
+            "command": f"I compare the evidence around {label} with what I already know.",
+        },
+        {
+            "semantic": "search_related_location",
+            "command": f"I search the location most closely connected to {label}.",
+        },
+        {
+            "semantic": "question_related_person",
+            "command": f"I question someone connected to {label} for a specific next lead.",
+        },
+    ]
 
 
 def _has_active_quest(state: Dict[str, Any]) -> bool:
@@ -677,6 +1060,7 @@ def apply_generic_handoff_from_leads(
 
     lead = _safe_dict(leads[0])
     label = _safe_str(lead.get("name") or lead.get("title") or lead.get("id") or "unresolved lead")
+    action_templates = _handoff_action_templates(label)
     quest_id = _stable_id("quest:investigate_lead", label)
     objective_id = _stable_id("objective:investigate_lead", label)
     quests = _safe_dict(_quest_progress(state).get("quests"))
@@ -712,11 +1096,11 @@ def apply_generic_handoff_from_leads(
                     "created_commit_sequence": int(current_sequence or 0),
                     "activated_after_turn": int(current_turn or 0),
                 },
-                "suggested_actions": [
-                    f"I follow up on the lead: {label}.",
-                    f"I ask nearby people what they know about {label}.",
-                    f"I inspect the place or evidence connected to {label}.",
-                ],
+                "suggested_actions": [row["command"] for row in action_templates],
+                "semantic_action_templates": action_templates,
+                "handoff_semantic_history": [],
+                "distinct_semantic_actions": [],
+                "handoff_progress_count": 0,
                 "status": "active",
                 "completed": False,
                 "known_leads": [lead],
@@ -889,6 +1273,11 @@ def commit_campaign_state(
         evidence,
         current_sequence=current_sequence,
     )
+    handoff_progress = _record_handoff_action_progress(
+        state,
+        turn_record=turn_record,
+        current_sequence=current_sequence,
+    )
     quest_summary = _quest_progress_summary(state)
     stale_state = _stale_state_summary(state, evidence, handoff)
 
@@ -914,6 +1303,7 @@ def commit_campaign_state(
             "recent": leads[:10],
         },
         "handoff_summary": handoff,
+        "handoff_progress_summary": handoff_progress,
         "quest_progress_summary": quest_summary,
         "stale_state_summary": stale_state,
         "performance": perf,

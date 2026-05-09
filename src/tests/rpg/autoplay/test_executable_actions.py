@@ -322,3 +322,64 @@ def test_scenario_specific_witness_repair_disabled_when_handoff_active():
 
     assert result["reason"] == "committed_handoff_quest_priority_repair"
     assert "bandit road" in result["action"].lower()
+
+
+def test_handoff_action_rotation_avoids_recent_semantic_repeat():
+    from tests.rpg.autoplay.executable_actions import repair_action_if_needed
+
+    context = {
+        "campaign_state_commit_summary": {
+            "quest_progress_summary": {
+                "quests": [
+                    {
+                        "quest_id": "quest:investigate_lead:test",
+                        "title": "Investigate Lead: ruined observatory",
+                        "status": "active",
+                        "completed": False,
+                        "source": "campaign_state_authority_commit",
+                        "handoff_quest": True,
+                        "lead": {"name": "ruined observatory"},
+                        "objectives": [
+                            {
+                                "objective_id": "objective:lead",
+                                "summary": "Investigate the unresolved lead: ruined observatory.",
+                                "status": "active",
+                                "completed": False,
+                                "subject": "ruined observatory",
+                                "handoff_objective": True,
+                                "semantic_action_templates": [
+                                    {
+                                        "semantic": "ask_about_lead",
+                                        "command": "I ask nearby people what they know about ruined observatory.",
+                                    },
+                                    {
+                                        "semantic": "inspect_lead",
+                                        "command": "I inspect evidence connected to ruined observatory, looking for concrete next steps.",
+                                    },
+                                ],
+                                "handoff_semantic_history": [
+                                    {"semantic": "ask_about_lead", "turn": 2}
+                                ],
+                            }
+                        ],
+                    }
+                ]
+            }
+        },
+        "recent_turns": [
+            {
+                "player_action": "I ask nearby people what they know about ruined observatory.",
+                "handoff_semantic": "ask_about_lead",
+            }
+        ],
+    }
+
+    result = repair_action_if_needed(
+        "I ask nearby people what they know about ruined observatory.",
+        context,
+    )
+
+    assert result["changed"] is True
+    assert result["reason"] == "committed_handoff_quest_priority_repair"
+    assert result["handoff_semantic"] == "inspect_lead"
+    assert "inspect" in result["action"].lower()
