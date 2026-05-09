@@ -28,7 +28,7 @@ def _semantic_aliases(semantic: str) -> List[str]:
     semantic = _safe_str(semantic)
     return {
         "ask": ["ask", "question", "talk", "speak", "who", "what", "where", "whether"],
-        "inspect": ["inspect", "examine", "look", "search", "check"],
+        "inspect": ["inspect", "examine", "look", "search", "check", "scout", "scan"],
         "travel": ["travel", "leave", "go", "head", "move", "walk", "set out"],
         "report": ["report", "tell", "explain", "show", "warn"],
         "warn": ["warn", "tell", "alert", "show", "explain"],
@@ -147,6 +147,14 @@ def _ensure_objective(
     if not quest_id:
         if objective_id in {"objective:warn_garran", "objective:travel_to_wagon_yard", "objective:choose_safe_route"}:
             quest_id = "quest:warn_wagon"
+        elif objective_id in {
+            "objective:leave_by_quarry_road",
+            "objective:scout_quarry_road",
+            "objective:spot_bridge_watchers",
+            "objective:choose_ambush_response",
+            "objective:protect_wagon",
+        }:
+            quest_id = "quest:quarry_road_ambush"
         elif objective_id in {"objective:find_witness", "objective:ask_mira", "objective:inspect_side_door"}:
             quest_id = "quest:witness_search"
     quest_id = quest_id or _infer_active_quest_id(state) or "quest:scenario_progression"
@@ -272,11 +280,17 @@ def get_active_progression_actions(
             row["priority"] = max(int(row.get("priority") or 0), int(node.priority or 0))
             out.append(row)
     out.sort(key=lambda row: (-int(row.get("priority") or 0), _safe_str(row.get("node_id"))))
+    if not out:
+        out = synthesize_progression_actions_from_objectives(state, limit=limit)
     state["scenario_progression_action_debug"] = {
         "graph_id": graph.graph_id,
         "available_action_count": len(out),
         "progression_state_revision": int(state.get("progression_state_revision") or 0),
         "completed_node_count": len(_nodes_completed(state)),
+        "synthesized_from_objectives": bool(
+            out and _safe_str(_safe_dict(out[0]).get("source")) == "scenario_progression_objective_synthesis"
+        ),
+        "active_graph_objective_count": len(_active_graph_objectives(state)),
         "nodes": debug_nodes[-30:],
     }
     return out[:limit]
@@ -330,11 +344,71 @@ def _action_matches_pattern(action: str, pattern: Dict[str, Any]) -> bool:
             "side door latch": ["side door", "latch", "threshold"],
             "garran wagon yard": ["wagon yard", "garran", "yard"],
             "quarry road": ["quarry road", "safer route", "alternate route"],
+            "rock shelf": ["rock shelf", "rocks", "shelf", "quarry"],
+            "wagon": ["wagon", "cart", "supply wagon"],
         }
         aliases = target_aliases.get(target_label, [target_label])
         if target_label and not any(alias in action_norm for alias in aliases):
             return False
     return True
+
+
+def _active_graph_objectives(state: Dict[str, Any]) -> List[Dict[str, Any]]:
+    out: List[Dict[str, Any]] = []
+    quests = _safe_dict(_quest_progress(state).get("quests"))
+    for quest_id, quest in quests.items():
+        quest = _safe_dict(quest)
+        if _safe_str(quest.get("source")) != "scenario_progression_graph":
+            continue
+        if bool(quest.get("completed")) or _safe_str(quest.get("status")) == "completed":
+            continue
+        for objective in _safe_list(quest.get("objectives")):
+            objective = _safe_dict(objective)
+            if bool(objective.get("completed")) or _safe_str(objective.get("status")) == "completed":
+                continue
+            out.append(
+                {
+                    "quest_id": _safe_str(quest_id),
+                    "quest_title": _safe_str(quest.get("title")),
+                    "objective_id": _safe_str(objective.get("objective_id")),
+                    "summary": _safe_str(objective.get("summary") or objective.get("title")),
+                }
+            )
+    return out
+
+
+def _synthesize_action_for_graph_objective(objective: Dict[str, Any]) -> Dict[str, Any]:
+    objective = _safe_dict(objective)
+    objective_id = _safe_str(objective.get("objective_id"))
+    summary = _safe_str(objective.get("summary"))
+    command_by_id = {
+        "objective:leave_by_quarry_road": "I leave Garran's wagon yard with the wagon and take the quarry road.",
+        "objective:scout_quarry_road": "I scout ahead on the quarry road for tracks, hiding places, and ambush signs.",
+        "objective:spot_bridge_watchers": "I scan the rock shelf for watchers or scouts watching the quarry road.",
+        "objective:choose_ambush_response": "I tell Garran we should slow the wagon and lure the watchers into revealing the ambush.",
+        "objective:protect_wagon": "I help Garran protect the wagon while drawing the ambushers out of hiding.",
+    }
+    command = command_by_id.get(objective_id) or f"I work on the objective: {summary}."
+    return {
+        "action_id": f"synth:{objective_id}",
+        "node_id": "",
+        "command": command,
+        "title": summary or objective_id,
+        "priority": 60,
+        "source": "scenario_progression_objective_synthesis",
+        "objective_id": objective_id,
+        "quest_id": _safe_str(objective.get("quest_id")),
+    }
+
+
+def synthesize_progression_actions_from_objectives(
+    state: Dict[str, Any],
+    *,
+    limit: int = 8,
+) -> List[Dict[str, Any]]:
+    objectives = _active_graph_objectives(state)
+    actions = [_synthesize_action_for_graph_objective(obj) for obj in objectives]
+    return actions[:limit]
 
 
 def _node_quest_hint(state: Dict[str, Any], node: ProgressionNode) -> str:
@@ -505,6 +579,7 @@ def apply_progression_for_action(
         "applied_effects": applied_effects[-20:],
         "next_action_ids": [_safe_str(row.get("action_id")) for row in next_actions],
         "graph_quest_ids": sorted(graph_quest_ids),
+        "active_graph_objective_count": len(_active_graph_objectives(state)),
         "elapsed_ms": elapsed_ms,
     }
     if summary["changed"]:

@@ -131,6 +131,19 @@ def _has_scenario_progression_actions(context: Dict[str, Any]) -> bool:
     )
 
 
+def _graph_flow_has_left_tavern(context: Dict[str, Any]) -> bool:
+    context = _safe_dict(context)
+    current_location = _safe_str(context.get("current_location"))
+    progression_summary = _safe_dict(context.get("progression_authority_summary"))
+    completed_nodes = _safe_dict(context.get("progression_completed_nodes"))
+    return bool(
+        current_location in {"location:garran_wagon_yard", "location:quarry_road"}
+        or "travel_to_wagon_yard" in completed_nodes
+        or "prepare_quarry_road" in completed_nodes
+        or int(progression_summary.get("completed_node_count") or 0) >= 10
+    )
+
+
 def _quest_status(context: Dict[str, Any], quest_id: str) -> str:
     quest_progress = _safe_dict(context.get("quest_progress"))
     quests = _safe_dict(quest_progress.get("quests"))
@@ -644,6 +657,28 @@ def repair_action_if_needed(action: str, context: Dict[str, Any], transcript: Li
                 "action": progression_action,
                 "original_action": original,
                 "reason": "scenario_progression_graph_priority_repair",
+            }
+    if _graph_flow_has_left_tavern(context):
+        original_norm = original.strip().lower()
+        if (
+            "road outside the tavern" in original_norm
+            or "ask bran who last saw the witness" in original_norm
+            or "fresh tracks" in original_norm
+            or ("side door" in original_norm and "bran" in original_norm)
+        ):
+            progression_action = _scenario_progression_action_from_context(context)
+            if progression_action:
+                return {
+                    "changed": True,
+                    "action": progression_action,
+                    "original_action": original,
+                    "reason": "scenario_progression_graph_repaired_stale_tavern_fallback",
+                }
+            return {
+                "changed": True,
+                "action": "I check in with Garran and focus on the active wagon-road objective.",
+                "original_action": original,
+                "reason": "scenario_progression_graph_suppressed_stale_tavern_fallback",
             }
     handoff_action = _handoff_action_from_committed_context(context)
 

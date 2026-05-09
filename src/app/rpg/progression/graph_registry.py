@@ -540,9 +540,200 @@ def _rusty_flagon_graph() -> ScenarioProgressionGraph:
                         "start_quest": "quest:quarry_road_ambush",
                         "title": "Quarry Road Ambush",
                     },
-                    {"set_location": "location:quarry_road", "name": "Quarry Road"},
+                    {
+                        "unlock_objective": "objective:leave_by_quarry_road",
+                        "summary": "Leave the wagon yard by the quarry road.",
+                    },
+                    {
+                        "unlock_objective": "objective:scout_quarry_road",
+                        "summary": "Scout the quarry road for ambush signs.",
+                    },
+                    {
+                        "unlock_objective": "objective:spot_bridge_watchers",
+                        "summary": "Identify any watchers or scouts near the route.",
+                    },
+                    {
+                        "unlock_objective": "objective:choose_ambush_response",
+                        "summary": "Choose how to handle the ambush threat.",
+                    },
+                    {
+                        "unlock_lead": "lead:quarry_road",
+                        "text": "The quarry road avoids the mill bridge.",
+                    },
+                    {
+                        "unlock_lead": "lead:leave_by_quarry_road",
+                        "text": "Leave the wagon yard by the quarry road.",
+                    },
+                    {"unlock_location": "location:quarry_road", "name": "Quarry Road"},
                 ],
                 priority=100,
+            ),
+            ProgressionNode(
+                node_id="leave_by_quarry_road",
+                title="Leave the wagon yard by the quarry road.",
+                requires=[{"lead": "lead:leave_by_quarry_road"}],
+                action_patterns=[
+                    {"semantic": "travel", "target_id": "location:quarry_road", "topics_any": ["quarry road", "leave"]},
+                    {"semantic": "travel", "topics_any": ["leave", "quarry road"]},
+                    {"semantic": "travel", "topics_any": ["wagon yard", "quarry road"]},
+                    {"semantic": "travel", "topics_any": ["take", "quarry road"]},
+                ],
+                suggested_actions=[
+                    _a(
+                        "leave_by_quarry_road",
+                        "I leave Garran's wagon yard with the wagon and take the quarry road.",
+                        "travel",
+                        target_type="location",
+                        target_id="location:quarry_road",
+                        priority=95,
+                    )
+                ],
+                effects=[
+                    {"set_location": "location:quarry_road", "name": "Quarry Road"},
+                    {"advance_objective": "objective:leave_by_quarry_road", "amount": 1},
+                    {"complete_objective": "objective:leave_by_quarry_road"},
+                    {
+                        "unlock_fact": "fact:quarry_road_reached",
+                        "text": "The wagon party reached the quarry road.",
+                    },
+                    {
+                        "unlock_lead": "lead:scout_quarry_road",
+                        "text": "Scout the quarry road before advancing.",
+                    },
+                ],
+            ),
+            ProgressionNode(
+                node_id="scout_quarry_road",
+                title="Scout the quarry road.",
+                requires=[{"lead": "lead:scout_quarry_road"}],
+                action_patterns=[
+                    {"semantic": "inspect", "target_id": "location:quarry_road", "topics_any": ["scout", "quarry road"]},
+                    {"semantic": "inspect", "topics_any": ["quarry road", "tracks"]},
+                    {"semantic": "inspect", "topics_any": ["ambush signs", "quarry"]},
+                    {"semantic": "inspect", "topics_any": ["rocks", "hiding places"]},
+                ],
+                suggested_actions=[
+                    _a(
+                        "scout_quarry_road",
+                        "I scout ahead on the quarry road for tracks, hiding places, and ambush signs.",
+                        "inspect",
+                        target_type="location",
+                        target_id="location:quarry_road",
+                        priority=94,
+                    )
+                ],
+                effects=[
+                    {"advance_objective": "objective:scout_quarry_road", "amount": 1},
+                    {"complete_objective": "objective:scout_quarry_road"},
+                    {
+                        "unlock_fact": "fact:quarry_road_tracks",
+                        "text": "Fresh boot tracks cross the quarry road near a rock shelf.",
+                    },
+                    {
+                        "unlock_lead": "lead:spot_bridge_watchers",
+                        "text": "Look for watchers near the rock shelf.",
+                    },
+                ],
+            ),
+            ProgressionNode(
+                node_id="spot_bridge_watchers",
+                title="Spot the watchers near the quarry road.",
+                requires=[{"lead": "lead:spot_bridge_watchers"}],
+                action_patterns=[
+                    {"semantic": "inspect", "topics_any": ["watchers", "rock shelf"]},
+                    {"semantic": "inspect", "topics_any": ["lookout", "quarry road"]},
+                    {"semantic": "inspect", "topics_any": ["bandit scouts", "rocks"]},
+                    {"semantic": "ask", "target_id": "npc:garran", "topics_any": ["watchers", "lookouts", "rock shelf"]},
+                ],
+                suggested_actions=[
+                    _a(
+                        "spot_bridge_watchers",
+                        "I scan the rock shelf for watchers or scouts watching the quarry road.",
+                        "inspect",
+                        target_type="location",
+                        target_id="location:quarry_road",
+                        priority=93,
+                    )
+                ],
+                effects=[
+                    {"advance_objective": "objective:spot_bridge_watchers", "amount": 1},
+                    {"complete_objective": "objective:spot_bridge_watchers"},
+                    {
+                        "unlock_fact": "fact:bandit_watchers_spotted",
+                        "text": "Two watchers are hidden near the rock shelf.",
+                    },
+                    {
+                        "unlock_lead": "lead:choose_ambush_response",
+                        "text": "Decide whether to lure, avoid, or confront the watchers.",
+                    },
+                ],
+            ),
+            ProgressionNode(
+                node_id="choose_ambush_response",
+                title="Choose how to respond to the ambush threat.",
+                requires=[{"lead": "lead:choose_ambush_response"}],
+                action_patterns=[
+                    {"semantic": "prepare", "topics_any": ["lure", "watchers"]},
+                    {"semantic": "prepare", "topics_any": ["protect", "wagon"]},
+                    {"semantic": "prepare", "topics_any": ["avoid", "ambush"]},
+                    {"semantic": "tell", "target_id": "npc:garran", "topics_any": ["plan", "watchers", "wagon"]},
+                ],
+                suggested_actions=[
+                    _a(
+                        "choose_ambush_response",
+                        "I tell Garran we should slow the wagon and lure the watchers into revealing the ambush.",
+                        "tell",
+                        target_type="npc",
+                        target_id="npc:garran",
+                        priority=92,
+                    )
+                ],
+                effects=[
+                    {"advance_objective": "objective:choose_ambush_response", "amount": 1},
+                    {"complete_objective": "objective:choose_ambush_response"},
+                    {
+                        "unlock_fact": "fact:ambush_response_chosen",
+                        "text": "The party chooses a plan to draw out the ambushers without risking the wagon.",
+                    },
+                    {
+                        "unlock_objective": "objective:protect_wagon",
+                        "summary": "Protect the wagon while executing the plan.",
+                    },
+                    {
+                        "unlock_lead": "lead:protect_wagon",
+                        "text": "Protect the wagon while the ambush plan unfolds.",
+                    },
+                ],
+            ),
+            ProgressionNode(
+                node_id="protect_wagon_or_lure_bandits",
+                title="Protect the wagon and draw out the ambushers.",
+                requires=[{"lead": "lead:protect_wagon"}],
+                action_patterns=[
+                    {"semantic": "prepare", "topics_any": ["protect", "wagon"]},
+                    {"semantic": "prepare", "topics_any": ["lure", "bandits"]},
+                    {"semantic": "inspect", "topics_any": ["ambushers", "wagon"]},
+                    {"semantic": "tell", "target_id": "npc:garran", "topics_any": ["protect", "wagon"]},
+                ],
+                suggested_actions=[
+                    _a(
+                        "protect_wagon_or_lure_bandits",
+                        "I help Garran protect the wagon while drawing the ambushers out of hiding.",
+                        "prepare",
+                        target_type="location",
+                        target_id="location:quarry_road",
+                        priority=91,
+                    )
+                ],
+                effects=[
+                    {"advance_objective": "objective:protect_wagon", "amount": 1},
+                    {"complete_objective": "objective:protect_wagon"},
+                    {
+                        "unlock_fact": "fact:ambushers_drawn_out",
+                        "text": "The ambushers are drawn out before they can strike the wagon.",
+                    },
+                    {"complete_quest": "quest:quarry_road_ambush"},
+                ],
             ),
         ],
     )

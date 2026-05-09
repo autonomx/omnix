@@ -115,6 +115,30 @@ def evaluate_behavioral_autoplay(
         later < earlier
         for earlier, later in zip(sidecar_counts, sidecar_counts[1:])
     )
+    graph_empty_with_active_objective_rows = [
+        i + 1
+        for i, row in enumerate(rows)
+        if bool(_safe_dict(row).get("scenario_progression_actions_empty_with_active_objectives"))
+    ]
+    graph_actions_empty_with_active_graph_quest_ok = not graph_empty_with_active_objective_rows
+
+    active_graph_quests = [
+        _safe_dict(quest)
+        for quest in graph_quest_state.values()
+        if not bool(_safe_dict(quest).get("completed"))
+        and _safe_str(_safe_dict(quest).get("status")) != "completed"
+    ]
+    active_graph_quest_has_objectives_ok = True
+    for quest in active_graph_quests:
+        objectives = _safe_list(quest.get("objectives"))
+        active_objectives = [
+            obj for obj in objectives
+            if not bool(_safe_dict(obj).get("completed"))
+            and _safe_str(_safe_dict(obj).get("status")) != "completed"
+        ]
+        if not active_objectives:
+            active_graph_quest_has_objectives_ok = False
+            break
 
     same_action_too_much = bool(exact_counts and max(exact_counts.values()) > max(3, requested_turns // 4))
     exact_streak_bad = max_exact_streak > 3
@@ -135,6 +159,8 @@ def evaluate_behavioral_autoplay(
         "no_repeated_nonrepeatable_node_ok": not repeated_graph_node,
         "progression_sidecar_monotonic_ok": not sidecar_decreased,
         "progression_sidecar_fields_present_ok": sidecar_fields_present,
+        "graph_actions_empty_with_active_graph_quest_ok": graph_actions_empty_with_active_graph_quest_ok,
+        "active_graph_quest_has_objectives_ok": active_graph_quest_has_objectives_ok,
         "quest_transition_ok": not no_quest_transition,
         "second_stage_quest_ok": not no_second_stage,
         "location_progress_ok": not no_location_change,
@@ -155,9 +181,12 @@ def evaluate_behavioral_autoplay(
             "unique_progression_node_count": unique_node_count,
             "matched_node_counts": matched_node_counts,
             "repeated_node_ids": repeated_node_ids,
+            "graph_empty_with_active_objective_rows": graph_empty_with_active_objective_rows,
             "quest_count": len(quests),
             "completed_quest_count": len(completed_quests),
             "active_quest_count": len(active_quests),
+            "active_graph_quest_count": len(active_graph_quests),
+            "active_graph_quest_has_objectives": active_graph_quest_has_objectives_ok,
             "unlocked_npc_count": len(unlocked_npcs),
             "unlocked_location_count": len(unlocked_locations),
             "fact_count": len(facts),
