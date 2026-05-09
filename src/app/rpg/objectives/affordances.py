@@ -3,6 +3,8 @@ from __future__ import annotations
 import re
 from typing import Any, Dict, List, Tuple
 
+from app.rpg.objectives.reconciliation import reconcile_objective_progression_into_quests
+
 
 def _safe_dict(value: Any) -> Dict[str, Any]:
     return value if isinstance(value, dict) else {}
@@ -269,6 +271,10 @@ def objective_affordance_actions(
 
 def collect_active_objectives(state: Dict[str, Any]) -> List[Dict[str, Any]]:
     state = _safe_dict(state)
+    try:
+        state = _safe_dict(reconcile_objective_progression_into_quests(state).get("state")) or state
+    except Exception:
+        pass
     out: List[Dict[str, Any]] = []
 
     quest_sources = [

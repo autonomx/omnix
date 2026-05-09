@@ -46,6 +46,55 @@ def is_repeated_affordance_action(action: str, transcript: List[Dict[str, Any]],
     return recent_action_signature_counts(transcript).get(sig, 0) >= int(threshold or 2)
 
 
+AFFORDANCE_ROTATION_ORDER = {
+    "ask": ["inspect", "travel", "follow", "report", "prepare", "confront"],
+    "inspect": ["follow", "travel", "ask", "report", "prepare", "confront"],
+    "travel": ["inspect", "follow", "ask", "report", "prepare", "confront"],
+    "follow": ["inspect", "travel", "ask", "report", "prepare", "confront"],
+    "report": ["travel", "inspect", "ask", "prepare", "confront"],
+    "prepare": ["travel", "inspect", "ask", "confront", "report"],
+}
+
+
+def _semantic_of_action(action: str) -> str:
+    return infer_semantic_action(_safe_str(action))
+
+
+def choose_rotated_affordance(context: Dict[str, Any], repeated_action: str) -> str:
+    repeated_semantic = _semantic_of_action(repeated_action)
+    preferred = AFFORDANCE_ROTATION_ORDER.get(repeated_semantic, ["inspect", "travel", "ask", "report", "prepare"])
+    candidates = []
+    for row in build_objective_affordances_for_state(context, limit=20):
+        command = _safe_str(_safe_dict(row).get("command")).strip()
+        if not command:
+            continue
+        candidate_semantic = _semantic_of_action(command)
+        candidates.append((command, candidate_semantic))
+
+    repeated_sig = action_signature(repeated_action)
+    recent_counts = recent_action_signature_counts(_safe_list(context.get("recent_turns")), limit=12)
+
+    for wanted_semantic in preferred:
+        for command, semantic in candidates:
+            if semantic != wanted_semantic:
+                continue
+            sig = action_signature(command)
+            if sig == repeated_sig:
+                continue
+            if recent_counts.get(sig, 0) >= 2:
+                continue
+            if is_meta_or_vague_action(command):
+                continue
+            return command
+
+    for command, semantic in candidates:
+        sig = action_signature(command)
+        if sig != repeated_sig and recent_counts.get(sig, 0) < 2 and not is_meta_or_vague_action(command):
+            return command
+
+    return ""
+
+
 def _dialogue_topic_repeat_count(context: Dict[str, Any], npc_id: str, topic: str) -> int:
     dialogue = _safe_dict(_safe_dict(context).get("dialogue_state"))
     topics = _safe_dict(dialogue.get("npc_topics"))
@@ -166,6 +215,16 @@ META_ACTION_PATTERNS = (
     "stop repeating",
     "stop repeating the report",
     "stop repeating the report to bran",
+    # Added from rpg-design.txt meta-planner block
+    "review my quest log",
+    "review the quest log",
+    "decide what objective to pursue",
+    "choose next objective",
+    "choose the next objective",
+    "what objective to pursue next",
+    "decide what to do next",
+    "make progress",
+    "look at my quest log",
 )
 
 
@@ -349,6 +408,38 @@ def executable_action_for_context(context: Dict[str, Any], original_action: str 
     if suggested:
         return suggested
 
+    generic_affordances = build_objective_affordances_for_state(context, limit=6)
+    for row in generic_affordances:
+        command = _safe_str(_safe_dict(row).get("command")).strip()
+        if (
+            command
+            and not is_meta_or_vague_action(command)
+            and not is_repeated_affordance_action(command, context)
+        ):
+            return command
+
+    if is_meta_or_vague_action(original_action):
+        quests = _safe_dict(_safe_dict(context.get("quest_progress")).get("quests"))
+        completed_count = sum(
+            1
+            for quest in quests.values()
+            if _safe_dict(quest).get("completed") or _safe_str(_safe_dict(quest).get("status")) == "completed"
+        )
+        active_count = sum(
+            1
+            for quest in quests.values()
+            if _safe_str(_safe_dict(quest).get("status")) == "active" and not _safe_dict(quest).get("completed")
+        )
+        if completed_count > 0 and active_count <= 0:
+            return (
+                "I investigate the most recent unresolved lead from my last discovery, "
+                "checking nearby people, places, tracks, objects, and rumors for the next concrete danger."
+            )
+        return (
+            "I ask a nearby NPC about urgent trouble, unresolved rumors, missing people, "
+            "dangerous places, or work that needs immediate action."
+        )
+
     return f"I ask {npc} for one specific fact about the strongest lead, then immediately act on that answer."
 
 
@@ -364,21 +455,24 @@ def repair_action_if_needed(action: str, context: Dict[str, Any], transcript: Li
         }
     action = normalized.strip()
     lower_action = action.lower()
+    used_explicit_transcript = transcript is not None
+    transcript = transcript if transcript is not None else _safe_list(context.get("recent_turns"))
 
     if transcript and is_repeated_affordance_action(action, transcript):
-        repaired = ""
-        for row in build_objective_affordances_for_state(context, limit=10):
-            candidate = _safe_str(_safe_dict(row).get("command"))
-            if candidate and action_signature(candidate) != action_signature(action) and not (transcript and is_repeated_affordance_action(candidate, transcript)):
-                repaired = candidate
-                break
+        repaired = choose_rotated_affordance(context, action)
+        reason = (
+            "repeated_affordance_action_repaired_by_semantic_rotation"
+            if used_explicit_transcript
+            else "repeated_affordance_action_repaired_to_alternate_objective_affordance"
+        )
         if not repaired:
             repaired = executable_action_for_context(context, action)
+            reason = "repeated_affordance_action_repaired_by_semantic_rotation"
         return {
             "changed": repaired != action,
             "action": repaired,
             "original_action": original,
-            "reason": "repeated_affordance_action_repaired_to_alternate_objective_affordance",
+            "reason": reason,
         }
     if _post_witness_road_transition_active(context) and _post_transition_forbidden_bran_or_witness_action(action):
         repaired = _road_progression_action(context, action)

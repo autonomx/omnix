@@ -260,9 +260,25 @@ class PlayerLoop:
         # TIER 9: Store events in narrative memory
         self.memory.add_events(world_events)
         
+
         # TIER 9: Check story arcs for completion
         completed_arcs = self.story_arcs.update({"tick": self._tick})
         world_events.extend(completed_arcs)
+
+        # --- RPG DESIGN: GENERIC QUEST HANDOFF (handoff.py) ---
+        try:
+            from app.rpg.objectives.handoff import apply_generic_quest_handoff
+            # Use the world state dict if available, else fallback to memory
+            state = self.world if isinstance(self.world, dict) else (self.memory if isinstance(self.memory, dict) else {})
+            handoff_result = apply_generic_quest_handoff(state)
+            if handoff_result.get("changed"):
+                # Update world state with new quest if needed
+                if isinstance(self.world, dict):
+                    self.world.update(handoff_result.get("state", {}))
+                elif isinstance(self.memory, dict):
+                    self.memory.update(handoff_result.get("state", {}))
+        except Exception:
+            pass
         
         # TIER 10: Autonomous NPC Agent System
         # NPCs act on their own goals, generating events that enrich the world

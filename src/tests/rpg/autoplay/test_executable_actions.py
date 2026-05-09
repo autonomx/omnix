@@ -1,4 +1,6 @@
 from tests.rpg.autoplay.executable_actions import (
+    action_signature,
+    choose_rotated_affordance,
     executable_action_for_context,
     is_meta_or_vague_action,
     normalize_command_label_action,
@@ -141,3 +143,55 @@ def test_repeated_affordance_loop_summary_flags_signature_streak():
 
     assert summary["ok"] is False
     assert summary["max_streak"] == 4
+
+
+def test_repeated_inspect_affordance_rotates_to_different_semantic():
+    repeated = (
+        "I inspect the forest trail for signs of missing scout: tracks, marks, "
+        "damage, residue, missing items, witnesses, or hidden clues."
+    )
+    context = {
+        "quest_log_state": {
+            "quests": {
+                "quest:scout": {
+                    "title": "Missing Scout",
+                    "quest_giver": "Captain Arlen",
+                    "objectives": [
+                        {
+                            "objective_id": "objective:find_scout",
+                            "summary": "Find the missing scout.",
+                            "objective_type": "find",
+                            "subject": "missing scout",
+                            "known_leads": ["forest trail"],
+                        }
+                    ],
+                }
+            }
+        },
+    }
+    transcript = [
+        {"player_action": repeated},
+        {"player_action": repeated},
+        {"player_action": repeated},
+    ]
+
+    rotated = choose_rotated_affordance(context, repeated)
+
+    assert rotated
+    assert action_signature(rotated) != action_signature(repeated)
+
+    repaired = repair_action_if_needed(repeated, context, transcript)
+    assert repaired["changed"] is True
+    assert repaired["reason"] == "repeated_affordance_action_repaired_by_semantic_rotation"
+    assert action_signature(repaired["action"]) != action_signature(repeated)
+
+
+def test_review_quest_log_meta_action_repairs_to_concrete_world_action():
+    result = repair_action_if_needed(
+        "I review my quest log and decide what objective to pursue next.",
+        {"recent_turns": []},
+    )
+
+    assert result["changed"] is True
+    assert "review my quest log" not in result["action"].lower()
+    assert result["action"].startswith("I ")

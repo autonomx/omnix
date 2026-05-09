@@ -13,6 +13,32 @@ def _safe_list(value: Any) -> List[Any]:
 def _safe_str(value: Any) -> str:
     return value if isinstance(value, str) else ""
 
+
+def _iter_quest_objectives(state: Dict[str, Any]):
+    state = _safe_dict(state)
+    source_paths = (
+        ("quest_progress", "quests"),
+        ("quest_log_state", "quests"),
+    )
+    for root_key, quests_key in source_paths:
+        quests = _safe_dict(_safe_dict(state.get(root_key)).get(quests_key))
+        for quest_id, quest_raw in quests.items():
+            quest = _safe_dict(quest_raw)
+            for obj in _safe_list(quest.get("objectives")):
+                yield root_key, quest_id, quest, _safe_dict(obj)
+
+    arcs = _safe_dict(_safe_dict(state.get("story_arc_milestone_state")).get("arcs"))
+    for arc_id, arc_raw in arcs.items():
+        arc = _safe_dict(arc_raw)
+        for milestone in _safe_list(arc.get("milestones")):
+            milestone = _safe_dict(milestone)
+            if "objective_id" not in milestone:
+                milestone["objective_id"] = _safe_str(milestone.get("milestone_id") or f"{arc_id}:milestone")
+            if "summary" not in milestone:
+                milestone["summary"] = _safe_str(milestone.get("title") or milestone.get("objective_text"))
+            yield "story_arc_milestone_state", arc_id, arc, milestone
+
+
 def _norm(value: Any) -> str:
     return " ".join(_safe_str(value).lower().strip().split())
 
@@ -192,58 +218,110 @@ def apply_objective_progression_rules(
 ) -> Dict[str, Any]:
     state = _safe_dict(state)
     event = build_progression_event(player_action=player_action, semantic_pair=semantic_pair, state=state)
-    changed = False
     completed: List[Dict[str, Any]] = []
     progressed: List[Dict[str, Any]] = []
+    touched_quests: List[Dict[str, Any]] = []
+    for source_key, quest_id, quest, obj in _iter_quest_objectives(state):
+        if objective_progress_matches_event(obj, event):
+            obj["completed"] = True
+            obj["status"] = "completed"
+            completed.append({
+                "source": source_key,
+                "quest_id": _safe_str(quest.get("quest_id") or quest_id),
+                "objective_id": _safe_str(obj.get("objective_id") or obj.get("id")),
+                "summary": _safe_str(obj.get("summary") or obj.get("objective_text") or obj.get("title")),
+                "event": event,
+                "matched": True,
+                "completed": True,
+                "partial": False,
+            })
+            if quest not in touched_quests:
+                touched_quests.append(quest)
+        elif objective_partial_progress_matches_event(obj, event):
+            progress_count = int(obj.get("progress_count", 0)) + 1
+            obj["progress_count"] = progress_count
+            obj["status"] = _safe_str(obj.get("status") or "active")
+            progressed.append({
+                "source": source_key,
+                "quest_id": _safe_str(quest.get("quest_id") or quest_id),
+                "objective_id": _safe_str(obj.get("objective_id") or obj.get("id")),
+                "summary": _safe_str(obj.get("summary") or obj.get("objective_text") or obj.get("title")),
+                "progress_count": progress_count,
+                "event": event,
+                "matched": True,
+                "completed": False,
+                "partial": True,
+            })
+            if quest not in touched_quests:
+                touched_quests.append(quest)
 
-    quest_sources = [
-        _safe_dict(_safe_dict(state.get("quest_progress")).get("quests")),
-        _safe_dict(_safe_dict(state.get("quest_log_state")).get("quests")),
-    ]
-    for quests in quest_sources:
-        for quest_id, quest in quests.items():
-            quest = _safe_dict(quest)
-            objectives = _safe_list(quest.get("objectives"))
-            for obj in objectives:
-                obj = _safe_dict(obj)
-                if objective_progress_matches_event(obj, event):
-                    obj["completed"] = True
-                    obj["status"] = "completed"
-                    changed = True
-                    completed.append({
-                        "quest_id": _safe_str(quest.get("quest_id") or quest_id),
-                        "objective_id": _safe_str(obj.get("objective_id") or obj.get("id")),
-                        "summary": _safe_str(obj.get("summary") or obj.get("objective_text") or obj.get("title")),
-                        "event": event,
-                    })
-                elif objective_partial_progress_matches_event(obj, event):
-                    progress_count = int(obj.get("progress_count") or 0) + 1
-                    obj["progress_count"] = progress_count
-                    obj["status"] = _safe_str(obj.get("status") or "active")
-                    changed = True
-                    progressed.append({
-                        "quest_id": _safe_str(quest.get("quest_id") or quest_id),
-                        "objective_id": _safe_str(obj.get("objective_id") or obj.get("id")),
-                        "summary": _safe_str(obj.get("summary") or obj.get("objective_text") or obj.get("title")),
-                        "progress_count": progress_count,
-                        "event": event,
-                    })
-            if objectives and all(bool(_safe_dict(obj).get("completed")) or _safe_str(_safe_dict(obj).get("status")) == "completed" for obj in objectives):
-                quest["completed"] = True
-                quest["status"] = "completed"
+    for quest in touched_quests:
+        objectives = _safe_list(quest.get("objectives") or quest.get("milestones"))
+        if objectives and all(
+            bool(_safe_dict(obj).get("completed")) or _safe_str(_safe_dict(obj).get("status")) == "completed"
+            for obj in objectives
+        ):
+            quest["completed"] = True
+            quest["status"] = "completed"
 
     progress_log = state.setdefault("objective_progression_log", [])
     if isinstance(progress_log, list):
+        # Calculate metrics
+        evaluated_count = 0
+        matched_count = 0
+        completed_count = 0
+        partial_count = 0
+        unmatched_count = 0
+        if completed:
+            completed_count = len(completed)
+        if progressed:
+            partial_count = len(progressed)
+        evaluated_count = completed_count + partial_count
+        matched_count = completed_count + partial_count
+        unmatched_count = 1 if not completed and not progressed else 0
+        ok = matched_count > 0
+
+        if not completed and not progressed:
+            progress_log.append({
+                "partial": False,
+                "matched": False,
+                "completed": False,
+                "event": event,
+                "summary": "Objective progression evaluated but no objective matched.",
+                "evaluated_count": evaluated_count,
+                "matched_count": matched_count,
+                "completed_count": completed_count,
+                "partial_count": partial_count,
+                "unmatched_count": unmatched_count,
+                "ok": ok,
+            })
         for row in completed:
+            row = dict(row)
+            row["matched"] = True
+            row["completed"] = True
+            row["evaluated_count"] = evaluated_count
+            row["matched_count"] = matched_count
+            row["completed_count"] = completed_count
+            row["partial_count"] = partial_count
+            row["unmatched_count"] = unmatched_count
+            row["ok"] = ok
             progress_log.append(row)
         for row in progressed:
             row = dict(row)
-            row["partial"] = True
+            row.setdefault("partial", True)
+            row.setdefault("matched", True)
+            row.setdefault("completed", False)
+            row["evaluated_count"] = evaluated_count
+            row["matched_count"] = matched_count
+            row["completed_count"] = completed_count
+            row["partial_count"] = partial_count
+            row["unmatched_count"] = unmatched_count
+            row["ok"] = ok
             progress_log.append(row)
         del progress_log[:-100]
 
     return {
-        "changed": changed,
+        "changed": bool(completed or progressed),
         "completed_objectives": completed,
         "progressed_objectives": progressed,
         "event": event,

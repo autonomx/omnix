@@ -3047,6 +3047,7 @@ def _render_qa_dashboard(summary: Dict[str, Any], metrics: Dict[str, Any]) -> st
     background = _safe_dict(summary.get("background_result_timing_summary") or metrics.get("background_result_timing_summary"))
     perf = _safe_dict(summary.get("performance_budget_summary") or metrics.get("performance_budget_summary"))
     live = _safe_dict(perf.get("live_blocking"))
+    reconciliation = _safe_dict(summary.get("quest_reconciliation_summary") or metrics.get("quest_reconciliation_summary"))
 
     gate_rows = ""
     for name, value in list(gates.items())[:40]:
@@ -3082,6 +3083,14 @@ def _render_qa_dashboard(summary: Dict[str, Any], metrics: Dict[str, Any]) -> st
           <div class="rpg-stat-label">Avg Live Blocking</div>
           <div class="rpg-stat-value">{html.escape(str(live.get('avg_human_playable_blocking_ms') or 0))}ms</div>
         </div>
+                <div class="rpg-stat">
+                    <div class="rpg-stat-label">Quest Reconciliation</div>
+                    <div class="rpg-stat-value">{html.escape(str(reconciliation.get('count') or 0))}</div>
+                </div>
+                <div class="rpg-stat">
+                    <div class="rpg-stat-label">Reconciliation Errors</div>
+                    <div class="rpg-stat-value">{html.escape(str(len(_safe_list(reconciliation.get('errors')))))}</div>
+                </div>
       </div>
       <h3>Quality Gates</h3>
       <table class="rpg-table">
@@ -4039,8 +4048,11 @@ def build_campaign_report_model(
     metrics: Dict[str, Any],
     health: Dict[str, Any],
 ) -> Dict[str, Any]:
-    latest_state = _latest_state_from_transcript(transcript)
-    latest_state_source = _latest_state_source(transcript)
+    latest_state = _safe_dict(summary.get("latest_state") or metrics.get("latest_state"))
+    latest_state_source = "summary.latest_state" if latest_state else ""
+    if not latest_state:
+        latest_state = _latest_state_from_transcript(transcript)
+        latest_state_source = _latest_state_source(transcript)
     initial_state = _initial_state_from_transcript(transcript)
     quality = _safe_dict(metrics.get("progress_quality"))
     turn_count_for_rates = max(1, len(transcript))
@@ -4215,6 +4227,8 @@ def build_campaign_report_model(
             summary.get("quest_progress_summary")
             or metrics.get("quest_progress_summary")
         ),
+        "quest_reconciliation_summary": _safe_dict(summary.get("quest_reconciliation_summary")),
+        "quest_handoff_summary": _safe_dict(summary.get("quest_handoff_summary")),
         "story_beat_summary": _safe_dict(
             summary.get("story_beat_summary")
             or metrics.get("story_beat_summary")
@@ -5596,7 +5610,7 @@ def render_campaign_report_html(
     )
     legacy_report_sections = f"""
       {_render_calendar_and_journal(model.get("campaign_calendar_summary") or {}, model.get("player_journal_summary") or {})}
-      {_render_quest_progress(_quest_summary_from_latest_state(model) or model.get("quest_progress_summary") or {})}
+      {_render_quest_progress(_quest_summary_from_latest_state(model) or _safe_dict(model.get("quest_progress_summary")) or {})}
       {_render_npc_evolution_cards(model.get("npc_evolution_report_summary") or {})}
       {_render_hundred_turn_eval(model)}
       {_render_action_diversity(model.get("action_diversity_summary") or {})}
@@ -5818,6 +5832,8 @@ def render_campaign_report_html(
     <h3>Hook Counts</h3>
     {_render_json_details("Hook counts", model.get("hook_counts"))}
   </section>
+
+    {_render_qa_dashboard(summary, metrics)}
 
   <section class="rpg-promoted-section" id="runtime-narration-diagnostics">
     <h2>Runtime Narration Diagnostics</h2>

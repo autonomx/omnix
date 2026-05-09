@@ -1,707 +1,813 @@
-N88.2 — Gate Wiring + Objective Progress Persistence + Affordance Rotation
-Goal
+N88.5.1 — Pre-Turn Advisory Promotion Fast Path + Slow-Path Guard
+Why this is needed
 
-Fix the concrete failures from run 180:
+The run is slow because pre_turn_deferred_advisory_promotion is blocking the main autoplay loop for tens of seconds to minutes:
 
-1. lifecycle diagnostics are red, but quality_gate_summary.ok is still true.
-2. objective_progression_summary exists but count == 0.
-3. quest_progress_summary still falsely claims latest_state.quest_progress.
-4. repeated affordance repair redirects into a new repeated inspect loop.
-5. strict health/progress is false but summary.ok remains green.
+turn 13: pre_turn_deferred_advisory_promotion elapsed_ms=43093
+turn 14: pre_turn_deferred_advisory_promotion elapsed_ms=87891
+turn 15: pre_turn_deferred_advisory_promotion elapsed_ms=185704
 
-This patch does not add more Bran/Witness/Road-specific logic. It completes the generic lifecycle:
+The actual runtime turn execution is only around 38–41ms, player-agent calls are around 3s, and background provider calls are around 5–6s, so this is deterministic advisory promotion work, not LM Studio/provider latency.
 
-action selected
-→ objective progression applied
-→ progress persisted into runtime_state
-→ repeated affordance signatures rotated
-→ final quest summary rebuilt after all merges
-→ final quality gate recomputed last
-1. Patch src/tests/rpg/autoplay_llm_campaign.py
-1A. Add final lifecycle gate builder
+The current pre-turn promotion path still does expensive work:
+
+load_profiles_into_row_runtime(...)
+consume_accepted_advisory_projections(...)
+deepcopy/merge large runtime_state
+promotion/evolution bookkeeping
+
+For pre-turn incremental promotion, we only need lightweight candidate promotion so the next turn can see recent advisory state. Full NPC evolution/profile loading can wait until final artifact/report processing.
+
+1. Patch src/tests/rpg/autoplay/advisory_promotion_runtime.py
+1A. Add timing import
+--- src/tests/rpg/autoplay/advisory_promotion_runtime.py
++++ src/tests/rpg/autoplay/advisory_promotion_runtime.py
+@@
+ from __future__ import annotations
+ 
+ from copy import deepcopy
++from time import perf_counter
+ from typing import Any, Dict, List
+1B. Add small timing helper
+
+Add after _safe_list(...):
+
+--- src/tests/rpg/autoplay/advisory_promotion_runtime.py
++++ src/tests/rpg/autoplay/advisory_promotion_runtime.py
+@@
+ def _safe_list(value: Any) -> List[Any]:
+     return value if isinstance(value, list) else []
++
++
++def _elapsed_ms(start: float) -> int:
++    return int(round((perf_counter() - start) * 1000))
+1C. Add pre-turn compact state helper
+
+Add after _compact_deferred_advisory_state(...):
+
+--- src/tests/rpg/autoplay/advisory_promotion_runtime.py
++++ src/tests/rpg/autoplay/advisory_promotion_runtime.py
+@@
+ def _compact_deferred_advisory_state(
+@@
+     runtime_state["deferred_advisory"] = advisory
+     return runtime_state
++
++
++def _compact_pre_turn_runtime_state(runtime_state: Dict[str, Any]) -> Dict[str, Any]:
++    """Keep only the namespaces needed by pre-turn advisory promotion.
++
++    Full runtime_state can include profile stores, journal history, report state,
++    large quest/event mirrors, and evolution projections. Pre-turn promotion
++    only needs enough state to validate/accept recent advisory candidates.
++    """
++    runtime_state = _safe_dict(runtime_state)
++    keep_keys = (
++        "deferred_advisory",
++        "quest_progress",
++        "quest_log_state",
++        "settings",
++        "ui_state",
++        "current_location",
++        "current_location_name",
++        "scene",
++        "dialogue_state",
++        "autoplay_story_hook_state",
++        "objective_progression_log",
++        "quest_reconciliation_log",
++        "quest_handoff_log",
++    )
++    compact: Dict[str, Any] = {}
++    for key in keep_keys:
++        if key in runtime_state:
++            compact[key] = deepcopy(runtime_state[key])
++    return compact
++
++
++def _compact_pre_turn_simulation_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
++    """Small simulation-state view for deterministic promotion validation."""
++    simulation_state = _safe_dict(simulation_state)
++    keep_keys = (
++        "turn_contract",
++        "npcs",
++        "present_npcs",
++        "nearby_npcs",
++        "visible_npcs",
++        "scene",
++        "current_location",
++        "current_location_name",
++        "quest_progress",
++        "quest_log_state",
++        "npc_progression_state",
++        "npc_profile_state",
++    )
++    compact: Dict[str, Any] = {}
++    for key in keep_keys:
++        if key in simulation_state:
++            compact[key] = deepcopy(simulation_state[key])
++    return compact
+1D. Add fast-path parameters to run_deferred_advisory_promotions_for_transcript
+
+Patch function signature:
+
+--- src/tests/rpg/autoplay/advisory_promotion_runtime.py
++++ src/tests/rpg/autoplay/advisory_promotion_runtime.py
+@@
+ def run_deferred_advisory_promotions_for_transcript(
+@@
+     carry_pending_limit: int = 50,
+     carry_accepted_limit: int = 100,
+     carry_rejected_limit: int = 100,
++    fast_pre_turn: bool = False,
++    skip_profile_load_for_pre_turn: bool = True,
++    skip_evolution_for_pre_turn: bool = True,
++    skip_mutation_compare_for_pre_turn: bool = True,
+ ) -> Dict[str, Any]:
+1E. Track timing breakdown
+
+After local counters:
+
+--- src/tests/rpg/autoplay/advisory_promotion_runtime.py
++++ src/tests/rpg/autoplay/advisory_promotion_runtime.py
+@@
+     evolution_signals_created = 0
+     evolution_signals_consumed = 0
+     latest_profile_persist_result: Dict[str, Any] = {}
++    timing_breakdown: Dict[str, int] = {
++        "row_total_ms": 0,
++        "merge_runtime_ms": 0,
++        "simulation_state_ms": 0,
++        "profile_load_ms": 0,
++        "promotion_ms": 0,
++        "evolution_consume_ms": 0,
++        "profile_persist_ms": 0,
++    }
++    fast_path_used = bool(incremental_pre_turn and fast_pre_turn)
+1F. Compact carried state in fast pre-turn mode
+
+Patch the carried-state setup:
+
+--- src/tests/rpg/autoplay/advisory_promotion_runtime.py
++++ src/tests/rpg/autoplay/advisory_promotion_runtime.py
+@@
+         if incremental_pre_turn:
+             carried_runtime_state = _compact_deferred_advisory_state(
+                 previous_runtime_state,
+@@
+                 accepted_limit=int(carry_accepted_limit or 100),
+                 rejected_limit=int(carry_rejected_limit or 100),
+             )
++            if fast_path_used:
++                carried_runtime_state = _compact_pre_turn_runtime_state(carried_runtime_state)
+         else:
+             carried_runtime_state = deepcopy(previous_runtime_state)
+1G. Replace expensive per-row pre-turn work with fast path
+
+Patch inside the for row in rows: loop.
+
+Find:
+
+        runtime_state = _merge_deferred_advisory_state(
+            carried_runtime_state,
+            _runtime_state_from_row(row),
+        )
+
+        simulation_state_before = _simulation_state_from_row(row)
+        # Important: profile loading must enrich the already-merged runtime
+        # state. If it reads only the row-local runtime_state, it can drop
+        # carried deferred_advisory candidates from previous turns, causing all
+        # candidates to remain same-turn pending forever.
+        row["runtime_state"] = runtime_state
+        profile_load_summary = load_profiles_into_row_runtime(
+            row=row,
+            simulation_state=simulation_state_before,
+        )
+        runtime_state = _safe_dict(row.get("runtime_state")) or runtime_state
+        simulation_state_after_probe = deepcopy(simulation_state_before)
+
+        updated_runtime_state, result = promote_advisory_candidates(
+            simulation_state=simulation_state_after_probe,
+            runtime_state=runtime_state,
+            current_turn=turn_index,
+            max_promotions_per_turn=max_promotions_per_turn,
+        )
+
+        # Safety: promotion must not mutate simulation_state.
+        mutated_authoritative_state = simulation_state_after_probe != simulation_state_before
+        result["mutated_authoritative_state"] = mutated_authoritative_state
+
+Replace with:
+
+--- src/tests/rpg/autoplay/advisory_promotion_runtime.py
++++ src/tests/rpg/autoplay/advisory_promotion_runtime.py
+@@
+-        runtime_state = _merge_deferred_advisory_state(
+-            carried_runtime_state,
+-            _runtime_state_from_row(row),
+-        )
+-
+-        simulation_state_before = _simulation_state_from_row(row)
+-        # Important: profile loading must enrich the already-merged runtime
+-        # state. If it reads only the row-local runtime_state, it can drop
+-        # carried deferred_advisory candidates from previous turns, causing all
+-        # candidates to remain same-turn pending forever.
+-        row["runtime_state"] = runtime_state
+-        profile_load_summary = load_profiles_into_row_runtime(
+-            row=row,
+-            simulation_state=simulation_state_before,
+-        )
+-        runtime_state = _safe_dict(row.get("runtime_state")) or runtime_state
+-        simulation_state_after_probe = deepcopy(simulation_state_before)
+-
+-        updated_runtime_state, result = promote_advisory_candidates(
+-            simulation_state=simulation_state_after_probe,
+-            runtime_state=runtime_state,
+-            current_turn=turn_index,
+-            max_promotions_per_turn=max_promotions_per_turn,
+-        )
+-
+-        # Safety: promotion must not mutate simulation_state.
+-        mutated_authoritative_state = simulation_state_after_probe != simulation_state_before
+-        result["mutated_authoritative_state"] = mutated_authoritative_state
++        row_start = perf_counter()
++
++        merge_start = perf_counter()
++        row_runtime_state = _runtime_state_from_row(row)
++        if fast_path_used:
++            row_runtime_state = _compact_pre_turn_runtime_state(row_runtime_state)
++        runtime_state = _merge_deferred_advisory_state(
++            carried_runtime_state,
++            row_runtime_state,
++        )
++        if fast_path_used:
++            runtime_state = _compact_deferred_advisory_state(
++                _compact_pre_turn_runtime_state(runtime_state),
++                candidate_limit=int(carry_candidate_limit or 50),
++                pending_limit=int(carry_pending_limit or 50),
++                accepted_limit=int(carry_accepted_limit or 100),
++                rejected_limit=int(carry_rejected_limit or 100),
++            )
++        timing_breakdown["merge_runtime_ms"] += _elapsed_ms(merge_start)
++
++        sim_start = perf_counter()
++        simulation_state_before = _simulation_state_from_row(row)
++        if fast_path_used:
++            simulation_state_before = _compact_pre_turn_simulation_state(simulation_state_before)
++        timing_breakdown["simulation_state_ms"] += _elapsed_ms(sim_start)
++
++        # Important for full/final promotion: profile loading enriches merged
++        # runtime state. For pre-turn fast path, skip disk/profile work.
++        row["runtime_state"] = runtime_state
++        profile_load_start = perf_counter()
++        if fast_path_used and skip_profile_load_for_pre_turn:
++            profile_load_summary = {
++                "ok": True,
++                "skipped": True,
++                "reason": "fast_pre_turn_skip_profile_load",
++            }
++        else:
++            profile_load_summary = load_profiles_into_row_runtime(
++                row=row,
++                simulation_state=simulation_state_before,
++            )
++            runtime_state = _safe_dict(row.get("runtime_state")) or runtime_state
++        timing_breakdown["profile_load_ms"] += _elapsed_ms(profile_load_start)
++
++        promotion_start = perf_counter()
++        if fast_path_used and skip_mutation_compare_for_pre_turn:
++            simulation_state_after_probe = simulation_state_before
++        else:
++            simulation_state_after_probe = deepcopy(simulation_state_before)
++
++        updated_runtime_state, result = promote_advisory_candidates(
++            simulation_state=simulation_state_after_probe,
++            runtime_state=runtime_state,
++            current_turn=turn_index,
++            max_promotions_per_turn=max_promotions_per_turn,
++        )
++        timing_breakdown["promotion_ms"] += _elapsed_ms(promotion_start)
++
++        # Safety: full/final promotion checks simulation mutation. Fast pre-turn
++        # promotion skips expensive deep comparison and remains non-authoritative.
++        if fast_path_used and skip_mutation_compare_for_pre_turn:
++            mutated_authoritative_state = False
++            result["mutation_compare_skipped"] = True
++            result["mutation_compare_skip_reason"] = "fast_pre_turn"
++        else:
++            mutated_authoritative_state = simulation_state_after_probe != simulation_state_before
++        result["mutated_authoritative_state"] = mutated_authoritative_state
++        result["fast_pre_turn"] = bool(fast_path_used)
+1H. Skip NPC evolution consumption in fast pre-turn mode
+
+Find:
+
+        updated_runtime_state, evolution_result = consume_accepted_advisory_projections(
+            runtime_state=updated_runtime_state,
+            simulation_state=simulation_state_before,
+            turn_index=turn_index,
+        )
+        evolution_result["simulation_state_keys"] = sorted(list(simulation_state_before.keys()))[:80]
+        ...
+
+Replace the whole evolution-consumption block through the row["npc_evolution_summary"] = ... assignment with:
+
+--- src/tests/rpg/autoplay/advisory_promotion_runtime.py
++++ src/tests/rpg/autoplay/advisory_promotion_runtime.py
+@@
+-        updated_runtime_state, evolution_result = consume_accepted_advisory_projections(
+-            runtime_state=updated_runtime_state,
+-            simulation_state=simulation_state_before,
+-            turn_index=turn_index,
+-        )
+-        evolution_result["simulation_state_keys"] = sorted(list(simulation_state_before.keys()))[:80]
+-        npc_progression_state = _safe_dict(simulation_state_before.get("npc_progression_state"))
+-        scene = _safe_dict(simulation_state_before.get("scene"))
+-        contract = _safe_dict(simulation_state_before.get("turn_contract"))
+-        resolved_action_location = _safe_dict(
+-            _safe_dict(_safe_dict(contract.get("resolved_action")).get("location_state")).get("current_location")
+-        )
+-        evolution_result["simulation_npc_count"] = len(
+-            _safe_dict(simulation_state_before.get("npcs"))
+-            or _safe_dict(npc_progression_state.get("npcs"))
+-        )
+-        evolution_result["simulation_present_npc_count"] = len(
+-            _safe_list(simulation_state_before.get("present_npcs"))
+-            or _safe_list(simulation_state_before.get("nearby_npcs"))
+-            or _safe_list(scene.get("nearby_npcs"))
+-            or _safe_list(resolved_action_location.get("present_npcs"))
+-        )
+-        row["runtime_state"] = updated_runtime_state
+-        row["npc_evolution_consumption_result"] = evolution_result
+-        row["npc_evolution_summary"] = evolution_result.get("summary") or {}
++        evolution_start = perf_counter()
++        if fast_path_used and skip_evolution_for_pre_turn:
++            evolution_result = {
++                "ok": True,
++                "skipped": True,
++                "reason": "fast_pre_turn_skip_evolution_consumption",
++                "signals_created": 0,
++                "signals_consumed": 0,
++                "summary": {},
++            }
++        else:
++            updated_runtime_state, evolution_result = consume_accepted_advisory_projections(
++                runtime_state=updated_runtime_state,
++                simulation_state=simulation_state_before,
++                turn_index=turn_index,
++            )
++            evolution_result["simulation_state_keys"] = sorted(list(simulation_state_before.keys()))[:80]
++            npc_progression_state = _safe_dict(simulation_state_before.get("npc_progression_state"))
++            scene = _safe_dict(simulation_state_before.get("scene"))
++            contract = _safe_dict(simulation_state_before.get("turn_contract"))
++            resolved_action_location = _safe_dict(
++                _safe_dict(_safe_dict(contract.get("resolved_action")).get("location_state")).get("current_location")
++            )
++            evolution_result["simulation_npc_count"] = len(
++                _safe_dict(simulation_state_before.get("npcs"))
++                or _safe_dict(npc_progression_state.get("npcs"))
++            )
++            evolution_result["simulation_present_npc_count"] = len(
++                _safe_list(simulation_state_before.get("present_npcs"))
++                or _safe_list(simulation_state_before.get("nearby_npcs"))
++                or _safe_list(scene.get("nearby_npcs"))
++                or _safe_list(resolved_action_location.get("present_npcs"))
++            )
++        timing_breakdown["evolution_consume_ms"] += _elapsed_ms(evolution_start)
++        row["runtime_state"] = updated_runtime_state
++        row["npc_evolution_consumption_result"] = evolution_result
++        row["npc_evolution_summary"] = evolution_result.get("summary") or {}
+1I. Time profile persistence
+
+Patch profile persistence block:
+
+--- src/tests/rpg/autoplay/advisory_promotion_runtime.py
++++ src/tests/rpg/autoplay/advisory_promotion_runtime.py
+@@
+-        if persist_profiles:
++        persist_start = perf_counter()
++        if persist_profiles:
+             profile_persist_result = persist_npc_evolution_profiles(runtime_state=updated_runtime_state)
+         else:
+             profile_persist_result = {
+                 "ok": True,
+                 "skipped": True,
+                 "reason": "pre_turn_promotion_no_disk_persist",
+             }
++        timing_breakdown["profile_persist_ms"] += _elapsed_ms(persist_start)
+1J. Add row timing to promotion result
+
+Inside promotion_results.append({...}), add:
+
+--- src/tests/rpg/autoplay/advisory_promotion_runtime.py
++++ src/tests/rpg/autoplay/advisory_promotion_runtime.py
+@@
+                 "profile_persist_result": profile_persist_result,
+                 "profile_load_summary": profile_load_summary,
++                "row_elapsed_ms": _elapsed_ms(row_start),
++                "fast_pre_turn": bool(fast_path_used),
+             }
+         )
++        timing_breakdown["row_total_ms"] += _elapsed_ms(row_start)
+1K. Add fast-path metadata to return object
+
+Patch return dict:
+
+--- src/tests/rpg/autoplay/advisory_promotion_runtime.py
++++ src/tests/rpg/autoplay/advisory_promotion_runtime.py
+@@
+         "mark_pre_turn_promoted": bool(mark_pre_turn_promoted),
++        "fast_pre_turn": bool(fast_path_used),
++        "skip_profile_load_for_pre_turn": bool(skip_profile_load_for_pre_turn),
++        "skip_evolution_for_pre_turn": bool(skip_evolution_for_pre_turn),
++        "skip_mutation_compare_for_pre_turn": bool(skip_mutation_compare_for_pre_turn),
+         "current_turn": int(current_turn or 0),
+@@
+         "profile_persist_result": latest_profile_persist_result,
++        "timing_breakdown": timing_breakdown,
+         "results": promotion_results,
+2. Patch src/tests/rpg/autoplay_llm_campaign.py
+2A. Add pre-turn promotion guard state
+
+Before the turn loop, near other runtime trackers:
+
+--- src/tests/rpg/autoplay_llm_campaign.py
++++ src/tests/rpg/autoplay_llm_campaign.py
+@@
+     player_agent_cache = PlayerAgentDecisionCache(max_entries=256)
+     player_agent_prompt_rows: List[Dict[str, Any]] = []
+     regression_warnings: List[Dict[str, Any]] = []
++    pre_turn_advisory_promotion_auto_disabled = False
++    pre_turn_advisory_promotion_disable_reason = ""
++    pre_turn_advisory_promotion_slow_events: List[Dict[str, Any]] = []
+     started = time.time()
+2B. Change promotion condition to honor auto-disable
+
+Patch:
+
+--- src/tests/rpg/autoplay_llm_campaign.py
++++ src/tests/rpg/autoplay_llm_campaign.py
+@@
+             if (
+                 not bool(getattr(args, "disable_pre_turn_advisory_promotion", False))
++                and not bool(pre_turn_advisory_promotion_auto_disabled)
+                 and int(drain_event.get("attached") or 0) > 0
+             ):
+2C. Measure promotion elapsed manually and call fast path
+
+Patch the call block.
+
+Find:
+
+                pre_turn_promotion_result: Dict[str, Any] = {}
+                with _ProbeTimer(...):
+                    pre_turn_promotion_result = run_deferred_advisory_promotions_for_transcript(
+                        transcript=transcript,
+                        ...
+                    )
+
+Replace with:
+
+--- src/tests/rpg/autoplay_llm_campaign.py
++++ src/tests/rpg/autoplay_llm_campaign.py
+@@
+                 pre_turn_promotion_result: Dict[str, Any] = {}
++                pre_turn_promotion_start = now_perf()
+                 with _ProbeTimer(
+                     bool(getattr(args, "debug_autoplay_stage_timing", False)),
+                     "pre_turn_deferred_advisory_promotion",
+@@
+                     pre_turn_promotion_result = run_deferred_advisory_promotions_for_transcript(
+                         transcript=transcript,
+                         max_promotions_per_turn=int(args.max_advisory_promotions_per_turn),
+                         max_rows=int(getattr(args, "pre_turn_advisory_promotion_max_rows", 6) or 6),
+                         persist_profiles=False,
+                         incremental_pre_turn=True,
+                         mark_pre_turn_promoted=True,
+                         current_turn=turn_index,
+@@
+                         carry_rejected_limit=int(
+                             getattr(args, "pre_turn_advisory_carry_rejected_limit", 60) or 60
+                         ),
++                        fast_pre_turn=bool(getattr(args, "pre_turn_advisory_fast_path", True)),
++                        skip_profile_load_for_pre_turn=bool(
++                            getattr(args, "pre_turn_advisory_skip_profile_load", True)
++                        ),
++                        skip_evolution_for_pre_turn=bool(
++                            getattr(args, "pre_turn_advisory_skip_evolution", True)
++                        ),
++                        skip_mutation_compare_for_pre_turn=bool(
++                            getattr(args, "pre_turn_advisory_skip_mutation_compare", True)
++                        ),
+                     )
++                pre_turn_promotion_elapsed_ms = elapsed_ms(pre_turn_promotion_start)
++                pre_turn_promotion_result["elapsed_ms"] = pre_turn_promotion_elapsed_ms
+2D. Add slow-path guard after promotion
+
+Immediately after the _probe_log(... "pre_turn_deferred_advisory_promotion.result" ...) call, add:
+
+--- src/tests/rpg/autoplay_llm_campaign.py
++++ src/tests/rpg/autoplay_llm_campaign.py
+@@
+                     carry_accepted_limit=pre_turn_promotion_result.get("carry_accepted_limit"),
+                     carry_rejected_limit=pre_turn_promotion_result.get("carry_rejected_limit"),
++                    fast_pre_turn=pre_turn_promotion_result.get("fast_pre_turn"),
++                    elapsed_ms=pre_turn_promotion_result.get("elapsed_ms"),
++                    timing_breakdown=pre_turn_promotion_result.get("timing_breakdown"),
+                 )
++                slow_guard_ms = int(getattr(args, "pre_turn_advisory_slow_guard_ms", 5000) or 5000)
++                if pre_turn_promotion_elapsed_ms > slow_guard_ms:
++                    slow_event = {
++                        "turn_index": turn_index,
++                        "elapsed_ms": pre_turn_promotion_elapsed_ms,
++                        "slow_guard_ms": slow_guard_ms,
++                        "fast_pre_turn": pre_turn_promotion_result.get("fast_pre_turn"),
++                        "timing_breakdown": pre_turn_promotion_result.get("timing_breakdown"),
++                        "turns": pre_turn_promotion_result.get("turns"),
++                        "accepted": pre_turn_promotion_result.get("accepted"),
++                        "rejected": pre_turn_promotion_result.get("rejected"),
++                        "pending": pre_turn_promotion_result.get("pending"),
++                    }
++                    pre_turn_advisory_promotion_slow_events.append(slow_event)
++                    _probe_log(
++                        bool(getattr(args, "debug_autoplay_stage_timing", False)),
++                        "pre_turn_deferred_advisory_promotion.slow_guard",
++                        **slow_event,
++                    )
++                    if bool(getattr(args, "pre_turn_advisory_auto_disable_on_slow", True)):
++                        pre_turn_advisory_promotion_auto_disabled = True
++                        pre_turn_advisory_promotion_disable_reason = (
++                            f"slow_pre_turn_advisory_promotion:{pre_turn_promotion_elapsed_ms}ms"
++                        )
+2E. Include fast-path metadata in drain event
+
+Patch drain_event["pre_turn_advisory_promotion_result"]:
+
+--- src/tests/rpg/autoplay_llm_campaign.py
++++ src/tests/rpg/autoplay_llm_campaign.py
+@@
+                     "carry_candidate_limit": pre_turn_promotion_result.get("carry_candidate_limit"),
+                     "carry_pending_limit": pre_turn_promotion_result.get("carry_pending_limit"),
+                     "carry_accepted_limit": pre_turn_promotion_result.get("carry_accepted_limit"),
+                     "carry_rejected_limit": pre_turn_promotion_result.get("carry_rejected_limit"),
++                    "fast_pre_turn": pre_turn_promotion_result.get("fast_pre_turn"),
++                    "elapsed_ms": pre_turn_promotion_result.get("elapsed_ms"),
++                    "timing_breakdown": pre_turn_promotion_result.get("timing_breakdown"),
+                 }
+2F. Add summary helper for pre-turn promotion performance
 
 Add near summary helpers:
 
 --- src/tests/rpg/autoplay_llm_campaign.py
 +++ src/tests/rpg/autoplay_llm_campaign.py
 @@
-+def _strict_progress_health_summary_from_summary(summary: Dict[str, Any]) -> Dict[str, Any]:
-+    health = _safe_dict(summary.get("health"))
-+    progress_quality = _safe_dict(health.get("progress_quality"))
-+    if not progress_quality:
-+        progress_quality = _safe_dict(summary.get("progress_quality"))
++def _pre_turn_advisory_promotion_performance_summary(
++    background_drain_events: List[Dict[str, Any]],
++    *,
++    slow_events: List[Dict[str, Any]],
++    auto_disabled: bool,
++    disable_reason: str,
++) -> Dict[str, Any]:
++    promotions: List[Dict[str, Any]] = []
++    for event in _safe_list(background_drain_events):
++        result = _safe_dict(_safe_dict(event).get("pre_turn_advisory_promotion_result"))
++        if result:
++            promotions.append(result)
++
++    elapsed_values = [
++        int(row.get("elapsed_ms") or 0)
++        for row in promotions
++        if int(row.get("elapsed_ms") or 0) > 0
++    ]
 +    return {
-+        "ok": bool(progress_quality.get("ok", True)),
-+        "meaningful_progress_rate": progress_quality.get("meaningful_progress_rate"),
-+        "meaningful_turns": progress_quality.get("meaningful_turns"),
-+        "no_change_turns": progress_quality.get("no_change_turns"),
-+        "churn_only_turns": progress_quality.get("churn_only_turns"),
-+        "source": "health.progress_quality",
++        "ok": not bool(slow_events),
++        "promotion_count": len(promotions),
++        "fast_path_count": sum(1 for row in promotions if bool(row.get("fast_pre_turn"))),
++        "max_elapsed_ms": max(elapsed_values) if elapsed_values else 0,
++        "avg_elapsed_ms": round(sum(elapsed_values) / len(elapsed_values), 3) if elapsed_values else 0.0,
++        "slow_event_count": len(slow_events),
++        "slow_events": slow_events[-10:],
++        "auto_disabled": bool(auto_disabled),
++        "disable_reason": _safe_str(disable_reason),
 +    }
-+
-+
-+def _final_lifecycle_quality_gates(summary: Dict[str, Any]) -> Dict[str, Any]:
-+    summary = _safe_dict(summary)
-+    requested_turns = int(summary.get("requested_turns") or summary.get("turns_requested") or summary.get("turns_executed") or 0)
-+    is_20_turn_or_more = requested_turns >= 20
-+
-+    existing = _safe_dict(summary.get("quality_gate_summary"))
-+    existing_gates = _safe_dict(existing.get("gates"))
-+
-+    strict_progress = _safe_dict(summary.get("strict_progress_health_summary"))
-+    post_transition = _safe_dict(
-+        summary.get("post_transition_action_quality")
-+        or summary.get("post_transition_action_quality_summary")
+2G. Add summary field in final lifecycle block
+
+In the final summary block before quality gates:
+
+--- src/tests/rpg/autoplay_llm_campaign.py
++++ src/tests/rpg/autoplay_llm_campaign.py
+@@
+     summary["quest_handoff_summary"] = _quest_handoff_summary_from_state(runtime_state)
+     summary["final_state_field_coverage_summary"] = _final_state_field_coverage_summary(runtime_state)
++    summary["pre_turn_advisory_promotion_performance_summary"] = (
++        _pre_turn_advisory_promotion_performance_summary(
++            background_drain_events,
++            slow_events=pre_turn_advisory_promotion_slow_events,
++            auto_disabled=pre_turn_advisory_promotion_auto_disabled,
++            disable_reason=pre_turn_advisory_promotion_disable_reason,
++        )
 +    )
-+    objective_progression = _safe_dict(summary.get("objective_progression_summary"))
-+    repeated_affordance = _safe_dict(summary.get("repeated_affordance_loop_summary"))
-+
-+    gates = dict(existing_gates)
-+    gates["strict_progress_health_ok"] = (
+2H. Add quality gate
+
+In _final_lifecycle_quality_gates(...), add:
+
+--- src/tests/rpg/autoplay_llm_campaign.py
++++ src/tests/rpg/autoplay_llm_campaign.py
+@@
+     field_coverage = _safe_dict(summary.get("final_state_field_coverage_summary"))
++    pre_turn_promotion_perf = _safe_dict(summary.get("pre_turn_advisory_promotion_performance_summary"))
+@@
+     gates["final_state_field_coverage_ok"] = (
+         not is_20_turn_or_more
+         or bool(field_coverage.get("ok", True))
+     )
++    gates["pre_turn_advisory_promotion_fast_ok"] = (
 +        not is_20_turn_or_more
-+        or bool(strict_progress.get("ok", True))
++        or bool(pre_turn_promotion_perf.get("ok", True))
 +    )
-+    gates["post_transition_action_quality_ok"] = (
-+        not is_20_turn_or_more
-+        or bool(post_transition.get("ok", True))
+
+This intentionally fails the run if pre-turn promotion goes slow again.
+
+2I. Add CLI args
+
+Patch build_arg_parser() near --pre-turn-background-drain-ms:
+
+--- src/tests/rpg/autoplay_llm_campaign.py
++++ src/tests/rpg/autoplay_llm_campaign.py
+@@
+     parser.add_argument(
+         "--pre-turn-background-drain-ms",
+         type=int,
+         default=250,
+@@
+         ),
+     )
++    parser.add_argument(
++        "--disable-pre-turn-advisory-promotion",
++        action="store_true",
++        help="Disable deterministic pre-turn advisory promotion after background result attachment.",
 +    )
-+    gates["objective_progression_present_ok"] = (
-+        not is_20_turn_or_more
-+        or bool(objective_progression.get("ok", False))
++    parser.add_argument(
++        "--pre-turn-advisory-promotion-max-rows",
++        type=int,
++        default=1,
++        help="Maximum newly attached transcript rows to process during pre-turn advisory promotion.",
 +    )
-+    gates["repeated_affordance_loop_ok"] = (
-+        not is_20_turn_or_more
-+        or bool(repeated_affordance.get("ok", True))
++    parser.add_argument(
++        "--pre-turn-advisory-fast-path",
++        action="store_true",
++        default=True,
++        help="Use lightweight pre-turn advisory promotion path that skips profile/evolution slow work.",
 +    )
++    parser.add_argument(
++        "--no-pre-turn-advisory-fast-path",
++        action="store_false",
++        dest="pre_turn_advisory_fast_path",
++        help="Use full advisory promotion even during pre-turn promotion.",
++    )
++    parser.add_argument(
++        "--pre-turn-advisory-skip-profile-load",
++        action="store_true",
++        default=True,
++        help="Skip NPC profile loading during pre-turn fast advisory promotion.",
++    )
++    parser.add_argument(
++        "--no-pre-turn-advisory-skip-profile-load",
++        action="store_false",
++        dest="pre_turn_advisory_skip_profile_load",
++        help="Allow NPC profile loading during pre-turn advisory promotion.",
++    )
++    parser.add_argument(
++        "--pre-turn-advisory-skip-evolution",
++        action="store_true",
++        default=True,
++        help="Skip NPC evolution consumption during pre-turn fast advisory promotion.",
++    )
++    parser.add_argument(
++        "--no-pre-turn-advisory-skip-evolution",
++        action="store_false",
++        dest="pre_turn_advisory_skip_evolution",
++        help="Allow NPC evolution consumption during pre-turn advisory promotion.",
++    )
++    parser.add_argument(
++        "--pre-turn-advisory-skip-mutation-compare",
++        action="store_true",
++        default=True,
++        help="Skip expensive authoritative-state deep comparison during pre-turn fast advisory promotion.",
++    )
++    parser.add_argument(
++        "--no-pre-turn-advisory-skip-mutation-compare",
++        action="store_false",
++        dest="pre_turn_advisory_skip_mutation_compare",
++        help="Run authoritative-state mutation comparison during pre-turn advisory promotion.",
++    )
++    parser.add_argument(
++        "--pre-turn-advisory-slow-guard-ms",
++        type=int,
++        default=5000,
++        help="Auto-disable pre-turn advisory promotion if one pass exceeds this many milliseconds.",
++    )
++    parser.add_argument(
++        "--pre-turn-advisory-auto-disable-on-slow",
++        action="store_true",
++        default=True,
++        help="Auto-disable pre-turn advisory promotion for the rest of the run after a slow pass.",
++    )
++    parser.add_argument(
++        "--no-pre-turn-advisory-auto-disable-on-slow",
++        action="store_false",
++        dest="pre_turn_advisory_auto_disable_on_slow",
++        help="Do not auto-disable pre-turn advisory promotion after a slow pass.",
++    )
++    parser.add_argument("--pre-turn-advisory-carry-candidate-limit", type=int, default=12)
++    parser.add_argument("--pre-turn-advisory-carry-pending-limit", type=int, default=12)
++    parser.add_argument("--pre-turn-advisory-carry-accepted-limit", type=int, default=20)
++    parser.add_argument("--pre-turn-advisory-carry-rejected-limit", type=int, default=20)
+
+Note: the defaults are intentionally smaller than the previous implicit 30/60 carry limits. Pre-turn promotion should stay lightweight; final promotion can remain full fidelity.
+
+3. Patch tests
+3A. Add src/tests/rpg/autoplay/test_advisory_promotion_runtime.py
+--- /dev/null
++++ src/tests/rpg/autoplay/test_advisory_promotion_runtime.py
+@@
++from tests.rpg.autoplay.advisory_promotion_runtime import (
++    run_deferred_advisory_promotions_for_transcript,
++)
 +
-+    failed = [name for name, ok in gates.items() if not bool(ok)]
-+    return {
-+        **existing,
-+        "ok": not failed,
-+        "gates": gates,
-+        "failed_gates": failed,
-+        "source": "final_lifecycle_quality_gates",
-+    }
-1B. Finalize summary only once, at the very end
-
-Find where the final summary is created and written. Before any artifact write, add this block after all merges:
-
---- src/tests/rpg/autoplay_llm_campaign.py
-+++ src/tests/rpg/autoplay_llm_campaign.py
-@@
-+    # N88.2: final lifecycle summary override.
-+    # This must be the last summary mutation block before artifact writes.
-+    summary["quest_progress_summary"] = _quest_progress_summary_from_state(runtime_state)
-+    summary["objective_progression_summary"] = _objective_progression_summary_from_state(runtime_state)
-+    summary["repeated_affordance_loop_summary"] = _repeated_affordance_loop_summary(transcript, threshold=4)
-+    summary["post_transition_action_quality"] = _post_transition_action_quality_summary(transcript, runtime_state)
-+    summary["post_transition_action_quality_summary"] = summary["post_transition_action_quality"]
-+    summary["strict_progress_health_summary"] = _strict_progress_health_summary_from_summary(summary)
-+    summary["quality_gate_summary"] = _final_lifecycle_quality_gates(summary)
-+    summary["ok"] = bool(summary["quality_gate_summary"].get("ok"))
-
-Then search for later assignments:
-
-Select-String -Path src\tests\rpg\autoplay_llm_campaign.py -Pattern "quality_gate_summary|summary\[`"ok"`\]|summary\['ok'\]|quest_progress_summary" -Context 2,2
-
-If any of these assignments occur after the final lifecycle block, move the block lower or delete the later stale assignment.
-
-The final order must be:
-
-# build summary
-# merge health/performance/progress/report metadata
-# attach latest_state
-# N88.2 final lifecycle summary override
-# write JSON/HTML/ZIP artifacts
-1C. Ensure latest_state in summary is the same runtime_state
-
-Before the final lifecycle block, add:
-
---- src/tests/rpg/autoplay_llm_campaign.py
-+++ src/tests/rpg/autoplay_llm_campaign.py
-@@
-+    summary["latest_state"] = runtime_state
-
-This prevents the report builder from using an older snapshot.
-
-2. Patch objective progression persistence
-2A. Add direct progression application in autoplay loop
-
-In src/tests/rpg/autoplay_llm_campaign.py, after each turn result mutates runtime_state, and after player_action is finalized, add:
-
---- src/tests/rpg/autoplay_llm_campaign.py
-+++ src/tests/rpg/autoplay_llm_campaign.py
-@@
-+        try:
-+            from app.rpg.objectives.progression_rules import apply_objective_progression_rules
 +
-+            progression_result = apply_objective_progression_rules(
-+                runtime_state,
-+                player_action=_safe_str(player_action),
-+                semantic_pair=_safe_dict(
-+                    selected.get("semantic_pair") if isinstance(selected, dict) else {}
-+                ),
-+            )
-+            if progression_result.get("changed"):
-+                runtime_state = _safe_dict(progression_result.get("simulation_state")) or runtime_state
-+                turn_objective_progression = {
-+                    "changed": True,
-+                    "completed_objectives": progression_result.get("completed_objectives") or [],
-+                    "progressed_objectives": progression_result.get("progressed_objectives") or [],
-+                    "event": progression_result.get("event") or {},
-+                }
-+                _probe_log(
-+                    bool(getattr(args, "debug_autoplay_stage_timing", False)),
-+                    "objective_progression.applied",
-+                    turn_index=turn_index,
-+                    completed_count=len(_safe_list(progression_result.get("completed_objectives"))),
-+                    progressed_count=len(_safe_list(progression_result.get("progressed_objectives"))),
-+                )
-+            else:
-+                turn_objective_progression = {
-+                    "changed": False,
-+                    "event": progression_result.get("event") or {},
-+                }
-+        except Exception as exc:
-+            turn_objective_progression = {
-+                "changed": False,
-+                "error": f"{type(exc).__name__}: {exc}",
-+            }
-+            _probe_log(
-+                bool(getattr(args, "debug_autoplay_stage_timing", False)),
-+                "objective_progression.failed",
-+                turn_index=turn_index,
-+                error=f"{type(exc).__name__}: {exc}",
-+            )
-
-Then when constructing the transcript record, include:
-
---- src/tests/rpg/autoplay_llm_campaign.py
-+++ src/tests/rpg/autoplay_llm_campaign.py
-@@
-         record = {
-             ...
-+            "objective_progression": turn_objective_progression,
-         }
-
-If record is created before this block, move the progression block before record = {...} or update the record after creation:
-
-record["objective_progression"] = turn_objective_progression
-2B. Make progress summary read transcript fallback too
-
-Patch _objective_progression_summary_from_state(...) to accept transcript fallback.
-
-Replace existing helper with:
-
---- src/tests/rpg/autoplay_llm_campaign.py
-+++ src/tests/rpg/autoplay_llm_campaign.py
-@@
--def _objective_progression_summary_from_state(state: Dict[str, Any]) -> Dict[str, Any]:
-+def _objective_progression_summary_from_state(state: Dict[str, Any], transcript: List[Dict[str, Any]] | None = None) -> Dict[str, Any]:
-     state = _safe_dict(state)
-     log = _safe_list(state.get("objective_progression_log"))
-     hook_state = _safe_dict(state.get("autoplay_story_hook_state"))
-     fired_hooks = _safe_dict(hook_state.get("fired_hooks"))
-     objective_hooks = [
-         {"hook_id": hook_id, **_safe_dict(payload)}
-         for hook_id, payload in fired_hooks.items()
-         if _safe_str(hook_id).startswith("hook:objective")
-     ]
-+    transcript_rows: List[Dict[str, Any]] = []
-+    for row in _safe_list(transcript):
-+        progression = _safe_dict(_safe_dict(row).get("objective_progression"))
-+        if progression.get("changed"):
-+            transcript_rows.append(
++def test_pre_turn_fast_path_marks_promoted_and_skips_profile_evolution():
++    row = {
++        "turn_index": 1,
++        "combined_background_llm_attach": {"phase": "pre_turn"},
++        "combined_background_llm_result": {
++            "deferred_advisory_candidates": [
 +                {
-+                    "turn": _safe_dict(row).get("turn"),
-+                    "completed_objectives": progression.get("completed_objectives") or [],
-+                    "progressed_objectives": progression.get("progressed_objectives") or [],
-+                    "event": progression.get("event") or {},
++                    "candidate_id": "cand:test:1",
++                    "kind": "memory",
++                    "payload": {"owner": "npc:test", "text": "Test memory."},
++                    "backing": {"turn_contract_action": "ask"},
++                    "promotion": {"eligible_from_turn": 1},
++                    "safety": {},
 +                }
-+            )
-     return {
--        "count": len(log) + len(objective_hooks),
-+        "count": len(log) + len(objective_hooks) + len(transcript_rows),
-         "recent": log[-10:],
-         "objective_hooks": objective_hooks[-10:],
--        "ok": bool(log or objective_hooks),
-+        "transcript_progression": transcript_rows[-10:],
-+        "ok": bool(log or objective_hooks or transcript_rows),
-     }
-
-Update final lifecycle call:
-
---- src/tests/rpg/autoplay_llm_campaign.py
-+++ src/tests/rpg/autoplay_llm_campaign.py
-@@
--    summary["objective_progression_summary"] = _objective_progression_summary_from_state(runtime_state)
-+    summary["objective_progression_summary"] = _objective_progression_summary_from_state(runtime_state, transcript)
-3. Patch src/app/rpg/objectives/progression_rules.py
-3A. Ensure objectives are discoverable from multiple state shapes
-
-Add helper near safe helpers:
-
---- src/app/rpg/objectives/progression_rules.py
-+++ src/app/rpg/objectives/progression_rules.py
-@@
-+def _iter_quest_objectives(state: Dict[str, Any]):
-+    state = _safe_dict(state)
-+    source_paths = (
-+        ("quest_progress", "quests"),
-+        ("quest_log_state", "quests"),
++            ]
++        },
++        "runtime_state": {"deferred_advisory": {"candidates": []}},
++        "turn_contract": {"action": {"type": "social"}},
++        "simulation_state": {
++            "npcs": {"npc:test": {"id": "npc:test", "name": "Test NPC"}},
++            "present_npcs": ["npc:test"],
++        },
++    }
++
++    result = run_deferred_advisory_promotions_for_transcript(
++        transcript=[row],
++        incremental_pre_turn=True,
++        mark_pre_turn_promoted=True,
++        current_turn=2,
++        persist_profiles=False,
++        fast_pre_turn=True,
++        skip_profile_load_for_pre_turn=True,
++        skip_evolution_for_pre_turn=True,
++        skip_mutation_compare_for_pre_turn=True,
 +    )
-+    for root_key, quests_key in source_paths:
-+        quests = _safe_dict(_safe_dict(state.get(root_key)).get(quests_key))
-+        for quest_id, quest_raw in quests.items():
-+            quest = _safe_dict(quest_raw)
-+            for obj in _safe_list(quest.get("objectives")):
-+                yield root_key, quest_id, quest, _safe_dict(obj)
 +
-+    arcs = _safe_dict(_safe_dict(state.get("story_arc_milestone_state")).get("arcs"))
-+    for arc_id, arc_raw in arcs.items():
-+        arc = _safe_dict(arc_raw)
-+        for milestone in _safe_list(arc.get("milestones")):
-+            milestone = _safe_dict(milestone)
-+            if "objective_id" not in milestone:
-+                milestone["objective_id"] = _safe_str(milestone.get("milestone_id") or f"{arc_id}:milestone")
-+            if "summary" not in milestone:
-+                milestone["summary"] = _safe_str(milestone.get("title") or milestone.get("objective_text"))
-+            yield "story_arc_milestone_state", arc_id, arc, milestone
-3B. Use _iter_quest_objectives in progression application
++    assert result["ok"] is True
++    assert result["fast_pre_turn"] is True
++    assert row["pre_turn_advisory_promoted"] is True
++    assert row["npc_evolution_consumption_result"]["skipped"] is True
++    assert row["npc_evolution_profile_persist_result"]["skipped"] is True
++    assert result["timing_breakdown"]["profile_load_ms"] >= 0
++    assert result["timing_breakdown"]["evolution_consume_ms"] >= 0
+3B. Add summary helper test
 
-Replace the current quest_sources = [...] loop inside apply_objective_progression_rules(...) with:
+Add to existing autoplay summary/quality test file:
 
---- src/app/rpg/objectives/progression_rules.py
-+++ src/app/rpg/objectives/progression_rules.py
-@@
--    quest_sources = [
--        _safe_dict(_safe_dict(state.get("quest_progress")).get("quests")),
--        _safe_dict(_safe_dict(state.get("quest_log_state")).get("quests")),
--    ]
--    for quests in quest_sources:
--        for quest_id, quest in quests.items():
--            quest = _safe_dict(quest)
--            objectives = _safe_list(quest.get("objectives"))
--            for obj in objectives:
--                obj = _safe_dict(obj)
--                if objective_progress_matches_event(obj, event):
--                    obj["completed"] = True
--                    obj["status"] = "completed"
--                    changed = True
--                    completed.append({
--                        "quest_id": _safe_str(quest.get("quest_id") or quest_id),
--                        "objective_id": _safe_str(obj.get("objective_id") or obj.get("id")),
--                        "summary": _safe_str(obj.get("summary") or obj.get("objective_text") or obj.get("title")),
--                        "event": event,
--                    })
--                elif objective_partial_progress_matches_event(obj, event):
--                    progress_count = int(obj.get("progress_count") or 0) + 1
--                    obj["progress_count"] = progress_count
--                    obj["status"] = _safe_str(obj.get("status") or "active")
--                    changed = True
--                    progressed.append({
--                        "quest_id": _safe_str(quest.get("quest_id") or quest_id),
--                        "objective_id": _safe_str(obj.get("objective_id") or obj.get("id")),
--                        "summary": _safe_str(obj.get("summary") or obj.get("objective_text") or obj.get("title")),
--                        "progress_count": progress_count,
--                        "event": event,
--                    })
--            if objectives and all(bool(_safe_dict(obj).get("completed")) or _safe_str(_safe_dict(obj).get("status")) == "completed" for obj in objectives):
--                quest["completed"] = True
--                quest["status"] = "completed"
-+    touched_quests: List[Dict[str, Any]] = []
-+    for source_key, quest_id, quest, obj in _iter_quest_objectives(state):
-+        if objective_progress_matches_event(obj, event):
-+            obj["completed"] = True
-+            obj["status"] = "completed"
-+            changed = True
-+            completed.append({
-+                "source": source_key,
-+                "quest_id": _safe_str(quest.get("quest_id") or quest_id),
-+                "objective_id": _safe_str(obj.get("objective_id") or obj.get("id")),
-+                "summary": _safe_str(obj.get("summary") or obj.get("objective_text") or obj.get("title")),
-+                "event": event,
-+            })
-+            if quest not in touched_quests:
-+                touched_quests.append(quest)
-+        elif objective_partial_progress_matches_event(obj, event):
-+            progress_count = int(obj.get("progress_count") or 0) + 1
-+            obj["progress_count"] = progress_count
-+            obj["status"] = _safe_str(obj.get("status") or "active")
-+            changed = True
-+            progressed.append({
-+                "source": source_key,
-+                "quest_id": _safe_str(quest.get("quest_id") or quest_id),
-+                "objective_id": _safe_str(obj.get("objective_id") or obj.get("id")),
-+                "summary": _safe_str(obj.get("summary") or obj.get("objective_text") or obj.get("title")),
-+                "progress_count": progress_count,
-+                "event": event,
-+            })
-+            if quest not in touched_quests:
-+                touched_quests.append(quest)
-+
-+    for quest in touched_quests:
-+        objectives = _safe_list(quest.get("objectives") or quest.get("milestones"))
-+        if objectives and all(
-+            bool(_safe_dict(obj).get("completed")) or _safe_str(_safe_dict(obj).get("status")) == "completed"
-+            for obj in objectives
-+        ):
-+            quest["completed"] = True
-+            quest["status"] = "completed"
-3C. Always persist event log for diagnostic visibility
+def test_pre_turn_advisory_promotion_performance_summary_flags_slow_event():
+    from tests.rpg.autoplay_llm_campaign import _pre_turn_advisory_promotion_performance_summary
 
-Patch log writing:
-
---- src/app/rpg/objectives/progression_rules.py
-+++ src/app/rpg/objectives/progression_rules.py
-@@
-     progress_log = state.setdefault("objective_progression_log", [])
-     if isinstance(progress_log, list):
-+        if not completed and not progressed:
-+            progress_log.append({
-+                "partial": True,
-+                "matched": False,
-+                "event": event,
-+                "summary": "Objective progression evaluated but no objective matched.",
-+            })
-         for row in completed:
-             progress_log.append(row)
-         for row in progressed:
-             row = dict(row)
-             row["partial"] = True
-             progress_log.append(row)
-         del progress_log[:-100]
-@@
--        "changed": changed,
-+        "changed": changed or bool(completed or progressed),
-
-This ensures objective_progression_log proves the system is running even when no objective matches. The gate should still prefer matched rows later, but this helps debugging.
-
-4. Patch affordance rotation
-4A. Create generic rotation chooser
-
-Patch src/tests/rpg/autoplay/executable_actions.py.
-
-Add helper after is_repeated_affordance_action(...):
-
---- src/tests/rpg/autoplay/executable_actions.py
-+++ src/tests/rpg/autoplay/executable_actions.py
-@@
-+AFFORDANCE_ROTATION_ORDER = {
-+    "ask": ["inspect", "travel", "follow", "report", "prepare", "confront"],
-+    "inspect": ["follow", "travel", "ask", "report", "prepare", "confront"],
-+    "travel": ["inspect", "follow", "ask", "report", "prepare", "confront"],
-+    "follow": ["inspect", "travel", "ask", "report", "prepare", "confront"],
-+    "report": ["travel", "inspect", "ask", "prepare", "confront"],
-+    "prepare": ["travel", "inspect", "ask", "confront", "report"],
-+}
-+
-+
-+def _semantic_of_action(action: str) -> str:
-+    return infer_semantic_action(_safe_str(action))
-+
-+
-+def choose_rotated_affordance(context: Dict[str, Any], repeated_action: str) -> str:
-+    repeated_semantic = _semantic_of_action(repeated_action)
-+    preferred = AFFORDANCE_ROTATION_ORDER.get(repeated_semantic, ["inspect", "travel", "ask", "report", "prepare"])
-+    candidates = []
-+    for row in build_objective_affordances_for_state(context, limit=20):
-+        command = _safe_str(_safe_dict(row).get("command")).strip()
-+        if not command:
-+            continue
-+        candidate_semantic = _semantic_of_action(command)
-+        candidates.append((command, candidate_semantic))
-+
-+    repeated_sig = action_signature(repeated_action)
-+    recent_counts = recent_action_signature_counts(context, limit=12)
-+
-+    for wanted_semantic in preferred:
-+        for command, semantic in candidates:
-+            if semantic != wanted_semantic:
-+                continue
-+            sig = action_signature(command)
-+            if sig == repeated_sig:
-+                continue
-+            if recent_counts.get(sig, 0) >= 2:
-+                continue
-+            if is_meta_or_vague_action(command):
-+                continue
-+            return command
-+
-+    for command, semantic in candidates:
-+        sig = action_signature(command)
-+        if sig != repeated_sig and recent_counts.get(sig, 0) < 2 and not is_meta_or_vague_action(command):
-+            return command
-+
-+    return ""
-4B. Use rotation in repeated repair
-
-Replace the repeated affordance repair block:
-
---- src/tests/rpg/autoplay/executable_actions.py
-+++ src/tests/rpg/autoplay/executable_actions.py
-@@
-     if is_repeated_affordance_action(action, context):
--        repaired = ""
--        for row in build_objective_affordances_for_state(context, limit=10):
--            candidate = _safe_str(_safe_dict(row).get("command"))
--            if candidate and action_signature(candidate) != action_signature(action) and not is_repeated_affordance_action(candidate, context):
--                repaired = candidate
--                break
-+        repaired = choose_rotated_affordance(context, action)
-         if not repaired:
-             repaired = executable_action_for_context(context, action)
-         return {
-             "changed": repaired != action,
-             "action": repaired,
-             "original_action": original,
--            "reason": "repeated_affordance_action_repaired_to_alternate_objective_affordance",
-+            "reason": "repeated_affordance_action_repaired_by_semantic_rotation",
-         }
-4C. Prevent executable_action_for_context from always returning first affordance
-
-Find:
-
-generic_affordances = build_objective_affordances_for_state(context, limit=6)
-for row in generic_affordances:
-    command = ...
-    if command and not is_meta_or_vague_action(command):
-        return command
-
-Replace with:
-
---- src/tests/rpg/autoplay/executable_actions.py
-+++ src/tests/rpg/autoplay/executable_actions.py
-@@
-     generic_affordances = build_objective_affordances_for_state(context, limit=6)
-     for row in generic_affordances:
-         command = _safe_str(_safe_dict(row).get("command")).strip()
--        if command and not is_meta_or_vague_action(command):
-+        if (
-+            command
-+            and not is_meta_or_vague_action(command)
-+            and not is_repeated_affordance_action(command, context)
-+        ):
-             return command
-5. Fix quest summary false source
-5A. Patch summary source guard
-
-In src/tests/rpg/autoplay_llm_campaign.py, add helper:
-
---- src/tests/rpg/autoplay_llm_campaign.py
-+++ src/tests/rpg/autoplay_llm_campaign.py
-@@
-+def _guard_quest_summary_source(summary: Dict[str, Any], latest_state: Dict[str, Any]) -> None:
-+    latest_state = _safe_dict(latest_state)
-+    qps = _safe_dict(summary.get("quest_progress_summary"))
-+    has_canonical_quest_progress = bool(_safe_dict(_safe_dict(latest_state.get("quest_progress")).get("quests")))
-+    if qps.get("source") == "latest_state.quest_progress" and not has_canonical_quest_progress:
-+        summary["quest_progress_summary"] = _quest_progress_summary_from_state(latest_state)
-+        qps = _safe_dict(summary.get("quest_progress_summary"))
-+        if qps.get("source") == "latest_state.quest_progress":
-+            synthesized = _synthesize_quest_progress_summary_from_story_state(latest_state)
-+            if synthesized.get("quest_count"):
-+                summary["quest_progress_summary"] = synthesized
-
-In the final lifecycle block, after setting quest_progress_summary, add:
-
---- src/tests/rpg/autoplay_llm_campaign.py
-+++ src/tests/rpg/autoplay_llm_campaign.py
-@@
-     summary["quest_progress_summary"] = _quest_progress_summary_from_state(runtime_state)
-+    _guard_quest_summary_source(summary, runtime_state)
-5B. Apply same guard to report model
-
-Where the campaign report model is created, add:
-
---- src/tests/rpg/autoplay_llm_campaign.py
-+++ src/tests/rpg/autoplay_llm_campaign.py
-@@
-+    if isinstance(report_model, dict):
-+        report_model["latest_state"] = runtime_state
-+        report_model["quest_progress_summary"] = summary.get("quest_progress_summary")
-+        report_model["objective_progression_summary"] = summary.get("objective_progression_summary")
-+        report_model["repeated_affordance_loop_summary"] = summary.get("repeated_affordance_loop_summary")
-+        report_model["quality_gate_summary"] = summary.get("quality_gate_summary")
-
-If report model is built before final summary override, move report model construction below the final lifecycle block.
-
-6. Patch report builder source guard
-
-Patch src/tests/rpg/autoplay/campaign_report.py.
-
-In _quest_summary_from_latest_state(...), after computing latest_state, add:
-
---- src/tests/rpg/autoplay/campaign_report.py
-+++ src/tests/rpg/autoplay/campaign_report.py
-@@
-     quest_progress = _safe_dict(latest_state.get("quest_progress"))
-     quests = _safe_dict(quest_progress.get("quests"))
-     if quests:
-         return _quest_summary_from_quest_mapping(quests, source="latest_state.quest_progress")
-
-Then ensure there is no fallback that returns report_model["quest_progress_summary"] with stale source before trying latest state. Find:
-
-quest_summary = _safe_dict(report_model.get("quest_progress_summary"))
-
-Replace with:
-
---- src/tests/rpg/autoplay/campaign_report.py
-+++ src/tests/rpg/autoplay/campaign_report.py
-@@
--    quest_summary = _safe_dict(report_model.get("quest_progress_summary"))
-+    quest_summary = _quest_summary_from_latest_state(report_model)
-+    if not quest_summary:
-+        quest_summary = _safe_dict(report_model.get("quest_progress_summary"))
-+        latest_state = _safe_dict(report_model.get("latest_state"))
-+        has_canonical = bool(_safe_dict(_safe_dict(latest_state.get("quest_progress")).get("quests")))
-+        if quest_summary.get("source") == "latest_state.quest_progress" and not has_canonical:
-+            quest_summary = _quest_summary_from_story_state(latest_state) or quest_summary
-
-Apply this to every report section that separately fetches quest summary.
-
-7. Tests
-7A. Add quality gate finalization test
-
-Add to an autoplay test file:
-
-def test_final_lifecycle_quality_gates_fail_when_lifecycle_red():
-    from tests.rpg.autoplay_llm_campaign import _final_lifecycle_quality_gates
-
-    summary = {
-        "requested_turns": 20,
-        "turns_executed": 20,
-        "quality_gate_summary": {"gates": {"existing_gate": True}, "ok": True},
-        "strict_progress_health_summary": {"ok": False},
-        "post_transition_action_quality_summary": {"ok": False},
-        "objective_progression_summary": {"ok": False},
-        "repeated_affordance_loop_summary": {"ok": False},
-    }
-
-    gates = _final_lifecycle_quality_gates(summary)
-
-    assert gates["ok"] is False
-    assert gates["gates"]["strict_progress_health_ok"] is False
-    assert gates["gates"]["post_transition_action_quality_ok"] is False
-    assert gates["gates"]["objective_progression_present_ok"] is False
-    assert gates["gates"]["repeated_affordance_loop_ok"] is False
-7B. Add objective progression persistence test
-
-Add to src/tests/rpg/test_objective_progression_rules.py:
-
-def test_progression_rules_persist_evaluation_log_even_when_no_match():
-    from app.rpg.objectives.progression_rules import apply_objective_progression_rules
-
-    state = {
-        "quest_log_state": {
-            "quests": {
-                "quest:scout": {
-                    "title": "Missing Scout",
-                    "objectives": [
-                        {
-                            "objective_id": "objective:find_scout",
-                            "summary": "Find the missing scout.",
-                            "objective_type": "find",
-                            "subject": "missing scout",
-                        }
-                    ],
+    summary = _pre_turn_advisory_promotion_performance_summary(
+        [
+            {
+                "pre_turn_advisory_promotion_result": {
+                    "elapsed_ms": 9000,
+                    "fast_pre_turn": True,
+                    "turns": 1,
                 }
             }
-        }
-    }
-
-    result = apply_objective_progression_rules(
-        state,
-        player_action="I play a lute in the corner.",
-    )
-
-    assert "objective_progression_log" in state
-    assert state["objective_progression_log"]
-    assert state["objective_progression_log"][-1]["matched"] is False
-    assert result["event"]["semantic_action"]
-7C. Add affordance rotation test
-
-Add to src/tests/rpg/autoplay/test_executable_actions.py:
-
-def test_repeated_inspect_affordance_rotates_to_different_semantic():
-    from tests.rpg.autoplay.executable_actions import (
-        action_signature,
-        choose_rotated_affordance,
-        repair_action_if_needed,
-    )
-
-    repeated = (
-        "I inspect the forest trail for signs of missing scout: tracks, marks, "
-        "damage, residue, missing items, witnesses, or hidden clues."
-    )
-    context = {
-        "quest_log_state": {
-            "quests": {
-                "quest:scout": {
-                    "title": "Missing Scout",
-                    "quest_giver": "Captain Arlen",
-                    "objectives": [
-                        {
-                            "objective_id": "objective:find_scout",
-                            "summary": "Find the missing scout.",
-                            "objective_type": "find",
-                            "subject": "missing scout",
-                            "known_leads": ["forest trail"],
-                        }
-                    ],
-                }
-            }
-        },
-        "recent_turns": [
-            {"player_action": repeated},
-            {"player_action": repeated},
-            {"player_action": repeated},
         ],
-    }
+        slow_events=[{"turn_index": 3, "elapsed_ms": 9000}],
+        auto_disabled=True,
+        disable_reason="slow_pre_turn_advisory_promotion:9000ms",
+    )
 
-    rotated = choose_rotated_affordance(context, repeated)
-
-    assert rotated
-    assert action_signature(rotated) != action_signature(repeated)
-
-    repaired = repair_action_if_needed(repeated, context)
-    assert repaired["changed"] is True
-    assert repaired["reason"] == "repeated_affordance_action_repaired_by_semantic_rotation"
-    assert action_signature(repaired["action"]) != action_signature(repeated)
-7D. Add quest source guard test
-
-Add to autoplay summary tests:
-
-def test_guard_quest_summary_source_replaces_false_latest_quest_progress_source():
-    from tests.rpg.autoplay_llm_campaign import _guard_quest_summary_source
-
-    latest_state = {
-        "witness_search_facts": {
-            "inspected_side_door": True,
-            "followed_road": True,
-            "reported_to_bran": True,
-        },
-        "autoplay_story_hook_state": {
-            "fired_hooks": {
-                "hook:witness:pursue_bandit_trail": {"turn_index": 4}
-            }
-        },
-    }
-    summary = {
-        "quest_progress_summary": {
-            "source": "latest_state.quest_progress",
-            "quest_count": 1,
-            "quests": [],
-        }
-    }
-
-    _guard_quest_summary_source(summary, latest_state)
-
-    assert summary["quest_progress_summary"]["source"] != "latest_state.quest_progress"
-8. Validation
+    assert summary["ok"] is False
+    assert summary["slow_event_count"] == 1
+    assert summary["auto_disabled"] is True
+    assert summary["max_elapsed_ms"] == 9000
+4. Validation
 
 Run:
 
-python -m py_compile src\tests\rpg\autoplay_llm_campaign.py src\tests\rpg\autoplay\executable_actions.py src\app\rpg\objectives\progression_rules.py src\tests\rpg\autoplay\campaign_report.py
+python -m py_compile src\tests\rpg\autoplay\advisory_promotion_runtime.py src\tests\rpg\autoplay_llm_campaign.py
 
-python -m pytest src\tests\rpg\test_objective_progression_rules.py src\tests\rpg\autoplay\test_executable_actions.py src\tests\rpg\autoplay\test_campaign_report.py -q
+Run focused tests:
