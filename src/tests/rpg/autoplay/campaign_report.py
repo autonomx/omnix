@@ -802,6 +802,198 @@ def _render_action_diversity(summary: Dict[str, Any]) -> str:
     """
 
 
+def _node_ids_from_progression_log(summary: Dict[str, Any]) -> List[str]:
+    progression_log = _safe_list(_safe_dict(summary).get("scenario_progression_log"))
+    rows: List[tuple[int, int, str]] = []
+
+    for row_index, row in enumerate(progression_log):
+        row = _safe_dict(row)
+        turn_index = int(row.get("turn_index") or 0)
+
+        node_ids: List[str] = []
+        for node_id in _safe_list(row.get("matched_node_ids")):
+            node_id = _safe_str(node_id)
+            if node_id:
+                node_ids.append(node_id)
+
+        for node in _safe_list(row.get("matched_nodes")):
+            node_id = _safe_str(_safe_dict(node).get("node_id"))
+            if node_id:
+                node_ids.append(node_id)
+
+        for local_index, node_id in enumerate(node_ids):
+            rows.append((turn_index, row_index * 1000 + local_index, node_id))
+
+    ordered: List[str] = []
+    seen = set()
+    for _turn_index, _row_order, node_id in sorted(rows, key=lambda item: (item[0], item[1])):
+        if node_id and node_id not in seen:
+            ordered.append(node_id)
+            seen.add(node_id)
+    return ordered
+
+
+def _turn_index_by_progression_node(summary: Dict[str, Any]) -> Dict[str, int]:
+    progression_log = _safe_list(_safe_dict(summary).get("scenario_progression_log"))
+    out: Dict[str, int] = {}
+
+    for row in progression_log:
+        row = _safe_dict(row)
+        turn_index = int(row.get("turn_index") or 0)
+        if turn_index <= 0:
+            continue
+
+        matched_ids: List[str] = []
+        for node_id in _safe_list(row.get("matched_node_ids")):
+            node_id = _safe_str(node_id)
+            if node_id:
+                matched_ids.append(node_id)
+
+        for node in _safe_list(row.get("matched_nodes")):
+            node_id = _safe_str(_safe_dict(node).get("node_id"))
+            if node_id:
+                matched_ids.append(node_id)
+
+        for node_id in matched_ids:
+            out.setdefault(node_id, turn_index)
+
+    return out
+
+
+def _graph_registry_node_order(summary: Dict[str, Any]) -> List[str]:
+    summary = _safe_dict(summary)
+    arc = _safe_dict(summary.get("scenario_progression_arc_summary"))
+    scenario_seed = _safe_str(
+        summary.get("scenario_seed")
+        or arc.get("scenario_seed")
+        or "tavern_story_seed"
+    )
+
+    try:
+        from app.rpg.progression.graph_registry import get_progression_graph_for_seed
+
+        graph = get_progression_graph_for_seed(scenario_seed)
+        if graph:
+            return [_safe_str(node.node_id) for node in graph.nodes if _safe_str(node.node_id)]
+    except Exception:
+        return []
+
+    return []
+
+
+def _ordered_progression_graph_node_ids(summary: Dict[str, Any]) -> List[str]:
+    summary = _safe_dict(summary)
+    arc = _safe_dict(summary.get("scenario_progression_arc_summary"))
+    completed_nodes = _safe_dict(summary.get("progression_completed_nodes"))
+
+    chronological = _node_ids_from_progression_log(summary)
+    registry_order = _graph_registry_node_order(summary)
+
+    # Arc summaries may store completed node ids as sorted lists. They are useful
+    # as a membership source, but should not define visual order.
+    arc_completed = [
+        _safe_str(node_id)
+        for node_id in _safe_list(arc.get("completed_node_ids"))
+        if _safe_str(node_id)
+    ]
+    arc_remaining = [
+        _safe_str(node_id)
+        for node_id in _safe_list(arc.get("remaining_node_ids"))
+        if _safe_str(node_id)
+    ]
+    completed_fallback = [
+        _safe_str(node_id)
+        for node_id in completed_nodes.keys()
+        if _safe_str(node_id)
+    ]
+
+    ordered: List[str] = []
+    seen = set()
+
+    def add_many(values: List[str]) -> None:
+        for value in values:
+            value = _safe_str(value)
+            if value and value not in seen:
+                ordered.append(value)
+                seen.add(value)
+
+    # 1. Actual turn order for completed/reached nodes.
+    add_many(chronological)
+
+    # 2. Registry order for known nodes not yet reached. This keeps pending nodes
+    # after completed nodes without alphabetizing the graph.
+    completed_membership = set(chronological) | set(arc_completed) | set(completed_fallback)
+    pending_registry = [node_id for node_id in registry_order if node_id not in completed_membership]
+    add_many(pending_registry)
+
+    # 3. Append any completed nodes absent from log, preserving registry order if possible.
+    completed_missing_from_log = [
+        node_id for node_id in registry_order
+        if node_id in completed_membership and node_id not in seen
+    ]
+    add_many(completed_missing_from_log)
+
+    # 4. Last-resort fallback: use arc/completed lists as-is, not sorted.
+    add_many(arc_completed)
+    add_many(arc_remaining)
+    add_many(completed_fallback)
+
+    return ordered
+
+
+def _progression_graph_report_data(summary: Dict[str, Any]) -> Dict[str, Any]:
+    summary = _safe_dict(summary)
+    arc = _safe_dict(summary.get("scenario_progression_arc_summary"))
+    completed_nodes = _safe_dict(summary.get("progression_completed_nodes"))
+    ordered_node_ids = _ordered_progression_graph_node_ids(summary)
+    turn_by_node_id = _turn_index_by_progression_node(summary)
+    completed_from_log = set(_node_ids_from_progression_log(summary))
+    completed_from_arc = {
+        _safe_str(node_id)
+        for node_id in _safe_list(arc.get("completed_node_ids"))
+        if _safe_str(node_id)
+    }
+
+    nodes: List[Dict[str, Any]] = []
+    for index, node_id in enumerate(ordered_node_ids, start=1):
+        node_id = _safe_str(node_id)
+        status = (
+            "completed"
+            if node_id in completed_nodes
+            or node_id in completed_from_log
+            or node_id in completed_from_arc
+            else "pending"
+        )
+        turn_index = int(turn_by_node_id.get(node_id) or 0)
+        nodes.append(
+            {
+                "node_id": node_id,
+                "label": node_id.replace("_", " "),
+                "status": status,
+                "turn_index": turn_index,
+                "order": index,
+            }
+        )
+
+    edges = [
+        {
+            "from": nodes[i]["node_id"],
+            "to": nodes[i + 1]["node_id"],
+        }
+        for i in range(len(nodes) - 1)
+    ]
+
+    return {
+        "ok": bool(nodes),
+        "graph_id": _safe_str(arc.get("graph_id")),
+        "arc_complete": bool(arc.get("arc_complete")),
+        "expected_node_count": int(arc.get("expected_node_count") or len(nodes)),
+        "completed_node_count": int(arc.get("completed_node_count") or len(completed_from_log)),
+        "nodes": nodes,
+        "edges": edges,
+    }
+
+
 def _render_progress_timeline(summary: Dict[str, Any]) -> str:
     summary = _safe_dict(summary)
     timeline = summary.get("timeline") if isinstance(summary.get("timeline"), list) else []
@@ -837,6 +1029,77 @@ def _render_progress_timeline(summary: Dict[str, Any]) -> str:
         </thead>
         <tbody>{rows}</tbody>
       </table>
+    </section>
+    """
+
+
+def _render_progression_graph_section(summary: Dict[str, Any]) -> str:
+    data = _progression_graph_report_data(summary)
+    if not data.get("ok"):
+        return """
+        <section class="card">
+          <h2>Scenario Progression Graph</h2>
+          <p class="muted">No progression graph data was captured for this run.</p>
+        </section>
+        """
+
+    nodes_html = []
+    for node in _safe_list(data.get("nodes")):
+        node = _safe_dict(node)
+        status = _safe_str(node.get("status")) or "pending"
+        turn = int(node.get("turn_index") or 0)
+        turn_label = f"Turn {turn}" if turn else "Not reached"
+        nodes_html.append(
+            f"""
+            <div class="graph-node graph-node-{html.escape(status)}">
+              <div class="graph-node-index">{int(node.get("order") or 0)}</div>
+              <div class="graph-node-body">
+                <div class="graph-node-title">{html.escape(_safe_str(node.get("label")))}</div>
+                <div class="graph-node-meta">{html.escape(turn_label)} · {html.escape(status)} · {html.escape(_safe_str(node.get("node_id")))}</div>
+              </div>
+            </div>
+            """
+        )
+
+    edges_html = "".join('<div class="graph-edge">↓</div>' for _ in _safe_list(data.get("edges")))
+    interleaved = []
+    for index, node_html in enumerate(nodes_html):
+        interleaved.append(node_html)
+        if index < len(nodes_html) - 1:
+            interleaved.append('<div class="graph-edge">↓</div>')
+
+    mermaid_lines = ["graph TD"]
+    for node in _safe_list(data.get("nodes")):
+        node = _safe_dict(node)
+        node_id = _safe_str(node.get("node_id"))
+        label = _safe_str(node.get("label"))
+        safe_id = "n_" + "".join(ch if ch.isalnum() else "_" for ch in node_id)
+        mermaid_lines.append(f'  {safe_id}["{label}"]')
+    for edge in _safe_list(data.get("edges")):
+        edge = _safe_dict(edge)
+        src = "n_" + "".join(ch if ch.isalnum() else "_" for ch in _safe_str(edge.get("from")))
+        dst = "n_" + "".join(ch if ch.isalnum() else "_" for ch in _safe_str(edge.get("to")))
+        mermaid_lines.append(f"  {src} --> {dst}")
+    mermaid_source = "\n".join(mermaid_lines)
+
+    return f"""
+    <section class="card" id="scenario-progression-graph">
+      <h2>Scenario Progression Graph</h2>
+      <p class="muted">
+        Graph: {html.escape(_safe_str(data.get("graph_id")))}
+        · Completed {int(data.get("completed_node_count") or 0)} / {int(data.get("expected_node_count") or 0)}
+        · Arc complete: {html.escape(str(bool(data.get("arc_complete"))))}
+      </p>
+      <p class="muted small">
+        Nodes are ordered by first matched turn, with unreached graph nodes appended afterward.
+      </p>
+      <div class="progression-graph">
+        {''.join(interleaved)}
+      </div>
+      <details class="debug-details">
+        <summary>Mermaid graph source</summary>
+        <pre>{html.escape(mermaid_source)}</pre>
+      </details>
     </section>
     """
 
@@ -4520,6 +4783,7 @@ def render_campaign_report_html(
     .story-card h3 { margin-bottom: 6px; }
     .kv-table th { width: 220px; }
     .muted { color: var(--muted); }
+    .small { font-size: 0.85rem; }
    .good { color: var(--good); }
    .warn { color: var(--warn); }
    .bad { color: var(--bad); }
@@ -5408,166 +5672,63 @@ def render_campaign_report_html(
         display: none !important;
       }
 
-      body > main.rpg-shell {
-        max-width: 1480px !important;
-        padding: 28px !important;
-        margin: 0 auto !important;
-      }
+.progression-graph {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  margin-top: 1rem;
+}
 
-      body > main.rpg-shell > header.rpg-hero {
-        position: relative !important;
-        top: auto !important;
-        z-index: auto !important;
-        border: 1px solid rgba(226, 191, 109, 0.55) !important;
-        background:
-          linear-gradient(135deg, rgba(33, 26, 20, 0.96), rgba(42, 33, 25, 0.9)),
-          radial-gradient(circle at 80% 10%, rgba(199, 154, 59, 0.18), transparent 24rem) !important;
-        color: var(--rpg-parchment) !important;
-        border-radius: 22px !important;
-        box-shadow: 0 18px 50px var(--rpg-shadow) !important;
-      }
+.graph-node {
+  display: grid;
+  grid-template-columns: 2.25rem 1fr;
+  gap: 0.75rem;
+  align-items: center;
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  border-radius: 0.9rem;
+  padding: 0.75rem;
+  background: rgba(15, 23, 42, 0.58);
+}
 
-      body > main.rpg-shell section.rpg-card {
-        background:
-          linear-gradient(180deg, rgba(241, 227, 200, 0.98), rgba(230, 208, 170, 0.98)) !important;
-        color: var(--rpg-ink) !important;
-        border: 1px solid rgba(120, 83, 30, 0.35) !important;
-      }
+.graph-node-index {
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: 999px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 800;
+  background: rgba(148, 163, 184, 0.18);
+  border: 1px solid rgba(148, 163, 184, 0.32);
+}
 
-      body > main.rpg-shell section.rpg-card.dark {
-        background: linear-gradient(180deg, rgba(42, 33, 25, 0.98), rgba(33, 26, 20, 0.98)) !important;
-        color: var(--rpg-parchment) !important;
-        border-color: rgba(226, 191, 109, 0.28) !important;
-      }
+.graph-node-title {
+  font-weight: 750;
+  letter-spacing: 0.01em;
+}
 
-      @media print {
-        body { background: #fff; color: #000; }
-        .rpg-nav { display: none; }
-        .rpg-card, .rpg-hero { box-shadow: none; break-inside: avoid; }
-      }
+.graph-node-meta {
+  margin-top: 0.2rem;
+  font-size: 0.85rem;
+  opacity: 0.75;
+}
 
-      /*
-       * Last-resort guard for the old standalone partial shown in artifact 159:
-       * body > header with status-pill + old nav, followed by section#summary.
-       * Python removes it; CSS hides it if an append path reintroduces it.
-       */
-      body > header:not(.rpg-hero),
-      body > section#summary,
-      body > section.hero {
-        display: none !important;
-      }
+.graph-node-completed {
+  border-color: rgba(34, 197, 94, 0.45);
+  background: linear-gradient(135deg, rgba(22, 163, 74, 0.20), rgba(15, 23, 42, 0.60));
+}
 
-      /*
-       * N83.1.6.1 readability fix:
-       * Promoted legacy sections must be dark-on-parchment and must not inherit
-       * pale legacy text colors. This block intentionally uses high-specificity
-       * selectors and !important because the legacy report CSS still defines
-       * broad rules for section/card/journal-entry/summary/pre/table.
-       */
-      body > main.rpg-shell .rpg-promoted-section {
-        background:
-          linear-gradient(180deg, #f5ead2 0%, #ead8b8 100%) !important;
-        color: #24170d !important;
-        border: 1px solid rgba(120, 83, 30, 0.42) !important;
-      }
+.graph-node-pending {
+  border-color: rgba(234, 179, 8, 0.40);
+  background: linear-gradient(135deg, rgba(234, 179, 8, 0.12), rgba(15, 23, 42, 0.60));
+}
 
-      body > main.rpg-shell .rpg-promoted-section *,
-      body > main.rpg-shell .rpg-promoted-section p,
-      body > main.rpg-shell .rpg-promoted-section div,
-      body > main.rpg-shell .rpg-promoted-section span,
-      body > main.rpg-shell .rpg-promoted-section li,
-      body > main.rpg-shell .rpg-promoted-section td,
-      body > main.rpg-shell .rpg-promoted-section th,
-      body > main.rpg-shell .rpg-promoted-section summary {
-        color: #24170d !important;
-      }
-
-      body > main.rpg-shell .rpg-promoted-section h2,
-      body > main.rpg-shell .rpg-promoted-section h3,
-      body > main.rpg-shell .rpg-promoted-section h4,
-      body > main.rpg-shell .rpg-promoted-section strong {
-        color: #2b1607 !important;
-      }
-
-      body > main.rpg-shell .rpg-promoted-section .rpg-section-title {
-        border-bottom: 1px solid rgba(120, 83, 30, 0.35) !important;
-      }
-
-      body > main.rpg-shell .rpg-promoted-section .rpg-badge {
-        background: rgba(120, 83, 30, 0.12) !important;
-        color: #3a240f !important;
-        border: 1px solid rgba(120, 83, 30, 0.35) !important;
-      }
-
-      body > main.rpg-shell .rpg-promoted-section .journal-entry,
-      body > main.rpg-shell .rpg-promoted-section .npc-card,
-      body > main.rpg-shell .rpg-promoted-section .metric-card,
-      body > main.rpg-shell .rpg-promoted-section .turn-card,
-      body > main.rpg-shell .rpg-promoted-section article {
-        background: #fff8e9 !important;
-        color: #24170d !important;
-        border: 1px solid rgba(120, 83, 30, 0.28) !important;
-        border-radius: 14px !important;
-        box-shadow: inset 0 1px 0 rgba(255,255,255,0.65) !important;
-      }
-
-      body > main.rpg-shell .rpg-promoted-section table {
-        width: 100% !important;
-        background: #fff8e9 !important;
-        color: #24170d !important;
-        border-collapse: collapse !important;
-        border: 1px solid rgba(120, 83, 30, 0.24) !important;
-      }
-
-      body > main.rpg-shell .rpg-promoted-section th {
-        background: rgba(199, 154, 59, 0.20) !important;
-        color: #2b1607 !important;
-      }
-
-      body > main.rpg-shell .rpg-promoted-section td,
-      body > main.rpg-shell .rpg-promoted-section th {
-        padding: 10px 12px !important;
-        border-bottom: 1px solid rgba(120, 83, 30, 0.18) !important;
-      }
-
-      body > main.rpg-shell .rpg-promoted-section a {
-        color: #6b3f0b !important;
-        font-weight: 800 !important;
-        text-decoration: underline !important;
-        text-underline-offset: 2px !important;
-      }
-
-      body > main.rpg-shell .rpg-promoted-section pre,
-      body > main.rpg-shell .rpg-promoted-section code {
-        background: #211a14 !important;
-        color: #fff1d0 !important;
-        border-color: rgba(226, 191, 109, 0.24) !important;
-      }
-
-      body > main.rpg-shell .rpg-promoted-section .muted,
-      body > main.rpg-shell .rpg-promoted-section .small,
-      body > main.rpg-shell .rpg-promoted-section .subtle {
-        color: #5b4226 !important;
-      }
-
-      /*
-       * Hide any unwrapped legacy second report if it somehow survives final
-       * sanitization. Promoted sections inside .rpg-shell remain visible because
-       * they have .rpg-promoted-section.
-       */
-      body > main:not(.rpg-shell) {
-        display: none !important;
-      }
-
-      .nav-link {
-        background: none;
-        border: none;
-        color: inherit;
-        text-decoration: underline;
-        cursor: pointer;
-        padding: 0;
-        font: inherit;
-      }
+.graph-edge {
+  text-align: center;
+  opacity: 0.5;
+  font-size: 1.2rem;
+  line-height: 1;
+}
     """
     arc_cards_html = "".join(
         '<div class="story-card">'
@@ -5665,6 +5826,8 @@ def render_campaign_report_html(
     {_render_json_details("Story arcs JSON", model.get("story_arcs"))}
     {_render_json_details("Milestones JSON", model.get("milestones"))}
    </section>
+
+  {_render_progression_graph_section(summary)}
 
   <section class="rpg-promoted-section" id="locations">
     <h2>Location Journey</h2>

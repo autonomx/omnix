@@ -478,6 +478,12 @@ def build_scenario_progression_arc_summary(
         "active_graph_objective_count": len(active_graph_objectives),
         "active_graph_objectives": active_graph_objectives,
         "arc_complete": arc_complete,
+        "waiting_for_next_graph_pack": arc_complete,
+        "recommended_next_arc_bridge_action": (
+            "I ask Garran what threat or lead we should follow next now that the wagon is safe."
+            if arc_complete
+            else ""
+        ),
     }
 
 
@@ -493,9 +499,19 @@ def _arc_complete_idle_action(state: Dict[str, Any], *, scenario_seed: str) -> L
             "semantic": "recap",
             "target_type": "npc",
             "target_id": "npc:garran",
-            "priority": 20,
+            "priority": 40,
             "source": "scenario_progression_arc_complete_idle",
-        }
+        },
+        {
+            "action_id": "arc_complete_ask_next_lead",
+            "node_id": "",
+            "command": "I ask Garran what threat or lead we should follow next now that the wagon is safe.",
+            "semantic": "ask",
+            "target_type": "npc",
+            "target_id": "npc:garran",
+            "priority": 39,
+            "source": "scenario_progression_arc_complete_bridge",
+        },
     ]
 
 

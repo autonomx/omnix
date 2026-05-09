@@ -1,642 +1,437 @@
-N90.7 — Graph-Aware Progress Quality Gates + Campaign Arc End-State
+N90.8.1 — Report Graph Chronological Ordering
 Goal
 
-Fix run 197.
+Fix the report graph visualization added in N90.8.
 
-N90.6 made the graph behave correctly:
+Run 199 passed, and the report now includes the graph section. But node order is currently wrong because the renderer falls back to sorted/completed-node ordering:
 
-Witness Search
-→ Warn the Wagon
-→ Quarry Road Ambush
-→ graph arc complete by turn 18
+1. ask alternate route      Turn 12
+2. ask bran about tension   Turn 1
+3. ask bran bridge          Turn 6
 
-But legacy gates still fail because they do not understand graph-driven progress or a completed graph arc:
+The graph should render in chronological progression order:
 
-strict_progress_health_ok: false
-post_transition_action_quality_ok: false
-campaign_state_commit_ok: false
-campaign_state_not_stale_ok: false
+1. ask_bran_about_tension        Turn 1
+2. ask_bran_who_left_side_door   Turn 2
+3. ask_bran_direction            Turn 3
+...
+18. protect_wagon_or_lure_bandits Turn 18
 
-This patch updates the evaluators and end-state handling, not the graph.
+This patch makes the report graph order use:
 
-1. Patch src/app/rpg/progression/runtime.py
-1A. Add graph arc summary helper
+1. scenario_progression_log turn order first
+2. graph registry order second, for pending/unreached nodes
+3. completed_node_ids only as a fallback
+4. never alphabetical sort as the primary visual order
+1. Patch src/tests/rpg/autoplay/campaign_report.py
+1A. Add chronological progression log helpers
 
-Add near the runtime helpers:
+Add near the graph report helpers:
 
---- src/app/rpg/progression/runtime.py
-+++ src/app/rpg/progression/runtime.py
+--- src/tests/rpg/autoplay/campaign_report.py
++++ src/tests/rpg/autoplay/campaign_report.py
 @@
-+def build_scenario_progression_arc_summary(
-+    state: Dict[str, Any],
-+    *,
-+    scenario_seed: str,
-+) -> Dict[str, Any]:
-+    graph = get_progression_graph_for_seed(scenario_seed)
-+    state = _safe_dict(state)
-+    completed_nodes = _safe_dict(state.get("progression_completed_nodes"))
-+    completed_node_ids = sorted(completed_nodes.keys())
-+    expected_node_ids = [node.node_id for node in graph.nodes] if graph else []
++def _node_ids_from_progression_log(summary: Dict[str, Any]) -> List[str]:
++    progression_log = _safe_list(_safe_dict(summary).get("scenario_progression_log"))
++    rows: List[tuple[int, int, str]] = []
 +
-+    qp = _safe_dict(state.get("quest_progress"))
-+    quests = _safe_dict(qp.get("quests"))
-+    graph_quests = {
-+        quest_id: _safe_dict(quest)
-+        for quest_id, quest in quests.items()
-+        if _safe_str(_safe_dict(quest).get("source")) == "scenario_progression_graph"
-+        or quest_id in {
-+            "quest:witness_search",
-+            "quest:warn_wagon",
-+            "quest:quarry_road_ambush",
-+        }
-+    }
-+    completed_graph_quests = {
-+        quest_id: quest
-+        for quest_id, quest in graph_quests.items()
-+        if bool(quest.get("completed")) or _safe_str(quest.get("status")) == "completed"
-+    }
-+    active_graph_quests = {
-+        quest_id: quest
-+        for quest_id, quest in graph_quests.items()
-+        if not bool(quest.get("completed")) and _safe_str(quest.get("status")) == "active"
-+    }
++    for row_index, row in enumerate(progression_log):
++        row = _safe_dict(row)
++        turn_index = int(row.get("turn_index") or 0)
 +
-+    active_graph_objectives: List[Dict[str, Any]] = []
-+    for quest_id, quest in active_graph_quests.items():
-+        for objective in _safe_list(quest.get("objectives")):
-+            objective = _safe_dict(objective)
-+            if not bool(objective.get("completed")) and _safe_str(objective.get("status")) != "completed":
-+                active_graph_objectives.append(
-+                    {
-+                        "quest_id": quest_id,
-+                        "objective_id": _safe_str(objective.get("objective_id")),
-+                        "summary": _safe_str(objective.get("summary")),
-+                    }
-+                )
++        node_ids: List[str] = []
++        for node_id in _safe_list(row.get("matched_node_ids")):
++            node_id = _safe_str(node_id)
++            if node_id:
++                node_ids.append(node_id)
 +
-+    remaining_node_ids = [
-+        node_id for node_id in expected_node_ids
-+        if node_id not in completed_nodes
-+    ]
-+    expected_node_count = len(expected_node_ids)
-+    completed_node_count = len(completed_node_ids)
-+    arc_complete = bool(
-+        expected_node_count > 0
-+        and completed_node_count >= expected_node_count
-+        and graph_quests
-+        and not active_graph_quests
-+        and not active_graph_objectives
++        for node in _safe_list(row.get("matched_nodes")):
++            node_id = _safe_str(_safe_dict(node).get("node_id"))
++            if node_id:
++                node_ids.append(node_id)
++
++        for local_index, node_id in enumerate(node_ids):
++            rows.append((turn_index, row_index * 1000 + local_index, node_id))
++
++    ordered: List[str] = []
++    seen = set()
++    for _turn_index, _row_order, node_id in sorted(rows, key=lambda item: (item[0], item[1])):
++        if node_id and node_id not in seen:
++            ordered.append(node_id)
++            seen.add(node_id)
++    return ordered
++
++
++def _turn_index_by_progression_node(summary: Dict[str, Any]) -> Dict[str, int]:
++    progression_log = _safe_list(_safe_dict(summary).get("scenario_progression_log"))
++    out: Dict[str, int] = {}
++
++    for row in progression_log:
++        row = _safe_dict(row)
++        turn_index = int(row.get("turn_index") or 0)
++        if turn_index <= 0:
++            continue
++
++        matched_ids: List[str] = []
++        for node_id in _safe_list(row.get("matched_node_ids")):
++            node_id = _safe_str(node_id)
++            if node_id:
++                matched_ids.append(node_id)
++
++        for node in _safe_list(row.get("matched_nodes")):
++            node_id = _safe_str(_safe_dict(node).get("node_id"))
++            if node_id:
++                matched_ids.append(node_id)
++
++        for node_id in matched_ids:
++            out.setdefault(node_id, turn_index)
++
++    return out
++
++
++def _graph_registry_node_order(summary: Dict[str, Any]) -> List[str]:
++    summary = _safe_dict(summary)
++    arc = _safe_dict(summary.get("scenario_progression_arc_summary"))
++    scenario_seed = _safe_str(
++        summary.get("scenario_seed")
++        or arc.get("scenario_seed")
++        or "tavern_story_seed"
 +    )
 +
-+    return {
-+        "ok": True,
-+        "graph_id": graph.graph_id if graph else "",
-+        "scenario_seed": scenario_seed,
-+        "expected_node_count": expected_node_count,
-+        "completed_node_count": completed_node_count,
-+        "completed_node_ids": completed_node_ids,
-+        "remaining_node_ids": remaining_node_ids,
-+        "graph_quest_count": len(graph_quests),
-+        "completed_graph_quest_count": len(completed_graph_quests),
-+        "active_graph_quest_count": len(active_graph_quests),
-+        "active_graph_objective_count": len(active_graph_objectives),
-+        "active_graph_objectives": active_graph_objectives,
-+        "arc_complete": arc_complete,
-+    }
-2. Patch src/tests/rpg/autoplay_llm_campaign.py
-2A. Add arc summary wrapper
-
-Add near progression helpers:
-
---- src/tests/rpg/autoplay_llm_campaign.py
-+++ src/tests/rpg/autoplay_llm_campaign.py
-@@
-+def _scenario_progression_arc_summary(
-+    runtime_state: Dict[str, Any],
-+    *,
-+    scenario_seed: str,
-+) -> Dict[str, Any]:
 +    try:
-+        from app.rpg.progression.runtime import build_scenario_progression_arc_summary
++        from app.rpg.progression.graph_registry import get_progression_graph_for_seed
 +
-+        return build_scenario_progression_arc_summary(
-+            runtime_state,
-+            scenario_seed=scenario_seed,
-+        )
-+    except Exception as exc:
-+        return {
-+            "ok": False,
-+            "error": f"{type(exc).__name__}: {exc}",
-+            "arc_complete": False,
-+            "expected_node_count": 0,
-+            "completed_node_count": 0,
-+        }
-2B. Add arc summary to final summary
-
-Inside _build_authoritative_final_lifecycle_summary(...), after existing progression fields:
-
---- src/tests/rpg/autoplay_llm_campaign.py
-+++ src/tests/rpg/autoplay_llm_campaign.py
-@@
-     summary["scenario_progression_quest_ids"] = _safe_list(
-         runtime_state.get("scenario_progression_quest_ids")
-     )
-     summary["active_graph_objective_count"] = _active_graph_objective_count_from_state(runtime_state)
-     summary["scenario_progression_actions_empty_with_active_objectives"] = (
-         _active_graph_objective_count_from_state(runtime_state) > 0
-         and not bool(_safe_list(runtime_state.get("scenario_progression_actions")))
-     )
-+    summary["scenario_progression_arc_summary"] = _scenario_progression_arc_summary(
-+        runtime_state,
-+        scenario_seed=_safe_str(summary.get("scenario_seed") or runtime_state.get("scenario_seed") or "tavern_story_seed"),
-+    )
-
-If summary["scenario_seed"] is not currently set, add this once near the top of the final summary builder:
-
---- src/tests/rpg/autoplay_llm_campaign.py
-+++ src/tests/rpg/autoplay_llm_campaign.py
-@@
-     summary["latest_state"] = runtime_state
-+    summary.setdefault("scenario_seed", _safe_str(runtime_state.get("scenario_seed") or ""))
-
-Add required field:
-
---- src/tests/rpg/autoplay_llm_campaign.py
-+++ src/tests/rpg/autoplay_llm_campaign.py
-@@
-     "scenario_progression_quest_state",
-+    "scenario_progression_arc_summary",
-     "behavioral_autoplay_eval_summary",
-3. Patch strict progress health to count graph progress
-
-Find _strict_progress_health_summary_from_summary(...).
-
-Add graph-aware extraction near the top:
-
---- src/tests/rpg/autoplay_llm_campaign.py
-+++ src/tests/rpg/autoplay_llm_campaign.py
-@@
- def _strict_progress_health_summary_from_summary(summary: Dict[str, Any]) -> Dict[str, Any]:
-     summary = _safe_dict(summary)
-+    behavioral = _safe_dict(summary.get("behavioral_autoplay_eval_summary"))
-+    behavioral_metrics = _safe_dict(behavioral.get("metrics"))
-+    arc_summary = _safe_dict(summary.get("scenario_progression_arc_summary"))
-+    progression_changed_count = int(behavioral_metrics.get("progression_changed_count") or 0)
-+    unique_progression_node_count = int(behavioral_metrics.get("unique_progression_node_count") or 0)
-+    arc_complete = bool(arc_summary.get("arc_complete"))
-
-Where the function computes meaningful progress rate / ok, add graph progress as valid progress.
-
-Patch the return shape or computed fields so it includes:
-
---- src/tests/rpg/autoplay_llm_campaign.py
-+++ src/tests/rpg/autoplay_llm_campaign.py
-@@
--    ok = ...
-+    graph_progress_ok = (
-+        progression_changed_count >= 3
-+        and unique_progression_node_count >= 3
-+    ) or arc_complete
-+    ok = bool(ok or graph_progress_ok)
-@@
-         "ok": ok,
-+        "graph_progress_ok": graph_progress_ok,
-+        "progression_changed_count": progression_changed_count,
-+        "unique_progression_node_count": unique_progression_node_count,
-+        "scenario_arc_complete": arc_complete,
-
-If the function builds failed_reasons, remove stale progress failures when graph_progress_ok is true:
-
---- src/tests/rpg/autoplay_llm_campaign.py
-+++ src/tests/rpg/autoplay_llm_campaign.py
-@@
--    failed_reasons = [...]
-+    if graph_progress_ok:
-+        failed_reasons = [
-+            reason for reason in failed_reasons
-+            if reason not in {
-+                "low_meaningful_progress_rate",
-+                "too_many_no_change_turns",
-+                "no_meaningful_progress",
-+            }
-+        ]
-+        ok = not failed_reasons
-4. Patch campaign stale-state summary for graph arc completion
-
-Find _stale_state_summary(...) in src/app/rpg/campaign_state/authority_commit.py.
-
-Patch it so completed graph arcs are not marked stale.
-
---- src/app/rpg/campaign_state/authority_commit.py
-+++ src/app/rpg/campaign_state/authority_commit.py
-@@
- def _stale_state_summary(state: Dict[str, Any], evidence: List[Dict[str, Any]], handoff: Dict[str, Any]) -> Dict[str, Any]:
-     counts = _quest_counts(state)
-+    graph_completed_nodes = _safe_dict(state.get("progression_completed_nodes"))
-+    graph_quest_state = _safe_dict(state.get("scenario_progression_quest_state"))
-+    graph_quests = {
-+        quest_id: _safe_dict(quest)
-+        for quest_id, quest in _safe_dict(_quest_progress(state).get("quests")).items()
-+        if _safe_str(_safe_dict(quest).get("source")) == "scenario_progression_graph"
-+        or quest_id in graph_quest_state
-+    }
-+    active_graph_quests = [
-+        quest for quest in graph_quests.values()
-+        if not bool(_safe_dict(quest).get("completed"))
-+        and _safe_str(_safe_dict(quest).get("status")) == "active"
-+    ]
-+    graph_arc_end_state = bool(
-+        graph_completed_nodes
-+        and graph_quests
-+        and not active_graph_quests
-+        and counts["completed_quest_count"] > 0
-+    )
-@@
-     completed_without_next = (
-         counts["completed_quest_count"] > 0
-         and counts["active_quest_count"] <= 0
-         and not bool(_safe_dict(handoff).get("changed"))
-         and _safe_str(_safe_dict(handoff).get("reason")) != "handoff_already_exists"
-+        and not graph_arc_end_state
-     )
-@@
-         "completed_without_next_objective": completed_without_next,
-+        "graph_arc_end_state": graph_arc_end_state,
-+        "graph_completed_node_count": len(graph_completed_nodes),
-+        "graph_quest_count": len(graph_quests),
-+        "active_graph_quest_count": len(active_graph_quests),
-         **counts,
-     }
-5. Patch final quality gates for graph arc end-state
-
-In _final_lifecycle_quality_gates(...), after reading summaries:
-
---- src/tests/rpg/autoplay_llm_campaign.py
-+++ src/tests/rpg/autoplay_llm_campaign.py
-@@
-     stale_state = _safe_dict(summary.get("campaign_stale_state_summary"))
-     commit_perf = _safe_dict(summary.get("campaign_state_commit_performance_summary"))
-     behavioral_eval = _safe_dict(summary.get("behavioral_autoplay_eval_summary"))
-+    arc_summary = _safe_dict(summary.get("scenario_progression_arc_summary"))
-+    arc_complete = bool(arc_summary.get("arc_complete"))
-
-Patch campaign state gate:
-
---- src/tests/rpg/autoplay_llm_campaign.py
-+++ src/tests/rpg/autoplay_llm_campaign.py
-@@
--    gates["campaign_state_not_stale_ok"] = bool(stale_state.get("ok", False))
-+    gates["campaign_state_not_stale_ok"] = bool(stale_state.get("ok", False) or arc_complete)
-
-Patch post-transition gate:
-
---- src/tests/rpg/autoplay_llm_campaign.py
-+++ src/tests/rpg/autoplay_llm_campaign.py
-@@
--    gates["post_transition_action_quality_ok"] = bool(post_transition.get("ok", False))
-+    gates["post_transition_action_quality_ok"] = bool(post_transition.get("ok", False) or arc_complete)
-
-Patch strict progress gate:
-
---- src/tests/rpg/autoplay_llm_campaign.py
-+++ src/tests/rpg/autoplay_llm_campaign.py
-@@
--    gates["strict_progress_health_ok"] = bool(strict_progress.get("ok", False))
-+    gates["strict_progress_health_ok"] = bool(strict_progress.get("ok", False) or arc_complete)
-
-Patch campaign commit gate if it only fails due stale end-state:
-
---- src/tests/rpg/autoplay_llm_campaign.py
-+++ src/tests/rpg/autoplay_llm_campaign.py
-@@
--    gates["campaign_state_commit_ok"] = bool(campaign_commit.get("ok", False))
-+    gates["campaign_state_commit_ok"] = bool(campaign_commit.get("ok", False) or arc_complete)
-
-Add an explicit gate:
-
---- src/tests/rpg/autoplay_llm_campaign.py
-+++ src/tests/rpg/autoplay_llm_campaign.py
-@@
-     gates["behavioral_autoplay_eval_ok"] = bool(behavioral_eval.get("ok", False))
-+    gates["scenario_progression_arc_complete_ok"] = (
-+        not _safe_dict(summary.get("progression_completed_nodes"))
-+        or bool(arc_summary.get("arc_complete"))
-+        or int(arc_summary.get("active_graph_quest_count") or 0) > 0
-+    )
-
-Add to required gates:
-
---- src/tests/rpg/autoplay_llm_campaign.py
-+++ src/tests/rpg/autoplay_llm_campaign.py
-@@
-     "behavioral_autoplay_eval_ok",
-+    "scenario_progression_arc_complete_ok",
- )
-6. Patch post-transition action quality to recognize graph nodes
-
-Find _post_transition_action_quality_summary(...).
-
-Add graph-node whitelist near weak-action detection:
-
---- src/tests/rpg/autoplay_llm_campaign.py
-+++ src/tests/rpg/autoplay_llm_campaign.py
-@@
-+GRAPH_STRONG_ACTION_NODE_IDS = {
-+    "ask_bran_about_tension",
-+    "ask_bran_who_left_side_door",
-+    "ask_bran_direction",
-+    "ask_mira_side_door",
-+    "inspect_side_door",
-+    "ask_bran_bridge",
-+    "ask_patron_bridge",
-+    "report_findings_to_bran",
-+    "ask_bran_garran",
-+    "travel_to_wagon_yard",
-+    "warn_garran",
-+    "ask_alternate_route",
-+    "prepare_quarry_road",
-+    "leave_by_quarry_road",
-+    "scout_quarry_road",
-+    "spot_bridge_watchers",
-+    "choose_ambush_response",
-+    "protect_wagon_or_lure_bandits",
-+}
-
-Inside the loop over transcript rows, before adding a weak action warning:
-
---- src/tests/rpg/autoplay_llm_campaign.py
-+++ src/tests/rpg/autoplay_llm_campaign.py
-@@
-         row = _safe_dict(row)
-+        progression_summary = _safe_dict(row.get("scenario_progression_summary"))
-+        matched_node_ids = {
-+            _safe_str(node_id)
-+            for node_id in _safe_list(progression_summary.get("matched_node_ids"))
-+        }
-+        if matched_node_ids & GRAPH_STRONG_ACTION_NODE_IDS:
-+            continue
-
-Also treat graph selection source as strong:
-
---- src/tests/rpg/autoplay_llm_campaign.py
-+++ src/tests/rpg/autoplay_llm_campaign.py
-@@
-+        if _safe_str(row.get("player_agent_selection_source")) == "scenario_progression_graph":
-+            continue
-
-This prevents correct quarry-road actions from being flagged as “weak bandit road” actions.
-
-7. Add graph arc completion idle/follow-up action
-
-This is polish for turns after the graph completes.
-
-7A. Patch src/app/rpg/progression/runtime.py
-
-Add helper:
-
---- src/app/rpg/progression/runtime.py
-+++ src/app/rpg/progression/runtime.py
-@@
-+def _arc_complete_idle_action(state: Dict[str, Any], *, scenario_seed: str) -> List[Dict[str, Any]]:
-+    arc = build_scenario_progression_arc_summary(state, scenario_seed=scenario_seed)
-+    if not arc.get("arc_complete"):
++        graph = get_progression_graph_for_seed(scenario_seed)
++        if graph:
++            return [_safe_str(node.node_id) for node in graph.nodes if _safe_str(node.node_id)]
++    except Exception:
 +        return []
-+    return [
-+        {
-+            "action_id": "arc_complete_regroup",
-+            "node_id": "",
-+            "command": "I regroup with Garran and review what we learned from the ambush before choosing the next lead.",
-+            "semantic": "recap",
-+            "target_type": "npc",
-+            "target_id": "npc:garran",
-+            "priority": 20,
-+            "source": "scenario_progression_arc_complete_idle",
-+        }
++
++    return []
++
++
++def _ordered_progression_graph_node_ids(summary: Dict[str, Any]) -> List[str]:
++    summary = _safe_dict(summary)
++    arc = _safe_dict(summary.get("scenario_progression_arc_summary"))
++    completed_nodes = _safe_dict(summary.get("progression_completed_nodes"))
++
++    chronological = _node_ids_from_progression_log(summary)
++    registry_order = _graph_registry_node_order(summary)
++
++    # Arc summaries may store completed node ids as sorted lists. They are useful
++    # as a membership source, but should not define visual order.
++    arc_completed = [
++        _safe_str(node_id)
++        for node_id in _safe_list(arc.get("completed_node_ids"))
++        if _safe_str(node_id)
 +    ]
++    arc_remaining = [
++        _safe_str(node_id)
++        for node_id in _safe_list(arc.get("remaining_node_ids"))
++        if _safe_str(node_id)
++    ]
++    completed_fallback = [
++        _safe_str(node_id)
++        for node_id in completed_nodes.keys()
++        if _safe_str(node_id)
++    ]
++
++    ordered: List[str] = []
++    seen = set()
++
++    def add_many(values: List[str]) -> None:
++        for value in values:
++            value = _safe_str(value)
++            if value and value not in seen:
++                ordered.append(value)
++                seen.add(value)
++
++    # 1. Actual turn order for completed/reached nodes.
++    add_many(chronological)
++
++    # 2. Registry order for known nodes not yet reached. This keeps pending nodes
++    # after completed nodes without alphabetizing the graph.
++    completed_membership = set(chronological) | set(arc_completed) | set(completed_fallback)
++    pending_registry = [node_id for node_id in registry_order if node_id not in completed_membership]
++    add_many(pending_registry)
++
++    # 3. Append any completed nodes absent from log, preserving registry order if possible.
++    completed_missing_from_log = [
++        node_id for node_id in registry_order
++        if node_id in completed_membership and node_id not in seen
++    ]
++    add_many(completed_missing_from_log)
++
++    # 4. Last-resort fallback: use arc/completed lists as-is, not sorted.
++    add_many(arc_completed)
++    add_many(arc_remaining)
++    add_many(completed_fallback)
++
++    return ordered
+1B. Replace graph report data ordering
 
-At end of get_active_progression_actions(...), after synthesis:
+Find _progression_graph_report_data(summary).
 
---- src/app/rpg/progression/runtime.py
-+++ src/app/rpg/progression/runtime.py
+Replace the current block that builds completed_order / expected_nodes.
+
+Replace this kind of logic:
+completed_order: List[str] = []
+for row in progression_log:
+    ...
+expected_nodes = _safe_list(arc.get("completed_node_ids")) + [...]
+if not expected_nodes:
+    expected_nodes = completed_order or sorted(completed_nodes.keys())
+
+with:
+
+--- src/tests/rpg/autoplay/campaign_report.py
++++ src/tests/rpg/autoplay/campaign_report.py
 @@
-     if not out:
-         out = synthesize_progression_actions_from_objectives(state, limit=limit)
-+    if not out:
-+        out = _arc_complete_idle_action(state, scenario_seed=scenario_seed)
-
-This gives turns 19–20 a safe non-stale action if the graph is done.
-
-8. Patch behavioral eval to accept graph arc completion
-
-In src/tests/rpg/autoplay/behavioral_eval.py, after graph metrics:
-
---- src/tests/rpg/autoplay/behavioral_eval.py
-+++ src/tests/rpg/autoplay/behavioral_eval.py
+ def _progression_graph_report_data(summary: Dict[str, Any]) -> Dict[str, Any]:
+     summary = _safe_dict(summary)
+     arc = _safe_dict(summary.get("scenario_progression_arc_summary"))
+     completed_nodes = _safe_dict(summary.get("progression_completed_nodes"))
+     progression_log = _safe_list(summary.get("scenario_progression_log"))
+-
+-    completed_order: List[str] = []
+-    for row in progression_log:
+-        row = _safe_dict(row)
+-        for node_id in _safe_list(row.get("matched_node_ids")):
+-            node_id = _safe_str(node_id)
+-            if node_id and node_id not in completed_order:
+-                completed_order.append(node_id)
+-        for node in _safe_list(row.get("matched_nodes")):
+-            node_id = _safe_str(_safe_dict(node).get("node_id"))
+-            if node_id and node_id not in completed_order:
+-                completed_order.append(node_id)
+-
+-    expected_nodes = _safe_list(arc.get("completed_node_ids")) + [
+-        node_id for node_id in _safe_list(arc.get("remaining_node_ids"))
+-        if node_id not in _safe_list(arc.get("completed_node_ids"))
+-    ]
+-    if not expected_nodes:
+-        expected_nodes = completed_order or sorted(completed_nodes.keys())
++    ordered_node_ids = _ordered_progression_graph_node_ids(summary)
++    turn_by_node_id = _turn_index_by_progression_node(summary)
++    completed_from_log = set(_node_ids_from_progression_log(summary))
++    completed_from_arc = {
++        _safe_str(node_id)
++        for node_id in _safe_list(arc.get("completed_node_ids"))
++        if _safe_str(node_id)
++    }
+ 
+     nodes: List[Dict[str, Any]] = []
+-    for index, node_id in enumerate(expected_nodes, start=1):
++    for index, node_id in enumerate(ordered_node_ids, start=1):
+         node_id = _safe_str(node_id)
+-        status = "completed" if node_id in completed_nodes or node_id in completed_order else "pending"
+-        turn_index = 0
+-        for row in progression_log:
+-            row = _safe_dict(row)
+-            matched = set(_safe_str(x) for x in _safe_list(row.get("matched_node_ids")))
+-            matched.update(
+-                _safe_str(_safe_dict(node).get("node_id"))
+-                for node in _safe_list(row.get("matched_nodes"))
+-            )
+-            if node_id in matched:
+-                turn_index = int(row.get("turn_index") or 0)
+-                break
++        status = (
++            "completed"
++            if node_id in completed_nodes
++            or node_id in completed_from_log
++            or node_id in completed_from_arc
++            else "pending"
++        )
++        turn_index = int(turn_by_node_id.get(node_id) or 0)
+         nodes.append(
+             {
+                 "node_id": node_id,
+                 "label": node_id.replace("_", " "),
+                 "status": status,
 @@
-     graph_quest_state = _safe_dict(latest_state.get("scenario_progression_quest_state"))
-+    arc_summary = _safe_dict(latest_state.get("scenario_progression_arc_summary"))
-+    arc_complete = bool(arc_summary.get("arc_complete"))
-@@
--    graph_actions_empty_with_active_graph_quest_ok = not graph_empty_with_active_objective_rows
-+    graph_actions_empty_with_active_graph_quest_ok = arc_complete or not graph_empty_with_active_objective_rows
-@@
--    active_graph_quest_has_objectives_ok = True
-+    active_graph_quest_has_objectives_ok = True
-@@
--        if not active_objectives:
-+        if not active_objectives and not arc_complete:
-             active_graph_quest_has_objectives_ok = False
-             break
+         "arc_complete": bool(arc.get("arc_complete")),
+         "expected_node_count": int(arc.get("expected_node_count") or len(nodes)),
+-        "completed_node_count": int(arc.get("completed_node_count") or len(completed_order)),
++        "completed_node_count": int(arc.get("completed_node_count") or len(completed_from_log)),
+         "nodes": nodes,
+         "edges": edges,
+     }
+1C. Remove unused progression_log variable if pyflakes complains
 
-Add metrics:
+If the function no longer uses:
 
---- src/tests/rpg/autoplay/behavioral_eval.py
-+++ src/tests/rpg/autoplay/behavioral_eval.py
+progression_log = _safe_list(summary.get("scenario_progression_log"))
+
+delete it.
+
+--- src/tests/rpg/autoplay/campaign_report.py
++++ src/tests/rpg/autoplay/campaign_report.py
 @@
-             "active_graph_quest_count": len(active_graph_quests),
-             "active_graph_quest_has_objectives": active_graph_quest_has_objectives_ok,
-+            "scenario_arc_complete": arc_complete,
-             "quest_count": len(quests),
-9. Tests
-9A. Patch src/tests/rpg/test_scenario_progression_runtime.py
+-    progression_log = _safe_list(summary.get("scenario_progression_log"))
+2. Make the visual graph easier to read
+2A. Add compact chronological row layout
+
+In _render_progression_graph_section(...), patch node HTML to include turn/order and node id.
+
+Replace each node body block with:
+
+--- src/tests/rpg/autoplay/campaign_report.py
++++ src/tests/rpg/autoplay/campaign_report.py
+@@
+         nodes_html.append(
+             f"""
+             <div class="graph-node graph-node-{_html_escape(status)}">
+               <div class="graph-node-index">{int(node.get("order") or 0)}</div>
+               <div class="graph-node-body">
+                 <div class="graph-node-title">{_html_escape(_safe_str(node.get("label")))}</div>
+-                <div class="graph-node-meta">{_html_escape(turn_label)} · {_html_escape(status)}</div>
++                <div class="graph-node-meta">{_html_escape(turn_label)} · {_html_escape(status)} · {_html_escape(_safe_str(node.get("node_id")))}</div>
+               </div>
+             </div>
+             """
+         )
+2B. Add a chronological hint in the section header
+
+Patch the section intro:
+
+--- src/tests/rpg/autoplay/campaign_report.py
++++ src/tests/rpg/autoplay/campaign_report.py
+@@
+       <p class="muted">
+         Graph: {_html_escape(_safe_str(data.get("graph_id")))}
+         · Completed {int(data.get("completed_node_count") or 0)} / {int(data.get("expected_node_count") or 0)}
+         · Arc complete: {_html_escape(str(bool(data.get("arc_complete"))))}
+       </p>
++      <p class="muted small">
++        Nodes are ordered by first matched turn, with unreached graph nodes appended afterward.
++      </p>
+
+If .small does not exist in CSS, add:
+
+--- src/tests/rpg/autoplay/campaign_report.py
++++ src/tests/rpg/autoplay/campaign_report.py
+@@
++.small {
++  font-size: 0.85rem;
++}
+3. Ensure Mermaid source uses the same chronological order
+
+The Mermaid source already loops over data["nodes"]. After the data-order fix, it should automatically become chronological.
+
+Confirm the Mermaid block looks like:
+
+for node in _safe_list(data.get("nodes")):
+    ...
+for edge in _safe_list(data.get("edges")):
+    ...
+
+Do not rebuild Mermaid from completed_node_ids.
+
+4. Add tests
+4A. Patch src/tests/rpg/autoplay/test_campaign_report.py
 
 Add:
 
-def test_arc_summary_reports_complete_after_full_graph():
-    from app.rpg.progression.runtime import (
-        apply_progression_for_action,
-        build_scenario_progression_arc_summary,
-        get_active_progression_actions,
-    )
+def test_progression_graph_report_orders_nodes_by_turn_not_alphabetically():
+    from tests.rpg.autoplay.campaign_report import _progression_graph_report_data
 
-    state = {}
-    actions = [
-        "I ask Bran for a room, but I also ask why the tavern feels so tense tonight.",
-        "I ask Bran who left through the side door and why they were afraid.",
-        "I ask Bran what direction the cloaked traveler went after leaving.",
-        "I turn to Mira and ask what she saw near the side door.",
-        "I inspect the side door, latch, and threshold for blood, tracks, or torn cloth.",
-        "I ask Bran if the old east road leads to a bridge.",
-        "I approach the local patron and quietly ask what he knows about the mill bridge.",
-        "I report to Bran that the traveler’s trail, the blood, and the bridge story point to an ambush.",
-        "I ask Bran who is most likely to travel the road before dawn.",
-        "I leave the tavern and travel toward Garran’s wagon yard.",
-        "I tell Garran the mill bridge may be an ambush and show him the evidence.",
-        "I ask Garran if there is another route around the bridge.",
-        "I help Garran prepare the wagon for the safer quarry road.",
-        "I leave Garran’s wagon yard with the wagon and take the quarry road.",
-        "I scout ahead on the quarry road for tracks, hiding places, and ambush signs.",
-        "I scan the rock shelf for watchers or scouts watching the quarry road.",
-        "I tell Garran we should slow the wagon and lure the watchers into revealing the ambush.",
-        "I help Garran protect the wagon while drawing the ambushers out of hiding.",
-    ]
-
-    for turn, action in enumerate(actions, start=1):
-        result = apply_progression_for_action(
-            state,
-            scenario_seed="tavern_story_seed",
-            player_action=action,
-            turn_index=turn,
-        )
-        state = result["state"]
-
-    arc = build_scenario_progression_arc_summary(
-        state,
-        scenario_seed="tavern_story_seed",
-    )
-
-    assert arc["arc_complete"] is True
-    assert arc["completed_node_count"] == arc["expected_node_count"]
-    assert arc["active_graph_quest_count"] == 0
-    assert arc["active_graph_objective_count"] == 0
-
-    actions = get_active_progression_actions(
-        state,
-        scenario_seed="tavern_story_seed",
-        limit=8,
-    )
-    assert actions
-    assert actions[0]["action_id"] == "arc_complete_regroup"
-9B. Patch campaign authority tests
-
-Add to src/tests/rpg/test_campaign_state_authority_commit.py:
-
-def test_stale_state_summary_accepts_completed_graph_arc_end_state():
-    from app.rpg.campaign_state.authority_commit import commit_campaign_state
-
-    state = {
-        "progression_completed_nodes": {
-            "ask_bran_about_tension": {},
-            "protect_wagon_or_lure_bandits": {},
-        },
-        "scenario_progression_quest_state": {
-            "quest:witness_search": {
-                "status": "completed",
-                "completed": True,
-                "source": "scenario_progression_graph",
-            },
-            "quest:warn_wagon": {
-                "status": "completed",
-                "completed": True,
-                "source": "scenario_progression_graph",
-            },
-            "quest:quarry_road_ambush": {
-                "status": "completed",
-                "completed": True,
-                "source": "scenario_progression_graph",
-            },
-        },
-        "quest_progress": {
-            "quests": {
-                "quest:witness_search": {
-                    "status": "completed",
-                    "completed": True,
-                    "source": "scenario_progression_graph",
-                },
-                "quest:warn_wagon": {
-                    "status": "completed",
-                    "completed": True,
-                    "source": "scenario_progression_graph",
-                },
-                "quest:quarry_road_ambush": {
-                    "status": "completed",
-                    "completed": True,
-                    "source": "scenario_progression_graph",
-                },
-            }
-        },
-    }
-
-    result = commit_campaign_state(state, phase="turn")
-
-    stale = result["summary"]["stale_state_summary"]
-    assert stale["graph_arc_end_state"] is True
-    assert stale["completed_without_next_objective"] is False
-9C. Patch behavioral eval tests
-
-Add:
-
-def test_behavioral_eval_accepts_completed_graph_arc_with_no_active_objectives():
-    from tests.rpg.autoplay.behavioral_eval import evaluate_behavioral_autoplay
-
-    transcript = [
-        {
-            "player_action": f"graph action {i}",
-            "progression_sidecar_completed_node_count": i,
-            "scenario_progression_actions_empty_with_active_objectives": False,
-        }
-        for i in range(1, 19)
-    ]
-
-    latest_state = {
+    summary = {
+        "scenario_seed": "tavern_story_seed",
         "scenario_progression_arc_summary": {
+            "graph_id": "graph:tavern_story_seed",
             "arc_complete": True,
-            "expected_node_count": 18,
-            "completed_node_count": 18,
+            "expected_node_count": 4,
+            "completed_node_count": 4,
+            # This intentionally mimics run 199's problem: completed_node_ids may
+            # be sorted or non-chronological.
+            "completed_node_ids": [
+                "ask_alternate_route",
+                "ask_bran_about_tension",
+                "ask_bran_bridge",
+                "report_findings_to_bran",
+            ],
+            "remaining_node_ids": [],
+        },
+        "progression_completed_nodes": {
+            "ask_alternate_route": {},
+            "ask_bran_about_tension": {},
+            "ask_bran_bridge": {},
+            "report_findings_to_bran": {},
         },
         "scenario_progression_log": [
-            {"changed": True, "turn_index": i, "matched_node_ids": [f"node:{i}"]}
-            for i in range(1, 19)
+            {"turn_index": 1, "matched_node_ids": ["ask_bran_about_tension"]},
+            {"turn_index": 6, "matched_node_ids": ["ask_bran_bridge"]},
+            {"turn_index": 8, "matched_node_ids": ["report_findings_to_bran"]},
+            {"turn_index": 12, "matched_node_ids": ["ask_alternate_route"]},
         ],
-        "progression_completed_nodes": {
-            f"node:{i}": {} for i in range(1, 19)
-        },
-        "scenario_progression_quest_state": {
-            "quest:witness_search": {"status": "completed", "completed": True},
-            "quest:warn_wagon": {"status": "completed", "completed": True},
-            "quest:quarry_road_ambush": {"status": "completed", "completed": True},
-        },
-        "quest_progress": {
-            "quests": {
-                "quest:witness_search": {"status": "completed", "completed": True},
-                "quest:warn_wagon": {"status": "completed", "completed": True},
-                "quest:quarry_road_ambush": {"status": "completed", "completed": True},
-            }
-        },
-        "progression_unlocked_npcs": {"npc:mira": {}, "npc:garran": {}},
-        "progression_unlocked_locations": {
-            "location:side_door": {},
-            "location:garran_wagon_yard": {},
-            "location:quarry_road": {},
-        },
-        "progression_facts": {f"fact:{i}": {} for i in range(8)},
-        "location_history": [{"location_id": "location:quarry_road"}],
     }
 
-    result = evaluate_behavioral_autoplay(
-        transcript,
-        latest_state,
-        requested_turns=20,
-    )
+    data = _progression_graph_report_data(summary)
+    ordered_ids = [node["node_id"] for node in data["nodes"][:4]]
 
-    assert result["gates"]["graph_actions_empty_with_active_graph_quest_ok"] is True
-    assert result["gates"]["active_graph_quest_has_objectives_ok"] is True
-10. Validation
+    assert ordered_ids == [
+        "ask_bran_about_tension",
+        "ask_bran_bridge",
+        "report_findings_to_bran",
+        "ask_alternate_route",
+    ]
+
+
+def test_progression_graph_report_appends_pending_nodes_after_reached_nodes():
+    from tests.rpg.autoplay.campaign_report import _progression_graph_report_data
+
+    summary = {
+        "scenario_seed": "tavern_story_seed",
+        "scenario_progression_arc_summary": {
+            "graph_id": "graph:tavern_story_seed",
+            "arc_complete": False,
+            "expected_node_count": 18,
+            "completed_node_count": 2,
+            "completed_node_ids": [
+                "ask_bran_about_tension",
+                "ask_bran_who_left_side_door",
+            ],
+            "remaining_node_ids": [
+                "ask_bran_direction",
+                "ask_mira_side_door",
+            ],
+        },
+        "progression_completed_nodes": {
+            "ask_bran_about_tension": {},
+            "ask_bran_who_left_side_door": {},
+        },
+        "scenario_progression_log": [
+            {"turn_index": 1, "matched_node_ids": ["ask_bran_about_tension"]},
+            {"turn_index": 2, "matched_node_ids": ["ask_bran_who_left_side_door"]},
+        ],
+    }
+
+    data = _progression_graph_report_data(summary)
+    ordered_ids = [node["node_id"] for node in data["nodes"]]
+
+    assert ordered_ids[0] == "ask_bran_about_tension"
+    assert ordered_ids[1] == "ask_bran_who_left_side_door"
+    assert "ask_bran_direction" in ordered_ids[2:]
+    assert "ask_mira_side_door" in ordered_ids[2:]
+4B. Patch HTML renderer test
+
+If you added the previous N90.8 report HTML test, extend it:
+
+--- src/tests/rpg/autoplay/test_campaign_report.py
++++ src/tests/rpg/autoplay/test_campaign_report.py
+@@
+     assert "Scenario Progression Graph" in html
++    assert "Nodes are ordered by first matched turn" in html
+     assert "ask bran about tension" in html
+     assert "ask bran who left side door" in html
+     assert "Mermaid graph source" in html
+5. Validation
 
 Compile:
 
-python -m py_compile src\app\rpg\progression\runtime.py src\app\rpg\campaign_state\authority_commit.py src\tests\rpg\autoplay_llm_campaign.py src\tests\rpg\autoplay\behavioral_eval.py
+python -m py_compile src\tests\rpg\autoplay\campaign_report.py
 
-Run focused tests:
+Run report tests:
 
-python -m pytest src\tests\rpg\test_scenario_progression_runtime.py src\tests\rpg\test_campaign_state_authority_commit.py src\tests\rpg\autoplay\test_behavioral_eval.py src\tests\rpg\autoplay\test_quality_gates.py -q
+python -m pytest src\tests\rpg\autoplay\test_campaign_report.py -q
