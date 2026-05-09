@@ -1,484 +1,682 @@
-N88.5.2 — Final Lifecycle Summary Authority Repair
+N89.1 — Turn-Level Commit Visibility + Handoff Affordance Priority
 Goal
 
-Fix run 184.
+N89 fixed canonical truth at final artifact time:
 
-N88.5.1 fixed the slow pre-turn advisory path, but the final summary is stale again:
+PASS:
+  objective hooks reconcile into quest_progress
+  Witness Search completes canonically
+  generic handoff quest is created
+  latest_state is preserved
+  final authority gates work
 
-summary.ok: true
-quality_gate_summary.ok: true
+But run 186 still fails because action selection during the run does not reliably see the committed handoff state:
 
-but missing:
-  latest_state
-  strict_progress_health_summary
-  quest_handoff_summary
-  final_state_field_coverage_summary
-  pre_turn_advisory_promotion_performance_summary
+FAIL:
+  per-turn action context still sees stale active Witness Search
+  handoff quest appears in final state, but player-agent keeps inspecting old road clue
+  handoff lead quality is weak because recent repeated actions outrank story/fact evidence
+  pre_turn_advisory_promotion_fast_ok is falsely red
 
-This patch makes final lifecycle summary generation authoritative and non-optional.
+This patch makes committed state visible before the next action, prioritizes active handoff affordances, ranks deterministic leads above recent action text, and fixes the pre-turn performance gate.
 
-1. Patch src/tests/rpg/autoplay_llm_campaign.py
-1A. Add required final lifecycle fields
+1. Patch src/app/rpg/campaign_state/authority_commit.py
+1A. Add lead priority scoring
 
-Add near summary helpers:
+Find derive_unresolved_leads(...).
 
---- src/tests/rpg/autoplay_llm_campaign.py
-+++ src/tests/rpg/autoplay_llm_campaign.py
+Add these helpers before it:
+
+--- src/app/rpg/campaign_state/authority_commit.py
++++ src/app/rpg/campaign_state/authority_commit.py
 @@
-+REQUIRED_FINAL_LIFECYCLE_SUMMARY_FIELDS = (
-+    "latest_state",
-+    "quest_progress_summary",
-+    "objective_progression_summary",
-+    "quest_reconciliation_summary",
-+    "quest_handoff_summary",
-+    "final_state_field_coverage_summary",
-+    "strict_progress_health_summary",
-+    "post_transition_action_quality_summary",
-+    "repeated_affordance_loop_summary",
-+    "pre_turn_advisory_promotion_performance_summary",
-+    "quality_gate_summary",
-+)
-+
-+
-+REQUIRED_FINAL_LIFECYCLE_GATES = (
-+    "strict_progress_health_ok",
-+    "post_transition_action_quality_ok",
-+    "objective_progression_present_ok",
-+    "repeated_affordance_loop_ok",
-+    "quest_handoff_available_after_completion_ok",
-+    "no_completed_without_next_objective_ok",
-+    "final_state_field_coverage_ok",
-+    "pre_turn_advisory_promotion_fast_ok",
-+    "final_lifecycle_summary_fields_present_ok",
-+)
-1B. Add final lifecycle field presence helper
-
-Add near _final_lifecycle_quality_gates(...):
-
---- src/tests/rpg/autoplay_llm_campaign.py
-+++ src/tests/rpg/autoplay_llm_campaign.py
+ def _lead_from_text(text: str, *, source: str, kind: str = "text") -> Dict[str, Any]:
 @@
-+def _final_lifecycle_field_presence_summary(summary: Dict[str, Any]) -> Dict[str, Any]:
-+    summary = _safe_dict(summary)
-+    present = []
-+    missing = []
-+    empty = []
-+    for key in REQUIRED_FINAL_LIFECYCLE_SUMMARY_FIELDS:
-+        value = summary.get(key)
-+        if key not in summary:
-+            missing.append(key)
-+        elif value in (None, {}, []):
-+            empty.append(key)
-+        else:
-+            present.append(key)
-+    return {
-+        "ok": not missing and not empty,
-+        "present": present,
-+        "missing": missing,
-+        "empty": empty,
-+    }
-1C. Harden _final_lifecycle_quality_gates(...)
-
-Find _final_lifecycle_quality_gates(...).
-
-Add field presence and required gate checks before return.
-
---- src/tests/rpg/autoplay_llm_campaign.py
-+++ src/tests/rpg/autoplay_llm_campaign.py
-@@
- def _final_lifecycle_quality_gates(summary: Dict[str, Any]) -> Dict[str, Any]:
-     summary = _safe_dict(summary)
-@@
-     repeated_affordance = _safe_dict(summary.get("repeated_affordance_loop_summary"))
-     quest_handoff = _safe_dict(summary.get("quest_handoff_summary"))
-     field_coverage = _safe_dict(summary.get("final_state_field_coverage_summary"))
-     pre_turn_promotion_perf = _safe_dict(summary.get("pre_turn_advisory_promotion_performance_summary"))
-+    final_field_presence = _final_lifecycle_field_presence_summary(summary)
-@@
-     gates["pre_turn_advisory_promotion_fast_ok"] = (
-         not is_20_turn_or_more
-         or bool(pre_turn_promotion_perf.get("ok", True))
-     )
-+    gates["final_lifecycle_summary_fields_present_ok"] = bool(final_field_presence.get("ok"))
-+
-+    for required_gate in REQUIRED_FINAL_LIFECYCLE_GATES:
-+        gates.setdefault(required_gate, False)
- 
-     failed = [name for name, ok in gates.items() if not bool(ok)]
      return {
-         **existing,
-         "ok": not failed,
-         "gates": gates,
-         "failed_gates": failed,
-+        "final_lifecycle_field_presence": final_field_presence,
-         "source": "final_lifecycle_quality_gates",
+         "id": _stable_id(f"lead:{source}", cleaned),
+         "name": cleaned,
+         "source": source,
+         "kind": kind,
+     }
++
++
++LEAD_SOURCE_PRIORITY = {
++    "explicit": 100,
++    "known_leads": 100,
++    "unresolved_leads": 100,
++    "quest_leads": 95,
++    "story_leads": 95,
++    "autoplay_story_hook_state": 90,
++    "objective_evidence": 85,
++    "objective_progression_log": 85,
++    "completed_objective_summary": 75,
++    "scene": 50,
++    "location_history": 45,
++    "recent_action": 20,
++    "generic_local_fallback": 10,
++}
++
++
++def _lead_priority(lead: Dict[str, Any]) -> int:
++    lead = _safe_dict(lead)
++    source = _safe_str(lead.get("source"))
++    kind = _safe_str(lead.get("kind"))
++    base = int(LEAD_SOURCE_PRIORITY.get(source, 25))
++    label = _norm(lead.get("name") or lead.get("title") or lead.get("id"))
++
++    # Penalize leads that are clearly just a repeated action bag.
++    repeated_action_terms = {
++        "inspect",
++        "checking",
++        "nearby",
++        "fresh",
++        "tracks",
++        "wagon",
++        "ruts",
++        "cord",
++        "cloth",
++        "markings",
++        "signs",
++    }
++    action_term_count = len(set(label.split()) & repeated_action_terms)
++    if source == "recent_action":
++        base -= min(15, action_term_count * 2)
++
++    if kind in {"hook", "fact", "topic", "target", "location"}:
++        base += 5
++    return base
++
++
++def _sort_leads(leads: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
++    enriched: List[Dict[str, Any]] = []
++    for index, lead in enumerate(leads):
++        lead = dict(_safe_dict(lead))
++        lead.setdefault("priority", _lead_priority(lead))
++        lead.setdefault("rank_index", index)
++        enriched.append(lead)
++    enriched.sort(key=lambda row: (-int(row.get("priority") or 0), int(row.get("rank_index") or 0)))
++    return enriched
+1B. Add hook-derived leads explicitly
+
+Inside derive_unresolved_leads(...), after explicit lead bags are read, add:
+
+--- src/app/rpg/campaign_state/authority_commit.py
++++ src/app/rpg/campaign_state/authority_commit.py
+@@
+     for key in ("known_leads", "unresolved_leads", "quest_leads", "story_leads"):
+         for row in _safe_list(state.get(key)):
+             lead = dict(row) if isinstance(row, dict) else {"name": _safe_str(row)}
+             if lead.get("resolved") or _safe_str(lead.get("status")) == "completed":
+                 continue
+             if _safe_str(lead.get("name") or lead.get("title") or lead.get("id")):
++                lead.setdefault("source", key)
++                lead.setdefault("kind", "explicit")
+                 leads.append(lead)
++
++    hook_state = _safe_dict(state.get("autoplay_story_hook_state"))
++    fired_hooks = _safe_dict(hook_state.get("fired_hooks"))
++    for hook_id, payload in fired_hooks.items():
++        hook_id = _safe_str(hook_id)
++        payload = _safe_dict(payload)
++        summary = _safe_str(payload.get("summary"))
++        lower = _norm(f"{hook_id} {summary}")
++        if any(term in lower for term in ("lead", "trail", "road", "bridge", "toward", "points", "location", "route")):
++            lead_text = summary or hook_id.replace("hook:", "").replace("_", " ")
++            lead = _lead_from_text(lead_text, source="autoplay_story_hook_state", kind="hook")
++            if lead:
++                lead["hook_id"] = hook_id
++                leads.append(lead)
+1C. Sort leads by priority before choosing handoff
+
+At the end of derive_unresolved_leads(...), replace:
+
+return deduped[:25]
+
+with:
+
+--- src/app/rpg/campaign_state/authority_commit.py
++++ src/app/rpg/campaign_state/authority_commit.py
+@@
+-    return deduped[:25]
++    return _sort_leads(deduped)[:25]
+1D. Improve handoff objective command metadata
+
+In apply_generic_handoff_from_leads(...), inside the new handoff objective dict, add explicit affordance hints:
+
+--- src/app/rpg/campaign_state/authority_commit.py
++++ src/app/rpg/campaign_state/authority_commit.py
+@@
+             {
+                 "objective_id": objective_id,
+                 "summary": f"Investigate the unresolved lead: {label}.",
+                 "objective_type": "investigate",
+                 "subject": label,
++                "affordance_priority": 100,
++                "handoff_objective": True,
++                "suggested_actions": [
++                    f"I follow up on the lead: {label}.",
++                    f"I ask nearby people what they know about {label}.",
++                    f"I inspect the place or evidence connected to {label}.",
++                ],
+                 "status": "active",
+                 "completed": False,
+                 "known_leads": [lead],
+
+Also add priority to the quest:
+
+--- src/app/rpg/campaign_state/authority_commit.py
++++ src/app/rpg/campaign_state/authority_commit.py
+@@
+         "status": "active",
+         "completed": False,
+         "source": "campaign_state_authority_commit",
++        "priority": 100,
++        "handoff_quest": True,
+         "lead": lead,
+2. Patch src/app/rpg/objectives/affordances.py
+2A. Prioritize active authority handoff quests
+
+Find the function that collects active objectives, likely collect_active_objectives(...).
+
+Inside the loop where objective rows are appended to out, add fields from quest/objective:
+
+--- src/app/rpg/objectives/affordances.py
++++ src/app/rpg/objectives/affordances.py
+@@
+             out.append(
+                 {
+                     ...
++                    "quest_source": _safe_str(quest.get("source")),
++                    "quest_priority": int(quest.get("priority") or 0),
++                    "handoff_quest": bool(quest.get("handoff_quest")),
++                    "handoff_objective": bool(obj.get("handoff_objective")),
++                    "affordance_priority": int(obj.get("affordance_priority") or quest.get("priority") or 0),
+                 }
+             )
+
+If your append shape differs, add those keys to the row that represents an active objective.
+
+After all objectives are collected, sort before return:
+
+--- src/app/rpg/objectives/affordances.py
++++ src/app/rpg/objectives/affordances.py
+@@
+-    return out
++    out.sort(
++        key=lambda row: (
++            -int(_safe_dict(row).get("affordance_priority") or 0),
++            0 if _safe_dict(row).get("handoff_objective") else 1,
++            _safe_str(_safe_dict(row).get("quest_id")),
++            _safe_str(_safe_dict(row).get("objective_id")),
++        )
++    )
++    return out
+2B. Prefer suggested actions for handoff objectives
+
+Find where build_objective_affordances_for_state(...) builds commands from active objectives.
+
+Before generic template generation for an objective, add:
+
+--- src/app/rpg/objectives/affordances.py
++++ src/app/rpg/objectives/affordances.py
+@@
+     for objective in active_objectives:
++        if _safe_dict(objective).get("handoff_objective"):
++            for action in _safe_list(_safe_dict(objective).get("suggested_actions")):
++                command = _safe_str(action).strip()
++                if command:
++                    affordances.append(
++                        {
++                            "command": command,
++                            "source": "handoff_objective_suggested_action",
++                            "objective_id": _safe_str(objective.get("objective_id")),
++                            "quest_id": _safe_str(objective.get("quest_id")),
++                            "semantic": "investigate",
++                            "priority": int(objective.get("affordance_priority") or 100),
++                        }
++                    )
+
+Then before returning affordances, sort by priority:
+
+--- src/app/rpg/objectives/affordances.py
++++ src/app/rpg/objectives/affordances.py
+@@
+-    return affordances[:limit]
++    affordances.sort(
++        key=lambda row: (
++            -int(_safe_dict(row).get("priority") or 0),
++            _safe_str(_safe_dict(row).get("source")),
++            _safe_str(_safe_dict(row).get("command")),
++        )
++    )
++    return affordances[:limit]
+
+If affordances is named differently, apply the same sort to the list returned by the function.
+
+3. Patch src/tests/rpg/autoplay_llm_campaign.py
+3A. Merge authoritative simulation/runtime state from turn result before commit
+
+Find the block after runtime turn execution where turn_result is available and before record is created.
+
+Add this helper near runtime-state helpers:
+
+--- src/tests/rpg/autoplay_llm_campaign.py
++++ src/tests/rpg/autoplay_llm_campaign.py
+@@
++def _merge_turn_result_authoritative_state(
++    runtime_state: Dict[str, Any],
++    turn_result: Dict[str, Any],
++) -> Dict[str, Any]:
++    runtime_state = _safe_dict(runtime_state)
++    turn_result = _safe_dict(turn_result)
++    candidates = [
++        _safe_dict(turn_result.get("simulation_state")),
++        _safe_dict(turn_result.get("runtime_state")),
++        _safe_dict(_safe_dict(turn_result.get("result")).get("simulation_state")),
++        _safe_dict(_safe_dict(turn_result.get("result")).get("runtime_state")),
++        _safe_dict(_safe_dict(turn_result.get("resolved_result")).get("simulation_state")),
++        _safe_dict(_safe_dict(turn_result.get("resolved_result")).get("runtime_state")),
++    ]
++    merged = dict(runtime_state)
++    for candidate in candidates:
++        if not candidate:
++            continue
++        merged = _merge_preserving_runtime_state(merged, candidate)
++    return merged
+
+After runtime_turn_execution completes and turn_result exists, add:
+
+--- src/tests/rpg/autoplay_llm_campaign.py
++++ src/tests/rpg/autoplay_llm_campaign.py
+@@
+         with _ProbeTimer(
+             bool(getattr(args, "debug_autoplay_stage_timing", False)),
+             "runtime_turn_execution",
+@@
+             turn_result = ...
+ 
++        runtime_state = _merge_turn_result_authoritative_state(runtime_state, turn_result)
++        runtime_state = _commit_campaign_state_authority(
++            runtime_state,
++            transcript_tail=transcript[-12:],
++            phase="turn",
++        )
+
+If the exact assignment is not turn_result = ..., place this immediately after the variable containing the runtime execution result is assigned.
+
+3B. Commit again after record creation with the record evidence
+
+You already added a post-append commit in N89. Keep it, but make sure it uses the merged authoritative state and writes back to context-visible runtime state:
+
+--- src/tests/rpg/autoplay_llm_campaign.py
++++ src/tests/rpg/autoplay_llm_campaign.py
+@@
+         runtime_state = _commit_campaign_state_authority(
+             runtime_state,
+             turn_record=record,
+             transcript_tail=transcript[-12:],
+             phase="turn",
+         )
+         record["campaign_state_commit_summary"] = _safe_dict(
+             runtime_state.get("campaign_state_commit_summary")
+         )
++        record["quest_progress_after_commit"] = _safe_dict(runtime_state.get("quest_progress"))
+3C. Commit before every player-agent context build and attach commit summary to context
+
+Find the player-agent context creation block. Before it, ensure:
+
+--- src/tests/rpg/autoplay_llm_campaign.py
++++ src/tests/rpg/autoplay_llm_campaign.py
+@@
++        runtime_state = _commit_campaign_state_authority(
++            runtime_state,
++            transcript_tail=transcript[-12:],
++            phase="turn",
++        )
+         player_context = ...
+
+After player_context is built, inject committed state fields if they are missing:
+
+--- src/tests/rpg/autoplay_llm_campaign.py
++++ src/tests/rpg/autoplay_llm_campaign.py
+@@
+         player_context = ...
++        if isinstance(player_context, dict):
++            player_context["quest_progress"] = runtime_state.get("quest_progress")
++            player_context["campaign_state_commit_summary"] = runtime_state.get("campaign_state_commit_summary")
++            player_context["unresolved_leads"] = runtime_state.get("unresolved_leads")
+
+If the context variable is named action_context, player_agent_context, or context, patch that variable.
+
+3D. Include committed state in executable repair context
+
+Find the call to repair_action_if_needed(...) or executable_action_for_context(...).
+
+Before the call, add:
+
+--- src/tests/rpg/autoplay_llm_campaign.py
++++ src/tests/rpg/autoplay_llm_campaign.py
+@@
+         repair_context = {
+             ...
+         }
++        repair_context["quest_progress"] = runtime_state.get("quest_progress")
++        repair_context["campaign_state_commit_summary"] = runtime_state.get("campaign_state_commit_summary")
++        repair_context["unresolved_leads"] = runtime_state.get("unresolved_leads")
+
+If repair context is just player_context, make sure those fields are already injected there.
+
+3E. Add per-turn commit visibility diagnostics
+
+After post-append commit, add:
+
+--- src/tests/rpg/autoplay_llm_campaign.py
++++ src/tests/rpg/autoplay_llm_campaign.py
+@@
+         record["campaign_state_commit_summary"] = _safe_dict(
+             runtime_state.get("campaign_state_commit_summary")
+         )
++        commit_summary = _safe_dict(runtime_state.get("campaign_state_commit_summary"))
++        commit_qps = _safe_dict(commit_summary.get("quest_progress_summary"))
++        _probe_log(
++            bool(getattr(args, "debug_autoplay_stage_timing", False)),
++            "campaign_state_commit.visible_to_next_turn",
++            turn_index=turn_index,
++            active_count=commit_qps.get("active_count"),
++            completed_count=commit_qps.get("completed_count"),
++            handoff_reason=_safe_str(_safe_dict(commit_summary.get("handoff_summary")).get("reason")),
++            handoff_changed=bool(_safe_dict(commit_summary.get("handoff_summary")).get("changed")),
++        )
+
+Acceptance signal in logs:
+
+After Witness Search completes:
+campaign_state_commit.visible_to_next_turn active_count=1 completed_count=1 handoff_changed=True
+4. Patch src/tests/rpg/autoplay/executable_actions.py
+4A. Make handoff action priority unconditional
+
+Find executable_action_for_context(...).
+
+At the very top after context = _safe_dict(context), replace the previous N89 handoff block with this stronger version:
+
+--- src/tests/rpg/autoplay/executable_actions.py
++++ src/tests/rpg/autoplay/executable_actions.py
+@@
+ def executable_action_for_context(context: Dict[str, Any], original_action: str = "") -> str:
+     context = _safe_dict(context)
++    handoff_action = _handoff_action_from_committed_context(context)
++    if handoff_action:
++        return handoff_action
+
+Add helper before executable_action_for_context(...):
+
+--- src/tests/rpg/autoplay/executable_actions.py
++++ src/tests/rpg/autoplay/executable_actions.py
+@@
++def _handoff_action_from_committed_context(context: Dict[str, Any]) -> str:
++    context = _safe_dict(context)
++    commit_summary = _safe_dict(context.get("campaign_state_commit_summary"))
++    quest_summary = _safe_dict(commit_summary.get("quest_progress_summary"))
++    quests = _safe_list(quest_summary.get("quests"))
++    if not quests:
++        quests = list(_safe_dict(_safe_dict(context.get("quest_progress")).get("quests")).values())
++
++    for quest in quests:
++        quest = _safe_dict(quest)
++        if quest.get("completed") or _safe_str(quest.get("status")) == "completed":
++            continue
++        title = _safe_str(quest.get("title"))
++        is_handoff = (
++            bool(quest.get("handoff_quest"))
++            or quest.get("source") == "campaign_state_authority_commit"
++            or title.startswith("Investigate Lead:")
++        )
++        if not is_handoff:
++            continue
++        lead = _safe_dict(quest.get("lead"))
++        lead_label = _safe_str(lead.get("name") or lead.get("title") or title.replace("Investigate Lead:", "").strip())
++        for obj in _safe_list(quest.get("objectives")):
++            obj = _safe_dict(obj)
++            if obj.get("completed") or _safe_str(obj.get("status")) == "completed":
++                continue
++            suggested = _safe_list(obj.get("suggested_actions"))
++            for action in suggested:
++                action = _safe_str(action).strip()
++                if action and not is_meta_or_vague_action(action):
++                    return action
++            subject = _safe_str(obj.get("subject") or lead_label or obj.get("summary") or title)
++            if subject:
++                return (
++                    f"I follow up on the lead: {subject}, checking the next place, person, "
++                    "or evidence connected to it instead of repeating the old search."
++                )
++    return ""
+4B. Repair repeated old objective into handoff action
+
+Inside repair_action_if_needed(...), at the top after context is normalized, add:
+
+--- src/tests/rpg/autoplay/executable_actions.py
++++ src/tests/rpg/autoplay/executable_actions.py
+@@
+ def repair_action_if_needed(action: str, context: Dict[str, Any]) -> Dict[str, Any]:
+     context = _safe_dict(context)
+     original = _safe_str(action)
++    handoff_action = _handoff_action_from_committed_context(context)
++    if handoff_action and (
++        is_meta_or_vague_action(original)
++        or is_repeated_affordance_action(original, context)
++        or "review my quest log" in original.lower()
++        or "road outside the tavern" in original.lower()
++    ):
++        return {
++            "changed": handoff_action != original,
++            "action": handoff_action,
++            "original_action": original,
++            "reason": "committed_handoff_quest_priority_repair",
++        }
+
+This makes active handoff quests override stale road-inspection repairs.
+
+5. Fix pre-turn advisory performance false fail
+
+Patch src/tests/rpg/autoplay_llm_campaign.py.
+
+Find _pre_turn_advisory_promotion_performance_summary(...).
+
+Replace the return calculation with:
+
+--- src/tests/rpg/autoplay_llm_campaign.py
++++ src/tests/rpg/autoplay_llm_campaign.py
+@@
+ def _pre_turn_advisory_promotion_performance_summary(
+@@
+-    return {
+-        "ok": not bool(slow_events),
++    slow_guard_ms = 5000
++    for row in promotions:
++        if int(row.get("slow_guard_ms") or 0) > 0:
++            slow_guard_ms = int(row.get("slow_guard_ms") or 0)
++            break
++
++    max_elapsed_ms = max(elapsed_values) if elapsed_values else 0
++    slow_event_count = len(slow_events)
++    ok = slow_event_count == 0 and max_elapsed_ms <= slow_guard_ms
++
++    return {
++        "ok": ok,
+         "promotion_count": len(promotions),
+-        "fast_path_count": sum(1 for row in promotions if bool(row.get("fast_pre_turn"))),
+-        "max_elapsed_ms": max(elapsed_values) if elapsed_values else 0,
++        "fast_path_count": sum(1 for row in promotions if bool(row.get("fast_pre_turn"))),
++        "max_elapsed_ms": max_elapsed_ms,
+         "avg_elapsed_ms": round(sum(elapsed_values) / len(elapsed_values), 3) if elapsed_values else 0.0,
+-        "slow_event_count": len(slow_events),
++        "slow_guard_ms": slow_guard_ms,
++        "slow_event_count": slow_event_count,
+         "slow_events": slow_events[-10:],
+         "auto_disabled": bool(auto_disabled),
+         "disable_reason": _safe_str(disable_reason),
      }
 
-This prevents quality_gate_summary.ok == true if any required N88.5 field or gate is missing.
-
-1D. Add authoritative final lifecycle builder
-
-Add this helper near final summary helpers:
+Also make sure drain_event["pre_turn_advisory_promotion_result"] includes slow_guard_ms:
 
 --- src/tests/rpg/autoplay_llm_campaign.py
 +++ src/tests/rpg/autoplay_llm_campaign.py
 @@
-+def _build_authoritative_final_lifecycle_summary(
-+    *,
-+    summary: Dict[str, Any],
-+    runtime_state: Dict[str, Any],
-+    transcript: List[Dict[str, Any]],
-+    background_drain_events: List[Dict[str, Any]],
-+    pre_turn_advisory_promotion_slow_events: List[Dict[str, Any]],
-+    pre_turn_advisory_promotion_auto_disabled: bool,
-+    pre_turn_advisory_promotion_disable_reason: str,
-+) -> Dict[str, Any]:
-+    """Final authoritative summary override.
-+
-+    This must be called after all state merges and immediately before artifact
-+    writes. It intentionally recomputes lifecycle summaries from runtime_state
-+    instead of trusting earlier partial summary fields.
-+    """
-+    summary = _safe_dict(summary)
-+    runtime_state = _safe_dict(runtime_state)
-+
-+    runtime_state = _reconcile_and_apply_handoff(runtime_state)
-+
-+    previous_latest_state = _safe_dict(summary.get("latest_state"))
-+    runtime_state = _merge_preserving_runtime_state(previous_latest_state, runtime_state)
-+    runtime_state = _reconcile_and_apply_handoff(runtime_state)
-+
-+    summary["latest_state"] = runtime_state
-+
-+    summary["quest_progress_summary"] = _quest_progress_summary_from_state(runtime_state)
-+    _guard_quest_summary_source(summary, runtime_state)
-+
-+    summary["objective_progression_summary"] = _objective_progression_summary_from_state(
-+        runtime_state,
-+        transcript,
-+    )
-+    summary["quest_reconciliation_summary"] = _quest_reconciliation_summary_from_state(runtime_state)
-+    summary["quest_handoff_summary"] = _quest_handoff_summary_from_state(runtime_state)
-+    if not isinstance(summary["quest_handoff_summary"], dict):
-+        summary["quest_handoff_summary"] = {
-+            "ok": False,
-+            "count": 0,
-+            "recent": [],
-+            "active_handoff_quests": [],
-+        }
-+
-+    summary["final_state_field_coverage_summary"] = _final_state_field_coverage_summary(runtime_state)
-+
-+    summary["strict_progress_health_summary"] = _strict_progress_health_summary_from_summary(summary)
-+
-+    summary["post_transition_action_quality"] = _post_transition_action_quality_summary(
-+        transcript,
-+        runtime_state,
-+    )
-+    summary["post_transition_action_quality_summary"] = summary["post_transition_action_quality"]
-+
-+    summary["repeated_affordance_loop_summary"] = _repeated_affordance_loop_summary(
-+        transcript,
-+        threshold=4,
-+    )
-+
-+    summary["pre_turn_advisory_promotion_performance_summary"] = (
-+        _pre_turn_advisory_promotion_performance_summary(
-+            background_drain_events,
-+            slow_events=pre_turn_advisory_promotion_slow_events,
-+            auto_disabled=pre_turn_advisory_promotion_auto_disabled,
-+            disable_reason=pre_turn_advisory_promotion_disable_reason,
-+        )
-+    )
-+
-+    summary["final_lifecycle_field_presence_summary"] = _final_lifecycle_field_presence_summary(summary)
-+    summary["quality_gate_summary"] = _final_lifecycle_quality_gates(summary)
-+    summary["ok"] = bool(_safe_dict(summary["quality_gate_summary"]).get("ok"))
-+
-+    return summary
-1E. Make final lifecycle builder the last summary mutation before artifacts
+                     "fast_pre_turn": pre_turn_promotion_result.get("fast_pre_turn"),
+                     "elapsed_ms": pre_turn_promotion_result.get("elapsed_ms"),
++                    "slow_guard_ms": int(getattr(args, "pre_turn_advisory_slow_guard_ms", 5000) or 5000),
+                     "timing_breakdown": pre_turn_promotion_result.get("timing_breakdown"),
+                 }
 
-Find the final artifact-writing area.
+If your current parser branch still lacks pre_turn_advisory_slow_guard_ms, use:
 
-Search:
+int(getattr(args, "pre_turn_advisory_slow_guard_ms", 5000) or 5000)
 
-Select-String -Path src\tests\rpg\autoplay_llm_campaign.py -Pattern "write|artifact|summary_path|autoplay-summary|campaign_report|zip|quality_gate_summary|summary\[`"ok"`\]|summary\['ok'\]" -Context 3,6
+as shown.
 
-Immediately before the first artifact write, insert:
+6. Tests
+6A. Patch src/tests/rpg/test_campaign_state_authority_commit.py
 
---- src/tests/rpg/autoplay_llm_campaign.py
-+++ src/tests/rpg/autoplay_llm_campaign.py
-@@
-+    # N88.5.2: authoritative final lifecycle summary.
-+    # This must be the last summary recomputation before artifact writes.
-+    summary = _build_authoritative_final_lifecycle_summary(
-+        summary=summary,
-+        runtime_state=runtime_state,
-+        transcript=transcript,
-+        background_drain_events=background_drain_events,
-+        pre_turn_advisory_promotion_slow_events=pre_turn_advisory_promotion_slow_events,
-+        pre_turn_advisory_promotion_auto_disabled=pre_turn_advisory_promotion_auto_disabled,
-+        pre_turn_advisory_promotion_disable_reason=pre_turn_advisory_promotion_disable_reason,
-+    )
-+    runtime_state = _safe_dict(summary.get("latest_state"))
+Add:
 
-Then delete or move below this block any stale assignments like:
+def test_commit_prefers_hook_lead_over_recent_repeated_action_lead():
+    from app.rpg.campaign_state.authority_commit import commit_campaign_state
 
-summary["ok"] = ...
-summary["quality_gate_summary"] = ...
-summary["quest_progress_summary"] = ...
-summary["latest_state"] = ...
-
-There should be no later summary lifecycle overwrite after this block.
-
-The final order must be:
-
-build base summary
-build report_model if needed
-merge health/perf/progress metadata
-N88.5.2 authoritative final lifecycle summary
-sync report_model from final summary
-write JSON/HTML/ZIP artifacts
-1F. Sync report model after final lifecycle builder
-
-Immediately after the N88.5.2 builder block, add:
-
---- src/tests/rpg/autoplay_llm_campaign.py
-+++ src/tests/rpg/autoplay_llm_campaign.py
-@@
-+    if isinstance(report_model, dict):
-+        report_model["latest_state"] = summary.get("latest_state")
-+        report_model["quest_progress_summary"] = summary.get("quest_progress_summary")
-+        report_model["objective_progression_summary"] = summary.get("objective_progression_summary")
-+        report_model["quest_reconciliation_summary"] = summary.get("quest_reconciliation_summary")
-+        report_model["quest_handoff_summary"] = summary.get("quest_handoff_summary")
-+        report_model["final_state_field_coverage_summary"] = summary.get("final_state_field_coverage_summary")
-+        report_model["strict_progress_health_summary"] = summary.get("strict_progress_health_summary")
-+        report_model["post_transition_action_quality_summary"] = summary.get("post_transition_action_quality_summary")
-+        report_model["repeated_affordance_loop_summary"] = summary.get("repeated_affordance_loop_summary")
-+        report_model["pre_turn_advisory_promotion_performance_summary"] = summary.get(
-+            "pre_turn_advisory_promotion_performance_summary"
-+        )
-+        report_model["quality_gate_summary"] = summary.get("quality_gate_summary")
-+        report_model["ok"] = summary.get("ok")
-1G. Add artifact-time invariant check
-
-Add helper:
-
---- src/tests/rpg/autoplay_llm_campaign.py
-+++ src/tests/rpg/autoplay_llm_campaign.py
-@@
-+def _assert_final_lifecycle_summary_authority(summary: Dict[str, Any]) -> None:
-+    summary = _safe_dict(summary)
-+    field_presence = _final_lifecycle_field_presence_summary(summary)
-+    if not field_presence.get("ok"):
-+        raise RuntimeError(
-+            "final_lifecycle_summary_missing_fields:"
-+            f"missing={field_presence.get('missing')}:"
-+            f"empty={field_presence.get('empty')}"
-+        )
-+
-+    qgs = _safe_dict(summary.get("quality_gate_summary"))
-+    gates = _safe_dict(qgs.get("gates"))
-+    missing_gates = [gate for gate in REQUIRED_FINAL_LIFECYCLE_GATES if gate not in gates]
-+    if missing_gates:
-+        raise RuntimeError(
-+            "final_lifecycle_quality_gates_missing:"
-+            f"missing_gates={missing_gates}"
-+        )
-+
-+    if bool(summary.get("ok")) != bool(qgs.get("ok")):
-+        raise RuntimeError(
-+            "summary_ok_mismatch:"
-+            f"summary_ok={summary.get('ok')}:"
-+            f"quality_gate_ok={qgs.get('ok')}"
-+        )
-
-Call it after report model sync and before artifact writes:
-
---- src/tests/rpg/autoplay_llm_campaign.py
-+++ src/tests/rpg/autoplay_llm_campaign.py
-@@
-     if isinstance(report_model, dict):
-         report_model["latest_state"] = summary.get("latest_state")
-@@
-         report_model["quality_gate_summary"] = summary.get("quality_gate_summary")
-         report_model["ok"] = summary.get("ok")
-+
-+    _assert_final_lifecycle_summary_authority(summary)
-
-This will fail loudly instead of producing another false-green summary.
-
-2. Fix likely summary object split
-
-Run:
-
-Select-String -Path src\tests\rpg\autoplay_llm_campaign.py -Pattern "summary =|report_model =|return summary|return .*summary|autoplay-summary" -Context 2,4
-
-If the function writes a different object, for example:
-
-artifact_summary = dict(summary)
-...
-summary = _build_authoritative_final_lifecycle_summary(...)
-...
-write_json(artifact_summary)
-
-patch it to write the final summary:
-
---- src/tests/rpg/autoplay_llm_campaign.py
-+++ src/tests/rpg/autoplay_llm_campaign.py
-@@
--    artifact_summary = dict(summary)
-+    artifact_summary = summary
-
-or delete the alias and use summary directly.
-
-If the ZIP/report writes report_model before final summary sync, move report generation below the N88.5.2 builder block.
-
-3. Patch src/tests/rpg/autoplay/campaign_report.py
-3A. Include final lifecycle summaries in report context
-
-Where report context/model is normalized, add:
-
---- src/tests/rpg/autoplay/campaign_report.py
-+++ src/tests/rpg/autoplay/campaign_report.py
-@@
-         "quest_progress_summary": _safe_dict(report_model.get("quest_progress_summary")),
-         "objective_progression_summary": _safe_dict(report_model.get("objective_progression_summary")),
-+        "quest_reconciliation_summary": _safe_dict(report_model.get("quest_reconciliation_summary")),
-+        "quest_handoff_summary": _safe_dict(report_model.get("quest_handoff_summary")),
-+        "final_state_field_coverage_summary": _safe_dict(report_model.get("final_state_field_coverage_summary")),
-+        "strict_progress_health_summary": _safe_dict(report_model.get("strict_progress_health_summary")),
-+        "post_transition_action_quality_summary": _safe_dict(report_model.get("post_transition_action_quality_summary")),
-+        "repeated_affordance_loop_summary": _safe_dict(report_model.get("repeated_affordance_loop_summary")),
-+        "pre_turn_advisory_promotion_performance_summary": _safe_dict(
-+            report_model.get("pre_turn_advisory_promotion_performance_summary")
-+        ),
-         "quality_gate_summary": _safe_dict(report_model.get("quality_gate_summary")),
-
-If the file uses a different context builder, add the same fields wherever report_model is converted to the render context.
-
-4. Tests
-4A. Add final lifecycle presence test
-
-Add to src/tests/rpg/autoplay/test_quality_gates.py:
-
-def test_final_lifecycle_quality_gates_fail_when_required_fields_missing():
-    from tests.rpg.autoplay_llm_campaign import _final_lifecycle_quality_gates
-
-    summary = {
-        "requested_turns": 20,
-        "quality_gate_summary": {"ok": True, "gates": {}},
-    }
-
-    result = _final_lifecycle_quality_gates(summary)
-
-    assert result["ok"] is False
-    assert result["gates"]["final_lifecycle_summary_fields_present_ok"] is False
-    assert "final_lifecycle_summary_fields_present_ok" in result["failed_gates"]
-4B. Add final lifecycle builder test
-
-Add to src/tests/rpg/autoplay/test_quality_gates.py:
-
-def test_authoritative_final_lifecycle_summary_populates_required_fields():
-    from tests.rpg.autoplay_llm_campaign import (
-        REQUIRED_FINAL_LIFECYCLE_SUMMARY_FIELDS,
-        _build_authoritative_final_lifecycle_summary,
-    )
-
-    runtime_state = {
+    state = {
         "quest_progress": {
             "quests": {
-                "quest:test": {
-                    "quest_id": "quest:test",
-                    "title": "Test Quest",
-                    "status": "active",
-                    "completed": False,
+                "quest:first": {
+                    "quest_id": "quest:first",
+                    "title": "First Quest",
+                    "status": "completed",
+                    "completed": True,
                     "objectives": [
                         {
-                            "objective_id": "objective:test",
-                            "summary": "Inspect the test clue.",
-                            "status": "active",
-                            "completed": False,
+                            "objective_id": "objective:first",
+                            "summary": "Find the clue.",
+                            "status": "completed",
+                            "completed": True,
                         }
                     ],
                 }
             }
         },
-        "dialogue_state": {"recent_exchanges": [{"npc": "npc:test"}]},
-        "objective_progression_log": [
-            {"objective_id": "objective:test", "matched": True, "partial": True}
-        ],
-        "quest_reconciliation_log": [{"changed": False}],
-        "quest_handoff_log": [{"quest_id": "quest:test"}],
-        "autoplay_story_hook_state": {"fired_hooks": {"hook:test": {}}},
-        "location_history": [{"location_id": "location:test"}],
-        "recent_turns": [{"turn": 1, "player_action": "I inspect the test clue."}],
-        "action_history": [{"turn": 1, "player_action": "I inspect the test clue."}],
-    }
-
-    summary = {
-        "requested_turns": 20,
-        "health": {
-            "progress_quality": {
-                "ok": True,
-                "metrics": {
-                    "meaningful_progress_rate": 0.2,
-                    "meaningful_turns": 4,
-                    "no_change_turns": 2,
-                    "churn_only_turns": 1,
-                },
+        "autoplay_story_hook_state": {
+            "fired_hooks": {
+                "hook:lead:next_location": {
+                    "summary": "The trail points toward the old mill bridge.",
+                }
             }
         },
-        "quality_gate_summary": {"ok": True, "gates": {}},
+        "current_location_name": "Road Outside Tavern",
     }
 
-    final = _build_authoritative_final_lifecycle_summary(
-        summary=summary,
-        runtime_state=runtime_state,
-        transcript=[{"turn": 1, "player_action": "I inspect the test clue."}],
-        background_drain_events=[
+    transcript_tail = [
+        {
+            "turn": 1,
+            "player_action": "I inspect the road outside the tavern for fresh tracks, wagon ruts, black cord, torn cloth, ambush signs, or bridge markings.",
+        }
+    ] * 5
+
+    result = commit_campaign_state(
+        state,
+        transcript_tail=transcript_tail,
+        phase="turn",
+    )
+
+    handoff = result["summary"]["handoff_summary"]
+    assert handoff["changed"] is True
+    quest = [
+        q for q in result["state"]["quest_progress"]["quests"].values()
+        if q.get("source") == "campaign_state_authority_commit"
+    ][0]
+    assert "old mill bridge" in quest["title"].lower()
+6B. Patch src/tests/rpg/autoplay/test_executable_actions.py
+
+Add:
+
+def test_repeated_old_search_repairs_to_committed_handoff_action():
+    from tests.rpg.autoplay.executable_actions import repair_action_if_needed
+
+    context = {
+        "campaign_state_commit_summary": {
+            "quest_progress_summary": {
+                "quests": [
+                    {
+                        "quest_id": "quest:done",
+                        "title": "Old Quest",
+                        "status": "completed",
+                        "completed": True,
+                    },
+                    {
+                        "quest_id": "quest:investigate_lead:test",
+                        "title": "Investigate Lead: old mill bridge",
+                        "status": "active",
+                        "completed": False,
+                        "source": "campaign_state_authority_commit",
+                        "handoff_quest": True,
+                        "lead": {"name": "old mill bridge"},
+                        "objectives": [
+                            {
+                                "objective_id": "objective:lead",
+                                "summary": "Investigate the unresolved lead: old mill bridge.",
+                                "status": "active",
+                                "completed": False,
+                                "subject": "old mill bridge",
+                                "handoff_objective": True,
+                            }
+                        ],
+                    },
+                ]
+            }
+        },
+        "recent_turns": [
+            {
+                "player_action": "I inspect the road outside the tavern for fresh tracks, wagon ruts, black cord, torn cloth, ambush signs, or bridge markings."
+            }
+        ] * 4,
+    }
+
+    result = repair_action_if_needed(
+        "I inspect the road outside the tavern for fresh tracks, wagon ruts, black cord, torn cloth, ambush signs, or bridge markings.",
+        context,
+    )
+
+    assert result["changed"] is True
+    assert result["reason"] == "committed_handoff_quest_priority_repair"
+    assert "old mill bridge" in result["action"].lower()
+6C. Patch pre-turn performance summary test
+
+Add to src/tests/rpg/autoplay/test_quality_gates.py:
+
+def test_pre_turn_advisory_perf_ok_when_zero_slow_events_and_low_elapsed():
+    from tests.rpg.autoplay_llm_campaign import _pre_turn_advisory_promotion_performance_summary
+
+    summary = _pre_turn_advisory_promotion_performance_summary(
+        [
             {
                 "pre_turn_advisory_promotion_result": {
-                    "elapsed_ms": 5,
+                    "elapsed_ms": 9,
                     "fast_pre_turn": True,
+                    "slow_guard_ms": 5000,
                 }
             }
         ],
-        pre_turn_advisory_promotion_slow_events=[],
-        pre_turn_advisory_promotion_auto_disabled=False,
-        pre_turn_advisory_promotion_disable_reason="",
+        slow_events=[],
+        auto_disabled=False,
+        disable_reason="",
     )
 
-    for key in REQUIRED_FINAL_LIFECYCLE_SUMMARY_FIELDS:
-        assert key in final
-        assert final[key] not in (None, {}, [])
+    assert summary["ok"] is True
+    assert summary["max_elapsed_ms"] == 9
+    assert summary["slow_event_count"] == 0
+7. Validation
 
-    assert final["latest_state"]["quest_progress"]["quests"]
-    assert final["quality_gate_summary"]["gates"]["final_lifecycle_summary_fields_present_ok"] is True
-    assert final["ok"] == final["quality_gate_summary"]["ok"]
-4C. Add artifact invariant test
-def test_assert_final_lifecycle_summary_authority_raises_on_false_green():
-    import pytest
-    from tests.rpg.autoplay_llm_campaign import _assert_final_lifecycle_summary_authority
+Run compile:
 
-    summary = {
-        "ok": True,
-        "quality_gate_summary": {"ok": True, "gates": {}},
-    }
-
-    with pytest.raises(RuntimeError, match="final_lifecycle_summary_missing_fields"):
-        _assert_final_lifecycle_summary_authority(summary)
-5. Validation
-
-Run:
-
-python -m py_compile src\tests\rpg\autoplay_llm_campaign.py src\tests\rpg\autoplay\campaign_report.py
+python -m py_compile src\app\rpg\campaign_state\authority_commit.py src\app\rpg\objectives\affordances.py src\tests\rpg\autoplay_llm_campaign.py src\tests\rpg\autoplay\executable_actions.py
 
 Run focused tests:
 
-python -m pytest src\tests\rpg\autoplay\test_quality_gates.py src\tests\rpg\autoplay\test_campaign_report.py -q
-
-Run a 3-turn smoke first:
-
-python src/tests/rpg/autoplay_llm_campaign.py --turns 3 --player-agent llm --player-agent-context-mode compact --player-agent-cache on --scenario-seed tavern_story_seed --artifact-detail full --latency-profile playable --narration-mode deferred --background-llm-mode combined --deferred-advisory-promotion on --checkpoint-mode background --background-workers 3 --provider-workers 2 --output-dir resources/data/test-results/autoplay-3-final-summary-authority --checkpoint-every 0 --debug-provider-shape --debug-autoplay-stage-timing --strategy goal_directed_quest_runner --autoplay-base-response deterministic --action-diversity-window 12 --player-agent-anti-loop-streak-threshold 3 --player-agent-goal-pressure --player-agent-goal-pressure-repair --player-agent-executable-action-repair --fail-on-compatibility-turn-runtime --fail-on-runtime-error --fail-on-regression-warnings --campaign-minutes-per-turn 60 --journal-every-turns 4 --pre-turn-background-drain-ms 500 --pre-turn-advisory-promotion-max-rows 1 --pre-turn-advisory-fast-path --pre-turn-advisory-slow-guard-ms 5000 --final-background-drain-timeout-seconds 30 --cancel-unfinished-background-on-final-timeout --force-exit-after-artifacts-on-background-timeout
+python -m pytest src\tests\rpg\test_campaign_state_authority_commit.py src\tests\rpg\autoplay\test_executable_actions.py src\tests\rpg\autoplay\test_quality_gates.py -q

@@ -1217,6 +1217,9 @@ REQUIRED_FINAL_LIFECYCLE_SUMMARY_FIELDS = (
     "post_transition_action_quality_summary",
     "repeated_affordance_loop_summary",
     "pre_turn_advisory_promotion_performance_summary",
+    "campaign_state_commit_summary",
+    "campaign_stale_state_summary",
+    "campaign_state_commit_performance_summary",
     "quality_gate_summary",
 )
 
@@ -1231,6 +1234,9 @@ REQUIRED_FINAL_LIFECYCLE_GATES = (
     "final_state_field_coverage_ok",
     "pre_turn_advisory_promotion_fast_ok",
     "final_lifecycle_summary_fields_present_ok",
+    "campaign_state_commit_ok",
+    "campaign_state_not_stale_ok",
+    "campaign_state_commit_performance_ok",
 )
 
 
@@ -1446,6 +1452,26 @@ def _ensure_runtime_state_tracking_fields(
     return state
 
 
+def _compact_campaign_state_transcript_tail(
+    transcript: List[Dict[str, Any]],
+    *,
+    limit: int = 12,
+) -> List[Dict[str, Any]]:
+    rows: List[Dict[str, Any]] = []
+    for row in _safe_list(transcript)[-max(1, int(limit or 12)):]:
+        row = _safe_dict(row)
+        rows.append(
+            {
+                "turn": row.get("turn") or row.get("turn_index"),
+                "turn_index": row.get("turn_index") or row.get("turn"),
+                "player_action": _safe_str(row.get("player_action") or row.get("action")),
+                "narration": _safe_str(row.get("narration")),
+                "objective_progression": _safe_dict(row.get("objective_progression")),
+            }
+        )
+    return rows
+
+
 def _strict_progress_health_summary_from_summary(summary: Dict[str, Any]) -> Dict[str, Any]:
     summary = _safe_dict(summary)
     progress_quality = _safe_dict(_safe_dict(summary.get("health")).get("progress_quality"))
@@ -1500,14 +1526,27 @@ def _pre_turn_advisory_promotion_performance_summary(
             promotion_results.append(result)
     elapsed_values = [float(_safe_dict(row).get("elapsed_ms") or 0.0) for row in promotion_results]
     fast_count = sum(1 for row in promotion_results if bool(_safe_dict(row).get("fast_pre_turn")))
+    slow_guard_ms = 5000
+    for row in promotion_results:
+        if int(_safe_dict(row).get("slow_guard_ms") or 0) > 0:
+            slow_guard_ms = int(_safe_dict(row).get("slow_guard_ms") or 0)
+            break
+    max_elapsed_ms = max(elapsed_values) if elapsed_values else 0.0
+    slow_event_count = len(_safe_list(slow_events))
+    ok = slow_event_count == 0 and max_elapsed_ms <= slow_guard_ms
     return {
-        "ok": (not promotion_results or fast_count == len(promotion_results)) and not slow_events and not auto_disabled,
+        "ok": ok,
         "count": len(promotion_results),
+        "promotion_count": len(promotion_results),
         "fast_count": fast_count,
-        "slow_event_count": len(_safe_list(slow_events)),
+        "fast_path_count": fast_count,
+        "slow_guard_ms": slow_guard_ms,
+        "slow_event_count": slow_event_count,
         "auto_disabled": bool(auto_disabled),
         "disable_reason": _safe_str(disable_reason),
-        "max_elapsed_ms": max(elapsed_values, default=0.0),
+        "max_elapsed_ms": max_elapsed_ms,
+        "avg_elapsed_ms": round(sum(elapsed_values) / len(elapsed_values), 3) if elapsed_values else 0.0,
+        "slow_events": _safe_list(slow_events)[-10:],
     }
 
 
@@ -1540,6 +1579,28 @@ def _merge_preserving_runtime_state(
     return merged
 
 
+def _merge_turn_result_authoritative_state(
+    runtime_state: Dict[str, Any],
+    turn_result: Dict[str, Any],
+) -> Dict[str, Any]:
+    runtime_state = _safe_dict(runtime_state)
+    turn_result = _safe_dict(turn_result)
+    candidates = [
+        _safe_dict(turn_result.get("simulation_state")),
+        _safe_dict(turn_result.get("runtime_state")),
+        _safe_dict(_safe_dict(turn_result.get("result")).get("simulation_state")),
+        _safe_dict(_safe_dict(turn_result.get("result")).get("runtime_state")),
+        _safe_dict(_safe_dict(turn_result.get("resolved_result")).get("simulation_state")),
+        _safe_dict(_safe_dict(turn_result.get("resolved_result")).get("runtime_state")),
+    ]
+    merged = dict(runtime_state)
+    for candidate in candidates:
+        if not candidate:
+            continue
+        merged = _merge_preserving_runtime_state(merged, candidate)
+    return merged
+
+
 def _reconcile_and_apply_handoff(runtime_state: Dict[str, Any]) -> Dict[str, Any]:
     state = deepcopy(_safe_dict(runtime_state))
     try:
@@ -1557,6 +1618,34 @@ def _reconcile_and_apply_handoff(runtime_state: Dict[str, Any]) -> Dict[str, Any
     except Exception:
         pass
     return state
+
+
+def _commit_campaign_state_authority(
+    runtime_state: Dict[str, Any],
+    *,
+    turn_record: Dict[str, Any] | None = None,
+    transcript_tail: List[Dict[str, Any]] | None = None,
+    transcript: List[Dict[str, Any]] | None = None,
+    phase: str = "turn",
+) -> Dict[str, Any]:
+    try:
+        from app.rpg.campaign_state.authority_commit import commit_campaign_state
+
+        result = commit_campaign_state(
+            runtime_state,
+            turn_record=turn_record,
+            transcript_tail=transcript_tail,
+            transcript=transcript,
+            phase=phase,
+            performance_budget_ms=25,
+        )
+        return _safe_dict(result.get("state")) or runtime_state
+    except Exception as exc:
+        errors = runtime_state.setdefault("campaign_state_commit_errors", [])
+        if isinstance(errors, list):
+            errors.append(f"{type(exc).__name__}: {exc}")
+            del errors[:-20]
+        return runtime_state
 
 
 def _runtime_state_from_transcript(transcript: List[Dict[str, Any]]) -> Dict[str, Any]:
@@ -1604,6 +1693,9 @@ def _final_lifecycle_quality_gates(summary: Dict[str, Any]) -> Dict[str, Any]:
     field_coverage = _safe_dict(summary.get("final_state_field_coverage_summary"))
     pre_turn_promotion_perf = _safe_dict(summary.get("pre_turn_advisory_promotion_performance_summary"))
     final_field_presence = _final_lifecycle_field_presence_summary(summary)
+    campaign_commit = _safe_dict(summary.get("campaign_state_commit_summary"))
+    stale_state = _safe_dict(summary.get("campaign_stale_state_summary"))
+    commit_perf = _safe_dict(summary.get("campaign_state_commit_performance_summary"))
 
     quest_progress_summary = _safe_dict(summary.get("quest_progress_summary"))
     active_quests = 0
@@ -1659,6 +1751,9 @@ def _final_lifecycle_quality_gates(summary: Dict[str, Any]) -> Dict[str, Any]:
         or bool(pre_turn_promotion_perf.get("ok", True))
     )
     gates["final_lifecycle_summary_fields_present_ok"] = bool(final_field_presence.get("ok"))
+    gates["campaign_state_commit_ok"] = bool(campaign_commit.get("ok", False))
+    gates["campaign_state_not_stale_ok"] = bool(stale_state.get("ok", False))
+    gates["campaign_state_commit_performance_ok"] = bool(commit_perf.get("ok", True))
 
     for required_gate in REQUIRED_FINAL_LIFECYCLE_GATES:
         gates.setdefault(required_gate, False)
@@ -1696,21 +1791,36 @@ def _build_authoritative_final_lifecycle_summary(
     runtime_state = _merge_preserving_runtime_state(transcript_state, runtime_state)
     runtime_state = _ensure_runtime_state_tracking_fields(runtime_state, transcript)
 
-    runtime_state = _reconcile_and_apply_handoff(runtime_state)
-
     previous_latest_state = _safe_dict(summary.get("latest_state"))
     runtime_state = _merge_preserving_runtime_state(previous_latest_state, runtime_state)
-    runtime_state = _reconcile_and_apply_handoff(runtime_state)
+    runtime_state = _commit_campaign_state_authority(
+        runtime_state,
+        transcript_tail=transcript[-12:],
+        transcript=transcript,
+        phase="final",
+    )
 
     summary["latest_state"] = runtime_state
-    summary["quest_progress_summary"] = _quest_progress_summary_from_state(runtime_state)
+    campaign_commit_summary = _safe_dict(runtime_state.get("campaign_state_commit_summary"))
+    summary["campaign_state_commit_summary"] = campaign_commit_summary
+    commit_summary = _safe_dict(runtime_state.get("campaign_state_commit_summary"))
+    summary["quest_progress_summary"] = (
+        _safe_dict(commit_summary.get("quest_progress_summary"))
+        or _quest_progress_summary_from_state(runtime_state)
+    )
     _guard_quest_summary_source(summary, runtime_state)
     summary["objective_progression_summary"] = _objective_progression_summary_from_state(
         runtime_state,
         transcript,
     )
-    summary["quest_reconciliation_summary"] = _quest_reconciliation_summary_from_state(runtime_state)
-    summary["quest_handoff_summary"] = _quest_handoff_summary_from_state(runtime_state)
+    summary["quest_reconciliation_summary"] = (
+        _safe_dict(commit_summary.get("quest_reconciliation_summary"))
+        or _quest_reconciliation_summary_from_state(runtime_state)
+    )
+    summary["quest_handoff_summary"] = (
+        _safe_dict(commit_summary.get("handoff_summary"))
+        or _quest_handoff_summary_from_state(runtime_state)
+    )
     if not isinstance(summary["quest_handoff_summary"], dict):
         summary["quest_handoff_summary"] = {
             "ok": False,
@@ -1718,6 +1828,8 @@ def _build_authoritative_final_lifecycle_summary(
             "recent": [],
             "active_handoff_quests": [],
         }
+    summary["campaign_stale_state_summary"] = _safe_dict(commit_summary.get("stale_state_summary"))
+    summary["campaign_state_commit_performance_summary"] = _safe_dict(commit_summary.get("performance"))
     summary["final_state_field_coverage_summary"] = _final_state_field_coverage_summary(runtime_state)
     summary["strict_progress_health_summary"] = _strict_progress_health_summary_from_summary(summary)
     summary["post_transition_action_quality"] = _post_transition_action_quality_summary(transcript)
@@ -3812,6 +3924,9 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
                     "rejected": pre_turn_promotion_result.get("rejected"),
                     "pending": pre_turn_promotion_result.get("pending"),
                     "persist_profiles": pre_turn_promotion_result.get("persist_profiles"),
+                    "fast_pre_turn": pre_turn_promotion_result.get("fast_pre_turn"),
+                    "elapsed_ms": pre_turn_promotion_result.get("elapsed_ms"),
+                    "slow_guard_ms": int(getattr(args, "pre_turn_advisory_slow_guard_ms", 5000) or 5000),
                     "carry_candidate_limit": pre_turn_promotion_result.get("carry_candidate_limit"),
                     "carry_pending_limit": pre_turn_promotion_result.get("carry_pending_limit"),
                     "carry_accepted_limit": pre_turn_promotion_result.get("carry_accepted_limit"),
@@ -3845,6 +3960,11 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
             session_id=session_id,
             authoritative_state=authoritative_state,
         )
+        authoritative_state = _commit_campaign_state_authority(
+            authoritative_state,
+            transcript_tail=transcript[-12:],
+            phase="turn",
+        )
         simulation_state = deepcopy(authoritative_state)
         context = build_player_action_context(
             authoritative_state,
@@ -3855,6 +3975,8 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
             context["dialogue_state"] = authoritative_state.get("dialogue_state") or {}
             context["autoplay_story_hook_state"] = authoritative_state.get("autoplay_story_hook_state") or {}
             context["quest_progress"] = authoritative_state.get("quest_progress") or {}
+            context["campaign_state_commit_summary"] = authoritative_state.get("campaign_state_commit_summary") or {}
+            context["unresolved_leads"] = authoritative_state.get("unresolved_leads") or []
             context["current_location"] = authoritative_state.get("current_location") or authoritative_state.get("current_location_name") or ""
             context["current_location_name"] = authoritative_state.get("current_location_name") or ""
             # Limit recent_turns to prevent memory explosion in long campaigns
@@ -4208,6 +4330,12 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
             ok=_safe_dict(turn_result).get("ok"),
             keys=",".join(sorted(_safe_dict(turn_result).keys())[:80]),
         )
+        authoritative_state = _merge_turn_result_authoritative_state(authoritative_state, turn_result)
+        authoritative_state = _commit_campaign_state_authority(
+            authoritative_state,
+            transcript_tail=transcript[-12:],
+            phase="turn",
+        )
 
         base_response_payload: Dict[str, Any] = {}
         raw_payload = _safe_dict(
@@ -4434,6 +4562,7 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
             carried_campaign_runtime_state,
             row_runtime_state,
         )
+        runtime_state = _merge_preserving_runtime_state(final_turn_state, runtime_state)
         runtime_state = ensure_quest_runtime_state(
             runtime_state=runtime_state,
             scenario_seed=_safe_str(args.scenario_seed),
@@ -4608,6 +4737,59 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
         )
 
         transcript.append(record)
+
+        compact_transcript_tail = _compact_campaign_state_transcript_tail(transcript, limit=12)
+        runtime_state["recent_turns"] = compact_transcript_tail
+        runtime_state["transcript_tail"] = compact_transcript_tail
+        action_history = runtime_state.setdefault("action_history", [])
+        if isinstance(action_history, list):
+            action_history.append(
+                {
+                    "turn": turn_index,
+                    "turn_index": turn_index,
+                    "player_action": _safe_str(player_action),
+                }
+            )
+            del action_history[:-50]
+
+        runtime_state = _commit_campaign_state_authority(
+            runtime_state,
+            turn_record=record,
+            transcript_tail=transcript[-12:],
+            phase="turn",
+        )
+        carried_campaign_runtime_state = _merge_base_runtime_namespaces(
+            carried_campaign_runtime_state,
+            runtime_state,
+        )
+        last_committed_state = deepcopy(runtime_state)
+        simulation_state = deepcopy(last_committed_state)
+        turn_result["runtime_state"] = runtime_state
+        if session_obj:
+            session_obj["runtime_state"] = runtime_state
+            turn_result["session"] = session_obj
+        record["runtime_state"] = runtime_state
+        record["campaign_state_commit_summary"] = _safe_dict(
+            runtime_state.get("campaign_state_commit_summary")
+        )
+        record["quest_progress_after_commit"] = _safe_dict(runtime_state.get("quest_progress"))
+        commit_summary = _safe_dict(runtime_state.get("campaign_state_commit_summary"))
+        commit_qps = _safe_dict(commit_summary.get("quest_progress_summary"))
+        committed_digest = state_digest(last_committed_state)
+        record["final_authoritative_state"] = last_committed_state
+        record["after_state_digest"] = committed_digest
+        record["authoritative_state_digest"] = committed_digest
+        record["committed_next_turn_digest"] = committed_digest
+        state_preservation_debug["committed_counts"] = committed_digest.get("counts", {})
+        _probe_log(
+            bool(getattr(args, "debug_autoplay_stage_timing", False)),
+            "campaign_state_commit.visible_to_next_turn",
+            turn_index=turn_index,
+            active_count=commit_qps.get("active_count"),
+            completed_count=commit_qps.get("completed_count"),
+            handoff_reason=_safe_str(_safe_dict(commit_summary.get("handoff_summary")).get("reason")),
+            handoff_changed=bool(_safe_dict(commit_summary.get("handoff_summary")).get("changed")),
+        )
 
         _probe_log(
             bool(getattr(args, "debug_autoplay_stage_timing", False)),
