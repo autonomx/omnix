@@ -4,6 +4,7 @@ from tests.rpg.autoplay.executable_actions import (
     normalize_command_label_action,
     repair_action_if_needed,
 )
+from tests.rpg.autoplay_llm_campaign import _repeated_affordance_loop_summary
 
 
 def test_meta_action_is_detected():
@@ -72,8 +73,8 @@ def test_repeated_completed_report_repairs_to_next_lead():
         context,
     )
     assert result["changed"] is True
-    assert "leave the tavern" in result["action"].lower()
-    assert "follow the road trail" in result["action"].lower()
+    assert "leave the rusty flagon" in result["action"].lower()
+    assert "follow the road" in result["action"].lower()
 
 
 def test_completed_witness_search_repairs_to_bandit_road_transition():
@@ -94,3 +95,49 @@ def test_completed_witness_search_repairs_to_bandit_road_transition():
     assert result["changed"] is True
     assert "leave the Rusty Flagon" in result["action"] or "follow the road" in result["action"]
     assert "cloaked traveler went" not in result["action"]
+
+
+def test_repeated_affordance_action_repairs_to_alternate_affordance():
+    context = {
+        "quest_log_state": {
+            "quests": {
+                "quest:scout": {
+                    "title": "Missing Scout",
+                    "quest_giver": "Captain Arlen",
+                    "objectives": [
+                        {
+                            "objective_id": "objective:find_scout",
+                            "summary": "Find the missing scout.",
+                            "objective_type": "find",
+                            "subject": "missing scout",
+                            "known_leads": ["forest trail"],
+                        }
+                    ],
+                }
+            }
+        },
+        "recent_turns": [
+            {"player_action": "I ask Captain Arlen what they personally know about missing scout, where it was last seen, and who or what I should inspect next."},
+            {"player_action": "I ask Captain Arlen what they personally know about missing scout, where it was last seen, and who or what I should inspect next."},
+        ],
+    }
+
+    result = repair_action_if_needed("I ask Captain Arlen what they personally know about missing scout, where it was last seen, and who or what I should inspect next.", context)
+
+    assert result["changed"] is True
+    assert result["action"] != "I ask Captain Arlen what they personally know about missing scout, where it was last seen, and who or what I should inspect next."
+    assert result["reason"] == "repeated_affordance_action_repaired_to_alternate_objective_affordance"
+
+
+def test_repeated_affordance_loop_summary_flags_signature_streak():
+    transcript = [
+        {"player_action": "I ask Captain Arlen who last saw the missing scout."},
+        {"player_action": "I ask Captain Arlen who last saw the missing scout."},
+        {"player_action": "I ask Captain Arlen who last saw the missing scout."},
+        {"player_action": "I ask Captain Arlen who last saw the missing scout."},
+    ]
+
+    summary = _repeated_affordance_loop_summary(transcript, threshold=4)
+
+    assert summary["ok"] is False
+    assert summary["max_streak"] == 4

@@ -1,11 +1,11 @@
 from tests.rpg.autoplay.parallel_pipeline import (
-     _combined_payload_has_useful_content,
-     _combined_background_llm_job,
-     _extract_json_object_from_text,
-     _extract_nested_combined_payload,
-     _has_expected_combined_provider_keys,
-     _salvage_combined_narration_from_text,
- )
+    _combined_background_llm_job,
+    _combined_payload_has_useful_content,
+    _extract_json_object_from_text,
+    _extract_nested_combined_payload,
+    _has_expected_combined_provider_keys,
+    _salvage_combined_narration_from_text,
+)
 
 
 class _FakeCombinedProvider:

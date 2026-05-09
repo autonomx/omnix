@@ -4,13 +4,13 @@ import json
 import re
 from typing import Any, Dict, List
 
-from app.shared import get_provider
+from app.rpg.dialogue_state import get_dialogue_context, update_dialogue_state
 from app.rpg.npc_dialogue.intelligence import (
     build_npc_intelligence_prompt,
     normalize_npc_intelligence_payload,
     npc_line_is_invalid,
 )
-from app.rpg.dialogue_state import get_dialogue_context, update_dialogue_state
+from app.shared import get_provider
 
 PROVIDER_METHOD_CANDIDATES = [
     "chat",

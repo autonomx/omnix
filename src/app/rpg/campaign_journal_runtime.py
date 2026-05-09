@@ -3,7 +3,6 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any, Dict, List
 
-
 CAMPAIGN_CALENDAR_VERSION = "campaign_calendar_v1"
 PLAYER_JOURNAL_VERSION = "player_journal_v1"
 

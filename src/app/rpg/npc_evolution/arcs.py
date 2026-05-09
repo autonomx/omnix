@@ -6,7 +6,6 @@ from copy import deepcopy
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Tuple
 
-
 NPC_EVOLUTION_VERSION = "npc_evolution_arcs_v1"
 
 ALLOWED_SIGNAL_KINDS = {

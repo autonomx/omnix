@@ -1,7 +1,7 @@
+from app.rpg.advisory.candidates import normalize_advisory_candidates
 from tests.rpg.autoplay.advisory_promotion_runtime import (
     run_deferred_advisory_promotions_for_transcript,
 )
-from app.rpg.advisory.candidates import normalize_advisory_candidates
 
 
 def test_promotion_runtime_promotes_previous_turn_candidate_without_state_mutation():

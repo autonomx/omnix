@@ -1,6 +1,7 @@
 
 from __future__ import annotations
 
+
 def _post_witness_road_transition_active_in_state(state: Dict[str, Any]) -> bool:
     state = _safe_dict(state)
     facts = _safe_dict(state.get("witness_search_facts"))
@@ -38,9 +39,11 @@ def _is_stale_witness_or_bran_action_command(command: str) -> bool:
     )
     return any(term in lower for term in stale)
 
+
 from typing import Any, Dict, List
 
 from app.rpg.campaign_journal.journal import build_player_story_recap
+from app.rpg.objectives.affordances import build_objective_affordances_for_state
 from app.rpg.quest_log.runtime import (
     build_objective_tracker_payload,
     build_quest_log_payload,
@@ -573,7 +576,11 @@ def build_suggested_actions(
     mode = _derive_mode(simulation_state)
     arcs = _active_arc_rows(recap)
 
-    actions: List[Dict[str, Any]] = []
+
+    # Scenario-agnostic objective affordances should be first-class candidates.
+    # These replace brittle scenario-specific commands like Bran/Witness/Road.
+    objective_affordance_actions = build_objective_affordances_for_state(simulation_state, limit=12)
+    actions = objective_affordance_actions + []
     for row in _objective_actions(objectives, simulation_state):
         actions.append(row)
     for row in _npc_actions(npcs):
@@ -582,6 +589,18 @@ def build_suggested_actions(
         actions.append(row)
     for row in _mode_actions(mode, location):
         actions.append(row)
+
+    def _dedupe_actions_by_command(actions: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        seen = set()
+        out: List[Dict[str, Any]] = []
+        for action in actions:
+            action = _safe_dict(action)
+            command = " ".join(_safe_str(action.get("command")).lower().split())
+            if not command or command in seen:
+                continue
+            seen.add(command)
+            out.append(action)
+        return out
 
     # Filter stale actions after post-transition
     if _post_witness_road_transition_active_in_state(simulation_state):
@@ -594,6 +613,7 @@ def build_suggested_actions(
     else:
         actions = _bandit_road_transition_actions(simulation_state) + actions
 
+    actions = _dedupe_actions_by_command(actions)
     actions.sort(
         key=lambda row: (
             -int(row.get("priority") or 0),

@@ -1,709 +1,707 @@
-N87.2.6 — Hard Post-Transition Action Filter + Strict Progress Gate Sync
+N88.2 — Gate Wiring + Objective Progress Persistence + Affordance Rotation
 Goal
 
-Fix the current 177 state:
+Fix the concrete failures from run 180:
 
-1. Quest hooks/facts are mostly firing, but quest_progress_summary is still stale.
-2. Player still targets Bran too much after the road transition.
-3. “I stop repeating...” became a repeated meta-repair action.
-4. Dialogue memory only records 2 exchanges despite many Bran turns.
-5. health.progress_quality.ok is false, but top-level gates still pass.
-6. Suggested actions still include stale Witness Search / Bran actions after transition.
+1. lifecycle diagnostics are red, but quality_gate_summary.ok is still true.
+2. objective_progression_summary exists but count == 0.
+3. quest_progress_summary still falsely claims latest_state.quest_progress.
+4. repeated affordance repair redirects into a new repeated inspect loop.
+5. strict health/progress is false but summary.ok remains green.
 
-This patch makes the post-transition state authoritative:
+This patch does not add more Bran/Witness/Road-specific logic. It completes the generic lifecycle:
 
-Once the player has reached the road or the Bandit Road hook is active:
-  - hard-block Bran/witness-repeat actions
-  - force road/track/bridge/wagon/next-lead actions
-  - repair “stop repeating...” into concrete road investigation
-  - rebuild quest summary from latest state/facts at the final write point
-  - include strict health.progress_quality in quality gates
-1. Patch src/tests/rpg/autoplay/executable_actions.py
-1A. Add hard post-transition detector
+action selected
+→ objective progression applied
+→ progress persisted into runtime_state
+→ repeated affordance signatures rotated
+→ final quest summary rebuilt after all merges
+→ final quality gate recomputed last
+1. Patch src/tests/rpg/autoplay_llm_campaign.py
+1A. Add final lifecycle gate builder
 
-Add near the helper functions:
+Add near summary helpers:
 
---- src/tests/rpg/autoplay/executable_actions.py
-+++ src/tests/rpg/autoplay/executable_actions.py
+--- src/tests/rpg/autoplay_llm_campaign.py
++++ src/tests/rpg/autoplay_llm_campaign.py
 @@
- def _current_location(context: Dict[str, Any]) -> str:
-     return _safe_str(
-         context.get("current_location")
-         or context.get("current_location_name")
-         or _safe_dict(context.get("scene")).get("location")
-         or _safe_dict(context.get("player_visible")).get("location")
-     ).lower()
++def _strict_progress_health_summary_from_summary(summary: Dict[str, Any]) -> Dict[str, Any]:
++    health = _safe_dict(summary.get("health"))
++    progress_quality = _safe_dict(health.get("progress_quality"))
++    if not progress_quality:
++        progress_quality = _safe_dict(summary.get("progress_quality"))
++    return {
++        "ok": bool(progress_quality.get("ok", True)),
++        "meaningful_progress_rate": progress_quality.get("meaningful_progress_rate"),
++        "meaningful_turns": progress_quality.get("meaningful_turns"),
++        "no_change_turns": progress_quality.get("no_change_turns"),
++        "churn_only_turns": progress_quality.get("churn_only_turns"),
++        "source": "health.progress_quality",
++    }
 +
 +
-+def _witness_facts(context: Dict[str, Any]) -> Dict[str, Any]:
-+    return _safe_dict(context.get("witness_search_facts"))
++def _final_lifecycle_quality_gates(summary: Dict[str, Any]) -> Dict[str, Any]:
++    summary = _safe_dict(summary)
++    requested_turns = int(summary.get("requested_turns") or summary.get("turns_requested") or summary.get("turns_executed") or 0)
++    is_20_turn_or_more = requested_turns >= 20
 +
++    existing = _safe_dict(summary.get("quality_gate_summary"))
++    existing_gates = _safe_dict(existing.get("gates"))
 +
-+def _post_witness_road_transition_active(context: Dict[str, Any]) -> bool:
-+    location = _current_location(context)
-+    facts = _witness_facts(context)
-+    return bool(
-+        _quest_completed(context, "quest:witness_search")
-+        or _quest_status(context, "quest:bandit_road") == "active"
-+        or _story_hook_fired(context, "hook:witness:pursue_bandit_trail")
-+        or _story_hook_fired(context, "hook:travel:location:east_road_outside_tavern")
-+        or bool(facts.get("followed_road"))
-+        or "east_road" in location
-+        or "road outside" in location
-+        or "outside the rusty flagon" in location
++    strict_progress = _safe_dict(summary.get("strict_progress_health_summary"))
++    post_transition = _safe_dict(
++        summary.get("post_transition_action_quality")
++        or summary.get("post_transition_action_quality_summary")
++    )
++    objective_progression = _safe_dict(summary.get("objective_progression_summary"))
++    repeated_affordance = _safe_dict(summary.get("repeated_affordance_loop_summary"))
++
++    gates = dict(existing_gates)
++    gates["strict_progress_health_ok"] = (
++        not is_20_turn_or_more
++        or bool(strict_progress.get("ok", True))
++    )
++    gates["post_transition_action_quality_ok"] = (
++        not is_20_turn_or_more
++        or bool(post_transition.get("ok", True))
++    )
++    gates["objective_progression_present_ok"] = (
++        not is_20_turn_or_more
++        or bool(objective_progression.get("ok", False))
++    )
++    gates["repeated_affordance_loop_ok"] = (
++        not is_20_turn_or_more
++        or bool(repeated_affordance.get("ok", True))
 +    )
 +
-+
-+def _post_transition_forbidden_bran_or_witness_action(action: str) -> bool:
-+    lower = _safe_str(action).lower()
-+    forbidden = (
-+        "ask bran where the cloaked traveler",
-+        "ask bran what he personally saw",
-+        "ask bran what they personally saw",
-+        "report to bran that the cloaked traveler trail",
-+        "stop repeating the report to bran",
-+        "where the cloaked traveler went",
-+        "cloak markings",
-+        "witness search",
-+        "side door",
-+        "cloaked traveler went",
-+    )
-+    return any(term in lower for term in forbidden)
-+
-+
-+def _road_progression_action(context: Dict[str, Any], original_action: str = "") -> str:
-+    lower = _safe_str(original_action).lower()
-+    location = _current_location(context)
-+
-+    if "road" not in location and "outside" not in location:
-+        return (
-+            "I leave the Rusty Flagon and follow the road outside, "
-+            "looking for fresh tracks, wagon ruts, black cord, or bridge signs."
-+        )
-+
-+    if "prepare" in active_objective_blob(context):
-+        return (
-+            "I check my supplies, secure food and water, and prepare to follow "
-+            "the bandit road trail."
-+        )
-+
-+    if "bridge" in lower:
-+        return (
-+            "I follow the road toward the mill bridge, watching for ambush signs, "
-+            "lantern marks, wagon ruts, or bandit tracks."
-+        )
-+
-+    return (
-+        "I inspect the road outside the tavern for fresh tracks, wagon ruts, "
-+        "black cord, torn cloth, ambush signs, or bridge markings."
-+    )
-1B. Make is_meta_or_vague_action catch “stop repeating”
++    failed = [name for name, ok in gates.items() if not bool(ok)]
++    return {
++        **existing,
++        "ok": not failed,
++        "gates": gates,
++        "failed_gates": failed,
++        "source": "final_lifecycle_quality_gates",
++    }
+1B. Finalize summary only once, at the very end
 
-Patch the constants:
+Find where the final summary is created and written. Before any artifact write, add this block after all merges:
 
---- src/tests/rpg/autoplay/executable_actions.py
-+++ src/tests/rpg/autoplay/executable_actions.py
+--- src/tests/rpg/autoplay_llm_campaign.py
++++ src/tests/rpg/autoplay_llm_campaign.py
 @@
- META_ACTION_PATTERNS = (
++    # N88.2: final lifecycle summary override.
++    # This must be the last summary mutation block before artifact writes.
++    summary["quest_progress_summary"] = _quest_progress_summary_from_state(runtime_state)
++    summary["objective_progression_summary"] = _objective_progression_summary_from_state(runtime_state)
++    summary["repeated_affordance_loop_summary"] = _repeated_affordance_loop_summary(transcript, threshold=4)
++    summary["post_transition_action_quality"] = _post_transition_action_quality_summary(transcript, runtime_state)
++    summary["post_transition_action_quality_summary"] = summary["post_transition_action_quality"]
++    summary["strict_progress_health_summary"] = _strict_progress_health_summary_from_summary(summary)
++    summary["quality_gate_summary"] = _final_lifecycle_quality_gates(summary)
++    summary["ok"] = bool(summary["quality_gate_summary"].get("ok"))
+
+Then search for later assignments:
+
+Select-String -Path src\tests\rpg\autoplay_llm_campaign.py -Pattern "quality_gate_summary|summary\[`"ok"`\]|summary\['ok'\]|quest_progress_summary" -Context 2,2
+
+If any of these assignments occur after the final lifecycle block, move the block lower or delete the later stale assignment.
+
+The final order must be:
+
+# build summary
+# merge health/performance/progress/report metadata
+# attach latest_state
+# N88.2 final lifecycle summary override
+# write JSON/HTML/ZIP artifacts
+1C. Ensure latest_state in summary is the same runtime_state
+
+Before the final lifecycle block, add:
+
+--- src/tests/rpg/autoplay_llm_campaign.py
++++ src/tests/rpg/autoplay_llm_campaign.py
 @@
-     "next concrete lead",
-+    "stop repeating",
-+    "stop repeating the report",
-+    "stop repeating the report to bran",
- )
-1C. Hard-block stale Bran/Witness actions after transition
++    summary["latest_state"] = runtime_state
 
-Patch suggested_executable_action(...).
+This prevents the report builder from using an older snapshot.
 
-Inside the loop after command = ...:
+2. Patch objective progression persistence
+2A. Add direct progression application in autoplay loop
 
---- src/tests/rpg/autoplay/executable_actions.py
-+++ src/tests/rpg/autoplay/executable_actions.py
+In src/tests/rpg/autoplay_llm_campaign.py, after each turn result mutates runtime_state, and after player_action is finalized, add:
+
+--- src/tests/rpg/autoplay_llm_campaign.py
++++ src/tests/rpg/autoplay_llm_campaign.py
 @@
-         command = _safe_str(row.get("command")).strip()
-         if not command or is_meta_or_vague_action(command):
-             continue
-         lower_command = command.lower()
-+        if _post_witness_road_transition_active(context) and _post_transition_forbidden_bran_or_witness_action(command):
-+            continue
-         if _quest_completed(context, "quest:witness_search") and any(
-             phrase in lower_command
-             for phrase in (
-1D. Replace “stop repeating...” repair with road action
-
-Patch executable_action_for_context(...).
-
-At the top, after location = _current_location(context):
-
---- src/tests/rpg/autoplay/executable_actions.py
-+++ src/tests/rpg/autoplay/executable_actions.py
-@@
-     objective_blob = active_objective_blob(context)
-     npc = strongest_known_npc(context)
-     location = _current_location(context)
++        try:
++            from app.rpg.objectives.progression_rules import apply_objective_progression_rules
 +
-+    if _post_witness_road_transition_active(context):
-+        if _post_transition_forbidden_bran_or_witness_action(original_action) or is_meta_or_vague_action(original_action):
-+            return _road_progression_action(context, original_action)
- 
-     if _quest_completed(context, "quest:witness_search"):
-         if "road" not in location and "outside" not in location:
++            progression_result = apply_objective_progression_rules(
++                runtime_state,
++                player_action=_safe_str(player_action),
++                semantic_pair=_safe_dict(
++                    selected.get("semantic_pair") if isinstance(selected, dict) else {}
++                ),
++            )
++            if progression_result.get("changed"):
++                runtime_state = _safe_dict(progression_result.get("simulation_state")) or runtime_state
++                turn_objective_progression = {
++                    "changed": True,
++                    "completed_objectives": progression_result.get("completed_objectives") or [],
++                    "progressed_objectives": progression_result.get("progressed_objectives") or [],
++                    "event": progression_result.get("event") or {},
++                }
++                _probe_log(
++                    bool(getattr(args, "debug_autoplay_stage_timing", False)),
++                    "objective_progression.applied",
++                    turn_index=turn_index,
++                    completed_count=len(_safe_list(progression_result.get("completed_objectives"))),
++                    progressed_count=len(_safe_list(progression_result.get("progressed_objectives"))),
++                )
++            else:
++                turn_objective_progression = {
++                    "changed": False,
++                    "event": progression_result.get("event") or {},
++                }
++        except Exception as exc:
++            turn_objective_progression = {
++                "changed": False,
++                "error": f"{type(exc).__name__}: {exc}",
++            }
++            _probe_log(
++                bool(getattr(args, "debug_autoplay_stage_timing", False)),
++                "objective_progression.failed",
++                turn_index=turn_index,
++                error=f"{type(exc).__name__}: {exc}",
++            )
 
-Then replace this older repeated-report repair text if present:
+Then when constructing the transcript record, include:
 
---- src/tests/rpg/autoplay/executable_actions.py
-+++ src/tests/rpg/autoplay/executable_actions.py
+--- src/tests/rpg/autoplay_llm_campaign.py
++++ src/tests/rpg/autoplay_llm_campaign.py
 @@
--        return "I stop repeating the report to Bran and leave the tavern to follow the road trail toward the next lead."
-+        return _road_progression_action(context, original_action)
+         record = {
+             ...
++            "objective_progression": turn_objective_progression,
+         }
 
-Also patch repair_action_if_needed(...) before the generic meta/vague branch:
+If record is created before this block, move the progression block before record = {...} or update the record after creation:
 
---- src/tests/rpg/autoplay/executable_actions.py
-+++ src/tests/rpg/autoplay/executable_actions.py
+record["objective_progression"] = turn_objective_progression
+2B. Make progress summary read transcript fallback too
+
+Patch _objective_progression_summary_from_state(...) to accept transcript fallback.
+
+Replace existing helper with:
+
+--- src/tests/rpg/autoplay_llm_campaign.py
++++ src/tests/rpg/autoplay_llm_campaign.py
 @@
-     action = normalized.strip()
-     lower_action = action.lower()
-+    if _post_witness_road_transition_active(context) and _post_transition_forbidden_bran_or_witness_action(action):
-+        repaired = _road_progression_action(context, action)
-+        return {
-+            "changed": repaired != action,
-+            "action": repaired,
-+            "original_action": original,
-+            "reason": "post_transition_bran_witness_action_repaired_to_road_progression",
-+        }
-     if _quest_completed(context, "quest:witness_search") and any(
-1E. Make unchanged “stop repeating” impossible
-
-Patch the bottom unchanged return:
-
---- src/tests/rpg/autoplay/executable_actions.py
-+++ src/tests/rpg/autoplay/executable_actions.py
-@@
+-def _objective_progression_summary_from_state(state: Dict[str, Any]) -> Dict[str, Any]:
++def _objective_progression_summary_from_state(state: Dict[str, Any], transcript: List[Dict[str, Any]] | None = None) -> Dict[str, Any]:
+     state = _safe_dict(state)
+     log = _safe_list(state.get("objective_progression_log"))
+     hook_state = _safe_dict(state.get("autoplay_story_hook_state"))
+     fired_hooks = _safe_dict(hook_state.get("fired_hooks"))
+     objective_hooks = [
+         {"hook_id": hook_id, **_safe_dict(payload)}
+         for hook_id, payload in fired_hooks.items()
+         if _safe_str(hook_id).startswith("hook:objective")
+     ]
++    transcript_rows: List[Dict[str, Any]] = []
++    for row in _safe_list(transcript):
++        progression = _safe_dict(_safe_dict(row).get("objective_progression"))
++        if progression.get("changed"):
++            transcript_rows.append(
++                {
++                    "turn": _safe_dict(row).get("turn"),
++                    "completed_objectives": progression.get("completed_objectives") or [],
++                    "progressed_objectives": progression.get("progressed_objectives") or [],
++                    "event": progression.get("event") or {},
++                }
++            )
      return {
-         "changed": False,
-         "action": action,
-         "original_action": original,
-         "reason": "",
+-        "count": len(log) + len(objective_hooks),
++        "count": len(log) + len(objective_hooks) + len(transcript_rows),
+         "recent": log[-10:],
+         "objective_hooks": objective_hooks[-10:],
+-        "ok": bool(log or objective_hooks),
++        "transcript_progression": transcript_rows[-10:],
++        "ok": bool(log or objective_hooks or transcript_rows),
      }
+
+Update final lifecycle call:
+
+--- src/tests/rpg/autoplay_llm_campaign.py
++++ src/tests/rpg/autoplay_llm_campaign.py
+@@
+-    summary["objective_progression_summary"] = _objective_progression_summary_from_state(runtime_state)
++    summary["objective_progression_summary"] = _objective_progression_summary_from_state(runtime_state, transcript)
+3. Patch src/app/rpg/objectives/progression_rules.py
+3A. Ensure objectives are discoverable from multiple state shapes
+
+Add helper near safe helpers:
+
+--- src/app/rpg/objectives/progression_rules.py
++++ src/app/rpg/objectives/progression_rules.py
+@@
++def _iter_quest_objectives(state: Dict[str, Any]):
++    state = _safe_dict(state)
++    source_paths = (
++        ("quest_progress", "quests"),
++        ("quest_log_state", "quests"),
++    )
++    for root_key, quests_key in source_paths:
++        quests = _safe_dict(_safe_dict(state.get(root_key)).get(quests_key))
++        for quest_id, quest_raw in quests.items():
++            quest = _safe_dict(quest_raw)
++            for obj in _safe_list(quest.get("objectives")):
++                yield root_key, quest_id, quest, _safe_dict(obj)
++
++    arcs = _safe_dict(_safe_dict(state.get("story_arc_milestone_state")).get("arcs"))
++    for arc_id, arc_raw in arcs.items():
++        arc = _safe_dict(arc_raw)
++        for milestone in _safe_list(arc.get("milestones")):
++            milestone = _safe_dict(milestone)
++            if "objective_id" not in milestone:
++                milestone["objective_id"] = _safe_str(milestone.get("milestone_id") or f"{arc_id}:milestone")
++            if "summary" not in milestone:
++                milestone["summary"] = _safe_str(milestone.get("title") or milestone.get("objective_text"))
++            yield "story_arc_milestone_state", arc_id, arc, milestone
+3B. Use _iter_quest_objectives in progression application
+
+Replace the current quest_sources = [...] loop inside apply_objective_progression_rules(...) with:
+
+--- src/app/rpg/objectives/progression_rules.py
++++ src/app/rpg/objectives/progression_rules.py
+@@
+-    quest_sources = [
+-        _safe_dict(_safe_dict(state.get("quest_progress")).get("quests")),
+-        _safe_dict(_safe_dict(state.get("quest_log_state")).get("quests")),
+-    ]
+-    for quests in quest_sources:
+-        for quest_id, quest in quests.items():
+-            quest = _safe_dict(quest)
+-            objectives = _safe_list(quest.get("objectives"))
+-            for obj in objectives:
+-                obj = _safe_dict(obj)
+-                if objective_progress_matches_event(obj, event):
+-                    obj["completed"] = True
+-                    obj["status"] = "completed"
+-                    changed = True
+-                    completed.append({
+-                        "quest_id": _safe_str(quest.get("quest_id") or quest_id),
+-                        "objective_id": _safe_str(obj.get("objective_id") or obj.get("id")),
+-                        "summary": _safe_str(obj.get("summary") or obj.get("objective_text") or obj.get("title")),
+-                        "event": event,
+-                    })
+-                elif objective_partial_progress_matches_event(obj, event):
+-                    progress_count = int(obj.get("progress_count") or 0) + 1
+-                    obj["progress_count"] = progress_count
+-                    obj["status"] = _safe_str(obj.get("status") or "active")
+-                    changed = True
+-                    progressed.append({
+-                        "quest_id": _safe_str(quest.get("quest_id") or quest_id),
+-                        "objective_id": _safe_str(obj.get("objective_id") or obj.get("id")),
+-                        "summary": _safe_str(obj.get("summary") or obj.get("objective_text") or obj.get("title")),
+-                        "progress_count": progress_count,
+-                        "event": event,
+-                    })
+-            if objectives and all(bool(_safe_dict(obj).get("completed")) or _safe_str(_safe_dict(obj).get("status")) == "completed" for obj in objectives):
+-                quest["completed"] = True
+-                quest["status"] = "completed"
++    touched_quests: List[Dict[str, Any]] = []
++    for source_key, quest_id, quest, obj in _iter_quest_objectives(state):
++        if objective_progress_matches_event(obj, event):
++            obj["completed"] = True
++            obj["status"] = "completed"
++            changed = True
++            completed.append({
++                "source": source_key,
++                "quest_id": _safe_str(quest.get("quest_id") or quest_id),
++                "objective_id": _safe_str(obj.get("objective_id") or obj.get("id")),
++                "summary": _safe_str(obj.get("summary") or obj.get("objective_text") or obj.get("title")),
++                "event": event,
++            })
++            if quest not in touched_quests:
++                touched_quests.append(quest)
++        elif objective_partial_progress_matches_event(obj, event):
++            progress_count = int(obj.get("progress_count") or 0) + 1
++            obj["progress_count"] = progress_count
++            obj["status"] = _safe_str(obj.get("status") or "active")
++            changed = True
++            progressed.append({
++                "source": source_key,
++                "quest_id": _safe_str(quest.get("quest_id") or quest_id),
++                "objective_id": _safe_str(obj.get("objective_id") or obj.get("id")),
++                "summary": _safe_str(obj.get("summary") or obj.get("objective_text") or obj.get("title")),
++                "progress_count": progress_count,
++                "event": event,
++            })
++            if quest not in touched_quests:
++                touched_quests.append(quest)
++
++    for quest in touched_quests:
++        objectives = _safe_list(quest.get("objectives") or quest.get("milestones"))
++        if objectives and all(
++            bool(_safe_dict(obj).get("completed")) or _safe_str(_safe_dict(obj).get("status")) == "completed"
++            for obj in objectives
++        ):
++            quest["completed"] = True
++            quest["status"] = "completed"
+3C. Always persist event log for diagnostic visibility
+
+Patch log writing:
+
+--- src/app/rpg/objectives/progression_rules.py
++++ src/app/rpg/objectives/progression_rules.py
+@@
+     progress_log = state.setdefault("objective_progression_log", [])
+     if isinstance(progress_log, list):
++        if not completed and not progressed:
++            progress_log.append({
++                "partial": True,
++                "matched": False,
++                "event": event,
++                "summary": "Objective progression evaluated but no objective matched.",
++            })
+         for row in completed:
+             progress_log.append(row)
+         for row in progressed:
+             row = dict(row)
+             row["partial"] = True
+             progress_log.append(row)
+         del progress_log[:-100]
+@@
+-        "changed": changed,
++        "changed": changed or bool(completed or progressed),
+
+This ensures objective_progression_log proves the system is running even when no objective matches. The gate should still prefer matched rows later, but this helps debugging.
+
+4. Patch affordance rotation
+4A. Create generic rotation chooser
+
+Patch src/tests/rpg/autoplay/executable_actions.py.
+
+Add helper after is_repeated_affordance_action(...):
+
+--- src/tests/rpg/autoplay/executable_actions.py
++++ src/tests/rpg/autoplay/executable_actions.py
+@@
++AFFORDANCE_ROTATION_ORDER = {
++    "ask": ["inspect", "travel", "follow", "report", "prepare", "confront"],
++    "inspect": ["follow", "travel", "ask", "report", "prepare", "confront"],
++    "travel": ["inspect", "follow", "ask", "report", "prepare", "confront"],
++    "follow": ["inspect", "travel", "ask", "report", "prepare", "confront"],
++    "report": ["travel", "inspect", "ask", "prepare", "confront"],
++    "prepare": ["travel", "inspect", "ask", "confront", "report"],
++}
++
++
++def _semantic_of_action(action: str) -> str:
++    return infer_semantic_action(_safe_str(action))
++
++
++def choose_rotated_affordance(context: Dict[str, Any], repeated_action: str) -> str:
++    repeated_semantic = _semantic_of_action(repeated_action)
++    preferred = AFFORDANCE_ROTATION_ORDER.get(repeated_semantic, ["inspect", "travel", "ask", "report", "prepare"])
++    candidates = []
++    for row in build_objective_affordances_for_state(context, limit=20):
++        command = _safe_str(_safe_dict(row).get("command")).strip()
++        if not command:
++            continue
++        candidate_semantic = _semantic_of_action(command)
++        candidates.append((command, candidate_semantic))
++
++    repeated_sig = action_signature(repeated_action)
++    recent_counts = recent_action_signature_counts(context, limit=12)
++
++    for wanted_semantic in preferred:
++        for command, semantic in candidates:
++            if semantic != wanted_semantic:
++                continue
++            sig = action_signature(command)
++            if sig == repeated_sig:
++                continue
++            if recent_counts.get(sig, 0) >= 2:
++                continue
++            if is_meta_or_vague_action(command):
++                continue
++            return command
++
++    for command, semantic in candidates:
++        sig = action_signature(command)
++        if sig != repeated_sig and recent_counts.get(sig, 0) < 2 and not is_meta_or_vague_action(command):
++            return command
++
++    return ""
+4B. Use rotation in repeated repair
+
+Replace the repeated affordance repair block:
+
+--- src/tests/rpg/autoplay/executable_actions.py
++++ src/tests/rpg/autoplay/executable_actions.py
+@@
+     if is_repeated_affordance_action(action, context):
+-        repaired = ""
+-        for row in build_objective_affordances_for_state(context, limit=10):
+-            candidate = _safe_str(_safe_dict(row).get("command"))
+-            if candidate and action_signature(candidate) != action_signature(action) and not is_repeated_affordance_action(candidate, context):
+-                repaired = candidate
+-                break
++        repaired = choose_rotated_affordance(context, action)
+         if not repaired:
+             repaired = executable_action_for_context(context, action)
+         return {
+             "changed": repaired != action,
+             "action": repaired,
+             "original_action": original,
+-            "reason": "repeated_affordance_action_repaired_to_alternate_objective_affordance",
++            "reason": "repeated_affordance_action_repaired_by_semantic_rotation",
+         }
+4C. Prevent executable_action_for_context from always returning first affordance
+
+Find:
+
+generic_affordances = build_objective_affordances_for_state(context, limit=6)
+for row in generic_affordances:
+    command = ...
+    if command and not is_meta_or_vague_action(command):
+        return command
 
 Replace with:
 
 --- src/tests/rpg/autoplay/executable_actions.py
 +++ src/tests/rpg/autoplay/executable_actions.py
 @@
-+    if "stop repeating" in lower_action:
-+        repaired = _road_progression_action(context, action)
-+        return {
-+            "changed": repaired != action,
-+            "action": repaired,
-+            "original_action": original,
-+            "reason": "stop_repeating_meta_action_repaired_to_concrete_road_action",
-+        }
-     return {
-         "changed": False,
-         "action": action,
-         "original_action": original,
-         "reason": "",
-2. Patch src/app/rpg/player_action_context/runtime.py
-2A. Add post-transition detector
-
-Add near helper functions:
-
---- src/app/rpg/player_action_context/runtime.py
-+++ src/app/rpg/player_action_context/runtime.py
-@@
- def _bandit_road_active_in_state(state: Dict[str, Any]) -> bool:
-     quests = _safe_dict(_safe_dict(state).get("quest_progress")).get("quests")
-     quest = _safe_dict(_safe_dict(quests).get("quest:bandit_road"))
-     return _safe_str(quest.get("status")) == "active"
-+
-+
-+def _post_witness_road_transition_active_in_state(state: Dict[str, Any]) -> bool:
-+    state = _safe_dict(state)
-+    facts = _safe_dict(state.get("witness_search_facts"))
-+    hook_state = _safe_dict(state.get("autoplay_story_hook_state"))
-+    fired_hooks = _safe_dict(hook_state.get("fired_hooks"))
-+    location = _safe_str(
-+        state.get("current_location")
-+        or state.get("current_location_name")
-+        or _safe_dict(state.get("scene")).get("location")
-+    ).lower()
-+    return bool(
-+        _quest_completed_in_state(state, "quest:witness_search")
-+        or _bandit_road_active_in_state(state)
-+        or "hook:witness:pursue_bandit_trail" in fired_hooks
-+        or "hook:travel:location:east_road_outside_tavern" in fired_hooks
-+        or facts.get("followed_road")
-+        or "east_road" in location
-+        or "road outside" in location
-+        or "outside the rusty flagon" in location
-+    )
-+
-+
-+def _is_stale_witness_or_bran_action_command(command: str) -> bool:
-+    lower = _safe_str(command).lower()
-+    stale = (
-+        "ask bran where the cloaked traveler",
-+        "ask bran what he personally saw",
-+        "ask bran what they personally saw",
-+        "report to bran that the cloaked traveler trail",
-+        "stop repeating the report to bran",
-+        "where the cloaked traveler went",
-+        "cloak markings",
-+        "witness search",
-+        "side door",
-+    )
-+    return any(term in lower for term in stale)
-2B. Filter stale actions before return
-
-At the top-level suggested action builder, immediately before sorting/returning the action list, add:
-
---- src/app/rpg/player_action_context/runtime.py
-+++ src/app/rpg/player_action_context/runtime.py
-@@
-+    if _post_witness_road_transition_active_in_state(state):
-+        actions = [
-+            action
-+            for action in actions
-+            if not _is_stale_witness_or_bran_action_command(_safe_str(_safe_dict(action).get("command")))
-+        ]
-+        actions = _bandit_road_transition_actions(state) + actions
-
-If your list variable is named suggested_actions, use that instead of actions.
-
-2C. Strengthen Bandit Road actions
-
-Patch _bandit_road_transition_actions(...) priorities and commands:
-
---- src/app/rpg/player_action_context/runtime.py
-+++ src/app/rpg/player_action_context/runtime.py
-@@
-     add(
-         "bandit_road:leave_tavern",
-         "Leave the tavern for the road",
--        "I leave the Rusty Flagon and follow the road outside, looking for fresh tracks, bridge signs, or the next bandit lead.",
-+        "I leave the Rusty Flagon and follow the road outside, looking for fresh tracks, wagon ruts, black cord, or bridge signs.",
-         "travel",
--        140,
-+        170,
-         "Witness Search is complete; transition to the Bandit Road lead.",
-     )
-@@
-         "bandit_road:inspect_tracks",
-         "Inspect the road for bandit signs",
--        "I inspect the road outside the tavern for tracks, ambush signs, black cord, wagon ruts, or bridge markings.",
-+        "I inspect the road outside the tavern for fresh tracks, wagon ruts, black cord, torn cloth, ambush signs, or bridge markings.",
-         "exploration",
--        136,
-+        168,
-         "Find concrete evidence for the Bandit Road quest.",
-     )
-@@
-         "bandit_road:ask_travelers",
-         "Ask who travels before dawn",
-         "I ask Bran who is likely to travel the road before dawn and who needs warning first.",
-         "objective",
--        132,
-+        130,
-         "Identify the next person or place tied to the Bandit Road threat.",
-     )
-3. Patch src/tests/rpg/autoplay_llm_campaign.py
-3A. Add strict post-transition transcript repair summary
-
-Add helper near other summary helpers:
-
---- src/tests/rpg/autoplay_llm_campaign.py
-+++ src/tests/rpg/autoplay_llm_campaign.py
-@@
-+def _post_transition_action_quality_summary(transcript: List[Dict[str, Any]], latest_state: Dict[str, Any]) -> Dict[str, Any]:
-+    latest_state = _safe_dict(latest_state)
-+    facts = _safe_dict(latest_state.get("witness_search_facts"))
-+    hook_state = _safe_dict(latest_state.get("autoplay_story_hook_state"))
-+    fired_hooks = _safe_dict(hook_state.get("fired_hooks"))
-+    location = _safe_str(
-+        latest_state.get("current_location")
-+        or latest_state.get("current_location_name")
-+        or _safe_dict(latest_state.get("scene")).get("location")
-+    ).lower()
-+    transition_active = bool(
-+        facts.get("followed_road")
-+        or "hook:witness:pursue_bandit_trail" in fired_hooks
-+        or "hook:travel:location:east_road_outside_tavern" in fired_hooks
-+        or "east_road" in location
-+        or "road outside" in location
-+    )
-+
-+    stale_patterns = (
-+        "ask bran where the cloaked traveler",
-+        "report to bran that the cloaked traveler trail",
-+        "stop repeating the report to bran",
-+        "where the cloaked traveler went",
-+        "cloak markings",
-+    )
-+    stale_after_transition: List[Dict[str, Any]] = []
-+    saw_transition = False
-+    for row in _safe_list(transcript):
-+        action = _safe_str(_safe_dict(row).get("player_action"))
-+        lower = action.lower()
-+        if any(
-+            phrase in lower
-+            for phrase in (
-+                "leave the rusty flagon",
-+                "follow the road outside",
-+                "road outside",
-+                "follow the road trail",
-+                "travel to the road",
-+            )
+     generic_affordances = build_objective_affordances_for_state(context, limit=6)
+     for row in generic_affordances:
+         command = _safe_str(_safe_dict(row).get("command")).strip()
+-        if command and not is_meta_or_vague_action(command):
++        if (
++            command
++            and not is_meta_or_vague_action(command)
++            and not is_repeated_affordance_action(command, context)
 +        ):
-+            saw_transition = True
-+        if saw_transition and any(pattern in lower for pattern in stale_patterns):
-+            stale_after_transition.append(
-+                {
-+                    "turn": _safe_dict(row).get("turn"),
-+                    "player_action": action,
-+                }
-+            )
-+
-+    return {
-+        "ok": not stale_after_transition,
-+        "transition_active": transition_active,
-+        "stale_after_transition_count": len(stale_after_transition),
-+        "stale_after_transition": stale_after_transition[:20],
-+    }
-3B. Ensure context has latest facts
+             return command
+5. Fix quest summary false source
+5A. Patch summary source guard
 
-Where you already add context fields from runtime_state, add:
+In src/tests/rpg/autoplay_llm_campaign.py, add helper:
 
 --- src/tests/rpg/autoplay_llm_campaign.py
 +++ src/tests/rpg/autoplay_llm_campaign.py
 @@
-         if isinstance(context, dict) and isinstance(runtime_state, dict):
-             context["dialogue_state"] = runtime_state.get("dialogue_state") or {}
-             context["autoplay_story_hook_state"] = runtime_state.get("autoplay_story_hook_state") or {}
-             context["quest_progress"] = runtime_state.get("quest_progress") or {}
-+            context["quest_log_state"] = runtime_state.get("quest_log_state") or {}
-+            context["witness_search_facts"] = runtime_state.get("witness_search_facts") or {}
-             context["current_location"] = runtime_state.get("current_location") or runtime_state.get("current_location_name") or ""
-             context["current_location_name"] = runtime_state.get("current_location_name") or ""
-3C. Make final executable repair run twice
++def _guard_quest_summary_source(summary: Dict[str, Any], latest_state: Dict[str, Any]) -> None:
++    latest_state = _safe_dict(latest_state)
++    qps = _safe_dict(summary.get("quest_progress_summary"))
++    has_canonical_quest_progress = bool(_safe_dict(_safe_dict(latest_state.get("quest_progress")).get("quests")))
++    if qps.get("source") == "latest_state.quest_progress" and not has_canonical_quest_progress:
++        summary["quest_progress_summary"] = _quest_progress_summary_from_state(latest_state)
++        qps = _safe_dict(summary.get("quest_progress_summary"))
++        if qps.get("source") == "latest_state.quest_progress":
++            synthesized = _synthesize_quest_progress_summary_from_story_state(latest_state)
++            if synthesized.get("quest_count"):
++                summary["quest_progress_summary"] = synthesized
 
-The action can be repaired once into “stop repeating...” by an older layer, so enforce final repair one more time immediately before turn execution.
-
-Find final repair block:
-
-executable_action_repair = repair_action_if_needed(...)
-...
-player_action = ...
-
-After that block, add:
+In the final lifecycle block, after setting quest_progress_summary, add:
 
 --- src/tests/rpg/autoplay_llm_campaign.py
 +++ src/tests/rpg/autoplay_llm_campaign.py
 @@
-         if bool(getattr(args, "player_agent_executable_action_repair", True)):
-             executable_action_repair = repair_action_if_needed(_safe_str(player_action), context)
-             if executable_action_repair.get("changed"):
-@@
-                 if isinstance(selected, dict):
-                     selected["executable_action_repaired"] = True
-                     selected["executable_action_original_action"] = _safe_str(executable_action_repair.get("original_action"))
-                     selected["action"] = player_action
-+
-+            # Second pass: older repair layers may produce a self-referential
-+            # "stop repeating..." command. That must never reach the runtime.
-+            second_pass_repair = repair_action_if_needed(_safe_str(player_action), context)
-+            if second_pass_repair.get("changed"):
-+                _probe_log(
-+                    bool(getattr(args, "debug_autoplay_stage_timing", False)),
-+                    "player_agent_executable_action_repair.second_pass_applied",
-+                    turn_index=turn_index,
-+                    original_action=_safe_str(second_pass_repair.get("original_action"))[:240],
-+                    repaired_action=_safe_str(second_pass_repair.get("action"))[:240],
-+                    reason=_safe_str(second_pass_repair.get("reason")),
-+                )
-+                player_action = _safe_str(second_pass_repair.get("action"))
-+                if isinstance(selected, dict):
-+                    selected["executable_action_second_pass_repaired"] = True
-+                    selected["executable_action_second_pass_original_action"] = _safe_str(second_pass_repair.get("original_action"))
-+                    selected["action"] = player_action
-3D. Fix final quest summary overwrite
+     summary["quest_progress_summary"] = _quest_progress_summary_from_state(runtime_state)
++    _guard_quest_summary_source(summary, runtime_state)
+5B. Apply same guard to report model
 
-Find final summary creation and after all progress metrics are attached, add this as the final override before writing artifacts:
+Where the campaign report model is created, add:
 
 --- src/tests/rpg/autoplay_llm_campaign.py
 +++ src/tests/rpg/autoplay_llm_campaign.py
 @@
-     summary = {
-         ...
-     }
-+
-+    # Final authoritative quest summary override. This must run after any
-+    # progress-metrics merge so stale pre-sync summaries cannot overwrite it.
-+    summary["quest_progress_summary"] = _quest_progress_summary_from_state(runtime_state)
++    if isinstance(report_model, dict):
++        report_model["latest_state"] = runtime_state
++        report_model["quest_progress_summary"] = summary.get("quest_progress_summary")
++        report_model["objective_progression_summary"] = summary.get("objective_progression_summary")
++        report_model["repeated_affordance_loop_summary"] = summary.get("repeated_affordance_loop_summary")
++        report_model["quality_gate_summary"] = summary.get("quality_gate_summary")
 
-If there is a later line assigning summary["quest_progress_summary"], move this block to below that later line.
+If report model is built before final summary override, move report model construction below the final lifecycle block.
 
-3E. Add post-transition and strict progress to summary
+6. Patch report builder source guard
 
-Before quality gate computation or final summary write:
+Patch src/tests/rpg/autoplay/campaign_report.py.
 
---- src/tests/rpg/autoplay_llm_campaign.py
-+++ src/tests/rpg/autoplay_llm_campaign.py
-@@
-+    post_transition_action_quality = _post_transition_action_quality_summary(transcript, runtime_state)
-+    summary["post_transition_action_quality"] = post_transition_action_quality
-+
-+    health_progress_quality = _safe_dict(_safe_dict(summary.get("health")).get("progress_quality"))
-+    summary["strict_progress_health_summary"] = {
-+        "ok": bool(health_progress_quality.get("ok", True)),
-+        "meaningful_progress_rate": health_progress_quality.get("meaningful_progress_rate"),
-+        "meaningful_turns": health_progress_quality.get("meaningful_turns"),
-+        "no_change_turns": health_progress_quality.get("no_change_turns"),
-+        "source": "health.progress_quality",
-+    }
-3F. Gate top-level quality on strict progress health for 20+ turns
-
-In _quality_gate_summary(...), add gates:
-
---- src/tests/rpg/autoplay_llm_campaign.py
-+++ src/tests/rpg/autoplay_llm_campaign.py
-@@
-         "strict_100turn_no_forbidden_player_actions_ok": (
-             not strict_100_turn_mode
-             or bool(_safe_dict(summary.get("forbidden_player_action_summary")).get("ok", True))
-         ),
-+        "strict_progress_health_ok": (
-+            int(summary.get("requested_turns") or summary.get("turns_executed") or 0) < 20
-+            or bool(_safe_dict(summary.get("strict_progress_health_summary")).get("ok", True))
-+        ),
-+        "post_transition_action_quality_ok": (
-+            int(summary.get("requested_turns") or summary.get("turns_executed") or 0) < 20
-+            or bool(_safe_dict(summary.get("post_transition_action_quality")).get("ok", True))
-+        ),
-
-If _quality_gate_summary is called before these fields are added, either move the field creation before the call or compute these two gates inside _quality_gate_summary directly from summary["health"] and summary["post_transition_action_quality"].
-
-4. Patch dialogue-memory extraction to include resolved narration
-
-177 still has only 2 dialogue exchanges. The visible NPC lines may live in resolved narration fields.
-
-Patch _extract_npc_payload_from_turn_result(...).
-
-Add these candidates:
-
---- src/tests/rpg/autoplay_llm_campaign.py
-+++ src/tests/rpg/autoplay_llm_campaign.py
-@@
-     candidates = [
-         turn_result.get("npc"),
-         turn_result.get("npc_reply"),
-         _safe_dict(turn_result.get("narration")).get("npc"),
-         _safe_dict(turn_result.get("structured_narration")).get("npc"),
-+        _safe_dict(turn_result.get("resolved_narration_payload")).get("npc"),
-+        _safe_dict(turn_result.get("resolved_narration")).get("npc"),
-+        _safe_dict(turn_result.get("background_narration_payload")).get("npc"),
-+        _safe_dict(turn_result.get("combined_background_llm_result")).get("npc"),
-+        _safe_dict(_safe_dict(turn_result.get("combined_background_llm_result")).get("narration")).get("npc"),
-         _safe_dict(turn_result.get("turn_contract")).get("npc"),
-         _safe_dict(turn_result.get("result")).get("npc"),
-         _safe_dict(_safe_dict(turn_result.get("result")).get("narration")).get("npc"),
-+        _safe_dict(_safe_dict(turn_result.get("result")).get("resolved_narration_payload")).get("npc"),
-         record.get("npc"),
-         _safe_dict(record.get("narration")).get("npc"),
-+        _safe_dict(record.get("resolved_narration_payload")).get("npc"),
-     ]
-
-Also support flattened fields:
-
---- src/tests/rpg/autoplay_llm_campaign.py
-+++ src/tests/rpg/autoplay_llm_campaign.py
-@@
-     for candidate in candidates:
-         candidate = _safe_dict(candidate)
-         speaker = _safe_str(candidate.get("speaker"))
-         line = _safe_str(candidate.get("line"))
-         if speaker and line:
-             return {"speaker": speaker, "line": line}
-+    speaker = _safe_str(turn_result.get("npc_speaker") or record.get("npc_speaker"))
-+    line = _safe_str(turn_result.get("npc_line") or record.get("npc_line"))
-+    if speaker and line:
-+        return {"speaker": speaker, "line": line}
-     return {}
-5. Patch src/tests/rpg/autoplay/campaign_report.py
-5A. Prefer strict summary fields in report
-
-Where report context/model is built, ensure these fields are surfaced:
+In _quest_summary_from_latest_state(...), after computing latest_state, add:
 
 --- src/tests/rpg/autoplay/campaign_report.py
 +++ src/tests/rpg/autoplay/campaign_report.py
 @@
-     report_context = {
-         ...
-+        "post_transition_action_quality": _safe_dict(report_model.get("post_transition_action_quality")),
-+        "strict_progress_health_summary": _safe_dict(report_model.get("strict_progress_health_summary")),
-+        "npc_dialogue_mode_summary": _safe_dict(report_model.get("npc_dialogue_mode_summary")),
-     }
+     quest_progress = _safe_dict(latest_state.get("quest_progress"))
+     quests = _safe_dict(quest_progress.get("quests"))
+     if quests:
+         return _quest_summary_from_quest_mapping(quests, source="latest_state.quest_progress")
 
-If there is no central report_context, add the fields wherever summary cards are built.
+Then ensure there is no fallback that returns report_model["quest_progress_summary"] with stale source before trying latest state. Find:
 
-5B. Add a strict-progress card to QA dashboard
+quest_summary = _safe_dict(report_model.get("quest_progress_summary"))
 
-In _render_qa_dashboard(...), add:
+Replace with:
 
 --- src/tests/rpg/autoplay/campaign_report.py
 +++ src/tests/rpg/autoplay/campaign_report.py
 @@
-+    strict_progress = _safe_dict(report_context.get("strict_progress_health_summary"))
-+    post_transition = _safe_dict(report_context.get("post_transition_action_quality"))
-+    cards.append(
-+        _render_metric_card(
-+            "Strict Progress Health",
-+            "PASS" if strict_progress.get("ok", True) else "FAIL",
-+            [
-+                f"meaningful_progress_rate: {_esc(strict_progress.get('meaningful_progress_rate'))}",
-+                f"meaningful_turns: {_esc(strict_progress.get('meaningful_turns'))}",
-+                f"no_change_turns: {_esc(strict_progress.get('no_change_turns'))}",
-+            ],
-+            status="ok" if strict_progress.get("ok", True) else "fail",
-+        )
-+    )
-+    cards.append(
-+        _render_metric_card(
-+            "Post-Transition Actions",
-+            "PASS" if post_transition.get("ok", True) else "FAIL",
-+            [
-+                f"stale_after_transition_count: {_esc(post_transition.get('stale_after_transition_count'))}",
-+                f"transition_active: {_esc(post_transition.get('transition_active'))}",
-+            ],
-+            status="ok" if post_transition.get("ok", True) else "fail",
-+        )
-+    )
+-    quest_summary = _safe_dict(report_model.get("quest_progress_summary"))
++    quest_summary = _quest_summary_from_latest_state(report_model)
++    if not quest_summary:
++        quest_summary = _safe_dict(report_model.get("quest_progress_summary"))
++        latest_state = _safe_dict(report_model.get("latest_state"))
++        has_canonical = bool(_safe_dict(_safe_dict(latest_state.get("quest_progress")).get("quests")))
++        if quest_summary.get("source") == "latest_state.quest_progress" and not has_canonical:
++            quest_summary = _quest_summary_from_story_state(latest_state) or quest_summary
 
-If your dashboard uses a different card helper, adapt this but include these metrics visibly.
+Apply this to every report section that separately fetches quest summary.
 
-6. Tests
-6A. Patch src/tests/rpg/autoplay/test_executable_actions.py
+7. Tests
+7A. Add quality gate finalization test
 
-Add:
+Add to an autoplay test file:
 
---- src/tests/rpg/autoplay/test_executable_actions.py
-+++ src/tests/rpg/autoplay/test_executable_actions.py
-@@
-+def test_post_transition_blocks_bran_witness_action_to_road_inspection():
-+    context = {
-+        "quest_progress": {
-+            "quests": {
-+                "quest:witness_search": {"status": "completed", "completed": True},
-+                "quest:bandit_road": {"status": "active"},
-+            }
-+        },
-+        "witness_search_facts": {"followed_road": True, "reported_to_bran": True},
-+        "current_location": "location:east_road_outside_tavern",
-+    }
-+
-+    result = repair_action_if_needed(
-+        "I ask Bran where the cloaked traveler went after leaving by the side door.",
-+        context,
-+    )
-+
-+    assert result["changed"] is True
-+    assert "inspect the road" in result["action"].lower()
-+    assert "ask bran" not in result["action"].lower()
-+    assert "cloaked traveler went" not in result["action"].lower()
-+
-+
-+def test_stop_repeating_meta_action_repairs_to_concrete_road_action():
-+    context = {
-+        "quest_progress": {
-+            "quests": {
-+                "quest:witness_search": {"status": "completed", "completed": True},
-+                "quest:bandit_road": {"status": "active"},
-+            }
-+        },
-+        "current_location": "location:east_road_outside_tavern",
-+    }
-+
-+    result = repair_action_if_needed(
-+        "I stop repeating the report to Bran and leave the tavern to follow the road trail toward the next lead.",
-+        context,
-+    )
-+
-+    assert result["changed"] is True
-+    assert "stop repeating" not in result["action"].lower()
-+    assert "inspect the road" in result["action"].lower() or "follow the road" in result["action"].lower()
-6B. Add summary helper test
-
-Patch an autoplay test file:
-
-def test_post_transition_action_quality_flags_stale_bran_after_road_transition():
-    from tests.rpg.autoplay_llm_campaign import _post_transition_action_quality_summary
-
-    transcript = [
-        {"turn": 1, "player_action": "I leave the Rusty Flagon and follow the road outside."},
-        {"turn": 2, "player_action": "I ask Bran where the cloaked traveler went after leaving by the side door."},
-    ]
-    latest_state = {
-        "current_location": "location:east_road_outside_tavern",
-        "witness_search_facts": {"followed_road": True},
-        "autoplay_story_hook_state": {
-            "fired_hooks": {"hook:witness:pursue_bandit_trail": {"turn_index": 1}}
-        },
-    }
-
-    summary = _post_transition_action_quality_summary(transcript, latest_state)
-
-    assert summary["ok"] is False
-    assert summary["stale_after_transition_count"] == 1
-6C. Patch dialogue extraction test
-def test_extract_npc_payload_reads_resolved_narration_payload():
-    from tests.rpg.autoplay_llm_campaign import _extract_npc_payload_from_turn_result
-
-    payload = _extract_npc_payload_from_turn_result(
-        {
-            "resolved_narration_payload": {
-                "npc": {
-                    "speaker": "Bran",
-                    "line": "The road is the danger.",
-                }
-            }
-        }
-    )
-
-    assert payload == {"speaker": "Bran", "line": "The road is the danger."}
-6D. Patch quality gate test
-
-Add to the test file that covers quality gates:
-
-def test_quality_gate_fails_20_turn_when_strict_progress_health_fails():
-    from tests.rpg.autoplay_llm_campaign import _quality_gate_summary
+def test_final_lifecycle_quality_gates_fail_when_lifecycle_red():
+    from tests.rpg.autoplay_llm_campaign import _final_lifecycle_quality_gates
 
     summary = {
         "requested_turns": 20,
         "turns_executed": 20,
-        "health": {
-            "progress_quality": {
-                "ok": False,
-                "meaningful_progress_rate": 0.0,
-            }
-        },
+        "quality_gate_summary": {"gates": {"existing_gate": True}, "ok": True},
         "strict_progress_health_summary": {"ok": False},
-        "post_transition_action_quality": {"ok": True},
-        "forbidden_player_action_summary": {"ok": True},
-        "npc_line_repetition_summary": {"ok": True},
+        "post_transition_action_quality_summary": {"ok": False},
+        "objective_progression_summary": {"ok": False},
+        "repeated_affordance_loop_summary": {"ok": False},
     }
 
-    gates = _quality_gate_summary(summary, strict_100_turn_mode=False)
+    gates = _final_lifecycle_quality_gates(summary)
 
-    assert gates["gates"]["strict_progress_health_ok"] is False
     assert gates["ok"] is False
+    assert gates["gates"]["strict_progress_health_ok"] is False
+    assert gates["gates"]["post_transition_action_quality_ok"] is False
+    assert gates["gates"]["objective_progression_present_ok"] is False
+    assert gates["gates"]["repeated_affordance_loop_ok"] is False
+7B. Add objective progression persistence test
 
-Adapt call signature if _quality_gate_summary uses different parameters.
+Add to src/tests/rpg/test_objective_progression_rules.py:
 
-7. Validation
+def test_progression_rules_persist_evaluation_log_even_when_no_match():
+    from app.rpg.objectives.progression_rules import apply_objective_progression_rules
+
+    state = {
+        "quest_log_state": {
+            "quests": {
+                "quest:scout": {
+                    "title": "Missing Scout",
+                    "objectives": [
+                        {
+                            "objective_id": "objective:find_scout",
+                            "summary": "Find the missing scout.",
+                            "objective_type": "find",
+                            "subject": "missing scout",
+                        }
+                    ],
+                }
+            }
+        }
+    }
+
+    result = apply_objective_progression_rules(
+        state,
+        player_action="I play a lute in the corner.",
+    )
+
+    assert "objective_progression_log" in state
+    assert state["objective_progression_log"]
+    assert state["objective_progression_log"][-1]["matched"] is False
+    assert result["event"]["semantic_action"]
+7C. Add affordance rotation test
+
+Add to src/tests/rpg/autoplay/test_executable_actions.py:
+
+def test_repeated_inspect_affordance_rotates_to_different_semantic():
+    from tests.rpg.autoplay.executable_actions import (
+        action_signature,
+        choose_rotated_affordance,
+        repair_action_if_needed,
+    )
+
+    repeated = (
+        "I inspect the forest trail for signs of missing scout: tracks, marks, "
+        "damage, residue, missing items, witnesses, or hidden clues."
+    )
+    context = {
+        "quest_log_state": {
+            "quests": {
+                "quest:scout": {
+                    "title": "Missing Scout",
+                    "quest_giver": "Captain Arlen",
+                    "objectives": [
+                        {
+                            "objective_id": "objective:find_scout",
+                            "summary": "Find the missing scout.",
+                            "objective_type": "find",
+                            "subject": "missing scout",
+                            "known_leads": ["forest trail"],
+                        }
+                    ],
+                }
+            }
+        },
+        "recent_turns": [
+            {"player_action": repeated},
+            {"player_action": repeated},
+            {"player_action": repeated},
+        ],
+    }
+
+    rotated = choose_rotated_affordance(context, repeated)
+
+    assert rotated
+    assert action_signature(rotated) != action_signature(repeated)
+
+    repaired = repair_action_if_needed(repeated, context)
+    assert repaired["changed"] is True
+    assert repaired["reason"] == "repeated_affordance_action_repaired_by_semantic_rotation"
+    assert action_signature(repaired["action"]) != action_signature(repeated)
+7D. Add quest source guard test
+
+Add to autoplay summary tests:
+
+def test_guard_quest_summary_source_replaces_false_latest_quest_progress_source():
+    from tests.rpg.autoplay_llm_campaign import _guard_quest_summary_source
+
+    latest_state = {
+        "witness_search_facts": {
+            "inspected_side_door": True,
+            "followed_road": True,
+            "reported_to_bran": True,
+        },
+        "autoplay_story_hook_state": {
+            "fired_hooks": {
+                "hook:witness:pursue_bandit_trail": {"turn_index": 4}
+            }
+        },
+    }
+    summary = {
+        "quest_progress_summary": {
+            "source": "latest_state.quest_progress",
+            "quest_count": 1,
+            "quests": [],
+        }
+    }
+
+    _guard_quest_summary_source(summary, latest_state)
+
+    assert summary["quest_progress_summary"]["source"] != "latest_state.quest_progress"
+8. Validation
 
 Run:
 
-python -m py_compile src\tests\rpg\autoplay\executable_actions.py src\app\rpg\player_action_context\runtime.py src\tests\rpg\autoplay_llm_campaign.py src\tests\rpg\autoplay\campaign_report.py
+python -m py_compile src\tests\rpg\autoplay_llm_campaign.py src\tests\rpg\autoplay\executable_actions.py src\app\rpg\objectives\progression_rules.py src\tests\rpg\autoplay\campaign_report.py
 
-python -m pytest src\tests\rpg\autoplay\test_executable_actions.py src\tests\rpg\autoplay\test_campaign_report.py -q
+python -m pytest src\tests\rpg\test_objective_progression_rules.py src\tests\rpg\autoplay\test_executable_actions.py src\tests\rpg\autoplay\test_campaign_report.py -q

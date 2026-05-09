@@ -1,4 +1,8 @@
-from app.rpg.dialogue_state import get_dialogue_context, infer_dialogue_topic, update_dialogue_state
+from app.rpg.dialogue_state import (
+    get_dialogue_context,
+    infer_dialogue_topic,
+    update_dialogue_state,
+)
 
 
 def test_dialogue_topic_inference_for_cloaked_traveler():

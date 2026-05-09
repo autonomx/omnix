@@ -12,7 +12,6 @@ from app.rpg.npc_evolution.arcs import (
 )
 from app.rpg.npc_evolution.target_grounding import ground_projection_target
 
-
 AXES = {
     "trust",
     "fear",

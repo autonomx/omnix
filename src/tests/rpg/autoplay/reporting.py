@@ -17,7 +17,23 @@ def _safe_str(value: Any) -> str:
 
 def write_json(path: Path, payload: Any) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
+    try:
+        # Try the normal approach first
+        path.write_text(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
+    except MemoryError:
+        # If we get a MemoryError, use streaming JSON dump to file
+        try:
+            with path.open('w', encoding='utf-8') as f:
+                json.dump(payload, f, ensure_ascii=False, indent=2, sort_keys=True)
+        except MemoryError:
+            # If still failing, skip the large payload and write a placeholder
+            error_payload = {
+                "error": "MemoryError during JSON serialization",
+                "payload_type": str(type(payload)),
+                "payload_size_estimate": len(str(payload)) if hasattr(payload, '__len__') else "unknown",
+                "note": "Large payload could not be serialized due to memory constraints"
+            }
+            path.write_text(json.dumps(error_payload, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
 def render_autoplay_html(transcript: List[Dict[str, Any]], summary: Dict[str, Any]) -> str:
@@ -126,8 +142,22 @@ def write_autoplay_artifacts(
     write_json(story_variety_path, metrics.get("story_variety") or {})
     write_json(health_path, health)
     if artifact_detail == "full":
-        write_json(transcript_path, transcript)
-        html_path.write_text(render_autoplay_html(transcript, summary), encoding="utf-8")
+        # Limit transcript size to prevent memory issues
+        max_transcript_length = 500  # Limit to last 500 turns
+        if len(transcript) > max_transcript_length:
+            limited_transcript = transcript[-max_transcript_length:]
+            transcript_summary = {
+                "truncated": True,
+                "original_length": len(transcript),
+                "kept_turns": max_transcript_length,
+                "transcript": limited_transcript
+            }
+            write_json(transcript_path, transcript_summary)
+        else:
+            write_json(transcript_path, transcript)
+        # Only render HTML for limited transcripts to avoid memory issues
+        if len(transcript) <= 200:
+            html_path.write_text(render_autoplay_html(transcript, summary), encoding="utf-8")
 
     with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as zf:
         zf.write(summary_path, summary_path.name)

@@ -2,9 +2,9 @@ from types import SimpleNamespace
 
 from tests.rpg.autoplay_llm_campaign import (
     _summarize_manual_turn_errors,
-    _summarize_player_journal_quality,
     _summarize_npc_arc_progression,
     _summarize_player_agent_prompt_budget,
+    _summarize_player_journal_quality,
     _summarize_profile_grounded_output,
     _summarize_promotion_target_grounding,
     _summarize_quality_gates,
@@ -732,6 +732,7 @@ def test_quality_gate_fails_strict_100_turn_unknown_semantic_rate():
 
 def test_quality_gate_combined_background_uses_timing_tracker_for_pre_turn_drained_jobs():
     from types import SimpleNamespace
+
     from tests.rpg.autoplay_llm_campaign import _summarize_quality_gates
 
     args = SimpleNamespace(

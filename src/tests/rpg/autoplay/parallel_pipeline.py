@@ -2,12 +2,14 @@ from __future__ import annotations
 
 import time
 import traceback
-from concurrent.futures import Future, ThreadPoolExecutor, TimeoutError as FuturesTimeoutError, as_completed
+from concurrent.futures import Future, ThreadPoolExecutor, as_completed
+from concurrent.futures import TimeoutError as FuturesTimeoutError
 from copy import deepcopy
 from datetime import datetime
 from typing import Any, Dict, List
 
 from app.rpg.narration.runtime_narration_contract import build_runtime_narration_payload
+
 try:
     from app.providers.base import ChatMessage
 except Exception:
@@ -1647,7 +1649,9 @@ def attach_background_results_to_transcript(
             summary["combined_background_llm_jobs"] += 1
             # Use timing-aware attachment if tracker provided
             if timing_tracker and attach_turn is not None:
-                from tests.rpg.autoplay_llm_campaign import _attach_completed_background_job_to_record
+                from tests.rpg.autoplay_llm_campaign import (
+                    _attach_completed_background_job_to_record,
+                )
                 attached = _attach_completed_background_job_to_record(
                     record=row,
                     job_id=_safe_str(
