@@ -282,6 +282,8 @@ def get_active_progression_actions(
     out.sort(key=lambda row: (-int(row.get("priority") or 0), _safe_str(row.get("node_id"))))
     if not out:
         out = synthesize_progression_actions_from_objectives(state, limit=limit)
+    if not out:
+        out = _arc_complete_idle_action(state, scenario_seed=scenario_seed)
     state["scenario_progression_action_debug"] = {
         "graph_id": graph.graph_id,
         "available_action_count": len(out),
@@ -399,6 +401,102 @@ def _synthesize_action_for_graph_objective(objective: Dict[str, Any]) -> Dict[st
         "objective_id": objective_id,
         "quest_id": _safe_str(objective.get("quest_id")),
     }
+
+
+def build_scenario_progression_arc_summary(
+    state: Dict[str, Any],
+    *,
+    scenario_seed: str,
+) -> Dict[str, Any]:
+    graph = get_progression_graph_for_seed(scenario_seed)
+    state = _safe_dict(state)
+    completed_nodes = _safe_dict(state.get("progression_completed_nodes"))
+    completed_node_ids = sorted(completed_nodes.keys())
+    expected_node_ids = [node.node_id for node in graph.nodes] if graph else []
+
+    qp = _safe_dict(state.get("quest_progress"))
+    quests = _safe_dict(qp.get("quests"))
+    graph_quests = {
+        quest_id: _safe_dict(quest)
+        for quest_id, quest in quests.items()
+        if _safe_str(_safe_dict(quest).get("source")) == "scenario_progression_graph"
+        or quest_id in {
+            "quest:witness_search",
+            "quest:warn_wagon",
+            "quest:quarry_road_ambush",
+        }
+    }
+    completed_graph_quests = {
+        quest_id: quest
+        for quest_id, quest in graph_quests.items()
+        if bool(quest.get("completed")) or _safe_str(quest.get("status")) == "completed"
+    }
+    active_graph_quests = {
+        quest_id: quest
+        for quest_id, quest in graph_quests.items()
+        if not bool(quest.get("completed")) and _safe_str(quest.get("status")) == "active"
+    }
+
+    active_graph_objectives: List[Dict[str, Any]] = []
+    for quest_id, quest in active_graph_quests.items():
+        for objective in _safe_list(quest.get("objectives")):
+            objective = _safe_dict(objective)
+            if not bool(objective.get("completed")) and _safe_str(objective.get("status")) != "completed":
+                active_graph_objectives.append(
+                    {
+                        "quest_id": quest_id,
+                        "objective_id": _safe_str(objective.get("objective_id")),
+                        "summary": _safe_str(objective.get("summary")),
+                    }
+                )
+
+    remaining_node_ids = [
+        node_id for node_id in expected_node_ids
+        if node_id not in completed_nodes
+    ]
+    expected_node_count = len(expected_node_ids)
+    completed_node_count = len(completed_node_ids)
+    arc_complete = bool(
+        expected_node_count > 0
+        and completed_node_count >= expected_node_count
+        and graph_quests
+        and not active_graph_quests
+        and not active_graph_objectives
+    )
+
+    return {
+        "ok": True,
+        "graph_id": graph.graph_id if graph else "",
+        "scenario_seed": scenario_seed,
+        "expected_node_count": expected_node_count,
+        "completed_node_count": completed_node_count,
+        "completed_node_ids": completed_node_ids,
+        "remaining_node_ids": remaining_node_ids,
+        "graph_quest_count": len(graph_quests),
+        "completed_graph_quest_count": len(completed_graph_quests),
+        "active_graph_quest_count": len(active_graph_quests),
+        "active_graph_objective_count": len(active_graph_objectives),
+        "active_graph_objectives": active_graph_objectives,
+        "arc_complete": arc_complete,
+    }
+
+
+def _arc_complete_idle_action(state: Dict[str, Any], *, scenario_seed: str) -> List[Dict[str, Any]]:
+    arc = build_scenario_progression_arc_summary(state, scenario_seed=scenario_seed)
+    if not arc.get("arc_complete"):
+        return []
+    return [
+        {
+            "action_id": "arc_complete_regroup",
+            "node_id": "",
+            "command": "I regroup with Garran and review what we learned from the ambush before choosing the next lead.",
+            "semantic": "recap",
+            "target_type": "npc",
+            "target_id": "npc:garran",
+            "priority": 20,
+            "source": "scenario_progression_arc_complete_idle",
+        }
+    ]
 
 
 def synthesize_progression_actions_from_objectives(

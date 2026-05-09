@@ -1229,6 +1229,25 @@ def _preserve_scenario_progression_graph_quests(state: Dict[str, Any]) -> Dict[s
 
 def _stale_state_summary(state: Dict[str, Any], evidence: List[Dict[str, Any]], handoff: Dict[str, Any]) -> Dict[str, Any]:
     counts = _quest_counts(state)
+    graph_completed_nodes = _safe_dict(state.get("progression_completed_nodes"))
+    graph_quest_state = _safe_dict(state.get("scenario_progression_quest_state"))
+    graph_quests = {
+        quest_id: _safe_dict(quest)
+        for quest_id, quest in _safe_dict(_quest_progress(state).get("quests")).items()
+        if _safe_str(_safe_dict(quest).get("source")) == "scenario_progression_graph"
+        or quest_id in graph_quest_state
+    }
+    active_graph_quests = [
+        quest for quest in graph_quests.values()
+        if not bool(_safe_dict(quest).get("completed"))
+        and _safe_str(_safe_dict(quest).get("status")) == "active"
+    ]
+    graph_arc_end_state = bool(
+        graph_completed_nodes
+        and graph_quests
+        and not active_graph_quests
+        and counts["completed_quest_count"] > 0
+    )
     completed_evidence_count = sum(1 for row in evidence if _safe_dict(row).get("completed"))
     stale_active_objectives = []
     for quest_id, quest, obj in _iter_objectives(state):
@@ -1250,12 +1269,17 @@ def _stale_state_summary(state: Dict[str, Any], evidence: List[Dict[str, Any]], 
         and counts["active_quest_count"] <= 0
         and not bool(_safe_dict(handoff).get("changed"))
         and _safe_str(_safe_dict(handoff).get("reason")) != "handoff_already_exists"
+        and not graph_arc_end_state
     )
     return {
         "ok": not stale_active_objectives and not completed_without_next,
         "stale_active_objectives": stale_active_objectives,
         "completed_evidence_count": completed_evidence_count,
         "completed_without_next_objective": completed_without_next,
+        "graph_arc_end_state": graph_arc_end_state,
+        "graph_completed_node_count": len(graph_completed_nodes),
+        "graph_quest_count": len(graph_quests),
+        "active_graph_quest_count": len(active_graph_quests),
         **counts,
     }
 
