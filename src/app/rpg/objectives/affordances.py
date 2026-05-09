@@ -341,8 +341,15 @@ def build_objective_affordances_for_state(state: Dict[str, Any], *, limit: int =
     for index, objective in enumerate(collect_active_objectives(state)):
         objective = _safe_dict(objective)
         if objective.get("handoff_objective"):
-            for action in _safe_list(objective.get("suggested_actions")):
-                command = _safe_str(action).strip()
+            templates = _safe_list(objective.get("semantic_action_templates"))
+            if not templates:
+                templates = [
+                    {"semantic": "investigate_lead", "command": _safe_str(action)}
+                    for action in _safe_list(objective.get("suggested_actions"))
+                ]
+            for template in templates:
+                template = _safe_dict(template)
+                command = _safe_str(template.get("command")).strip()
                 if command:
                     actions.append(
                         {
@@ -350,7 +357,7 @@ def build_objective_affordances_for_state(state: Dict[str, Any], *, limit: int =
                             "source": "handoff_objective_suggested_action",
                             "objective_id": _safe_str(objective.get("objective_id")),
                             "quest_id": _safe_str(objective.get("quest_id")),
-                            "semantic": "investigate",
+                            "semantic": _safe_str(template.get("semantic") or "investigate_lead"),
                             "priority": int(objective.get("affordance_priority") or 100),
                         }
                     )

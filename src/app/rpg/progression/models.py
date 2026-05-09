@@ -1,0 +1,33 @@
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from typing import Any, Dict, List
+
+
+@dataclass(frozen=True)
+class ProgressionAction:
+    action_id: str
+    command: str
+    semantic: str
+    target_type: str = ""
+    target_id: str = ""
+    priority: int = 50
+
+
+@dataclass(frozen=True)
+class ProgressionNode:
+    node_id: str
+    title: str
+    requires: List[Dict[str, Any]] = field(default_factory=list)
+    action_patterns: List[Dict[str, Any]] = field(default_factory=list)
+    suggested_actions: List[ProgressionAction] = field(default_factory=list)
+    effects: List[Dict[str, Any]] = field(default_factory=list)
+    repeatable: bool = False
+    priority: int = 50
+
+
+@dataclass(frozen=True)
+class ScenarioProgressionGraph:
+    graph_id: str
+    scenario_seed: str
+    nodes: List[ProgressionNode] = field(default_factory=list)

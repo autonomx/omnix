@@ -4242,6 +4242,9 @@ def build_campaign_report_model(
         "campaign_state_commit_performance_summary": _safe_dict(
             summary.get("campaign_state_commit_performance_summary")
         ),
+        "handoff_progress_summary": _safe_dict(summary.get("handoff_progress_summary")),
+        "scenario_progression_summary": _safe_dict(summary.get("scenario_progression_summary")),
+        "behavioral_autoplay_eval_summary": _safe_dict(summary.get("behavioral_autoplay_eval_summary")),
         "story_beat_summary": _safe_dict(
             summary.get("story_beat_summary")
             or metrics.get("story_beat_summary")
@@ -5826,6 +5829,8 @@ def render_campaign_report_html(
     {_render_json_details("NPC arc progression summary JSON", model.get("npc_arc_progression_summary") or {})}
     {_render_json_details("Promotion target grounding summary JSON", model.get("promotion_target_grounding_summary") or {})}
     {_render_json_details("Quality gate summary JSON", model.get("quality_gate_summary") or {})}
+    {_render_json_details("Scenario progression summary JSON", model.get("scenario_progression_summary") or {})}
+    {_render_json_details("Behavioral autoplay eval summary JSON", model.get("behavioral_autoplay_eval_summary") or {})}
     {_render_json_details("Slowest turns JSON", performance.get("slowest_turns") or [])}
      {_render_json_details("Background job summary JSON", model.get("background_jobs") or {})}
   </section>

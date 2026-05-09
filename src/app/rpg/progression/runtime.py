@@ -1,0 +1,466 @@
+from __future__ import annotations
+
+import time
+from dataclasses import asdict
+from typing import Any, Dict, List
+
+from app.rpg.progression.graph_registry import get_progression_graph_for_seed
+from app.rpg.progression.models import ProgressionNode
+
+
+def _safe_dict(value: Any) -> Dict[str, Any]:
+    return value if isinstance(value, dict) else {}
+
+
+def _safe_list(value: Any) -> List[Any]:
+    return value if isinstance(value, list) else []
+
+
+def _safe_str(value: Any) -> str:
+    return value if isinstance(value, str) else ""
+
+
+def _norm(value: Any) -> str:
+    return " ".join(_safe_str(value).lower().strip().split())
+
+
+def _bag(state: Dict[str, Any], key: str) -> Dict[str, Any]:
+    bag = state.setdefault(key, {})
+    if not isinstance(bag, dict):
+        bag = {}
+        state[key] = bag
+    return bag
+
+
+def _stamp_progression_revision(state: Dict[str, Any], *, reason: str, turn_index: int = 0) -> None:
+    completed_node_count = len(_safe_dict(state.get("progression_completed_nodes")))
+    fact_count = len(_safe_dict(state.get("progression_facts")))
+    lead_count = len(_safe_dict(state.get("progression_leads")))
+    prior = int(state.get("progression_state_revision") or 0)
+    derived = completed_node_count * 10000 + fact_count * 100 + lead_count
+    revision = max(prior + 1, derived)
+    state["progression_state_revision"] = revision
+    state["progression_completed_node_count"] = completed_node_count
+    state["progression_fact_count"] = fact_count
+    state["progression_lead_count"] = lead_count
+    state["progression_authority_summary"] = {
+        "revision": revision,
+        "completed_node_count": completed_node_count,
+        "fact_count": fact_count,
+        "lead_count": lead_count,
+        "reason": reason,
+        "turn_index": turn_index,
+    }
+
+
+def _facts(state: Dict[str, Any]) -> Dict[str, Any]:
+    return _bag(state, "progression_facts")
+
+
+def _leads(state: Dict[str, Any]) -> Dict[str, Any]:
+    return _bag(state, "progression_leads")
+
+
+def _nodes_completed(state: Dict[str, Any]) -> Dict[str, Any]:
+    return _bag(state, "progression_completed_nodes")
+
+
+def _unlocked_npcs(state: Dict[str, Any]) -> Dict[str, Any]:
+    return _bag(state, "progression_unlocked_npcs")
+
+
+def _unlocked_locations(state: Dict[str, Any]) -> Dict[str, Any]:
+    return _bag(state, "progression_unlocked_locations")
+
+
+def _quest_progress(state: Dict[str, Any]) -> Dict[str, Any]:
+    qp = state.setdefault("quest_progress", {})
+    if not isinstance(qp, dict):
+        qp = {}
+        state["quest_progress"] = qp
+    quests = qp.setdefault("quests", {})
+    if not isinstance(quests, dict):
+        quests = {}
+        qp["quests"] = quests
+    return qp
+
+
+def _ensure_quest(state: Dict[str, Any], quest_id: str, title: str) -> Dict[str, Any]:
+    quests = _quest_progress(state)["quests"]
+    quest = quests.setdefault(
+        quest_id,
+        {
+            "quest_id": quest_id,
+            "title": title or quest_id,
+            "status": "active",
+            "completed": False,
+            "objectives": [],
+            "source": "scenario_progression_graph",
+        },
+    )
+    quest["status"] = "active" if not quest.get("completed") else "completed"
+    quest.setdefault("source", "scenario_progression_graph")
+    quest.setdefault("objectives", [])
+    return quest
+
+
+def _infer_active_quest_id(state: Dict[str, Any]) -> str:
+    quests = _safe_dict(_quest_progress(state).get("quests"))
+    for quest_id, quest in quests.items():
+        quest = _safe_dict(quest)
+        if not quest.get("completed") and _safe_str(quest.get("status")) == "active":
+            return _safe_str(quest_id)
+    return ""
+
+
+def _ensure_objective(
+    state: Dict[str, Any],
+    objective_id: str,
+    *,
+    quest_id: str = "",
+    summary: str = "",
+) -> Dict[str, Any]:
+    quest_id = quest_id or _infer_active_quest_id(state) or "quest:scenario_progression"
+    quest = _ensure_quest(
+        state,
+        quest_id,
+        quest_id.replace("quest:", "").replace("_", " ").title(),
+    )
+    for obj in _safe_list(quest.get("objectives")):
+        obj = _safe_dict(obj)
+        if obj.get("objective_id") == objective_id:
+            return obj
+    obj = {
+        "objective_id": objective_id,
+        "summary": summary or objective_id.replace("objective:", "").replace("_", " "),
+        "status": "active",
+        "completed": False,
+        "source": "scenario_progression_graph",
+        "progress_count": 0,
+    }
+    quest.setdefault("objectives", []).append(obj)
+    return obj
+
+
+def _complete_objective(state: Dict[str, Any], objective_id: str) -> None:
+    for quest in _safe_dict(_quest_progress(state).get("quests")).values():
+        quest = _safe_dict(quest)
+        for obj in _safe_list(quest.get("objectives")):
+            obj = _safe_dict(obj)
+            if obj.get("objective_id") == objective_id:
+                obj["completed"] = True
+                obj["status"] = "completed"
+                obj["completion_evidence"] = {"source": "scenario_progression_graph"}
+        objectives = [_safe_dict(row) for row in _safe_list(quest.get("objectives"))]
+        if objectives and all(bool(obj.get("completed")) for obj in objectives):
+            quest["completed"] = True
+            quest["status"] = "completed"
+
+
+def _complete_quest(state: Dict[str, Any], quest_id: str) -> None:
+    quest = _safe_dict(_safe_dict(_quest_progress(state).get("quests")).get(quest_id))
+    if not quest:
+        return
+    quest["completed"] = True
+    quest["status"] = "completed"
+    for obj in _safe_list(quest.get("objectives")):
+        obj = _safe_dict(obj)
+        obj["completed"] = True
+        obj["status"] = "completed"
+
+
+def _requirement_met(state: Dict[str, Any], req: Dict[str, Any]) -> bool:
+    req = _safe_dict(req)
+    if not req:
+        return True
+    if "fact" in req:
+        return _safe_str(req["fact"]) in _facts(state)
+    if "lead" in req:
+        return _safe_str(req["lead"]) in _leads(state)
+    if "node" in req:
+        return _safe_str(req["node"]) in _nodes_completed(state)
+    if "npc" in req:
+        return _safe_str(req["npc"]) in _unlocked_npcs(state)
+    if "location" in req:
+        return _safe_str(req["location"]) in _unlocked_locations(state)
+    if "quest" in req:
+        quest_id = _safe_str(req["quest"])
+        quest = _safe_dict(_safe_dict(_quest_progress(state).get("quests")).get(quest_id))
+        if not quest:
+            return False
+        status = _safe_str(req.get("status"))
+        if status:
+            return _safe_str(quest.get("status")) == status
+        return True
+    return True
+
+
+def _node_available(state: Dict[str, Any], node: ProgressionNode) -> bool:
+    if not node.repeatable and node.node_id in _nodes_completed(state):
+        return False
+    return all(_requirement_met(state, req) for req in node.requires)
+
+
+def _node_block_reasons(state: Dict[str, Any], node: ProgressionNode) -> List[str]:
+    reasons: List[str] = []
+    if not node.repeatable and node.node_id in _nodes_completed(state):
+        reasons.append("completed")
+    for req in node.requires:
+        if not _requirement_met(state, req):
+            reasons.append(f"missing:{req}")
+    return reasons
+
+
+def get_active_progression_actions(
+    runtime_state: Dict[str, Any],
+    *,
+    scenario_seed: str,
+    limit: int = 8,
+) -> List[Dict[str, Any]]:
+    graph = get_progression_graph_for_seed(scenario_seed)
+    if graph is None:
+        return []
+    state = _safe_dict(runtime_state)
+    out: List[Dict[str, Any]] = []
+    debug_nodes: List[Dict[str, Any]] = []
+    for node in graph.nodes:
+        block_reasons = _node_block_reasons(state, node)
+        debug_nodes.append(
+            {
+                "node_id": node.node_id,
+                "available": not block_reasons,
+                "block_reasons": block_reasons,
+            }
+        )
+        if block_reasons:
+            continue
+        for action in node.suggested_actions:
+            row = asdict(action)
+            row["node_id"] = node.node_id
+            row["node_title"] = node.title
+            row["graph_id"] = graph.graph_id
+            row["source"] = "scenario_progression_graph"
+            row["priority"] = max(int(row.get("priority") or 0), int(node.priority or 0))
+            out.append(row)
+    out.sort(key=lambda row: (-int(row.get("priority") or 0), _safe_str(row.get("node_id"))))
+    state["scenario_progression_action_debug"] = {
+        "graph_id": graph.graph_id,
+        "available_action_count": len(out),
+        "progression_state_revision": int(state.get("progression_state_revision") or 0),
+        "completed_node_count": len(_nodes_completed(state)),
+        "nodes": debug_nodes[-30:],
+    }
+    return out[:limit]
+
+
+def _action_matches_pattern(action: str, pattern: Dict[str, Any]) -> bool:
+    pattern = _safe_dict(pattern)
+    action_norm = _norm(action)
+    semantic = _safe_str(pattern.get("semantic"))
+    if semantic and semantic not in action_norm:
+        semantic_aliases = {
+            "ask": ["ask", "question", "talk", "speak"],
+            "inspect": ["inspect", "examine", "look", "search"],
+            "travel": ["travel", "leave", "go", "head", "move"],
+            "report": ["report", "tell", "explain"],
+            "warn": ["warn", "tell"],
+            "prepare": ["prepare", "ready", "help"],
+        }
+        if not any(alias in action_norm for alias in semantic_aliases.get(semantic, [semantic])):
+            return False
+    topics = [_norm(topic) for topic in _safe_list(pattern.get("topics_any")) if _safe_str(topic)]
+    if topics and not any(topic in action_norm for topic in topics):
+        return False
+    target_id = _safe_str(pattern.get("target_id"))
+    if target_id:
+        target_label = target_id.split(":")[-1].replace("_", " ")
+        target_aliases = {
+            "bran": ["bran", "innkeeper", "barkeep", "tavern keeper"],
+            "mira": ["mira", "server", "barmaid", "woman"],
+            "local patron": ["local patron", "patron", "man by the hearth", "nearby patron"],
+            "garran": ["garran", "wagoner", "merchant", "driver"],
+            "side door latch": ["side door", "latch", "threshold"],
+            "garran wagon yard": ["wagon yard", "garran", "yard"],
+        }
+        aliases = target_aliases.get(target_label, [target_label])
+        if target_label and not any(alias in action_norm for alias in aliases):
+            return False
+    return True
+
+
+def _node_quest_hint(state: Dict[str, Any], node: ProgressionNode) -> str:
+    for effect in node.effects:
+        quest_id = _safe_str(_safe_dict(effect).get("start_quest"))
+        if quest_id:
+            return quest_id
+    return _infer_active_quest_id(state)
+
+
+def _apply_effect(
+    state: Dict[str, Any],
+    effect: Dict[str, Any],
+    *,
+    quest_hint: str = "",
+) -> Dict[str, Any]:
+    effect = _safe_dict(effect)
+    applied: Dict[str, Any] = {"effect": effect, "changed": False}
+
+    if "unlock_fact" in effect:
+        fact_id = _safe_str(effect["unlock_fact"])
+        _facts(state)[fact_id] = {
+            "fact_id": fact_id,
+            "text": _safe_str(effect.get("text")),
+            "source": "scenario_progression_graph",
+        }
+        applied["changed"] = True
+    if "unlock_lead" in effect:
+        lead_id = _safe_str(effect["unlock_lead"])
+        _leads(state)[lead_id] = {
+            "lead_id": lead_id,
+            "text": _safe_str(effect.get("text")),
+            "source": "scenario_progression_graph",
+        }
+        applied["changed"] = True
+    if "unlock_npc" in effect:
+        npc_id = _safe_str(effect["unlock_npc"])
+        _unlocked_npcs(state)[npc_id] = {
+            "npc_id": npc_id,
+            "name": _safe_str(effect.get("name") or npc_id),
+            "source": "scenario_progression_graph",
+        }
+        applied["changed"] = True
+    if "unlock_location" in effect:
+        location_id = _safe_str(effect["unlock_location"])
+        _unlocked_locations(state)[location_id] = {
+            "location_id": location_id,
+            "name": _safe_str(effect.get("name") or location_id),
+            "source": "scenario_progression_graph",
+        }
+        applied["changed"] = True
+    if "start_quest" in effect:
+        _ensure_quest(state, _safe_str(effect["start_quest"]), _safe_str(effect.get("title")))
+        applied["changed"] = True
+    if "unlock_objective" in effect:
+        _ensure_objective(
+            state,
+            _safe_str(effect["unlock_objective"]),
+            quest_id=quest_hint,
+            summary=_safe_str(effect.get("summary")),
+        )
+        applied["changed"] = True
+    if "advance_objective" in effect:
+        obj = _ensure_objective(
+            state,
+            _safe_str(effect["advance_objective"]),
+            quest_id=quest_hint,
+        )
+        obj["progress_count"] = int(obj.get("progress_count") or 0) + int(effect.get("amount") or 1)
+        obj["status"] = "active"
+        applied["changed"] = True
+    if "complete_objective" in effect:
+        _complete_objective(state, _safe_str(effect["complete_objective"]))
+        applied["changed"] = True
+    if "complete_quest" in effect:
+        _complete_quest(state, _safe_str(effect["complete_quest"]))
+        applied["changed"] = True
+    if "set_location" in effect:
+        location_id = _safe_str(effect["set_location"])
+        state["current_location"] = location_id
+        state["current_location_name"] = _safe_str(effect.get("name") or location_id)
+        history = state.setdefault("location_history", [])
+        if isinstance(history, list):
+            history.append(
+                {
+                    "location_id": location_id,
+                    "name": state["current_location_name"],
+                    "source": "scenario_progression_graph",
+                }
+            )
+            del history[:-50]
+        _unlocked_locations(state)[location_id] = {
+            "location_id": location_id,
+            "name": state["current_location_name"],
+            "source": "scenario_progression_graph",
+        }
+        applied["changed"] = True
+    return applied
+
+
+def apply_progression_for_action(
+    runtime_state: Dict[str, Any],
+    *,
+    scenario_seed: str,
+    player_action: str,
+    turn_index: int = 0,
+) -> Dict[str, Any]:
+    start = time.perf_counter()
+    graph = get_progression_graph_for_seed(scenario_seed)
+    state = _safe_dict(runtime_state)
+    if graph is None:
+        return {"ok": True, "changed": False, "state": state, "summary": {"reason": "no_graph"}}
+
+    matched_nodes: List[Dict[str, Any]] = []
+    applied_effects: List[Dict[str, Any]] = []
+    for node in graph.nodes:
+        if not node.repeatable and node.node_id in _nodes_completed(state):
+            continue
+        if not _node_available(state, node):
+            continue
+        if not any(_action_matches_pattern(player_action, pattern) for pattern in node.action_patterns):
+            continue
+        if not node.repeatable and node.node_id in _nodes_completed(state):
+            continue
+        _nodes_completed(state)[node.node_id] = {
+            "node_id": node.node_id,
+            "title": node.title,
+            "turn": turn_index,
+            "player_action": player_action,
+        }
+        matched_nodes.append({"node_id": node.node_id, "title": node.title})
+        quest_hint = _node_quest_hint(state, node)
+        for effect in node.effects:
+            applied = _apply_effect(state, effect, quest_hint=quest_hint)
+            if applied.get("changed"):
+                applied_effects.append(applied)
+        if not node.repeatable:
+            break
+
+    elapsed_ms = int(round((time.perf_counter() - start) * 1000))
+    if matched_nodes or applied_effects:
+        _stamp_progression_revision(
+            state,
+            reason="apply_progression_for_action",
+            turn_index=turn_index,
+        )
+    next_actions = get_active_progression_actions(
+        state,
+        scenario_seed=scenario_seed,
+        limit=8,
+    )
+    summary = {
+        "ok": True,
+        "changed": bool(matched_nodes or applied_effects),
+        "graph_id": graph.graph_id,
+        "turn_index": turn_index,
+        "progression_state_revision": int(state.get("progression_state_revision") or 0),
+        "completed_node_count": len(_nodes_completed(state)),
+        "fact_count": len(_facts(state)),
+        "lead_count": len(_leads(state)),
+        "matched_nodes": matched_nodes,
+        "matched_node_ids": [_safe_str(row.get("node_id")) for row in matched_nodes],
+        "applied_effect_count": len(applied_effects),
+        "applied_effects": applied_effects[-20:],
+        "next_action_ids": [_safe_str(row.get("action_id")) for row in next_actions],
+        "elapsed_ms": elapsed_ms,
+    }
+    if summary["changed"]:
+        log = state.setdefault("scenario_progression_log", [])
+        if isinstance(log, list):
+            log.append(summary)
+            del log[:-100]
+        state["scenario_progression_summary"] = summary
+        state["scenario_progression_current_turn_summary"] = summary
+    else:
+        state["scenario_progression_last_no_match"] = summary
+        state["scenario_progression_current_turn_summary"] = summary
+    return {"ok": True, "changed": bool(matched_nodes or applied_effects), "state": state, "summary": summary}
