@@ -149,3 +149,61 @@ def test_behavioral_eval_deduplicates_same_turn_node_log_duplicates():
     assert result["metrics"]["matched_node_counts"]["ask_bran_about_tension"] == 1
     assert result["metrics"]["matched_node_counts"]["ask_bran_who_left_side_door"] == 1
     assert result["gates"]["no_repeated_nonrepeatable_node_ok"] is True
+
+
+def test_behavioral_eval_fails_graph_actions_empty_with_active_objectives():
+    transcript = [
+        {
+            "player_action": "I prepare the wagon.",
+            "progression_sidecar_completed_node_count": 13,
+            "scenario_progression_actions_empty_with_active_objectives": True,
+        }
+    ]
+    latest_state = {
+        "scenario_progression_quest_state": {
+            "quest:quarry_road_ambush": {
+                "quest_id": "quest:quarry_road_ambush",
+                "status": "active",
+                "completed": False,
+                "objectives": [
+                    {"objective_id": "objective:leave_by_quarry_road", "status": "active", "completed": False}
+                ],
+            }
+        },
+        "scenario_progression_log": [],
+        "progression_completed_nodes": {},
+        "quest_progress": {"quests": {}},
+    }
+
+    result = evaluate_behavioral_autoplay(transcript, latest_state, requested_turns=20)
+
+    assert result["gates"]["graph_actions_empty_with_active_graph_quest_ok"] is False
+    assert result["gates"]["active_graph_quest_has_objectives_ok"] is True
+
+
+def test_behavioral_eval_fails_active_graph_quest_without_objectives():
+    result = evaluate_behavioral_autoplay(
+        transcript=[
+            {
+                "player_action": "I prepare the wagon.",
+                "progression_sidecar_completed_node_count": 13,
+                "scenario_progression_actions_empty_with_active_objectives": False,
+            }
+        ],
+        latest_state={
+            "scenario_progression_quest_state": {
+                "quest:quarry_road_ambush": {
+                    "quest_id": "quest:quarry_road_ambush",
+                    "status": "active",
+                    "completed": False,
+                    "objectives": [],
+                }
+            },
+            "scenario_progression_log": [],
+            "progression_completed_nodes": {},
+            "quest_progress": {"quests": {}},
+        },
+        requested_turns=20,
+    )
+
+    assert result["gates"]["active_graph_quest_has_objectives_ok"] is False

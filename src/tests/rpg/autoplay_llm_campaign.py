@@ -457,6 +457,11 @@ def _overlay_and_assert_progression_sidecar(
         turn_index=turn_index,
         stage=reason,
     )
+    _assert_graph_actions_available_for_active_objectives(
+        overlaid,
+        turn_index=turn_index,
+        stage=reason,
+    )
     return overlaid
 
 
@@ -730,6 +735,26 @@ def _get_scenario_progression_actions(
         return []
 
 
+def _refresh_scenario_progression_actions_for_turn(
+    runtime_state: Dict[str, Any],
+    args: Any,
+    *,
+    turn_index: int,
+) -> Dict[str, Any]:
+    runtime_state = _safe_dict(runtime_state)
+    runtime_state["scenario_progression_actions"] = _get_scenario_progression_actions(
+        runtime_state,
+        scenario_seed=str(getattr(args, "scenario_seed", "") or ""),
+        limit=int(getattr(args, "suggested_action_limit", 8) or 8),
+    )
+    runtime_state = _stamp_progression_authority(
+        runtime_state,
+        reason="scenario_progression_actions_recomputed",
+        turn_index=turn_index,
+    )
+    return runtime_state
+
+
 def _apply_scenario_progression_for_action(
     runtime_state: Dict[str, Any],
     *,
@@ -915,6 +940,41 @@ def _assert_graph_second_quest_invariant(
             "graph_second_quest_not_active_after_report:"
             f"turn={turn_index}:stage={stage}:"
             f"status={warn_wagon.get('status')}"
+        )
+
+
+def _active_graph_objective_count_from_state(runtime_state: Dict[str, Any]) -> int:
+    count = 0
+    quests = _quest_progress_quests(runtime_state)
+    for _quest_id, quest in quests.items():
+        quest = _safe_dict(quest)
+        if _safe_str(quest.get("source")) != "scenario_progression_graph":
+            continue
+        if bool(quest.get("completed")) or _safe_str(quest.get("status")) == "completed":
+            continue
+        for objective in _safe_list(quest.get("objectives")):
+            objective = _safe_dict(objective)
+            if bool(objective.get("completed")) or _safe_str(objective.get("status")) == "completed":
+                continue
+            count += 1
+    return count
+
+
+def _assert_graph_actions_available_for_active_objectives(
+    runtime_state: Dict[str, Any],
+    *,
+    turn_index: int,
+    stage: str,
+) -> None:
+    if stage in {"before_player_context", "before_executable_repair"}:
+        return
+    active_objective_count = _active_graph_objective_count_from_state(runtime_state)
+    actions = _safe_list(_safe_dict(runtime_state).get("scenario_progression_actions"))
+    if active_objective_count > 0 and not actions:
+        raise RuntimeError(
+            "scenario_progression_actions_empty_with_active_graph_objectives:"
+            f"turn={turn_index}:stage={stage}:"
+            f"active_graph_objective_count={active_objective_count}"
         )
 
 
@@ -2571,6 +2631,11 @@ def _build_authoritative_final_lifecycle_summary(
     )
     summary["scenario_progression_quest_ids"] = _safe_list(
         runtime_state.get("scenario_progression_quest_ids")
+    )
+    summary["active_graph_objective_count"] = _active_graph_objective_count_from_state(runtime_state)
+    summary["scenario_progression_actions_empty_with_active_objectives"] = (
+        _active_graph_objective_count_from_state(runtime_state) > 0
+        and not bool(_safe_list(runtime_state.get("scenario_progression_actions")))
     )
     commit_summary = _safe_dict(runtime_state.get("campaign_state_commit_summary"))
     summary["quest_progress_summary"] = (
@@ -4778,16 +4843,15 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
             transcript_tail=transcript[-12:],
             phase="turn",
         )
-        scenario_progression_actions = _get_scenario_progression_actions(
-            authoritative_state,
-            scenario_seed=str(getattr(args, "scenario_seed", "") or ""),
-            limit=int(getattr(args, "suggested_action_limit", 8) or 8),
-        )
-        authoritative_state["scenario_progression_actions"] = scenario_progression_actions
         authoritative_state = _overlay_and_assert_progression_sidecar(
             authoritative_state,
             progression_authority_state,
             reason="before_player_context",
+            turn_index=turn_index,
+        )
+        authoritative_state = _refresh_scenario_progression_actions_for_turn(
+            authoritative_state,
+            args,
             turn_index=turn_index,
         )
         simulation_state = deepcopy(authoritative_state)
@@ -5087,7 +5151,13 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
                 reason="before_executable_repair",
                 turn_index=turn_index,
             )
+            authoritative_state = _refresh_scenario_progression_actions_for_turn(
+                authoritative_state,
+                args,
+                turn_index=turn_index,
+            )
             context["progression_authority_summary"] = authoritative_state.get("progression_authority_summary") or {}
+            context["progression_completed_nodes"] = authoritative_state.get("progression_completed_nodes") or {}
             context["progression_sidecar_completed_node_count"] = _progression_node_count(
                 progression_authority_state
             )
@@ -5095,6 +5165,8 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
                 progression_authority_state
             )
             context["scenario_progression_active"] = _scenario_progression_active(authoritative_state)
+            context["current_location"] = authoritative_state.get("current_location") or authoritative_state.get("current_location_name") or ""
+            context["scenario_progression_actions"] = authoritative_state.get("scenario_progression_actions") or []
             executable_action_repair = repair_action_if_needed(_safe_str(player_action), context, transcript)
             if executable_action_repair.get("changed"):
                 _probe_log(
@@ -5120,6 +5192,11 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
             player_action=player_action,
             turn_index=turn_index,
         )
+        authoritative_state = _refresh_scenario_progression_actions_for_turn(
+            authoritative_state,
+            args,
+            turn_index=turn_index,
+        )
         authoritative_state, progression_authority_state = _update_sidecar_and_overlay(
             authoritative_state,
             progression_authority_state,
@@ -5131,26 +5208,15 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
             transcript_tail=transcript[-12:],
             phase="turn",
         )
-        authoritative_state = _overlay_and_assert_progression_sidecar(
+        authoritative_state = _refresh_scenario_progression_actions_for_turn(
             authoritative_state,
-            progression_authority_state,
-            reason="after_campaign_state_commit",
-            turn_index=turn_index,
-        )
-        authoritative_state["scenario_progression_actions"] = _get_scenario_progression_actions(
-            authoritative_state,
-            scenario_seed=str(getattr(args, "scenario_seed", "") or ""),
-            limit=int(getattr(args, "suggested_action_limit", 8) or 8),
-        )
-        authoritative_state = _stamp_progression_authority(
-            authoritative_state,
-            reason="scenario_progression_actions_recomputed",
+            args,
             turn_index=turn_index,
         )
         authoritative_state, progression_authority_state = _update_sidecar_and_overlay(
             authoritative_state,
             progression_authority_state,
-            reason="after_scenario_progression_actions_recomputed",
+            reason="after_campaign_state_commit",
             turn_index=turn_index,
         )
         _probe_log(
@@ -5264,7 +5330,12 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
             keys=",".join(sorted(_safe_dict(turn_result).keys())[:80]),
         )
         authoritative_state = _merge_turn_result_authoritative_state(authoritative_state, turn_result)
-        authoritative_state = _overlay_and_assert_progression_sidecar(
+        authoritative_state = _refresh_scenario_progression_actions_for_turn(
+            authoritative_state,
+            args,
+            turn_index=turn_index,
+        )
+        authoritative_state, progression_authority_state = _update_sidecar_and_overlay(
             authoritative_state,
             progression_authority_state,
             reason="after_turn_result_merge",
@@ -5275,7 +5346,12 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
             transcript_tail=transcript[-12:],
             phase="turn",
         )
-        authoritative_state = _overlay_and_assert_progression_sidecar(
+        authoritative_state = _refresh_scenario_progression_actions_for_turn(
+            authoritative_state,
+            args,
+            turn_index=turn_index,
+        )
+        authoritative_state, progression_authority_state = _update_sidecar_and_overlay(
             authoritative_state,
             progression_authority_state,
             reason="after_campaign_state_commit",
@@ -5590,6 +5666,11 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
             ),
             "progression_runtime_completed_node_count": _progression_node_count(authoritative_state),
             "progression_runtime_revision": _progression_revision(authoritative_state),
+            "active_graph_objective_count": _active_graph_objective_count_from_state(authoritative_state),
+            "scenario_progression_actions_empty_with_active_objectives": (
+                _active_graph_objective_count_from_state(authoritative_state) > 0
+                and not bool(_safe_list(authoritative_state.get("scenario_progression_actions")))
+            ),
             "handoff_semantic": handoff_semantic,
             "player_agent_anti_loop_context": anti_loop_context,
             "turn_result": turn_result if args.artifact_detail == "full" else {
@@ -5751,6 +5832,11 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
             transcript_tail=transcript[-12:],
             phase="turn",
         )
+        runtime_state = _refresh_scenario_progression_actions_for_turn(
+            runtime_state,
+            args,
+            turn_index=turn_index,
+        )
         runtime_state, progression_authority_state = _update_sidecar_and_overlay(
             runtime_state,
             progression_authority_state,
@@ -5784,6 +5870,11 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
         )
         record["progression_runtime_completed_node_count"] = _progression_node_count(runtime_state)
         record["progression_runtime_revision"] = _progression_revision(runtime_state)
+        record["active_graph_objective_count"] = _active_graph_objective_count_from_state(runtime_state)
+        record["scenario_progression_actions_empty_with_active_objectives"] = (
+            _active_graph_objective_count_from_state(runtime_state) > 0
+            and not bool(_safe_list(runtime_state.get("scenario_progression_actions")))
+        )
         commit_summary = _safe_dict(runtime_state.get("campaign_state_commit_summary"))
         commit_qps = _safe_dict(commit_summary.get("quest_progress_summary"))
         active_handoff_count = 0
