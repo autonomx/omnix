@@ -207,3 +207,58 @@ def test_behavioral_eval_fails_active_graph_quest_without_objectives():
     )
 
     assert result["gates"]["active_graph_quest_has_objectives_ok"] is False
+
+
+def test_behavioral_eval_accepts_completed_graph_arc_with_no_active_objectives():
+    transcript = [
+        {
+            "player_action": f"graph action {i}",
+            "progression_sidecar_completed_node_count": i,
+            "scenario_progression_actions_empty_with_active_objectives": False,
+        }
+        for i in range(1, 19)
+    ]
+
+    latest_state = {
+        "scenario_progression_arc_summary": {
+            "arc_complete": True,
+            "expected_node_count": 18,
+            "completed_node_count": 18,
+        },
+        "scenario_progression_log": [
+            {"changed": True, "turn_index": i, "matched_node_ids": [f"node:{i}"]}
+            for i in range(1, 19)
+        ],
+        "progression_completed_nodes": {
+            f"node:{i}": {} for i in range(1, 19)
+        },
+        "scenario_progression_quest_state": {
+            "quest:witness_search": {"status": "completed", "completed": True},
+            "quest:warn_wagon": {"status": "completed", "completed": True},
+            "quest:quarry_road_ambush": {"status": "completed", "completed": True},
+        },
+        "quest_progress": {
+            "quests": {
+                "quest:witness_search": {"status": "completed", "completed": True},
+                "quest:warn_wagon": {"status": "completed", "completed": True},
+                "quest:quarry_road_ambush": {"status": "completed", "completed": True},
+            }
+        },
+        "progression_unlocked_npcs": {"npc:mira": {}, "npc:garran": {}},
+        "progression_unlocked_locations": {
+            "location:side_door": {},
+            "location:garran_wagon_yard": {},
+            "location:quarry_road": {},
+        },
+        "progression_facts": {f"fact:{i}": {} for i in range(8)},
+        "location_history": [{"location_id": "location:quarry_road"}],
+    }
+
+    result = evaluate_behavioral_autoplay(
+        transcript,
+        latest_state,
+        requested_turns=20,
+    )
+
+    assert result["gates"]["graph_actions_empty_with_active_graph_quest_ok"] is True
+    assert result["gates"]["active_graph_quest_has_objectives_ok"] is True

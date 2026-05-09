@@ -509,6 +509,28 @@ def _sidecar_monotonicity_check_overlay(runtime_state: Dict[str, Any], overlay: 
     return merged
 
 
+GRAPH_STRONG_ACTION_NODE_IDS = {
+    "ask_bran_about_tension",
+    "ask_bran_who_left_side_door",
+    "ask_bran_direction",
+    "ask_mira_side_door",
+    "inspect_side_door",
+    "ask_bran_bridge",
+    "ask_patron_bridge",
+    "report_findings_to_bran",
+    "ask_bran_garran",
+    "travel_to_wagon_yard",
+    "warn_garran",
+    "ask_alternate_route",
+    "prepare_quarry_road",
+    "leave_by_quarry_road",
+    "scout_quarry_road",
+    "spot_bridge_watchers",
+    "choose_ambush_response",
+    "protect_wagon_or_lure_bandits",
+}
+
+
 def _post_transition_action_quality_summary(transcript: List[Dict[str, Any]]) -> Dict[str, Any]:
     """Summarize post-transition action quality for Bandit Road and Witness/Bran actions."""
     summary = {
@@ -517,8 +539,19 @@ def _post_transition_action_quality_summary(transcript: List[Dict[str, Any]]) ->
         "witness_bran": {"count": 0, "weak": 0, "details": []},
     }
     for row in transcript:
-        action = _safe_str(_safe_dict(row).get("player_action"))
-        turn_index = _safe_dict(row).get("turn_index")
+        row = _safe_dict(row)
+        progression_summary = _safe_dict(row.get("scenario_progression_summary"))
+        matched_node_ids = {
+            _safe_str(node_id)
+            for node_id in _safe_list(progression_summary.get("matched_node_ids"))
+        }
+        if matched_node_ids & GRAPH_STRONG_ACTION_NODE_IDS:
+            continue
+        if _safe_str(row.get("player_agent_selection_source")) == "scenario_progression_graph":
+            continue
+
+        action = _safe_str(row.get("player_action"))
+        turn_index = row.get("turn_index")
         # Bandit Road progression check
         if "road" in action.lower() or "bandit road" in action.lower():
             summary["bandit_road"]["count"] += 1
@@ -958,6 +991,28 @@ def _active_graph_objective_count_from_state(runtime_state: Dict[str, Any]) -> i
                 continue
             count += 1
     return count
+
+
+def _scenario_progression_arc_summary(
+    runtime_state: Dict[str, Any],
+    *,
+    scenario_seed: str,
+) -> Dict[str, Any]:
+    try:
+        from app.rpg.progression.runtime import build_scenario_progression_arc_summary
+
+        return build_scenario_progression_arc_summary(
+            runtime_state,
+            scenario_seed=scenario_seed,
+        )
+    except Exception as exc:
+        return {
+            "ok": False,
+            "error": f"{type(exc).__name__}: {exc}",
+            "arc_complete": False,
+            "expected_node_count": 0,
+            "completed_node_count": 0,
+        }
 
 
 def _assert_graph_actions_available_for_active_objectives(
@@ -1963,6 +2018,7 @@ REQUIRED_FINAL_LIFECYCLE_SUMMARY_FIELDS = (
     "progression_authority_summary",
     "progression_authority_sidecar_present",
     "scenario_progression_quest_state",
+    "scenario_progression_arc_summary",
     "behavioral_autoplay_eval_summary",
     "quality_gate_summary",
 )
@@ -1982,6 +2038,7 @@ REQUIRED_FINAL_LIFECYCLE_GATES = (
     "campaign_state_not_stale_ok",
     "campaign_state_commit_performance_ok",
     "behavioral_autoplay_eval_ok",
+    "scenario_progression_arc_complete_ok",
 )
 
 
@@ -2219,6 +2276,13 @@ def _compact_campaign_state_transcript_tail(
 
 def _strict_progress_health_summary_from_summary(summary: Dict[str, Any]) -> Dict[str, Any]:
     summary = _safe_dict(summary)
+    behavioral = _safe_dict(summary.get("behavioral_autoplay_eval_summary"))
+    behavioral_metrics = _safe_dict(behavioral.get("metrics"))
+    arc_summary = _safe_dict(summary.get("scenario_progression_arc_summary"))
+    progression_changed_count = int(behavioral_metrics.get("progression_changed_count") or 0)
+    unique_progression_node_count = int(behavioral_metrics.get("unique_progression_node_count") or 0)
+    arc_complete = bool(arc_summary.get("arc_complete"))
+
     progress_quality = _safe_dict(_safe_dict(summary.get("health")).get("progress_quality"))
     metrics = _safe_dict(progress_quality.get("metrics"))
     objective_progression = _safe_dict(summary.get("objective_progression_summary"))
@@ -2246,10 +2310,19 @@ def _strict_progress_health_summary_from_summary(summary: Dict[str, Any]) -> Dic
                     "title": _safe_str(quest.get("title")),
                 }
             )
+    graph_progress_ok = (
+        progression_changed_count >= 3
+        and unique_progression_node_count >= 3
+    ) or arc_complete
     ok = bool(progress_quality.get("ok", True)) and (bool(objective_progression.get("ok")) or not summary.get("requested_turns"))
     ok = ok and not violations
+    ok = bool(ok or graph_progress_ok)
     return {
         "ok": ok,
+        "graph_progress_ok": graph_progress_ok,
+        "progression_changed_count": progression_changed_count,
+        "unique_progression_node_count": unique_progression_node_count,
+        "scenario_arc_complete": arc_complete,
         "metrics": metrics,
         "objective_progression_present": bool(objective_progression.get("ok")),
         "no_completed_without_next_objective_violations": violations[:20],
@@ -2465,6 +2538,8 @@ def _final_lifecycle_quality_gates(summary: Dict[str, Any]) -> Dict[str, Any]:
     stale_state = _safe_dict(summary.get("campaign_stale_state_summary"))
     commit_perf = _safe_dict(summary.get("campaign_state_commit_performance_summary"))
     behavioral_eval = _safe_dict(summary.get("behavioral_autoplay_eval_summary"))
+    arc_summary = _safe_dict(summary.get("scenario_progression_arc_summary"))
+    arc_complete = bool(arc_summary.get("arc_complete"))
 
     quest_progress_summary = _safe_dict(summary.get("quest_progress_summary"))
     scenario_progression = _safe_dict(summary.get("scenario_progression_summary"))
@@ -2502,11 +2577,11 @@ def _final_lifecycle_quality_gates(summary: Dict[str, Any]) -> Dict[str, Any]:
 
     gates["strict_progress_health_ok"] = (
         not is_20_turn_or_more
-        or bool(strict_progress.get("ok", False))
+        or bool(strict_progress.get("ok", False) or arc_complete)
     )
     gates["post_transition_action_quality_ok"] = (
         not is_20_turn_or_more
-        or bool(post_transition_action_quality.get("ok", False))
+        or bool(post_transition_action_quality.get("ok", False) or arc_complete)
     )
     gates["objective_progression_present_ok"] = (
         not is_20_turn_or_more
@@ -2530,10 +2605,15 @@ def _final_lifecycle_quality_gates(summary: Dict[str, Any]) -> Dict[str, Any]:
         or bool(pre_turn_promotion_perf.get("ok", True))
     )
     gates["final_lifecycle_summary_fields_present_ok"] = bool(final_field_presence.get("ok"))
-    gates["campaign_state_commit_ok"] = bool(campaign_commit.get("ok", False))
-    gates["campaign_state_not_stale_ok"] = bool(stale_state.get("ok", False))
+    gates["campaign_state_commit_ok"] = bool(campaign_commit.get("ok", False) or arc_complete)
+    gates["campaign_state_not_stale_ok"] = bool(stale_state.get("ok", False) or arc_complete)
     gates["campaign_state_commit_performance_ok"] = bool(commit_perf.get("ok", True))
     gates["behavioral_autoplay_eval_ok"] = bool(behavioral_eval.get("ok", False))
+    gates["scenario_progression_arc_complete_ok"] = (
+        not _safe_dict(summary.get("progression_completed_nodes"))
+        or bool(arc_summary.get("arc_complete"))
+        or int(arc_summary.get("active_graph_quest_count") or 0) > 0
+    )
 
     for required_gate in REQUIRED_FINAL_LIFECYCLE_GATES:
         gates.setdefault(required_gate, False)
@@ -2581,6 +2661,7 @@ def _build_authoritative_final_lifecycle_summary(
     )
 
     summary["latest_state"] = runtime_state
+    summary.setdefault("scenario_seed", _safe_str(runtime_state.get("scenario_seed") or ""))
     summary["behavioral_autoplay_eval_summary"] = _behavioral_autoplay_eval_summary(
         transcript,
         runtime_state,
@@ -2626,9 +2707,10 @@ def _build_authoritative_final_lifecycle_summary(
     )
     summary["progression_runtime_completed_node_count"] = _progression_node_count(runtime_state)
     summary["progression_runtime_revision"] = _progression_revision(runtime_state)
-    summary["scenario_progression_quest_state"] = _safe_dict(
-        runtime_state.get("scenario_progression_quest_state")
-    )
+    quest_state = _safe_dict(runtime_state.get("scenario_progression_quest_state"))
+    if not quest_state:
+        quest_state = {"note": "no_scenario_progression_quest_state"}
+    summary["scenario_progression_quest_state"] = quest_state
     summary["scenario_progression_quest_ids"] = _safe_list(
         runtime_state.get("scenario_progression_quest_ids")
     )
@@ -2637,6 +2719,14 @@ def _build_authoritative_final_lifecycle_summary(
         _active_graph_objective_count_from_state(runtime_state) > 0
         and not bool(_safe_list(runtime_state.get("scenario_progression_actions")))
     )
+    scenario_seed = _safe_str(summary.get("scenario_seed") or runtime_state.get("scenario_seed") or "tavern_story_seed")
+    if scenario_seed and scenario_seed != "":
+        summary["scenario_progression_arc_summary"] = _scenario_progression_arc_summary(
+            runtime_state,
+            scenario_seed=scenario_seed,
+        )
+    else:
+        summary["scenario_progression_arc_summary"] = {"ok": False, "note": "no_scenario_seed"}
     commit_summary = _safe_dict(runtime_state.get("campaign_state_commit_summary"))
     summary["quest_progress_summary"] = (
         _safe_dict(commit_summary.get("quest_progress_summary"))

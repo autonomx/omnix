@@ -439,3 +439,60 @@ def test_quarry_road_arc_can_continue_after_prepare_node():
     assert "spot_bridge_watchers" in completed
     assert state["current_location"] == "location:quarry_road"
     assert "lead:choose_ambush_response" in state["progression_leads"]
+
+
+def test_arc_summary_reports_complete_after_full_graph():
+    from app.rpg.progression.runtime import (
+        apply_progression_for_action,
+        build_scenario_progression_arc_summary,
+        get_active_progression_actions,
+    )
+
+    state = {}
+    actions = [
+        "I ask Bran for a room, but I also ask why the tavern feels so tense tonight.",
+        "I ask Bran who left through the side door and why they were afraid.",
+        "I ask Bran what direction the cloaked traveler went after leaving.",
+        "I turn to Mira and ask what she saw near the side door.",
+        "I inspect the side door, latch, and threshold for blood, tracks, or torn cloth.",
+        "I ask Bran if the old east road leads to a bridge.",
+        "I approach the local patron and quietly ask what he knows about the mill bridge.",
+        "I report to Bran that the traveler's trail, the blood, and the bridge story point to an ambush.",
+        "I ask Bran who is most likely to travel the road before dawn.",
+        "I leave the tavern and travel toward Garran's wagon yard.",
+        "I tell Garran the mill bridge may be an ambush and show him the evidence.",
+        "I ask Garran if there is another route around the bridge.",
+        "I help Garran prepare the wagon for the safer quarry road.",
+        "I leave Garran's wagon yard with the wagon and take the quarry road.",
+        "I scout ahead on the quarry road for tracks, hiding places, and ambush signs.",
+        "I scan the rock shelf for watchers or scouts watching the quarry road.",
+        "I tell Garran we should slow the wagon and lure the watchers into revealing the ambush.",
+        "I help Garran protect the wagon while drawing the ambushers out of hiding.",
+    ]
+
+    for turn, action in enumerate(actions, start=1):
+        result = apply_progression_for_action(
+            state,
+            scenario_seed="tavern_story_seed",
+            player_action=action,
+            turn_index=turn,
+        )
+        state = result["state"]
+
+    arc = build_scenario_progression_arc_summary(
+        state,
+        scenario_seed="tavern_story_seed",
+    )
+
+    assert arc["arc_complete"] is True
+    assert arc["completed_node_count"] == arc["expected_node_count"]
+    assert arc["active_graph_quest_count"] == 0
+    assert arc["active_graph_objective_count"] == 0
+
+    actions = get_active_progression_actions(
+        state,
+        scenario_seed="tavern_story_seed",
+        limit=8,
+    )
+    assert actions
+    assert actions[0]["action_id"] == "arc_complete_regroup"

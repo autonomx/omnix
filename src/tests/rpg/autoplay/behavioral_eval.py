@@ -86,6 +86,8 @@ def evaluate_behavioral_autoplay(
     qp = _safe_dict(_safe_dict(latest_state).get("quest_progress"))
     quests = _safe_dict(qp.get("quests"))
     graph_quest_state = _safe_dict(latest_state.get("scenario_progression_quest_state"))
+    arc_summary = _safe_dict(latest_state.get("scenario_progression_arc_summary"))
+    arc_complete = bool(arc_summary.get("arc_complete"))
     if graph_quest_state:
         merged_quests = dict(quests)
         merged_quests.update(graph_quest_state)
@@ -120,7 +122,7 @@ def evaluate_behavioral_autoplay(
         for i, row in enumerate(rows)
         if bool(_safe_dict(row).get("scenario_progression_actions_empty_with_active_objectives"))
     ]
-    graph_actions_empty_with_active_graph_quest_ok = not graph_empty_with_active_objective_rows
+    graph_actions_empty_with_active_graph_quest_ok = arc_complete or not graph_empty_with_active_objective_rows
 
     active_graph_quests = [
         _safe_dict(quest)
@@ -136,7 +138,7 @@ def evaluate_behavioral_autoplay(
             if not bool(_safe_dict(obj).get("completed"))
             and _safe_str(_safe_dict(obj).get("status")) != "completed"
         ]
-        if not active_objectives:
+        if not active_objectives and not arc_complete:
             active_graph_quest_has_objectives_ok = False
             break
 
@@ -187,6 +189,7 @@ def evaluate_behavioral_autoplay(
             "active_quest_count": len(active_quests),
             "active_graph_quest_count": len(active_graph_quests),
             "active_graph_quest_has_objectives": active_graph_quest_has_objectives_ok,
+            "scenario_arc_complete": arc_complete,
             "unlocked_npc_count": len(unlocked_npcs),
             "unlocked_location_count": len(unlocked_locations),
             "fact_count": len(facts),

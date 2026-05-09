@@ -511,3 +511,56 @@ def test_campaign_commit_preserves_scenario_progression_graph_quest_state():
     quests = result["state"]["quest_progress"]["quests"]
     assert "quest:warn_wagon" in quests
     assert quests["quest:warn_wagon"]["status"] == "active"
+
+
+def test_stale_state_summary_accepts_completed_graph_arc_end_state():
+    from app.rpg.campaign_state.authority_commit import commit_campaign_state
+
+    state = {
+        "progression_completed_nodes": {
+            "ask_bran_about_tension": {},
+            "protect_wagon_or_lure_bandits": {},
+        },
+        "scenario_progression_quest_state": {
+            "quest:witness_search": {
+                "status": "completed",
+                "completed": True,
+                "source": "scenario_progression_graph",
+            },
+            "quest:warn_wagon": {
+                "status": "completed",
+                "completed": True,
+                "source": "scenario_progression_graph",
+            },
+            "quest:quarry_road_ambush": {
+                "status": "completed",
+                "completed": True,
+                "source": "scenario_progression_graph",
+            },
+        },
+        "quest_progress": {
+            "quests": {
+                "quest:witness_search": {
+                    "status": "completed",
+                    "completed": True,
+                    "source": "scenario_progression_graph",
+                },
+                "quest:warn_wagon": {
+                    "status": "completed",
+                    "completed": True,
+                    "source": "scenario_progression_graph",
+                },
+                "quest:quarry_road_ambush": {
+                    "status": "completed",
+                    "completed": True,
+                    "source": "scenario_progression_graph",
+                },
+            }
+        },
+    }
+
+    result = commit_campaign_state(state, phase="turn")
+
+    stale = result["summary"]["stale_state_summary"]
+    assert stale["graph_arc_end_state"] is True
+    assert stale["completed_without_next_objective"] is False
