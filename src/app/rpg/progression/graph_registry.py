@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Dict
+from typing import Any, Dict, List
 
 from app.rpg.progression.models import (
     ProgressionAction,
@@ -2498,8 +2498,885 @@ def _build_sable_chain_countermove_graph() -> ScenarioProgressionGraph:
     return graph
 
 
+def _build_sable_chain_handler_route_pressure_graph() -> ScenarioProgressionGraph:
+    graph = ScenarioProgressionGraph(
+        graph_id="graph:tavern_story_seed:sable_chain_handler_route_pressure",
+        scenario_seed="tavern_story_seed",
+        nodes=[
+            ProgressionNode(
+                node_id="review_handler_orders",
+                title="Review the sealed orders naming the Sable Chain handler.",
+                requires=[{"lead": "lead:sable_chain_handler_next_arc"}],
+                action_patterns=[
+                    {"semantic": "review", "topics_any": ["sealed orders", "handler"]},
+                    {"semantic": "read", "topics_any": ["sealed orders"]},
+                    {"semantic": "study", "topics_any": ["sable chain handler"]},
+                    {"semantic": "tell", "target_id": "npc:bran", "topics_any": ["handler", "orders"]},
+                ],
+                suggested_actions=[
+                    _a(
+                        "review_handler_orders",
+                        "I review the sealed orders with Bran and Garran to identify the higher Sable Chain handler.",
+                        "review",
+                        target_type="item",
+                        target_id="item:sable_chain_sealed_orders",
+                        priority=95,
+                    ),
+                ],
+                effects=[
+                    {"start_quest": "quest:sable_chain_handler_route_pressure", "title": "Sable Chain Handler"},
+                    {"unlock_objective": "objective:review_handler_orders", "summary": "Review the sealed orders naming the Sable Chain handler."},
+                    {"complete_objective": "objective:review_handler_orders"},
+                    {"unlock_fact": "fact:handler_orders_reviewed", "text": "The sealed orders point to a handler using route pressure to isolate the town."},
+                    {"unlock_lead": "lead:decode_handler_route_cipher", "text": "Decode the handler's route cipher."},
+                ],
+            ),
+            ProgressionNode(
+                node_id="decode_handler_route_cipher",
+                title="Decode the handler's route cipher.",
+                requires=[{"lead": "lead:decode_handler_route_cipher"}],
+                action_patterns=[
+                    {"semantic": "decipher", "topics_any": ["route cipher"]},
+                    {"semantic": "read", "topics_any": ["cipher", "orders"]},
+                    {"semantic": "study", "topics_any": ["handler route"]},
+                    {"semantic": "inspect", "topics_any": ["cipher marks"]},
+                ],
+                suggested_actions=[
+                    _a(
+                        "decode_handler_route_cipher",
+                        "I decode the handler's route cipher from the sealed orders.",
+                        "decipher",
+                        target_type="item",
+                        target_id="item:sable_chain_sealed_orders",
+                        priority=94,
+                    ),
+                ],
+                effects=[
+                    {"unlock_objective": "objective:decode_handler_route_cipher", "summary": "Decode the handler's route cipher."},
+                    {"complete_objective": "objective:decode_handler_route_cipher"},
+                    {"unlock_fact": "fact:handler_targets_east_road", "text": "The cipher shows the handler intends to choke the east road supply route."},
+                    {"unlock_lead": "lead:warn_east_road_teamsters", "text": "Warn the east road teamsters about the route pressure."},
+                ],
+            ),
+            ProgressionNode(
+                node_id="warn_east_road_teamsters",
+                title="Warn the east road teamsters.",
+                requires=[{"lead": "lead:warn_east_road_teamsters"}],
+                action_patterns=[
+                    {"semantic": "warn", "topics_any": ["east road teamsters"]},
+                    {"semantic": "tell", "target_id": "npc:old_teamster", "topics_any": ["east road"]},
+                    {"semantic": "travel", "topics_any": ["teamsters", "east road"]},
+                    {"semantic": "warn", "topics_any": ["route pressure"]},
+                ],
+                suggested_actions=[
+                    _a(
+                        "warn_east_road_teamsters",
+                        "I warn the east road teamsters that the Sable Chain handler plans to choke the supply route.",
+                        "warn",
+                        target_type="npc",
+                        target_id="npc:old_teamster",
+                        priority=93,
+                    ),
+                ],
+                effects=[
+                    {"unlock_objective": "objective:warn_east_road_teamsters", "summary": "Warn the east road teamsters."},
+                    {"complete_objective": "objective:warn_east_road_teamsters"},
+                    {"unlock_fact": "fact:east_road_teamsters_warned", "text": "The east road teamsters are warned about the handler's route pressure plan."},
+                    {"unlock_lead": "lead:scout_east_road_pressure_points", "text": "Scout the east road pressure points."},
+                ],
+            ),
+            ProgressionNode(
+                node_id="scout_east_road_pressure_points",
+                title="Scout the east road pressure points.",
+                requires=[{"lead": "lead:scout_east_road_pressure_points"}],
+                action_patterns=[
+                    {"semantic": "scout", "topics_any": ["east road", "pressure points"]},
+                    {"semantic": "inspect", "topics_any": ["east road", "ambush"]},
+                    {"semantic": "scan", "topics_any": ["roadblocks", "east road"]},
+                    {"semantic": "travel", "topics_any": ["east road"]},
+                ],
+                suggested_actions=[
+                    _a(
+                        "scout_east_road_pressure_points",
+                        "I scout the east road for roadblocks, chokepoints, and Sable Chain pressure points.",
+                        "scout",
+                        target_type="location",
+                        target_id="location:east_road",
+                        priority=92,
+                    ),
+                ],
+                effects=[
+                    {"set_location": "location:east_road", "name": "East Road"},
+                    {"unlock_location": "location:east_road", "name": "East Road"},
+                    {"unlock_objective": "objective:scout_east_road_pressure_points", "summary": "Scout the east road pressure points."},
+                    {"complete_objective": "objective:scout_east_road_pressure_points"},
+                    {"unlock_fact": "fact:east_road_pressure_points_found", "text": "Several roadblocks and false toll markers have been set along the east road."},
+                    {"unlock_lead": "lead:disable_false_toll_markers", "text": "Disable the false toll markers."},
+                ],
+            ),
+            ProgressionNode(
+                node_id="disable_false_toll_markers",
+                title="Disable the false toll markers.",
+                requires=[{"lead": "lead:disable_false_toll_markers"}],
+                action_patterns=[
+                    {"semantic": "inspect", "topics_any": ["false toll markers"]},
+                    {"semantic": "disable", "topics_any": ["toll markers"]},
+                    {"semantic": "remove", "topics_any": ["markers"]},
+                    {"semantic": "take", "topics_any": ["false toll signs"]},
+                ],
+                suggested_actions=[
+                    _a(
+                        "disable_false_toll_markers",
+                        "I disable the false toll markers the Sable Chain placed along the east road.",
+                        "disable",
+                        target_type="location",
+                        target_id="location:east_road",
+                        priority=91,
+                    ),
+                ],
+                effects=[
+                    {"unlock_objective": "objective:disable_false_toll_markers", "summary": "Disable the false toll markers."},
+                    {"complete_objective": "objective:disable_false_toll_markers"},
+                    {"unlock_fact": "fact:false_toll_markers_disabled", "text": "The false toll markers are disabled before they can redirect wagon traffic."},
+                    {"unlock_lead": "lead:find_handler_dead_drop", "text": "Find the handler's dead drop near the old milepost."},
+                ],
+            ),
+            ProgressionNode(
+                node_id="find_handler_dead_drop",
+                title="Find the handler's dead drop.",
+                requires=[{"lead": "lead:find_handler_dead_drop"}],
+                action_patterns=[
+                    {"semantic": "search", "topics_any": ["dead drop", "milepost"]},
+                    {"semantic": "inspect", "topics_any": ["old milepost"]},
+                    {"semantic": "scout", "topics_any": ["dead drop"]},
+                    {"semantic": "find", "topics_any": ["handler dead drop"]},
+                ],
+                suggested_actions=[
+                    _a(
+                        "find_handler_dead_drop",
+                        "I search the old milepost for the Sable Chain handler's dead drop.",
+                        "search",
+                        target_type="location",
+                        target_id="location:east_road",
+                        priority=90,
+                    ),
+                ],
+                effects=[
+                    {"unlock_fact": "fact:handler_dead_drop_found", "text": "A dead drop at the old milepost contains route pressure instructions."},
+                    {"unlock_lead": "lead:read_route_pressure_instructions", "text": "Read the route pressure instructions."},
+                ],
+            ),
+            ProgressionNode(
+                node_id="read_route_pressure_instructions",
+                title="Read the route pressure instructions.",
+                requires=[{"lead": "lead:read_route_pressure_instructions"}],
+                action_patterns=[
+                    {"semantic": "read", "topics_any": ["route pressure instructions"]},
+                    {"semantic": "study", "topics_any": ["dead drop instructions"]},
+                    {"semantic": "inspect", "topics_any": ["instructions", "route"]},
+                    {"semantic": "decipher", "topics_any": ["instructions", "handler"]},
+                ],
+                suggested_actions=[
+                    _a(
+                        "read_route_pressure_instructions",
+                        "I read the route pressure instructions from the handler's dead drop.",
+                        "read",
+                        target_type="item",
+                        target_id="item:route_pressure_instructions",
+                        priority=89,
+                    ),
+                ],
+                effects=[
+                    {"unlock_fact": "fact:instructions_name_black_ford", "text": "The instructions name Black Ford as the handler's next pressure point."},
+                    {"unlock_location": "location:black_ford", "name": "Black Ford"},
+                    {"unlock_lead": "lead:travel_to_black_ford", "text": "Travel to Black Ford before the handler's people arrive."},
+                ],
+            ),
+            ProgressionNode(
+                node_id="travel_to_black_ford",
+                title="Travel to Black Ford.",
+                requires=[{"lead": "lead:travel_to_black_ford"}],
+                action_patterns=[
+                    {"semantic": "travel", "target_id": "location:black_ford", "topics_any": ["black ford"]},
+                    {"semantic": "travel", "topics_any": ["ford"]},
+                    {"semantic": "follow", "topics_any": ["handler", "black ford"]},
+                    {"semantic": "travel", "topics_any": ["pressure point"]},
+                ],
+                suggested_actions=[
+                    _a(
+                        "travel_to_black_ford",
+                        "I travel to Black Ford before the Sable Chain handler's people can seize the crossing.",
+                        "travel",
+                        target_type="location",
+                        target_id="location:black_ford",
+                        priority=88,
+                    ),
+                ],
+                effects=[
+                    {"set_location": "location:black_ford", "name": "Black Ford"},
+                    {"unlock_objective": "objective:reach_black_ford", "summary": "Reach Black Ford."},
+                    {"complete_objective": "objective:reach_black_ford"},
+                    {"unlock_fact": "fact:black_ford_reached", "text": "Black Ford is reached before the Sable Chain can fully seize the crossing."},
+                    {"unlock_lead": "lead:confront_route_pressure_agents", "text": "Confront the route pressure agents at Black Ford."},
+                ],
+            ),
+            ProgressionNode(
+                node_id="confront_route_pressure_agents",
+                title="Confront the route pressure agents.",
+                requires=[{"lead": "lead:confront_route_pressure_agents"}],
+                action_patterns=[
+                    {"semantic": "confront", "topics_any": ["route pressure agents"]},
+                    {"semantic": "intercept", "topics_any": ["agents", "black ford"]},
+                    {"semantic": "tell", "topics_any": ["stand down", "agents"]},
+                    {"semantic": "protect", "topics_any": ["ford", "teamsters"]},
+                ],
+                suggested_actions=[
+                    _a(
+                        "confront_route_pressure_agents",
+                        "I confront the Sable Chain route pressure agents at Black Ford and order them to stand down.",
+                        "confront",
+                        target_type="npc",
+                        target_id="npc:route_pressure_agents",
+                        priority=87,
+                    ),
+                ],
+                effects=[
+                    {"unlock_npc": "npc:route_pressure_agents", "name": "Route Pressure Agents"},
+                    {"unlock_fact": "fact:route_pressure_agents_stopped", "text": "The Sable Chain route pressure agents are stopped at Black Ford."},
+                    {"unlock_lead": "lead:secure_black_ford_crossing", "text": "Secure Black Ford for the teamsters."},
+                ],
+            ),
+            ProgressionNode(
+                node_id="secure_black_ford_crossing",
+                title="Secure Black Ford crossing.",
+                requires=[{"lead": "lead:secure_black_ford_crossing"}],
+                action_patterns=[
+                    {"semantic": "secure", "topics_any": ["black ford crossing"]},
+                    {"semantic": "protect", "topics_any": ["crossing", "teamsters"]},
+                    {"semantic": "guard", "topics_any": ["black ford"]},
+                    {"semantic": "prepare", "topics_any": ["safe crossing"]},
+                ],
+                suggested_actions=[
+                    _a(
+                        "secure_black_ford_crossing",
+                        "I secure the Black Ford crossing so the teamsters can keep the east road open.",
+                        "secure",
+                        target_type="location",
+                        target_id="location:black_ford",
+                        priority=86,
+                    ),
+                ],
+                effects=[
+                    {"unlock_objective": "objective:secure_black_ford_crossing", "summary": "Secure Black Ford crossing."},
+                    {"complete_objective": "objective:secure_black_ford_crossing"},
+                    {"unlock_fact": "fact:black_ford_crossing_secured", "text": "Black Ford is secured for the teamsters and the east road remains open."},
+                    {"unlock_lead": "lead:identify_handler_signature", "text": "Identify the handler's signature from the captured route papers."},
+                ],
+            ),
+            ProgressionNode(
+                node_id="identify_handler_signature",
+                title="Identify the handler's signature.",
+                requires=[{"lead": "lead:identify_handler_signature"}],
+                action_patterns=[
+                    {"semantic": "inspect", "topics_any": ["handler signature"]},
+                    {"semantic": "read", "topics_any": ["route papers"]},
+                    {"semantic": "decipher", "topics_any": ["signature"]},
+                    {"semantic": "study", "topics_any": ["captured route papers"]},
+                ],
+                suggested_actions=[
+                    _a(
+                        "identify_handler_signature",
+                        "I study the captured route papers to identify the Sable Chain handler's signature.",
+                        "inspect",
+                        target_type="item",
+                        target_id="item:captured_route_papers",
+                        priority=85,
+                    ),
+                ],
+                effects=[
+                    {"unlock_fact": "fact:handler_signature_is_veska", "text": "The route papers identify the higher Sable Chain handler as Veska."},
+                    {"unlock_npc": "npc:handler_veska", "name": "Handler Veska"},
+                    {"unlock_lead": "lead:return_with_veska_name", "text": "Return with Handler Veska's name."},
+                ],
+            ),
+            ProgressionNode(
+                node_id="return_with_veska_name",
+                title="Return with Handler Veska's name.",
+                requires=[{"lead": "lead:return_with_veska_name"}],
+                action_patterns=[
+                    {"semantic": "report", "target_id": "npc:bran", "topics_any": ["veska"]},
+                    {"semantic": "tell", "target_id": "npc:garran", "topics_any": ["handler veska"]},
+                    {"semantic": "travel", "topics_any": ["return", "veska"]},
+                    {"semantic": "report", "topics_any": ["sable chain handler"]},
+                ],
+                suggested_actions=[
+                    _a(
+                        "return_with_veska_name",
+                        "I return to Bran and Garran with the name of the Sable Chain handler: Veska.",
+                        "report",
+                        target_type="npc",
+                        target_id="npc:bran",
+                        priority=84,
+                    ),
+                ],
+                effects=[
+                    {"set_location": "location:rusty_flagon_tavern", "name": "The Rusty Flagon Tavern"},
+                    {"complete_quest": "quest:sable_chain_handler_route_pressure"},
+                    {"unlock_fact": "fact:allies_know_handler_veska", "text": "Bran and Garran now know Handler Veska is directing Sable Chain pressure against the region."},
+                    {"unlock_lead": "lead:handler_veska_next_arc", "text": "Plan how to pursue Handler Veska."},
+                ],
+            ),
+        ],
+    )
+    graph.title = "Sable Chain Handler → Route Pressure"
+    graph.starts_after_graph_ids = ["graph:tavern_story_seed:sable_chain_countermove"]
+    graph.starts_after_quest_ids = ["quest:sable_chain_countermove"]
+    graph.priority = 40
+    return graph
+
+
+def _build_handler_veska_leadership_pursuit_graph() -> ScenarioProgressionGraph:
+    graph = ScenarioProgressionGraph(
+        graph_id="graph:tavern_story_seed:handler_veska_leadership_pursuit",
+        scenario_seed="tavern_story_seed",
+        nodes=[
+            ProgressionNode(
+                node_id="plan_pursuit_of_handler_veska",
+                title="Plan the pursuit of Handler Veska.",
+                requires=[{"lead": "lead:handler_veska_next_arc"}],
+                action_patterns=[
+                    {"semantic": "plan", "topics_any": ["handler veska"]},
+                    {"semantic": "prepare", "topics_any": ["veska", "pursuit"]},
+                    {"semantic": "tell", "target_id": "npc:bran", "topics_any": ["veska", "plan"]},
+                    {"semantic": "tell", "target_id": "npc:garran", "topics_any": ["handler veska"]},
+                ],
+                suggested_actions=[
+                    _a(
+                        "plan_pursuit_of_handler_veska",
+                        "I meet with Bran and Garran to plan how to pursue Handler Veska before the Sable Chain relocates.",
+                        "plan",
+                        target_type="npc",
+                        target_id="npc:bran",
+                        priority=95,
+                    ),
+                ],
+                effects=[
+                    {"start_quest": "quest:handler_veska_leadership_pursuit", "title": "Handler Veska Pursuit"},
+                    {"unlock_objective": "objective:plan_pursuit_of_veska", "summary": "Plan how to pursue Handler Veska."},
+                    {"complete_objective": "objective:plan_pursuit_of_veska"},
+                    {"unlock_fact": "fact:veska_pursuit_planned", "text": "Bran and Garran agree that Veska must be found before the Sable Chain relocates."},
+                    {"unlock_lead": "lead:trace_veska_courier_route", "text": "Trace Veska's courier route."},
+                ],
+            ),
+            ProgressionNode(
+                node_id="trace_veska_courier_route",
+                title="Trace Veska's courier route.",
+                requires=[{"lead": "lead:trace_veska_courier_route"}],
+                action_patterns=[
+                    {"semantic": "trace", "topics_any": ["veska courier route"]},
+                    {"semantic": "track", "topics_any": ["courier", "veska"]},
+                    {"semantic": "inspect", "topics_any": ["courier marks"]},
+                    {"semantic": "study", "topics_any": ["route papers", "courier"]},
+                ],
+                suggested_actions=[
+                    _a(
+                        "trace_veska_courier_route",
+                        "I trace Veska's courier route from the captured route papers and sealed orders.",
+                        "trace",
+                        target_type="item",
+                        target_id="item:captured_route_papers",
+                        priority=94,
+                    ),
+                ],
+                effects=[
+                    {"unlock_objective": "objective:trace_veska_courier_route", "summary": "Trace Veska's courier route."},
+                    {"complete_objective": "objective:trace_veska_courier_route"},
+                    {"unlock_fact": "fact:veska_courier_route_traced", "text": "The courier route points toward the old north watchpost."},
+                    {"unlock_location": "location:old_north_watchpost", "name": "Old North Watchpost"},
+                    {"unlock_lead": "lead:travel_to_old_north_watchpost", "text": "Travel to the old north watchpost."},
+                ],
+            ),
+            ProgressionNode(
+                node_id="travel_to_old_north_watchpost",
+                title="Travel to the old north watchpost.",
+                requires=[{"lead": "lead:travel_to_old_north_watchpost"}],
+                action_patterns=[
+                    {"semantic": "travel", "target_id": "location:old_north_watchpost", "topics_any": ["old north watchpost"]},
+                    {"semantic": "travel", "topics_any": ["north watchpost"]},
+                    {"semantic": "follow", "topics_any": ["courier route", "watchpost"]},
+                    {"semantic": "travel", "topics_any": ["veska trail"]},
+                ],
+                suggested_actions=[
+                    _a(
+                        "travel_to_old_north_watchpost",
+                        "I travel to the old north watchpost to follow Veska's courier trail.",
+                        "travel",
+                        target_type="location",
+                        target_id="location:old_north_watchpost",
+                        priority=93,
+                    ),
+                ],
+                effects=[
+                    {"set_location": "location:old_north_watchpost", "name": "Old North Watchpost"},
+                    {"unlock_objective": "objective:reach_old_north_watchpost", "summary": "Reach the old north watchpost."},
+                    {"complete_objective": "objective:reach_old_north_watchpost"},
+                    {"unlock_fact": "fact:old_north_watchpost_reached", "text": "The old north watchpost is reached along Veska's courier route."},
+                    {"unlock_lead": "lead:inspect_watchpost_courier_signs", "text": "Inspect the watchpost for courier signs."},
+                ],
+            ),
+            ProgressionNode(
+                node_id="inspect_watchpost_courier_signs",
+                title="Inspect courier signs at the watchpost.",
+                requires=[{"lead": "lead:inspect_watchpost_courier_signs"}],
+                action_patterns=[
+                    {"semantic": "inspect", "topics_any": ["courier signs", "watchpost"]},
+                    {"semantic": "search", "topics_any": ["watchpost", "courier"]},
+                    {"semantic": "scout", "topics_any": ["watchpost", "veska"]},
+                    {"semantic": "study", "topics_any": ["sable chain signs"]},
+                ],
+                suggested_actions=[
+                    _a(
+                        "inspect_watchpost_courier_signs",
+                        "I inspect the old north watchpost for courier signs, Sable Chain marks, and Veska's trail.",
+                        "inspect",
+                        target_type="location",
+                        target_id="location:old_north_watchpost",
+                        priority=92,
+                    ),
+                ],
+                effects=[
+                    {"unlock_objective": "objective:inspect_watchpost_courier_signs", "summary": "Inspect the watchpost for courier signs."},
+                    {"complete_objective": "objective:inspect_watchpost_courier_signs"},
+                    {"unlock_fact": "fact:watchpost_has_fresh_courier_marks", "text": "Fresh courier marks at the watchpost show Veska's messages are still moving."},
+                    {"unlock_lead": "lead:intercept_veska_courier", "text": "Intercept Veska's courier."},
+                ],
+            ),
+            ProgressionNode(
+                node_id="intercept_veska_courier",
+                title="Intercept Veska's courier.",
+                requires=[{"lead": "lead:intercept_veska_courier"}],
+                action_patterns=[
+                    {"semantic": "intercept", "topics_any": ["courier"]},
+                    {"semantic": "confront", "topics_any": ["courier", "veska"]},
+                    {"semantic": "stop", "topics_any": ["sable chain courier"]},
+                    {"semantic": "track", "topics_any": ["courier"]},
+                ],
+                suggested_actions=[
+                    _a(
+                        "intercept_veska_courier",
+                        "I intercept Veska's courier before the message can leave the old north watchpost.",
+                        "intercept",
+                        target_type="npc",
+                        target_id="npc:veska_courier",
+                        priority=91,
+                    ),
+                ],
+                effects=[
+                    {"unlock_npc": "npc:veska_courier", "name": "Veska's Courier"},
+                    {"unlock_fact": "fact:veska_courier_intercepted", "text": "Veska's courier is intercepted before the message leaves the watchpost."},
+                    {"unlock_lead": "lead:recover_veska_coded_message", "text": "Recover Veska's coded message from the courier."},
+                ],
+            ),
+            ProgressionNode(
+                node_id="recover_veska_coded_message",
+                title="Recover Veska's coded message.",
+                requires=[{"lead": "lead:recover_veska_coded_message"}],
+                action_patterns=[
+                    {"semantic": "recover", "topics_any": ["coded message"]},
+                    {"semantic": "take", "topics_any": ["veska message"]},
+                    {"semantic": "search", "topics_any": ["courier", "message"]},
+                    {"semantic": "inspect", "topics_any": ["coded message", "veska"]},
+                ],
+                suggested_actions=[
+                    _a(
+                        "recover_veska_coded_message",
+                        "I recover Veska's coded message from the intercepted courier.",
+                        "recover",
+                        target_type="item",
+                        target_id="item:veska_coded_message",
+                        priority=90,
+                    ),
+                ],
+                effects=[
+                    {"unlock_fact": "fact:veska_coded_message_recovered", "text": "Veska's coded message is recovered from the intercepted courier."},
+                    {"unlock_lead": "lead:decode_veska_coded_message", "text": "Decode Veska's coded message."},
+                ],
+            ),
+            ProgressionNode(
+                node_id="decode_veska_coded_message",
+                title="Decode Veska's coded message.",
+                requires=[{"lead": "lead:decode_veska_coded_message"}],
+                action_patterns=[
+                    {"semantic": "decipher", "topics_any": ["coded message"]},
+                    {"semantic": "read", "topics_any": ["coded message", "veska"]},
+                    {"semantic": "study", "topics_any": ["message", "cipher"]},
+                    {"semantic": "inspect", "topics_any": ["veska message"]},
+                ],
+                suggested_actions=[
+                    _a(
+                        "decode_veska_coded_message",
+                        "I decode Veska's coded message to learn where the Sable Chain leadership is moving.",
+                        "decipher",
+                        target_type="item",
+                        target_id="item:veska_coded_message",
+                        priority=89,
+                    ),
+                ],
+                effects=[
+                    {"unlock_objective": "objective:decode_veska_message", "summary": "Decode Veska's coded message."},
+                    {"complete_objective": "objective:decode_veska_message"},
+                    {"unlock_fact": "fact:veska_message_points_to_ridge_hideout", "text": "The coded message points to a ridge hideout used by Veska's leadership cell."},
+                    {"unlock_location": "location:ridge_hideout", "name": "Ridge Hideout"},
+                    {"unlock_lead": "lead:travel_to_ridge_hideout", "text": "Travel to the ridge hideout."},
+                ],
+            ),
+            ProgressionNode(
+                node_id="travel_to_ridge_hideout",
+                title="Travel to the ridge hideout.",
+                requires=[{"lead": "lead:travel_to_ridge_hideout"}],
+                action_patterns=[
+                    {"semantic": "travel", "target_id": "location:ridge_hideout", "topics_any": ["ridge hideout"]},
+                    {"semantic": "travel", "topics_any": ["hideout"]},
+                    {"semantic": "follow", "topics_any": ["veska", "hideout"]},
+                    {"semantic": "travel", "topics_any": ["leadership cell"]},
+                ],
+                suggested_actions=[
+                    _a(
+                        "travel_to_ridge_hideout",
+                        "I travel to the ridge hideout before Veska's leadership cell can relocate.",
+                        "travel",
+                        target_type="location",
+                        target_id="location:ridge_hideout",
+                        priority=88,
+                    ),
+                ],
+                effects=[
+                    {"set_location": "location:ridge_hideout", "name": "Ridge Hideout"},
+                    {"unlock_objective": "objective:reach_ridge_hideout", "summary": "Reach Veska's ridge hideout."},
+                    {"complete_objective": "objective:reach_ridge_hideout"},
+                    {"unlock_fact": "fact:ridge_hideout_reached", "text": "The ridge hideout is reached before Veska's leadership cell can fully relocate."},
+                    {"unlock_lead": "lead:scout_ridge_hideout", "text": "Scout the ridge hideout."},
+                ],
+            ),
+            ProgressionNode(
+                node_id="scout_ridge_hideout",
+                title="Scout the ridge hideout.",
+                requires=[{"lead": "lead:scout_ridge_hideout"}],
+                action_patterns=[
+                    {"semantic": "scout", "topics_any": ["ridge hideout"]},
+                    {"semantic": "inspect", "topics_any": ["hideout guards"]},
+                    {"semantic": "observe", "topics_any": ["veska", "hideout"]},
+                    {"semantic": "scan", "topics_any": ["ridge", "guards"]},
+                ],
+                suggested_actions=[
+                    _a(
+                        "scout_ridge_hideout",
+                        "I scout the ridge hideout for guards, exits, and signs of Handler Veska.",
+                        "scout",
+                        target_type="location",
+                        target_id="location:ridge_hideout",
+                        priority=87,
+                    ),
+                ],
+                effects=[
+                    {"unlock_objective": "objective:scout_ridge_hideout", "summary": "Scout Veska's ridge hideout."},
+                    {"complete_objective": "objective:scout_ridge_hideout"},
+                    {"unlock_fact": "fact:veska_seen_at_ridge_hideout", "text": "Veska is seen coordinating the Sable Chain leadership cell at the ridge hideout."},
+                    {"unlock_lead": "lead:confront_handler_veska", "text": "Confront Handler Veska."},
+                ],
+            ),
+            ProgressionNode(
+                node_id="confront_handler_veska",
+                title="Confront Handler Veska.",
+                requires=[{"lead": "lead:confront_handler_veska"}],
+                action_patterns=[
+                    {"semantic": "confront", "target_id": "npc:handler_veska", "topics_any": ["veska"]},
+                    {"semantic": "tell", "target_id": "npc:handler_veska", "topics_any": ["proof", "sable chain"]},
+                    {"semantic": "press", "topics_any": ["veska", "leadership"]},
+                    {"semantic": "intercept", "topics_any": ["veska", "hideout"]},
+                ],
+                suggested_actions=[
+                    _a(
+                        "confront_handler_veska",
+                        "I confront Handler Veska at the ridge hideout with the proof linking her to the Sable Chain route pressure.",
+                        "confront",
+                        target_type="npc",
+                        target_id="npc:handler_veska",
+                        priority=86,
+                    ),
+                ],
+                effects=[
+                    {"unlock_fact": "fact:veska_confronted_at_hideout", "text": "Handler Veska is confronted at the ridge hideout with evidence of her leadership role."},
+                    {"unlock_lead": "lead:secure_veska_ledgers", "text": "Secure Veska's leadership ledgers."},
+                ],
+            ),
+            ProgressionNode(
+                node_id="secure_veska_ledgers",
+                title="Secure Veska's leadership ledgers.",
+                requires=[{"lead": "lead:secure_veska_ledgers"}],
+                action_patterns=[
+                    {"semantic": "secure", "topics_any": ["ledgers"]},
+                    {"semantic": "recover", "topics_any": ["leadership ledgers"]},
+                    {"semantic": "take", "topics_any": ["sable chain ledgers"]},
+                    {"semantic": "inspect", "topics_any": ["veska documents"]},
+                ],
+                suggested_actions=[
+                    _a(
+                        "secure_veska_ledgers",
+                        "I secure Veska's leadership ledgers before the Sable Chain can destroy or move them.",
+                        "secure",
+                        target_type="item",
+                        target_id="item:veska_leadership_ledgers",
+                        priority=85,
+                    ),
+                ],
+                effects=[
+                    {"unlock_fact": "fact:veska_ledgers_secured", "text": "Veska's leadership ledgers are secured before they can be destroyed."},
+                    {"unlock_lead": "lead:return_with_veska_ledgers", "text": "Return to Bran and Garran with Veska's ledgers."},
+                ],
+            ),
+            ProgressionNode(
+                node_id="return_with_veska_ledgers",
+                title="Return with Veska's leadership ledgers.",
+                requires=[{"lead": "lead:return_with_veska_ledgers"}],
+                action_patterns=[
+                    {"semantic": "report", "target_id": "npc:bran", "topics_any": ["veska ledgers"]},
+                    {"semantic": "tell", "target_id": "npc:garran", "topics_any": ["veska", "leadership"]},
+                    {"semantic": "travel", "topics_any": ["return", "veska ledgers"]},
+                    {"semantic": "report", "topics_any": ["sable chain leadership"]},
+                ],
+                suggested_actions=[
+                    _a(
+                        "return_with_veska_ledgers",
+                        "I return to Bran and Garran with Veska's leadership ledgers and proof of the Sable Chain command structure.",
+                        "report",
+                        target_type="npc",
+                        target_id="npc:bran",
+                        priority=84,
+                    ),
+                ],
+                effects=[
+                    {"set_location": "location:rusty_flagon_tavern", "name": "The Rusty Flagon Tavern"},
+                    {"complete_quest": "quest:handler_veska_leadership_pursuit"},
+                    {"unlock_fact": "fact:allies_have_veska_ledgers", "text": "Bran and Garran now have Veska's ledgers and proof of the Sable Chain command structure."},
+                    {"unlock_lead": "lead:sable_chain_endgame_next_arc", "text": "Plan the final move against the Sable Chain command structure."},
+                ],
+            ),
+        ],
+    )
+    graph.title = "Handler Veska → Leadership Pursuit"
+    graph.starts_after_graph_ids = ["graph:tavern_story_seed:sable_chain_handler_route_pressure"]
+    graph.starts_after_quest_ids = ["quest:sable_chain_handler_route_pressure"]
+    graph.priority = 30
+    return graph
+
+
+def _build_sable_chain_endgame_opener_graph() -> ScenarioProgressionGraph:
+    graph = ScenarioProgressionGraph(
+        graph_id="graph:tavern_story_seed:sable_chain_endgame_opener",
+        scenario_seed="tavern_story_seed",
+        nodes=[
+            ProgressionNode(
+                node_id="review_veska_ledgers_for_command_structure",
+                title="Review Veska's ledgers for the Sable Chain command structure.",
+                requires=[{"lead": "lead:sable_chain_endgame_next_arc"}],
+                action_patterns=[
+                    {"semantic": "review", "topics_any": ["veska ledgers", "command structure"]},
+                    {"semantic": "read", "topics_any": ["veska ledgers"]},
+                    {"semantic": "study", "topics_any": ["sable chain command"]},
+                    {"semantic": "tell", "target_id": "npc:bran", "topics_any": ["ledgers", "command structure"]},
+                ],
+                suggested_actions=[
+                    _a(
+                        "review_veska_ledgers_for_command_structure",
+                        "I review Veska's ledgers with Bran and Garran to map the Sable Chain command structure.",
+                        "review",
+                        target_type="item",
+                        target_id="item:veska_leadership_ledgers",
+                        priority=95,
+                    ),
+                ],
+                effects=[
+                    {"start_quest": "quest:sable_chain_endgame_opener", "title": "Sable Chain Endgame Opener"},
+                    {"unlock_objective": "objective:review_veska_ledgers", "summary": "Review Veska's ledgers to map the Sable Chain command structure."},
+                    {"complete_objective": "objective:review_veska_ledgers"},
+                    {"unlock_fact": "fact:sable_chain_command_structure_mapped", "text": "Veska's ledgers reveal a command structure built around three courier captains and one hidden paymaster."},
+                    {"unlock_lead": "lead:identify_hidden_paymaster", "text": "Identify the hidden Sable Chain paymaster."},
+                ],
+            ),
+            ProgressionNode(
+                node_id="identify_hidden_paymaster",
+                title="Identify the hidden Sable Chain paymaster.",
+                requires=[{"lead": "lead:identify_hidden_paymaster"}],
+                action_patterns=[
+                    {"semantic": "inspect", "topics_any": ["hidden paymaster"]},
+                    {"semantic": "read", "topics_any": ["ledger", "paymaster"]},
+                    {"semantic": "decipher", "topics_any": ["paymaster cipher"]},
+                    {"semantic": "study", "topics_any": ["command structure", "paymaster"]},
+                ],
+                suggested_actions=[
+                    _a(
+                        "identify_hidden_paymaster",
+                        "I study the ledger entries to identify the hidden Sable Chain paymaster.",
+                        "inspect",
+                        target_type="item",
+                        target_id="item:veska_leadership_ledgers",
+                        priority=94,
+                    ),
+                ],
+                effects=[
+                    {"unlock_objective": "objective:identify_hidden_paymaster", "summary": "Identify the hidden paymaster behind the Sable Chain."},
+                    {"complete_objective": "objective:identify_hidden_paymaster"},
+                    {"unlock_fact": "fact:hidden_paymaster_is_red_lantern", "text": "The hidden paymaster uses the Red Lantern mark in Veska's ledgers."},
+                    {"unlock_lead": "lead:trace_red_lantern_payments", "text": "Trace the Red Lantern payment line."},
+                ],
+            ),
+            ProgressionNode(
+                node_id="trace_red_lantern_payments",
+                title="Trace the Red Lantern payment line.",
+                requires=[{"lead": "lead:trace_red_lantern_payments"}],
+                action_patterns=[
+                    {"semantic": "trace", "topics_any": ["red lantern payments"]},
+                    {"semantic": "track", "topics_any": ["payment line"]},
+                    {"semantic": "study", "topics_any": ["red lantern ledger"]},
+                    {"semantic": "inspect", "topics_any": ["payments", "red lantern"]},
+                ],
+                suggested_actions=[
+                    _a(
+                        "trace_red_lantern_payments",
+                        "I trace the Red Lantern payment line from Veska's ledgers to find where the Sable Chain money is moving.",
+                        "trace",
+                        target_type="item",
+                        target_id="item:veska_leadership_ledgers",
+                        priority=93,
+                    ),
+                ],
+                effects=[
+                    {"unlock_objective": "objective:trace_red_lantern_payments", "summary": "Trace the Red Lantern payment line."},
+                    {"complete_objective": "objective:trace_red_lantern_payments"},
+                    {"unlock_fact": "fact:red_lantern_payments_point_to_counting_house", "text": "The Red Lantern payment line points to the old counting house near the market ward."},
+                    {"unlock_location": "location:old_counting_house", "name": "Old Counting House"},
+                    {"unlock_lead": "lead:travel_to_old_counting_house", "text": "Travel to the old counting house."},
+                ],
+            ),
+            ProgressionNode(
+                node_id="travel_to_old_counting_house",
+                title="Travel to the old counting house.",
+                requires=[{"lead": "lead:travel_to_old_counting_house"}],
+                action_patterns=[
+                    {"semantic": "travel", "target_id": "location:old_counting_house", "topics_any": ["old counting house"]},
+                    {"semantic": "travel", "topics_any": ["counting house"]},
+                    {"semantic": "follow", "topics_any": ["red lantern", "counting house"]},
+                    {"semantic": "travel", "topics_any": ["market ward"]},
+                ],
+                suggested_actions=[
+                    _a(
+                        "travel_to_old_counting_house",
+                        "I travel to the old counting house near the market ward to follow the Red Lantern payment trail.",
+                        "travel",
+                        target_type="location",
+                        target_id="location:old_counting_house",
+                        priority=92,
+                    ),
+                ],
+                effects=[
+                    {"set_location": "location:old_counting_house", "name": "Old Counting House"},
+                    {"unlock_objective": "objective:reach_old_counting_house", "summary": "Reach the old counting house."},
+                    {"complete_objective": "objective:reach_old_counting_house"},
+                    {"unlock_fact": "fact:old_counting_house_reached", "text": "The old counting house is reached before the Sable Chain can clear the payment trail."},
+                    {"unlock_lead": "lead:inspect_counting_house_records", "text": "Inspect the counting house records."},
+                ],
+            ),
+            ProgressionNode(
+                node_id="inspect_counting_house_records",
+                title="Inspect the counting house records.",
+                requires=[{"lead": "lead:inspect_counting_house_records"}],
+                action_patterns=[
+                    {"semantic": "inspect", "topics_any": ["counting house records"]},
+                    {"semantic": "search", "topics_any": ["records", "payment trail"]},
+                    {"semantic": "read", "topics_any": ["ledger", "counting house"]},
+                    {"semantic": "study", "topics_any": ["red lantern records"]},
+                ],
+                suggested_actions=[
+                    _a(
+                        "inspect_counting_house_records",
+                        "I inspect the counting house records for Red Lantern payments and Sable Chain accounts.",
+                        "inspect",
+                        target_type="location",
+                        target_id="location:old_counting_house",
+                        priority=91,
+                    ),
+                ],
+                effects=[
+                    {"unlock_objective": "objective:inspect_counting_house_records", "summary": "Inspect the counting house records."},
+                    {"complete_objective": "objective:inspect_counting_house_records"},
+                    {"unlock_fact": "fact:counting_house_records_found", "text": "The counting house records confirm the Red Lantern mark is tied to a Sable Chain paymaster."},
+                    {"unlock_lead": "lead:secure_red_lantern_records", "text": "Secure the Red Lantern records before they vanish."},
+                ],
+            ),
+            ProgressionNode(
+                node_id="secure_red_lantern_records",
+                title="Secure the Red Lantern records.",
+                requires=[{"lead": "lead:secure_red_lantern_records"}],
+                action_patterns=[
+                    {"semantic": "secure", "topics_any": ["red lantern records"]},
+                    {"semantic": "recover", "topics_any": ["counting house records"]},
+                    {"semantic": "take", "topics_any": ["payment records"]},
+                    {"semantic": "protect", "topics_any": ["records", "evidence"]},
+                ],
+                suggested_actions=[
+                    _a(
+                        "secure_red_lantern_records",
+                        "I secure the Red Lantern payment records before the Sable Chain can destroy them.",
+                        "secure",
+                        target_type="item",
+                        target_id="item:red_lantern_records",
+                        priority=90,
+                    ),
+                ],
+                effects=[
+                    {"unlock_fact": "fact:red_lantern_records_secured", "text": "The Red Lantern payment records are secured as evidence against the Sable Chain paymaster."},
+                    {"unlock_lead": "lead:return_with_red_lantern_records", "text": "Return to Bran and Garran with the Red Lantern records."},
+                ],
+            ),
+            ProgressionNode(
+                node_id="return_with_red_lantern_records",
+                title="Return with the Red Lantern records.",
+                requires=[{"lead": "lead:return_with_red_lantern_records"}],
+                action_patterns=[
+                    {"semantic": "report", "target_id": "npc:bran", "topics_any": ["red lantern records"]},
+                    {"semantic": "tell", "target_id": "npc:garran", "topics_any": ["paymaster", "records"]},
+                    {"semantic": "travel", "topics_any": ["return", "red lantern"]},
+                    {"semantic": "report", "topics_any": ["sable chain paymaster"]},
+                ],
+                suggested_actions=[
+                    _a(
+                        "return_with_red_lantern_records",
+                        "I return to Bran and Garran with the Red Lantern records proving the Sable Chain paymaster's role.",
+                        "report",
+                        target_type="npc",
+                        target_id="npc:bran",
+                        priority=89,
+                    ),
+                ],
+                effects=[
+                    {"set_location": "location:rusty_flagon_tavern", "name": "The Rusty Flagon Tavern"},
+                    {"unlock_fact": "fact:allies_have_red_lantern_records", "text": "Bran and Garran now have the Red Lantern records proving the Sable Chain paymaster's role."},
+                    {"complete_quest": "quest:sable_chain_endgame_opener"},
+                    {"unlock_lead": "lead:red_lantern_paymaster_next_arc", "text": "Plan the move against the Red Lantern paymaster."},
+                ],
+            ),
+        ],
+    )
+    graph.title = "Sable Chain Endgame → Red Lantern Paymaster"
+    graph.starts_after_graph_ids = ["graph:tavern_story_seed:handler_veska_leadership_pursuit"]
+    graph.starts_after_quest_ids = ["quest:handler_veska_leadership_pursuit"]
+    graph.priority = 20
+    return graph
+
+
 _GRAPHS: Dict[str, List[ScenarioProgressionGraph]] = {
-    "tavern_story_seed": [_rusty_flagon_graph(), _build_tavern_aftermath_graph(), _build_north_road_shrine_graph(), _build_captain_voss_consequence_graph(), _build_voss_backers_investigation_graph(), _build_sable_chain_countermove_graph()],
+    "tavern_story_seed": [_rusty_flagon_graph(), _build_tavern_aftermath_graph(), _build_north_road_shrine_graph(), _build_captain_voss_consequence_graph(), _build_voss_backers_investigation_graph(), _build_sable_chain_countermove_graph(), _build_sable_chain_handler_route_pressure_graph(), _build_handler_veska_leadership_pursuit_graph(), _build_sable_chain_endgame_opener_graph()],
     "caravan_ambush_seed": [_caravan_ambush_graph()],
 }
 

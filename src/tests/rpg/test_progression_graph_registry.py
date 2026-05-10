@@ -151,3 +151,79 @@ def test_sixth_tavern_graph_contains_sable_chain_countermove_nodes():
         "capture_sable_chain_orders",
         "report_sable_chain_countermove",
     ]
+
+
+def test_seventh_tavern_graph_contains_sable_chain_handler_route_pressure_nodes():
+    from app.rpg.progression.graph_registry import get_progression_graph_by_id
+
+    graph = get_progression_graph_by_id(
+        "tavern_story_seed",
+        "graph:tavern_story_seed:sable_chain_handler_route_pressure",
+    )
+    assert graph is not None
+
+    node_ids = [node.node_id for node in graph.nodes]
+
+    assert node_ids == [
+        "review_handler_orders",
+        "decode_handler_route_cipher",
+        "warn_east_road_teamsters",
+        "scout_east_road_pressure_points",
+        "disable_false_toll_markers",
+        "find_handler_dead_drop",
+        "read_route_pressure_instructions",
+        "travel_to_black_ford",
+        "confront_route_pressure_agents",
+        "secure_black_ford_crossing",
+        "identify_handler_signature",
+        "return_with_veska_name",
+    ]
+
+
+def test_eighth_tavern_graph_contains_handler_veska_leadership_pursuit_nodes():
+    from app.rpg.progression.graph_registry import get_progression_graph_by_id
+
+    graph = get_progression_graph_by_id(
+        "tavern_story_seed",
+        "graph:tavern_story_seed:handler_veska_leadership_pursuit",
+    )
+    assert graph is not None
+
+    node_ids = [node.node_id for node in graph.nodes]
+
+    assert node_ids == [
+        "plan_pursuit_of_handler_veska",
+        "trace_veska_courier_route",
+        "travel_to_old_north_watchpost",
+        "inspect_watchpost_courier_signs",
+        "intercept_veska_courier",
+        "recover_veska_coded_message",
+        "decode_veska_coded_message",
+        "travel_to_ridge_hideout",
+        "scout_ridge_hideout",
+        "confront_handler_veska",
+        "secure_veska_ledgers",
+        "return_with_veska_ledgers",
+    ]
+
+
+def test_ninth_tavern_graph_contains_sable_chain_endgame_opener_nodes():
+    from app.rpg.progression.graph_registry import get_progression_graph_by_id
+
+    graph = get_progression_graph_by_id(
+        "tavern_story_seed",
+        "graph:tavern_story_seed:sable_chain_endgame_opener",
+    )
+    assert graph is not None
+
+    node_ids = [node.node_id for node in graph.nodes]
+
+    assert node_ids == [
+        "review_veska_ledgers_for_command_structure",
+        "identify_hidden_paymaster",
+        "trace_red_lantern_payments",
+        "travel_to_old_counting_house",
+        "inspect_counting_house_records",
+        "secure_red_lantern_records",
+        "return_with_red_lantern_records",
+    ]

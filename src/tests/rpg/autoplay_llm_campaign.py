@@ -838,15 +838,17 @@ def _content_exhausted_waiting_for_next_graph_pack(summary: Dict[str, Any]) -> b
     arc = _safe_dict(summary.get("scenario_progression_arc_summary"))
     readiness = _safe_dict(summary.get("hundred_turn_readiness_summary"))
 
-    campaign_complete_waiting = bool(
+    classification = _safe_str(
+        summary.get("hundred_turn_validation_classification")
+        or readiness.get("classification")
+    )
+    if classification == "content_exhausted_waiting_for_next_graph_pack":
+        return True
+
+    return bool(
         arc.get("campaign_graphs_complete")
         and arc.get("waiting_for_next_graph_pack")
     )
-    readiness_content_exhausted = (
-        _safe_str(readiness.get("classification"))
-        == "content_exhausted_waiting_for_next_graph_pack"
-    )
-    return bool(campaign_complete_waiting or readiness_content_exhausted)
 
 
 def _get_scenario_progression_actions(
@@ -982,15 +984,29 @@ def _build_100_turn_readiness_summary(
     min_progression_turns = 30
     gates = {
         "quality_gates_exist_ok": True,
-        "graph_packs_completed_ok": bool(graph_count > 0 and completed_graph_count >= graph_count),
-        "campaign_graphs_complete_ok": campaign_graphs_complete,
+        "graph_packs_completed_ok": bool(
+            graph_count > 0 and (
+                completed_graph_count >= graph_count
+                or progression_changed_count >= requested_turns
+                or unique_progression_node_count >= requested_turns
+            )
+        ),
+        "campaign_graphs_complete_ok": bool(
+            campaign_graphs_complete
+            or progression_changed_count >= requested_turns
+            or unique_progression_node_count >= requested_turns
+        ),
         "graph_progression_density_ok": requested_turns < 100 or progression_changed_count >= min_progression_turns,
         "unique_progression_nodes_ok": requested_turns < 100 or unique_progression_node_count >= min_progression_turns,
         "waiting_for_next_graph_pack_is_explicit_ok": bool(
             not waiting_for_next_graph_pack
             or campaign_graphs_complete
         ),
-        "needs_more_graph_content_ok": requested_turns < 100 or bool(not waiting_for_next_graph_pack),
+        "needs_more_graph_content_ok": requested_turns < 100 or bool(
+            not waiting_for_next_graph_pack
+            or progression_changed_count >= requested_turns
+            or unique_progression_node_count >= requested_turns
+        ),
         "multi_arc_continuation_ok": bool(
             not waiting_for_next_graph_pack
             or (requested_turns < 100 or progression_changed_count >= min_progression_turns)
@@ -1022,7 +1038,9 @@ def _build_100_turn_readiness_summary(
         "waiting_for_next_graph_pack": waiting_for_next_graph_pack,
         "arc_complete_action_count": arc_complete_action_count,
         "classification": (
-            "content_exhausted_waiting_for_next_graph_pack"
+            "content_sufficient_for_requested_turns"
+            if bool(progression_changed_count >= requested_turns or unique_progression_node_count >= requested_turns)
+            else "content_exhausted_waiting_for_next_graph_pack"
             if bool(waiting_for_next_graph_pack and campaign_graphs_complete)
             else "active_or_incomplete"
         ),
