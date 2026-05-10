@@ -70,3 +70,30 @@ def test_third_tavern_graph_contains_north_road_shrine_nodes():
         "confront_black_briar_contact",
         "return_to_allies_with_voss_proof",
     ]
+
+
+def test_fourth_tavern_graph_contains_captain_voss_nodes():
+    from app.rpg.progression.graph_registry import get_progression_graph_by_id
+
+    graph = get_progression_graph_by_id(
+        "tavern_story_seed",
+        "graph:tavern_story_seed:captain_voss_consequence",
+    )
+    assert graph is not None
+
+    node_ids = [node.node_id for node in graph.nodes]
+
+    assert node_ids == [
+        "plan_against_captain_voss",
+        "identify_voss_allies",
+        "seek_magistrate_hearing",
+        "present_manifest_to_magistrate",
+        "secure_public_witnesses",
+        "counter_voss_intimidation",
+        "attend_public_hearing",
+        "answer_voss_accusation",
+        "force_voss_response",
+        "choose_voss_outcome",
+        "stabilize_town_after_voss",
+        "close_voss_consequence_arc",
+    ]

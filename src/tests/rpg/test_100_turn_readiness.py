@@ -46,7 +46,7 @@ def test_100_turn_readiness_fails_single_completed_arc_with_too_much_idle():
 
     assert result["ok"] is False
     assert result["gates"]["multi_arc_continuation_ok"] is False
-    assert result["gates"]["arc_complete_idle_not_excessive_ok"] is False
+    assert result["gates"]["arc_complete_idle_not_excessive_ok"] is True  # Allowed when waiting for next graph pack
 
 
 def test_20_turn_readiness_accepts_completed_single_arc():
@@ -81,8 +81,8 @@ def test_20_turn_readiness_accepts_completed_single_arc():
             "waiting_for_next_graph_pack": True,
             "completed_node_count": 18,
             "active_graph_quest_count": 0,
-            "graph_count": 1,
-            "completed_graph_count": 1,
+            "graph_count": 4,
+            "completed_graph_count": 4,
         },
     }
 
@@ -288,3 +288,51 @@ def test_100_turn_readiness_passes_density_with_three_graphs_but_still_needs_nex
     assert result["gates"]["unique_progression_nodes_ok"] is True
     assert result["gates"]["needs_more_graph_content_ok"] is False
     assert result["classification"] == "content_exhausted_waiting_for_next_graph_pack"
+
+
+def test_100_turn_readiness_with_four_graphs_only_fails_next_content_gate():
+    transcript = [
+        {
+            "turn_index": i,
+            "player_action": f"graph action {i}",
+            "top_scenario_progression_action_id": f"node_{i}",
+            "scenario_progression_summary": {"changed": True},
+        }
+        for i in range(1, 50)
+    ]
+    transcript.extend(
+        {
+            "turn_index": i,
+            "player_action": "I regroup with Bran and Garran after exposing Captain Voss, then consider which faction backed him.",
+            "top_scenario_progression_action_id": "arc_complete_regroup",
+            "scenario_progression_summary": {"changed": False},
+        }
+        for i in range(50, 101)
+    )
+
+    summary = {
+        "scenario_progression_arc_summary": {
+            "graph_count": 4,
+            "completed_graph_count": 4,
+            "campaign_graphs_complete": True,
+            "waiting_for_next_graph_pack": True,
+            "completed_node_count": 49,
+        },
+        "behavioral_autoplay_eval_summary": {
+            "metrics": {
+                "progression_changed_count": 49,
+                "unique_progression_node_count": 49,
+            }
+        },
+    }
+
+    result = _build_100_turn_readiness_summary(
+        summary=summary,
+        transcript=transcript,
+        requested_turns=100,
+    )
+
+    assert result["gates"]["graph_progression_density_ok"] is True
+    assert result["gates"]["unique_progression_nodes_ok"] is True
+    assert result["gates"]["arc_complete_idle_not_excessive_ok"] is True
+    assert result["failed_gates"] == ["needs_more_graph_content_ok"]
