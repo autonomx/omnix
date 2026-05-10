@@ -57,7 +57,9 @@ def test_graph_action_override_replaces_stale_road_action():
 
 
 def test_recent_same_graph_action_without_progress_detects_stall():
-    from tests.rpg.autoplay_llm_campaign import _recent_same_graph_action_without_progress
+    from tests.rpg.autoplay_llm_campaign import (
+        _recent_same_graph_action_without_progress,
+    )
 
     transcript = [
         {

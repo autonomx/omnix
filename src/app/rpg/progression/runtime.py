@@ -54,7 +54,7 @@ def _semantic_aliases(semantic: str) -> List[str]:
         "eavesdrop": ["eavesdrop", "listen", "observe"],
         "follow": ["follow", "shadow", "trail", "track", "travel"],
         "shadow": ["shadow", "follow", "trail", "track"],
-        "take": ["take", "recover", "grab", "collect", "inspect", "search"],
+        "take": ["take", "recover", "grab", "collect", "inspect", "search", "capture"],
         "recover": ["recover", "take", "collect", "grab", "search"],
         "confront": ["confront", "challenge", "tell", "ask", "threaten"],
         "threaten": ["threaten", "confront", "warn", "tell"],
@@ -68,6 +68,10 @@ def _semantic_aliases(semantic: str) -> List[str]:
         "trace": ["trace", "track", "follow", "inspect", "study"],
         "question": ["question", "ask", "interrogate"],
         "decipher": ["decipher", "read", "study", "inspect"],
+        "secure": ["secure", "protect", "guard", "prepare"],
+        "intercept": ["intercept", "confront", "stop", "block", "protect"],
+        "guard": ["guard", "protect", "watch", "secure"],
+        "track": ["track", "follow", "trace", "shadow", "scout"],
     }.get(semantic, [semantic])
 
 
@@ -223,6 +227,15 @@ def _ensure_objective(
             "objective:inspect_cooperage_cellar",
         }:
             quest_id = "quest:voss_backers_investigation"
+        elif objective_id in {
+            "objective:plan_against_sable_chain",
+            "objective:secure_sable_chain_evidence",
+            "objective:detect_safehouse_watchers",
+            "objective:reach_river_gate_warehouses",
+            "objective:inspect_warehouse_marks",
+            "objective:prepare_safehouse_defense",
+        }:
+            quest_id = "quest:sable_chain_countermove"
     quest_id = quest_id or _infer_active_quest_id(state) or "quest:scenario_progression"
     quest = _ensure_quest(
         state,
@@ -723,7 +736,10 @@ def _arc_complete_idle_actions(state: Dict[str, Any], *, scenario_seed: str) -> 
     if not arc.get("campaign_graphs_complete") and not arc.get("waiting_for_next_graph_pack"):
         return []
     facts = _safe_dict(state.get("progression_facts"))
-    if "fact:allies_have_sable_chain_proof" in facts:
+    if "fact:sable_chain_countermove_thwarted" in facts:
+        regroup = "I regroup with Bran and Garran after thwarting the Sable Chain countermove, then prepare to pursue the higher handler named in the sealed orders."
+        next_lead = "I ask Bran and Garran how we should pursue the higher Sable Chain handler before the faction can disappear."
+    elif "fact:allies_have_sable_chain_proof" in facts:
         regroup = "I regroup with Bran and Garran after exposing the Sable Chain connection, then plan how to move against the faction behind Captain Voss."
         next_lead = "I ask Bran and Garran how we should move against the Sable Chain now that we have proof of their role."
     elif "fact:voss_arc_closed" in facts:

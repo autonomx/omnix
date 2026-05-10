@@ -290,7 +290,10 @@ def test_progression_reaches_wagon_yard_and_warns_garran():
 
 
 def test_report_findings_starts_warn_wagon_quest_and_objectives():
-    from app.rpg.progression.runtime import apply_progression_for_action, get_active_progression_actions
+    from app.rpg.progression.runtime import (
+        apply_progression_for_action,
+        get_active_progression_actions,
+    )
 
     state = {}
     actions = [
@@ -403,6 +406,104 @@ def test_prepare_quarry_road_seeds_next_arc_objectives_and_actions():
     assert "leave_by_quarry_road" in action_ids
 
 
+def test_six_graph_campaign_progresses_through_sable_chain_countermove():
+    from app.rpg.progression.runtime import build_scenario_progression_arc_summary
+
+    state = {}
+    actions = [
+        # Graph 1
+        "I ask Bran for a room, but I also ask why the tavern feels so tense tonight.",
+        "I ask Bran who left through the side door and why they were afraid.",
+        "I ask Bran what direction the cloaked traveler went after leaving.",
+        "I turn to Mira and ask what she saw near the side door.",
+        "I inspect the side door, latch, and threshold for blood, tracks, or torn cloth.",
+        "I ask Bran if the old east road leads to a bridge.",
+        "I approach the local patron and quietly ask what he knows about the mill bridge.",
+        "I report to Bran that the traveler's trail, the blood, and the bridge story point to an ambush.",
+        "I ask Bran who is most likely to travel the road before dawn.",
+        "I leave the tavern and travel toward Garran's wagon yard.",
+        "I tell Garran the mill bridge may be an ambush and show him the evidence.",
+        "I ask Garran if there is another route around the bridge.",
+        "I help Garran prepare the wagon for the safer route and get ready to leave.",
+        "I leave Garran's wagon yard with the wagon and take the quarry road.",
+        "I scout ahead on the quarry road for tracks, hiding places, and ambush signs.",
+        "I scan the rock shelf for watchers or scouts watching the quarry road.",
+        "I tell Garran we should slow the wagon and lure the watchers into revealing the ambush.",
+        "I help Garran protect the wagon while drawing the ambushers out of hiding.",
+        # Graph 2
+        "I question the captured bandit about who hired them and why they targeted Garran's wagon.",
+        "I search the bandit's satchel for letters, marked coins, or anything tying them to the old mill.",
+        "I return to the Rusty Flagon and bring Bran the proof linking the ambush to the old mill.",
+        "I ask Bran what he knows about the old mill and who might be using it now.",
+        "I travel to the old mill ruins to follow the marked coin lead.",
+        "I inspect the old mill cellar, trapdoor, and floor marks for signs of recent use.",
+        "I search behind the loose cellar stones for the smuggler cache.",
+        "I read the wax-sealed order from the hidden smuggler cache.",
+        "I decide to follow the north road shrine lead before the Black Briar contact disappears.",
+        # Graph 3
+        "I travel to the north road shrine to follow the Black Briar contact lead.",
+        "I inspect the shrine grounds for fresh tracks, ash, hidden marks, or signs of the Black Briar contact.",
+        "I search the shrine stones and offering bowl for the hidden Black Briar contact token.",
+        "I hide near the north road shrine and watch for the Black Briar contact signal.",
+        "I shadow the hooded Black Briar contact from the shrine without revealing myself.",
+        "I follow the Black Briar contact to the ruined tollhouse.",
+        "I eavesdrop on the meeting at the ruined tollhouse to learn who the contact serves.",
+        "I recover the tollhouse manifest before the Black Briar contact can remove it.",
+        "I confront the Black Briar contact with the recovered manifest and demand the truth about Captain Voss.",
+        "I return to Bran and Garran with the manifest proving Captain Voss is behind the attacks.",
+        # Graph 4
+        "I gather Bran and Garran to plan how to use the proof against Captain Voss.",
+        "I ask Bran and Garran who in town still supports Captain Voss.",
+        "I go to the magistrate hall and request a public hearing against Captain Voss.",
+        "I present the tollhouse manifest and marked evidence to the magistrate.",
+        "I ask Bran and Garran to stand as public witnesses at the hearing against Captain Voss.",
+        "I protect Bran and Garran from Voss's watchmen and warn the guards that the magistrate has accepted the evidence.",
+        "I attend the public hearing and stand with Bran and Garran as the evidence against Captain Voss is heard.",
+        "I answer Captain Voss's accusation by tying the manifest, the marked coin, and the witnesses together.",
+        "I press Captain Voss to explain why his initials appear on the tollhouse manifest.",
+        "I ask the magistrate to arrest Captain Voss and open a wider investigation into his faction.",
+        "I help Bran and Garran stabilize the town and reopen the wagon routes after Voss is exposed.",
+        "I report back to Bran and Garran that Voss is exposed, then plan to investigate which faction backed him.",
+        # Graph 5
+        "I review the evidence with Bran and Garran to decide how to identify the faction that backed Captain Voss.",
+        "I study the manifest payment marks to trace who funded Captain Voss.",
+        "I ask Bran what he knows about the Silver Crow cipher on Voss's payment marks.",
+        "I question the old teamster at the wagon yard about the Silver Crow cargo routes.",
+        "I travel to the abandoned cooperage to search for the Silver Crow cache.",
+        "I inspect the cooperage cellar for hidden doors, cargo marks, or the Silver Crow cache.",
+        "I open the hidden Silver Crow cache beneath the cooperage cellar.",
+        "I read and decipher the coded Silver Crow ledger from the hidden cache.",
+        "I compare the ledger names and seals to identify the Sable Chain agent funding the Silver Crow.",
+        "I follow the ledger trail to locate Agent Marlowe before the Sable Chain can erase the evidence.",
+        "I confront Agent Marlowe with the Silver Crow ledger and demand the truth about the Sable Chain.",
+        "I return to Bran and Garran with proof that the Sable Chain backed Captain Voss through the Silver Crow.",
+        # Graph 6
+        "I meet with Bran and Garran to plan how to move against the Sable Chain before they strike back.",
+        "I secure the Silver Crow ledger, the manifest, and Marlowe's proof before the Sable Chain can steal them.",
+        "I scout the streets around the River Gate safehouse for Sable Chain watchers.",
+        "I shadow the Sable Chain watchers from the safehouse to learn where they report.",
+        "I follow the watchers to the River Gate warehouses.",
+        "I inspect the River Gate warehouse marks, crates, and chalk signs for Sable Chain codes.",
+        "I search the warehouse office for Sable Chain countermove orders.",
+        "I rush back to warn Bran and Garran that the Sable Chain plans to burn the evidence and silence witnesses.",
+        "I help Bran and Garran prepare the safehouse defense and protect the evidence before the Sable Chain strike.",
+        "I intercept the Sable Chain strike team before they can burn the safehouse evidence.",
+        "I capture the strike team's sealed orders before they can destroy them.",
+        "I report to Bran and Garran that the Sable Chain countermove failed and the sealed orders point to a higher handler.",
+    ]
+
+    state = _apply_actions(state, actions)
+    arc = build_scenario_progression_arc_summary(state, scenario_seed="tavern_story_seed")
+
+    assert arc["graph_count"] == 6
+    assert arc["completed_graph_count"] == 6
+    assert arc["campaign_graphs_complete"] is True
+    assert arc["completed_node_count"] >= 73
+    assert "graph:tavern_story_seed:sable_chain_countermove" in arc["completed_graph_ids"]
+    assert "fact:sable_chain_countermove_thwarted" in state["progression_facts"]
+    assert "lead:sable_chain_handler_next_arc" in state["progression_leads"]
+
+
 def _apply_actions(state, actions):
     from app.rpg.progression.runtime import apply_progression_for_action
 
@@ -494,9 +595,9 @@ def test_five_graph_campaign_progresses_through_sable_chain_proof():
     state = _apply_actions(state, actions)
     arc = build_scenario_progression_arc_summary(state, scenario_seed="tavern_story_seed")
 
-    assert arc["graph_count"] == 5
+    assert arc["graph_count"] == 6
     assert arc["completed_graph_count"] == 5
-    assert arc["campaign_graphs_complete"] is True
+    assert arc["campaign_graphs_complete"] is False
     assert arc["completed_node_count"] >= 61
     assert "graph:tavern_story_seed:voss_backers_investigation" in arc["completed_graph_ids"]
     assert "fact:allies_have_sable_chain_proof" in state["progression_facts"]
@@ -578,7 +679,7 @@ def test_four_graph_campaign_progresses_through_captain_voss_consequence():
 
     arc = build_scenario_progression_arc_summary(state, scenario_seed="tavern_story_seed")
 
-    assert arc["graph_count"] == 5
+    assert arc["graph_count"] == 6
     assert arc["completed_graph_count"] == 4
     assert arc["campaign_graphs_complete"] is False
     assert arc["completed_node_count"] >= 49
@@ -649,7 +750,7 @@ def test_three_graph_campaign_progresses_to_voss_proof():
 
     arc = build_scenario_progression_arc_summary(state, scenario_seed="tavern_story_seed")
 
-    assert arc["graph_count"] == 5
+    assert arc["graph_count"] == 6
     assert arc["completed_graph_count"] == 3
     assert arc["campaign_graphs_complete"] is False
     assert arc["completed_node_count"] >= 37
@@ -713,7 +814,7 @@ def test_campaign_complete_clears_active_graph_after_two_graphs_complete():
 
     assert arc["campaign_graphs_complete"] is False
     assert arc["completed_graph_count"] == 2
-    assert arc["graph_count"] == 5
+    assert arc["graph_count"] == 6
     assert arc["active_graph_id"] == "graph:tavern_story_seed:north_road_shrine"
     assert state["scenario_progression_active_graph_id"] == "graph:tavern_story_seed:north_road_shrine"
     assert state["scenario_progression_waiting_for_next_graph_pack"] is False
@@ -722,7 +823,10 @@ def test_campaign_complete_clears_active_graph_after_two_graphs_complete():
 
 
 def test_graph_handoff_activates_bandit_aftermath_after_quarry_ambush():
-    from app.rpg.progression.runtime import apply_progression_for_action, get_active_progression_actions
+    from app.rpg.progression.runtime import (
+        apply_progression_for_action,
+        get_active_progression_actions,
+    )
 
     state = {}
     actions = [
@@ -866,7 +970,10 @@ def test_arc_summary_reports_complete_after_full_graph():
 
 
 def test_arc_complete_actions_include_next_lead_bridge():
-    from app.rpg.progression.runtime import apply_progression_for_action, get_active_progression_actions
+    from app.rpg.progression.runtime import (
+        apply_progression_for_action,
+        get_active_progression_actions,
+    )
 
     state = {}
     actions = [

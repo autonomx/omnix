@@ -137,7 +137,9 @@ def test_progression_rules_persist_evaluation_log_even_when_no_match():
 
 
 def test_objective_progression_summary_requires_matched_rows_for_ok():
-    from tests.rpg.autoplay_llm_campaign import _objective_progression_summary_from_state
+    from tests.rpg.autoplay_llm_campaign import (
+        _objective_progression_summary_from_state,
+    )
 
     state = {
         "objective_progression_log": [
@@ -155,7 +157,9 @@ def test_objective_progression_summary_requires_matched_rows_for_ok():
 
 
 def test_objective_progression_summary_ok_with_partial_or_completed_match():
-    from tests.rpg.autoplay_llm_campaign import _objective_progression_summary_from_state
+    from tests.rpg.autoplay_llm_campaign import (
+        _objective_progression_summary_from_state,
+    )
 
     state = {
         "objective_progression_log": [

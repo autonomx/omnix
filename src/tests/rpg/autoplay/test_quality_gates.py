@@ -920,7 +920,9 @@ def test_guard_quest_summary_source_replaces_false_latest_quest_progress_source(
 
 
 def test_pre_turn_advisory_promotion_performance_summary_flags_slow_event():
-    from tests.rpg.autoplay_llm_campaign import _pre_turn_advisory_promotion_performance_summary
+    from tests.rpg.autoplay_llm_campaign import (
+        _pre_turn_advisory_promotion_performance_summary,
+    )
 
     summary = _pre_turn_advisory_promotion_performance_summary(
         [
@@ -944,7 +946,9 @@ def test_pre_turn_advisory_promotion_performance_summary_flags_slow_event():
 
 
 def test_pre_turn_advisory_perf_ok_when_zero_slow_events_and_low_elapsed():
-    from tests.rpg.autoplay_llm_campaign import _pre_turn_advisory_promotion_performance_summary
+    from tests.rpg.autoplay_llm_campaign import (
+        _pre_turn_advisory_promotion_performance_summary,
+    )
 
     summary = _pre_turn_advisory_promotion_performance_summary(
         [
@@ -1063,7 +1067,9 @@ def test_authoritative_final_lifecycle_summary_populates_required_fields():
 def test_assert_final_lifecycle_summary_authority_raises_on_false_green():
     import pytest
 
-    from tests.rpg.autoplay_llm_campaign import _assert_final_lifecycle_summary_authority
+    from tests.rpg.autoplay_llm_campaign import (
+        _assert_final_lifecycle_summary_authority,
+    )
 
     summary = {
         "ok": True,
