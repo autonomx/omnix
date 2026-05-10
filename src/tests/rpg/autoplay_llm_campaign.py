@@ -2832,10 +2832,38 @@ def _final_lifecycle_quality_gates(summary: Dict[str, Any]) -> Dict[str, Any]:
     gates["campaign_state_not_stale_ok"] = bool(stale_state.get("ok", False) or arc_complete)
     gates["campaign_state_commit_performance_ok"] = bool(commit_perf.get("ok", True))
     gates["behavioral_autoplay_eval_ok"] = bool(behavioral_eval.get("ok", False))
-    gates["scenario_progression_arc_complete_ok"] = (
-        not _safe_dict(summary.get("progression_completed_nodes"))
-        or bool(arc_summary.get("arc_complete"))
-        or int(arc_summary.get("active_graph_quest_count") or 0) > 0
+    requested_turns = int(
+        summary.get("requested_turns")
+        or summary.get("turns_executed")
+        or 0
+    )
+    all_expected_node_count = int(
+        arc_summary.get("all_expected_node_count")
+        or arc_summary.get("expected_node_count")
+        or 0
+    )
+    completed_node_count = int(arc_summary.get("completed_node_count") or 0)
+    campaign_complete = bool(
+        arc_summary.get("arc_complete")
+        or arc_summary.get("campaign_graphs_complete")
+        or (
+            int(arc_summary.get("graph_count") or 0) > 0
+            and int(arc_summary.get("completed_graph_count") or 0)
+            >= int(arc_summary.get("graph_count") or 0)
+        )
+    )
+    partial_run_has_expected_progress = bool(
+        requested_turns > 0
+        and all_expected_node_count > 0
+        and requested_turns < all_expected_node_count
+        and completed_node_count >= requested_turns
+    )
+
+    gates["scenario_progression_arc_complete_ok"] = bool(
+        campaign_complete or partial_run_has_expected_progress
+    )
+    gates["scenario_progression_campaign_complete_ok"] = bool(
+        campaign_complete or partial_run_has_expected_progress
     )
 
     for required_gate in REQUIRED_FINAL_LIFECYCLE_GATES:
@@ -5476,6 +5504,8 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
         player_agent_debug = _safe_dict(selected.get("debug")) if isinstance(selected, dict) else {}
 
         graph_action_state = _graph_action_source_state(runtime_state, authoritative_state)
+        pre_apply_graph_action_state = graph_action_state
+        pre_apply_top_graph_action = _top_scenario_progression_action(pre_apply_graph_action_state)
         top_graph_action = _top_scenario_progression_action(graph_action_state)
         top_graph_action_id = _safe_str(top_graph_action.get("action_id"))
         top_graph_command = _safe_str(top_graph_action.get("command"))
@@ -6059,16 +6089,20 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
             "progress_quality_before_turn": current_progress_quality_metrics,
             "player_action": player_action,
             "player_agent_selection_source": player_agent_selection_source,
-            "scenario_progression_summary": _safe_dict(
-                authoritative_state.get("scenario_progression_current_turn_summary")
-            )
-            if int(_safe_dict(authoritative_state.get("scenario_progression_current_turn_summary")).get("turn_index") or -1) == int(turn_index)
-            else {
-                "ok": True,
-                "changed": False,
-                "turn_index": turn_index,
-                "reason": "no_current_turn_progression_match",
-            },
+            "scenario_progression_summary": (
+                _safe_dict(authoritative_state.get("scenario_progression_current_turn_summary"))
+                if int(_safe_dict(authoritative_state.get("scenario_progression_current_turn_summary")).get("turn_index") or -1) == int(turn_index)
+                else (
+                    _safe_dict(turn_result.get("scenario_progression_summary"))
+                    if isinstance(turn_result, dict) and _safe_dict(turn_result.get("scenario_progression_summary"))
+                    else {
+                        "ok": True,
+                        "changed": False,
+                        "turn_index": turn_index,
+                        "reason": "no_current_turn_progression_match",
+                    }
+                )
+            ),
             "scenario_progression_actions": _safe_list(authoritative_state.get("scenario_progression_actions"))[:8],
             "progression_sidecar_completed_node_count": _progression_node_count(
                 progression_authority_state
@@ -6089,6 +6123,12 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
             "scenario_arc_complete": _scenario_arc_complete_from_state(authoritative_state, args),
             "arc_complete_graph_action_available": bool(
                 _arc_complete_graph_action_from_state(authoritative_state)
+            ),
+            "top_scenario_progression_action_id": _safe_str(
+                pre_apply_top_graph_action.get("action_id")
+            ),
+            "top_scenario_progression_command": _safe_str(
+                pre_apply_top_graph_action.get("command")
             ),
             "handoff_semantic": handoff_semantic,
             "player_agent_anti_loop_context": anti_loop_context,
