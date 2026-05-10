@@ -3,7 +3,9 @@ from __future__ import annotations
 import re
 from typing import Any, Dict, List, Tuple
 
-from app.rpg.objectives.reconciliation import reconcile_objective_progression_into_quests
+from app.rpg.objectives.reconciliation import (
+    reconcile_objective_progression_into_quests,
+)
 
 
 def _safe_dict(value: Any) -> Dict[str, Any]:

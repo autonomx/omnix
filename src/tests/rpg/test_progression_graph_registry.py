@@ -124,3 +124,30 @@ def test_fifth_tavern_graph_contains_voss_backer_nodes():
         "confront_agent_marlowe",
         "return_with_sable_chain_proof",
     ]
+
+
+def test_sixth_tavern_graph_contains_sable_chain_countermove_nodes():
+    from app.rpg.progression.graph_registry import get_progression_graph_by_id
+
+    graph = get_progression_graph_by_id(
+        "tavern_story_seed",
+        "graph:tavern_story_seed:sable_chain_countermove",
+    )
+    assert graph is not None
+
+    node_ids = [node.node_id for node in graph.nodes]
+
+    assert node_ids == [
+        "plan_against_sable_chain",
+        "secure_sable_chain_evidence",
+        "detect_safehouse_watchers",
+        "follow_safehouse_watchers",
+        "travel_to_river_gate_warehouses",
+        "inspect_warehouse_marks",
+        "find_countermove_orders",
+        "warn_allies_of_sable_chain_strike",
+        "prepare_safehouse_defense",
+        "intercept_sable_chain_strike_team",
+        "capture_sable_chain_orders",
+        "report_sable_chain_countermove",
+    ]

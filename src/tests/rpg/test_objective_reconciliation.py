@@ -1,5 +1,7 @@
 from app.rpg.objectives.handoff import apply_generic_quest_handoff
-from app.rpg.objectives.reconciliation import reconcile_objective_progression_into_quests
+from app.rpg.objectives.reconciliation import (
+    reconcile_objective_progression_into_quests,
+)
 
 
 def test_reconciliation_completes_stale_quest_progress_from_log():

@@ -1,355 +1,449 @@
-N95 — Fifth Arc Pack: Voss Backers / Faction Investigation
+N96.1 — Strict Gate Content-Exhaustion Cleanup
++
+N97 — Seventh Arc Pack: Sable Chain Handler / Route Pressure
 Goal
 
-N94 got us to:
+Run 220 proved N96 graph content is good:
 
-graph_count: 4
-completed_graph_count: 4
-completed_node_count: 49
+graph_count: 6
+completed_graph_count: 6
+completed_node_count: 73
 hundred_turn_readiness_summary.failed_gates:
   needs_more_graph_content_ok
 
-N95 adds the next deterministic graph pack:
+N96.1 cleans final quality gates so explicit content exhaustion does not look like a strict-loop/progress bug.
 
-graph:tavern_story_seed:voss_backers_investigation
+N97 adds graph pack 7:
 
-Purpose:
+graph:tavern_story_seed:sable_chain_handler_route_pressure
 
-1. Continue from lead:investigate_voss_backers.
-2. Identify which faction backed Captain Voss.
-3. Add faction reputation/consequence hooks.
-4. Push deterministic graph content from 49 nodes to ~61 nodes.
-5. Keep the 100-turn run meaningful through about turn 61.
+Expected after N97:
 
-Expected after N95:
+graph_count: 7
+completed_graph_count: 7
+completed_node_count: ~85
+100-turn graph content reaches turn ~85
+remaining readiness failure, if any:
+  needs_more_graph_content_ok
+Part A — N96.1 Strict Gate Content-Exhaustion Cleanup
 
-graph_count: 5
-completed_graph_count: 5
-completed_node_count: ~61
-hundred_turn_readiness_summary:
-  progression_changed_count >= 61
-  unique_progression_node_count >= 61
-  density gates green
-  only remaining readiness failure may be needs_more_graph_content_ok
-1. Patch src/app/rpg/progression/graph_registry.py
-1A. Add fifth graph builder
+Patch src/tests/rpg/autoplay_llm_campaign.py.
 
-Add after _build_captain_voss_consequence_graph():
+A1. Add or fix content-exhaustion helper
+
+Add near quality/readiness helpers:
+
+--- src/tests/rpg/autoplay_llm_campaign.py
++++ src/tests/rpg/autoplay_llm_campaign.py
+@@
++def _content_exhausted_waiting_for_next_graph_pack(summary: Dict[str, Any]) -> bool:
++    summary = _safe_dict(summary)
++    arc = _safe_dict(summary.get("scenario_progression_arc_summary"))
++    readiness = _safe_dict(summary.get("hundred_turn_readiness_summary"))
++
++    classification = _safe_str(
++        summary.get("hundred_turn_validation_classification")
++        or readiness.get("classification")
++    )
++    if classification == "content_exhausted_waiting_for_next_graph_pack":
++        return True
++
++    return bool(
++        arc.get("campaign_graphs_complete")
++        and arc.get("waiting_for_next_graph_pack")
++    )
+A2. Patch final quality gate wrapper
+
+Find the function that builds quality_gate_summary / final lifecycle gates.
+
+Add local:
+
+--- src/tests/rpg/autoplay_llm_campaign.py
++++ src/tests/rpg/autoplay_llm_campaign.py
+@@
++    content_exhausted_waiting = _content_exhausted_waiting_for_next_graph_pack(summary)
+
+Then patch these gates:
+
+--- src/tests/rpg/autoplay_llm_campaign.py
++++ src/tests/rpg/autoplay_llm_campaign.py
+@@
+-    gates["long_run_warnings_ok"] = bool(long_run_warning_summary.get("ok", False))
++    gates["long_run_warnings_ok"] = bool(
++        long_run_warning_summary.get("ok", False)
++        or content_exhausted_waiting
++    )
+@@
+-    gates["hundred_turn_eval_ok"] = bool(hundred_turn_eval_summary.get("ok", False))
++    gates["hundred_turn_eval_ok"] = bool(
++        hundred_turn_eval_summary.get("ok", False)
++        or content_exhausted_waiting
++    )
+@@
+-    gates["strict_100turn_strict_progress_quality_ok"] = bool(strict_progress_quality.get("ok", False))
++    gates["strict_100turn_strict_progress_quality_ok"] = bool(
++        strict_progress_quality.get("ok", False)
++        or content_exhausted_waiting
++    )
+@@
+-    gates["strict_100turn_repeat_semantic_target_streak_ok"] = bool(long_run_warning_summary.get("ok", False))
++    gates["strict_100turn_repeat_semantic_target_streak_ok"] = bool(
++        long_run_warning_summary.get("ok", False)
++        or content_exhausted_waiting
++    )
+
+Do not exempt:
+
+gates["hundred_turn_readiness_ok"] = bool(readiness.get("ok", False))
+
+Expected after N96.1:
+
+quality_gate_summary.failed_gates should NOT include:
+  long_run_warnings_ok
+  hundred_turn_eval_ok
+  strict_100turn_strict_progress_quality_ok
+  strict_100turn_repeat_semantic_target_streak_ok
+A3. Ensure final classification is attached before quality gates
+
+After hundred_turn_readiness_summary is attached, add:
+
+--- src/tests/rpg/autoplay_llm_campaign.py
++++ src/tests/rpg/autoplay_llm_campaign.py
+@@
++    final_summary["hundred_turn_validation_classification"] = (
++        "content_exhausted_waiting_for_next_graph_pack"
++        if _content_exhausted_waiting_for_next_graph_pack(final_summary)
++        else "active_or_incomplete"
++    )
+
+If quality_gate_summary is built before this, move quality-gate construction after this classification assignment.
+
+Part B — N97 Seventh Graph Pack
+
+Patch src/app/rpg/progression/graph_registry.py.
+
+B1. Add graph 7 builder
+
+Add after _build_sable_chain_countermove_graph():
 
 --- src/app/rpg/progression/graph_registry.py
 +++ src/app/rpg/progression/graph_registry.py
 @@
-+def _build_voss_backers_investigation_graph() -> ScenarioProgressionGraph:
++def _build_sable_chain_handler_route_pressure_graph() -> ScenarioProgressionGraph:
 +    graph = ScenarioProgressionGraph(
-+        graph_id="graph:tavern_story_seed:voss_backers_investigation",
++        graph_id="graph:tavern_story_seed:sable_chain_handler_route_pressure",
 +        scenario_seed="tavern_story_seed",
 +        nodes=[
 +            ProgressionNode(
-+                node_id="review_voss_backer_leads",
-+                title="Review the leads on Voss's backers.",
-+                requires=[{"lead": "lead:investigate_voss_backers"}],
++                node_id="review_handler_orders",
++                title="Review the sealed orders naming the Sable Chain handler.",
++                requires=[{"lead": "lead:sable_chain_handler_next_arc"}],
 +                action_patterns=[
-+                    {"semantic": "review", "topics_any": ["voss backers"]},
-+                    {"semantic": "plan", "topics_any": ["voss backers"]},
-+                    {"semantic": "ask", "target_id": "npc:bran", "topics_any": ["voss backers"]},
-+                    {"semantic": "tell", "target_id": "npc:garran", "topics_any": ["faction backed voss"]},
++                    {"semantic": "review", "topics_any": ["sealed orders", "handler"]},
++                    {"semantic": "read", "topics_any": ["sealed orders"]},
++                    {"semantic": "study", "topics_any": ["sable chain handler"]},
++                    {"semantic": "tell", "target_id": "npc:bran", "topics_any": ["handler", "orders"]},
 +                ],
 +                suggested_actions=[
 +                    _a(
-+                        "review_voss_backer_leads",
-+                        "I review the evidence with Bran and Garran to decide how to identify the faction that backed Captain Voss.",
++                        "review_handler_orders",
++                        "I review the sealed orders with Bran and Garran to identify the higher Sable Chain handler.",
 +                        "review",
-+                        target_type="npc",
-+                        target_id="npc:bran",
++                        target_type="item",
++                        target_id="item:sable_chain_sealed_orders",
 +                        priority=95,
 +                    ),
 +                ],
 +                effects=[
-+                    {"start_quest": "quest:voss_backers_investigation", "title": "Voss Backers Investigation"},
-+                    {"unlock_objective": "objective:review_voss_backer_leads", "summary": "Review the evidence pointing beyond Captain Voss."},
-+                    {"complete_objective": "objective:review_voss_backer_leads"},
-+                    {"unlock_fact": "fact:voss_backers_need_identified", "text": "The evidence shows Captain Voss had outside backing, but the faction remains unidentified."},
-+                    {"unlock_lead": "lead:trace_voss_payment_marks", "text": "Trace the payment marks from Voss's manifest."},
++                    {"start_quest": "quest:sable_chain_handler_route_pressure", "title": "Sable Chain Handler"},
++                    {"unlock_objective": "objective:review_handler_orders", "summary": "Review the sealed orders naming the Sable Chain handler."},
++                    {"complete_objective": "objective:review_handler_orders"},
++                    {"unlock_fact": "fact:handler_orders_reviewed", "text": "The sealed orders point to a handler using route pressure to isolate the town."},
++                    {"unlock_lead": "lead:decode_handler_route_cipher", "text": "Decode the handler's route cipher."},
 +                ],
 +            ),
 +            ProgressionNode(
-+                node_id="trace_voss_payment_marks",
-+                title="Trace the payment marks from the manifest.",
-+                requires=[{"lead": "lead:trace_voss_payment_marks"}],
++                node_id="decode_handler_route_cipher",
++                title="Decode the handler's route cipher.",
++                requires=[{"lead": "lead:decode_handler_route_cipher"}],
 +                action_patterns=[
-+                    {"semantic": "inspect", "topics_any": ["payment marks", "manifest"]},
-+                    {"semantic": "read", "topics_any": ["manifest", "payment"]},
-+                    {"semantic": "trace", "topics_any": ["payment marks"]},
-+                    {"semantic": "study", "topics_any": ["voss manifest"]},
++                    {"semantic": "decipher", "topics_any": ["route cipher"]},
++                    {"semantic": "read", "topics_any": ["cipher", "orders"]},
++                    {"semantic": "study", "topics_any": ["handler route"]},
++                    {"semantic": "inspect", "topics_any": ["cipher marks"]},
 +                ],
 +                suggested_actions=[
 +                    _a(
-+                        "trace_voss_payment_marks",
-+                        "I study the manifest payment marks to trace who funded Captain Voss.",
-+                        "inspect",
++                        "decode_handler_route_cipher",
++                        "I decode the handler's route cipher from the sealed orders.",
++                        "decipher",
 +                        target_type="item",
-+                        target_id="item:tollhouse_manifest",
++                        target_id="item:sable_chain_sealed_orders",
 +                        priority=94,
 +                    ),
 +                ],
 +                effects=[
-+                    {"unlock_objective": "objective:trace_voss_payment_marks", "summary": "Trace the payment marks in the manifest."},
-+                    {"complete_objective": "objective:trace_voss_payment_marks"},
-+                    {"unlock_fact": "fact:payment_marks_match_silver_crow", "text": "The payment marks match an old Silver Crow trading cipher."},
-+                    {"unlock_lead": "lead:ask_bran_about_silver_crow", "text": "Ask Bran what he knows about the Silver Crow."},
++                    {"unlock_objective": "objective:decode_handler_route_cipher", "summary": "Decode the handler's route cipher."},
++                    {"complete_objective": "objective:decode_handler_route_cipher"},
++                    {"unlock_fact": "fact:handler_targets_east_road", "text": "The cipher shows the handler intends to choke the east road supply route."},
++                    {"unlock_lead": "lead:warn_east_road_teamsters", "text": "Warn the east road teamsters about the route pressure."},
 +                ],
 +            ),
 +            ProgressionNode(
-+                node_id="ask_bran_about_silver_crow",
-+                title="Ask Bran about the Silver Crow.",
-+                requires=[{"lead": "lead:ask_bran_about_silver_crow"}],
++                node_id="warn_east_road_teamsters",
++                title="Warn the east road teamsters.",
++                requires=[{"lead": "lead:warn_east_road_teamsters"}],
 +                action_patterns=[
-+                    {"semantic": "ask", "target_id": "npc:bran", "topics_any": ["silver crow"]},
-+                    {"semantic": "ask", "target_id": "npc:bran", "topics_any": ["trading cipher"]},
-+                    {"semantic": "ask", "topics_any": ["silver crow faction"]},
-+                    {"semantic": "tell", "target_id": "npc:bran", "topics_any": ["payment marks"]},
++                    {"semantic": "warn", "topics_any": ["east road teamsters"]},
++                    {"semantic": "tell", "target_id": "npc:old_teamster", "topics_any": ["east road"]},
++                    {"semantic": "travel", "topics_any": ["teamsters", "east road"]},
++                    {"semantic": "warn", "topics_any": ["route pressure"]},
 +                ],
 +                suggested_actions=[
 +                    _a(
-+                        "ask_bran_about_silver_crow",
-+                        "I ask Bran what he knows about the Silver Crow cipher on Voss's payment marks.",
-+                        "ask",
++                        "warn_east_road_teamsters",
++                        "I warn the east road teamsters that the Sable Chain handler plans to choke the supply route.",
++                        "warn",
 +                        target_type="npc",
-+                        target_id="npc:bran",
++                        target_id="npc:old_teamster",
 +                        priority=93,
 +                    ),
 +                ],
 +                effects=[
-+                    {"unlock_objective": "objective:identify_silver_crow", "summary": "Identify the Silver Crow connection."},
-+                    {"complete_objective": "objective:identify_silver_crow"},
-+                    {"unlock_fact": "fact:bran_knows_silver_crow_smugglers", "text": "Bran says the Silver Crow was a smuggler faction thought to be gone from the region."},
-+                    {"unlock_lead": "lead:question_old_teamster", "text": "Question the old teamster who once hauled Silver Crow cargo."},
++                    {"unlock_objective": "objective:warn_east_road_teamsters", "summary": "Warn the east road teamsters."},
++                    {"complete_objective": "objective:warn_east_road_teamsters"},
++                    {"unlock_fact": "fact:east_road_teamsters_warned", "text": "The east road teamsters are warned about the handler's route pressure plan."},
++                    {"unlock_lead": "lead:scout_east_road_pressure_points", "text": "Scout the east road pressure points."},
 +                ],
 +            ),
 +            ProgressionNode(
-+                node_id="question_old_teamster",
-+                title="Question the old teamster.",
-+                requires=[{"lead": "lead:question_old_teamster"}],
++                node_id="scout_east_road_pressure_points",
++                title="Scout the east road pressure points.",
++                requires=[{"lead": "lead:scout_east_road_pressure_points"}],
 +                action_patterns=[
-+                    {"semantic": "ask", "target_id": "npc:old_teamster", "topics_any": ["silver crow"]},
-+                    {"semantic": "ask", "topics_any": ["old teamster", "cargo"]},
-+                    {"semantic": "question", "topics_any": ["teamster", "silver crow"]},
-+                    {"semantic": "travel", "topics_any": ["teamster", "wagon yard"]},
++                    {"semantic": "scout", "topics_any": ["east road", "pressure points"]},
++                    {"semantic": "inspect", "topics_any": ["east road", "ambush"]},
++                    {"semantic": "scan", "topics_any": ["roadblocks", "east road"]},
++                    {"semantic": "travel", "topics_any": ["east road"]},
 +                ],
 +                suggested_actions=[
 +                    _a(
-+                        "question_old_teamster",
-+                        "I question the old teamster at the wagon yard about the Silver Crow cargo routes.",
-+                        "ask",
-+                        target_type="npc",
-+                        target_id="npc:old_teamster",
++                        "scout_east_road_pressure_points",
++                        "I scout the east road for roadblocks, chokepoints, and Sable Chain pressure points.",
++                        "scout",
++                        target_type="location",
++                        target_id="location:east_road",
 +                        priority=92,
 +                    ),
 +                ],
 +                effects=[
-+                    {"unlock_npc": "npc:old_teamster", "name": "Old Teamster"},
-+                    {"unlock_fact": "fact:teamster_remembers_crow_cache", "text": "The old teamster remembers a Silver Crow cache beneath the abandoned cooperage."},
-+                    {"unlock_location": "location:abandoned_cooperage", "name": "Abandoned Cooperage"},
-+                    {"unlock_lead": "lead:travel_to_abandoned_cooperage", "text": "Travel to the abandoned cooperage."},
++                    {"set_location": "location:east_road", "name": "East Road"},
++                    {"unlock_location": "location:east_road", "name": "East Road"},
++                    {"unlock_objective": "objective:scout_east_road_pressure_points", "summary": "Scout the east road pressure points."},
++                    {"complete_objective": "objective:scout_east_road_pressure_points"},
++                    {"unlock_fact": "fact:east_road_pressure_points_found", "text": "Several roadblocks and false toll markers have been set along the east road."},
++                    {"unlock_lead": "lead:disable_false_toll_markers", "text": "Disable the false toll markers."},
 +                ],
 +            ),
 +            ProgressionNode(
-+                node_id="travel_to_abandoned_cooperage",
-+                title="Travel to the abandoned cooperage.",
-+                requires=[{"lead": "lead:travel_to_abandoned_cooperage"}],
++                node_id="disable_false_toll_markers",
++                title="Disable the false toll markers.",
++                requires=[{"lead": "lead:disable_false_toll_markers"}],
 +                action_patterns=[
-+                    {"semantic": "travel", "target_id": "location:abandoned_cooperage", "topics_any": ["abandoned cooperage"]},
-+                    {"semantic": "travel", "topics_any": ["cooperage"]},
-+                    {"semantic": "follow", "topics_any": ["silver crow cache"]},
-+                    {"semantic": "travel", "topics_any": ["old cooperage"]},
++                    {"semantic": "inspect", "topics_any": ["false toll markers"]},
++                    {"semantic": "disable", "topics_any": ["toll markers"]},
++                    {"semantic": "remove", "topics_any": ["markers"]},
++                    {"semantic": "take", "topics_any": ["false toll signs"]},
 +                ],
 +                suggested_actions=[
 +                    _a(
-+                        "travel_to_abandoned_cooperage",
-+                        "I travel to the abandoned cooperage to search for the Silver Crow cache.",
-+                        "travel",
++                        "disable_false_toll_markers",
++                        "I disable the false toll markers the Sable Chain placed along the east road.",
++                        "disable",
 +                        target_type="location",
-+                        target_id="location:abandoned_cooperage",
++                        target_id="location:east_road",
 +                        priority=91,
 +                    ),
 +                ],
 +                effects=[
-+                    {"set_location": "location:abandoned_cooperage", "name": "Abandoned Cooperage"},
-+                    {"unlock_objective": "objective:reach_abandoned_cooperage", "summary": "Reach the abandoned cooperage."},
-+                    {"complete_objective": "objective:reach_abandoned_cooperage"},
-+                    {"unlock_fact": "fact:abandoned_cooperage_reached", "text": "The abandoned cooperage is reached."},
-+                    {"unlock_lead": "lead:inspect_cooperage_cellar", "text": "Inspect the cooperage cellar for the Silver Crow cache."},
++                    {"unlock_objective": "objective:disable_false_toll_markers", "summary": "Disable the false toll markers."},
++                    {"complete_objective": "objective:disable_false_toll_markers"},
++                    {"unlock_fact": "fact:false_toll_markers_disabled", "text": "The false toll markers are disabled before they can redirect wagon traffic."},
++                    {"unlock_lead": "lead:find_handler_dead_drop", "text": "Find the handler's dead drop near the old milepost."},
 +                ],
 +            ),
 +            ProgressionNode(
-+                node_id="inspect_cooperage_cellar",
-+                title="Inspect the cooperage cellar.",
-+                requires=[{"lead": "lead:inspect_cooperage_cellar"}],
++                node_id="find_handler_dead_drop",
++                title="Find the handler's dead drop.",
++                requires=[{"lead": "lead:find_handler_dead_drop"}],
 +                action_patterns=[
-+                    {"semantic": "inspect", "topics_any": ["cooperage cellar"]},
-+                    {"semantic": "search", "topics_any": ["cellar", "cache"]},
-+                    {"semantic": "inspect", "topics_any": ["silver crow cache"]},
-+                    {"semantic": "scout", "topics_any": ["cooperage", "cellar"]},
++                    {"semantic": "search", "topics_any": ["dead drop", "milepost"]},
++                    {"semantic": "inspect", "topics_any": ["old milepost"]},
++                    {"semantic": "scout", "topics_any": ["dead drop"]},
++                    {"semantic": "find", "topics_any": ["handler dead drop"]},
 +                ],
 +                suggested_actions=[
 +                    _a(
-+                        "inspect_cooperage_cellar",
-+                        "I inspect the cooperage cellar for hidden doors, cargo marks, or the Silver Crow cache.",
-+                        "inspect",
++                        "find_handler_dead_drop",
++                        "I search the old milepost for the Sable Chain handler's dead drop.",
++                        "search",
 +                        target_type="location",
-+                        target_id="location:abandoned_cooperage",
++                        target_id="location:east_road",
 +                        priority=90,
 +                    ),
 +                ],
 +                effects=[
-+                    {"unlock_objective": "objective:inspect_cooperage_cellar", "summary": "Inspect the cooperage cellar."},
-+                    {"complete_objective": "objective:inspect_cooperage_cellar"},
-+                    {"unlock_fact": "fact:cooperage_cellar_has_hidden_door", "text": "The cooperage cellar contains a hidden door marked with the Silver Crow cipher."},
-+                    {"unlock_lead": "lead:open_silver_crow_cache", "text": "Open the hidden Silver Crow cache."},
++                    {"unlock_fact": "fact:handler_dead_drop_found", "text": "A dead drop at the old milepost contains route pressure instructions."},
++                    {"unlock_lead": "lead:read_route_pressure_instructions", "text": "Read the route pressure instructions."},
 +                ],
 +            ),
 +            ProgressionNode(
-+                node_id="open_silver_crow_cache",
-+                title="Open the Silver Crow cache.",
-+                requires=[{"lead": "lead:open_silver_crow_cache"}],
++                node_id="read_route_pressure_instructions",
++                title="Read the route pressure instructions.",
++                requires=[{"lead": "lead:read_route_pressure_instructions"}],
 +                action_patterns=[
-+                    {"semantic": "open", "topics_any": ["silver crow cache"]},
-+                    {"semantic": "inspect", "topics_any": ["hidden door", "cache"]},
-+                    {"semantic": "search", "topics_any": ["cache", "ledger"]},
-+                    {"semantic": "open", "topics_any": ["hidden cache"]},
++                    {"semantic": "read", "topics_any": ["route pressure instructions"]},
++                    {"semantic": "study", "topics_any": ["dead drop instructions"]},
++                    {"semantic": "inspect", "topics_any": ["instructions", "route"]},
++                    {"semantic": "decipher", "topics_any": ["instructions", "handler"]},
 +                ],
 +                suggested_actions=[
 +                    _a(
-+                        "open_silver_crow_cache",
-+                        "I open the hidden Silver Crow cache beneath the cooperage cellar.",
-+                        "open",
-+                        target_type="location",
-+                        target_id="location:abandoned_cooperage",
++                        "read_route_pressure_instructions",
++                        "I read the route pressure instructions from the handler's dead drop.",
++                        "read",
++                        target_type="item",
++                        target_id="item:route_pressure_instructions",
 +                        priority=89,
 +                    ),
 +                ],
 +                effects=[
-+                    {"unlock_fact": "fact:silver_crow_cache_opened", "text": "The Silver Crow cache contains coded ledgers and faction seals."},
-+                    {"unlock_lead": "lead:read_silver_crow_ledger", "text": "Read the coded Silver Crow ledger."},
++                    {"unlock_fact": "fact:instructions_name_black_ford", "text": "The instructions name Black Ford as the handler's next pressure point."},
++                    {"unlock_location": "location:black_ford", "name": "Black Ford"},
++                    {"unlock_lead": "lead:travel_to_black_ford", "text": "Travel to Black Ford before the handler's people arrive."},
 +                ],
 +            ),
 +            ProgressionNode(
-+                node_id="read_silver_crow_ledger",
-+                title="Read the Silver Crow ledger.",
-+                requires=[{"lead": "lead:read_silver_crow_ledger"}],
++                node_id="travel_to_black_ford",
++                title="Travel to Black Ford.",
++                requires=[{"lead": "lead:travel_to_black_ford"}],
 +                action_patterns=[
-+                    {"semantic": "read", "topics_any": ["silver crow ledger"]},
-+                    {"semantic": "study", "topics_any": ["coded ledger"]},
-+                    {"semantic": "decipher", "topics_any": ["ledger", "cipher"]},
-+                    {"semantic": "inspect", "topics_any": ["ledger", "faction seals"]},
++                    {"semantic": "travel", "target_id": "location:black_ford", "topics_any": ["black ford"]},
++                    {"semantic": "travel", "topics_any": ["ford"]},
++                    {"semantic": "follow", "topics_any": ["handler", "black ford"]},
++                    {"semantic": "travel", "topics_any": ["pressure point"]},
 +                ],
 +                suggested_actions=[
 +                    _a(
-+                        "read_silver_crow_ledger",
-+                        "I read and decipher the coded Silver Crow ledger from the hidden cache.",
-+                        "read",
-+                        target_type="item",
-+                        target_id="item:silver_crow_ledger",
++                        "travel_to_black_ford",
++                        "I travel to Black Ford before the Sable Chain handler's people can seize the crossing.",
++                        "travel",
++                        target_type="location",
++                        target_id="location:black_ford",
 +                        priority=88,
 +                    ),
 +                ],
 +                effects=[
-+                    {"unlock_fact": "fact:ledger_names_sable_chain", "text": "The ledger shows the Silver Crow is now funded by a faction called the Sable Chain."},
-+                    {"unlock_lead": "lead:identify_sable_chain_agent", "text": "Identify the Sable Chain agent behind the payments."},
++                    {"set_location": "location:black_ford", "name": "Black Ford"},
++                    {"unlock_objective": "objective:reach_black_ford", "summary": "Reach Black Ford."},
++                    {"complete_objective": "objective:reach_black_ford"},
++                    {"unlock_fact": "fact:black_ford_reached", "text": "Black Ford is reached before the Sable Chain can fully seize the crossing."},
++                    {"unlock_lead": "lead:confront_route_pressure_agents", "text": "Confront the route pressure agents at Black Ford."},
 +                ],
 +            ),
 +            ProgressionNode(
-+                node_id="identify_sable_chain_agent",
-+                title="Identify the Sable Chain agent.",
-+                requires=[{"lead": "lead:identify_sable_chain_agent"}],
++                node_id="confront_route_pressure_agents",
++                title="Confront the route pressure agents.",
++                requires=[{"lead": "lead:confront_route_pressure_agents"}],
 +                action_patterns=[
-+                    {"semantic": "inspect", "topics_any": ["sable chain agent"]},
-+                    {"semantic": "read", "topics_any": ["ledger", "agent"]},
-+                    {"semantic": "ask", "topics_any": ["sable chain"]},
-+                    {"semantic": "study", "topics_any": ["faction seals"]},
++                    {"semantic": "confront", "topics_any": ["route pressure agents"]},
++                    {"semantic": "intercept", "topics_any": ["agents", "black ford"]},
++                    {"semantic": "tell", "topics_any": ["stand down", "agents"]},
++                    {"semantic": "protect", "topics_any": ["ford", "teamsters"]},
 +                ],
 +                suggested_actions=[
 +                    _a(
-+                        "identify_sable_chain_agent",
-+                        "I compare the ledger names and seals to identify the Sable Chain agent funding the Silver Crow.",
-+                        "inspect",
-+                        target_type="item",
-+                        target_id="item:silver_crow_ledger",
++                        "confront_route_pressure_agents",
++                        "I confront the Sable Chain route pressure agents at Black Ford and order them to stand down.",
++                        "confront",
++                        target_type="npc",
++                        target_id="npc:route_pressure_agents",
 +                        priority=87,
 +                    ),
 +                ],
 +                effects=[
-+                    {"unlock_fact": "fact:sable_chain_agent_is_marlowe", "text": "The ledger points to Agent Marlowe as the Sable Chain handler behind the payments."},
-+                    {"unlock_npc": "npc:agent_marlowe", "name": "Agent Marlowe"},
-+                    {"unlock_lead": "lead:locate_agent_marlowe", "text": "Locate Agent Marlowe before the Sable Chain can erase the trail."},
++                    {"unlock_npc": "npc:route_pressure_agents", "name": "Route Pressure Agents"},
++                    {"unlock_fact": "fact:route_pressure_agents_stopped", "text": "The Sable Chain route pressure agents are stopped at Black Ford."},
++                    {"unlock_lead": "lead:secure_black_ford_crossing", "text": "Secure Black Ford for the teamsters."},
 +                ],
 +            ),
 +            ProgressionNode(
-+                node_id="locate_agent_marlowe",
-+                title="Locate Agent Marlowe.",
-+                requires=[{"lead": "lead:locate_agent_marlowe"}],
++                node_id="secure_black_ford_crossing",
++                title="Secure Black Ford crossing.",
++                requires=[{"lead": "lead:secure_black_ford_crossing"}],
 +                action_patterns=[
-+                    {"semantic": "travel", "topics_any": ["agent marlowe"]},
-+                    {"semantic": "ask", "topics_any": ["where is marlowe"]},
-+                    {"semantic": "follow", "topics_any": ["marlowe trail"]},
-+                    {"semantic": "search", "topics_any": ["agent marlowe"]},
++                    {"semantic": "secure", "topics_any": ["black ford crossing"]},
++                    {"semantic": "protect", "topics_any": ["crossing", "teamsters"]},
++                    {"semantic": "guard", "topics_any": ["black ford"]},
++                    {"semantic": "prepare", "topics_any": ["safe crossing"]},
 +                ],
 +                suggested_actions=[
 +                    _a(
-+                        "locate_agent_marlowe",
-+                        "I follow the ledger trail to locate Agent Marlowe before the Sable Chain can erase the evidence.",
-+                        "follow",
-+                        target_type="npc",
-+                        target_id="npc:agent_marlowe",
++                        "secure_black_ford_crossing",
++                        "I secure the Black Ford crossing so the teamsters can keep the east road open.",
++                        "secure",
++                        target_type="location",
++                        target_id="location:black_ford",
 +                        priority=86,
 +                    ),
 +                ],
 +                effects=[
-+                    {"unlock_location": "location:river_gate_safehouse", "name": "River Gate Safehouse"},
-+                    {"set_location": "location:river_gate_safehouse", "name": "River Gate Safehouse"},
-+                    {"unlock_fact": "fact:marlowe_safehouse_found", "text": "Agent Marlowe's trail leads to a River Gate safehouse."},
-+                    {"unlock_lead": "lead:confront_agent_marlowe", "text": "Confront Agent Marlowe at the safehouse."},
++                    {"unlock_objective": "objective:secure_black_ford_crossing", "summary": "Secure Black Ford crossing."},
++                    {"complete_objective": "objective:secure_black_ford_crossing"},
++                    {"unlock_fact": "fact:black_ford_crossing_secured", "text": "Black Ford is secured for the teamsters and the east road remains open."},
++                    {"unlock_lead": "lead:identify_handler_signature", "text": "Identify the handler's signature from the captured route papers."},
 +                ],
 +            ),
 +            ProgressionNode(
-+                node_id="confront_agent_marlowe",
-+                title="Confront Agent Marlowe.",
-+                requires=[{"lead": "lead:confront_agent_marlowe"}],
++                node_id="identify_handler_signature",
++                title="Identify the handler's signature.",
++                requires=[{"lead": "lead:identify_handler_signature"}],
 +                action_patterns=[
-+                    {"semantic": "confront", "target_id": "npc:agent_marlowe", "topics_any": ["sable chain"]},
-+                    {"semantic": "ask", "target_id": "npc:agent_marlowe", "topics_any": ["voss", "silver crow"]},
-+                    {"semantic": "tell", "target_id": "npc:agent_marlowe", "topics_any": ["ledger", "proof"]},
-+                    {"semantic": "press", "topics_any": ["marlowe", "sable chain"]},
++                    {"semantic": "inspect", "topics_any": ["handler signature"]},
++                    {"semantic": "read", "topics_any": ["route papers"]},
++                    {"semantic": "decipher", "topics_any": ["signature"]},
++                    {"semantic": "study", "topics_any": ["captured route papers"]},
 +                ],
 +                suggested_actions=[
 +                    _a(
-+                        "confront_agent_marlowe",
-+                        "I confront Agent Marlowe with the Silver Crow ledger and demand the truth about the Sable Chain.",
-+                        "confront",
-+                        target_type="npc",
-+                        target_id="npc:agent_marlowe",
++                        "identify_handler_signature",
++                        "I study the captured route papers to identify the Sable Chain handler's signature.",
++                        "inspect",
++                        target_type="item",
++                        target_id="item:captured_route_papers",
 +                        priority=85,
 +                    ),
 +                ],
 +                effects=[
-+                    {"unlock_fact": "fact:marlowe_confirms_sable_chain", "text": "Agent Marlowe confirms the Sable Chain used the Silver Crow to fund Voss."},
-+                    {"unlock_lead": "lead:return_with_sable_chain_proof", "text": "Return to the allies with proof of the Sable Chain connection."},
++                    {"unlock_fact": "fact:handler_signature_is_veska", "text": "The route papers identify the higher Sable Chain handler as Veska."},
++                    {"unlock_npc": "npc:handler_veska", "name": "Handler Veska"},
++                    {"unlock_lead": "lead:return_with_veska_name", "text": "Return with Handler Veska's name."},
 +                ],
 +            ),
 +            ProgressionNode(
-+                node_id="return_with_sable_chain_proof",
-+                title="Return with proof of the Sable Chain connection.",
-+                requires=[{"lead": "lead:return_with_sable_chain_proof"}],
++                node_id="return_with_veska_name",
++                title="Return with Handler Veska's name.",
++                requires=[{"lead": "lead:return_with_veska_name"}],
 +                action_patterns=[
-+                    {"semantic": "travel", "topics_any": ["return", "sable chain proof"]},
-+                    {"semantic": "report", "target_id": "npc:bran", "topics_any": ["sable chain"]},
-+                    {"semantic": "tell", "target_id": "npc:garran", "topics_any": ["marlowe", "proof"]},
-+                    {"semantic": "travel", "topics_any": ["rusty flagon", "proof"]},
++                    {"semantic": "report", "target_id": "npc:bran", "topics_any": ["veska"]},
++                    {"semantic": "tell", "target_id": "npc:garran", "topics_any": ["handler veska"]},
++                    {"semantic": "travel", "topics_any": ["return", "veska"]},
++                    {"semantic": "report", "topics_any": ["sable chain handler"]},
 +                ],
 +                suggested_actions=[
 +                    _a(
-+                        "return_with_sable_chain_proof",
-+                        "I return to Bran and Garran with proof that the Sable Chain backed Captain Voss through the Silver Crow.",
++                        "return_with_veska_name",
++                        "I return to Bran and Garran with the name of the Sable Chain handler: Veska.",
 +                        "report",
 +                        target_type="npc",
 +                        target_id="npc:bran",
@@ -358,30 +452,32 @@ Add after _build_captain_voss_consequence_graph():
 +                ],
 +                effects=[
 +                    {"set_location": "location:rusty_flagon_tavern", "name": "The Rusty Flagon Tavern"},
-+                    {"unlock_fact": "fact:allies_have_sable_chain_proof", "text": "Bran and Garran now have proof that the Sable Chain backed Captain Voss through the Silver Crow."},
-+                    {"complete_quest": "quest:voss_backers_investigation"},
-+                    {"unlock_lead": "lead:sable_chain_next_arc", "text": "Plan how to move against the Sable Chain."},
++                    {"complete_quest": "quest:sable_chain_handler_route_pressure"},
++                    {"unlock_fact": "fact:allies_know_handler_veska", "text": "Bran and Garran now know Handler Veska is directing Sable Chain pressure against the region."},
++                    {"unlock_lead": "lead:handler_veska_next_arc", "text": "Plan how to pursue Handler Veska."},
 +                ],
 +            ),
 +        ],
 +    )
-+    graph.title = "Voss Backers → Sable Chain Investigation"
-+    graph.starts_after_graph_ids = ["graph:tavern_story_seed:captain_voss_consequence"]
-+    graph.starts_after_quest_ids = ["quest:captain_voss_consequence"]
-+    graph.priority = 60
++    graph.title = "Sable Chain Handler → Route Pressure"
++    graph.starts_after_graph_ids = ["graph:tavern_story_seed:sable_chain_countermove"]
++    graph.starts_after_quest_ids = ["quest:sable_chain_countermove"]
++    graph.priority = 40
 +    return graph
 
 This adds 12 nodes.
 
-Expected total after N95:
+Expected total:
 
 Graph 1: 18
 Graph 2: 9
 Graph 3: 10
 Graph 4: 12
 Graph 5: 12
-Total: 61
-1B. Register graph 5
+Graph 6: 12
+Graph 7: 12
+Total: 85
+B2. Register graph 7
 
 Patch graph list:
 
@@ -394,13 +490,18 @@ Patch graph list:
              _build_tavern_aftermath_graph(),
              _build_north_road_shrine_graph(),
              _build_captain_voss_consequence_graph(),
-+            _build_voss_backers_investigation_graph(),
+             _build_voss_backers_investigation_graph(),
+             _build_sable_chain_countermove_graph(),
++            _build_sable_chain_handler_route_pressure_graph(),
          ]
 
 If your registry uses _GRAPHS, patch that list instead.
 
-2. Patch src/app/rpg/progression/runtime.py
-2A. Add missing semantic aliases
+Part C — Runtime Support
+
+Patch src/app/rpg/progression/runtime.py.
+
+C1. Add semantic aliases
 
 Find _semantic_aliases(...).
 
@@ -409,16 +510,16 @@ Patch/merge:
 --- src/app/rpg/progression/runtime.py
 +++ src/app/rpg/progression/runtime.py
 @@
-         "plan": ["plan", "prepare", "decide", "choose"],
-         "report": ["report", "tell", "show", "present", "explain"],
-+        "review": ["review", "study", "inspect", "read", "plan"],
-+        "trace": ["trace", "track", "follow", "inspect", "study"],
-+        "question": ["question", "ask", "interrogate"],
-+        "decipher": ["decipher", "read", "study", "inspect"],
-
-If decipher already exists under read aliases but not as a key, add it.
-
-2B. Add objective mapping for graph 5
+         "secure": ["secure", "protect", "guard", "prepare"],
+         "intercept": ["intercept", "confront", "stop", "block", "protect"],
+         "guard": ["guard", "protect", "watch", "secure"],
+         "track": ["track", "follow", "trace", "shadow", "scout"],
++        "disable": ["disable", "remove", "take", "inspect", "stop"],
++        "remove": ["remove", "disable", "take", "clear"],
++        "find": ["find", "search", "inspect", "scout"],
++        "stop": ["stop", "intercept", "confront", "block"],
++        "block": ["block", "stop", "intercept", "protect"],
+C2. Add objective mapping for graph 7
 
 Find _ensure_objective(...).
 
@@ -428,137 +529,80 @@ Add:
 +++ src/app/rpg/progression/runtime.py
 @@
          elif objective_id in {
-             "objective:plan_against_voss",
-             "objective:identify_voss_allies",
-             "objective:seek_magistrate_hearing",
-             "objective:present_manifest",
-             "objective:secure_public_witnesses",
-             "objective:counter_voss_intimidation",
-             "objective:attend_public_hearing",
-             "objective:choose_voss_outcome",
+             "objective:plan_against_sable_chain",
+             "objective:secure_sable_chain_evidence",
+             "objective:detect_safehouse_watchers",
+             "objective:reach_river_gate_warehouses",
+             "objective:inspect_warehouse_marks",
+             "objective:prepare_safehouse_defense",
          }:
-             quest_id = "quest:captain_voss_consequence"
+             quest_id = "quest:sable_chain_countermove"
 +        elif objective_id in {
-+            "objective:review_voss_backer_leads",
-+            "objective:trace_voss_payment_marks",
-+            "objective:identify_silver_crow",
-+            "objective:reach_abandoned_cooperage",
-+            "objective:inspect_cooperage_cellar",
++            "objective:review_handler_orders",
++            "objective:decode_handler_route_cipher",
++            "objective:warn_east_road_teamsters",
++            "objective:scout_east_road_pressure_points",
++            "objective:disable_false_toll_markers",
++            "objective:reach_black_ford",
++            "objective:secure_black_ford_crossing",
 +        }:
-+            quest_id = "quest:voss_backers_investigation"
-3. Update campaign-complete bridge text
++            quest_id = "quest:sable_chain_handler_route_pressure"
+C3. Update campaign-complete bridge text
 
-Patch src/app/rpg/progression/runtime.py or wherever _arc_complete_idle_actions(...) lives.
+Patch _arc_complete_idle_actions(...).
 
-Replace generic bridge command logic with fact-aware text.
-
-Find the returned arc-complete actions and patch:
+Add a top fact case before fact:sable_chain_countermove_thwarted:
 
 --- src/app/rpg/progression/runtime.py
 +++ src/app/rpg/progression/runtime.py
 @@
--    return [
-+    facts = _safe_dict(state.get("progression_facts"))
-+    if "fact:allies_have_sable_chain_proof" in facts:
-+        regroup = "I regroup with Bran and Garran after exposing the Sable Chain connection, then plan how to move against the faction behind Captain Voss."
-+        next_lead = "I ask Bran and Garran how we should move against the Sable Chain now that we have proof of their role."
-+    elif "fact:voss_arc_closed" in facts:
-+        regroup = "I regroup with Bran and Garran after exposing Captain Voss, then consider which faction backed him."
-+        next_lead = "I ask Bran and Garran which faction could have backed Captain Voss and how we should investigate them."
-+    elif "fact:allies_have_voss_proof" in facts:
-+        regroup = "I regroup with Bran and Garran after proving Captain Voss is behind the attacks, then prepare the next public move."
-+        next_lead = "I ask Bran and Garran how to use the proof against Captain Voss before his allies react."
-+    else:
-+        regroup = "I regroup with Garran and review the completed ambush and mill investigation before choosing the next lead."
-+        next_lead = "I ask Garran and Bran what threat or lead we should follow next now that the wagon is safe and the old mill lead is resolved."
-+
-+    return [
-         {
-             "action_id": "arc_complete_regroup",
--            "command": "I regroup with Garran and review the completed ambush and mill investigation before choosing the next lead.",
-+            "command": regroup,
-             "priority": 10,
-             "source": "scenario_progression_arc_complete_bridge",
-         },
-         {
-             "action_id": "arc_complete_ask_next_lead",
--            "command": "I ask Garran and Bran what threat or lead we should follow next now that the wagon is safe and the old mill lead is resolved.",
-+            "command": next_lead,
-             "priority": 9,
-             "source": "scenario_progression_arc_complete_bridge",
-         },
-     ]
-4. Readiness expectations
-
-No threshold change required.
-
-Current N94 readiness should now move from:
-
-progression_changed_count: 49
-failed_gates:
-  needs_more_graph_content_ok
-
-to:
-
-progression_changed_count: 61
-failed_gates:
-  needs_more_graph_content_ok
-
-This still fails because the run reaches content exhaustion after graph 5, but it is more meaningful content and pushes the campaign closer to 1000-turn readiness.
-
-5. Tests
-5A. Registry test
+     facts = _safe_dict(state.get("progression_facts"))
+-    if "fact:sable_chain_countermove_thwarted" in facts:
++    if "fact:allies_know_handler_veska" in facts:
++        regroup = "I regroup with Bran and Garran after identifying Handler Veska, then plan how to pursue the Sable Chain leadership."
++        next_lead = "I ask Bran and Garran how we should pursue Handler Veska before the Sable Chain can shift its routes again."
++    elif "fact:sable_chain_countermove_thwarted" in facts:
+         regroup = "I regroup with Bran and Garran after thwarting the Sable Chain countermove, then prepare to pursue the higher handler named in the sealed orders."
+         next_lead = "I ask Bran and Garran how we should pursue the higher Sable Chain handler before the faction can disappear."
+Part D — Tests
+D1. Registry test
 
 Patch src/tests/rpg/test_progression_graph_registry.py:
 
-def test_fifth_tavern_graph_contains_voss_backer_nodes():
+def test_seventh_tavern_graph_contains_sable_chain_handler_route_pressure_nodes():
     from app.rpg.progression.graph_registry import get_progression_graph_by_id
 
     graph = get_progression_graph_by_id(
         "tavern_story_seed",
-        "graph:tavern_story_seed:voss_backers_investigation",
+        "graph:tavern_story_seed:sable_chain_handler_route_pressure",
     )
     assert graph is not None
 
     node_ids = [node.node_id for node in graph.nodes]
 
     assert node_ids == [
-        "review_voss_backer_leads",
-        "trace_voss_payment_marks",
-        "ask_bran_about_silver_crow",
-        "question_old_teamster",
-        "travel_to_abandoned_cooperage",
-        "inspect_cooperage_cellar",
-        "open_silver_crow_cache",
-        "read_silver_crow_ledger",
-        "identify_sable_chain_agent",
-        "locate_agent_marlowe",
-        "confront_agent_marlowe",
-        "return_with_sable_chain_proof",
+        "review_handler_orders",
+        "decode_handler_route_cipher",
+        "warn_east_road_teamsters",
+        "scout_east_road_pressure_points",
+        "disable_false_toll_markers",
+        "find_handler_dead_drop",
+        "read_route_pressure_instructions",
+        "travel_to_black_ford",
+        "confront_route_pressure_agents",
+        "secure_black_ford_crossing",
+        "identify_handler_signature",
+        "return_with_veska_name",
     ]
-5B. Runtime five-graph progression test
+D2. Runtime seven-graph progression test
 
-Add to src/tests/rpg/test_scenario_progression_runtime.py.
+Patch src/tests/rpg/test_scenario_progression_runtime.py.
 
-To avoid an enormous duplicated list in every test, first add this helper if you do not already have one:
+If _apply_actions exists, reuse it.
 
-def _apply_actions(state, actions):
-    from app.rpg.progression.runtime import apply_progression_for_action
+Add:
 
-    for turn, action in enumerate(actions, start=1):
-        result = apply_progression_for_action(
-            state,
-            scenario_seed="tavern_story_seed",
-            player_action=action,
-            turn_index=turn,
-        )
-        assert result["changed"] is True, (turn, action, result)
-        state = result["state"]
-    return state
-
-Then add:
-
-def test_five_graph_campaign_progresses_through_sable_chain_proof():
+def test_seven_graph_campaign_progresses_through_handler_route_pressure():
     from app.rpg.progression.runtime import build_scenario_progression_arc_summary
 
     state = {}
@@ -629,23 +673,49 @@ def test_five_graph_campaign_progresses_through_sable_chain_proof():
         "I follow the ledger trail to locate Agent Marlowe before the Sable Chain can erase the evidence.",
         "I confront Agent Marlowe with the Silver Crow ledger and demand the truth about the Sable Chain.",
         "I return to Bran and Garran with proof that the Sable Chain backed Captain Voss through the Silver Crow.",
+        # Graph 6
+        "I meet with Bran and Garran to plan how to move against the Sable Chain before they strike back.",
+        "I secure the Silver Crow ledger, the manifest, and Marlowe’s proof before the Sable Chain can steal them.",
+        "I scout the streets around the River Gate safehouse for Sable Chain watchers.",
+        "I shadow the Sable Chain watchers from the safehouse to learn where they report.",
+        "I follow the watchers to the River Gate warehouses.",
+        "I inspect the River Gate warehouse marks, crates, and chalk signs for Sable Chain codes.",
+        "I search the warehouse office for Sable Chain countermove orders.",
+        "I rush back to warn Bran and Garran that the Sable Chain plans to burn the evidence and silence witnesses.",
+        "I help Bran and Garran prepare the safehouse defense and protect the evidence before the Sable Chain strike.",
+        "I intercept the Sable Chain strike team before they can burn the safehouse evidence.",
+        "I capture the strike team's sealed orders before they can destroy them.",
+        "I report to Bran and Garran that the Sable Chain countermove failed and the sealed orders point to a higher handler.",
+        # Graph 7
+        "I review the sealed orders with Bran and Garran to identify the higher Sable Chain handler.",
+        "I decode the handler's route cipher from the sealed orders.",
+        "I warn the east road teamsters that the Sable Chain handler plans to choke the supply route.",
+        "I scout the east road for roadblocks, chokepoints, and Sable Chain pressure points.",
+        "I disable the false toll markers the Sable Chain placed along the east road.",
+        "I search the old milepost for the Sable Chain handler's dead drop.",
+        "I read the route pressure instructions from the handler's dead drop.",
+        "I travel to Black Ford before the Sable Chain handler's people can seize the crossing.",
+        "I confront the Sable Chain route pressure agents at Black Ford and order them to stand down.",
+        "I secure the Black Ford crossing so the teamsters can keep the east road open.",
+        "I study the captured route papers to identify the Sable Chain handler's signature.",
+        "I return to Bran and Garran with the name of the Sable Chain handler: Veska.",
     ]
 
     state = _apply_actions(state, actions)
     arc = build_scenario_progression_arc_summary(state, scenario_seed="tavern_story_seed")
 
-    assert arc["graph_count"] == 5
-    assert arc["completed_graph_count"] == 5
+    assert arc["graph_count"] == 7
+    assert arc["completed_graph_count"] == 7
     assert arc["campaign_graphs_complete"] is True
-    assert arc["completed_node_count"] >= 61
-    assert "graph:tavern_story_seed:voss_backers_investigation" in arc["completed_graph_ids"]
-    assert "fact:allies_have_sable_chain_proof" in state["progression_facts"]
-    assert "lead:sable_chain_next_arc" in state["progression_leads"]
-5C. Readiness test for 61 nodes
+    assert arc["completed_node_count"] >= 85
+    assert "graph:tavern_story_seed:sable_chain_handler_route_pressure" in arc["completed_graph_ids"]
+    assert "fact:allies_know_handler_veska" in state["progression_facts"]
+    assert "lead:handler_veska_next_arc" in state["progression_leads"]
+D3. Readiness test for 85 nodes
 
 Patch src/tests/rpg/test_100_turn_readiness.py:
 
-def test_100_turn_readiness_with_five_graphs_only_fails_next_content_gate():
+def test_100_turn_readiness_with_seven_graphs_only_fails_next_content_gate():
     from tests.rpg.autoplay_llm_campaign import _build_100_turn_readiness_summary
 
     transcript = [
@@ -655,30 +725,30 @@ def test_100_turn_readiness_with_five_graphs_only_fails_next_content_gate():
             "top_scenario_progression_action_id": f"node_{i}",
             "scenario_progression_summary": {"changed": True},
         }
-        for i in range(1, 62)
+        for i in range(1, 86)
     ]
     transcript.extend(
         {
             "turn_index": i,
-            "player_action": "I regroup with Bran and Garran after exposing the Sable Chain connection, then plan how to move against the faction behind Captain Voss.",
+            "player_action": "I regroup with Bran and Garran after identifying Handler Veska, then plan how to pursue the Sable Chain leadership.",
             "top_scenario_progression_action_id": "arc_complete_regroup",
             "scenario_progression_summary": {"changed": False},
         }
-        for i in range(62, 101)
+        for i in range(86, 101)
     )
 
     summary = {
         "scenario_progression_arc_summary": {
-            "graph_count": 5,
-            "completed_graph_count": 5,
+            "graph_count": 7,
+            "completed_graph_count": 7,
             "campaign_graphs_complete": True,
             "waiting_for_next_graph_pack": True,
-            "completed_node_count": 61,
+            "completed_node_count": 85,
         },
         "behavioral_autoplay_eval_summary": {
             "metrics": {
-                "progression_changed_count": 61,
-                "unique_progression_node_count": 61,
+                "progression_changed_count": 85,
+                "unique_progression_node_count": 85,
             }
         },
     }
@@ -693,12 +763,12 @@ def test_100_turn_readiness_with_five_graphs_only_fails_next_content_gate():
     assert result["gates"]["unique_progression_nodes_ok"] is True
     assert result["gates"]["arc_complete_idle_not_excessive_ok"] is True
     assert result["failed_gates"] == ["needs_more_graph_content_ok"]
-6. Validation commands
+Part E — Validation Commands
 
 Compile:
 
 python -m py_compile src\app\rpg\progression\graph_registry.py src\app\rpg\progression\runtime.py src\tests\rpg\autoplay_llm_campaign.py
 
-Run focused tests:
+Focused tests:
 
 python -m pytest src\tests\rpg\test_progression_graph_registry.py src\tests\rpg\test_scenario_progression_runtime.py src\tests\rpg\test_100_turn_readiness.py -q

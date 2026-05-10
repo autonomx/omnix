@@ -122,7 +122,9 @@ def test_merge_preserving_runtime_state_does_not_drop_reconciled_quest_progress(
 
 
 def test_strict_progress_health_summary_reads_nested_metrics():
-    from tests.rpg.autoplay_llm_campaign import _strict_progress_health_summary_from_summary
+    from tests.rpg.autoplay_llm_campaign import (
+        _strict_progress_health_summary_from_summary,
+    )
 
     summary = {
         "health": {

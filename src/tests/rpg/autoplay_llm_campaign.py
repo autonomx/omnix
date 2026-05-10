@@ -1,7 +1,6 @@
 
 from __future__ import annotations
 
-
 PROGRESSION_STATE_PRESERVE_KEYS = (
     "progression_state_revision",
     "progression_completed_node_count",
@@ -2797,7 +2796,9 @@ def _merge_turn_result_authoritative_state(
 def _reconcile_and_apply_handoff(runtime_state: Dict[str, Any]) -> Dict[str, Any]:
     state = deepcopy(_safe_dict(runtime_state))
     try:
-        from app.rpg.objectives.reconciliation import reconcile_objective_progression_into_quests
+        from app.rpg.objectives.reconciliation import (
+            reconcile_objective_progression_into_quests,
+        )
 
         reconciled = _safe_dict(reconcile_objective_progression_into_quests(state))
         state = _safe_dict(reconciled.get("state")) or state
