@@ -26,8 +26,12 @@ class ProgressionNode:
     priority: int = 50
 
 
-@dataclass(frozen=True)
+@dataclass
 class ScenarioProgressionGraph:
     graph_id: str
     scenario_seed: str
     nodes: List[ProgressionNode] = field(default_factory=list)
+    title: str = ""
+    priority: int = 50
+    starts_after_graph_ids: List[str] = field(default_factory=list)
+    starts_after_quest_ids: List[str] = field(default_factory=list)

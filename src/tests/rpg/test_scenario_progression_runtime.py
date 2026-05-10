@@ -403,6 +403,55 @@ def test_prepare_quarry_road_seeds_next_arc_objectives_and_actions():
     assert "leave_by_quarry_road" in action_ids
 
 
+def test_graph_handoff_activates_bandit_aftermath_after_quarry_ambush():
+    from app.rpg.progression.runtime import apply_progression_for_action, get_active_progression_actions
+
+    state = {}
+    actions = [
+        "I ask Bran for a room, but I also ask why the tavern feels so tense tonight.",
+        "I ask Bran who left through the side door and why they were afraid.",
+        "I ask Bran what direction the cloaked traveler went after leaving.",
+        "I turn to Mira and ask what she saw near the side door.",
+        "I inspect the side door, latch, and threshold for blood, tracks, or torn cloth.",
+        "I ask Bran if the old east road leads to a bridge.",
+        "I approach the local patron and quietly ask what he knows about the mill bridge.",
+        "I report to Bran that the traveler's trail, the blood, and the bridge story point to an ambush.",
+        "I ask Bran who is most likely to travel the road before dawn.",
+        "I leave the tavern and travel toward Garran's wagon yard.",
+        "I tell Garran the mill bridge may be an ambush and show him the evidence.",
+        "I ask Garran if there is another route around the bridge.",
+        "I help Garran prepare the wagon for the safer route and get ready to leave.",
+        "I leave Garran's wagon yard with the wagon and take the quarry road.",
+        "I scout ahead on the quarry road for tracks, hiding places, and ambush signs.",
+        "I scan the rock shelf for watchers or scouts watching the quarry road.",
+        "I tell Garran we should slow the wagon and lure the watchers into revealing the ambush.",
+        "I help Garran protect the wagon while drawing the ambushers out of hiding.",
+    ]
+
+    for turn, action in enumerate(actions, start=1):
+        result = apply_progression_for_action(
+            state,
+            scenario_seed="tavern_story_seed",
+            player_action=action,
+            turn_index=turn,
+        )
+        assert result["changed"] is True, (turn, action, result)
+        state = result["state"]
+
+    next_actions = get_active_progression_actions(
+        state,
+        scenario_seed="tavern_story_seed",
+        limit=8,
+    )
+    action_ids = [row["action_id"] for row in next_actions]
+
+    assert "graph:tavern_story_seed:witness_to_quarry" in state["scenario_progression_completed_graph_ids"]
+    assert state["scenario_progression_active_graph_id"] == "graph:tavern_story_seed:bandit_aftermath"
+    assert state["scenario_progression_waiting_for_next_graph_pack"] is False
+    assert "question_captured_bandit" in action_ids
+    assert "arc_complete_regroup" not in action_ids
+
+
 def test_quarry_road_arc_can_continue_after_prepare_node():
     state = {}
     actions = [
@@ -484,10 +533,10 @@ def test_arc_summary_reports_complete_after_full_graph():
         scenario_seed="tavern_story_seed",
     )
 
-    assert arc["arc_complete"] is True
-    assert arc["completed_node_count"] == arc["expected_node_count"]
-    assert arc["active_graph_quest_count"] == 0
-    assert arc["active_graph_objective_count"] == 0
+    assert arc["campaign_graphs_complete"] is False
+    assert arc["arc_complete"] is False  # Active graph is not complete
+    assert arc["completed_graph_count"] == 1
+    assert arc["active_graph_id"] == "graph:tavern_story_seed:bandit_aftermath"
 
     actions = get_active_progression_actions(
         state,
@@ -495,7 +544,7 @@ def test_arc_summary_reports_complete_after_full_graph():
         limit=8,
     )
     assert actions
-    assert actions[0]["action_id"] == "arc_complete_regroup"
+    assert actions[0]["action_id"] == "question_captured_bandit"
 
 
 def test_arc_complete_actions_include_next_lead_bridge():
@@ -539,5 +588,190 @@ def test_arc_complete_actions_include_next_lead_bridge():
     )
     action_ids = [row["action_id"] for row in actions]
 
-    assert "arc_complete_regroup" in action_ids
-    assert "arc_complete_ask_next_lead" in action_ids
+    assert "question_captured_bandit" in action_ids
+    assert "arc_complete_regroup" not in action_ids
+
+
+def test_scout_quarry_road_matches_scout_action():
+    from app.rpg.progression.runtime import apply_progression_for_action
+
+    state = {
+        "scenario_progression_active_graph_id": "graph:tavern_story_seed:witness_to_quarry",
+        "progression_leads": {
+            "lead:scout_quarry_road": {
+                "lead_id": "lead:scout_quarry_road",
+                "text": "Scout the quarry road before advancing.",
+                "source": "scenario_progression_graph",
+            }
+        },
+        "quest_progress": {
+            "quests": {
+                "quest:quarry_road_ambush": {
+                    "quest_id": "quest:quarry_road_ambush",
+                    "title": "Quarry Road Ambush",
+                    "status": "active",
+                    "completed": False,
+                    "source": "scenario_progression_graph",
+                    "objectives": [
+                        {"objective_id": "objective:scout_quarry_road", "status": "active", "completed": False}
+                    ],
+                }
+            }
+        },
+    }
+
+    result = apply_progression_for_action(
+        state,
+        scenario_seed="tavern_story_seed",
+        player_action="I scout ahead on the quarry road for tracks, hiding places, and ambush signs.",
+        turn_index=15,
+    )
+
+    assert result["changed"] is True
+    assert result["summary"]["matched_node_ids"] == ["scout_quarry_road"]
+    assert "fact:quarry_road_tracks" in result["state"]["progression_facts"]
+    assert "lead:spot_bridge_watchers" in result["state"]["progression_leads"]
+
+
+def test_spot_bridge_watchers_matches_scan_action():
+    from app.rpg.progression.runtime import apply_progression_for_action
+
+    state = {
+        "scenario_progression_active_graph_id": "graph:tavern_story_seed:witness_to_quarry",
+        "progression_leads": {
+            "lead:spot_bridge_watchers": {
+                "lead_id": "lead:spot_bridge_watchers",
+                "text": "Look for watchers near the rock shelf.",
+                "source": "scenario_progression_graph",
+            }
+        },
+        "quest_progress": {
+            "quests": {
+                "quest:quarry_road_ambush": {
+                    "quest_id": "quest:quarry_road_ambush",
+                    "title": "Quarry Road Ambush",
+                    "status": "active",
+                    "completed": False,
+                    "source": "scenario_progression_graph",
+                    "objectives": [
+                        {"objective_id": "objective:spot_bridge_watchers", "status": "active", "completed": False}
+                    ],
+                }
+            }
+        },
+    }
+
+    result = apply_progression_for_action(
+        state,
+        scenario_seed="tavern_story_seed",
+        player_action="I scan the rock shelf for watchers or scouts watching the quarry road.",
+        turn_index=16,
+    )
+
+    assert result["changed"] is True
+    assert result["summary"]["matched_node_ids"] == ["spot_bridge_watchers"]
+    assert "fact:bandit_watchers_spotted" in result["state"]["progression_facts"]
+    assert "lead:choose_ambush_response" in result["state"]["progression_leads"]
+
+
+def test_read_wax_sealed_order_matches_generated_read_action():
+    from app.rpg.progression.runtime import apply_progression_for_action
+
+    state = {
+        "scenario_progression_active_graph_id": "graph:tavern_story_seed:bandit_aftermath",
+        "scenario_progression_completed_graph_ids": ["graph:tavern_story_seed:witness_to_quarry"],
+        "progression_leads": {
+            "lead:read_wax_sealed_order": {
+                "lead_id": "lead:read_wax_sealed_order",
+                "text": "Read the wax-sealed order.",
+            }
+        },
+    }
+
+    result = apply_progression_for_action(
+        state,
+        scenario_seed="tavern_story_seed",
+        player_action="I read the wax-sealed order from the hidden smuggler cache.",
+        turn_index=26,
+    )
+
+    assert result["changed"] is True
+    assert result["summary"]["matched_node_ids"] == ["read_wax_sealed_order"]
+    assert "fact:order_mentions_black_briar_contact" in result["state"]["progression_facts"]
+    assert "lead:decide_mill_next_step" in result["state"]["progression_leads"]
+
+
+def test_decide_mill_next_step_matches_generated_decide_action():
+    from app.rpg.progression.runtime import apply_progression_for_action
+
+    state = {
+        "scenario_progression_active_graph_id": "graph:tavern_story_seed:bandit_aftermath",
+        "scenario_progression_completed_graph_ids": ["graph:tavern_story_seed:witness_to_quarry"],
+        "progression_leads": {
+            "lead:decide_mill_next_step": {
+                "lead_id": "lead:decide_mill_next_step",
+                "text": "Decide whether to set a watch or follow the north road shrine lead.",
+            }
+        },
+    }
+
+    result = apply_progression_for_action(
+        state,
+        scenario_seed="tavern_story_seed",
+        player_action="I decide to follow the north road shrine lead before the Black Briar contact disappears.",
+        turn_index=27,
+    )
+
+    assert result["changed"] is True
+    assert result["summary"]["matched_node_ids"] == ["decide_mill_next_step"]
+    assert "fact:north_road_shrine_next" in result["state"]["progression_facts"]
+
+
+def test_prepare_quarry_road_unlocks_leave_by_quarry_road_and_starts_next_quest():
+    state = {
+        "scenario_progression_active_graph_id": "graph:tavern_story_seed:witness_to_quarry",
+        "progression_leads": {
+            "lead:prepare_quarry_road": {
+                "lead_id": "lead:prepare_quarry_road",
+                "text": "Prepare the wagon for the quarry road.",
+                "source": "scenario_progression_graph",
+            }
+        },
+        "quest_progress": {
+            "quests": {
+                "quest:warn_wagon": {
+                    "quest_id": "quest:warn_wagon",
+                    "title": "Warn the Wagon",
+                    "status": "active",
+                    "completed": False,
+                    "source": "scenario_progression_graph",
+                    "objectives": [
+                        {"objective_id": "objective:choose_safe_route", "status": "active", "completed": False}
+                    ],
+                }
+            }
+        },
+    }
+
+    result = apply_progression_for_action(
+        state,
+        scenario_seed="tavern_story_seed",
+        player_action="I help Garran prepare the wagon for the safer route and get ready to leave.",
+        turn_index=13,
+    )
+
+    assert result["changed"] is True
+    assert result["summary"]["matched_node_ids"] == ["prepare_quarry_road"]
+
+    state = result["state"]
+    assert "lead:leave_by_quarry_road" in state["progression_leads"]
+    assert state["quest_progress"]["quests"]["quest:warn_wagon"]["status"] == "completed"
+    assert state["quest_progress"]["quests"]["quest:quarry_road_ambush"]["status"] == "active"
+
+    next_actions = get_active_progression_actions(
+        state,
+        scenario_seed="tavern_story_seed",
+        limit=8,
+    )
+    action_ids = [row["action_id"] for row in next_actions]
+    assert "leave_by_quarry_road" in action_ids
