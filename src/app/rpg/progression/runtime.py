@@ -6,7 +6,6 @@ from typing import Any, Dict, List
 
 from app.rpg.progression.graph_registry import (
     get_progression_graph_by_id,
-    get_progression_graph_for_seed,
     get_progression_graphs_for_seed,
 )
 from app.rpg.progression.models import ProgressionNode, ScenarioProgressionGraph
@@ -67,11 +66,16 @@ def _semantic_aliases(semantic: str) -> List[str]:
         "review": ["review", "study", "inspect", "read", "plan"],
         "trace": ["trace", "track", "follow", "inspect", "study"],
         "question": ["question", "ask", "interrogate"],
-        "decipher": ["decipher", "read", "study", "inspect"],
+        "decipher": ["decipher", "read", "study", "inspect", "decode"],
         "secure": ["secure", "protect", "guard", "prepare"],
         "intercept": ["intercept", "confront", "stop", "block", "protect"],
         "guard": ["guard", "protect", "watch", "secure"],
         "track": ["track", "follow", "trace", "shadow", "scout"],
+        "disable": ["disable", "remove", "take", "inspect", "stop"],
+        "remove": ["remove", "disable", "take", "clear"],
+        "find": ["find", "search", "inspect", "scout"],
+        "stop": ["stop", "intercept", "confront", "block"],
+        "block": ["block", "stop", "intercept", "protect"],
     }.get(semantic, [semantic])
 
 
@@ -236,6 +240,34 @@ def _ensure_objective(
             "objective:prepare_safehouse_defense",
         }:
             quest_id = "quest:sable_chain_countermove"
+        elif objective_id in {
+            "objective:review_handler_orders",
+            "objective:decode_handler_route_cipher",
+            "objective:warn_east_road_teamsters",
+            "objective:scout_east_road_pressure_points",
+            "objective:disable_false_toll_markers",
+            "objective:reach_black_ford",
+            "objective:secure_black_ford_crossing",
+        }:
+            quest_id = "quest:sable_chain_handler_route_pressure"
+        elif objective_id in {
+            "objective:plan_pursuit_of_veska",
+            "objective:trace_veska_courier_route",
+            "objective:reach_old_north_watchpost",
+            "objective:inspect_watchpost_courier_signs",
+            "objective:decode_veska_message",
+            "objective:reach_ridge_hideout",
+            "objective:scout_ridge_hideout",
+        }:
+            quest_id = "quest:handler_veska_leadership_pursuit"
+        elif objective_id in {
+            "objective:review_veska_ledgers",
+            "objective:identify_hidden_paymaster",
+            "objective:trace_red_lantern_payments",
+            "objective:reach_old_counting_house",
+            "objective:inspect_counting_house_records",
+        }:
+            quest_id = "quest:sable_chain_endgame_opener"
     quest_id = quest_id or _infer_active_quest_id(state) or "quest:scenario_progression"
     quest = _ensure_quest(
         state,
@@ -736,7 +768,16 @@ def _arc_complete_idle_actions(state: Dict[str, Any], *, scenario_seed: str) -> 
     if not arc.get("campaign_graphs_complete") and not arc.get("waiting_for_next_graph_pack"):
         return []
     facts = _safe_dict(state.get("progression_facts"))
-    if "fact:sable_chain_countermove_thwarted" in facts:
+    if "fact:allies_have_red_lantern_records" in facts:
+        regroup = "I regroup with Bran and Garran after securing the Red Lantern records, then plan the move against the Sable Chain paymaster."
+        next_lead = "I ask Bran and Garran how we should use the Red Lantern records to expose the Sable Chain paymaster before the trail goes cold."
+    elif "fact:allies_have_veska_ledgers" in facts:
+        regroup = "I regroup with Bran and Garran after securing Veska's ledgers, then plan the final move against the Sable Chain command structure."
+        next_lead = "I ask Bran and Garran how we should use Veska's ledgers to strike at the Sable Chain leadership before they scatter."
+    elif "fact:allies_know_handler_veska" in facts:
+        regroup = "I regroup with Bran and Garran after identifying Handler Veska, then plan how to pursue the Sable Chain leadership."
+        next_lead = "I ask Bran and Garran how we should pursue Handler Veska before the Sable Chain can shift its routes again."
+    elif "fact:sable_chain_countermove_thwarted" in facts:
         regroup = "I regroup with Bran and Garran after thwarting the Sable Chain countermove, then prepare to pursue the higher handler named in the sealed orders."
         next_lead = "I ask Bran and Garran how we should pursue the higher Sable Chain handler before the faction can disappear."
     elif "fact:allies_have_sable_chain_proof" in facts:

@@ -338,6 +338,147 @@ def test_100_turn_readiness_with_four_graphs_only_fails_next_content_gate():
     assert result["failed_gates"] == ["needs_more_graph_content_ok"]
 
 
+def test_100_turn_readiness_passes_when_progression_reaches_requested_turns():
+    from tests.rpg.autoplay_llm_campaign import _build_100_turn_readiness_summary
+
+    transcript = [
+        {
+            "turn_index": i,
+            "player_action": f"graph action {i}",
+            "top_scenario_progression_action_id": f"node_{i}",
+            "scenario_progression_summary": {"changed": True},
+        }
+        for i in range(1, 101)
+    ]
+
+    summary = {
+        "scenario_progression_arc_summary": {
+            "graph_count": 9,
+            "completed_graph_count": 8,
+            "campaign_graphs_complete": False,
+            "waiting_for_next_graph_pack": False,
+            "completed_node_count": 100,
+        },
+        "behavioral_autoplay_eval_summary": {
+            "metrics": {
+                "progression_changed_count": 100,
+                "unique_progression_node_count": 100,
+            }
+        },
+    }
+
+    result = _build_100_turn_readiness_summary(
+        summary=summary,
+        transcript=transcript,
+        requested_turns=100,
+    )
+
+    assert result["ok"] is True
+    assert result["classification"] == "content_sufficient_for_requested_turns"
+    assert result["failed_gates"] == []
+    assert result["gates"]["needs_more_graph_content_ok"] is True
+
+
+def test_100_turn_readiness_with_eight_graphs_only_fails_next_content_gate():
+    from tests.rpg.autoplay_llm_campaign import _build_100_turn_readiness_summary
+
+    transcript = [
+        {
+            "turn_index": i,
+            "player_action": f"graph action {i}",
+            "top_scenario_progression_action_id": f"node_{i}",
+            "scenario_progression_summary": {"changed": True},
+        }
+        for i in range(1, 98)
+    ]
+    transcript.extend(
+        {
+            "turn_index": i,
+            "player_action": "I regroup with Bran and Garran after securing Veska's ledgers, then plan the final move against the Sable Chain command structure.",
+            "top_scenario_progression_action_id": "arc_complete_regroup",
+            "scenario_progression_summary": {"changed": False},
+        }
+        for i in range(98, 101)
+    )
+
+    summary = {
+        "scenario_progression_arc_summary": {
+            "graph_count": 8,
+            "completed_graph_count": 8,
+            "campaign_graphs_complete": True,
+            "waiting_for_next_graph_pack": True,
+            "completed_node_count": 97,
+        },
+        "behavioral_autoplay_eval_summary": {
+            "metrics": {
+                "progression_changed_count": 97,
+                "unique_progression_node_count": 97,
+            }
+        },
+    }
+
+    result = _build_100_turn_readiness_summary(
+        summary=summary,
+        transcript=transcript,
+        requested_turns=100,
+    )
+
+    assert result["gates"]["graph_progression_density_ok"] is True
+    assert result["gates"]["unique_progression_nodes_ok"] is True
+    assert result["gates"]["arc_complete_idle_not_excessive_ok"] is True
+    assert result["failed_gates"] == ["needs_more_graph_content_ok"]
+
+
+def test_100_turn_readiness_with_seven_graphs_only_fails_next_content_gate():
+    from tests.rpg.autoplay_llm_campaign import _build_100_turn_readiness_summary
+
+    transcript = [
+        {
+            "turn_index": i,
+            "player_action": f"graph action {i}",
+            "top_scenario_progression_action_id": f"node_{i}",
+            "scenario_progression_summary": {"changed": True},
+        }
+        for i in range(1, 86)
+    ]
+    transcript.extend(
+        {
+            "turn_index": i,
+            "player_action": "I regroup with Bran and Garran after identifying Handler Veska, then plan how to pursue the Sable Chain leadership.",
+            "top_scenario_progression_action_id": "arc_complete_regroup",
+            "scenario_progression_summary": {"changed": False},
+        }
+        for i in range(86, 101)
+    )
+
+    summary = {
+        "scenario_progression_arc_summary": {
+            "graph_count": 7,
+            "completed_graph_count": 7,
+            "campaign_graphs_complete": True,
+            "waiting_for_next_graph_pack": True,
+            "completed_node_count": 85,
+        },
+        "behavioral_autoplay_eval_summary": {
+            "metrics": {
+                "progression_changed_count": 85,
+                "unique_progression_node_count": 85,
+            }
+        },
+    }
+
+    result = _build_100_turn_readiness_summary(
+        summary=summary,
+        transcript=transcript,
+        requested_turns=100,
+    )
+
+    assert result["gates"]["graph_progression_density_ok"] is True
+    assert result["gates"]["unique_progression_nodes_ok"] is True
+    assert result["gates"]["arc_complete_idle_not_excessive_ok"] is True
+    assert result["failed_gates"] == ["needs_more_graph_content_ok"]
+
+
 def test_100_turn_readiness_with_six_graphs_only_fails_next_content_gate():
     transcript = [
         {
