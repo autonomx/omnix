@@ -459,3 +459,22 @@ def test_repair_replaces_early_stale_road_action_when_graph_action_exists():
     assert result["changed"] is True
     assert result["action"] == "I ask Bran who left through the side door and why they were afraid."
     assert result["reason"] == "scenario_progression_graph_repaired_stale_progression_miss"
+
+
+def test_campaign_complete_repairs_stale_active_wagon_fallback():
+    from tests.rpg.autoplay.executable_actions import repair_action_if_needed
+
+    result = repair_action_if_needed(
+        "I check in with Garran and focus on the active wagon-road objective.",
+        {
+            "scenario_progression_arc_summary": {
+                "campaign_graphs_complete": True,
+                "graph_count": 2,
+                "completed_graph_count": 2,
+            }
+        },
+    )
+
+    assert result["changed"] is True
+    assert "completed ambush and mill investigation" in result["action"]
+    assert result["reason"] == "campaign_complete_repaired_stale_active_wagon_fallback"

@@ -335,6 +335,11 @@ def _select_active_graph(
     if not graphs:
         return None
 
+    completed_graph_ids = set(_completed_graph_ids(state))
+    graph_ids = {_safe_str(graph.graph_id) for graph in graphs}
+    if graph_ids and graph_ids.issubset(completed_graph_ids):
+        return None
+
     current_id = _safe_str(_safe_dict(state).get("scenario_progression_active_graph_id"))
     current = get_progression_graph_by_id(scenario_seed, current_id) if current_id else None
     if current and not _graph_is_complete(state, current):
@@ -347,7 +352,7 @@ def _select_active_graph(
 
     # First graph fallback only before anything has started.
     first = graphs[0]
-    if not _completed_graph_ids(state) and not _graph_is_complete(state, first):
+    if not completed_graph_ids and not _graph_is_complete(state, first):
         return first
 
     return None
@@ -365,6 +370,14 @@ def _refresh_active_graph(
 
     for graph in graphs:
         _mark_graph_complete_if_needed(state, graph)
+
+    completed_graph_ids = set(_completed_graph_ids(state))
+    graph_ids = {_safe_str(graph.graph_id) for graph in graphs}
+    if graph_ids and graph_ids.issubset(completed_graph_ids):
+        state["scenario_progression_active_graph_id"] = ""
+        state["scenario_progression_active_graph_title"] = ""
+        state["scenario_progression_waiting_for_next_graph_pack"] = True
+        return None
 
     active = _select_active_graph(state, scenario_seed=scenario_seed)
     if active:
@@ -388,7 +401,7 @@ def get_active_progression_actions(
     state = _safe_dict(runtime_state)
     graph = _refresh_active_graph(state, scenario_seed=scenario_seed)
     if not graph:
-        return _arc_complete_idle_action(state, scenario_seed=scenario_seed)
+        return _arc_complete_idle_actions(state, scenario_seed=scenario_seed)
     state = _safe_dict(runtime_state)
     out: List[Dict[str, Any]] = []
     debug_nodes: List[Dict[str, Any]] = []
@@ -550,7 +563,7 @@ def build_scenario_progression_arc_summary(
 ) -> Dict[str, Any]:
     graphs = get_progression_graphs_for_seed(scenario_seed)
     active_graph = _refresh_active_graph(state, scenario_seed=scenario_seed)
-    graph = active_graph or (graphs[0] if graphs else None)
+    graph = active_graph
     state = _safe_dict(state)
     completed_nodes = _safe_dict(state.get("progression_completed_nodes"))
     completed_node_ids = sorted(completed_nodes.keys())
@@ -607,11 +620,11 @@ def build_scenario_progression_arc_summary(
         if node_id not in completed_nodes
     ]
     expected_node_count = len(expected_node_ids)
-    completed_node_count = len(completed_node_ids)
-    completed_node_count_for_active = len([node_id for node_id in expected_node_ids if node_id in completed_nodes])
+    active_completed_node_count = len([node_id for node_id in expected_node_ids if node_id in completed_nodes])
+    completed_node_count = len([node_id for node_id in all_expected_node_ids if node_id in completed_nodes])
     active_graph_complete = bool(
         expected_node_count > 0
-        and completed_node_count_for_active >= expected_node_count
+        and active_completed_node_count >= expected_node_count
         and graph_quests
         and not active_graph_quests
         and not active_graph_objectives
@@ -631,6 +644,7 @@ def build_scenario_progression_arc_summary(
         "expected_node_count": expected_node_count,
         "all_expected_node_count": len(all_expected_node_ids),
         "completed_node_count": completed_node_count,
+        "active_completed_node_count": active_completed_node_count,
         "completed_node_ids": completed_node_ids,
         "remaining_node_ids": remaining_node_ids,
         "graph_quest_count": len(graph_quests),
@@ -660,7 +674,7 @@ def _arc_complete_idle_actions(state: Dict[str, Any], *, scenario_seed: str) -> 
         {
             "action_id": "arc_complete_regroup",
             "node_id": "",
-            "command": "I regroup with Garran and review what we learned from the ambush before choosing the next lead.",
+            "command": "I regroup with Garran and review the completed ambush and mill investigation before choosing the next lead.",
             "semantic": "recap",
             "target_type": "npc",
             "target_id": "npc:garran",
@@ -670,7 +684,7 @@ def _arc_complete_idle_actions(state: Dict[str, Any], *, scenario_seed: str) -> 
         {
             "action_id": "arc_complete_ask_next_lead",
             "node_id": "",
-            "command": "I ask Garran what threat or lead we should follow next now that the wagon is safe.",
+            "command": "I ask Garran and Bran what threat or lead we should follow next now that the wagon is safe and the old mill lead is resolved.",
             "semantic": "ask",
             "target_type": "npc",
             "target_id": "npc:garran",

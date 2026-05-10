@@ -9,6 +9,20 @@ from app.rpg.objectives.progression_rules import (
 )
 
 
+def _campaign_graphs_complete(context: Dict[str, Any]) -> bool:
+    context = _safe_dict(context)
+    arc = _safe_dict(context.get("scenario_progression_arc_summary"))
+    if bool(arc.get("campaign_graphs_complete")):
+        return True
+    graph_count = int(arc.get("graph_count") or 0)
+    completed_graph_count = int(arc.get("completed_graph_count") or 0)
+    return bool(graph_count > 0 and completed_graph_count >= graph_count)
+
+
+def _campaign_complete_bridge_action() -> str:
+    return "I regroup with Garran and review the completed ambush and mill investigation before choosing the next lead."
+
+
 def _safe_dict(value: Any) -> Dict[str, Any]:
     return value if isinstance(value, dict) else {}
 
@@ -633,6 +647,20 @@ def executable_action_for_context(context: Dict[str, Any], original_action: str 
 def repair_action_if_needed(action: str, context: Dict[str, Any], transcript: List[Dict[str, Any]] | None = None) -> Dict[str, Any]:
     context = _safe_dict(context)
     original = _safe_str(action).strip()
+    original_norm = original.strip().lower()
+
+    if _campaign_graphs_complete(context) and (
+        "active wagon-road objective" in original_norm
+        or "active wagon road objective" in original_norm
+        or "focus on the active wagon" in original_norm
+    ):
+        return {
+            "changed": True,
+            "action": _campaign_complete_bridge_action(),
+            "original_action": original,
+            "reason": "campaign_complete_repaired_stale_active_wagon_fallback",
+        }
+
     normalized = normalize_command_label_action(original)
     if normalized and normalized != original and not is_meta_or_vague_action(normalized):
         return {
