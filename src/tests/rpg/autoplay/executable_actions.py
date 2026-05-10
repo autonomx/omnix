@@ -110,6 +110,9 @@ def _story_hook_fired(context: Dict[str, Any], hook_id: str) -> bool:
 
 def _scenario_progression_action_from_context(context: Dict[str, Any]) -> str:
     context = _safe_dict(context)
+    top = _safe_dict(context.get("top_scenario_progression_action"))
+    if _safe_str(top.get("command")):
+        return _safe_str(top.get("command"))
     recent = {
         _safe_str(_safe_dict(row).get("player_action") or _safe_dict(row).get("action")).strip().lower()
         for row in _safe_list(context.get("recent_turns"))[-4:]
@@ -142,6 +145,10 @@ def _graph_flow_has_left_tavern(context: Dict[str, Any]) -> bool:
         or "prepare_quarry_road" in completed_nodes
         or int(progression_summary.get("completed_node_count") or 0) >= 10
     )
+
+
+def _active_graph_is_bandit_aftermath(context: Dict[str, Any]) -> bool:
+    return _safe_str(_safe_dict(context).get("scenario_progression_active_graph_id")) == "graph:tavern_story_seed:bandit_aftermath"
 
 
 def _quest_status(context: Dict[str, Any], quest_id: str) -> str:
@@ -639,6 +646,33 @@ def repair_action_if_needed(action: str, context: Dict[str, Any], transcript: Li
     used_explicit_transcript = transcript is not None
     transcript = transcript if transcript is not None else _safe_list(context.get("recent_turns"))
 
+    # Skip repair if action was selected by scenario progression graph
+    if _safe_str(context.get("player_agent_selection_source")) == "scenario_progression_graph":
+        return {
+            "changed": False,
+            "action": action,
+            "original_action": original,
+            "reason": "",
+        }
+
+    progression_action = _scenario_progression_action_from_context(context)
+    if progression_action:
+        original_norm = original.strip().lower()
+        stale_progression_miss = (
+            "road outside the tavern" in original_norm
+            or "fresh tracks" in original_norm
+            or "wagon ruts" in original_norm
+            or "black cord" in original_norm
+            or "bridge markings" in original_norm
+        )
+        if stale_progression_miss:
+            return {
+                "changed": True,
+                "action": progression_action,
+                "original_action": original,
+                "reason": "scenario_progression_graph_repaired_stale_progression_miss",
+            }
+
     arc_summary = _safe_dict(context.get("scenario_progression_arc_summary"))
     if bool(context.get("scenario_arc_complete")) or bool(arc_summary.get("arc_complete")):
         original_norm = original.strip().lower()
@@ -682,13 +716,16 @@ def repair_action_if_needed(action: str, context: Dict[str, Any], transcript: Li
                 "original_action": original,
                 "reason": "scenario_progression_graph_priority_repair",
             }
-    if _graph_flow_has_left_tavern(context):
+    if _graph_flow_has_left_tavern(context) or _active_graph_is_bandit_aftermath(context):
         original_norm = original.strip().lower()
         if (
             "road outside the tavern" in original_norm
             or "ask bran who last saw the witness" in original_norm
             or "fresh tracks" in original_norm
             or ("side door" in original_norm and "bran" in original_norm)
+            or "active wagon-road objective" in original_norm
+            or "active wagon road objective" in original_norm
+            or "focus on the active wagon" in original_norm
         ):
             progression_action = _scenario_progression_action_from_context(context)
             if progression_action:
@@ -696,7 +733,7 @@ def repair_action_if_needed(action: str, context: Dict[str, Any], transcript: Li
                     "changed": True,
                     "action": progression_action,
                     "original_action": original,
-                    "reason": "scenario_progression_graph_repaired_stale_tavern_fallback",
+                    "reason": "scenario_progression_graph_repaired_stale_fallback",
                 }
             return {
                 "changed": True,

@@ -124,6 +124,7 @@ def write_autoplay_artifacts(
     metrics: Dict[str, Any],
     health: Dict[str, Any],
     artifact_detail: str = "summary",
+    transcript_artifacts: Dict[str, Any] = None,
 ) -> Dict[str, str]:
     output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -155,6 +156,9 @@ def write_autoplay_artifacts(
             write_json(transcript_path, transcript_summary)
         else:
             write_json(transcript_path, transcript)
+        write_json(output_dir / "autoplay-transcript-size-summary.json", transcript_artifacts["summary"])
+        if transcript_artifacts.get("debug_tail"):
+            write_json(output_dir / "autoplay-transcript-debug-tail.json", transcript_artifacts["debug_tail"])
         # Only render HTML for limited transcripts to avoid memory issues
         if len(transcript) <= 200:
             html_path.write_text(render_autoplay_html(transcript, summary), encoding="utf-8")

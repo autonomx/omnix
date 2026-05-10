@@ -406,3 +406,56 @@ def test_repair_replaces_stale_active_wagon_objective_after_arc_complete():
     assert result["changed"] is True
     assert result["reason"] == "scenario_progression_arc_complete_repaired_stale_objective_text"
     assert "next" in result["action"].lower()
+
+
+def test_repair_uses_graph_action_for_stale_wagon_text_during_bandit_aftermath():
+    from tests.rpg.autoplay.executable_actions import repair_action_if_needed
+
+    result = repair_action_if_needed(
+        "I check in with Garran and focus on the active wagon-road objective.",
+        {
+            "scenario_progression_active_graph_id": "graph:tavern_story_seed:bandit_aftermath",
+            "scenario_progression_actions": [
+                {
+                    "action_id": "read_wax_sealed_order",
+                    "command": "I read the wax-sealed order from the hidden smuggler cache.",
+                    "priority": 88,
+                }
+            ],
+            "top_scenario_progression_action": {
+                "action_id": "read_wax_sealed_order",
+                "command": "I read the wax-sealed order from the hidden smuggler cache.",
+                "priority": 88,
+            },
+        },
+    )
+
+    assert result["changed"] is True
+    assert result["action"] == "I read the wax-sealed order from the hidden smuggler cache."
+    assert result["reason"] == "scenario_progression_graph_repaired_stale_fallback"
+
+
+def test_repair_replaces_early_stale_road_action_when_graph_action_exists():
+    from tests.rpg.autoplay.executable_actions import repair_action_if_needed
+
+    result = repair_action_if_needed(
+        "I inspect the road outside the tavern for fresh tracks, wagon ruts, black cord, torn cloth, or bridge markings.",
+        {
+            "scenario_progression_actions": [
+                {
+                    "action_id": "ask_bran_who_left_side_door",
+                    "command": "I ask Bran who left through the side door and why they were afraid.",
+                    "priority": 95,
+                }
+            ],
+            "top_scenario_progression_action": {
+                "action_id": "ask_bran_who_left_side_door",
+                "command": "I ask Bran who left through the side door and why they were afraid.",
+                "priority": 95,
+            },
+        },
+    )
+
+    assert result["changed"] is True
+    assert result["action"] == "I ask Bran who left through the side door and why they were afraid."
+    assert result["reason"] == "scenario_progression_graph_repaired_stale_progression_miss"

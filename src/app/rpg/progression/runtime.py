@@ -4,8 +4,12 @@ import time
 from dataclasses import asdict
 from typing import Any, Dict, List
 
-from app.rpg.progression.graph_registry import get_progression_graph_for_seed
-from app.rpg.progression.models import ProgressionNode
+from app.rpg.progression.graph_registry import (
+    get_progression_graph_by_id,
+    get_progression_graph_for_seed,
+    get_progression_graphs_for_seed,
+)
+from app.rpg.progression.models import ProgressionNode, ScenarioProgressionGraph
 
 
 def _safe_dict(value: Any) -> Dict[str, Any]:
@@ -21,19 +25,29 @@ def _safe_str(value: Any) -> str:
 
 
 def _norm(value: Any) -> str:
-    return " ".join(_safe_str(value).lower().strip().split())
+    text = _safe_str(value).strip().lower()
+    for ch in ["-", "—", "–", "_", ".", ",", ";", ":", "!", "?", "'", '"', "’", "“", "”", "(", ")", "[", "]"]:
+        text = text.replace(ch, " ")
+    return " ".join(text.split())
 
 
 def _semantic_aliases(semantic: str) -> List[str]:
     semantic = _safe_str(semantic)
     return {
         "ask": ["ask", "question", "talk", "speak", "who", "what", "where", "whether"],
-        "inspect": ["inspect", "examine", "look", "search", "check", "scout", "scan"],
+        "inspect": ["inspect", "examine", "look", "search", "check", "scout", "survey", "scan", "read", "study", "open", "decipher"],
+        "scout": ["scout", "inspect", "examine", "look", "search", "check", "survey", "scan"],
+        "search": ["search", "inspect", "examine", "look", "check", "scout", "survey", "scan"],
+        "scan": ["scan", "scout", "inspect", "look", "search"],
+        "read": ["read", "study", "inspect", "examine", "open", "decipher"],
+        "study": ["study", "read", "inspect", "examine", "decipher"],
+        "open": ["open", "read", "inspect", "examine"],
         "travel": ["travel", "leave", "go", "head", "move", "walk", "set out"],
         "report": ["report", "tell", "explain", "show", "warn"],
         "warn": ["warn", "tell", "alert", "show", "explain"],
         "tell": ["tell", "warn", "explain", "show"],
-        "prepare": ["prepare", "ready", "help", "load", "tighten", "pack"],
+        "prepare": ["prepare", "ready", "help", "load", "tighten", "pack", "decide", "choose", "plan"],
+        "decide": ["decide", "choose", "plan", "prepare", "commit", "follow"],
     }.get(semantic, [semantic])
 
 
@@ -248,15 +262,133 @@ def _node_block_reasons(state: Dict[str, Any], node: ProgressionNode) -> List[st
     return reasons
 
 
+def _completed_graph_ids(state: Dict[str, Any]) -> List[str]:
+    return [
+        _safe_str(value)
+        for value in _safe_list(_safe_dict(state).get("scenario_progression_completed_graph_ids"))
+        if _safe_str(value)
+    ]
+
+
+def _set_completed_graph_ids(state: Dict[str, Any], graph_ids: List[str]) -> None:
+    ordered: List[str] = []
+    seen = set()
+    for graph_id in graph_ids:
+        graph_id = _safe_str(graph_id)
+        if graph_id and graph_id not in seen:
+            ordered.append(graph_id)
+            seen.add(graph_id)
+    state["scenario_progression_completed_graph_ids"] = ordered
+
+
+def _quest_is_completed(state: Dict[str, Any], quest_id: str) -> bool:
+    quest = _safe_dict(_safe_dict(_quest_progress(state).get("quests")).get(_safe_str(quest_id)))
+    return bool(quest.get("completed")) or _safe_str(quest.get("status")) == "completed"
+
+
+def _graph_is_complete(state: Dict[str, Any], graph: ScenarioProgressionGraph) -> bool:
+    if not graph or not _safe_list(getattr(graph, "nodes", [])):
+        return False
+    completed_nodes = _nodes_completed(state)
+    return all(_safe_str(node.node_id) in completed_nodes for node in graph.nodes)
+
+
+def _graph_is_eligible(state: Dict[str, Any], graph: ScenarioProgressionGraph) -> bool:
+    if not graph:
+        return False
+
+    completed_graph_ids = set(_completed_graph_ids(state))
+    repeatable = bool(getattr(graph, "repeatable", False))
+    if graph.graph_id in completed_graph_ids and not repeatable:
+        return False
+
+    for required_graph_id in _safe_list(getattr(graph, "starts_after_graph_ids", [])):
+        if _safe_str(required_graph_id) not in completed_graph_ids:
+            return False
+
+    for required_quest_id in _safe_list(getattr(graph, "starts_after_quest_ids", [])):
+        if not _quest_is_completed(state, _safe_str(required_quest_id)):
+            return False
+
+    return True
+
+
+def _mark_graph_complete_if_needed(
+    state: Dict[str, Any],
+    graph: ScenarioProgressionGraph,
+) -> None:
+    if not graph or not _graph_is_complete(state, graph):
+        return
+    completed = _completed_graph_ids(state)
+    if graph.graph_id not in completed:
+        completed.append(graph.graph_id)
+        _set_completed_graph_ids(state, completed)
+    state["scenario_progression_last_completed_graph_id"] = graph.graph_id
+
+
+def _select_active_graph(
+    state: Dict[str, Any],
+    *,
+    scenario_seed: str,
+) -> ScenarioProgressionGraph | None:
+    graphs = get_progression_graphs_for_seed(scenario_seed)
+    if not graphs:
+        return None
+
+    current_id = _safe_str(_safe_dict(state).get("scenario_progression_active_graph_id"))
+    current = get_progression_graph_by_id(scenario_seed, current_id) if current_id else None
+    if current and not _graph_is_complete(state, current):
+        return current
+
+    eligible = [graph for graph in graphs if _graph_is_eligible(state, graph)]
+    if eligible:
+        eligible.sort(key=lambda graph: (-int(getattr(graph, "priority", 100)), graph.graph_id))
+        return eligible[0]
+
+    # First graph fallback only before anything has started.
+    first = graphs[0]
+    if not _completed_graph_ids(state) and not _graph_is_complete(state, first):
+        return first
+
+    return None
+
+
+def _refresh_active_graph(
+    state: Dict[str, Any],
+    *,
+    scenario_seed: str,
+) -> ScenarioProgressionGraph | None:
+    graphs = get_progression_graphs_for_seed(scenario_seed)
+    if not graphs:
+        state["scenario_progression_waiting_for_next_graph_pack"] = True
+        return None
+
+    for graph in graphs:
+        _mark_graph_complete_if_needed(state, graph)
+
+    active = _select_active_graph(state, scenario_seed=scenario_seed)
+    if active:
+        state["scenario_progression_active_graph_id"] = active.graph_id
+        state["scenario_progression_active_graph_title"] = getattr(active, "title", active.graph_id)
+        state["scenario_progression_waiting_for_next_graph_pack"] = False
+        return active
+
+    state["scenario_progression_active_graph_id"] = ""
+    state["scenario_progression_active_graph_title"] = ""
+    state["scenario_progression_waiting_for_next_graph_pack"] = True
+    return None
+
+
 def get_active_progression_actions(
     runtime_state: Dict[str, Any],
     *,
     scenario_seed: str,
     limit: int = 8,
 ) -> List[Dict[str, Any]]:
-    graph = get_progression_graph_for_seed(scenario_seed)
-    if graph is None:
-        return []
+    state = _safe_dict(runtime_state)
+    graph = _refresh_active_graph(state, scenario_seed=scenario_seed)
+    if not graph:
+        return _arc_complete_idle_action(state, scenario_seed=scenario_seed)
     state = _safe_dict(runtime_state)
     out: List[Dict[str, Any]] = []
     debug_nodes: List[Dict[str, Any]] = []
@@ -283,9 +415,13 @@ def get_active_progression_actions(
     if not out:
         out = synthesize_progression_actions_from_objectives(state, limit=limit)
     if not out:
-        out = _arc_complete_idle_action(state, scenario_seed=scenario_seed)
+        out = _arc_complete_idle_actions(state, scenario_seed=scenario_seed)
     state["scenario_progression_action_debug"] = {
         "graph_id": graph.graph_id,
+        "active_graph_id": graph.graph_id,
+        "active_graph_title": getattr(graph, "title", graph.graph_id),
+        "completed_graph_ids": _completed_graph_ids(state),
+        "waiting_for_next_graph_pack": bool(state.get("scenario_progression_waiting_for_next_graph_pack")),
         "available_action_count": len(out),
         "progression_state_revision": int(state.get("progression_state_revision") or 0),
         "completed_node_count": len(_nodes_completed(state)),
@@ -348,6 +484,10 @@ def _action_matches_pattern(action: str, pattern: Dict[str, Any]) -> bool:
             "quarry road": ["quarry road", "safer route", "alternate route"],
             "rock shelf": ["rock shelf", "rocks", "shelf", "quarry"],
             "wagon": ["wagon", "cart", "supply wagon"],
+            "wax sealed order": ["wax-sealed order", "wax sealed order", "sealed order", "order", "document", "letter"],
+            "bandit satchel": ["satchel", "bandit satchel", "bag", "pouch"],
+            "smuggler cache": ["cache", "smuggler cache", "hidden cache", "crates"],
+            "old mill ruins": ["old mill", "mill ruins", "old mill ruins", "mill"],
         }
         aliases = target_aliases.get(target_label, [target_label])
         if target_label and not any(alias in action_norm for alias in aliases):
@@ -408,11 +548,23 @@ def build_scenario_progression_arc_summary(
     *,
     scenario_seed: str,
 ) -> Dict[str, Any]:
-    graph = get_progression_graph_for_seed(scenario_seed)
+    graphs = get_progression_graphs_for_seed(scenario_seed)
+    active_graph = _refresh_active_graph(state, scenario_seed=scenario_seed)
+    graph = active_graph or (graphs[0] if graphs else None)
     state = _safe_dict(state)
     completed_nodes = _safe_dict(state.get("progression_completed_nodes"))
     completed_node_ids = sorted(completed_nodes.keys())
     expected_node_ids = [node.node_id for node in graph.nodes] if graph else []
+    all_expected_node_ids = [
+        node.node_id
+        for candidate_graph in graphs
+        for node in candidate_graph.nodes
+    ]
+    completed_graph_ids = _completed_graph_ids(state)
+    graph_ids = [graph.graph_id for graph in graphs]
+    campaign_graphs_complete = bool(
+        graph_ids and all(graph_id in set(completed_graph_ids) for graph_id in graph_ids)
+    )
 
     qp = _safe_dict(state.get("quest_progress"))
     quests = _safe_dict(qp.get("quests"))
@@ -456,19 +608,28 @@ def build_scenario_progression_arc_summary(
     ]
     expected_node_count = len(expected_node_ids)
     completed_node_count = len(completed_node_ids)
-    arc_complete = bool(
+    completed_node_count_for_active = len([node_id for node_id in expected_node_ids if node_id in completed_nodes])
+    active_graph_complete = bool(
         expected_node_count > 0
-        and completed_node_count >= expected_node_count
+        and completed_node_count_for_active >= expected_node_count
         and graph_quests
         and not active_graph_quests
         and not active_graph_objectives
     )
+    arc_complete = active_graph_complete
 
     return {
         "ok": True,
         "graph_id": graph.graph_id if graph else "",
+        "active_graph_id": graph.graph_id if graph else "",
+        "active_graph_title": getattr(graph, "title", "") if graph else "",
+        "graph_ids": graph_ids,
+        "graph_count": len(graphs),
+        "completed_graph_ids": completed_graph_ids,
+        "completed_graph_count": len(completed_graph_ids),
         "scenario_seed": scenario_seed,
         "expected_node_count": expected_node_count,
+        "all_expected_node_count": len(all_expected_node_ids),
         "completed_node_count": completed_node_count,
         "completed_node_ids": completed_node_ids,
         "remaining_node_ids": remaining_node_ids,
@@ -478,7 +639,8 @@ def build_scenario_progression_arc_summary(
         "active_graph_objective_count": len(active_graph_objectives),
         "active_graph_objectives": active_graph_objectives,
         "arc_complete": arc_complete,
-        "waiting_for_next_graph_pack": arc_complete,
+        "campaign_graphs_complete": campaign_graphs_complete,
+        "waiting_for_next_graph_pack": bool(state.get("scenario_progression_waiting_for_next_graph_pack")),
         "recommended_next_arc_bridge_action": (
             "I ask Garran what threat or lead we should follow next now that the wagon is safe."
             if arc_complete
@@ -487,9 +649,12 @@ def build_scenario_progression_arc_summary(
     }
 
 
-def _arc_complete_idle_action(state: Dict[str, Any], *, scenario_seed: str) -> List[Dict[str, Any]]:
+def _arc_complete_idle_actions(state: Dict[str, Any], *, scenario_seed: str) -> List[Dict[str, Any]]:
+    if _select_active_graph(state, scenario_seed=scenario_seed):
+        return []
+
     arc = build_scenario_progression_arc_summary(state, scenario_seed=scenario_seed)
-    if not arc.get("arc_complete"):
+    if not arc.get("campaign_graphs_complete") and not arc.get("waiting_for_next_graph_pack"):
         return []
     return [
         {
@@ -631,10 +796,15 @@ def apply_progression_for_action(
     turn_index: int = 0,
 ) -> Dict[str, Any]:
     start = time.perf_counter()
-    graph = get_progression_graph_for_seed(scenario_seed)
     state = _safe_dict(runtime_state)
-    if graph is None:
-        return {"ok": True, "changed": False, "state": state, "summary": {"reason": "no_graph"}}
+    graph = _refresh_active_graph(state, scenario_seed=scenario_seed)
+    if not graph:
+        return {
+            "ok": True,
+            "changed": False,
+            "state": state,
+            "summary": {"reason": "no_graph"},
+        }
 
     matched_nodes: List[Dict[str, Any]] = []
     applied_effects: List[Dict[str, Any]] = []
@@ -662,6 +832,18 @@ def apply_progression_for_action(
         if not node.repeatable:
             break
 
+    if any(node["node_id"] == "prepare_quarry_road" for node in matched_nodes):
+        leads = _safe_dict(state.get("progression_leads"))
+        quests = _safe_dict(_quest_progress(state).get("quests"))
+        if "lead:leave_by_quarry_road" not in leads:
+            raise RuntimeError("prepare_quarry_road_failed_to_unlock_leave_by_quarry_road")
+        quarry_quest = _safe_dict(quests.get("quest:quarry_road_ambush"))
+        if not quarry_quest or _safe_str(quarry_quest.get("status")) != "active":
+            raise RuntimeError("prepare_quarry_road_failed_to_start_quarry_road_ambush")
+
+    _mark_graph_complete_if_needed(state, graph)
+    graph_after = _refresh_active_graph(state, scenario_seed=scenario_seed)
+
     elapsed_ms = int(round((time.perf_counter() - start) * 1000))
     if matched_nodes or applied_effects:
         _stamp_progression_revision(
@@ -682,6 +864,10 @@ def apply_progression_for_action(
         "ok": True,
         "changed": bool(matched_nodes or applied_effects),
         "graph_id": graph.graph_id,
+        "active_graph_id": _safe_str(state.get("scenario_progression_active_graph_id")),
+        "completed_graph_ids": _completed_graph_ids(state),
+        "waiting_for_next_graph_pack": bool(state.get("scenario_progression_waiting_for_next_graph_pack")),
+        "next_active_graph_id": _safe_str(getattr(graph_after, "graph_id", "")),
         "turn_index": turn_index,
         "progression_state_revision": int(state.get("progression_state_revision") or 0),
         "completed_node_count": len(_nodes_completed(state)),

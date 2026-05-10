@@ -21,7 +21,90 @@ PROGRESSION_STATE_PRESERVE_KEYS = (
     "scenario_progression_action_debug",
     "scenario_progression_quest_state",
     "scenario_progression_quest_ids",
+    "scenario_progression_active_graph_id",
+    "scenario_progression_active_graph_title",
+    "scenario_progression_completed_graph_ids",
+    "scenario_progression_last_completed_graph_id",
+    "scenario_progression_waiting_for_next_graph_pack",
 )
+
+TRANSCRIPT_KEEP_KEYS = (
+    "turn",
+    "turn_index",
+    "turn_start_timestamp",
+    "turn_end_timestamp",
+    "player_action",
+    "player_agent_selection_source",
+    "player_agent_selection_reason",
+    "scenario_progression_summary",
+    "scenario_progression_actions",
+    "scenario_progression_action_debug",
+    "player_action_source",
+    "player_action_timing",
+    "player_action_quality",
+    "player_agent_trace",
+    "deferred_narration_trace",
+    "deferred_advisory_trace",
+    "background_prompt_budget",
+    "combined_quality_shape",
+    "promotion_target_grounding",
+    "profile_grounded_output",
+    "npc_arc_progression",
+    "manual_turn_errors",
+    "campaign_state_summary",
+    "repeated_affordance_loop",
+    "scenario_progression_waiting_for_next_graph_pack",
+    "graph_action_state_has_actions",
+    "top_scenario_progression_action_id",
+    "top_scenario_progression_command",
+    "scenario_arc_complete",
+)
+
+
+def _effective_transcript_detail(args: Any) -> str:
+    turns = int(getattr(args, "turns", 0) or 0)
+    profile = _safe_str(getattr(args, "autoplay_profile", "") or "")
+    if turns >= 30 or profile == "smoke_100":
+        return "slim"
+    return "full"
+
+
+def _slim_transcript_row(row: Dict[str, Any], max_row_bytes: int = 50000) -> Dict[str, Any]:
+    slim_row = {key: row.get(key) for key in TRANSCRIPT_KEEP_KEYS if key in row}
+    slim_row["_artifact_slimmed"] = True
+    return slim_row
+
+
+def _prepare_transcript_artifacts(transcript: List[Dict[str, Any]], args: Any) -> Dict[str, Any]:
+    import json
+    detail = _effective_transcript_detail(args)
+    if detail == "slim":
+        slim_transcript = []
+        for row in transcript:
+            slim_row = _slim_transcript_row(row)
+            slim_transcript.append(slim_row)
+        full_bytes = len(json.dumps(transcript).encode('utf-8'))
+        slim_bytes = len(json.dumps(slim_transcript).encode('utf-8'))
+        summary = {
+            "used_slim_transcript": True,
+            "row_count": len(transcript),
+            "full_mb": full_bytes / (1024 * 1024),
+            "slim_mb": slim_bytes / (1024 * 1024),
+            "kept_keys": list(TRANSCRIPT_KEEP_KEYS),
+            "detail": detail,
+        }
+        debug_tail = transcript[-3:] if len(transcript) > 3 else None
+        return {
+            "transcript": slim_transcript,
+            "summary": summary,
+            "debug_tail": debug_tail,
+        }
+    else:
+        return {
+            "transcript": transcript,
+            "summary": {"detail": detail, "used_slim_transcript": False},
+            "debug_tail": None,
+        }
 
 
 def _progression_node_count(state: Dict[str, Any]) -> int:
@@ -1042,6 +1125,117 @@ def _scenario_arc_complete_from_state(runtime_state: Dict[str, Any], args: Any) 
         scenario_seed=str(getattr(args, "scenario_seed", "") or ""),
     )
     return bool(arc.get("arc_complete"))
+
+
+def _top_scenario_progression_action(runtime_state: Dict[str, Any]) -> Dict[str, Any]:
+    actions = [_safe_dict(row) for row in _safe_list(_safe_dict(runtime_state).get("scenario_progression_actions"))]
+    if not actions:
+        return {}
+    actions.sort(
+        key=lambda row: (
+            -int(row.get("priority") or 0),
+            _safe_str(row.get("action_id")),
+        )
+    )
+    return actions[0]
+
+
+def _top_scenario_progression_command(runtime_state: Dict[str, Any]) -> str:
+    action = _top_scenario_progression_action(runtime_state)
+    return _safe_str(action.get("command"))
+
+
+def _recent_same_graph_action_without_progress(
+    transcript: List[Dict[str, Any]],
+    *,
+    action_id: str,
+    command: str,
+    max_repeats: int = 2,
+) -> bool:
+    action_id = _safe_str(action_id)
+    command = _safe_str(command).strip()
+    if not action_id and not command:
+        return False
+
+    repeats = 0
+    for row in reversed(_safe_list(transcript)):
+        row = _safe_dict(row)
+        row_action_id = _safe_str(row.get("top_scenario_progression_action_id"))
+        row_command = _safe_str(row.get("player_action")).strip()
+        progressed = bool(_safe_dict(row.get("scenario_progression_summary")).get("changed"))
+
+        if progressed:
+            break
+        if (action_id and row_action_id == action_id) or (command and row_command == command):
+            repeats += 1
+            if repeats >= max_repeats:
+                return True
+        else:
+            break
+    return False
+
+
+def _graph_action_source_state(*states: Dict[str, Any]) -> Dict[str, Any]:
+    for state in states:
+        state = _safe_dict(state)
+        if _safe_list(state.get("scenario_progression_actions")):
+            return state
+    for state in states:
+        state = _safe_dict(state)
+        if state:
+            return state
+    return {}
+
+
+def _apply_graph_action_selection_override(
+    *,
+    player_action: str,
+    player_agent_selection_source: str,
+    player_agent_selection_reason: str,
+    player_agent_debug: Dict[str, Any],
+    graph_state: Dict[str, Any],
+    args: Any,
+) -> tuple[str, str, str, Dict[str, Any]]:
+    graph_state = _safe_dict(graph_state)
+    if not _should_force_graph_action(graph_state, args):
+        return player_action, player_agent_selection_source, player_agent_selection_reason, player_agent_debug
+
+    top_graph_action = _top_scenario_progression_action(graph_state)
+    forced_graph_command = _safe_str(top_graph_action.get("command"))
+    if not forced_graph_command:
+        return player_action, player_agent_selection_source, player_agent_selection_reason, player_agent_debug
+
+    original_player_action = _safe_str(player_action)
+    debug = _safe_dict(player_agent_debug)
+    if original_player_action.strip() != forced_graph_command.strip():
+        debug["scenario_progression_graph_action_preferred"] = {
+            "changed": True,
+            "original_action": original_player_action,
+            "replacement_action": forced_graph_command,
+            "action_id": _safe_str(top_graph_action.get("action_id")),
+            "active_graph_id": _safe_str(graph_state.get("scenario_progression_active_graph_id")),
+            "reason": "scenario_progression_graph_action_preferred_over_llm",
+        }
+
+    return (
+        forced_graph_command,
+        "scenario_progression_graph",
+        "scenario_progression_graph_action_preferred_over_llm",
+        debug,
+    )
+
+
+def _should_force_graph_action(runtime_state: Dict[str, Any], args: Any) -> bool:
+    if not _safe_list(_safe_dict(runtime_state).get("scenario_progression_actions")):
+        return False
+    strategy = _safe_str(getattr(args, "strategy", "") or "")
+    profile = _safe_str(getattr(args, "autoplay_profile", "") or "")
+    # In deterministic smoke/autoplay, graph actions are authoritative affordances.
+    return bool(
+        strategy == "goal_directed_quest_runner"
+        or profile in {"smoke_20", "smoke_100"}
+        or bool(getattr(args, "player_agent_goal_pressure_repair", False))
+    )
 
 
 def _assert_graph_actions_available_for_active_objectives(
@@ -2756,6 +2950,19 @@ def _build_authoritative_final_lifecycle_summary(
         )
     else:
         summary["scenario_progression_arc_summary"] = {"ok": False, "note": "no_scenario_seed"}
+    summary["graph_action_state_has_actions"] = bool(
+        _safe_list(_graph_action_source_state(runtime_state, runtime_state).get("scenario_progression_actions"))
+    )
+    summary["top_scenario_progression_action_id"] = _safe_str(
+        _top_scenario_progression_action(
+            _graph_action_source_state(runtime_state, runtime_state)
+        ).get("action_id")
+    )
+    summary["top_scenario_progression_command"] = _safe_str(
+        _top_scenario_progression_action(
+            _graph_action_source_state(runtime_state, runtime_state)
+        ).get("command")
+    )
     commit_summary = _safe_dict(runtime_state.get("campaign_state_commit_summary"))
     summary["quest_progress_summary"] = (
         _safe_dict(commit_summary.get("quest_progress_summary"))
@@ -4785,6 +4992,10 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
     progression_sidecar_max_revision = _progression_revision(progression_authority_state)
 
     for turn_index in range(1, int(args.turns) + 1):
+        # Initialize player agent selection variables
+        player_agent_selection_source = "unknown"
+        player_agent_selection_reason = "unknown"
+
         runtime_state = _overlay_and_assert_progression_sidecar(
             last_committed_state,
             progression_authority_state,
@@ -5152,6 +5363,7 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
                     )
 
                 player_agent_selection_source = _safe_str(selected.get("source")) or "player_agent"
+                player_agent_selection_reason = _safe_str(selected.get("reason")) or "player_agent"
                 player_action = _safe_str(selected.get("action"))
 
         _probe_log(
@@ -5263,6 +5475,44 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
 
         player_agent_debug = _safe_dict(selected.get("debug")) if isinstance(selected, dict) else {}
 
+        graph_action_state = _graph_action_source_state(runtime_state, authoritative_state)
+        top_graph_action = _top_scenario_progression_action(graph_action_state)
+        top_graph_action_id = _safe_str(top_graph_action.get("action_id"))
+        top_graph_command = _safe_str(top_graph_action.get("command"))
+        top_graph_source = _safe_str(top_graph_action.get("source"))
+        if (
+            top_graph_source not in {
+                "scenario_progression_arc_complete_idle",
+                "scenario_progression_arc_complete_bridge",
+            }
+            and _recent_same_graph_action_without_progress(
+                transcript,
+                action_id=top_graph_action_id,
+                command=top_graph_command,
+                max_repeats=2,
+            )
+        ):
+            raise RuntimeError(
+                "scenario_progression_graph_action_repeated_without_progress:"
+                f"turn={turn_index}:"
+                f"action_id={top_graph_action_id}:"
+                f"command={top_graph_command!r}:"
+                f"active_graph_id={_safe_str(graph_action_state.get('scenario_progression_active_graph_id'))}"
+            )
+        (
+            player_action,
+            player_agent_selection_source,
+            player_agent_selection_reason,
+            player_agent_debug,
+        ) = _apply_graph_action_selection_override(
+            player_action=player_action,
+            player_agent_selection_source=player_agent_selection_source,
+            player_agent_selection_reason=player_agent_selection_reason,
+            player_agent_debug=player_agent_debug,
+            graph_state=graph_action_state,
+            args=args,
+        )
+
         arc_complete_action = _arc_complete_graph_action_from_state(authoritative_state)
         if arc_complete_action and _scenario_arc_complete_from_state(authoritative_state, args):
             original_player_action = _safe_str(player_action)
@@ -5301,7 +5551,12 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
             )
             context["scenario_progression_active"] = _scenario_progression_active(authoritative_state)
             context["current_location"] = authoritative_state.get("current_location") or authoritative_state.get("current_location_name") or ""
-            context["scenario_progression_actions"] = authoritative_state.get("scenario_progression_actions") or []
+            graph_action_state = _graph_action_source_state(runtime_state, authoritative_state)
+            context["top_scenario_progression_action"] = _top_scenario_progression_action(graph_action_state)
+            context["scenario_progression_actions"] = graph_action_state.get("scenario_progression_actions") or []
+            context["scenario_progression_active_graph_id"] = graph_action_state.get(
+                "scenario_progression_active_graph_id"
+            )
             context["scenario_progression_arc_summary"] = _scenario_progression_arc_summary(
                 authoritative_state,
                 scenario_seed=str(getattr(args, "scenario_seed", "") or ""),
@@ -5309,6 +5564,7 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
             context["scenario_arc_complete"] = bool(
                 _safe_dict(context.get("scenario_progression_arc_summary")).get("arc_complete")
             )
+            context["player_agent_selection_source"] = player_agent_selection_source
             executable_action_repair = repair_action_if_needed(_safe_str(player_action), context, transcript)
             if executable_action_repair.get("changed"):
                 _probe_log(
@@ -5327,6 +5583,23 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
                     selected["executable_action_repaired"] = True
                     selected["executable_action_original_action"] = _safe_str(executable_action_repair.get("original_action"))
                     selected["action"] = player_action
+
+        graph_action_state = _graph_action_source_state(runtime_state, authoritative_state)
+        top_graph_action = _top_scenario_progression_action(graph_action_state)
+        top_graph_command = _safe_str(top_graph_action.get("command"))
+        if (
+            _should_force_graph_action(graph_action_state, args)
+            and top_graph_command
+            and _safe_str(player_action).strip() != top_graph_command.strip()
+        ):
+            raise RuntimeError(
+                "scenario_progression_graph_action_not_selected:"
+                f"turn={turn_index}:"
+                f"expected_action_id={_safe_str(top_graph_action.get('action_id'))}:"
+                f"expected={top_graph_command!r}:"
+                f"actual={_safe_str(player_action)!r}:"
+                f"source={_safe_str(player_agent_selection_source)}"
+            )
 
         authoritative_state = _apply_scenario_progression_for_action(
             authoritative_state,
@@ -6722,17 +6995,23 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
     if _ACTIVE_CONSOLE_CAPTURE is not None:
         _ACTIVE_CONSOLE_CAPTURE.write_file()
 
+    transcript_artifacts = _prepare_transcript_artifacts(transcript, args)
+    summary["artifact_size_summary"] = {
+        "transcript": transcript_artifacts["summary"],
+    }
+
     with _ProbeTimer(
         bool(getattr(args, "debug_autoplay_stage_timing", False)),
         "write_results_zip",
     ):
         paths = write_autoplay_artifacts(
             output_dir=Path(args.output_dir),
-            transcript=transcript,
+            transcript=transcript_artifacts["transcript"],
             summary=summary,
             metrics=metrics,
             health=health,
             artifact_detail=args.artifact_detail,
+            transcript_artifacts=transcript_artifacts,
         )
     paths.update(extra_paths)
     summary["artifact_paths"] = paths
@@ -6751,6 +7030,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--turns", type=int, default=25)
     parser.add_argument("--session-id", default="")
     parser.add_argument("--scenario-seed", default="tavern_story_seed")
+    parser.add_argument("--autoplay-profile", choices=["smoke_20", "smoke_100"], default="smoke_20")
     parser.add_argument("--random-seed", type=int, default=None)
     parser.add_argument("--list-scenario-seeds", action="store_true")
     parser.add_argument("--player-agent", choices=["scripted", "llm"], default="scripted")
@@ -6832,6 +7112,8 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--debug-turn-runtime-shape", action="store_true")
     parser.add_argument("--suggested-action-limit", type=int, default=12)
     parser.add_argument("--artifact-detail", choices=["summary", "full"], default="summary")
+    parser.add_argument("--transcript-detail", choices=["auto", "full"], default="auto")
+    parser.add_argument("--max-transcript-artifact-mb", type=int, default=50)
     parser.add_argument("--output-dir", default=str(Path("resources") / "data" / "test-results" / "autoplay"))
     parser.add_argument("--base-url", default=os.environ.get("RPG_AUTOPLAY_BASE_URL", "http://127.0.0.1:5000"), help="Ignored by default manual-harness runtime; reserved for optional HTTP smoke tests.")
     parser.add_argument("--start-app-server", action="store_true", help="Ignored by default manual-harness runtime; reserved for optional HTTP smoke tests.")
