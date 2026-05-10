@@ -97,3 +97,30 @@ def test_fourth_tavern_graph_contains_captain_voss_nodes():
         "stabilize_town_after_voss",
         "close_voss_consequence_arc",
     ]
+
+
+def test_fifth_tavern_graph_contains_voss_backer_nodes():
+    from app.rpg.progression.graph_registry import get_progression_graph_by_id
+
+    graph = get_progression_graph_by_id(
+        "tavern_story_seed",
+        "graph:tavern_story_seed:voss_backers_investigation",
+    )
+    assert graph is not None
+
+    node_ids = [node.node_id for node in graph.nodes]
+
+    assert node_ids == [
+        "review_voss_backer_leads",
+        "trace_voss_payment_marks",
+        "ask_bran_about_silver_crow",
+        "question_old_teamster",
+        "travel_to_abandoned_cooperage",
+        "inspect_cooperage_cellar",
+        "open_silver_crow_cache",
+        "read_silver_crow_ledger",
+        "identify_sable_chain_agent",
+        "locate_agent_marlowe",
+        "confront_agent_marlowe",
+        "return_with_sable_chain_proof",
+    ]

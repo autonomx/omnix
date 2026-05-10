@@ -336,3 +336,53 @@ def test_100_turn_readiness_with_four_graphs_only_fails_next_content_gate():
     assert result["gates"]["unique_progression_nodes_ok"] is True
     assert result["gates"]["arc_complete_idle_not_excessive_ok"] is True
     assert result["failed_gates"] == ["needs_more_graph_content_ok"]
+
+
+def test_100_turn_readiness_with_five_graphs_only_fails_next_content_gate():
+    from tests.rpg.autoplay_llm_campaign import _build_100_turn_readiness_summary
+
+    transcript = [
+        {
+            "turn_index": i,
+            "player_action": f"graph action {i}",
+            "top_scenario_progression_action_id": f"node_{i}",
+            "scenario_progression_summary": {"changed": True},
+        }
+        for i in range(1, 62)
+    ]
+    transcript.extend(
+        {
+            "turn_index": i,
+            "player_action": "I regroup with Bran and Garran after exposing the Sable Chain connection, then plan how to move against the faction behind Captain Voss.",
+            "top_scenario_progression_action_id": "arc_complete_regroup",
+            "scenario_progression_summary": {"changed": False},
+        }
+        for i in range(62, 101)
+    )
+
+    summary = {
+        "scenario_progression_arc_summary": {
+            "graph_count": 5,
+            "completed_graph_count": 5,
+            "campaign_graphs_complete": True,
+            "waiting_for_next_graph_pack": True,
+            "completed_node_count": 61,
+        },
+        "behavioral_autoplay_eval_summary": {
+            "metrics": {
+                "progression_changed_count": 61,
+                "unique_progression_node_count": 61,
+            }
+        },
+    }
+
+    result = _build_100_turn_readiness_summary(
+        summary=summary,
+        transcript=transcript,
+        requested_turns=100,
+    )
+
+    assert result["gates"]["graph_progression_density_ok"] is True
+    assert result["gates"]["unique_progression_nodes_ok"] is True
+    assert result["gates"]["arc_complete_idle_not_excessive_ok"] is True
+    assert result["failed_gates"] == ["needs_more_graph_content_ok"]
