@@ -45,3 +45,28 @@ def test_second_tavern_graph_contains_document_nodes():
 
     assert "read_wax_sealed_order" in node_ids
     assert "decide_mill_next_step" in node_ids
+
+
+def test_third_tavern_graph_contains_north_road_shrine_nodes():
+    from app.rpg.progression.graph_registry import get_progression_graph_by_id
+
+    graph = get_progression_graph_by_id(
+        "tavern_story_seed",
+        "graph:tavern_story_seed:north_road_shrine",
+    )
+    assert graph is not None
+
+    node_ids = [node.node_id for node in graph.nodes]
+
+    assert node_ids == [
+        "travel_to_north_road_shrine",
+        "inspect_shrine_tracks",
+        "find_shrine_token",
+        "wait_for_contact_signal",
+        "shadow_black_briar_contact",
+        "reach_ruined_tollhouse",
+        "eavesdrop_tollhouse_meeting",
+        "recover_tollhouse_manifest",
+        "confront_black_briar_contact",
+        "return_to_allies_with_voss_proof",
+    ]

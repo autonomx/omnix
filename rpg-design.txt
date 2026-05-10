@@ -1,309 +1,551 @@
-N92.3 — Campaign-Complete State Cleanup + Transcript Summary Consistency
-1. Patch src/app/rpg/progression/runtime.py
-1A. Do not select graph 1 after all graphs complete
+Part A — N92.6 Content-Exhaustion Exemptions
 
-Find _select_active_graph(...).
+Patch src/tests/rpg/autoplay_llm_campaign.py.
 
-Patch the first fallback logic so graph 1 is only selected before campaign start, not after campaign completion:
+A1. Add content-exhaustion helper
 
---- src/app/rpg/progression/runtime.py
-+++ src/app/rpg/progression/runtime.py
-@@
- def _select_active_graph(
-     state: Dict[str, Any],
-     *,
-     scenario_seed: str,
- ) -> ScenarioProgressionGraph | None:
-     graphs = get_progression_graphs_for_seed(scenario_seed)
-     if not graphs:
-         return None
-+
-+    completed_graph_ids = set(_completed_graph_ids(state))
-+    graph_ids = {_safe_str(graph.graph_id) for graph in graphs}
-+    if graph_ids and graph_ids.issubset(completed_graph_ids):
-+        return None
- 
-     current_id = _safe_str(_safe_dict(state).get("scenario_progression_active_graph_id"))
-     current = get_progression_graph_by_id(scenario_seed, current_id) if current_id else None
-     if current and not _graph_is_complete(state, current):
-         return current
-@@
--    first = graphs[0]
--    if not _completed_graph_ids(state) and not _graph_is_complete(state, first):
-+    first = graphs[0]
-+    if not completed_graph_ids and not _graph_is_complete(state, first):
-         return first
- 
-     return None
-1B. Clear active graph when campaign graphs complete
-
-Find _refresh_active_graph(...).
-
-Patch after marking complete and before selecting active graph:
-
---- src/app/rpg/progression/runtime.py
-+++ src/app/rpg/progression/runtime.py
-@@
-     for graph in graphs:
-         _mark_graph_complete_if_needed(state, graph)
- 
-+    completed_graph_ids = set(_completed_graph_ids(state))
-+    graph_ids = {_safe_str(graph.graph_id) for graph in graphs}
-+    if graph_ids and graph_ids.issubset(completed_graph_ids):
-+        state["scenario_progression_active_graph_id"] = ""
-+        state["scenario_progression_active_graph_title"] = ""
-+        state["scenario_progression_waiting_for_next_graph_pack"] = True
-+        return None
-+
-     active = _select_active_graph(state, scenario_seed=scenario_seed)
-     if active:
-         state["scenario_progression_active_graph_id"] = active.graph_id
-1C. Fix arc summary when campaign complete
-
-In build_scenario_progression_arc_summary(...), replace graph selection:
-
---- src/app/rpg/progression/runtime.py
-+++ src/app/rpg/progression/runtime.py
-@@
--    active_graph = _refresh_active_graph(state, scenario_seed=scenario_seed)
--    graph = active_graph or (graphs[0] if graphs else None)
-+    active_graph = _refresh_active_graph(state, scenario_seed=scenario_seed)
-+    graph = active_graph
-
-Then compute expected/current fields safely:
-
---- src/app/rpg/progression/runtime.py
-+++ src/app/rpg/progression/runtime.py
-@@
--    expected_node_ids = [node.node_id for node in graph.nodes] if graph else []
-+    expected_node_ids = [node.node_id for node in graph.nodes] if graph else []
-     all_expected_node_ids = [
-         node.node_id
-         for candidate_graph in graphs
-         for node in candidate_graph.nodes
-     ]
-@@
--    expected_node_count = len(expected_node_ids)
--    completed_node_count = len([node_id for node_id in expected_node_ids if node_id in completed_nodes])
-+    expected_node_count = len(expected_node_ids)
-+    active_completed_node_count = len([node_id for node_id in expected_node_ids if node_id in completed_nodes])
-+    completed_node_count = len([node_id for node_id in all_expected_node_ids if node_id in completed_nodes])
-
-Patch return fields:
-
---- src/app/rpg/progression/runtime.py
-+++ src/app/rpg/progression/runtime.py
-@@
--        "graph_id": graph.graph_id if graph else "",
--        "active_graph_id": graph.graph_id if graph else "",
--        "active_graph_title": getattr(graph, "title", "") if graph else "",
-+        "graph_id": graph.graph_id if graph else "",
-+        "active_graph_id": graph.graph_id if graph else "",
-+        "active_graph_title": getattr(graph, "title", "") if graph else "",
-@@
-         "expected_node_count": expected_node_count,
-         "all_expected_node_count": len(all_expected_node_ids),
-         "completed_node_count": completed_node_count,
-+        "active_completed_node_count": active_completed_node_count,
-
-If other code expects completed_node_count to mean “current graph only,” keep the old field and add a new one instead:
-
-"active_completed_node_count": active_completed_node_count,
-"completed_node_count": len([node_id for node_id in all_expected_node_ids if node_id in completed_nodes]),
-
-For the report/100-turn gates, the all-graph count is more useful.
-
-2. Patch campaign-complete idle action
-2A. Replace stale wagon-road fallback after all graphs complete
-
-Find _arc_complete_idle_actions(...) or your arc-complete bridge action helper.
-
-Patch returned commands to include campaign-complete language:
-
---- src/app/rpg/progression/runtime.py
-+++ src/app/rpg/progression/runtime.py
-@@
-     return [
-         {
-             "action_id": "arc_complete_regroup",
--            "command": "I regroup with Garran and review what we learned from the ambush before choosing the next lead.",
-+            "command": "I regroup with Garran and review the completed ambush and mill investigation before choosing the next lead.",
-             "priority": 10,
-             "source": "scenario_progression_arc_complete_bridge",
-         },
-         {
-             "action_id": "arc_complete_ask_next_lead",
--            "command": "I ask Garran what threat or lead we should follow next now that the wagon is safe.",
-+            "command": "I ask Garran and Bran what threat or lead we should follow next now that the wagon is safe and the old mill lead is resolved.",
-             "priority": 9,
-             "source": "scenario_progression_arc_complete_bridge",
-         },
-     ]
-
-If this helper currently lives in autoplay_llm_campaign.py, patch it there.
-
-3. Patch stale fallback repair after campaign complete
-
-Patch src/tests/rpg/autoplay/executable_actions.py.
-
-3A. Add campaign-complete helper
---- src/tests/rpg/autoplay/executable_actions.py
-+++ src/tests/rpg/autoplay/executable_actions.py
-@@
-+def _campaign_graphs_complete(context: Dict[str, Any]) -> bool:
-+    context = _safe_dict(context)
-+    arc = _safe_dict(context.get("scenario_progression_arc_summary"))
-+    if bool(arc.get("campaign_graphs_complete")):
-+        return True
-+    graph_count = int(arc.get("graph_count") or 0)
-+    completed_graph_count = int(arc.get("completed_graph_count") or 0)
-+    return bool(graph_count > 0 and completed_graph_count >= graph_count)
-+
-+
-+def _campaign_complete_bridge_action() -> str:
-+    return "I regroup with Garran and review the completed ambush and mill investigation before choosing the next lead."
-3B. Repair stale active-wagon text after campaign completion
-
-At the top of repair_action_if_needed(...), after original_norm is available:
-
---- src/tests/rpg/autoplay/executable_actions.py
-+++ src/tests/rpg/autoplay/executable_actions.py
-@@
-     context = _safe_dict(context)
-     original = _safe_str(action)
-+    original_norm = original.strip().lower()
-+
-+    if _campaign_graphs_complete(context) and (
-+        "active wagon-road objective" in original_norm
-+        or "active wagon road objective" in original_norm
-+        or "focus on the active wagon" in original_norm
-+    ):
-+        return {
-+            "changed": True,
-+            "action": _campaign_complete_bridge_action(),
-+            "original_action": original,
-+            "reason": "campaign_complete_repaired_stale_active_wagon_fallback",
-+        }
-
-If original_norm is already declared later, remove the duplicate later declaration.
-
-4. Patch repair context in src/tests/rpg/autoplay_llm_campaign.py
-
-Make sure the repair context includes arc summary:
+Add near summary/quality helpers:
 
 --- src/tests/rpg/autoplay_llm_campaign.py
 +++ src/tests/rpg/autoplay_llm_campaign.py
 @@
-         repair_context["scenario_progression_active_graph_id"] = graph_action_state.get(
-             "scenario_progression_active_graph_id"
-         )
-+        repair_context["scenario_progression_arc_summary"] = _scenario_progression_arc_summary(
-+            runtime_state,
-+            scenario_seed=_safe_str(getattr(args, "scenario_seed", "") or runtime_state.get("scenario_seed") or ""),
-+        )
-5. Patch transcript recording consistency
-5A. Record post-apply scenario progression summary
++def _content_exhausted_waiting_for_next_graph_pack(summary: Dict[str, Any]) -> bool:
++    summary = _safe_dict(summary)
++    arc = _safe_dict(summary.get("scenario_progression_arc_summary"))
++    readiness = _safe_dict(summary.get("hundred_turn_readiness_summary"))
++
++    campaign_complete_waiting = bool(
++        arc.get("campaign_graphs_complete")
++        and arc.get("waiting_for_next_graph_pack")
++    )
++    readiness_content_exhausted = (
++        _safe_str(readiness.get("classification"))
++        == "content_exhausted_waiting_for_next_graph_pack"
++    )
++    return bool(campaign_complete_waiting or readiness_content_exhausted)
+A2. Patch final quality gates
 
-Find where the transcript row is created.
+Find your final quality gate builder, likely something like:
 
-You likely have something like:
+def _final_lifecycle_quality_gates(summary: Dict[str, Any]) -> Dict[str, Any]:
 
-record = {
-    ...
-    "scenario_progression_summary": runtime_state.get("scenario_progression_summary"),
-}
+Add after gates = {} or after local summary extraction:
 
-Make sure this happens after _apply_scenario_progression_for_action(...).
+--- src/tests/rpg/autoplay_llm_campaign.py
++++ src/tests/rpg/autoplay_llm_campaign.py
+@@
++    content_exhausted_waiting = _content_exhausted_waiting_for_next_graph_pack(summary)
+
+Then patch these gates.
+
+--- src/tests/rpg/autoplay_llm_campaign.py
++++ src/tests/rpg/autoplay_llm_campaign.py
+@@
+-    gates["long_run_warnings_ok"] = bool(long_run_warning_summary.get("ok", False))
++    gates["long_run_warnings_ok"] = bool(
++        long_run_warning_summary.get("ok", False)
++        or content_exhausted_waiting
++    )
+@@
+-    gates["hundred_turn_eval_ok"] = bool(hundred_turn_eval_summary.get("ok", False))
++    gates["hundred_turn_eval_ok"] = bool(
++        hundred_turn_eval_summary.get("ok", False)
++        or content_exhausted_waiting
++    )
+@@
+-    gates["strict_100turn_strict_progress_quality_ok"] = bool(strict_progress_quality.get("ok", False))
++    gates["strict_100turn_strict_progress_quality_ok"] = bool(
++        strict_progress_quality.get("ok", False)
++        or content_exhausted_waiting
++    )
+@@
+-    gates["strict_100turn_repeat_semantic_target_streak_ok"] = bool(long_run_warning_summary.get("ok", False))
++    gates["strict_100turn_repeat_semantic_target_streak_ok"] = bool(
++        long_run_warning_summary.get("ok", False)
++        or content_exhausted_waiting
++    )
+
+Do not exempt this gate:
+
+gates["hundred_turn_readiness_ok"] = bool(readiness.get("ok", False))
+
+That gate should remain false when we need more graph content.
+
+A3. Add final classification field
+
+After hundred_turn_readiness_summary is attached:
+
+--- src/tests/rpg/autoplay_llm_campaign.py
++++ src/tests/rpg/autoplay_llm_campaign.py
+@@
++    final_summary["hundred_turn_validation_classification"] = (
++        "content_exhausted_waiting_for_next_graph_pack"
++        if _content_exhausted_waiting_for_next_graph_pack(final_summary)
++        else "active_or_incomplete"
++    )
+
+Expected for N92-only run:
+
+quality_gate_summary.ok: false
+failed_gates includes:
+  hundred_turn_readiness_ok
+
+failed_gates should NOT include:
+  long_run_warnings_ok
+  hundred_turn_eval_ok
+  strict_100turn_strict_progress_quality_ok
+  strict_100turn_repeat_semantic_target_streak_ok
+Part B — N93 Third Graph Pack
+
+Patch src/app/rpg/progression/graph_registry.py.
+
+B1. Add third graph builder
+
+Add this below _build_tavern_aftermath_graph():
+
+--- src/app/rpg/progression/graph_registry.py
++++ src/app/rpg/progression/graph_registry.py
+@@
++def _build_north_road_shrine_graph() -> ScenarioProgressionGraph:
++    graph = ScenarioProgressionGraph(
++        graph_id="graph:tavern_story_seed:north_road_shrine",
++        scenario_seed="tavern_story_seed",
++        nodes=[
++            ProgressionNode(
++                node_id="travel_to_north_road_shrine",
++                title="Travel to the north road shrine.",
++                requires=[{"lead": "lead:north_road_shrine"}],
++                action_patterns=[
++                    {"semantic": "travel", "target_id": "location:north_road_shrine", "topics_any": ["north road shrine"]},
++                    {"semantic": "travel", "topics_any": ["north road", "shrine"]},
++                    {"semantic": "travel", "topics_any": ["follow", "shrine lead"]},
++                ],
++                suggested_actions=[
++                    _a(
++                        "travel_to_north_road_shrine",
++                        "I travel to the north road shrine to follow the Black Briar contact lead.",
++                        "travel",
++                        target_type="location",
++                        target_id="location:north_road_shrine",
++                        priority=95,
++                    ),
++                ],
++                effects=[
++                    {"start_quest": "quest:north_road_shrine_contact", "title": "North Road Shrine Contact"},
++                    {"unlock_objective": "objective:reach_north_road_shrine", "summary": "Reach the north road shrine."},
++                    {"complete_objective": "objective:reach_north_road_shrine"},
++                    {"set_location": "location:north_road_shrine", "name": "North Road Shrine"},
++                    {"unlock_location": "location:north_road_shrine", "name": "North Road Shrine"},
++                    {"unlock_fact": "fact:north_road_shrine_reached", "text": "The north road shrine has been reached."},
++                    {"unlock_lead": "lead:inspect_shrine_tracks", "text": "Inspect the shrine grounds for signs of the Black Briar contact."},
++                ],
++            ),
++            ProgressionNode(
++                node_id="inspect_shrine_tracks",
++                title="Inspect tracks and signs around the shrine.",
++                requires=[{"lead": "lead:inspect_shrine_tracks"}],
++                action_patterns=[
++                    {"semantic": "inspect", "topics_any": ["shrine", "tracks"]},
++                    {"semantic": "inspect", "topics_any": ["grounds", "footprints"]},
++                    {"semantic": "scout", "topics_any": ["shrine", "tracks"]},
++                    {"semantic": "search", "topics_any": ["shrine", "signs"]},
++                ],
++                suggested_actions=[
++                    _a(
++                        "inspect_shrine_tracks",
++                        "I inspect the shrine grounds for fresh tracks, ash, hidden marks, or signs of the Black Briar contact.",
++                        "inspect",
++                        target_type="location",
++                        target_id="location:north_road_shrine",
++                        priority=94,
++                    ),
++                ],
++                effects=[
++                    {"unlock_objective": "objective:inspect_shrine_tracks", "summary": "Inspect the shrine grounds."},
++                    {"complete_objective": "objective:inspect_shrine_tracks"},
++                    {"unlock_fact": "fact:black_briar_tracks_at_shrine", "text": "Fresh tracks and black briar scratches mark the stones near the shrine."},
++                    {"unlock_lead": "lead:find_shrine_token", "text": "Find the contact token hidden at the shrine."},
++                ],
++            ),
++            ProgressionNode(
++                node_id="find_shrine_token",
++                title="Find the hidden contact token.",
++                requires=[{"lead": "lead:find_shrine_token"}],
++                action_patterns=[
++                    {"semantic": "inspect", "topics_any": ["token", "shrine"]},
++                    {"semantic": "search", "topics_any": ["hidden token"]},
++                    {"semantic": "inspect", "topics_any": ["offering bowl", "token"]},
++                    {"semantic": "inspect", "topics_any": ["black briar token"]},
++                ],
++                suggested_actions=[
++                    _a(
++                        "find_shrine_token",
++                        "I search the shrine stones and offering bowl for the hidden Black Briar contact token.",
++                        "inspect",
++                        target_type="location",
++                        target_id="location:north_road_shrine",
++                        priority=93,
++                    ),
++                ],
++                effects=[
++                    {"unlock_fact": "fact:black_briar_token_found", "text": "A blackened token is hidden beneath the shrine's cracked offering bowl."},
++                    {"unlock_lead": "lead:wait_for_contact_signal", "text": "Wait and watch for the contact signal."},
++                ],
++            ),
++            ProgressionNode(
++                node_id="wait_for_contact_signal",
++                title="Wait for the contact signal.",
++                requires=[{"lead": "lead:wait_for_contact_signal"}],
++                action_patterns=[
++                    {"semantic": "wait", "topics_any": ["contact", "signal"]},
++                    {"semantic": "observe", "topics_any": ["shrine", "signal"]},
++                    {"semantic": "listen", "topics_any": ["contact", "road"]},
++                    {"semantic": "inspect", "topics_any": ["signal", "contact"]},
++                ],
++                suggested_actions=[
++                    _a(
++                        "wait_for_contact_signal",
++                        "I hide near the north road shrine and watch for the Black Briar contact signal.",
++                        "wait",
++                        target_type="location",
++                        target_id="location:north_road_shrine",
++                        priority=92,
++                    ),
++                ],
++                effects=[
++                    {"unlock_objective": "objective:watch_for_contact_signal", "summary": "Watch for the Black Briar contact signal."},
++                    {"complete_objective": "objective:watch_for_contact_signal"},
++                    {"unlock_fact": "fact:contact_signal_seen", "text": "A hooded contact gives a three-tap signal on the shrine stone."},
++                    {"unlock_lead": "lead:shadow_black_briar_contact", "text": "Shadow the Black Briar contact without being seen."},
++                ],
++            ),
++            ProgressionNode(
++                node_id="shadow_black_briar_contact",
++                title="Shadow the Black Briar contact.",
++                requires=[{"lead": "lead:shadow_black_briar_contact"}],
++                action_patterns=[
++                    {"semantic": "follow", "topics_any": ["black briar contact"]},
++                    {"semantic": "follow", "topics_any": ["hooded contact"]},
++                    {"semantic": "shadow", "topics_any": ["contact"]},
++                    {"semantic": "travel", "topics_any": ["follow", "contact"]},
++                ],
++                suggested_actions=[
++                    _a(
++                        "shadow_black_briar_contact",
++                        "I shadow the hooded Black Briar contact from the shrine without revealing myself.",
++                        "follow",
++                        target_type="npc",
++                        target_id="npc:black_briar_contact",
++                        priority=91,
++                    ),
++                ],
++                effects=[
++                    {"unlock_npc": "npc:black_briar_contact", "name": "Black Briar Contact"},
++                    {"unlock_fact": "fact:black_briar_contact_shadowed", "text": "The contact leaves the shrine and heads toward a ruined tollhouse."},
++                    {"unlock_location": "location:ruined_tollhouse", "name": "Ruined Tollhouse"},
++                    {"unlock_lead": "lead:reach_ruined_tollhouse", "text": "Follow the contact to the ruined tollhouse."},
++                ],
++            ),
++            ProgressionNode(
++                node_id="reach_ruined_tollhouse",
++                title="Reach the ruined tollhouse.",
++                requires=[{"lead": "lead:reach_ruined_tollhouse"}],
++                action_patterns=[
++                    {"semantic": "travel", "target_id": "location:ruined_tollhouse", "topics_any": ["ruined tollhouse"]},
++                    {"semantic": "travel", "topics_any": ["tollhouse"]},
++                    {"semantic": "follow", "topics_any": ["contact", "tollhouse"]},
++                ],
++                suggested_actions=[
++                    _a(
++                        "reach_ruined_tollhouse",
++                        "I follow the Black Briar contact to the ruined tollhouse.",
++                        "travel",
++                        target_type="location",
++                        target_id="location:ruined_tollhouse",
++                        priority=90,
++                    ),
++                ],
++                effects=[
++                    {"set_location": "location:ruined_tollhouse", "name": "Ruined Tollhouse"},
++                    {"unlock_fact": "fact:ruined_tollhouse_reached", "text": "The ruined tollhouse is being used as a quiet meeting point."},
++                    {"unlock_lead": "lead:eavesdrop_tollhouse_meeting", "text": "Eavesdrop on the tollhouse meeting."},
++                ],
++            ),
++            ProgressionNode(
++                node_id="eavesdrop_tollhouse_meeting",
++                title="Eavesdrop on the tollhouse meeting.",
++                requires=[{"lead": "lead:eavesdrop_tollhouse_meeting"}],
++                action_patterns=[
++                    {"semantic": "listen", "topics_any": ["meeting", "tollhouse"]},
++                    {"semantic": "eavesdrop", "topics_any": ["meeting"]},
++                    {"semantic": "observe", "topics_any": ["contact", "meeting"]},
++                    {"semantic": "inspect", "topics_any": ["meeting", "contact"]},
++                ],
++                suggested_actions=[
++                    _a(
++                        "eavesdrop_tollhouse_meeting",
++                        "I eavesdrop on the meeting at the ruined tollhouse to learn who the contact serves.",
++                        "listen",
++                        target_type="location",
++                        target_id="location:ruined_tollhouse",
++                        priority=89,
++                    ),
++                ],
++                effects=[
++                    {"unlock_objective": "objective:eavesdrop_tollhouse_meeting", "summary": "Eavesdrop on the tollhouse meeting."},
++                    {"complete_objective": "objective:eavesdrop_tollhouse_meeting"},
++                    {"unlock_fact": "fact:black_briar_mentions_captain_voss", "text": "The contact names Captain Voss as the buyer behind the ambush chain."},
++                    {"unlock_lead": "lead:recover_tollhouse_manifest", "text": "Recover the tollhouse manifest before the contact leaves."},
++                ],
++            ),
++            ProgressionNode(
++                node_id="recover_tollhouse_manifest",
++                title="Recover the tollhouse manifest.",
++                requires=[{"lead": "lead:recover_tollhouse_manifest"}],
++                action_patterns=[
++                    {"semantic": "inspect", "topics_any": ["manifest", "tollhouse"]},
++                    {"semantic": "search", "topics_any": ["manifest"]},
++                    {"semantic": "take", "topics_any": ["manifest"]},
++                    {"semantic": "read", "topics_any": ["manifest"]},
++                ],
++                suggested_actions=[
++                    _a(
++                        "recover_tollhouse_manifest",
++                        "I recover the tollhouse manifest before the Black Briar contact can remove it.",
++                        "inspect",
++                        target_type="location",
++                        target_id="location:ruined_tollhouse",
++                        priority=88,
++                    ),
++                ],
++                effects=[
++                    {"unlock_fact": "fact:tollhouse_manifest_recovered", "text": "The manifest lists wagon routes, payment marks, and Captain Voss's initials."},
++                    {"unlock_lead": "lead:confront_black_briar_contact", "text": "Confront the Black Briar contact with the manifest."},
++                ],
++            ),
++            ProgressionNode(
++                node_id="confront_black_briar_contact",
++                title="Confront the Black Briar contact.",
++                requires=[{"lead": "lead:confront_black_briar_contact"}],
++                action_patterns=[
++                    {"semantic": "tell", "target_id": "npc:black_briar_contact", "topics_any": ["manifest", "voss"]},
++                    {"semantic": "confront", "topics_any": ["black briar contact"]},
++                    {"semantic": "ask", "target_id": "npc:black_briar_contact", "topics_any": ["captain voss"]},
++                    {"semantic": "threaten", "topics_any": ["contact", "manifest"]},
++                ],
++                suggested_actions=[
++                    _a(
++                        "confront_black_briar_contact",
++                        "I confront the Black Briar contact with the recovered manifest and demand the truth about Captain Voss.",
++                        "tell",
++                        target_type="npc",
++                        target_id="npc:black_briar_contact",
++                        priority=87,
++                    ),
++                ],
++                effects=[
++                    {"unlock_fact": "fact:contact_implicates_voss", "text": "The contact admits Captain Voss paid for the wagon disruptions."},
++                    {"unlock_lead": "lead:return_to_allies_with_voss_proof", "text": "Return to Bran and Garran with proof against Captain Voss."},
++                ],
++            ),
++            ProgressionNode(
++                node_id="return_to_allies_with_voss_proof",
++                title="Return to Bran and Garran with proof against Voss.",
++                requires=[{"lead": "lead:return_to_allies_with_voss_proof"}],
++                action_patterns=[
++                    {"semantic": "travel", "topics_any": ["return", "bran", "garran"]},
++                    {"semantic": "report", "target_id": "npc:bran", "topics_any": ["voss", "proof"]},
++                    {"semantic": "tell", "target_id": "npc:garran", "topics_any": ["voss", "proof"]},
++                    {"semantic": "travel", "topics_any": ["rusty flagon", "proof"]},
++                ],
++                suggested_actions=[
++                    _a(
++                        "return_to_allies_with_voss_proof",
++                        "I return to Bran and Garran with the manifest proving Captain Voss is behind the attacks.",
++                        "travel",
++                        target_type="location",
++                        target_id="location:rusty_flagon_tavern",
++                        priority=86,
++                    ),
++                ],
++                effects=[
++                    {"set_location": "location:rusty_flagon_tavern", "name": "The Rusty Flagon Tavern"},
++                    {"unlock_fact": "fact:allies_have_voss_proof", "text": "Bran and Garran now have proof that Captain Voss is behind the wagon attacks."},
++                    {"complete_quest": "quest:north_road_shrine_contact"},
++                    {"unlock_lead": "lead:captain_voss_next_arc", "text": "Plan the next move against Captain Voss."},
++                ],
++            ),
++        ],
++    )
++    graph.title = "North Road Shrine → Black Briar Contact"
++    graph.starts_after_graph_ids = ["graph:tavern_story_seed:bandit_aftermath"]
++    graph.starts_after_quest_ids = ["quest:mill_ruins_lead"]
++    graph.priority = 80
++    return graph
+
+This adds 10 more nodes. Total expected graph nodes become:
+
+Graph 1: 18
+Graph 2: 9
+Graph 3: 10
+Total: 37
+
+That should pass the current min_progression_turns = 30 readiness density gate.
+
+B2. Register graph 3
+
+Find get_progression_graphs_for_seed(...).
 
 Patch:
 
---- src/tests/rpg/autoplay_llm_campaign.py
-+++ src/tests/rpg/autoplay_llm_campaign.py
+--- src/app/rpg/progression/graph_registry.py
++++ src/app/rpg/progression/graph_registry.py
 @@
--        progression_summary_for_record = _safe_dict(runtime_state.get("scenario_progression_summary"))
-+        progression_summary_for_record = _safe_dict(runtime_state.get("scenario_progression_summary"))
-+        if not progression_summary_for_record and isinstance(turn_result, dict):
-+            progression_summary_for_record = _safe_dict(turn_result.get("scenario_progression_summary"))
+     if seed == "tavern_story_seed":
+         return [
+             _rusty_flagon_graph(),
+             _build_tavern_aftermath_graph(),
++            _build_north_road_shrine_graph(),
+         ]
 
-Then use this variable in the record:
+If you use _GRAPHS = {...} instead, patch that list instead:
 
---- src/tests/rpg/autoplay_llm_campaign.py
-+++ src/tests/rpg/autoplay_llm_campaign.py
+--- src/app/rpg/progression/graph_registry.py
++++ src/app/rpg/progression/graph_registry.py
 @@
--            "scenario_progression_summary": runtime_state.get("scenario_progression_summary"),
-+            "scenario_progression_summary": progression_summary_for_record,
+     "tavern_story_seed": [
+         _rusty_flagon_graph(),
+         _build_tavern_aftermath_graph(),
++        _build_north_road_shrine_graph(),
+     ],
+Part C — Runtime Semantic Alias Support
 
-If you have an apply_progression_result local, prefer that:
+Patch src/app/rpg/progression/runtime.py.
 
-progression_summary_for_record = _safe_dict(
-    apply_progression_result.get("summary")
-    or runtime_state.get("scenario_progression_summary")
-)
+C1. Add missing semantic aliases
 
-The goal is simple:
+Find _semantic_aliases(...).
 
-Turn 27 transcript must show:
-  changed: true
-  matched_node_ids: ["decide_mill_next_step"]
-5B. Preserve top graph action fields in full row before slimming
+Patch:
 
-In the record dict, use graph state from before apply:
-
---- src/tests/rpg/autoplay_llm_campaign.py
-+++ src/tests/rpg/autoplay_llm_campaign.py
+--- src/app/rpg/progression/runtime.py
++++ src/app/rpg/progression/runtime.py
 @@
-             "top_scenario_progression_action_id": _safe_str(
-                 _top_scenario_progression_action(
-                     _graph_action_source_state(runtime_state, authoritative_state)
-                 ).get("action_id")
-             ),
+         "inspect": ["inspect", "examine", "look", "search", "check", "scout", "survey", "scan", "read", "study", "open", "decipher"],
+         "scout": ["scout", "inspect", "examine", "look", "search", "check", "survey", "scan"],
+         "search": ["search", "inspect", "examine", "look", "check", "scout", "survey", "scan"],
+         "scan": ["scan", "scout", "inspect", "look", "search"],
++        "wait": ["wait", "watch", "observe", "listen", "hide"],
++        "observe": ["observe", "watch", "look", "inspect", "listen"],
++        "listen": ["listen", "eavesdrop", "hear", "observe", "wait"],
++        "eavesdrop": ["eavesdrop", "listen", "observe"],
++        "follow": ["follow", "shadow", "trail", "track", "travel"],
++        "shadow": ["shadow", "follow", "trail", "track"],
++        "take": ["take", "recover", "grab", "collect", "inspect", "search"],
++        "recover": ["recover", "take", "collect", "grab", "search"],
++        "confront": ["confront", "challenge", "tell", "ask", "threaten"],
++        "threaten": ["threaten", "confront", "warn", "tell"],
 
-This was still None in the slim transcript. Replace with a local computed before action application:
+This prevents the same “scout/read” matcher problem from recurring in graph 3.
 
-pre_apply_graph_action_state = _graph_action_source_state(runtime_state, authoritative_state)
-pre_apply_top_graph_action = _top_scenario_progression_action(pre_apply_graph_action_state)
+C2. Objective mapping for graph 3
 
-Then record:
+Find _ensure_objective(...).
 
---- src/tests/rpg/autoplay_llm_campaign.py
-+++ src/tests/rpg/autoplay_llm_campaign.py
+Add:
+
+--- src/app/rpg/progression/runtime.py
++++ src/app/rpg/progression/runtime.py
 @@
-             "top_scenario_progression_action_id": _safe_str(
--                _top_scenario_progression_action(
--                    _graph_action_source_state(runtime_state, authoritative_state)
--                ).get("action_id")
-+                pre_apply_top_graph_action.get("action_id")
-             ),
-             "top_scenario_progression_command": _safe_str(
--                _top_scenario_progression_action(
--                    _graph_action_source_state(runtime_state, authoritative_state)
--                ).get("command")
-+                pre_apply_top_graph_action.get("command")
-             ),
+         elif objective_id in {
+             "objective:identify_bandit_employer",
+             "objective:find_mill_proof",
+             "objective:inspect_mill_cellar",
+         }:
+             quest_id = "quest:mill_ruins_lead"
++        elif objective_id in {
++            "objective:reach_north_road_shrine",
++            "objective:inspect_shrine_tracks",
++            "objective:watch_for_contact_signal",
++            "objective:eavesdrop_tollhouse_meeting",
++        }:
++            quest_id = "quest:north_road_shrine_contact"
+Part D — Update Readiness Threshold Behavior
 
-Place the local computation right before graph action override:
+Patch src/tests/rpg/autoplay_llm_campaign.py.
 
---- src/tests/rpg/autoplay_llm_campaign.py
-+++ src/tests/rpg/autoplay_llm_campaign.py
-@@
-         graph_action_state = _graph_action_source_state(runtime_state, authoritative_state)
-+        pre_apply_graph_action_state = graph_action_state
-+        pre_apply_top_graph_action = _top_scenario_progression_action(pre_apply_graph_action_state)
-         top_graph_action = _top_scenario_progression_action(graph_action_state)
-6. Tests
-6A. Add campaign complete graph summary test
+D1. Keep min progression threshold at 30
+
+In _build_100_turn_readiness_summary(...), ensure this remains:
+
+min_progression_turns = 30
+
+No change needed if it already exists.
+
+With graph 3, expected:
+
+progression_changed_count: 37
+unique_progression_node_count: 37
+graph_progression_density_ok: true
+unique_progression_nodes_ok: true
+
+But if all graph packs complete and there is no graph 4, this gate may still fail:
+
+needs_more_graph_content_ok
+
+That is fine. N93 means we have enough density, but not necessarily full 100-turn content.
+
+Part E — Report Update
+
+Patch src/tests/rpg/autoplay/campaign_report.py.
+
+E1. Multi-arc report should naturally show graph 3
+
+If _render_multi_graph_progression_section(...) uses graph_ids, no code change is needed.
+
+Add test expectation later.
+
+Part F — Tests
+F1. Registry test for graph 3
+
+Patch src/tests/rpg/test_progression_graph_registry.py:
+
+def test_third_tavern_graph_contains_north_road_shrine_nodes():
+    from app.rpg.progression.graph_registry import get_progression_graph_by_id
+
+    graph = get_progression_graph_by_id(
+        "tavern_story_seed",
+        "graph:tavern_story_seed:north_road_shrine",
+    )
+    assert graph is not None
+
+    node_ids = [node.node_id for node in graph.nodes]
+
+    assert node_ids == [
+        "travel_to_north_road_shrine",
+        "inspect_shrine_tracks",
+        "find_shrine_token",
+        "wait_for_contact_signal",
+        "shadow_black_briar_contact",
+        "reach_ruined_tollhouse",
+        "eavesdrop_tollhouse_meeting",
+        "recover_tollhouse_manifest",
+        "confront_black_briar_contact",
+        "return_to_allies_with_voss_proof",
+    ]
+F2. Runtime full three-graph progression test
 
 Add to src/tests/rpg/test_scenario_progression_runtime.py:
 
-def test_campaign_complete_clears_active_graph_after_two_graphs_complete():
+def test_three_graph_campaign_progresses_to_voss_proof():
     from app.rpg.progression.runtime import (
         apply_progression_for_action,
         build_scenario_progression_arc_summary,
-        get_active_progression_actions,
     )
 
     state = {}
     actions = [
+        # Graph 1
         "I ask Bran for a room, but I also ask why the tavern feels so tense tonight.",
         "I ask Bran who left through the side door and why they were afraid.",
         "I ask Bran what direction the cloaked traveler went after leaving.",
@@ -322,6 +564,7 @@ def test_campaign_complete_clears_active_graph_after_two_graphs_complete():
         "I scan the rock shelf for watchers or scouts watching the quarry road.",
         "I tell Garran we should slow the wagon and lure the watchers into revealing the ambush.",
         "I help Garran protect the wagon while drawing the ambushers out of hiding.",
+        # Graph 2
         "I question the captured bandit about who hired them and why they targeted Garran's wagon.",
         "I search the bandit's satchel for letters, marked coins, or anything tying them to the old mill.",
         "I return to the Rusty Flagon and bring Bran the proof linking the ambush to the old mill.",
@@ -331,6 +574,17 @@ def test_campaign_complete_clears_active_graph_after_two_graphs_complete():
         "I search behind the loose cellar stones for the smuggler cache.",
         "I read the wax-sealed order from the hidden smuggler cache.",
         "I decide to follow the north road shrine lead before the Black Briar contact disappears.",
+        # Graph 3
+        "I travel to the north road shrine to follow the Black Briar contact lead.",
+        "I inspect the shrine grounds for fresh tracks, ash, hidden marks, or signs of the Black Briar contact.",
+        "I search the shrine stones and offering bowl for the hidden Black Briar contact token.",
+        "I hide near the north road shrine and watch for the Black Briar contact signal.",
+        "I shadow the hooded Black Briar contact from the shrine without revealing myself.",
+        "I follow the Black Briar contact to the ruined tollhouse.",
+        "I eavesdrop on the meeting at the ruined tollhouse to learn who the contact serves.",
+        "I recover the tollhouse manifest before the Black Briar contact can remove it.",
+        "I confront the Black Briar contact with the recovered manifest and demand the truth about Captain Voss.",
+        "I return to Bran and Garran with the manifest proving Captain Voss is behind the attacks.",
     ]
 
     for turn, action in enumerate(actions, start=1):
@@ -340,49 +594,75 @@ def test_campaign_complete_clears_active_graph_after_two_graphs_complete():
             player_action=action,
             turn_index=turn,
         )
+        assert result["changed"] is True, (turn, action, result)
         state = result["state"]
 
     arc = build_scenario_progression_arc_summary(state, scenario_seed="tavern_story_seed")
-    actions_after_complete = get_active_progression_actions(
-        state,
-        scenario_seed="tavern_story_seed",
-        limit=8,
+
+    assert arc["graph_count"] == 3
+    assert arc["completed_graph_count"] == 3
+    assert arc["campaign_graphs_complete"] is True
+    assert arc["completed_node_count"] >= 37
+    assert "graph:tavern_story_seed:north_road_shrine" in arc["completed_graph_ids"]
+    assert "fact:allies_have_voss_proof" in state["progression_facts"]
+F3. Readiness test with graph 3
+
+Patch src/tests/rpg/test_100_turn_readiness.py:
+
+def test_100_turn_readiness_passes_density_with_three_graphs_but_still_needs_next_content():
+    from tests.rpg.autoplay_llm_campaign import _build_100_turn_readiness_summary
+
+    transcript = [
+        {
+            "turn_index": i,
+            "player_action": f"graph action {i}",
+            "top_scenario_progression_action_id": f"node_{i}",
+            "scenario_progression_summary": {"changed": True},
+        }
+        for i in range(1, 38)
+    ]
+    transcript.extend(
+        {
+            "turn_index": i,
+            "player_action": "I regroup with Garran and review the completed ambush, mill, and shrine investigation before choosing the next lead.",
+            "top_scenario_progression_action_id": "arc_complete_regroup",
+            "scenario_progression_summary": {"changed": False},
+        }
+        for i in range(38, 101)
     )
 
-    assert arc["campaign_graphs_complete"] is True
-    assert arc["completed_graph_count"] == arc["graph_count"] == 2
-    assert arc["active_graph_id"] == ""
-    assert state["scenario_progression_active_graph_id"] == ""
-    assert state["scenario_progression_waiting_for_next_graph_pack"] is True
-    assert actions_after_complete
-    assert actions_after_complete[0]["action_id"].startswith("arc_complete")
-6B. Add stale active wagon repair test
-
-Add to src/tests/rpg/autoplay/test_executable_actions.py:
-
-def test_campaign_complete_repairs_stale_active_wagon_fallback():
-    from tests.rpg.autoplay.executable_actions import repair_action_if_needed
-
-    result = repair_action_if_needed(
-        "I check in with Garran and focus on the active wagon-road objective.",
-        {
-            "scenario_progression_arc_summary": {
-                "campaign_graphs_complete": True,
-                "graph_count": 2,
-                "completed_graph_count": 2,
+    summary = {
+        "scenario_progression_arc_summary": {
+            "graph_count": 3,
+            "completed_graph_count": 3,
+            "campaign_graphs_complete": True,
+            "waiting_for_next_graph_pack": True,
+            "completed_node_count": 37,
+        },
+        "behavioral_autoplay_eval_summary": {
+            "metrics": {
+                "progression_changed_count": 37,
+                "unique_progression_node_count": 37,
             }
         },
+    }
+
+    result = _build_100_turn_readiness_summary(
+        summary=summary,
+        transcript=transcript,
+        requested_turns=100,
     )
 
-    assert result["changed"] is True
-    assert "completed ambush and mill investigation" in result["action"]
-    assert result["reason"] == "campaign_complete_repaired_stale_active_wagon_fallback"
-7. Validation
+    assert result["gates"]["graph_progression_density_ok"] is True
+    assert result["gates"]["unique_progression_nodes_ok"] is True
+    assert result["gates"]["needs_more_graph_content_ok"] is False
+    assert result["classification"] == "content_exhausted_waiting_for_next_graph_pack"
+Part G — Validation Commands
 
 Compile:
 
-python -m py_compile src\app\rpg\progression\runtime.py src\tests\rpg\autoplay_llm_campaign.py src\tests\rpg\autoplay\executable_actions.py
+python -m py_compile src\app\rpg\progression\graph_registry.py src\app\rpg\progression\runtime.py src\tests\rpg\autoplay_llm_campaign.py src\tests\rpg\autoplay\behavioral_eval.py
 
 Run focused tests:
 
-python -m pytest src\tests\rpg\test_scenario_progression_runtime.py src\tests\rpg\autoplay\test_executable_actions.py -q
+python -m pytest src\tests\rpg\test_progression_graph_registry.py src\tests\rpg\test_scenario_progression_runtime.py src\tests\rpg\test_100_turn_readiness.py src\tests\rpg\autoplay\test_behavioral_eval.py -q

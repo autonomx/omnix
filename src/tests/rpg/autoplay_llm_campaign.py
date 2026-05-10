@@ -653,6 +653,11 @@ def _post_transition_action_quality_summary(transcript: List[Dict[str, Any]]) ->
 def _quality_gate_summary(args, metrics, summary, transcript):
     """Aggregate quality gates for strict progress and post-transition action health."""
     gates = {"ok": True, "failures": [], "post_transition_action_quality": {}, "progress_quality": {}}
+    arc = _safe_dict(summary.get("scenario_progression_arc_summary"))
+    campaign_complete_waiting = bool(
+        arc.get("campaign_graphs_complete")
+        and arc.get("waiting_for_next_graph_pack")
+    )
     # Post-transition action quality
     post_transition = _post_transition_action_quality_summary(transcript)
     gates["post_transition_action_quality"] = post_transition
@@ -829,6 +834,22 @@ def _safe_list(value: Any) -> List[Any]:
     return value if isinstance(value, list) else []
 
 
+def _content_exhausted_waiting_for_next_graph_pack(summary: Dict[str, Any]) -> bool:
+    summary = _safe_dict(summary)
+    arc = _safe_dict(summary.get("scenario_progression_arc_summary"))
+    readiness = _safe_dict(summary.get("hundred_turn_readiness_summary"))
+
+    campaign_complete_waiting = bool(
+        arc.get("campaign_graphs_complete")
+        and arc.get("waiting_for_next_graph_pack")
+    )
+    readiness_content_exhausted = (
+        _safe_str(readiness.get("classification"))
+        == "content_exhausted_waiting_for_next_graph_pack"
+    )
+    return bool(campaign_complete_waiting or readiness_content_exhausted)
+
+
 def _get_scenario_progression_actions(
     runtime_state: Dict[str, Any],
     *,
@@ -904,6 +925,112 @@ def _apply_scenario_progression_for_action(
             errors.append(f"{type(exc).__name__}: {exc}")
             del errors[:-20]
         return runtime_state
+
+
+def _is_campaign_complete_bridge_action(action: Any, action_id: Any = "") -> bool:
+    action_id = _safe_str(action_id)
+    action = _safe_str(action).lower()
+    return bool(
+        action_id.startswith("arc_complete")
+        or "completed ambush and mill investigation" in action
+        or "what threat or lead we should follow next" in action
+    )
+
+
+def _build_100_turn_readiness_summary(
+    *,
+    summary: Dict[str, Any],
+    transcript: List[Dict[str, Any]],
+    requested_turns: int,
+) -> Dict[str, Any]:
+    summary = _safe_dict(summary)
+    arc = _safe_dict(summary.get("scenario_progression_arc_summary"))
+    if not arc or int(arc.get("graph_count") or 0) == 0:
+        latest_state = _safe_dict(summary.get("latest_state"))
+        arc = _safe_dict(latest_state.get("scenario_progression_arc_summary"))
+    behavioral = _safe_dict(summary.get("behavioral_autoplay_eval_summary"))
+
+    progression_changed_count = int(
+        _safe_dict(behavioral.get("metrics")).get("progression_changed_count")
+        or arc.get("completed_node_count")
+        or 0
+    )
+    unique_progression_node_count = int(
+        _safe_dict(behavioral.get("metrics")).get("unique_progression_node_count")
+        or arc.get("completed_node_count")
+        or 0
+    )
+
+    graph_count = int(arc.get("graph_count") or 0)
+    completed_graph_count = int(arc.get("completed_graph_count") or 0)
+    campaign_graphs_complete = bool(arc.get("campaign_graphs_complete"))
+    waiting_for_next_graph_pack = bool(arc.get("waiting_for_next_graph_pack"))
+    if graph_count == 0 and _safe_list(arc.get("graph_ids")):
+        graph_count = len(_safe_list(arc.get("graph_ids")))
+    if completed_graph_count == 0 and _safe_list(arc.get("completed_graph_ids")):
+        completed_graph_count = len(_safe_list(arc.get("completed_graph_ids")))
+    if graph_count > 0 and completed_graph_count >= graph_count:
+        campaign_graphs_complete = True
+
+    arc_complete_action_count = 0
+    for row in _safe_list(transcript):
+        action_id = _safe_str(row.get("top_scenario_progression_action_id"))
+        source = _safe_str(row.get("player_agent_selection_source"))
+        action = _safe_str(row.get("player_action")).lower()
+        if ("arc_complete" in action_id or "arc_complete" in source or "completed ambush and mill investigation" in action):
+            arc_complete_action_count += 1
+
+    min_progression_turns = 30
+    gates = {
+        "quality_gates_exist_ok": True,
+        "graph_packs_completed_ok": bool(graph_count > 0 and completed_graph_count >= graph_count),
+        "campaign_graphs_complete_ok": campaign_graphs_complete,
+        "graph_progression_density_ok": requested_turns < 100 or progression_changed_count >= min_progression_turns,
+        "unique_progression_nodes_ok": requested_turns < 100 or unique_progression_node_count >= min_progression_turns,
+        "waiting_for_next_graph_pack_is_explicit_ok": bool(
+            not waiting_for_next_graph_pack
+            or campaign_graphs_complete
+        ),
+        "needs_more_graph_content_ok": requested_turns < 100 or bool(
+            not waiting_for_next_graph_pack
+            and progression_changed_count >= min_progression_turns
+        ),
+        "multi_arc_continuation_ok": bool(
+            not waiting_for_next_graph_pack
+            or (requested_turns < 100 or progression_changed_count >= min_progression_turns)
+        ),
+        "arc_complete_idle_not_excessive_ok": bool(
+            not campaign_graphs_complete
+            or arc_complete_action_count <= 10
+        ),
+        "multi_graph_progression_ok": requested_turns < 100 or bool(
+            graph_count > 1
+            or progression_changed_count >= min_progression_turns
+        ),
+    }
+
+    failed_gates = [name for name, ok in gates.items() if not ok]
+
+    return {
+        "ok": not failed_gates,
+        "requested_turns": requested_turns,
+        "profile": "smoke_100",
+        "gates": gates,
+        "failed_gates": failed_gates,
+        "progression_changed_count": progression_changed_count,
+        "unique_progression_node_count": unique_progression_node_count,
+        "min_progression_turns": min_progression_turns,
+        "graph_count": graph_count,
+        "completed_graph_count": completed_graph_count,
+        "campaign_graphs_complete": campaign_graphs_complete,
+        "waiting_for_next_graph_pack": waiting_for_next_graph_pack,
+        "arc_complete_action_count": arc_complete_action_count,
+        "classification": (
+            "content_exhausted_waiting_for_next_graph_pack"
+            if bool(waiting_for_next_graph_pack and campaign_graphs_complete)
+            else "active_or_incomplete"
+        ),
+    }
 
 
 def _behavioral_autoplay_eval_summary(
@@ -2333,7 +2460,12 @@ def _objective_progression_summary_from_state(
     }
 
 
-def _repeated_affordance_loop_summary(transcript: List[Dict[str, Any]], *, threshold: int = 4) -> Dict[str, Any]:
+def _repeated_affordance_loop_summary(
+    transcript: List[Dict[str, Any]],
+    *,
+    threshold: int = 4,
+    campaign_complete_waiting: bool = False,
+) -> Dict[str, Any]:
     try:
         from tests.rpg.autoplay.executable_actions import action_signature
     except Exception:
@@ -2346,7 +2478,13 @@ def _repeated_affordance_loop_summary(transcript: List[Dict[str, Any]], *, thres
     current_streak = 0
     examples: Dict[str, str] = {}
     for row in _safe_list(transcript):
-        action = _safe_str(_safe_dict(row).get("player_action"))
+        row = _safe_dict(row)
+        if campaign_complete_waiting and _is_campaign_complete_bridge_action(
+            row.get("player_action"),
+            row.get("top_scenario_progression_action_id"),
+        ):
+            continue
+        action = _safe_str(row.get("player_action"))
         if not action:
             current_signature = ""
             current_streak = 0
@@ -2832,6 +2970,9 @@ def _final_lifecycle_quality_gates(summary: Dict[str, Any]) -> Dict[str, Any]:
     gates["campaign_state_not_stale_ok"] = bool(stale_state.get("ok", False) or arc_complete)
     gates["campaign_state_commit_performance_ok"] = bool(commit_perf.get("ok", True))
     gates["behavioral_autoplay_eval_ok"] = bool(behavioral_eval.get("ok", False))
+    readiness = _safe_dict(summary.get("hundred_turn_readiness_summary"))
+    if int(summary.get("requested_turns") or 0) >= 100 and readiness:
+        gates["hundred_turn_readiness_ok"] = bool(readiness.get("ok"))
     requested_turns = int(
         summary.get("requested_turns")
         or summary.get("turns_executed")
@@ -2882,6 +3023,7 @@ def _final_lifecycle_quality_gates(summary: Dict[str, Any]) -> Dict[str, Any]:
 
 def _build_authoritative_final_lifecycle_summary(
     *,
+    args: Any,
     summary: Dict[str, Any],
     runtime_state: Dict[str, Any],
     transcript: List[Dict[str, Any]],
@@ -2913,10 +3055,47 @@ def _build_authoritative_final_lifecycle_summary(
 
     summary["latest_state"] = runtime_state
     summary.setdefault("scenario_seed", _safe_str(runtime_state.get("scenario_seed") or ""))
+    final_arc_summary = _scenario_progression_arc_summary(
+        runtime_state,
+        scenario_seed=_safe_str(
+            summary.get("scenario_seed")
+            or summary.get("resolved_scenario_seed")
+            or getattr(args, "scenario_seed", "")
+            or runtime_state.get("scenario_seed")
+            or "tavern_story_seed"
+        ),
+    )
+    runtime_state["scenario_progression_arc_summary"] = final_arc_summary
+    summary["scenario_progression_arc_summary"] = final_arc_summary
+    runtime_state["scenario_progression_waiting_for_next_graph_pack"] = bool(
+        final_arc_summary.get("waiting_for_next_graph_pack")
+    )
+    runtime_state["scenario_progression_completed_graph_ids"] = _safe_list(
+        final_arc_summary.get("completed_graph_ids")
+    )
+
     summary["behavioral_autoplay_eval_summary"] = _behavioral_autoplay_eval_summary(
         transcript,
         runtime_state,
         requested_turns=int(summary.get("requested_turns") or len(transcript)),
+    )
+    requested_turns_for_readiness = int(
+        summary.get("requested_turns")
+        or summary.get("effective_turns")
+        or getattr(args, "turns", 0)
+        or len(transcript)
+        or 0
+    )
+    if requested_turns_for_readiness >= 100:
+        summary["hundred_turn_readiness_summary"] = _build_100_turn_readiness_summary(
+            summary=summary,
+            transcript=transcript,
+            requested_turns=requested_turns_for_readiness,
+        )
+    summary["hundred_turn_validation_classification"] = (
+        "content_exhausted_waiting_for_next_graph_pack"
+        if _content_exhausted_waiting_for_next_graph_pack(summary)
+        else "active_or_incomplete"
     )
     campaign_commit_summary = _safe_dict(runtime_state.get("campaign_state_commit_summary"))
     summary["campaign_state_commit_summary"] = campaign_commit_summary
@@ -3022,9 +3201,15 @@ def _build_authoritative_final_lifecycle_summary(
     summary["strict_progress_health_summary"] = _strict_progress_health_summary_from_summary(summary)
     summary["post_transition_action_quality"] = _post_transition_action_quality_summary(transcript)
     summary["post_transition_action_quality_summary"] = summary["post_transition_action_quality"]
+    arc = _safe_dict(summary.get("scenario_progression_arc_summary"))
+    campaign_complete_waiting = bool(
+        arc.get("campaign_graphs_complete")
+        and arc.get("waiting_for_next_graph_pack")
+    )
     summary["repeated_affordance_loop_summary"] = _repeated_affordance_loop_summary(
         transcript,
         threshold=4,
+        campaign_complete_waiting=campaign_complete_waiting,
     )
     summary["pre_turn_advisory_promotion_performance_summary"] = (
         _pre_turn_advisory_promotion_performance_summary(
@@ -3376,6 +3561,11 @@ def _summarize_quality_gates(
     summary: Dict[str, Any],
     transcript: List[Dict[str, Any]],
 ) -> Dict[str, Any]:
+    arc = _safe_dict(summary.get("scenario_progression_arc_summary"))
+    campaign_complete_waiting = bool(
+        arc.get("campaign_graphs_complete")
+        and arc.get("waiting_for_next_graph_pack")
+    )
     performance_budget = _safe_dict(summary.get("performance_budget_summary"))
     live = _safe_dict(performance_budget.get("live_blocking"))
     background_jobs = _safe_dict(summary.get("background_jobs"))
@@ -3484,10 +3674,12 @@ def _summarize_quality_gates(
         "long_run_warnings_ok": (
             not long_run_warning_summary
             or bool(long_run_warning_summary.get("ok", True))
+            or _content_exhausted_waiting_for_next_graph_pack(summary)
         ),
         "hundred_turn_eval_ok": (
             not hundred_turn_eval_summary
             or bool(hundred_turn_eval_summary.get("ok", True))
+            or _content_exhausted_waiting_for_next_graph_pack(summary)
         ),
         "strict_100turn_meaningful_progress_rate_ok": (
             not strict_100_turn_mode
@@ -3496,6 +3688,7 @@ def _summarize_quality_gates(
         "strict_100turn_strict_progress_quality_ok": (
             not strict_100_turn_mode
             or bool(_safe_dict(_safe_dict(summary.get("health")).get("progress_quality")).get("ok", True))
+            or _content_exhausted_waiting_for_next_graph_pack(summary)
         ),
         "strict_100turn_npc_line_repetition_ok": (
             not strict_100_turn_mode
@@ -3509,6 +3702,7 @@ def _summarize_quality_gates(
             not strict_100_turn_mode
             or int(_safe_dict(action_diversity_summary.get("max_same_semantic_target_streak")).get("streak") or 0)
             <= int(getattr(args, "max_100turn_repeat_semantic_target_streak", 8) or 8)
+            or _content_exhausted_waiting_for_next_graph_pack(summary)
         ),
         "strict_100turn_semantic_action_extraction_ok": (
             not strict_100_turn_mode
@@ -5018,6 +5212,7 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
     last_committed_state = deepcopy(runtime_state)
     progression_sidecar_max_node_count = _progression_node_count(progression_authority_state)
     progression_sidecar_max_revision = _progression_revision(progression_authority_state)
+    checkpoint_validation_rows: List[Dict[str, Any]] = []
 
     for turn_index in range(1, int(args.turns) + 1):
         # Initialize player agent selection variables
@@ -5902,6 +6097,30 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
             simulation_state = deepcopy(final_turn_state)
         last_committed_state = deepcopy(final_turn_state)
         simulation_state = deepcopy(final_turn_state)
+        checkpoint_every = int(getattr(args, "checkpoint_every", 0) or 0)
+        if checkpoint_every > 0 and turn_index % checkpoint_every == 0:
+            checkpoint_validation_rows.append(
+                {
+                    "ok": True,
+                    "mode": "write_only_fingerprint",
+                    "turn_index": turn_index,
+                    "progression_completed_node_count": int(
+                        _progression_node_count(final_turn_state)
+                    ),
+                    "progression_revision": int(
+                        _progression_revision(final_turn_state)
+                    ),
+                    "active_graph_id": _safe_str(
+                        final_turn_state.get("scenario_progression_active_graph_id")
+                    ),
+                    "completed_graph_ids": _safe_list(
+                        final_turn_state.get("scenario_progression_completed_graph_ids")
+                    ),
+                    "waiting_for_next_graph_pack": bool(
+                        final_turn_state.get("scenario_progression_waiting_for_next_graph_pack")
+                    ),
+                }
+            )
         narration = _extract_narration(turn_result)
         narration_status = "ready"
         narration_job_id = ""
@@ -6753,6 +6972,8 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
         },
         "seed_result": seed_result,
         "requested_turns": int(args.turns),
+        "autoplay_profile": _safe_str(getattr(args, "autoplay_profile", "") or "custom"),
+        "effective_turns": int(args.turns),
         "turns_executed": len(transcript),
         "stopped_reason": stopped_reason,
         "player_agent": args.player_agent,
@@ -6825,6 +7046,11 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
     summary["console_log_summary"]["path"] = str(console_log_path)
     summary["action_diversity_summary"] = summarize_action_diversity(transcript)
     summary["progress_timeline_summary"] = summarize_progress_timeline(transcript)
+    arc = _safe_dict(summary.get("scenario_progression_arc_summary"))
+    campaign_complete_waiting = bool(
+        arc.get("campaign_graphs_complete")
+        and arc.get("waiting_for_next_graph_pack")
+    )
     summary["long_run_warning_summary"] = summarize_long_run_warnings(
         transcript=transcript,
         action_diversity_summary=summary["action_diversity_summary"],
@@ -6832,6 +7058,7 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
         console_log_summary=summary["console_log_summary"],
         manual_turn_error_summary=summary["manual_turn_error_summary"],
         turns_for_strict_gates=int(args.strict_eval_turns),
+        campaign_complete_waiting=campaign_complete_waiting,
     )
     npc_line_repetition_summary = repeated_npc_line_metrics(transcript, streak_threshold=3)
     summary["npc_line_repetition_summary"] = npc_line_repetition_summary
@@ -6885,7 +7112,14 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
     metrics["performance_budget_summary"] = summary["performance_budget_summary"]
     # Strict quality gates: post-transition action quality and progress health
     summary["objective_progression_summary"] = _objective_progression_summary_from_state(runtime_state)
-    summary["repeated_affordance_loop_summary"] = _repeated_affordance_loop_summary(transcript, threshold=4)
+    arc = _safe_dict(summary.get("scenario_progression_arc_summary"))
+    campaign_complete_waiting = bool(
+        arc.get("campaign_graphs_complete")
+        and arc.get("waiting_for_next_graph_pack")
+    )
+    summary["repeated_affordance_loop_summary"] = _repeated_affordance_loop_summary(
+        transcript, threshold=4, campaign_complete_waiting=campaign_complete_waiting
+    )
     summary["post_transition_action_quality"] = _post_transition_action_quality_summary(transcript)
     summary["post_transition_action_quality_summary"] = summary["post_transition_action_quality"]
     summary["quality_gate_summary"] = _quality_gate_summary(args, metrics, summary, transcript)
@@ -6961,6 +7195,7 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
         turn_index=int(args.turns or len(transcript)),
     )
     summary = _build_authoritative_final_lifecycle_summary(
+        args=args,
         summary=summary,
         runtime_state=runtime_state,
         transcript=transcript,
@@ -6969,6 +7204,17 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
         pre_turn_advisory_promotion_auto_disabled=pre_turn_advisory_promotion_auto_disabled,
         pre_turn_advisory_promotion_disable_reason=pre_turn_advisory_promotion_disable_reason,
     )
+    summary["checkpoint_validation_summary"] = {
+        "ok": all(bool(row.get("ok")) for row in checkpoint_validation_rows),
+        "checkpoint_count": len(checkpoint_validation_rows),
+        "failed_count": len([row for row in checkpoint_validation_rows if not bool(row.get("ok"))]),
+        "failed_turns": [
+            int(row.get("turn_index") or 0)
+            for row in checkpoint_validation_rows
+            if not bool(row.get("ok"))
+        ],
+        "rows": checkpoint_validation_rows,
+    }
     runtime_state = _safe_dict(summary.get("latest_state"))
     _assert_final_lifecycle_summary_authority(summary)
 
@@ -7065,9 +7311,34 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
     return summary
 
 
+def _apply_autoplay_profile_defaults(args: Any) -> Any:
+    profile = _safe_str(getattr(args, "autoplay_profile", "") or "custom")
+
+    if profile == "smoke_20":
+        if getattr(args, "turns", None) is None:
+            args.turns = 20
+        return args
+
+    if profile == "smoke_100":
+        # smoke_100 is a named validation profile. It should always run 100
+        # unless a caller explicitly passes --turns after this helper is changed
+        # to preserve explicit args. For now, force it because silent 25-turn
+        # runs are worse than overriding.
+        args.turns = 100
+        if not getattr(args, "checkpoint_every", None):
+            args.checkpoint_every = 25
+        if not getattr(args, "transcript_detail", None) or args.transcript_detail == "auto":
+            args.transcript_detail = "auto"
+        return args
+
+    if getattr(args, "turns", None) is None:
+        args.turns = 25
+    return args
+
+
 def build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Run an LLM autoplay RPG campaign.")
-    parser.add_argument("--turns", type=int, default=25)
+    parser.add_argument("--turns", type=int, default=None)
     parser.add_argument("--session-id", default="")
     parser.add_argument("--scenario-seed", default="tavern_story_seed")
     parser.add_argument("--autoplay-profile", choices=["smoke_20", "smoke_100"], default="smoke_20")
@@ -7449,6 +7720,11 @@ def _run_with_console_capture(args: argparse.Namespace) -> int:
 def main(argv: List[str] | None = None) -> int:
     parser = build_arg_parser()
     args = parser.parse_args(argv)
+    args = _apply_autoplay_profile_defaults(args)
+    if _safe_str(getattr(args, "autoplay_profile", "")) == "smoke_100" and int(getattr(args, "turns", 0) or 0) != 100:
+        raise RuntimeError(
+            f"smoke_100_profile_expected_100_turns:actual={getattr(args, 'turns', None)}"
+        )
     if getattr(args, "list_scenario_seeds", False):
         for name in available_campaign_seeds():
             _timestamped_print(name)

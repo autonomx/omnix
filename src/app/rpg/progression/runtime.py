@@ -42,12 +42,22 @@ def _semantic_aliases(semantic: str) -> List[str]:
         "read": ["read", "study", "inspect", "examine", "open", "decipher"],
         "study": ["study", "read", "inspect", "examine", "decipher"],
         "open": ["open", "read", "inspect", "examine"],
-        "travel": ["travel", "leave", "go", "head", "move", "walk", "set out"],
+        "travel": ["travel", "leave", "go", "head", "move", "walk", "set out", "return"],
         "report": ["report", "tell", "explain", "show", "warn"],
         "warn": ["warn", "tell", "alert", "show", "explain"],
         "tell": ["tell", "warn", "explain", "show"],
         "prepare": ["prepare", "ready", "help", "load", "tighten", "pack", "decide", "choose", "plan"],
         "decide": ["decide", "choose", "plan", "prepare", "commit", "follow"],
+        "wait": ["wait", "watch", "observe", "listen", "hide"],
+        "observe": ["observe", "watch", "look", "inspect", "listen"],
+        "listen": ["listen", "eavesdrop", "hear", "observe", "wait"],
+        "eavesdrop": ["eavesdrop", "listen", "observe"],
+        "follow": ["follow", "shadow", "trail", "track", "travel"],
+        "shadow": ["shadow", "follow", "trail", "track"],
+        "take": ["take", "recover", "grab", "collect", "inspect", "search"],
+        "recover": ["recover", "take", "collect", "grab", "search"],
+        "confront": ["confront", "challenge", "tell", "ask", "threaten"],
+        "threaten": ["threaten", "confront", "warn", "tell"],
     }.get(semantic, [semantic])
 
 
@@ -171,6 +181,19 @@ def _ensure_objective(
             quest_id = "quest:quarry_road_ambush"
         elif objective_id in {"objective:find_witness", "objective:ask_mira", "objective:inspect_side_door"}:
             quest_id = "quest:witness_search"
+        elif objective_id in {
+            "objective:identify_bandit_employer",
+            "objective:find_mill_proof",
+            "objective:inspect_mill_cellar",
+        }:
+            quest_id = "quest:mill_ruins_lead"
+        elif objective_id in {
+            "objective:reach_north_road_shrine",
+            "objective:inspect_shrine_tracks",
+            "objective:watch_for_contact_signal",
+            "objective:eavesdrop_tollhouse_meeting",
+        }:
+            quest_id = "quest:north_road_shrine_contact"
     quest_id = quest_id or _infer_active_quest_id(state) or "quest:scenario_progression"
     quest = _ensure_quest(
         state,

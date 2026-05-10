@@ -262,3 +262,83 @@ def test_behavioral_eval_accepts_completed_graph_arc_with_no_active_objectives()
 
     assert result["gates"]["graph_actions_empty_with_active_graph_quest_ok"] is True
     assert result["gates"]["active_graph_quest_has_objectives_ok"] is True
+
+
+def test_behavioral_eval_allows_repeated_campaign_complete_bridge_when_waiting_for_pack():
+    transcript = [
+        {"player_action": f"graph action {i}", "scenario_progression_summary": {"changed": True}}
+        for i in range(27)
+    ]
+    transcript.extend(
+        {
+            "player_action": "I regroup with Garran and review the completed ambush and mill investigation before choosing the next lead.",
+            "top_scenario_progression_action_id": "arc_complete_regroup",
+            "scenario_progression_summary": {"changed": False},
+        }
+        for _ in range(73)
+    )
+
+    latest_state = {
+        "scenario_progression_arc_summary": {
+            "campaign_graphs_complete": True,
+            "waiting_for_next_graph_pack": True,
+            "completed_graph_count": 2,
+            "graph_count": 2,
+        },
+        "scenario_progression_log": [{"changed": True} for _ in range(27)],
+        "progression_completed_nodes": {f"node:{i}": {} for i in range(27)},
+        "quest_progress": {
+            "quests": {
+                "quest:completed1": {"completed": True, "status": "completed"},
+                "quest:completed2": {"completed": True, "status": "completed"},
+            }
+        },
+        "location_history": ["location1", "location2"],
+        "progression_unlocked_locations": {"loc1": {}, "loc2": {}},
+    }
+
+    result = evaluate_behavioral_autoplay(
+        transcript,
+        latest_state,
+        requested_turns=100,
+    )
+
+    assert result["ok"] is True
+    assert result["metrics"]["campaign_complete_waiting_for_next_pack"] is True
+
+
+def test_behavioral_eval_exempts_repeated_bridge_when_campaign_waiting_for_next_pack():
+    from tests.rpg.autoplay.behavioral_eval import evaluate_behavioral_autoplay
+
+    transcript = [
+        {"player_action": f"graph action {i}", "scenario_progression_summary": {"changed": True}}
+        for i in range(27)
+    ]
+    transcript.extend(
+        {
+            "player_action": "I regroup with Garran and review the completed ambush and mill investigation before choosing the next lead.",
+            "top_scenario_progression_action_id": "arc_complete_regroup",
+            "scenario_progression_summary": {"changed": False},
+        }
+        for _ in range(73)
+    )
+
+    latest_state = {
+        "scenario_progression_arc_summary": {
+            "graph_count": 2,
+            "completed_graph_count": 2,
+            "campaign_graphs_complete": True,
+            "waiting_for_next_graph_pack": True,
+        },
+        "progression_completed_nodes": {f"node:{i}": {} for i in range(27)},
+    }
+
+    result = evaluate_behavioral_autoplay(
+        transcript,
+        latest_state,
+        requested_turns=100,
+    )
+
+    assert result["metrics"]["campaign_complete_waiting_for_next_pack"] is True
+    assert result["gates"]["exact_action_streak_ok"] is True
+    assert result["gates"]["same_action_volume_ok"] is True
