@@ -35,7 +35,7 @@ def _semantic_aliases(semantic: str) -> List[str]:
     semantic = _safe_str(semantic)
     return {
         "ask": ["ask", "question", "talk", "speak", "who", "what", "where", "whether"],
-        "inspect": ["inspect", "examine", "look", "search", "check", "scout", "survey", "scan", "read", "study", "open", "decipher"],
+        "inspect": ["inspect", "examine", "look", "search", "check", "scout", "survey", "scan", "read", "study", "open", "decipher", "compare"],
         "scout": ["scout", "inspect", "examine", "look", "search", "check", "survey", "scan"],
         "search": ["search", "inspect", "examine", "look", "check", "scout", "survey", "scan"],
         "scan": ["scan", "scout", "inspect", "look", "search"],
@@ -64,6 +64,10 @@ def _semantic_aliases(semantic: str) -> List[str]:
         "attend": ["attend", "travel", "observe", "go"],
         "press": ["press", "confront", "ask", "challenge", "tell"],
         "plan": ["plan", "prepare", "decide", "choose"],
+        "review": ["review", "study", "inspect", "read", "plan"],
+        "trace": ["trace", "track", "follow", "inspect", "study"],
+        "question": ["question", "ask", "interrogate"],
+        "decipher": ["decipher", "read", "study", "inspect"],
     }.get(semantic, [semantic])
 
 
@@ -211,6 +215,14 @@ def _ensure_objective(
             "objective:choose_voss_outcome",
         }:
             quest_id = "quest:captain_voss_consequence"
+        elif objective_id in {
+            "objective:review_voss_backer_leads",
+            "objective:trace_voss_payment_marks",
+            "objective:identify_silver_crow",
+            "objective:reach_abandoned_cooperage",
+            "objective:inspect_cooperage_cellar",
+        }:
+            quest_id = "quest:voss_backers_investigation"
     quest_id = quest_id or _infer_active_quest_id(state) or "quest:scenario_progression"
     quest = _ensure_quest(
         state,
@@ -710,11 +722,25 @@ def _arc_complete_idle_actions(state: Dict[str, Any], *, scenario_seed: str) -> 
     arc = build_scenario_progression_arc_summary(state, scenario_seed=scenario_seed)
     if not arc.get("campaign_graphs_complete") and not arc.get("waiting_for_next_graph_pack"):
         return []
+    facts = _safe_dict(state.get("progression_facts"))
+    if "fact:allies_have_sable_chain_proof" in facts:
+        regroup = "I regroup with Bran and Garran after exposing the Sable Chain connection, then plan how to move against the faction behind Captain Voss."
+        next_lead = "I ask Bran and Garran how we should move against the Sable Chain now that we have proof of their role."
+    elif "fact:voss_arc_closed" in facts:
+        regroup = "I regroup with Bran and Garran after exposing Captain Voss, then consider which faction backed him."
+        next_lead = "I ask Bran and Garran which faction could have backed Captain Voss and how we should investigate them."
+    elif "fact:allies_have_voss_proof" in facts:
+        regroup = "I regroup with Bran and Garran after proving Captain Voss is behind the attacks, then prepare the next public move."
+        next_lead = "I ask Bran and Garran how to use the proof against Captain Voss before his allies react."
+    else:
+        regroup = "I regroup with Garran and review the completed ambush and mill investigation before choosing the next lead."
+        next_lead = "I ask Garran and Bran what threat or lead we should follow next now that the wagon is safe and the old mill lead is resolved."
+
     return [
         {
             "action_id": "arc_complete_regroup",
             "node_id": "",
-            "command": "I regroup with Garran and review the completed ambush and mill investigation before choosing the next lead.",
+            "command": regroup,
             "semantic": "recap",
             "target_type": "npc",
             "target_id": "npc:garran",
@@ -724,7 +750,7 @@ def _arc_complete_idle_actions(state: Dict[str, Any], *, scenario_seed: str) -> 
         {
             "action_id": "arc_complete_ask_next_lead",
             "node_id": "",
-            "command": "I ask Garran and Bran what threat or lead we should follow next now that the wagon is safe and the old mill lead is resolved.",
+            "command": next_lead,
             "semantic": "ask",
             "target_type": "npc",
             "target_id": "npc:garran",
