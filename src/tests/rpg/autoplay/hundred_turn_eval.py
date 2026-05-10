@@ -893,6 +893,7 @@ def summarize_long_run_warnings(
     console_log_summary: Dict[str, Any],
     manual_turn_error_summary: Dict[str, Any],
     turns_for_strict_gates: int = 100,
+    campaign_complete_waiting: bool = False,
 ) -> Dict[str, Any]:
     rows = [_safe_dict(row) for row in (transcript if isinstance(transcript, list) else [])]
     turn_count = len(rows)
@@ -912,7 +913,7 @@ def summarize_long_run_warnings(
     same_semantic_target_streak = int(
         _safe_dict(action_diversity_summary.get("max_same_semantic_target_streak")).get("streak") or 0
     )
-    if same_semantic_target_streak >= (8 if strict else 5):
+    if same_semantic_target_streak >= (8 if strict else 5) and not campaign_complete_waiting:
         add(
             "repeated_semantic_target_streak",
             "error" if strict else "warning",

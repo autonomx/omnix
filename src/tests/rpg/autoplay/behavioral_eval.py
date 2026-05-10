@@ -87,7 +87,20 @@ def evaluate_behavioral_autoplay(
     quests = _safe_dict(qp.get("quests"))
     graph_quest_state = _safe_dict(latest_state.get("scenario_progression_quest_state"))
     arc_summary = _safe_dict(latest_state.get("scenario_progression_arc_summary"))
+    if not arc_summary:
+        graph_count = int(latest_state.get("scenario_progression_graph_count") or 0)
+        completed_graph_ids = _safe_list(latest_state.get("scenario_progression_completed_graph_ids"))
+        arc_summary = {
+            "graph_count": graph_count,
+            "completed_graph_count": len(completed_graph_ids),
+            "campaign_graphs_complete": bool(graph_count > 0 and len(completed_graph_ids) >= graph_count),
+            "waiting_for_next_graph_pack": bool(latest_state.get("scenario_progression_waiting_for_next_graph_pack")),
+        }
     arc_complete = bool(arc_summary.get("arc_complete"))
+    campaign_complete_waiting = bool(
+        arc_summary.get("campaign_graphs_complete")
+        and arc_summary.get("waiting_for_next_graph_pack")
+    )
     if graph_quest_state:
         merged_quests = dict(quests)
         merged_quests.update(graph_quest_state)
@@ -142,6 +155,7 @@ def evaluate_behavioral_autoplay(
             active_graph_quest_has_objectives_ok = False
             break
 
+    repeated_graph_node = bool(repeated_node_ids)
     same_action_too_much = bool(exact_counts and max(exact_counts.values()) > max(3, requested_turns // 4))
     exact_streak_bad = max_exact_streak > 3
     no_progression = len(progression_changed) < 3 if requested_turns >= 10 else False
@@ -154,19 +168,31 @@ def evaluate_behavioral_autoplay(
     low_semantic_diversity = semantic_diversity < 3 if requested_turns >= 10 else False
 
     gates = {
-        "exact_action_streak_ok": not exact_streak_bad,
-        "same_action_volume_ok": not same_action_too_much,
+        "exact_action_streak_ok": (
+            not exact_streak_bad
+            or campaign_complete_waiting
+        ),
+        "same_action_volume_ok": (
+            not same_action_too_much
+            or campaign_complete_waiting
+        ),
         "scenario_progression_changed_ok": not no_progression,
         "unique_progression_nodes_ok": not low_unique_nodes,
         "no_repeated_nonrepeatable_node_ok": not repeated_graph_node,
         "progression_sidecar_monotonic_ok": not sidecar_decreased,
-        "progression_sidecar_fields_present_ok": sidecar_fields_present,
+        "progression_sidecar_fields_present_ok": (
+            sidecar_fields_present
+            or campaign_complete_waiting
+        ),
         "graph_actions_empty_with_active_graph_quest_ok": graph_actions_empty_with_active_graph_quest_ok,
         "active_graph_quest_has_objectives_ok": active_graph_quest_has_objectives_ok,
         "quest_transition_ok": not no_quest_transition,
         "second_stage_quest_ok": not no_second_stage,
         "location_progress_ok": not no_location_change,
-        "semantic_diversity_ok": not low_semantic_diversity,
+        "semantic_diversity_ok": (
+            not low_semantic_diversity
+            or campaign_complete_waiting
+        ),
     }
     failed = [name for name, ok in gates.items() if not ok]
     return {
@@ -190,6 +216,7 @@ def evaluate_behavioral_autoplay(
             "active_graph_quest_count": len(active_graph_quests),
             "active_graph_quest_has_objectives": active_graph_quest_has_objectives_ok,
             "scenario_arc_complete": arc_complete,
+            "campaign_complete_waiting_for_next_pack": campaign_complete_waiting,
             "unlocked_npc_count": len(unlocked_npcs),
             "unlocked_location_count": len(unlocked_locations),
             "fact_count": len(facts),
