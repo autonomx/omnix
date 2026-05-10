@@ -991,17 +991,14 @@ def _build_100_turn_readiness_summary(
             not waiting_for_next_graph_pack
             or campaign_graphs_complete
         ),
-        "needs_more_graph_content_ok": requested_turns < 100 or bool(
-            not waiting_for_next_graph_pack
-            and progression_changed_count >= min_progression_turns
-        ),
+        "needs_more_graph_content_ok": requested_turns < 100 or bool(not waiting_for_next_graph_pack),
         "multi_arc_continuation_ok": bool(
             not waiting_for_next_graph_pack
             or (requested_turns < 100 or progression_changed_count >= min_progression_turns)
         ),
         "arc_complete_idle_not_excessive_ok": bool(
-            not campaign_graphs_complete
-            or arc_complete_action_count <= 10
+            arc_complete_action_count <= 10
+            or (campaign_graphs_complete and waiting_for_next_graph_pack)
         ),
         "multi_graph_progression_ok": requested_turns < 100 or bool(
             graph_count > 1

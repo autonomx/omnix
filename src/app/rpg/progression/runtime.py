@@ -43,11 +43,11 @@ def _semantic_aliases(semantic: str) -> List[str]:
         "study": ["study", "read", "inspect", "examine", "decipher"],
         "open": ["open", "read", "inspect", "examine"],
         "travel": ["travel", "leave", "go", "head", "move", "walk", "set out", "return"],
-        "report": ["report", "tell", "explain", "show", "warn"],
+        "report": ["report", "tell", "explain", "show", "present"],
         "warn": ["warn", "tell", "alert", "show", "explain"],
-        "tell": ["tell", "warn", "explain", "show"],
+        "tell": ["tell", "warn", "explain", "show", "answer"],
         "prepare": ["prepare", "ready", "help", "load", "tighten", "pack", "decide", "choose", "plan"],
-        "decide": ["decide", "choose", "plan", "prepare", "commit", "follow"],
+        "decide": ["decide", "choose", "plan", "prepare", "commit", "follow", "ask"],
         "wait": ["wait", "watch", "observe", "listen", "hide"],
         "observe": ["observe", "watch", "look", "inspect", "listen"],
         "listen": ["listen", "eavesdrop", "hear", "observe", "wait"],
@@ -58,6 +58,12 @@ def _semantic_aliases(semantic: str) -> List[str]:
         "recover": ["recover", "take", "collect", "grab", "search"],
         "confront": ["confront", "challenge", "tell", "ask", "threaten"],
         "threaten": ["threaten", "confront", "warn", "tell"],
+        "show": ["show", "present", "tell", "report", "give"],
+        "present": ["present", "show", "tell", "report", "give"],
+        "protect": ["protect", "guard", "defend", "watch", "prepare"],
+        "attend": ["attend", "travel", "observe", "go"],
+        "press": ["press", "confront", "ask", "challenge", "tell"],
+        "plan": ["plan", "prepare", "decide", "choose"],
     }.get(semantic, [semantic])
 
 
@@ -194,6 +200,17 @@ def _ensure_objective(
             "objective:eavesdrop_tollhouse_meeting",
         }:
             quest_id = "quest:north_road_shrine_contact"
+        elif objective_id in {
+            "objective:plan_against_voss",
+            "objective:identify_voss_allies",
+            "objective:seek_magistrate_hearing",
+            "objective:present_manifest",
+            "objective:secure_public_witnesses",
+            "objective:counter_voss_intimidation",
+            "objective:attend_public_hearing",
+            "objective:choose_voss_outcome",
+        }:
+            quest_id = "quest:captain_voss_consequence"
     quest_id = quest_id or _infer_active_quest_id(state) or "quest:scenario_progression"
     quest = _ensure_quest(
         state,
