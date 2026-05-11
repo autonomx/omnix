@@ -4,6 +4,7 @@ from copy import deepcopy
 from typing import Any, Dict, List
 
 from app.rpg.economy.service_resolver import resolve_service_turn
+from app.rpg.world.travel_graph import list_available_routes
 
 
 def safe_dict(v: Any) -> Dict[str, Any]:
@@ -576,6 +577,20 @@ def build_turn_contract(
         state_delta,
     )
 
+    available_routes = list_available_routes(
+        state=simulation_state_before,
+    )
+    travel_suggestions = [
+        {
+            "type": "travel",
+            "label": f"Travel to {route.get('to_name')}",
+            "command": f"go to {route.get('to_name')}",
+            "to_location": route.get("to_location"),
+            "direction": route.get("direction"),
+        }
+        for route in available_routes[:4]
+    ]
+
     return {
         "version": "turn_contract_v1",
         "player_input": player_input,
@@ -588,6 +603,8 @@ def build_turn_contract(
         "state_delta": state_delta,
         "npc_behavior_context": npc_behavior_context,
         "narration_brief": narration_brief,
+        "available_routes": available_routes,
+        "suggested_actions": travel_suggestions,
         "presentation": {
             "available_actions": safe_list(service_result.get("available_actions"))
             if service_result.get("matched")

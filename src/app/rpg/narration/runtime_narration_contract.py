@@ -238,6 +238,11 @@ def _extract_compact_turn_contract_for_narration(turn_contract: Any) -> Dict[str
         "narration_brief",
         "summary",
         "message",
+        "travel_result",
+        "available_routes",
+        "location_changed",
+        "previous_location",
+        "current_location_name",
     )
 
     compact: Dict[str, Any] = {}
@@ -1624,6 +1629,7 @@ HIGH-RISK GROUNDING RULES:
 - The simulation/turn_contract is the only source of truth.
 - You are presentation only. You cannot grant rewards, create combat results, move the player, complete quests, or reveal hidden facts.
 - Do not mention rewards, currency, items, XP, inventory changes, combat, injury, blood, death, location travel, quest completion, objective completion, secret facts, or NPC knowledge unless explicitly present in the turn_contract, state_delta, resolved_result, or combat facts.
+- Travel/location rule: You may say the player arrives at, travels to, enters, or leaves a location only when the authoritative turn contract contains state_delta.location_changed=true or result.travel_result.ok=true. Use result.travel_result.from_location_name and to_location_name for travel narration. If travel_result.ok=false, explain that the route is unavailable and mention available_routes only if present. Do not invent roads, locations, shortcuts, travel time, danger, or arrival unless present in the contract.
 - If the player claims an NPC owes them money, items, favors, or information, treat that claim as unsupported unless the turn_contract confirms it.
 - The safe_fallback candidate should be a natural refusal/deferral when the player asks for an unsupported result.
 
