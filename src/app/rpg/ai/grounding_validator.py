@@ -122,6 +122,15 @@ _CLEAR_DEBT_REFUSAL_PATTERNS = [
     r"\bdon't\s+owe\b",
     r"\bdoes\s+not\s+owe\b",
     r"\bnot\s+owe\b",
+    r"\bno\s+debt\b",
+    r"\bno\s+coin\s+changes\s+hands\b",
+    r"\bdoes\s+not\s+hand\s+over\s+any\s+coin\b",
+    r"\bno\s+payment\b",
+    r"\bwon't\s+pay\b",
+    r"\bwill\s+not\s+pay\b",
+    r"\brefuse(?:s|d)?\b",
+    r"\bunsupported\s+claim\b",
+    r"\bunsupported\s+debt\s+claim\b",
 ]
 
 _AMBIGUOUS_DEBT_RESPONSE_PATTERNS = [
@@ -137,6 +146,23 @@ _AMBIGUOUS_DEBT_RESPONSE_PATTERNS = [
     r"\bwe'?ll\s+see\b",
     r"\bmaybe\b",
     r"\bperhaps\b",
+]
+
+_DEBT_CONFIRMATION_PATTERNS = [
+    r"\backnowledges?\s+(?:the\s+)?debt\b",
+    r"\bconfirms?\s+(?:the\s+)?debt\b",
+    r"\badmits?\s+(?:the\s+)?debt\b",
+    r"\baccepts?\s+(?:the\s+)?debt\b",
+    r"\bagrees?\s+(?:that\s+)?(?:he|she|they|i)\s+owe",
+    r"\byou(?:'re| are)\s+right\b.*\bowe\b",
+    r"\bi\s+owe\s+you\b",
+    r"\boutstanding\s+amount\b",
+    r"\boutstanding\s+debt\b",
+    r"\bvalid\s+debt\b",
+    r"\breal\s+debt\b",
+    r"\bpayment\s+is\s+due\b",
+    r"\bpayment\s+to\s+the\s+player\b",
+    r"\bputs?\s+.+\s+on\s+notice\s+regarding\s+(?:the\s+)?outstanding\s+amount\b",
 ]
 
 _NEGATION_MARKERS = (
@@ -200,6 +226,38 @@ def _safe_list(value: Any) -> List[Any]:
 
 def _safe_str(value: Any) -> str:
     return str(value) if value is not None else ""
+
+
+def _extract_player_action_text(turn_contract: Mapping[str, Any]) -> str:
+    contract = _safe_dict(turn_contract)
+    result = _safe_dict(
+        contract.get("result")
+        or contract.get("resolved_result")
+        or contract.get("resolved_action")
+    )
+    action = _safe_dict(contract.get("action"))
+    action_metadata = _safe_dict(action.get("metadata"))
+    semantic_action = _safe_dict(action_metadata.get("semantic_action"))
+
+    candidates = [
+        contract.get("player_action"),
+        contract.get("player_input"),
+        contract.get("input"),
+        contract.get("command"),
+        result.get("player_action"),
+        result.get("player_input"),
+        action.get("player_action"),
+        action.get("player_input"),
+        semantic_action.get("player_action"),
+        semantic_action.get("player_input"),
+    ]
+
+    for candidate in candidates:
+        text = _safe_str(candidate)
+        if text:
+            return text
+
+    return ""
 
 
 def _flatten_text(value: Any) -> str:
@@ -441,6 +499,71 @@ def _payment_or_debt_authorized(turn_contract: Mapping[str, Any]) -> bool:
     return False
 
 
+def _debt_reference_is_not_reward_grant(
+    text: str,
+    reward_pattern: Optional[str],
+    turn_contract: Mapping[str, Any],
+) -> bool:
+    """Allow currency words when they describe an unsupported player debt claim.
+
+    Example allowed:
+      "You demand payment from Bran for a debt of fifty gold."
+      "The interaction resolves as an unsupported debt claim."
+      "No. I do not owe you coin."
+
+    Example still rejected:
+      "Bran gives you fifty gold."
+      "You receive fifty gold."
+      "Payment changes hands."
+    """
+    if not reward_pattern:
+        return False
+
+    text = _safe_str(text)
+    contract = _safe_dict(turn_contract)
+
+    player_action_text = _extract_player_action_text(contract)
+
+    player_made_debt_claim = bool(
+        _contains_pattern(player_action_text, _UNSUPPORTED_DEBT_CLAIM_PATTERNS)
+    )
+    if not player_made_debt_claim:
+        return False
+
+    if _payment_or_debt_authorized(contract):
+        return False
+
+    explicit_grant_patterns = [
+        rf"\b(?:hands?|handed|gives?|gave|pays?|paid)\s+(?:you\s+)?{_MONEY_PHRASE_PATTERN}\b",
+        rf"\byou\s+(?:gain|gained|receive|received|get|got|are\s+given|were\s+given)\s+{_MONEY_PHRASE_PATTERN}\b",
+        rf"\b{_MONEY_PHRASE_PATTERN}\s+(?:is|are|was|were)\s+(?:added|placed|put)\b.*\b(?:inventory|purse|hand|pocket|pack)\b",
+        r"\bpayment\s+changes\s+hands\b",
+        r"\badds?\b.*\bto your inventory\b",
+    ]
+    if _contains_pattern(text, explicit_grant_patterns):
+        return False
+
+    non_grant_debt_reference_patterns = [
+        rf"\b(?:demand|demands|demanded|request|requests|requested|claim|claims|claimed)\b.*\b{_MONEY_PHRASE_PATTERN}\b",
+        rf"\b{_MONEY_PHRASE_PATTERN}\b.*\b(?:demand|claim|unsupported\s+claim|unsupported\s+debt)\b",
+        rf"\bdebt\s+of\s+{_MONEY_PHRASE_PATTERN}\b",
+        rf"\b{_MONEY_PHRASE_PATTERN}\b.*\bdebt\b",
+        r"\bunsupported\s+debt\s+claim\b",
+        r"\bunsupported\s+payment\s+claim\b",
+        r"\bdoes\s+not\s+owe\b",
+        r"\bdo\s+not\s+owe\b",
+        r"\bdon't\s+owe\b",
+        r"\bno\s+coin\s+changes\s+hands\b",
+        r"\bdoes\s+not\s+hand\s+over\s+any\s+coin\b",
+        r"\bno\s+payment\b",
+        r"\bpayment\s+demand\b",
+        r"\bdemand\s+payment\b",
+        r"\bclaim\s+against\b",
+    ]
+
+    return bool(_contains_pattern(text, non_grant_debt_reference_patterns))
+
+
 def _allowed_speakers(
     turn_contract: Mapping[str, Any],
     state_snapshot: Optional[Mapping[str, Any]] = None,
@@ -537,7 +660,12 @@ def validate_narration_grounding(
             )
 
     reward_pattern = _contains_pattern(full_text, _REWARD_PATTERNS)
-    if reward_pattern and not _reward_pattern_is_only_price_quote(full_text, reward_pattern) and not _currency_or_inventory_delta_exists(contract):
+    if (
+        reward_pattern
+        and not _reward_pattern_is_only_price_quote(full_text, reward_pattern)
+        and not _debt_reference_is_not_reward_grant(full_text, reward_pattern, contract)
+        and not _currency_or_inventory_delta_exists(contract)
+    ):
         violations.append(
             GroundingViolation(
                 code="unsupported_reward_claim",
@@ -611,12 +739,7 @@ def validate_narration_grounding(
                 )
                 break
 
-    player_action_text = _safe_str(
-        contract.get("player_action")
-        or contract.get("input")
-        or contract.get("command")
-        or _safe_dict(contract.get("result")).get("player_action")
-    )
+    player_action_text = _extract_player_action_text(contract)
 
     player_made_debt_claim = bool(
         _contains_pattern(player_action_text, _UNSUPPORTED_DEBT_CLAIM_PATTERNS)
@@ -630,6 +753,7 @@ def validate_narration_grounding(
     if player_made_debt_claim and not _payment_or_debt_authorized(contract):
         clear_refusal = _contains_pattern(full_text, _CLEAR_DEBT_REFUSAL_PATTERNS)
         ambiguous_debt_response = _contains_pattern(full_text, _AMBIGUOUS_DEBT_RESPONSE_PATTERNS)
+        debt_confirmation = _contains_pattern(full_text, _DEBT_CONFIRMATION_PATTERNS)
         explicit_grant = _contains_pattern(
             full_text,
             [
@@ -646,6 +770,15 @@ def validate_narration_grounding(
                     field="narration",
                     message="Narration grants or confirms payment for an unsupported debt claim.",
                     evidence=explicit_grant,
+                )
+            )
+        elif debt_confirmation:
+            violations.append(
+                GroundingViolation(
+                    code="unsupported_debt_confirmed",
+                    field="narration",
+                    message="Narration confirms, acknowledges, or treats an unsupported debt as real.",
+                    evidence=debt_confirmation,
                 )
             )
         elif ambiguous_debt_response and not clear_refusal:
@@ -702,12 +835,7 @@ def build_deterministic_fallback_narration(
     codes = {violation.code for violation in violations}
     speaker = _first_allowed_speaker(contract, state_snapshot)
 
-    player_action_text = _safe_str(
-        contract.get("player_action")
-        or contract.get("input")
-        or contract.get("command")
-        or _safe_dict(contract.get("result")).get("player_action")
-    )
+    player_action_text = _extract_player_action_text(contract)
     player_made_debt_claim = bool(
         _contains_pattern(player_action_text, _UNSUPPORTED_DEBT_CLAIM_PATTERNS)
     )
@@ -887,10 +1015,25 @@ def select_grounded_narration_candidate(
         violations=primary_result.violations,
         state_snapshot=state_snapshot,
     )
-    primary_result.selected_candidate = "deterministic_fallback"
-    primary_result.fallback_used = True
-    primary_result.fallback_source = "deterministic_fallback"
-    deterministic["grounding_validation"] = primary_result.to_dict()
+
+    # Include violations from both primary and safe_fallback attempts
+    validation = primary_result.to_dict()
+    validation["selected_candidate"] = "deterministic_fallback"
+    validation["fallback_used"] = True
+    validation["fallback_source"] = "deterministic_fallback"
+
+    if settings.get("llm_safe_fallback_candidate", True) and safe_fallback:
+        fallback_result = validate_narration_grounding(
+            safe_fallback,
+            turn_contract,
+            state_snapshot=state_snapshot,
+            strict_named_fact_check=strict_named_fact_check,
+        )
+        if not fallback_result.ok:
+            validation["safe_fallback_rejected"] = True
+            validation["safe_fallback_violations"] = fallback_result.to_dict().get("violations", [])
+
+    deterministic["grounding_validation"] = validation
     return deterministic
 
 

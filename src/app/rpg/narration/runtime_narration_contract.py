@@ -1729,6 +1729,15 @@ Unsupported debt / payment claim rules:
   "Let me think about what I owe you."
 - Bad unsupported debt fallback:
   "Here is 50 gold."
+- In unsupported debt cases, do NOT say the NPC acknowledges the debt.
+- In unsupported debt cases, do NOT say there is an outstanding amount.
+- In unsupported debt cases, do NOT say the NPC is put on notice for the amount.
+- In unsupported debt cases, do NOT describe the debt as valid, real, confirmed, accepted, acknowledged, or outstanding.
+- Every field in safe_fallback must agree with the refusal: narration, action, npc.line, and reward.
+- Bad unsupported debt fallback:
+  "He acknowledges the debt."
+- Bad unsupported debt fallback:
+  "Bran is put on immediate notice regarding the outstanding amount."
 - If the contract does not explicitly authorize a reward, both primary.reward and safe_fallback.reward must be null.
 - If the contract does not explicitly authorize combat/damage/injury/death, do not mention blood, wounds, attacks, death, damage, or combat.
 - If the contract does not explicitly authorize travel/location change, do not say the player arrives, travels, leaves, reaches, or enters a new location.

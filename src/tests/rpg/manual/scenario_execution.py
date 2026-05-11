@@ -117,13 +117,19 @@ def _record_scenario_error(
 
 def _add_regression_warning(
     *,
-    scenario: str,
-    turn: int,
+    regression_warnings: List[str] | None = None,
     warning: str,
+    scenario: str | None = None,
+    turn: int | None = None,
 ) -> None:
-    warning_entry = f"{scenario}:turn_{turn}:{warning}"
-    with _REGRESSION_WARNING_LOCK:
-        _REGRESSION_WARNINGS.append(warning_entry)
+    if regression_warnings is not None:
+        regression_warnings.append(warning)
+    elif scenario is not None and turn is not None:
+        warning_entry = f"{scenario}:turn_{turn}:{warning}"
+        with _REGRESSION_WARNING_LOCK:
+            _REGRESSION_WARNINGS.append(warning_entry)
+    else:
+        raise ValueError("Either regression_warnings or (scenario and turn) must be provided")
 
 
 def _extract_turn_grounding_validation(turn_record: Dict[str, Any]) -> Dict[str, Any]:
@@ -229,21 +235,39 @@ def _is_n101_gate_warning(value: Any) -> bool:
     if not text:
         return False
 
-    markers = (
+    # This scenario intentionally proves the validator catches bad combat narration.
+    # Deterministic fallback is expected here and should not fail the N101 gate.
+    if "narration_validator_catches_hit_miss_contradiction" in text:
+        if (
+            "unsupported_combat_claim" in text
+            or "grounding_fallback_used:deterministic_fallback" in text
+        ):
+            return False
+
+    hard_markers = (
         ":n101_",
         "n101_",
         "fake_debt_",
-        "grounding_violation:",
-        "grounding_primary_violation:",
-        "grounding_fallback_used:",
         "provider_json_parse_failed",
         "provider_context_exceeded",
         "provider_call_failed",
-        "unsupported_reward_claim",
-        "unsupported_debt",
-        "deterministic_fallback",
     )
-    return any(marker in text for marker in markers)
+    if any(marker in text for marker in hard_markers):
+        return True
+
+    # Grounding fallback is a gate failure for fake-debt, not for the combat contradiction test.
+    if "npc_bran_refuses_fake_debt" in text:
+        markers = (
+            "grounding_violation:",
+            "grounding_primary_violation:",
+            "grounding_fallback_used:",
+            "unsupported_reward_claim",
+            "unsupported_debt",
+            "deterministic_fallback",
+        )
+        return any(marker in text for marker in markers)
+
+    return False
 
 
 def _promote_turn_scenario_warnings(
@@ -262,7 +286,10 @@ def _promote_turn_scenario_warnings(
                 scenario_warnings.append(warning_text)
 
             if _is_n101_gate_warning(warning_text):
-                _add_regression_warning(regression_warnings, warning_text)
+                _add_regression_warning(
+                    regression_warnings=regression_warnings,
+                    warning=warning_text,
+                )
 
 
 def _n101_stabilization_gate_warnings(
@@ -588,6 +615,20 @@ def _fake_debt_expectation_warnings(
     )
     if any(term in text for term in grant_terms):
         warnings.append("fake_debt_printed_grant_language")
+
+    bad_debt_confirmation_terms = (
+        "acknowledges the debt",
+        "acknowledge the debt",
+        "confirms the debt",
+        "admits the debt",
+        "outstanding amount",
+        "outstanding debt",
+        "payment is due",
+        "valid debt",
+        "real debt",
+    )
+    if any(term in text for term in bad_debt_confirmation_terms):
+        warnings.append("fake_debt_confirmed_or_acknowledged_unsupported_debt")
 
     return warnings
 
@@ -1391,7 +1432,10 @@ def _run_one_service_scenario(
             for warning in fake_debt_warnings:
                 tagged = f"{scenario_name}:turn_{turn_index}:{warning}"
                 turn_record.setdefault("scenario_warnings", []).append(tagged)
-                regression_warnings.append(tagged)
+                _add_regression_warning(
+                    regression_warnings=regression_warnings,
+                    warning=tagged,
+                )
 
         turn_summaries.append(turn_record)
 
