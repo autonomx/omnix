@@ -98,6 +98,177 @@ def _norm(value: Any) -> str:
     return " ".join(str(value or "").lower().strip().split())
 
 
+RUNTIME_NARRATION_CONTEXT_JSON_LIMIT = 9000
+RUNTIME_NARRATION_STATE_JSON_LIMIT = 3500
+RUNTIME_NARRATION_CONTRACT_JSON_LIMIT = 5500
+
+
+def _cap_text(value: Any, limit: int) -> str:
+    text = _safe_str(value)
+    if limit <= 0 or len(text) <= limit:
+        return text
+    return text[: max(0, limit - 80)] + f"... [truncated {len(text) - limit} chars]"
+
+
+def _cap_list(value: Any, limit: int = 12) -> List[Any]:
+    if not isinstance(value, list):
+        return []
+    return value[:limit]
+
+
+def _compact_mapping(value: Any, *, max_keys: int = 40, max_text: int = 500, max_list: int = 12) -> Dict[str, Any]:
+    raw = _safe_dict(value)
+    compact: Dict[str, Any] = {}
+    for index, key in enumerate(sorted(raw.keys(), key=str)):
+        if index >= max_keys:
+            compact["_truncated_keys"] = max(0, len(raw) - max_keys)
+            break
+        item = raw.get(key)
+        if isinstance(item, str):
+            compact[key] = _cap_text(item, max_text)
+        elif isinstance(item, dict):
+            compact[key] = _compact_mapping(item, max_keys=max_keys, max_text=max_text, max_list=max_list)
+        elif isinstance(item, list):
+            compact[key] = [
+                _compact_mapping(v, max_keys=max_keys, max_text=max_text, max_list=max_list)
+                if isinstance(v, dict)
+                else _cap_text(v, max_text) if isinstance(v, str)
+                else v
+                for v in item[:max_list]
+            ]
+            if len(item) > max_list:
+                compact[f"{key}_truncated_count"] = len(item) - max_list
+        else:
+            compact[key] = item
+    return compact
+
+
+def _extract_compact_runtime_state_for_narration(simulation_state: Any) -> Dict[str, Any]:
+    state = _safe_dict(simulation_state)
+
+    compact: Dict[str, Any] = {
+        "tick": state.get("tick"),
+        "scene_id": state.get("scene_id"),
+        "current_location": (
+            state.get("current_location")
+            or state.get("current_location_id")
+            or state.get("location")
+        ),
+        "current_location_name": state.get("current_location_name") or state.get("location_name"),
+    }
+
+    for key in (
+        "present_npcs",
+        "known_npcs",
+        "unlocked_locations",
+        "allowed_locations",
+        "active_quests",
+        "quest_log",
+        "recent_world_events",
+        "recent_journal_entries",
+        "recent_memory",
+        "currency",
+        "inventory",
+        "runtime_settings",
+    ):
+        value = state.get(key)
+        if value not in (None, "", [], {}):
+            if isinstance(value, dict):
+                compact[key] = _compact_mapping(value, max_keys=20, max_text=300, max_list=8)
+            elif isinstance(value, list):
+                compact[key] = _cap_list(value, 8)
+            else:
+                compact[key] = value
+
+    # Never send giant full histories/session blobs to the narrator.
+    compact["omitted_from_prompt"] = [
+        "full_runtime_state",
+        "full_session",
+        "full_transcript",
+        "full_memory_store",
+        "full_debug_artifacts",
+    ]
+
+    return compact
+
+
+def _extract_compact_turn_contract_for_narration(turn_contract: Any) -> Dict[str, Any]:
+    contract = _safe_dict(turn_contract)
+    result = _safe_dict(
+        contract.get("result")
+        or contract.get("resolved_result")
+        or contract.get("resolved_action")
+    )
+
+    keys = (
+        "action_type",
+        "semantic_action_type",
+        "player_action",
+        "current_location",
+        "current_location_id",
+        "location",
+        "present_npcs",
+        "allowed_npcs",
+        "target_id",
+        "target_name",
+        "speaker",
+        "npc_backbone_decision",
+        "service_result",
+        "interaction_result",
+        "conversation_result",
+        "combat_result",
+        "combat_delta",
+        "damage_delta",
+        "health_delta",
+        "defeat",
+        "currency_delta",
+        "inventory_delta",
+        "items_added",
+        "items_removed",
+        "reward",
+        "quest_log_delta",
+        "completed_quests",
+        "completed_objectives",
+        "new_facts",
+        "allowed_facts",
+        "new_leads",
+        "allowed_leads",
+        "suggested_actions",
+        "allowed_next_actions",
+        "narration_brief",
+        "summary",
+        "message",
+    )
+
+    compact: Dict[str, Any] = {}
+    for key in keys:
+        value = contract.get(key)
+        if value in (None, "", [], {}):
+            value = result.get(key)
+        if value in (None, "", [], {}):
+            continue
+
+        if isinstance(value, dict):
+            compact[key] = _compact_mapping(value, max_keys=20, max_text=300, max_list=8)
+        elif isinstance(value, list):
+            compact[key] = _cap_list(value, 8)
+        elif isinstance(value, str):
+            compact[key] = _cap_text(value, 700)
+        else:
+            compact[key] = value
+
+    compact["result"] = _compact_mapping(result, max_keys=20, max_text=300, max_list=8) if result else {}
+    return compact
+
+
+def _json_for_prompt(value: Any, *, limit: int) -> str:
+    try:
+        text = json.dumps(value, ensure_ascii=False, indent=2, default=str)
+    except Exception:
+        text = json.dumps(_safe_str(value), ensure_ascii=False)
+    return _cap_text(text, limit)
+
+
 def _recent_npc_lines(simulation_state: Dict[str, Any], speaker: str, *, limit: int = 8) -> List[str]:
     simulation_state = _safe_dict(simulation_state)
     rows: List[Dict[str, Any]] = []
@@ -1413,20 +1584,41 @@ def build_provider_narration_payload(
     simulation_state = _safe_dict(simulation_state)
     turn_contract = _safe_dict(turn_contract)
 
+    compact_turn_contract = _extract_compact_turn_contract_for_narration(turn_contract)
+    compact_simulation_state = _extract_compact_runtime_state_for_narration(simulation_state)
+
+    turn_contract_json = _json_for_prompt(
+        compact_turn_contract,
+        limit=RUNTIME_NARRATION_CONTRACT_JSON_LIMIT,
+    )
+    simulation_state_json = _json_for_prompt(
+        compact_simulation_state,
+        limit=RUNTIME_NARRATION_STATE_JSON_LIMIT,
+    )
+
+    repair_context_json = ""
+    if repair_context:
+        repair_context_json = _json_for_prompt(
+            {
+                "previous_errors": _safe_list(_safe_dict(repair_context).get("previous_errors")),
+                "instruction": _safe_str(_safe_dict(repair_context).get("instruction")),
+            },
+            limit=1200,
+        )
+
     prompt = f"""
 Produce structured RPG narration for a completed deterministic turn.
 
-Authoritative turn contract:
-{json.dumps(turn_contract, ensure_ascii=False, indent=2)}
+Authoritative compact turn contract:
+{turn_contract_json}
 
-Simulation state:
-{json.dumps({
-    "scene": simulation_state.get("scene"),
-    "location": simulation_state.get("location"),
-    "story_arc_state": simulation_state.get("story_arc_state"),
-    "campaign_journal_state": simulation_state.get("campaign_journal_state"),
-    "npc_profile_state": simulation_state.get("npc_profile_state"),
-}, ensure_ascii=False, indent=2)}
+Compact state snapshot:
+{simulation_state_json}
+
+Only use the compact turn contract and compact state snapshot as authoritative truth.
+If something is omitted, do not invent it.
+
+Do not include full runtime_state, full session, full transcript, or full memory arrays in the provider prompt.
 
 HIGH-RISK GROUNDING RULES:
 - The simulation/turn_contract is the only source of truth.
@@ -1434,6 +1626,19 @@ HIGH-RISK GROUNDING RULES:
 - Do not mention rewards, currency, items, XP, inventory changes, combat, injury, blood, death, location travel, quest completion, objective completion, secret facts, or NPC knowledge unless explicitly present in the turn_contract, state_delta, resolved_result, or combat facts.
 - If the player claims an NPC owes them money, items, favors, or information, treat that claim as unsupported unless the turn_contract confirms it.
 - The safe_fallback candidate should be a natural refusal/deferral when the player asks for an unsupported result.
+
+UNSUPPORTED DEBT CLAIM SPECIAL CASE:
+If the player says the NPC owes them money and the compact turn contract does not explicitly authorize a payment/debt/currency_delta/reward:
+- primary.npc.line must clearly refuse.
+- safe_fallback.npc.line must clearly refuse.
+- safe_fallback must not ask a question.
+- safe_fallback must not be ambiguous.
+- safe_fallback should say: "No. I do not owe you coin."
+
+This is intentionally redundant. The fake-debt case is important enough to over-specify.
+
+Repair context, if any:
+{repair_context_json}
 
 {_runtime_narration_candidate_schema_text()}
 """
@@ -1488,7 +1693,7 @@ Use this exact shape:
     "action": "<short safe consequence only>",
     "npc": {
       "speaker": "<same allowed speaker when possible, or empty string>",
-      "line": "<safe in-character fallback line; no rewards, no combat, no travel, no quest completion, no hidden facts>"
+      "line": "<safe in-character fallback line; if refused or unsupported debt/payment claim, clearly refuse; no rewards, no combat, no travel, no quest completion, no hidden facts>"
     },
     "reward": null,
     "followup_hooks": []
@@ -1499,7 +1704,31 @@ Candidate rules:
 - primary may be expressive, but must stay inside the authoritative contract.
 - safe_fallback must be conservative, natural, and safe.
 - safe_fallback must never include rewards, currency, items, XP, inventory changes, combat, injury, blood, death, location travel, quest completion, objective completion, hidden facts, or unsupported NPC knowledge.
-- If the player makes an unsupported claim such as "you owe me gold", safe_fallback should refuse or defer the claim.
+Unsupported debt / payment claim rules:
+- If the player claims an NPC owes money, items, payment, debt, reward, compensation, or says "pay me", treat that claim as unsupported unless the authoritative contract explicitly contains a matching debt, payment, currency_delta, reward, service_result.accepted=true, or inventory_delta.
+- If no such authoritative payment/debt exists, both primary and safe_fallback MUST clearly refuse the claim.
+- In unsupported debt cases, both candidates must follow this exact meaning:
+  - The NPC does not owe the player.
+  - No coin changes hands.
+  - reward is null.
+- In unsupported debt cases, do NOT ask whether the player is sure.
+- In unsupported debt cases, do NOT write a question as the only response.
+- In unsupported debt cases, do NOT say "Pay me now?" back to the player.
+- In unsupported debt cases, do NOT leave the claim open, pending, under consideration, or ambiguous.
+- In unsupported debt cases, safe_fallback.npc.line should be close to:
+  "No. I do not owe you coin."
+- Good unsupported debt fallback:
+  "No. I do not owe you coin."
+- Good unsupported debt fallback:
+  "No payment changes hands. I do not owe you 50 gold."
+- Bad unsupported debt fallback:
+  "Fifty gold? You're sure about that?"
+- Bad unsupported debt fallback:
+  "Pay me now?"
+- Bad unsupported debt fallback:
+  "Let me think about what I owe you."
+- Bad unsupported debt fallback:
+  "Here is 50 gold."
 - If the contract does not explicitly authorize a reward, both primary.reward and safe_fallback.reward must be null.
 - If the contract does not explicitly authorize combat/damage/injury/death, do not mention blood, wounds, attacks, death, damage, or combat.
 - If the contract does not explicitly authorize travel/location change, do not say the player arrives, travels, leaves, reaches, or enters a new location.
@@ -1606,8 +1835,11 @@ def build_runtime_narration_payload(
                 repair_context = {
                     "previous_errors": errors,
                     "instruction": (
-                        "Retry with valid JSON only. reward must be ''. followup_hooks must be []. "
-                        "Do not include rolls, DCs, rewards, XP, item changes, or objective completion."
+                        "Retry with one complete valid rpg_narration_candidates_v1 JSON object only. "
+                        "Include both primary and safe_fallback. Keep all strings short. "
+                        "Both primary.reward and safe_fallback.reward must be null unless the contract explicitly authorizes reward/currency. "
+                        "If the player claims unsupported debt/payment, both candidates must clearly refuse it. "
+                        "Do not include rolls, DCs, XP, item changes, combat results, or objective completion unless explicitly authorized."
                     ),
                 }
 

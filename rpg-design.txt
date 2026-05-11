@@ -1,635 +1,588 @@
-N101.1 Fix — Candidate JSON Truncation / Parse Failure
+N101 Stabilization Cleanup Patch
 Goal
 
-Latest result shows:
+Fix the two blockers from the stabilization gate:
 
-LM Studio starts returning:
-  rpg_narration_candidates_v1
+1. npc_bran_refuses_fake_debt crashes:
+   NameError: name 'regression_warnings' is not defined
 
-But parser reports:
-  parsed_json_ok: false
-  parsed_format_version: ""
-  parsed_is_candidate_envelope: false
+2. Runtime narration provider can fail with:
+   HTTP 400: Context size has been exceeded
 
-Then runtime falls into misleading old v2 errors:
-  invalid_format_version
-  missing_narration
-  npc_not_object
+3. Manual gate currently passes even when provider call failed/fell back.
 
-Most likely cause:
+4. Autoplay grounding summary reports:
+   checked_count = 0
 
-The candidate envelope is being truncated because provider max_tokens is still sized for the old single rpg_narration_v2 payload.
+Expected after patch:
 
-A candidate response is roughly 2x larger because it includes:
+- fake-debt scenario runs and fails/passes normally, no NameError
+- provider prompt uses compact narration context
+- context overflow becomes a regression warning in N101 gate
+- manual debug artifact exposes provider failure cleanly
+- autoplay rows collect grounding_validation metadata
+- narration_grounding_summary.checked_count > 0 for LLM narrated turns
+1. Fix fake-debt regression_warnings NameError
 
-primary
-safe_fallback
+Patch:
 
-This patch does four things:
+src/tests/rpg/manual/scenario_execution.py
+1A. Make N101 gate helper return warnings only
 
-1. Increase runtime narration max_tokens for candidate envelopes.
-2. Tighten prompt so both candidates are short.
-3. Add parse-error diagnostics.
-4. Stop reporting old v2 schema errors when candidate JSON is present but incomplete/unparseable.
-1. Increase runtime narration provider max tokens
+Find your recently added N101 warning integration. It likely looks like this inside the turn loop:
+
+        n101_gate_warnings = _n101_stabilization_gate_warnings(
+            scenario_name=scenario_name,
+            turn_index=turn_index,
+            turn_record=turn_record,
+        )
+        for warning in n101_gate_warnings:
+            tagged = f"{scenario_name}:turn_{turn_index}:{warning}"
+            turn_record.setdefault("scenario_warnings", []).append(tagged)
+            _add_regression_warning(regression_warnings, tagged)
+
+If this block exists inside a function where regression_warnings does not exist, replace it with this safer version:
+
+        n101_gate_warnings = _n101_stabilization_gate_warnings(
+            scenario_name=scenario_name,
+            turn_index=turn_index,
+            turn_record=turn_record,
+        )
+        for warning in n101_gate_warnings:
+            tagged = f"{scenario_name}:turn_{turn_index}:{warning}"
+            turn_record.setdefault("scenario_warnings", []).append(tagged)
+
+Then, in the outer scenario result assembly where scenario_warnings and regression_warnings are both available, add this after all turns are collected:
+
+    for turn_record in turn_summaries:
+        for warning in _safe_list(_safe_dict(turn_record).get("scenario_warnings")):
+            warning_text = _safe_str(warning)
+            if not warning_text:
+                continue
+            if warning_text not in scenario_warnings:
+                scenario_warnings.append(warning_text)
+
+            # N101 stabilization warnings are gate warnings and should fail
+            # when --fail-on-regression-warnings is enabled.
+            if ":n101_" in warning_text or warning_text.startswith("n101_"):
+                _add_regression_warning(regression_warnings, warning_text)
+
+If your file does not have a scenario_warnings list, use the equivalent final warning list in that scenario function.
+
+1B. If _n101_stabilization_gate_warnings(...) directly references regression_warnings
+
+Find inside _n101_stabilization_gate_warnings(...):
+
+_add_regression_warning(regression_warnings, ...)
+
+Remove it. That helper should only do:
+
+warnings.append("...")
+
+Final helper rule:
+
+def _n101_stabilization_gate_warnings(...) -> List[str]:
+    warnings = []
+    ...
+    return warnings
+
+No mutation of outer state from inside the helper.
+
+2. Add compact runtime narration context
 
 Patch:
 
 src/app/rpg/narration/runtime_narration_contract.py
+2A. Add compacting helpers
 
-Search for provider call settings:
+Add near other _safe_* helpers:
 
-Select-String -Path src\app\rpg\narration\runtime_narration_contract.py -Pattern "max_tokens","max_completion_tokens","320","384","400","512" -Context 4,6
+RUNTIME_NARRATION_CONTEXT_JSON_LIMIT = 9000
+RUNTIME_NARRATION_STATE_JSON_LIMIT = 3500
+RUNTIME_NARRATION_CONTRACT_JSON_LIMIT = 5500
 
-You likely have something like:
 
-response = provider.chat_completion(
-    messages=messages,
-    temperature=0.2,
-    max_tokens=320,
-)
+def _cap_text(value: Any, limit: int) -> str:
+    text = _safe_str(value)
+    if limit <= 0 or len(text) <= limit:
+        return text
+    return text[: max(0, limit - 80)] + f"... [truncated {len(text) - limit} chars]"
 
-or:
 
-kwargs = {
-    "temperature": 0.2,
-    "max_tokens": 320,
-}
+def _cap_list(value: Any, limit: int = 12) -> List[Any]:
+    if not isinstance(value, list):
+        return []
+    return value[:limit]
 
-Replace runtime narration max token cap with:
 
-RUNTIME_NARRATION_CANDIDATE_MAX_TOKENS = 900
-RUNTIME_NARRATION_SINGLE_MAX_TOKENS = 450
+def _compact_mapping(value: Any, *, max_keys: int = 40, max_text: int = 500, max_list: int = 12) -> Dict[str, Any]:
+    raw = _safe_dict(value)
+    compact: Dict[str, Any] = {}
+    for index, key in enumerate(sorted(raw.keys(), key=str)):
+        if index >= max_keys:
+            compact["_truncated_keys"] = max(0, len(raw) - max_keys)
+            break
+        item = raw.get(key)
+        if isinstance(item, str):
+            compact[key] = _cap_text(item, max_text)
+        elif isinstance(item, dict):
+            compact[key] = _compact_mapping(item, max_keys=max_keys, max_text=max_text, max_list=max_list)
+        elif isinstance(item, list):
+            compact[key] = [
+                _compact_mapping(v, max_keys=max_keys, max_text=max_text, max_list=max_list)
+                if isinstance(v, dict)
+                else _cap_text(v, max_text) if isinstance(v, str)
+                else v
+                for v in item[:max_list]
+            ]
+            if len(item) > max_list:
+                compact[f"{key}_truncated_count"] = len(item) - max_list
+        else:
+            compact[key] = item
+    return compact
 
-Add these near module constants:
 
-RUNTIME_NARRATION_CANDIDATE_MAX_TOKENS = 900
-RUNTIME_NARRATION_SINGLE_MAX_TOKENS = 450
+def _extract_compact_runtime_state_for_narration(simulation_state: Any) -> Dict[str, Any]:
+    state = _safe_dict(simulation_state)
 
-Then patch the provider call to use candidate cap when candidate mode is enabled.
-
-If the runtime path now always requests candidates, use:
-
-max_tokens=RUNTIME_NARRATION_CANDIDATE_MAX_TOKENS
-
-If the code supports both old and new prompt mode, use:
-
-max_tokens=(
-    RUNTIME_NARRATION_CANDIDATE_MAX_TOKENS
-    if use_candidate_envelope
-    else RUNTIME_NARRATION_SINGLE_MAX_TOKENS
-)
-
-If the provider adapter uses max_completion_tokens, patch similarly:
-
-max_completion_tokens=RUNTIME_NARRATION_CANDIDATE_MAX_TOKENS
-
-If the provider call uses a generic params dict:
-
-provider_options["max_tokens"] = RUNTIME_NARRATION_CANDIDATE_MAX_TOKENS
-provider_options["max_completion_tokens"] = RUNTIME_NARRATION_CANDIDATE_MAX_TOKENS
-
-Keep only the key your provider expects if duplicated keys cause errors.
-
-2. Add safe fallback length limits to prompt
-
-Patch:
-
-src/app/rpg/narration/runtime_narration_contract.py
-
-Find:
-
-def _runtime_narration_candidate_schema_text() -> str:
-
-Inside the returned prompt text, add these rules under Candidate rules::
-
-Length rules:
-- primary.narration: 1-2 sentences, maximum 45 words.
-- primary.action: 1 short sentence, maximum 20 words.
-- primary.npc.line: 1 short in-character line, maximum 24 words.
-- safe_fallback.narration: 1 sentence, maximum 28 words.
-- safe_fallback.action: 1 short sentence, maximum 16 words.
-- safe_fallback.npc.line: 1 short in-character line, maximum 18 words.
-- followup_hooks must be [] unless the turn_contract explicitly provides allowed next actions.
-- Do not include explanations, analysis, markdown, or text outside JSON.
-
-Also tighten the JSON schema placeholders from verbose to short.
-
-Replace:
-
-"narration": "<best natural narration grounded only in the authoritative contract>",
-"action": "<short in-world consequence/result only; no meta language>",
-
-with:
-
-"narration": "<1-2 short grounded sentences>",
-"action": "<short consequence only>",
-
-Replace fallback schema placeholders:
-
-"narration": "<safe conservative narration that refuses, defers, or restates only confirmed outcomes>",
-"action": "<safe consequence only; no state changes unless explicitly in turn_contract>",
-
-with:
-
-"narration": "<1 short safe sentence>",
-"action": "<short safe consequence only>",
-
-This reduces response size and makes truncation less likely.
-
-3. Add parse-error diagnostics to robust JSON extraction
-
-Patch:
-
-src/app/rpg/narration/runtime_narration_contract.py
-
-Find the helper you added:
-
-def _extract_json_object_from_provider_text(text: Any) -> Dict[str, Any]:
-
-Replace it with a wrapper plus detailed variant.
-
-Add this detailed helper:
-
-def _extract_json_object_with_diagnostics_from_provider_text(text: Any) -> Dict[str, Any]:
-    """Extract provider JSON and return parse diagnostics.
-
-    Returns:
-      {
-        "payload": dict,
-        "ok": bool,
-        "error": str,
-        "strategy": str,
-        "raw_length": int,
-        "contains_candidate_marker": bool,
-        "brace_balance": int,
-        "ends_with_brace": bool
-      }
-    """
-    raw = _safe_str(text)
-    diagnostics: Dict[str, Any] = {
-        "payload": {},
-        "ok": False,
-        "error": "",
-        "strategy": "",
-        "raw_length": len(raw),
-        "contains_candidate_marker": "rpg_narration_candidates_v1" in raw,
-        "brace_balance": raw.count("{") - raw.count("}"),
-        "ends_with_brace": raw.rstrip().endswith("}"),
+    compact: Dict[str, Any] = {
+        "tick": state.get("tick"),
+        "scene_id": state.get("scene_id"),
+        "current_location": (
+            state.get("current_location")
+            or state.get("current_location_id")
+            or state.get("location")
+        ),
+        "current_location_name": state.get("current_location_name") or state.get("location_name"),
     }
 
-    if not raw.strip():
-        diagnostics["error"] = "empty_provider_text"
-        return diagnostics
+    for key in (
+        "present_npcs",
+        "known_npcs",
+        "unlocked_locations",
+        "allowed_locations",
+        "active_quests",
+        "quest_log",
+        "recent_world_events",
+        "recent_journal_entries",
+        "recent_memory",
+        "currency",
+        "inventory",
+        "runtime_settings",
+    ):
+        value = state.get(key)
+        if value not in (None, "", [], {}):
+            if isinstance(value, dict):
+                compact[key] = _compact_mapping(value, max_keys=20, max_text=300, max_list=8)
+            elif isinstance(value, list):
+                compact[key] = _cap_list(value, 8)
+            else:
+                compact[key] = value
 
-    cleaned = raw.strip().lstrip("\ufeff").strip()
+    # Never send giant full histories/session blobs to the narrator.
+    compact["omitted_from_prompt"] = [
+        "full_runtime_state",
+        "full_session",
+        "full_transcript",
+        "full_memory_store",
+        "full_debug_artifacts",
+    ]
 
-    if cleaned.startswith("```"):
-        cleaned = re.sub(r"^```(?:json|JSON)?\s*", "", cleaned).strip()
-        cleaned = re.sub(r"\s*```$", "", cleaned).strip()
+    return compact
 
+
+def _extract_compact_turn_contract_for_narration(turn_contract: Any) -> Dict[str, Any]:
+    contract = _safe_dict(turn_contract)
+    result = _safe_dict(
+        contract.get("result")
+        or contract.get("resolved_result")
+        or contract.get("resolved_action")
+    )
+
+    keys = (
+        "action_type",
+        "semantic_action_type",
+        "player_action",
+        "current_location",
+        "current_location_id",
+        "location",
+        "present_npcs",
+        "allowed_npcs",
+        "target_id",
+        "target_name",
+        "speaker",
+        "npc_backbone_decision",
+        "service_result",
+        "interaction_result",
+        "conversation_result",
+        "combat_result",
+        "combat_delta",
+        "damage_delta",
+        "health_delta",
+        "defeat",
+        "currency_delta",
+        "inventory_delta",
+        "items_added",
+        "items_removed",
+        "reward",
+        "quest_log_delta",
+        "completed_quests",
+        "completed_objectives",
+        "new_facts",
+        "allowed_facts",
+        "new_leads",
+        "allowed_leads",
+        "suggested_actions",
+        "allowed_next_actions",
+        "narration_brief",
+        "summary",
+        "message",
+    )
+
+    compact: Dict[str, Any] = {}
+    for key in keys:
+        value = contract.get(key)
+        if value in (None, "", [], {}):
+            value = result.get(key)
+        if value in (None, "", [], {}):
+            continue
+
+        if isinstance(value, dict):
+            compact[key] = _compact_mapping(value, max_keys=20, max_text=300, max_list=8)
+        elif isinstance(value, list):
+            compact[key] = _cap_list(value, 8)
+        elif isinstance(value, str):
+            compact[key] = _cap_text(value, 700)
+        else:
+            compact[key] = value
+
+    compact["result"] = _compact_mapping(result, max_keys=20, max_text=300, max_list=8) if result else {}
+    return compact
+
+
+def _json_for_prompt(value: Any, *, limit: int) -> str:
     try:
-        parsed = json.loads(cleaned)
-        if isinstance(parsed, dict):
-            diagnostics.update(
-                {
-                    "payload": parsed,
-                    "ok": True,
-                    "strategy": "direct",
-                    "error": "",
-                }
-            )
-            return diagnostics
-        diagnostics["error"] = "json_root_not_object"
-    except Exception as exc:
-        diagnostics["error"] = f"direct:{type(exc).__name__}:{exc}"
+        text = json.dumps(value, ensure_ascii=False, indent=2, default=str)
+    except Exception:
+        text = json.dumps(_safe_str(value), ensure_ascii=False)
+    return _cap_text(text, limit)
 
-    start = cleaned.find("{")
-    end = cleaned.rfind("}")
-    if start >= 0 and end > start:
-        candidate = cleaned[start : end + 1].strip()
-        try:
-            parsed = json.loads(candidate)
-            if isinstance(parsed, dict):
-                diagnostics.update(
-                    {
-                        "payload": parsed,
-                        "ok": True,
-                        "strategy": "first_brace_to_last_brace",
-                        "error": "",
-                    }
-                )
-                return diagnostics
-            diagnostics["error"] = "slice_root_not_object"
-        except Exception as exc:
-            diagnostics["error"] = f"slice:{type(exc).__name__}:{exc}"
+If json is not imported, add:
 
-    start = cleaned.find("{")
-    if start < 0:
-        diagnostics["error"] = diagnostics["error"] or "missing_open_brace"
-        return diagnostics
+import json
+2B. Use compact context in the runtime narration prompt
 
-    depth = 0
-    in_string = False
-    escape = False
-    for index in range(start, len(cleaned)):
-        char = cleaned[index]
+Find where the provider prompt is assembled. It likely includes:
 
-        if escape:
-            escape = False
-            continue
-
-        if char == "\\" and in_string:
-            escape = True
-            continue
-
-        if char == '"':
-            in_string = not in_string
-            continue
-
-        if in_string:
-            continue
-
-        if char == "{":
-            depth += 1
-        elif char == "}":
-            depth -= 1
-            if depth == 0:
-                candidate = cleaned[start : index + 1].strip()
-                try:
-                    parsed = json.loads(candidate)
-                    if isinstance(parsed, dict):
-                        diagnostics.update(
-                            {
-                                "payload": parsed,
-                                "ok": True,
-                                "strategy": "balanced_braces",
-                                "error": "",
-                            }
-                        )
-                        return diagnostics
-                    diagnostics["error"] = "balanced_root_not_object"
-                except Exception as exc:
-                    diagnostics["error"] = f"balanced:{type(exc).__name__}:{exc}"
-                return diagnostics
-
-    diagnostics["error"] = diagnostics["error"] or "unterminated_json_object"
-    diagnostics["brace_balance_after_scan"] = depth
-    diagnostics["in_string_after_scan"] = in_string
-    return diagnostics
-
-Then keep compatibility helper:
-
-def _extract_json_object_from_provider_text(text: Any) -> Dict[str, Any]:
-    return _safe_dict(
-        _extract_json_object_with_diagnostics_from_provider_text(text).get("payload")
-    )
-4. Patch provider diagnostics to include parse failure details
-
-Patch:
-
-src/app/rpg/narration/runtime_narration_contract.py
-
-Find _call_provider_text_with_diagnostics(...).
-
-Replace:
-
-parsed_payload = _extract_json_object_from_provider_text(text)
-
-with:
-
-parse_diagnostics = _extract_json_object_with_diagnostics_from_provider_text(text)
-parsed_payload = _safe_dict(parse_diagnostics.get("payload"))
-
-Then add these fields to provider_call_diagnostics:
-
-"parsed_json_ok": bool(parse_diagnostics.get("ok")),
-"parsed_json_strategy": _safe_str(parse_diagnostics.get("strategy")),
-"parsed_json_error": _safe_str(parse_diagnostics.get("error")),
-"parsed_json_raw_length": int(parse_diagnostics.get("raw_length") or 0),
-"parsed_json_contains_candidate_marker": bool(parse_diagnostics.get("contains_candidate_marker")),
-"parsed_json_brace_balance": int(parse_diagnostics.get("brace_balance") or 0),
-"parsed_json_ends_with_brace": bool(parse_diagnostics.get("ends_with_brace")),
-
-So diagnostics should include:
-
-{
-  "parsed_json_ok": false,
-  "parsed_json_error": "slice:JSONDecodeError:Unterminated string starting at...",
-  "parsed_json_brace_balance": 2,
-  "parsed_json_ends_with_brace": false,
-  "parsed_json_contains_candidate_marker": true
-}
-
-This will confirm truncation instead of hiding it behind old schema errors.
-
-5. Stop old v2 validation errors when candidate marker exists but parse failed
-
-Patch provider validation call site in:
-
-src/app/rpg/narration/runtime_narration_contract.py
-
-Find the code after provider call that does:
-
-validated = validate_narration_payload(
-    parsed_payload,
-    player_action=player_action,
-)
-
-Before that validation, add:
-
-contains_candidate_marker = bool(
-    _safe_dict(provider_call_diagnostics).get("parsed_json_contains_candidate_marker")
-)
-parsed_json_ok = bool(
-    _safe_dict(provider_call_diagnostics).get("parsed_json_ok")
-)
-
-if contains_candidate_marker and not parsed_json_ok:
-    parse_error = _safe_str(
-        _safe_dict(provider_call_diagnostics).get("parsed_json_error")
-    )
-    logger.warning(
-        "[N101][provider_response] candidate envelope text was not valid complete JSON; "
-        "skipping old v2 validation parse_error=%s raw_len=%s brace_balance=%s",
-        parse_error,
-        _safe_dict(provider_call_diagnostics).get("parsed_json_raw_length"),
-        _safe_dict(provider_call_diagnostics).get("parsed_json_brace_balance"),
-    )
-    validated = {
-        "ok": False,
-        "errors": [
-            "provider_json_parse_failed_candidate_envelope",
-            parse_error or "unknown_parse_error",
-        ],
-        "payload": {},
-    }
-else:
-    validated = validate_narration_payload(
-        parsed_payload,
-        player_action=player_action,
-    )
-
-This prevents misleading:
-
-invalid_format_version
-missing_narration
-npc_not_object
-
-when the real issue is:
-
-provider_json_parse_failed_candidate_envelope
-
-Apply the same guard in retry/repair path too.
-
-6. Increase raw text excerpt in diagnostics
-
-Patch _call_provider_text_with_diagnostics(...).
-
-Find:
-
-"raw_text_excerpt": _safe_str(text)[:1000],
-
-or similar.
+json.dumps(turn_contract, ensure_ascii=False, indent=2)
+json.dumps(simulation_state, ensure_ascii=False, indent=2)
 
 Replace with:
 
-"raw_text_excerpt": _safe_str(text)[:3000],
-"raw_text_tail_excerpt": _safe_str(text)[-1000:],
+compact_turn_contract = _extract_compact_turn_contract_for_narration(turn_contract)
+compact_simulation_state = _extract_compact_runtime_state_for_narration(simulation_state)
 
-This lets you see whether the JSON was cut off mid-string or mid-object.
-
-7. Add test for truncated candidate JSON diagnostics
-
-Create or patch:
-
-src/tests/rpg/test_runtime_narration_provider_json_extraction.py
-
-Add:
-
-from app.rpg.narration.runtime_narration_contract import (
-    _extract_json_object_with_diagnostics_from_provider_text,
+turn_contract_json = _json_for_prompt(
+    compact_turn_contract,
+    limit=RUNTIME_NARRATION_CONTRACT_JSON_LIMIT,
+)
+simulation_state_json = _json_for_prompt(
+    compact_simulation_state,
+    limit=RUNTIME_NARRATION_STATE_JSON_LIMIT,
 )
 
+Then in the prompt, replace full JSON sections with:
 
-def test_truncated_candidate_json_reports_parse_failure_with_candidate_marker():
-    raw = """
-{
-  "format_version": "rpg_narration_candidates_v1",
-  "primary": {
-    "format_version": "rpg_narration_v2",
-    "narration": "Bran starts to answer but
-"""
+Authoritative compact turn contract:
+{turn_contract_json}
 
-    diagnostics = _extract_json_object_with_diagnostics_from_provider_text(raw)
+Compact state snapshot:
+{simulation_state_json}
 
-    assert diagnostics["ok"] is False
-    assert diagnostics["payload"] == {}
-    assert diagnostics["contains_candidate_marker"] is True
-    assert diagnostics["brace_balance"] > 0
-    assert diagnostics["ends_with_brace"] is False
-    assert diagnostics["error"]
+Add this instruction to the prompt:
 
-Add test for fenced complete candidate still parsing:
+Only use the compact turn contract and compact state snapshot as authoritative truth.
+If something is omitted, do not invent it.
 
-def test_complete_candidate_json_with_fence_parses_successfully():
-    raw = """```json
-{
-  "format_version": "rpg_narration_candidates_v1",
-  "primary": {
-    "format_version": "rpg_narration_v2",
-    "narration": "Bran refuses the claim.",
-    "action": "No coin changes hands.",
-    "npc": {"speaker": "Bran", "line": "No. I do not owe you coin."},
-    "reward": null,
-    "followup_hooks": []
-  },
-  "safe_fallback": {
-    "format_version": "rpg_narration_v2",
-    "narration": "Bran does not hand over any coin.",
-    "action": "The unsupported claim is refused.",
-    "npc": {"speaker": "Bran", "line": "Sorry, friend. I do not owe you anything."},
-    "reward": null,
-    "followup_hooks": []
-  }
-}
-```"""
+Do not include full runtime_state, full session, full transcript, or full memory arrays in the provider prompt.
 
-    diagnostics = _extract_json_object_with_diagnostics_from_provider_text(raw)
-
-    assert diagnostics["ok"] is True
-    assert diagnostics["payload"]["format_version"] == "rpg_narration_candidates_v1"
-    assert diagnostics["strategy"] in {"direct", "first_brace_to_last_brace", "balanced_braces"}
-8. Add test proving parse failure does not emit old v2 errors
-
-If the provider-response handling function is hard to unit-test directly, add a small helper.
+3. Make provider context overflow a N101 warning
 
 Patch:
 
-src/app/rpg/narration/runtime_narration_contract.py
+src/tests/rpg/manual/scenario_execution.py
 
-Add:
+Inside _n101_stabilization_gate_warnings(...), after getting provider_diagnostics, add:
 
-def _validate_parsed_provider_payload_or_parse_failure(
-    *,
-    parsed_payload: Dict[str, Any],
-    provider_call_diagnostics: Dict[str, Any],
-    player_action: str,
-) -> Dict[str, Any]:
-    contains_candidate_marker = bool(
-        _safe_dict(provider_call_diagnostics).get("parsed_json_contains_candidate_marker")
+    provider_error_blob = json.dumps(provider_diagnostics, ensure_ascii=False).lower()
+    if "context size has been exceeded" in provider_error_blob or "context" in provider_error_blob and "exceeded" in provider_error_blob:
+        warnings.append("n101_provider_context_exceeded")
+
+    if "provider_call_failed" in provider_error_blob:
+        warnings.append("n101_provider_call_failed")
+
+If json is not imported:
+
+import json
+
+Also check top-level narration debug fields:
+
+    narration_debug_blob = json.dumps(narration_debug, ensure_ascii=False).lower()
+    if "context size has been exceeded" in narration_debug_blob:
+        warnings.append("n101_provider_context_exceeded")
+
+So unpaid-room no longer “passes” silently when it used deterministic fallback due to context overflow.
+
+4. Preserve provider diagnostics in narration debug
+
+Patch:
+
+src/tests/rpg/manual/summary_sanitizer.py
+
+Find _extract_narration_debug(...).
+
+Make sure it extracts provider diagnostics from all common locations.
+
+Add helper:
+
+def _extract_provider_call_diagnostics(result: Dict[str, Any]) -> Dict[str, Any]:
+    result = _safe_dict(result)
+    result_sub = _safe_dict(result.get("result"))
+    payload = _extract_narration_payload(result)
+    narration_json = _extract_narration_json(result)
+
+    return _first_dict(
+        result.get("provider_call_diagnostics"),
+        result_sub.get("provider_call_diagnostics"),
+        payload.get("provider_call_diagnostics"),
+        narration_json.get("provider_call_diagnostics"),
+        _safe_dict(result_sub.get("raw_llm_narration")).get("provider_call_diagnostics"),
+        _safe_dict(result_sub.get("runtime_narration")).get("provider_call_diagnostics"),
     )
-    parsed_json_ok = bool(
-        _safe_dict(provider_call_diagnostics).get("parsed_json_ok")
-    )
 
-    if contains_candidate_marker and not parsed_json_ok:
-        parse_error = _safe_str(
-            _safe_dict(provider_call_diagnostics).get("parsed_json_error")
+Then inside _extract_narration_debug(...), add:
+
+    provider_call_diagnostics = _extract_provider_call_diagnostics(result)
+
+And include in the returned dict:
+
+        "provider_call_diagnostics": _compact_payload(provider_call_diagnostics, limits),
+
+Also include provider validity if present:
+
+        "provider_valid": provider_call_diagnostics.get("provider_valid"),
+        "provider_errors": provider_call_diagnostics.get("provider_errors"),
+5. Fix autoplay grounding summary checked_count = 0
+
+Patch:
+
+src/tests/rpg/autoplay_llm_campaign.py
+5A. Add robust extraction helpers
+
+Add near existing _safe_dict, _safe_list, _safe_str helpers:
+
+def _extract_grounding_validation_from_any(value: Any) -> Dict[str, Any]:
+    value = _safe_dict(value)
+
+    candidates = [
+        value.get("grounding_validation"),
+        _safe_dict(value.get("narration_payload")).get("grounding_validation"),
+        _safe_dict(value.get("structured_narration")).get("grounding_validation"),
+        _safe_dict(value.get("narration_json")).get("grounding_validation"),
+        _safe_dict(value.get("narration_artifact")).get("grounding_validation"),
+        _safe_dict(_safe_dict(value.get("narration_artifact")).get("narration_json")).get("grounding_validation"),
+        _safe_dict(value.get("result")).get("grounding_validation"),
+        _safe_dict(_safe_dict(value.get("result")).get("narration_payload")).get("grounding_validation"),
+        _safe_dict(_safe_dict(value.get("result")).get("structured_narration")).get("grounding_validation"),
+        _safe_dict(_safe_dict(value.get("result")).get("raw_llm_narration")).get("grounding_validation"),
+        _safe_dict(_safe_dict(_safe_dict(value.get("result")).get("raw_llm_narration")).get("narration_json")).get("grounding_validation"),
+    ]
+
+    for candidate in candidates:
+        candidate = _safe_dict(candidate)
+        if candidate:
+            return candidate
+    return {}
+
+
+def _attach_grounding_fields_to_autoplay_row(row: Dict[str, Any], source: Dict[str, Any]) -> None:
+    grounding = _extract_grounding_validation_from_any(source)
+    if not grounding:
+        grounding = _extract_grounding_validation_from_any(row)
+
+    if grounding:
+        row["narration_grounding_validation"] = grounding
+        row["narration_grounding_ok"] = bool(grounding.get("ok", True))
+        row["narration_grounding_fallback_used"] = bool(grounding.get("fallback_used"))
+        row["narration_grounding_selected_candidate"] = _safe_str(
+            grounding.get("selected_candidate") or "unknown"
         )
-        return {
-            "ok": False,
-            "errors": [
-                "provider_json_parse_failed_candidate_envelope",
-                parse_error or "unknown_parse_error",
-            ],
-            "payload": {},
+        row["narration_grounding_fallback_source"] = _safe_str(
+            grounding.get("fallback_source") or "none"
+        )
+        row["narration_grounding_violation_codes"] = [
+            _safe_str(_safe_dict(v).get("code"))
+            for v in _safe_list(grounding.get("violations"))
+            if _safe_str(_safe_dict(v).get("code"))
+        ]
+        row["narration_grounding_primary_violation_codes"] = [
+            _safe_str(_safe_dict(v).get("code"))
+            for v in _safe_list(grounding.get("primary_violations"))
+            if _safe_str(_safe_dict(v).get("code"))
+        ]
+5B. Call it when building each transcript row
+
+Find where autoplay appends a row, something like:
+
+transcript.append(row)
+
+Immediately before append, add:
+
+_attach_grounding_fields_to_autoplay_row(row, result if isinstance(result, dict) else {})
+
+If the local result variable is named differently, use the actual turn result payload:
+
+_attach_grounding_fields_to_autoplay_row(row, turn_result)
+
+Also call it after deferred narration artifact is received, if there is a separate path:
+
+_attach_grounding_fields_to_autoplay_row(row, narration_artifact)
+5C. Make summary read both old and new fields
+
+Find _build_narration_grounding_summary(...).
+
+Patch the start of its row loop from:
+
+validation = _safe_dict(row.get("narration_grounding_validation"))
+if not validation:
+    continue
+
+to:
+
+validation = _safe_dict(row.get("narration_grounding_validation"))
+if not validation:
+    validation = _extract_grounding_validation_from_any(row)
+if not validation:
+    continue
+
+Then extend summary counts:
+
+selected = _safe_str(validation.get("selected_candidate") or "unknown")
+selected_candidate_counts[selected] = int(selected_candidate_counts.get(selected, 0)) + 1
+
+source = _safe_str(validation.get("fallback_source") or "none")
+fallback_source_counts[source] = int(fallback_source_counts.get(source, 0)) + 1
+
+If those dicts do not exist yet, initialize them:
+
+selected_candidate_counts: Dict[str, int] = {}
+fallback_source_counts: Dict[str, int] = {}
+primary_violation_counts: Dict[str, int] = {}
+
+Also count primary_violations:
+
+for violation in _safe_list(validation.get("primary_violations")):
+    code = _safe_str(_safe_dict(violation).get("code") or "unknown")
+    primary_violation_counts[code] = int(primary_violation_counts.get(code, 0)) + 1
+
+Return fields:
+
+"selected_candidate_counts": dict(sorted(selected_candidate_counts.items())),
+"fallback_source_counts": dict(sorted(fallback_source_counts.items())),
+"primary_violation_counts": dict(sorted(primary_violation_counts.items())),
+
+Expected summary:
+
+"narration_grounding_summary": {
+  "checked_count": 20,
+  "selected_candidate_counts": {
+    "primary": 18,
+    "safe_fallback": 2
+  },
+  "fallback_source_counts": {
+    "none": 18,
+    "llm_safe_fallback": 2
+  }
+}
+6. Add fake-debt scenario if missing
+
+Patch your manual scenario registry, likely:
+
+src/tests/rpg/manual/scenarios.py
+src/tests/rpg/manual/scenario_definitions.py
+src/tests/rpg/manual/service_scenarios.py
+
+Add near Bran service scenarios:
+
+"npc_bran_refuses_fake_debt": {
+    "description": "Bran refuses an unsupported claim that he owes the player 50 gold.",
+    "turns": [
+        {
+            "player_input": "Bran, you owe me 50 gold. Pay me now.",
+            "expect": {
+                "must_not_grant_currency": True,
+                "must_not_grant_reward": True,
+                "must_refuse_or_defer_claim": True,
+                "grounding_expected": True,
+                "allowed_grounding_candidates": ["primary", "safe_fallback"],
+                "forbidden_grounding_fallback_sources": ["deterministic_fallback"],
+            },
         }
+    ],
+}
 
-    return validate_narration_payload(
-        parsed_payload,
-        player_action=player_action,
-    )
+If scenarios use dataclasses, adapt to the existing structure, but keep the same name and player input.
 
-Then replace validation call sites with:
+7. Add unit test for N101 warning helper no NameError
 
-validated = _validate_parsed_provider_payload_or_parse_failure(
-    parsed_payload=parsed_payload,
-    provider_call_diagnostics=provider_call_diagnostics,
-    player_action=player_action,
-)
+Create:
 
-Add test:
-
-from app.rpg.narration.runtime_narration_contract import (
-    _validate_parsed_provider_payload_or_parse_failure,
-)
-
-
-def test_candidate_parse_failure_does_not_emit_old_v2_errors():
-    validated = _validate_parsed_provider_payload_or_parse_failure(
-        parsed_payload={},
-        provider_call_diagnostics={
-            "parsed_json_ok": False,
-            "parsed_json_contains_candidate_marker": True,
-            "parsed_json_error": "unterminated_json_object",
-        },
-        player_action="I ask Bran for a free room.",
-    )
-
-    assert validated["ok"] is False
-    assert "provider_json_parse_failed_candidate_envelope" in validated["errors"]
-    assert "invalid_format_version" not in validated["errors"]
-    assert "missing_narration" not in validated["errors"]
-    assert "npc_not_object" not in validated["errors"]
-9. Optional: one retry on candidate JSON parse failure with stricter compact prompt
-
-This is optional but useful.
-
-In provider attempt loop, if validation errors include:
-
-provider_json_parse_failed_candidate_envelope
-
-retry once with a compact prompt suffix:
-
-Your previous response was invalid/incomplete JSON. Return the same schema again, but make every string shorter. Output only one complete JSON object. No markdown.
-
-If your code already has repair/retry, just add this error to the repairable list.
-
-Find repairable errors:
-
-REPAIRABLE_NARRATION_ERRORS = {...}
+src/tests/rpg/manual/test_n101_stabilization_gate.py
 
 Add:
 
-"provider_json_parse_failed_candidate_envelope",
+from tests.rpg.manual.scenario_execution import _n101_stabilization_gate_warnings
 
-And make repair prompt include:
 
-The previous response was incomplete or unparsable JSON. Return a complete compact rpg_narration_candidates_v1 object. Keep all strings short.
+def test_n101_fake_debt_warning_helper_does_not_need_outer_regression_warnings():
+    turn_record = {
+        "narration_preview": "Bran says no. He does not owe you 50 gold.",
+        "grounding_validation": {
+            "ok": True,
+            "selected_candidate": "primary",
+            "fallback_used": False,
+            "fallback_source": "",
+            "violations": [],
+        },
+        "narration_debug": {
+            "final_narration": "Bran says no. He does not owe you 50 gold.",
+            "npc_line": "No. I do not owe you 50 gold.",
+        },
+    }
 
-Keep max_tokens at 900.
+    warnings = _n101_stabilization_gate_warnings(
+        scenario_name="npc_bran_refuses_fake_debt",
+        turn_index=1,
+        turn_record=turn_record,
+    )
 
-10. Compile and run tests
+    assert isinstance(warnings, list)
+    assert "n101_missing_grounding_validation" not in warnings
+8. Compile and run tests
 
-Run:
+Compile:
 
 python -m py_compile `
-  src\app\rpg\narration\runtime_narration_contract.py
+  src\app\rpg\narration\runtime_narration_contract.py `
+  src\tests\rpg\manual\scenario_execution.py `
+  src\tests\rpg\manual\summary_sanitizer.py `
+  src\tests\rpg\autoplay_llm_campaign.py
 
-Run:
+Run focused tests:
 
 python -m pytest `
+  src\tests\rpg\manual\test_n101_stabilization_gate.py `
   src\tests\rpg\test_runtime_narration_provider_json_extraction.py `
   src\tests\rpg\test_runtime_narration_candidate_envelope.py `
+  src\tests\rpg\test_narration_grounding_price_quotes.py `
   -q
-
-If the candidate envelope test file does not exist, run only the extraction test.
-
-11. Rerun manual scenario
-
-Restart the app/server if needed, then run:
-
-python src\tests\rpg\manual_llm_transcript.py `
-  --service-scenarios `
-  --scenario npc_bran_refuses_unpaid_room `
-  --fail-on-regression-warnings
-12. Expected next artifact
-
-Good result:
-
-"provider_call_diagnostics": {
-  "parsed_json_ok": true,
-  "parsed_json_strategy": "direct",
-  "parsed_format_version": "rpg_narration_candidates_v1",
-  "parsed_is_candidate_envelope": true,
-  "parsed_keys": ["format_version", "primary", "safe_fallback"]
-}
-
-and:
-
-"provider_valid": true,
-"provider_errors": []
-
-If still truncated, artifact should now be honest:
-
-"provider_call_diagnostics": {
-  "parsed_json_ok": false,
-  "parsed_json_contains_candidate_marker": true,
-  "parsed_json_error": "slice:JSONDecodeError:Unterminated string...",
-  "parsed_json_brace_balance": 2,
-  "parsed_json_ends_with_brace": false,
-  "raw_text_tail_excerpt": "...cut off here"
-}
-
-and provider errors should be:
-
-"provider_errors": [
-  "provider_json_parse_failed_candidate_envelope",
-  "slice:JSONDecodeError:..."
-]
-
-You should no longer see these for a candidate response:
-
-"provider_errors": [
-  "invalid_format_version",
-  "missing_narration",
-  "npc_not_object"
-]
-13. If truncation still happens after 900 tokens
-
-Increase to:
-
-RUNTIME_NARRATION_CANDIDATE_MAX_TOKENS = 1200
-
-But first check raw_text_tail_excerpt. If the tail ends mid-string or without final braces, it is definitely token truncation.

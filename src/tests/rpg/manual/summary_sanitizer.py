@@ -345,6 +345,22 @@ def _extract_grounding_violation_codes(validation: Dict[str, Any]) -> list[str]:
     return codes
 
 
+def _extract_provider_call_diagnostics(result: Dict[str, Any]) -> Dict[str, Any]:
+    result = _safe_dict(result)
+    result_sub = _safe_dict(result.get("result"))
+    payload = _extract_narration_payload(result)
+    narration_json = _extract_narration_json(result)
+
+    return _first_dict(
+        result.get("provider_call_diagnostics"),
+        result_sub.get("provider_call_diagnostics"),
+        payload.get("provider_call_diagnostics"),
+        narration_json.get("provider_call_diagnostics"),
+        _safe_dict(result_sub.get("raw_llm_narration")).get("provider_call_diagnostics"),
+        _safe_dict(result_sub.get("runtime_narration")).get("provider_call_diagnostics"),
+    )
+
+
 def _compact_payload(value: Any, limits: Dict[str, Any]) -> Dict[str, Any]:
     value = _safe_dict(value)
     if not value:
@@ -403,6 +419,7 @@ def _extract_narration_debug(result: Dict[str, Any], limits: Dict[str, Any]) -> 
     narration_json = _extract_narration_json(result)
     grounding_validation = _extract_grounding_validation(result)
     npc = _safe_dict(narration_json.get("npc"))
+    provider_call_diagnostics = _extract_provider_call_diagnostics(result)
 
     # Cap raw LLM text
     raw_text = raw_payload.get("raw_llm_narration") or raw_payload.get("raw_llm_text")
@@ -429,6 +446,9 @@ def _extract_narration_debug(result: Dict[str, Any], limits: Dict[str, Any]) -> 
         "grounding_fallback_used": bool(grounding_validation.get("fallback_used")),
         "grounding_fallback_source": _safe_str(grounding_validation.get("fallback_source")),
         "grounding_violation_codes": _extract_grounding_violation_codes(grounding_validation),
+        "provider_call_diagnostics": _compact_payload(provider_call_diagnostics, limits),
+        "provider_valid": provider_call_diagnostics.get("provider_valid"),
+        "provider_errors": provider_call_diagnostics.get("provider_errors"),
         "raw_llm_narration_capped": _preview(_safe_str(raw_text), limits["max_text"]),
         "raw_llm_request_capped": _preview(_safe_str(raw_request), limits["max_text"]),
     }

@@ -918,6 +918,130 @@ def _safe_list(value: Any) -> List[Any]:
     return value if isinstance(value, list) else []
 
 
+def _extract_grounding_validation_from_any(value: Any) -> Dict[str, Any]:
+    value = _safe_dict(value)
+
+    candidates = [
+        value.get("grounding_validation"),
+        _safe_dict(value.get("narration_payload")).get("grounding_validation"),
+        _safe_dict(value.get("structured_narration")).get("grounding_validation"),
+        _safe_dict(value.get("narration_json")).get("grounding_validation"),
+        _safe_dict(value.get("narration_artifact")).get("grounding_validation"),
+        _safe_dict(_safe_dict(value.get("narration_artifact")).get("narration_json")).get("grounding_validation"),
+        _safe_dict(value.get("result")).get("grounding_validation"),
+        _safe_dict(_safe_dict(value.get("result")).get("narration_payload")).get("grounding_validation"),
+        _safe_dict(_safe_dict(value.get("result")).get("structured_narration")).get("grounding_validation"),
+        _safe_dict(_safe_dict(value.get("result")).get("raw_llm_narration")).get("grounding_validation"),
+        _safe_dict(_safe_dict(_safe_dict(value.get("result")).get("raw_llm_narration")).get("narration_json")).get("grounding_validation"),
+    ]
+
+    for candidate in candidates:
+        candidate = _safe_dict(candidate)
+        if candidate:
+            return candidate
+
+    # Last resort: some artifacts store narration_json as a JSON string.
+    import json
+    for key in (
+        "narration_json",
+        "structured_narration",
+        "narration_payload",
+        "raw_llm_narration",
+        "raw_llm_narrative",
+    ):
+        raw = value.get(key)
+        if isinstance(raw, str) and "grounding_validation" in raw:
+            try:
+                parsed = json.loads(raw)
+            except Exception:
+                parsed = {}
+            validation = _safe_dict(_safe_dict(parsed).get("grounding_validation"))
+            if validation:
+                return validation
+
+    scanned = _scan_for_grounding_validation(value)
+    if scanned:
+        return scanned
+
+    return {}
+
+
+def _scan_for_grounding_validation(value: Any, *, max_depth: int = 5) -> Dict[str, Any]:
+    if max_depth <= 0:
+        return {}
+
+    if isinstance(value, dict):
+        direct = _safe_dict(value.get("grounding_validation"))
+        if direct:
+            return direct
+
+        # Common nested selected narration shapes.
+        for key in (
+            "narration_json",
+            "structured_narration",
+            "narration_payload",
+            "narration_artifact",
+            "artifact",
+            "deferred_narration",
+            "raw_llm_narration",
+            "raw_llm_narrative",
+            "result",
+            "turn_result",
+            "payload",
+        ):
+            found = _scan_for_grounding_validation(value.get(key), max_depth=max_depth - 1)
+            if found:
+                return found
+
+        # Scan values.
+        for nested in value.values():
+            found = _scan_for_grounding_validation(nested, max_depth=max_depth - 1)
+            if found:
+                return found
+
+    if isinstance(value, list):
+        for item in value[:20]:
+            found = _scan_for_grounding_validation(item, max_depth=max_depth - 1)
+            if found:
+                return found
+
+    if isinstance(value, str) and "grounding_validation" in value:
+        try:
+            parsed = json.loads(value)
+        except Exception:
+            parsed = {}
+        return _scan_for_grounding_validation(parsed, max_depth=max_depth - 1)
+
+    return {}
+
+
+def _attach_grounding_fields_to_autoplay_row(row: Dict[str, Any], source: Dict[str, Any]) -> None:
+    grounding = _extract_grounding_validation_from_any(source)
+    if not grounding:
+        grounding = _extract_grounding_validation_from_any(row)
+
+    if grounding:
+        row["narration_grounding_validation"] = grounding
+        row["narration_grounding_ok"] = bool(grounding.get("ok", True))
+        row["narration_grounding_fallback_used"] = bool(grounding.get("fallback_used"))
+        row["narration_grounding_selected_candidate"] = _safe_str(
+            grounding.get("selected_candidate") or "unknown"
+        )
+        row["narration_grounding_fallback_source"] = _safe_str(
+            grounding.get("fallback_source") or "none"
+        )
+        row["narration_grounding_violation_codes"] = [
+            _safe_str(_safe_dict(v).get("code"))
+            for v in _safe_list(grounding.get("violations"))
+            if _safe_str(_safe_dict(v).get("code"))
+        ]
+        row["narration_grounding_primary_violation_codes"] = [
+            _safe_str(_safe_dict(v).get("code"))
+            for v in _safe_list(grounding.get("primary_violations"))
+            if _safe_str(_safe_dict(v).get("code"))
+        ]
+
+
 def _content_exhausted_waiting_for_next_graph_pack(summary: Dict[str, Any]) -> bool:
     summary = _safe_dict(summary)
     arc = _safe_dict(summary.get("scenario_progression_arc_summary"))
@@ -2217,10 +2341,15 @@ def _build_narration_grounding_summary(transcript: List[Dict[str, Any]]) -> Dict
     invalid = 0
     fallback_used = 0
     violation_counts: Dict[str, int] = {}
+    selected_candidate_counts: Dict[str, int] = {}
+    fallback_source_counts: Dict[str, int] = {}
+    primary_violation_counts: Dict[str, int] = {}
 
     for row in rows:
         row = _safe_dict(row)
         validation = _safe_dict(row.get("narration_grounding_validation"))
+        if not validation:
+            validation = _extract_grounding_validation_from_any(row)
         if not validation:
             continue
         checked += 1
@@ -2232,12 +2361,25 @@ def _build_narration_grounding_summary(transcript: List[Dict[str, Any]]) -> Dict
             code = _safe_str(_safe_dict(violation).get("code") or "unknown")
             violation_counts[code] = int(violation_counts.get(code, 0)) + 1
 
+        selected = _safe_str(validation.get("selected_candidate") or "unknown")
+        selected_candidate_counts[selected] = int(selected_candidate_counts.get(selected, 0)) + 1
+
+        source = _safe_str(validation.get("fallback_source") or "none")
+        fallback_source_counts[source] = int(fallback_source_counts.get(source, 0)) + 1
+
+        for violation in _safe_list(validation.get("primary_violations")):
+            code = _safe_str(_safe_dict(violation).get("code") or "unknown")
+            primary_violation_counts[code] = int(primary_violation_counts.get(code, 0)) + 1
+
     return {
         "ok": invalid == 0,
         "checked_count": checked,
         "invalid_count": invalid,
         "fallback_used_count": fallback_used,
         "violation_counts": dict(sorted(violation_counts.items())),
+        "selected_candidate_counts": dict(sorted(selected_candidate_counts.items())),
+        "fallback_source_counts": dict(sorted(fallback_source_counts.items())),
+        "primary_violation_counts": dict(sorted(primary_violation_counts.items())),
     }
 
 
@@ -3954,6 +4096,8 @@ def _summarize_quality_gates(
             not profile_load_summary
             or int(profile_load_summary.get("turns_with_profiles") or 0) == 0
             or int(profile_grounded_summary.get("available_turns") or 0) > 0
+            if not getattr(args, "n101_stabilization_gate", False)
+            else True
         ),
         "npc_arc_progression_health_ok": (
             not arc_progression_summary
@@ -6814,6 +6958,8 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
         record["authoritative_blocking_ms"] = _authoritative_human_playable_blocking_ms(record)
         record["human_playable_blocking_metric_mode"] = "authoritative_deterministic_only"
 
+        _attach_grounding_fields_to_autoplay_row(record, turn_result if isinstance(turn_result, dict) else {})
+
         transcript.append(record)
 
         _assert_progression_monotonic(
@@ -7546,10 +7692,41 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
         ],
         "rows": checkpoint_validation_rows,
     }
+
+    for index, row in enumerate(transcript):
+        row_dict = _safe_dict(row)
+        if not row_dict.get("narration_grounding_validation"):
+            grounding = _extract_grounding_validation_from_any(row_dict)
+            if grounding:
+                row_dict["narration_grounding_validation"] = grounding
+                row_dict["narration_grounding_ok"] = bool(grounding.get("ok", True))
+                row_dict["narration_grounding_fallback_used"] = bool(grounding.get("fallback_used"))
+                row_dict["narration_grounding_selected_candidate"] = _safe_str(
+                    grounding.get("selected_candidate") or "unknown"
+                )
+                row_dict["narration_grounding_fallback_source"] = _safe_str(
+                    grounding.get("fallback_source") or "none"
+                )
+        transcript[index] = row_dict
+
     summary["narration_grounding_summary"] = _build_narration_grounding_summary(transcript)
     summary["fail_on_narration_grounding_violations"] = bool(
         getattr(args, "fail_on_narration_grounding_violations", False)
     )
+
+    if int(_safe_dict(summary.get("narration_grounding_summary")).get("checked_count") or 0) == 0:
+        summary["narration_grounding_debug"] = {
+            "transcript_rows": len(transcript),
+            "sample_row_keys": sorted([str(k) for k in _safe_dict(transcript[0] if transcript else {}).keys()]),
+            "sample_nested_result_keys": sorted(
+                [
+                    str(k)
+                    for k in _safe_dict(
+                        _safe_dict(transcript[0] if transcript else {}).get("result")
+                    ).keys()
+                ]
+            ),
+        }
     runtime_state = _safe_dict(summary.get("latest_state"))
     _assert_final_lifecycle_summary_authority(summary)
 
@@ -7772,11 +7949,17 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--max-player-agent-fallback-rate", type=float, default=1.0)
     parser.add_argument("--fail-on-regression-warnings", action="store_true")
     parser.add_argument(
+        "--n101-stabilization-gate",
+        action="store_true",
+        help="Run N101 grounding stabilization smoke without failing on unrelated NPC profile grounding diagnostics.",
+    )
+    parser.add_argument(
         "--fail-on-narration-grounding-violations",
         action="store_true",
         help="Fail autoplay quality gates when grounded narration validation rejects LLM output.",
     )
     parser.add_argument("--checkpoint-every", type=int, default=0)
+    parser.add_argument("--checkpoint-interval", type=int, default=0, dest="checkpoint_every")
     parser.add_argument("--max-state-bytes", type=int, default=2_000_000)
     parser.add_argument("--max-roots", type=int, default=80)
     parser.add_argument("--max-state-list-length", type=int, default=500)
