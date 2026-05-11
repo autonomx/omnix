@@ -20,6 +20,276 @@ def _safe_str(value: Any) -> str:
     return value if isinstance(value, str) else ""
 
 
+def _html_escape(value: Any) -> str:
+    import html
+
+    return html.escape(_safe_str(value), quote=True)
+
+
+def _format_seconds(value: Any) -> str:
+    if isinstance(value, (int, float)):
+        return f"{float(value):.2f}s"
+    try:
+        return f"{float(value):.2f}s"
+    except Exception:
+        return "—"
+
+
+def _format_percent(value: Any) -> str:
+    try:
+        return f"{float(value) * 100.0:.1f}%"
+    except Exception:
+        return "—"
+
+
+def _render_gate_table(evaluation: Dict[str, Any]) -> str:
+    gates = _safe_dict(_safe_dict(evaluation).get("gates"))
+    rows = []
+    for name, gate in gates.items():
+        gate = _safe_dict(gate)
+        ok = bool(gate.get("ok"))
+        badge = "PASS" if ok else "FAIL"
+        badge_class = "badge-pass" if ok else "badge-fail"
+        rows.append(
+            "<tr>"
+            f"<td><code>{_html_escape(name)}</code></td>"
+            f"<td><span class='{badge_class}'>{badge}</span></td>"
+            f"<td>{_html_escape(gate.get('message'))}</td>"
+            f"<td><pre>{_html_escape(json.dumps(gate.get('value'), ensure_ascii=False, indent=2, default=str))}</pre></td>"
+            f"<td><pre>{_html_escape(json.dumps(gate.get('expected'), ensure_ascii=False, indent=2, default=str))}</pre></td>"
+            "</tr>"
+        )
+
+    return (
+        "<section class='card' id='evaluation-gates'>"
+        "<h2>100-Turn Evaluation Gates</h2>"
+        "<table class='wide-table'>"
+        "<thead><tr><th>Gate</th><th>Status</th><th>Message</th><th>Value</th><th>Expected</th></tr></thead>"
+        f"<tbody>{''.join(rows)}</tbody>"
+        "</table>"
+        "</section>"
+    )
+
+
+def _render_grounding_summary(summary: Dict[str, Any]) -> str:
+    summary = _safe_dict(summary)
+    return (
+        "<section class='card' id='grounding-summary'>"
+        "<h2>Narration Grounding</h2>"
+        "<div class='metric-grid'>"
+        f"<div><strong>Checked</strong><span>{int(summary.get('checked_count') or 0)}</span></div>"
+        f"<div><strong>Invalid</strong><span>{int(summary.get('invalid_count') or 0)}</span></div>"
+        f"<div><strong>Fallback Used</strong><span>{int(summary.get('fallback_used_count') or 0)}</span></div>"
+        f"<div><strong>OK</strong><span>{_html_escape(summary.get('ok'))}</span></div>"
+        "</div>"
+        "<h3>Selected Candidates</h3>"
+        f"<pre>{_html_escape(json.dumps(summary.get('selected_candidate_counts', {}), ensure_ascii=False, indent=2, default=str))}</pre>"
+        "<h3>Fallback Sources</h3>"
+        f"<pre>{_html_escape(json.dumps(summary.get('fallback_source_counts', {}), ensure_ascii=False, indent=2, default=str))}</pre>"
+        "</section>"
+    )
+
+
+def _render_progress_quality(summary: Dict[str, Any]) -> str:
+    summary = _safe_dict(summary)
+    return (
+        "<section class='card' id='progress-quality'>"
+        "<h2>Progress Quality</h2>"
+        "<div class='metric-grid'>"
+        f"<div><strong>Meaningful Progress</strong><span>{_format_percent(summary.get('meaningful_progress_rate'))}</span></div>"
+        f"<div><strong>Fallback Action Rate</strong><span>{_format_percent(summary.get('fallback_player_action_rate'))}</span></div>"
+        f"<div><strong>No-Change Turns</strong><span>{int(summary.get('no_change_turns') or 0)}</span></div>"
+        f"<div><strong>Unique Locations</strong><span>{int(summary.get('unique_location_count') or 0)}</span></div>"
+        "</div>"
+        "<h3>Action Types</h3>"
+        f"<pre>{_html_escape(json.dumps(summary.get('action_type_counts', {}), ensure_ascii=False, indent=2, default=str))}</pre>"
+        "<h3>Story/World Signals</h3>"
+        "<table class='mini-table'>"
+        f"<tr><td>Quest events</td><td>{int(summary.get('quest_event_count') or 0)}</td></tr>"
+        f"<tr><td>NPC interactions</td><td>{int(summary.get('npc_interaction_count') or 0)}</td></tr>"
+        f"<tr><td>Service events</td><td>{int(summary.get('service_event_count') or 0)}</td></tr>"
+        f"<tr><td>Travel events</td><td>{int(summary.get('travel_event_count') or 0)}</td></tr>"
+        f"<tr><td>Combat events</td><td>{int(summary.get('combat_event_count') or 0)}</td></tr>"
+        "</table>"
+        "</section>"
+    )
+
+
+def _render_performance_seconds(summary: Dict[str, Any]) -> str:
+    summary = _safe_dict(summary)
+    turn = _safe_dict(summary.get("turn"))
+    blocking = _safe_dict(summary.get("blocking"))
+    narration = _safe_dict(summary.get("narration"))
+
+    def row(label: str, data: Dict[str, Any]) -> str:
+        return (
+            "<tr>"
+            f"<td>{_html_escape(label)}</td>"
+            f"<td>{int(data.get('count') or 0)}</td>"
+            f"<td>{_format_seconds(data.get('avg_seconds'))}</td>"
+            f"<td>{_format_seconds(data.get('p50_seconds'))}</td>"
+            f"<td>{_format_seconds(data.get('p95_seconds'))}</td>"
+            f"<td>{_format_seconds(data.get('max_seconds'))}</td>"
+            "</tr>"
+        )
+
+    return (
+        "<section class='card' id='performance'>"
+        "<h2>Performance Metrics</h2>"
+        "<table class='wide-table'>"
+        "<thead><tr><th>Metric</th><th>Count</th><th>Avg</th><th>P50</th><th>P95</th><th>Max</th></tr></thead>"
+        "<tbody>"
+        f"{row('Turn', turn)}"
+        f"{row('Blocking', blocking)}"
+        f"{row('Narration', narration)}"
+        "</tbody></table>"
+        "</section>"
+    )
+
+
+def _cap_text(value: Any, limit: int) -> str:
+    text = _safe_str(value)
+    if len(text) <= limit:
+        return text
+    return text[: max(0, limit - 1)] + "…"
+
+
+def _extract_report_entities(transcript: List[Dict[str, Any]]) -> Dict[str, Any]:
+    npcs: Dict[str, Dict[str, Any]] = {}
+    locations: Dict[str, Dict[str, Any]] = {}
+    quests: Dict[str, Dict[str, Any]] = {}
+    timeline: List[Dict[str, Any]] = []
+
+    for index, row in enumerate(transcript, start=1):
+        row = _safe_dict(row)
+        blob = json.dumps(row, ensure_ascii=False, default=str)
+
+        location = _safe_str(
+            row.get("location")
+            or row.get("current_location")
+            or row.get("location_id")
+            or _safe_dict(row.get("state")).get("current_location")
+            or _safe_dict(row.get("turn_contract")).get("current_location")
+        )
+        if location:
+            item = locations.setdefault(
+                location,
+                {
+                    "id": location,
+                    "turns": [],
+                    "summary": "",
+                    "event_count": 0,
+                },
+            )
+            item["turns"].append(index)
+            item["event_count"] += 1
+
+        npc_name = _safe_str(
+            row.get("npc")
+            or row.get("npc_name")
+            or _safe_dict(row.get("npc")).get("speaker")
+            or _safe_dict(row.get("narration_json")).get("npc", {}).get("speaker")
+        )
+        if npc_name:
+            item = npcs.setdefault(
+                npc_name,
+                {
+                    "name": npc_name,
+                    "turns": [],
+                    "interaction_count": 0,
+                    "latest_line": "",
+                },
+            )
+            item["turns"].append(index)
+            item["interaction_count"] += 1
+
+        narration = _safe_str(
+            row.get("narration")
+            or row.get("narration_preview")
+            or _safe_dict(row.get("narration_json")).get("narration")
+        )
+        if narration:
+            timeline.append(
+                {
+                    "turn": index,
+                    "title": _cap_text(narration, 90),
+                    "narration": _cap_text(narration, 500),
+                    "location": location,
+                    "npc": npc_name,
+                }
+            )
+
+        if "quest" in blob.lower() or "objective" in blob.lower():
+            quest_id = _safe_str(row.get("quest_id") or row.get("objective_id") or "quest_activity")
+            item = quests.setdefault(
+                quest_id,
+                {
+                    "id": quest_id,
+                    "turns": [],
+                    "event_count": 0,
+                },
+            )
+            item["turns"].append(index)
+            item["event_count"] += 1
+
+    return {
+        "npcs": list(npcs.values()),
+        "locations": list(locations.values()),
+        "quests": list(quests.values()),
+        "timeline": timeline,
+    }
+
+
+def _render_locations_section(entities: Dict[str, Any]) -> str:
+    locations = _safe_list(_safe_dict(entities).get("locations"))
+    rows = []
+    for loc in locations:
+        loc = _safe_dict(loc)
+        turns = _safe_list(loc.get("turns"))
+        rows.append(
+            "<tr>"
+            f"<td>{_html_escape(loc.get('id'))}</td>"
+            f"<td>{len(turns)}</td>"
+            f"<td>{_html_escape(', '.join(str(t) for t in turns[:12]))}</td>"
+            "</tr>"
+        )
+
+    return (
+        "<section class='card' id='locations'>"
+        "<h2>Locations Visited</h2>"
+        "<table class='wide-table'>"
+        "<thead><tr><th>Location</th><th>Events</th><th>Turns</th></tr></thead>"
+        f"<tbody>{''.join(rows)}</tbody>"
+        "</table>"
+        "</section>"
+    )
+
+
+def _render_timeline_section(entities: Dict[str, Any]) -> str:
+    timeline = _safe_list(_safe_dict(entities).get("timeline"))
+    rows = []
+    for item in timeline[:120]:
+        item = _safe_dict(item)
+        rows.append(
+            "<tr>"
+            f"<td>{int(item.get('turn') or 0)}</td>"
+            f"<td>{_html_escape(item.get('location'))}</td>"
+            f"<td>{_html_escape(item.get('npc'))}</td>"
+            f"<td>{_html_escape(item.get('narration'))}</td>"
+            "</tr>"
+        )
+
+    return (
+        "<section class='card' id='timeline'>"
+        "<h2>Adventure Timeline</h2>"
+        "<table class='wide-table'>"
+        "<thead><tr><th>Turn</th><th>Location</th><th>NPC</th><th>Beat</th></tr></thead>"
+        f"<tbody>{''.join(rows)}</tbody>"
+        "</table>"
+        "</section>"
+    )
+
+
 _HTML_ID_RE = re.compile(r'\bid="([^"]+)"')
 _HTML_HREF_RE = re.compile(r'href=(["\'])#([^"\']+)\1')
 
@@ -4621,6 +4891,7 @@ def render_campaign_report_html(
     pm_summary = _safe_dict(model.get("pm_summary"))
     pm_status = _status_class(pm_summary.get("overall_status"))
     chronicle_model = _build_campaign_chronicle_model(report_context, report_context)
+    entities = _extract_report_entities(_as_list(transcript))
 
     timeline_html = []
     for row in _as_list(report_context.get("timeline")):
@@ -5729,6 +6000,129 @@ def render_campaign_report_html(
   font-size: 1.2rem;
   line-height: 1;
 }
+
+body {
+  font-family: Inter, Segoe UI, Arial, sans-serif;
+  background: #0f1117;
+  color: #e8eaf0;
+  margin: 0;
+  padding: 24px;
+}
+
+.report-shell {
+  max-width: 1320px;
+  margin: 0 auto;
+}
+
+.card {
+  background: #171a23;
+  border: 1px solid #282d3a;
+  border-radius: 14px;
+  padding: 18px 20px;
+  margin: 18px 0;
+  box-shadow: 0 8px 30px rgba(0,0,0,0.18);
+}
+
+.card h2 {
+  margin-top: 0;
+  color: #ffffff;
+}
+
+.metric-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 12px;
+}
+
+.metric-grid div {
+  background: #10131b;
+  border: 1px solid #262b38;
+  border-radius: 12px;
+  padding: 12px;
+}
+
+.metric-grid strong {
+  display: block;
+  color: #aeb6c8;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+}
+
+.metric-grid span {
+  display: block;
+  font-size: 22px;
+  margin-top: 6px;
+}
+
+.badge-pass,
+.badge-fail {
+  display: inline-block;
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-weight: 700;
+  font-size: 12px;
+}
+
+.badge-pass {
+  background: #153f2b;
+  color: #8ff0b2;
+  border: 1px solid #2b7a4c;
+}
+
+.badge-fail {
+  background: #4a1c1c;
+  color: #ff9a9a;
+  border: 1px solid #8a3333;
+}
+
+.wide-table,
+.mini-table {
+  border-collapse: collapse;
+  width: 100%;
+}
+
+.wide-table th,
+.wide-table td,
+.mini-table td {
+  border-bottom: 1px solid #2a2f3d;
+  padding: 10px;
+  vertical-align: top;
+}
+
+.wide-table th {
+  color: #b8c0d4;
+  text-align: left;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+}
+
+pre {
+  white-space: pre-wrap;
+  word-break: break-word;
+  background: #0d1017;
+  border: 1px solid #242a37;
+  border-radius: 10px;
+  padding: 10px;
+  color: #d7dbea;
+}
+
+.nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 14px 0 22px;
+}
+
+.nav a {
+  color: #c8d6ff;
+  background: #151a27;
+  border: 1px solid #2b3347;
+  border-radius: 999px;
+  padding: 7px 11px;
+  text-decoration: none;
+}
     """
     arc_cards_html = "".join(
         '<div class="story-card">'
@@ -6083,6 +6477,13 @@ def render_campaign_report_html(
         ("runtime-narration-diagnostics", "Runtime Diagnostics"),
         ("debug", "Debug"),
     ]
+    evaluation_html = _render_gate_table(_safe_dict(summary.get("hundred_turn_evaluation")))
+    grounding_html = _render_grounding_summary(_safe_dict(summary.get("narration_grounding_summary")))
+    progress_html = _render_progress_quality(_safe_dict(summary.get("canonical_progress_quality")))
+    performance_html = _render_performance_seconds(_safe_dict(summary.get("performance_seconds_summary")))
+    timeline_html = _render_timeline_section(entities)
+    locations_html = _render_locations_section(entities)
+
     html_doc = f"""<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -6094,14 +6495,29 @@ def render_campaign_report_html(
     </style>
 </head>
 <body>
-    <main class="rpg-shell">
+    <div class="report-shell">
         {_render_rpg_hero(chronicle_model)}
         {_render_rpg_nav_links(primary_links, appendix_links)}
+        <nav class="nav">
+          <a href="#evaluation-gates">Evaluation Gates</a>
+          <a href="#grounding-summary">Grounding</a>
+          <a href="#progress-quality">Progress Quality</a>
+          <a href="#performance">Performance</a>
+          <a href="#timeline">Timeline</a>
+          <a href="#chronicle">Chronicle</a>
+          <a href="#debug">Debug</a>
+        </nav>
+        {evaluation_html}
+        {grounding_html}
+        {progress_html}
+        {performance_html}
+        {timeline_html}
+        {locations_html}
         {_render_rpg_verdict_cards(chronicle_model)}
         {_render_autoplay_campaign_report_partial(summary, metrics)}
         {legacy_report_sections}
         {body_sections}
-    </main>
+    </div>
 </body>
 </html>"""
     return _finalize_campaign_report_html(html_doc)
