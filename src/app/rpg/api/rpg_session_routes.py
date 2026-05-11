@@ -315,6 +315,13 @@ def _build_turn_payload(result: Dict[str, Any]) -> Dict[str, Any]:
         "used_app_llm": bool(raw_payload.get("used_app_llm")),
         "gateway_available": bool(raw_payload.get("gateway_available")),
         "raw_llm_narrative": _safe_str(raw_payload.get("raw_llm_narrative")),
+        "grounding_validation": _safe_dict(raw_payload.get("grounding_validation")),
+        "grounding_fallback": bool(raw_payload.get("grounding_fallback")),
+        "settings": _safe_dict(
+            raw_payload.get("settings")
+            or runtime_state.get("runtime_settings")
+            or runtime_state.get("settings")
+        ),
         "response_length": _safe_str(raw_payload.get("response_length", "short")),
         # Presentation
         "presentation": _safe_dict(raw_payload.get("presentation")),

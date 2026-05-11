@@ -54,6 +54,8 @@ from tests.rpg.manual.safe import _safe_dict, _safe_list
 from tests.rpg.manual.session_helpers import (
     _ensure_manual_session,
     _ensure_manual_simulation_roots,
+    _manual_apply_interaction_seed_fields,
+    _manual_apply_social_seed_fields,
     _save_manual_session_for_test,
     _sync_manual_simulation_state,
 )

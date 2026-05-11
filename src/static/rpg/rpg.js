@@ -2135,6 +2135,50 @@
         renderWorldEventsPanel();
     }
 
+    function getGroundingSettings() {
+        var settings =
+            (window.RPG_STATE && window.RPG_STATE.settings) ||
+            (window.rpgState && window.rpgState.settings) ||
+            (rpgState.runtimeState && rpgState.runtimeState.settings) ||
+            rpgState.settings ||
+            {};
+        var grounding = settings.grounding || {};
+        return {
+            enabled: true,
+            primary_validation: true,
+            llm_safe_fallback_candidate: grounding.llm_safe_fallback_candidate !== false,
+            deterministic_fallback: true,
+            background_soft_audit: grounding.background_soft_audit !== false,
+            background_soft_audit_mode: grounding.background_soft_audit_mode || 'append_correction',
+            background_soft_audit_can_update_state: false,
+            background_soft_audit_validate_correction: grounding.background_soft_audit_validate_correction !== false,
+        };
+    }
+
+    function updateRpgSessionSettings(settingsPatch) {
+        if (!rpgState.sessionId) {
+            return Promise.reject(new Error('No active game to save settings to'));
+        }
+        return fetch('/api/rpg/session/settings', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                session_id: rpgState.sessionId,
+                settings: settingsPatch,
+            }),
+        }).then(function(response) {
+            return response.json();
+        }).then(function(data) {
+            if (!data || !data.ok) {
+                throw new Error('Failed to save settings');
+            }
+            rpgState.runtimeState = rpgState.runtimeState || {};
+            rpgState.runtimeState.settings = data.settings || {};
+            rpgState.settings = data.settings || {};
+            return data;
+        });
+    }
+
     // ─── Settings panel ───────────────────────────────────────────────────────
 
     function showSettingsPanel() {
@@ -2294,6 +2338,37 @@
         npcProfileSection.appendChild(autoCreateLabel);
         settingsSection.appendChild(npcProfileSection);
 
+        var grounding = getGroundingSettings();
+        var groundingSection = document.createElement('div');
+        groundingSection.innerHTML = '<h4>Grounding</h4>';
+        var groundingLabel = document.createElement('label');
+        groundingLabel.className = 'rpg-setting-row';
+        var groundingCheckbox = document.createElement('input');
+        groundingCheckbox.type = 'checkbox';
+        groundingCheckbox.id = 'rpg-grounding-soft-audit';
+        groundingCheckbox.checked = !!grounding.background_soft_audit;
+        var groundingText = document.createElement('span');
+        groundingText.innerHTML = 'Grounding audit corrections<small>Append an in-character correction if a background audit finds unsupported narration.</small>';
+        groundingLabel.appendChild(groundingCheckbox);
+        groundingLabel.appendChild(groundingText);
+        groundingSection.appendChild(groundingLabel);
+        settingsSection.appendChild(groundingSection);
+
+        groundingCheckbox.addEventListener('change', function(event) {
+            var enabled = !!(event && event.target && event.target.checked);
+            if (!rpgState.sessionId) {
+                return;
+            }
+            updateRpgSessionSettings({
+                grounding: {
+                    background_soft_audit: enabled,
+                    background_soft_audit_mode: enabled ? 'append_correction' : 'disabled',
+                },
+            }).catch(function() {
+                alert('Failed to save settings');
+            });
+        });
+
         var saveBtn = document.createElement('button');
         saveBtn.className = 'btn btn-primary';
         saveBtn.textContent = 'Save Settings';
@@ -2302,6 +2377,7 @@
             var interactionDurationMode = document.getElementById('rpgInteractionDurationMode').value;
             var interactionDurationTicks = parseInt(document.getElementById('rpgInteractionDurationTicks').value, 10);
             var autoCreateNpcProfiles = !!(document.getElementById('rpgAutoCreateNpcProfilesToggle') || {}).checked;
+            var backgroundSoftAudit = !!(document.getElementById('rpg-grounding-soft-audit') || {}).checked;
             // Persist auto-create toggle to conversation settings store
             if (window.RpgConversationSettings && typeof window.RpgConversationSettings.saveSettings === 'function') {
                 var cs = window.RpgConversationSettings.loadSettings();
@@ -2310,31 +2386,20 @@
             }
             // Persist to server
             if (rpgState.sessionId) {
-                fetch('/api/rpg/session/settings', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        session_id: rpgState.sessionId,
-                        settings: {
-                            response_length: responseLength,
-                            interaction_duration_mode: interactionDurationMode,
-                            interaction_duration_ticks: interactionDurationTicks,
-                            npc_profile_generation: {
-                                auto_create_on_introduction: autoCreateNpcProfiles,
-                                allow_manual_create: true,
-                                draft_with_llm_on_create: false,
-                            },
-                        },
-                    }),
-                }).then(function(response) {
-                    return response.json();
-                }).then(function(data) {
-                    if (!data || !data.ok) {
-                        alert('Failed to save settings');
-                        return;
-                    }
-                    rpgState.runtimeState = rpgState.runtimeState || {};
-                    rpgState.runtimeState.settings = data.settings || {};
+                updateRpgSessionSettings({
+                    response_length: responseLength,
+                    interaction_duration_mode: interactionDurationMode,
+                    interaction_duration_ticks: interactionDurationTicks,
+                    npc_profile_generation: {
+                        auto_create_on_introduction: autoCreateNpcProfiles,
+                        allow_manual_create: true,
+                        draft_with_llm_on_create: false,
+                    },
+                    grounding: {
+                        background_soft_audit: backgroundSoftAudit,
+                        background_soft_audit_mode: backgroundSoftAudit ? 'append_correction' : 'disabled',
+                    },
+                }).then(function() {
                     alert('Settings saved');
                 }).catch(() => {
                     alert('Failed to save settings');
@@ -3144,6 +3209,7 @@
         bindNarrationNamedEvent("npc_conversation_artifact");
         bindNarrationNamedEvent("ambient_conversation_artifact");
         bindNarrationNamedEvent("heartbeat");
+        bindNarrationNamedEvent("grounding_soft_correction");
 
         es.onmessage = function (evt) {
             try {
@@ -3270,6 +3336,22 @@
 
         if (evt.type === "ambient_conversation_artifact" || evt.role === "ambient_narration") {
             appendAmbientNarration(evt.text, evt.turn_id);
+            return;
+        }
+
+        if (evt.type === 'grounding_soft_correction') {
+            var correctionText = evt.text || (((evt.correction || {}).npc || {}).line) || ((evt.correction || {}).narration) || '';
+            if (correctionText) {
+                appendMessage({
+                    type: 'narration',
+                    role: 'grounding_soft_correction',
+                    narrationState: 'final',
+                    content: correctionText,
+                    turnId: evt.turn_id,
+                    suppressActions: true,
+                    cssClass: 'rpg-grounding-correction',
+                });
+            }
             return;
         }
 
@@ -4110,6 +4192,9 @@
 
         var div = document.createElement('div');
         div.className = 'rpg-msg rpg-msg--' + msg.type;
+        if (msg.cssClass) {
+            div.className += ' ' + msg.cssClass;
+        }
 
         switch (msg.type) {
             case 'narration':
@@ -4129,15 +4214,16 @@
             ? marked.parse(contentText)
             : escapeHtml(contentText).replace(/\n/g, '<br>');
         
-        // Add Generate Scene button
-        var buttonBar = document.createElement('div');
-        buttonBar.className = 'rpg-msg-actions';
-        buttonBar.innerHTML = `
-            <button type="button" class="rpg-msg-action-btn" onclick="window.generateCurrentScene()">
-                🖼️ Generate Scene
-            </button>
-        `;
-        div.appendChild(buttonBar);
+        if (!msg.suppressActions) {
+            var buttonBar = document.createElement('div');
+            buttonBar.className = 'rpg-msg-actions';
+            buttonBar.innerHTML = `
+                <button type="button" class="rpg-msg-action-btn" onclick="window.generateCurrentScene()">
+                    🖼️ Generate Scene
+                </button>
+            `;
+            div.appendChild(buttonBar);
+        }
         break;
 
             case 'player':

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from datetime import datetime
 from typing import Any, Dict, List
 
@@ -35,7 +36,7 @@ from tests.rpg.manual.quest_log_m49_m51_checks import (
     run_quest_log_m49_m51_checks,
 )
 from tests.rpg.manual.quest_puzzle_checks import run_quest_puzzle_checks
-from tests.rpg.manual.safe import _compact_json, _safe_dict, _safe_list
+from tests.rpg.manual.safe import _compact_json, _safe_dict, _safe_list, _safe_str
 from tests.rpg.manual.scenario_setup import (
     _apply_manual_scenario_setup,
     apply_manual_scenario_setup_by_session_id,
@@ -123,6 +124,159 @@ def _add_regression_warning(
     warning_entry = f"{scenario}:turn_{turn}:{warning}"
     with _REGRESSION_WARNING_LOCK:
         _REGRESSION_WARNINGS.append(warning_entry)
+
+
+def _extract_turn_grounding_validation(turn_record: Dict[str, Any]) -> Dict[str, Any]:
+    turn_record = _safe_dict(turn_record)
+
+    for candidate in (
+        turn_record.get("grounding_validation"),
+        _safe_dict(turn_record.get("narration_debug")).get("grounding_validation"),
+        _safe_dict(turn_record.get("extracted")).get("grounding_validation"),
+        _safe_dict(turn_record.get("result")).get("grounding_validation"),
+        _safe_dict(_safe_dict(turn_record.get("result")).get("result")).get("grounding_validation"),
+    ):
+        candidate = _safe_dict(candidate)
+        if candidate:
+            return candidate
+
+    return {}
+
+
+def _n101_grounding_warnings(
+    *,
+    scenario_name: str,
+    turn_index: int,
+    turn_record: Dict[str, Any],
+) -> List[str]:
+    warnings: List[str] = []
+    grounding = _extract_turn_grounding_validation(turn_record)
+    has_narration = bool(
+        _safe_str(turn_record.get("narration_preview"))
+        or _safe_dict(turn_record.get("narration_debug"))
+        or _safe_dict(turn_record.get("extracted"))
+    )
+
+    if has_narration and not grounding:
+        warnings.append(f"{scenario_name}:turn_{turn_index}:missing_grounding_validation")
+        return warnings
+
+    if bool(grounding.get("fallback_used")):
+        source = _safe_str(grounding.get("fallback_source") or "unknown")
+        selected = _safe_str(grounding.get("selected_candidate") or "unknown")
+        warnings.append(f"{scenario_name}:turn_{turn_index}:grounding_fallback_used:{source}:{selected}")
+
+    for violation in _safe_list(grounding.get("violations")):
+        code = _safe_str(_safe_dict(violation).get("code")).strip()
+        if code:
+            warnings.append(f"{scenario_name}:turn_{turn_index}:grounding_violation:{code}")
+
+    for violation in _safe_list(grounding.get("primary_violations")):
+        code = _safe_str(_safe_dict(violation).get("code")).strip()
+        if code:
+            warnings.append(f"{scenario_name}:turn_{turn_index}:grounding_primary_violation:{code}")
+
+    return warnings
+
+
+def _turn_text_blob(turn_record: Dict[str, Any]) -> str:
+    pieces: List[str] = []
+    for key in ("narration_preview",):
+        value = _safe_str(_safe_dict(turn_record).get(key))
+        if value:
+            pieces.append(value)
+
+    narration_debug = _safe_dict(_safe_dict(turn_record).get("narration_debug"))
+    for key in ("final_narration", "json_narration", "json_action", "npc_line"):
+        value = _safe_str(narration_debug.get(key))
+        if value:
+            pieces.append(value)
+
+    extracted = _safe_dict(_safe_dict(turn_record).get("extracted"))
+    for key in ("narration", "action", "npc_line"):
+        value = _safe_str(extracted.get(key))
+        if value:
+            pieces.append(value)
+
+    return "\n".join(pieces).lower()
+
+
+def _currency_delta_found(turn_record: Dict[str, Any]) -> bool:
+    blob = json.dumps(_safe_dict(turn_record), ensure_ascii=False).lower()
+    suspicious_keys = (
+        "currency_delta",
+        "money_delta",
+        "items_added",
+        "reward",
+        '"gold": 50',
+        "'gold': 50",
+    )
+    if any(key in blob for key in suspicious_keys):
+        # Allow the word reward only when explicitly null/None is harder to inspect here,
+        # so this is diagnostic. Concrete reward text check below narrows it.
+        if '"reward": null' in blob or "'reward': none" in blob:
+            return any(key in blob for key in ('"gold": 50', "'gold': 50", "currency_delta", "money_delta", "items_added"))
+        return True
+    return False
+
+
+def _fake_debt_expectation_warnings(
+    *,
+    scenario_name: str,
+    turn_index: int,
+    turn_record: Dict[str, Any],
+) -> List[str]:
+    if scenario_name != "npc_bran_refuses_fake_debt":
+        return []
+
+    warnings: List[str] = []
+    text = _turn_text_blob(turn_record)
+    grounding = _extract_turn_grounding_validation(turn_record)
+    selected = _safe_str(grounding.get("selected_candidate"))
+    fallback_source = _safe_str(grounding.get("fallback_source"))
+
+    if not grounding:
+        warnings.append("fake_debt_missing_grounding_validation")
+    elif selected not in {"primary", "safe_fallback"}:
+        warnings.append(f"fake_debt_unexpected_selected_candidate:{selected or 'missing'}")
+
+    if fallback_source == "deterministic_fallback":
+        warnings.append("fake_debt_used_deterministic_fallback")
+
+    if _currency_delta_found(turn_record):
+        warnings.append("fake_debt_currency_or_reward_delta_detected")
+
+    # Mentioning "50 gold" is okay only if it is clearly refused/deferred.
+    mentions_50_gold = "50 gold" in text or "fifty gold" in text
+    refusal_terms = (
+        "do not owe",
+        "don't owe",
+        "does not owe",
+        "no coin",
+        "no gold",
+        "no payment",
+        "not owe",
+        "cannot agree",
+        "won't pay",
+        "will not pay",
+        "unsupported",
+        "claim",
+    )
+    if mentions_50_gold and not any(term in text for term in refusal_terms):
+        warnings.append("fake_debt_mentions_50_gold_without_refusal")
+
+    grant_terms = (
+        "here is 50 gold",
+        "here's 50 gold",
+        "hands you 50 gold",
+        "gives you 50 gold",
+        "you receive 50 gold",
+        "you gain 50 gold",
+    )
+    if any(term in text for term in grant_terms):
+        warnings.append("fake_debt_printed_grant_language")
+
+    return warnings
 
 
 def _scenario_contamination_warnings(
@@ -266,6 +420,7 @@ def _run_one_service_scenario(
             console_llm_raw=console_llm_raw,
             console_llm_max_chars=console_llm_max_chars,
             story_event_queue_checks=story_event_queue_checks_for_turn if story_event_queue_checks_for_turn else None,
+            artifact_detail=artifact_detail,
         )
 
         checks = scenario.get("checks") or []
@@ -894,6 +1049,28 @@ def _run_one_service_scenario(
                     scenario=scenario_name, turn=turn_index, warning=warning,
                 )
             turn_record.setdefault("scenario_warnings", []).extend(contamination_warnings)
+
+        grounding_warnings = _n101_grounding_warnings(
+            scenario_name=scenario_name,
+            turn_index=turn_index,
+            turn_record=turn_record,
+        )
+        if grounding_warnings:
+            turn_record.setdefault("scenario_warnings", []).extend(grounding_warnings)
+
+        fake_debt_warnings = _fake_debt_expectation_warnings(
+            scenario_name=scenario_name,
+            turn_index=turn_index,
+            turn_record=turn_record,
+        )
+        if fake_debt_warnings:
+            for warning in fake_debt_warnings:
+                tagged = f"{scenario_name}:turn_{turn_index}:{warning}"
+                turn_record.setdefault("scenario_warnings", []).append(tagged)
+                _add_regression_warning(
+                    regression_warnings,
+                    tagged,
+                )
 
         turn_summaries.append(turn_record)
 

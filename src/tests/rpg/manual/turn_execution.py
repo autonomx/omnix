@@ -87,6 +87,7 @@ def _run_one_manual_turn(
     console_llm_max_chars: int = 1200,
     story_event_queue_checks: list | None = None,
     include_raw_result: bool = False,
+    artifact_detail: str = "debug",
 ) -> Dict[str, Any]:
     """Run a single turn for a manual scenario."""
     raw_turn = turn
@@ -189,13 +190,17 @@ def _run_one_manual_turn(
             record_manual_harness_trace_stack("checkpoint_05_before_summary_or_narration")
 
             with traced_manual_stage("manual_harness_summary_compact_result"):
-                compact_result = _compact_result_for_summary(result)
+                compact_result = _compact_result_for_summary(
+                    result,
+                    detail=artifact_detail if artifact_detail in {"summary", "debug", "full"} else "debug",
+                )
 
             with traced_manual_stage("manual_harness_summary_initial_build"):
                 turn_summary = {
                     "turn_index": turn_index,
                     "player_input": player_input,
                     "result": compact_result,
+                    "raw_result_keys": sorted([str(k) for k in _safe_dict(result).keys()]),
                     "story_event_queue_checks": story_event_queue_check_results,
                 }
 
@@ -232,7 +237,10 @@ def _run_one_manual_turn(
 
                 # Apply sanitization for summary output
             with traced_manual_stage("manual_harness_sanitize_turn_for_summary"):
-                turn_summary = sanitize_turn_for_summary(turn_summary)
+                turn_summary = sanitize_turn_for_summary(
+                    turn_summary,
+                    detail=artifact_detail if artifact_detail in {"summary", "debug", "full"} else "debug",
+                )
 
             if include_raw_result:
                 # The sanitizer is designed for compact manual scenario summaries.

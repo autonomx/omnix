@@ -435,6 +435,8 @@ from app.rpg.ai.conversation_threads import (
     normalize_conversation_threads,
     seed_or_update_thread,
 )
+from app.rpg.ai.grounding_settings import normalize_grounding_settings
+from app.rpg.ai.grounding_soft_audit import run_grounding_soft_audit
 from app.rpg.ai.npc_initiative import (
     apply_initiative_cooldowns,
     apply_world_behavior_bias,
@@ -1582,6 +1584,23 @@ def _enqueue_narration_request(
         len(_safe_list(runtime_state.get("narration_jobs"))),
     )
     return runtime_state, job, is_new
+
+
+def _enqueue_grounding_soft_audit_request(
+    runtime_state: Dict[str, Any],
+    turn_id: str,
+    tick: int,
+    audit_request: Dict[str, Any],
+) -> Tuple[Dict[str, Any], Dict[str, Any], bool]:
+    audit_turn_id = f"{_safe_str(turn_id)}:grounding_soft_audit"
+    return _enqueue_narration_request(
+        runtime_state,
+        audit_turn_id,
+        tick,
+        audit_request,
+        job_kind="grounding_soft_audit",
+        priority=10,
+    )
 
 
 # Backward compatibility wrapper
@@ -12468,6 +12487,15 @@ def _generate_turn_narration_artifact(
         "authoritative_npc": _safe_dict(narration_json.get("npc")),
         "used_llm": bool(narration_result.get("used_llm")),
         "raw_llm_narrative": _safe_str(narration_result.get("raw_llm_narrative")),
+        "narration_context": _safe_dict(narration_request.get("narration_context")),
+        "grounding_validation": _safe_dict(
+            narration_result.get("grounding_validation")
+            or narration_json.get("grounding_validation")
+        ),
+        "grounding_fallback": bool(
+            narration_result.get("grounding_fallback")
+            or narration_json.get("grounding_fallback")
+        ),
         "speaker_presentation": _safe_dict(narration_result.get("speaker_presentation")),
         "format_warning": bool(narration_result.get("format_warning")),
         "created_at": _utc_now_iso(),
@@ -12723,6 +12751,7 @@ def process_next_narration_job(session_id: str) -> Dict[str, Any]:
         return {"ok": False, "status": "claimed_elsewhere", "turn_id": turn_id}
 
     narration_request = _safe_dict(claimed_job.get("narration_request") or queued_job.get("narration_request"))
+    job_kind = _safe_str(queued_job.get("job_kind")).strip() or _safe_str(claimed_job.get("job_kind")).strip() or "player_turn"
     logger.debug("Narration request prepared", extra={"session_id": session_id, "turn_id": turn_id, "request_keys": list(narration_request.keys()) if narration_request else None})
 
     if not narration_request or not narration_request.get("turn_id"):
@@ -12752,6 +12781,72 @@ def process_next_narration_job(session_id: str) -> Dict[str, Any]:
                 "chunk": piece,
             },
         )
+
+    if job_kind == "grounding_soft_audit":
+        try:
+            audit_result = run_grounding_soft_audit(
+                displayed_payload=_safe_dict(narration_request.get("displayed_payload")),
+                turn_contract=_safe_dict(narration_request.get("turn_contract")),
+                state_snapshot=_safe_dict(narration_request.get("state_snapshot")),
+                llm_gateway=build_app_llm_gateway(),
+                grounding_settings=_safe_dict(narration_request.get("grounding_settings")),
+            )
+
+            session = load_runtime_session(session_id)
+            if session is None:
+                return {"ok": False, "error": "session_not_found_after_soft_audit"}
+
+            runtime_state = _copy_dict(session.get("runtime_state"))
+            runtime_state = _mark_narration_job_status(runtime_state, turn_id, status="completed")
+            session["runtime_state"] = runtime_state
+            session = save_runtime_session(session)
+
+            correction = _safe_dict(audit_result.get("correction"))
+            if audit_result.get("ok") and audit_result.get("correction_needed") and correction:
+                publish_narration_event(
+                    session_id,
+                    {
+                        "type": "grounding_soft_correction",
+                        "session_id": session_id,
+                        "turn_id": _safe_str(narration_request.get("source_turn_id")),
+                        "audit_turn_id": turn_id,
+                        "role": "grounding_soft_correction",
+                        "append_only": True,
+                        "final": True,
+                        "version": 1,
+                        "text": _safe_str(
+                            _safe_dict(correction.get("npc")).get("line")
+                            or correction.get("narration")
+                            or correction.get("action")
+                        ),
+                        "correction": correction,
+                        "audit": _safe_dict(audit_result.get("audit")),
+                    },
+                )
+
+            return {
+                "ok": True,
+                "status": "completed",
+                "turn_id": turn_id,
+                "soft_audit": audit_result,
+                "session": session,
+            }
+        except Exception as exc:
+            logger.exception("Grounding soft audit failed for session %s turn %s", session_id, turn_id)
+            runtime_state = _mark_narration_job_status(
+                runtime_state,
+                turn_id,
+                status="failed",
+                error=f"grounding_soft_audit_failed: {exc!r}",
+            )
+            session["runtime_state"] = runtime_state
+            session = save_runtime_session(session)
+            return {
+                "ok": False,
+                "status": "failed",
+                "turn_id": turn_id,
+                "error": "grounding_soft_audit_failed",
+            }
 
     t_gen = _time.monotonic()
     logger.info(
@@ -12883,6 +12978,52 @@ def process_next_narration_job(session_id: str) -> Dict[str, Any]:
                     "used_llm": bool(artifact.get("used_llm")),
                 },
             )
+            try:
+                runtime_settings = _safe_dict(
+                    _safe_dict(session.get("runtime_state")).get("runtime_settings")
+                )
+                grounding_settings = normalize_grounding_settings(
+                    _safe_dict(runtime_settings.get("grounding"))
+                )
+                audit_turn_contract = _safe_dict(
+                    _safe_dict(artifact.get("narration_context")).get("turn_contract")
+                    or _safe_dict(narration_request.get("narration_context")).get("turn_contract")
+                    or narration_request.get("turn_contract")
+                )
+                if bool(grounding_settings.get("background_soft_audit", True)) and audit_turn_contract:
+                    source_turn_id = turn_id
+                    audit_request = {
+                        "turn_id": f"{source_turn_id}:grounding_soft_audit",
+                        "source_turn_id": source_turn_id,
+                        "tick": artifact.get("tick") or tick,
+                        "displayed_payload": _safe_dict(artifact.get("narration_json")) or {
+                            "format_version": "rpg_narration_v2",
+                            "narration": _safe_str(artifact.get("narration")),
+                            "action": "",
+                            "npc": None,
+                            "reward": None,
+                            "followup_hooks": [],
+                        },
+                        "turn_contract": audit_turn_contract,
+                        "state_snapshot": _safe_dict(
+                            _safe_dict(narration_request.get("narration_context")).get("simulation_state")
+                            or narration_request.get("simulation_state")
+                        ),
+                        "grounding_settings": grounding_settings,
+                    }
+                    runtime_state = _copy_dict(session.get("runtime_state"))
+                    runtime_state, _, audit_is_new = _enqueue_grounding_soft_audit_request(
+                        runtime_state,
+                        source_turn_id,
+                        int(artifact.get("tick") or tick or 0),
+                        audit_request,
+                    )
+                    session["runtime_state"] = runtime_state
+                    session = save_runtime_session(session)
+                    if audit_is_new:
+                        signal_narration_work(session_id)
+            except Exception:
+                logger.exception("Failed to enqueue grounding soft audit for session %s turn %s", session_id, turn_id)
         return {
             "ok": True,
             "status": "completed",

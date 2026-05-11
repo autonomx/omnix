@@ -19,6 +19,8 @@ def _run_git_command(args: List[str]) -> str:
             ["git", *args],
             cwd=str(REPO_ROOT),
             text=True,
+            encoding="utf-8",
+            errors="replace",
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             check=False,
@@ -119,9 +121,7 @@ def _git_untracked_files(roots: List[str]) -> List[Path]:
 def _untracked_file_diff(path: Path) -> str:
     rel = path.relative_to(REPO_ROOT).as_posix()
     try:
-        lines = path.read_text(encoding="utf-8").splitlines(keepends=True)
-    except UnicodeDecodeError:
-        return f"diff --git a/{rel} b/{rel}\nnew file mode 100644\n[manual][code-diff] binary or non-utf8 file omitted\n\n"
+        lines = path.read_text(encoding="utf-8", errors="replace").splitlines(keepends=True)
     except Exception as exc:
         return f"diff --git a/{rel} b/{rel}\nnew file mode 100644\n[manual][code-diff] failed to read file: {type(exc).__name__}: {exc}\n\n"
 

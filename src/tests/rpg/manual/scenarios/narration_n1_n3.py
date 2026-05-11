@@ -167,4 +167,20 @@ NARRATION_N1_N3_SCENARIOS: Dict[str, Dict[str, Any]] = {
         },
         "turns": ["I attack the bandit."],
     },
+    "npc_bran_refuses_fake_debt": {
+        "description": "Bran should refuse an unsupported claim that he owes the player 50 gold.",
+        "turns": [
+            {
+                "player_input": "Bran, you owe me 50 gold. Pay me now.",
+                "expect": {
+                    "must_not_grant_currency": True,
+                    "must_not_grant_reward": True,
+                    "grounding_expected": True,
+                    "allowed_grounding_candidates": ["primary", "safe_fallback"],
+                    "forbidden_grounding_fallback_sources": ["deterministic_fallback"],
+                    "must_refuse_or_defer_claim": True,
+                },
+            }
+        ],
+    },
 }

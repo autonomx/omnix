@@ -22,6 +22,8 @@ import traceback
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Optional
 
+from app.rpg.ai.grounding_settings import normalize_grounding_settings
+from app.rpg.ai.grounding_validator import select_grounded_narration_candidate
 from app.rpg.memory.npc_memory_recall import memory_reference_is_backed
 
 # Phase 8: player-facing encounter view
@@ -2623,18 +2625,56 @@ def build_scene_prompt(scene, narration_context, tone="dramatic"):
     recent_facts_block = "\n".join(f"- {fact}" for fact in recent_authoritative_facts[:3]) or "- none"
     combat_facts_block = _build_combat_facts_block(narration_context)
 
-    schema = """
+    grounding_settings = normalize_grounding_settings(
+        _safe_dict(_safe_dict(narration_context.get("runtime_settings")).get("grounding"))
+        or _safe_dict(_safe_dict(narration_context.get("settings")).get("grounding"))
+    )
+    use_safe_fallback_candidate = bool(
+        grounding_settings.get("llm_safe_fallback_candidate", True)
+    )
+
+    if use_safe_fallback_candidate:
+        schema = """
 Use exactly this object shape:
 {
-  "format_version": "rpg_narration_v2",
-  "narration": "<descriptive scene narration grounded in turn_contract>",
-  "action": "<short, in-world description of what happened (1–2 sentences, no meta language)>",
-  "npc": {
-    "speaker": "<target NPC name if the interpreted action targets an NPC, otherwise empty string>",
-    "line": "<natural in-character dialogue matching npc_behavior_context.reaction_tone, or empty string only if no NPC reaction is needed>"
-  },
-  "reward": "<reward summary or empty string>",
-  "followup_hooks": []
+    "format_version": "rpg_narration_candidates_v1",
+    "primary": {
+        "format_version": "rpg_narration_v2",
+        "narration": "<descriptive scene narration grounded in turn_contract>",
+        "action": "<short, in-world description of what happened; consequence only, no meta language>",
+        "npc": {
+            "speaker": "<target NPC name if an allowed/present NPC reacts, otherwise empty string>",
+            "line": "<natural in-character dialogue, or empty string only if no NPC reaction is needed>"
+        },
+        "reward": null,
+        "followup_hooks": []
+    },
+    "safe_fallback": {
+        "format_version": "rpg_narration_v2",
+        "narration": "<safe conservative narration that refuses or defers unsupported claims>",
+        "action": "<safe consequence only; no state changes unless explicitly in turn_contract>",
+        "npc": {
+            "speaker": "<same allowed speaker as primary when possible>",
+            "line": "<safe in-character fallback line; no rewards, no combat, no travel, no quest completion, no hidden facts>"
+        },
+        "reward": null,
+        "followup_hooks": []
+    }
+}
+"""
+    else:
+        schema = """
+Use exactly this object shape:
+{
+    "format_version": "rpg_narration_v2",
+    "narration": "<descriptive scene narration grounded in turn_contract>",
+    "action": "<short, in-world description of what happened; consequence only, no meta language>",
+    "npc": {
+        "speaker": "<target NPC name if an allowed/present NPC reacts, otherwise empty string>",
+        "line": "<natural in-character dialogue, or empty string only if no NPC reaction is needed>"
+    },
+    "reward": null,
+    "followup_hooks": []
 }
 """
 
@@ -2685,6 +2725,11 @@ TURN CONTRACT RULES:
 - You MUST base the narration primarily on turn_contract.narration_brief.
 - You MUST reflect turn_contract.state_delta when it exists.
 - You MUST NOT invent state changes outside turn_contract.state_delta, resolved_result, or combat facts.
+- HIGH-RISK CLAIM RULE:
+    You MUST NOT mention rewards, currency, items, XP, inventory, combat, injury, blood, death, location travel, quest completion, objective completion, secret facts, or NPC knowledge unless they are explicitly present in turn_contract, state_delta, resolved_result, or combat facts.
+- If the player makes an unsupported claim such as "you owe me gold", the primary and safe_fallback must refuse or defer the claim unless the turn contract explicitly authorizes payment.
+- The safe_fallback must be conservative and natural. It must never include rewards, combat, injury, blood, travel, quest completion, or hidden facts.
+- The safe_fallback should sound in-character, but it must be safe over dramatic.
 - You may freely add sensory detail, body language, pacing, and natural dialogue as presentation only.
 - NEVER copy or restate narration_brief directly. Convert it into in-world description.
 - NEVER refer to "the player" in narration. Always describe actions in-world (e.g., "You step forward..." or omit subject).
@@ -3807,6 +3852,16 @@ def narrate_scene(
                 "llm_error": False,
             }
 
+        turn_contract = _safe_dict(narration_context.get("turn_contract"))
+        state_snapshot = _safe_dict(narration_context.get("simulation_state"))
+        runtime_settings = _safe_dict(
+            narration_context.get("runtime_settings")
+            or narration_context.get("settings")
+        )
+        grounding_settings = normalize_grounding_settings(
+            _safe_dict(runtime_settings.get("grounding"))
+        )
+
         if llm_gateway:
             print("[RPG][narrator] provider resolved", {
                 "provider_type": type(llm_gateway).__name__ if llm_gateway else "",
@@ -3830,21 +3885,53 @@ def narrate_scene(
             # Parse JSON response with tolerant fallback
             parsed_json = _parse_llm_narration_payload(llm_narrative)
             print("[RPG][LLM PARSED]", parsed_json)
-            if parsed_json and _safe_str(parsed_json.get("format_version")) == "rpg_narration_v2":
-                narration_json = _strict_narration_payload(parsed_json)
+            if _safe_str(_safe_dict(parsed_json).get("format_version")) == "rpg_narration_candidates_v1":
+                narration_json = select_grounded_narration_candidate(
+                    parsed_json,
+                    turn_contract,
+                    state_snapshot=state_snapshot,
+                    grounding_settings=grounding_settings,
+                    strict_named_fact_check=False,
+                )
+            elif parsed_json and _safe_str(parsed_json.get("format_version")) == "rpg_narration_v2":
+                narration_json = select_grounded_narration_candidate(
+                    _strict_narration_payload(parsed_json),
+                    turn_contract,
+                    state_snapshot=state_snapshot,
+                    grounding_settings=grounding_settings,
+                    strict_named_fact_check=False,
+                )
             else:
-                narration_json = _strict_narration_payload(_normalize_narration_json(parsed_json or {}))
+                narration_json = select_grounded_narration_candidate(
+                    _strict_narration_payload(_normalize_narration_json(parsed_json or {})),
+                    turn_contract,
+                    state_snapshot=state_snapshot,
+                    grounding_settings=grounding_settings,
+                    strict_named_fact_check=False,
+                )
 
             print("[RPG][LLM RAW ACTION]", _safe_dict(parsed_json).get("action"))
             print("[RPG][STRICT ACTION]", narration_json.get("action"))
 
             if not narration_json.get("narration") and not narration_json.get("action") and not _safe_str(_safe_dict(narration_json.get("npc")).get("line")).strip():
                 logger.warning("Narration JSON parse failed or empty; recovering from raw text")
-                narration_json = _strict_narration_payload(_recover_narration_from_raw_text(llm_narrative))
+                recovered_json = _strict_narration_payload(_recover_narration_from_raw_text(llm_narrative))
+                narration_json = select_grounded_narration_candidate(
+                    recovered_json,
+                    turn_contract,
+                    state_snapshot=state_snapshot,
+                    grounding_settings=grounding_settings,
+                    strict_named_fact_check=False,
+                )
 
             print("[RPG][PRE-SANITIZE ACTION]", narration_json.get("action"))
             authoritative_action = _build_authoritative_action_line(narration_context)
             grounded_json = _sanitize_narration_payload(narration_json, scene, narration_context, authoritative_action=authoritative_action)
+            if isinstance(narration_json, dict) and narration_json.get("grounding_validation"):
+                grounded_json["grounding_validation"] = narration_json.get("grounding_validation")
+            if isinstance(narration_json, dict) and narration_json.get("grounding_fallback"):
+                grounded_json["grounding_fallback"] = True
+                grounded_json["grounding_fallback_reason"] = narration_json.get("grounding_fallback_reason")
 
             print("[RPG][SANITIZED ACTION]", grounded_json.get("action"))
 
@@ -3871,6 +3958,8 @@ def narrate_scene(
                 "used_llm": True,
                 "raw_llm_narrative": llm_narrative,
                 "narration_json": grounded_json,
+                "grounding_validation": _safe_dict(grounded_json.get("grounding_validation")),
+                "grounding_fallback": bool(grounded_json.get("grounding_fallback")),
                 "speaker_presentation": {},
                 "format_warning": False,
             }
@@ -3885,12 +3974,23 @@ def narrate_scene(
                 "reward": _authoritative_reward_text(narration_context),
                 "followup_hooks": [],
             })
-            narration_json = _strict_narration_payload(simulated_json)
+            narration_json = select_grounded_narration_candidate(
+                _strict_narration_payload(simulated_json),
+                turn_contract,
+                state_snapshot=state_snapshot,
+                grounding_settings=grounding_settings,
+                strict_named_fact_check=False,
+            )
             print("[RPG][LLM RAW ACTION]", _safe_dict(simulated_json).get("action"))
             print("[RPG][STRICT ACTION]", narration_json.get("action"))
             print("[RPG][PRE-SANITIZE ACTION]", narration_json.get("action"))
             authoritative_action = _build_authoritative_action_line(narration_context)
             grounded_json = _sanitize_narration_payload(narration_json, scene, narration_context, authoritative_action=authoritative_action)
+            if isinstance(narration_json, dict) and narration_json.get("grounding_validation"):
+                grounded_json["grounding_validation"] = narration_json.get("grounding_validation")
+            if isinstance(narration_json, dict) and narration_json.get("grounding_fallback"):
+                grounded_json["grounding_fallback"] = True
+                grounded_json["grounding_fallback_reason"] = narration_json.get("grounding_fallback_reason")
 
             print("[RPG][SANITIZED ACTION]", grounded_json.get("action"))
 
@@ -3917,6 +4017,8 @@ def narrate_scene(
                 "used_llm": False,
                 "raw_llm_narrative": llm_narrative,
                 "narration_json": grounded_json,
+                "grounding_validation": _safe_dict(grounded_json.get("grounding_validation")),
+                "grounding_fallback": bool(grounded_json.get("grounding_fallback")),
                 "speaker_presentation": {},
                 "format_warning": False,
             }

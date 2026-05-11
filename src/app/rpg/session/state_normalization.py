@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from typing import Any, Dict, List
 
+from app.rpg.ai.grounding_settings import normalize_grounding_settings
 from app.rpg.economy.currency import currency_to_copper_value, normalize_currency
 from app.rpg.items.inventory_state import add_inventory_items, normalize_inventory_state
 from app.rpg.items.world_items import ensure_world_item_state
@@ -175,6 +176,10 @@ def _normalize_runtime_settings(value: Dict[str, Any]) -> Dict[str, Any]:
     raw_npc_profile_gen = value.get("npc_profile_generation")
     if isinstance(raw_npc_profile_gen, dict):
         result["npc_profile_generation"] = npc_profile_settings(value)
+
+    raw_grounding = value.get("grounding")
+    result["grounding"] = normalize_grounding_settings(raw_grounding)
+
     return result
 
 

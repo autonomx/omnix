@@ -1,5 +1,10 @@
-from tests.rpg.autoplay_llm_campaign import _build_100_turn_readiness_summary, _build_strict_progress_quality_certification, _final_lifecycle_quality_gates, _sync_hundred_turn_validation_classification
-from tests.rpg.autoplay_llm_campaign import _summarize_quality_gates
+from tests.rpg.autoplay_llm_campaign import (
+    _build_100_turn_readiness_summary,
+    _build_strict_progress_quality_certification,
+    _final_lifecycle_quality_gates,
+    _summarize_quality_gates,
+    _sync_hundred_turn_validation_classification,
+)
 
 
 def test_100_turn_readiness_fails_single_completed_arc_with_too_much_idle():
@@ -337,6 +342,77 @@ def test_100_turn_readiness_with_four_graphs_only_fails_next_content_gate():
     assert result["gates"]["unique_progression_nodes_ok"] is True
     assert result["gates"]["arc_complete_idle_not_excessive_ok"] is True
     assert result["failed_gates"] == ["needs_more_graph_content_ok"]
+
+
+def test_authoritative_human_playable_blocking_excludes_player_agent_time():
+    from tests.rpg.autoplay_llm_campaign import (
+        _authoritative_human_playable_blocking_ms,
+    )
+
+    row = {
+        "human_playable_blocking_ms": 5200.0,
+        "stage_timing_ms": {
+            "runtime_turn_ms": 120.0,
+            "state_commit_ms": 25.0,
+            "presentation_payload_ms": 15.0,
+            "player_agent_ms": 5000.0,
+        },
+    }
+
+    assert _authoritative_human_playable_blocking_ms(row) == 160.0
+
+
+def test_authoritative_blocking_fallback_subtracts_known_llm_time():
+    from tests.rpg.autoplay_llm_campaign import (
+        _authoritative_human_playable_blocking_ms,
+    )
+
+    row = {
+        "human_playable_blocking_ms": 5200.0,
+        "stage_timing_ms": {
+            "player_agent_ms": 5000.0,
+            "background_attach_ms": 100.0,
+        },
+    }
+
+    assert _authoritative_human_playable_blocking_ms(row) == 100.0
+
+
+def test_final_quality_gate_uses_authoritative_blocking_summary():
+    from tests.rpg.autoplay_llm_campaign import _final_lifecycle_quality_gates
+
+    summary = {
+        "requested_turns": 100,
+        "turns_executed": 100,
+        "hundred_turn_readiness_summary": {
+            "ok": True,
+            "classification": "content_sufficient_for_requested_turns",
+            "failed_gates": [],
+        },
+        "hundred_turn_validation_classification": "content_sufficient_for_requested_turns",
+        "quality_gate_summary": {
+            "gates": {
+                "max_human_playable_blocking_under_1000ms": True,
+            },
+            "ok": True,
+        },
+        "performance_budget_summary": {
+            "live_blocking": {
+                "max_human_playable_blocking_ms": 250.0,
+                "blocking_metric_mode": "authoritative_deterministic_only",
+            },
+        },
+        "long_run_warning_summary": {"ok": True},
+        "hundred_turn_eval_summary": {"ok": True},
+        "strict_progress_quality_certification": {"ok": True},
+        "background_result_timing_summary": {"ok": True},
+        "behavioral_autoplay_eval_summary": {"ok": True},
+        "repeated_affordance_loop_summary": {"ok": True},
+        "checkpoint_validation_summary": {"ok": True},
+    }
+
+    result = _final_lifecycle_quality_gates(summary)
+    assert result["gates"]["max_human_playable_blocking_under_1000ms"] is True
 
 
 def test_strict_progress_quality_counts_scenario_progression_as_meaningful():

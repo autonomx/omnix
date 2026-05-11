@@ -136,12 +136,15 @@ def _pre_turn_contamination_snapshot(simulation_state: Dict[str, Any]) -> Dict[s
     }
 
 
-def _compact_result_for_summary(result: Dict[str, Any]) -> Dict[str, Any]:
+def _compact_result_for_summary(
+    result: Dict[str, Any],
+    detail: str = "summary",
+) -> Dict[str, Any]:
     """Compact a turn result for summary by removing large state blobs.
 
     This is now a thin wrapper around the more comprehensive sanitizer function.
     """
-    return _sanitizer_compact_result(result)
+    return _sanitizer_compact_result(result, detail)
 
 
 def _build_service_summary_row(
