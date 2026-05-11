@@ -730,6 +730,13 @@ from app.rpg.world.companion_dialogue import (
 )
 from app.rpg.world.location_registry import ensure_location_state
 from app.rpg.world.npc_dialogue_recall import player_input_requests_recall
+from app.rpg.world.travel_graph import (
+    apply_travel_result_to_state,
+    build_travel_state_delta,
+    build_travel_world_event,
+    list_available_routes,
+    resolve_travel_destination,
+)
 from app.rpg.world.world_event_director import (
     apply_world_behavior_to_events,
     build_world_event_candidates,
@@ -11723,20 +11730,118 @@ def _apply_turn_authoritative(
     # deterministic service result has matched.
     _service_result_for_travel = _safe_dict(resolved_result.get("service_result"))
     if not ambient_tick_result and not _service_result_for_travel.get("matched"):
-        ensure_location_state(after_action_state)
-        _travel_result = resolve_travel_turn(
+        travel_result = resolve_travel_destination(
             player_input=player_input,
-            simulation_state=after_action_state,
-            tick=current_tick,
+            state=after_action_state,
         )
-        if _travel_result.get("matched"):
-            _travel_resolved = travel_resolved_result(_travel_result)
-            resolved_result.update(_travel_resolved)
-            authoritative["travel_result"] = _travel_result
-            authoritative["resolved_result"] = resolved_result
-            authoritative["location_state"] = _safe_dict(after_action_state.get("location_state"))
-            authoritative["world_event_state"] = _safe_dict(after_action_state.get("world_event_state"))
-            authoritative["simulation_state"] = after_action_state
+
+        if travel_result.get("ok"):
+            previous_state = dict(after_action_state)
+            after_action_state = apply_travel_result_to_state(
+                state=after_action_state,
+                travel_result=travel_result,
+            )
+
+            state_delta = build_travel_state_delta(travel_result)
+            world_event = build_travel_world_event(travel_result)
+
+            resolved_result.update({
+                "ok": True,
+                "action_type": "travel",
+                "semantic_action_type": "travel",
+                "summary": world_event.get("summary"),
+                "travel_result": travel_result,
+                "state_delta": state_delta,
+                "world_event": world_event,
+                "meaningful_progress": True,
+                "progress_category": "location_progression",
+            })
+
+            authoritative["action_type"] = "travel"
+            authoritative["semantic_action_type"] = "travel"
+            authoritative["player_input"] = player_input
+            authoritative["current_location"] = travel_result.get("to_location")
+            authoritative["previous_location"] = travel_result.get("from_location")
+            authoritative["available_routes"] = list_available_routes(state=after_action_state)
+            authoritative["state_delta"] = {
+                **_safe_dict(authoritative.get("state_delta")),
+                **state_delta,
+            }
+            authoritative["result"] = {
+                **_safe_dict(authoritative.get("result")),
+                "ok": True,
+                "outcome": "success",
+                "action_type": "travel",
+                "summary": world_event.get("summary"),
+                "travel_result": travel_result,
+                "state_delta": state_delta,
+                "meaningful_progress": True,
+                "progress_category": "location_progression",
+            }
+            authoritative["world_events"] = [
+                *_safe_list(authoritative.get("world_events")),
+                world_event,
+            ]
+
+            # Continue through existing narration/persistence path with this resolved result.
+
+        elif travel_result.get("reason") == "unknown_or_unreachable_destination":
+            available_routes = _safe_list(travel_result.get("available_routes"))
+            route_labels = [
+                route.get("to_name") or route.get("to_location")
+                for route in available_routes[:4]
+                if route.get("to_name") or route.get("to_location")
+            ]
+
+            resolved_result.update({
+                "ok": False,
+                "action_type": "travel",
+                "semantic_action_type": "travel",
+                "summary": (
+                    "No known route matches that destination. "
+                    + (
+                        "Available routes: " + ", ".join(str(label) for label in route_labels)
+                        if route_labels
+                        else "No routes are currently available."
+                    )
+                ),
+                "travel_result": travel_result,
+                "meaningful_progress": False,
+                "progress_category": "blocked_travel",
+            })
+
+            authoritative["action_type"] = "travel"
+            authoritative["semantic_action_type"] = "travel"
+            authoritative["player_input"] = player_input
+            authoritative["current_location"] = travel_result.get("current_location")
+            authoritative["available_routes"] = available_routes
+            authoritative["suggested_actions"] = [
+                {
+                    "type": "travel",
+                    "label": f"Travel to {label}",
+                    "command": f"go to {label}",
+                }
+                for label in route_labels
+                if label
+            ]
+            authoritative["result"] = {
+                **_safe_dict(authoritative.get("result")),
+                "ok": False,
+                "outcome": "failure",
+                "action_type": "travel",
+                "summary": resolved_result.get("summary"),
+                "travel_result": travel_result,
+                "meaningful_progress": False,
+                "progress_category": "blocked_travel",
+            }
+
+            # Continue through narration path, not generic observe.
+
+        authoritative["travel_result"] = travel_result
+        authoritative["resolved_result"] = resolved_result
+        authoritative["location_state"] = _safe_dict(after_action_state.get("location_state"))
+        authoritative["world_event_state"] = _safe_dict(after_action_state.get("world_event_state"))
+        authoritative["simulation_state"] = after_action_state
 
     social_living_world_effects = apply_general_social_effects(
         after_action_state,

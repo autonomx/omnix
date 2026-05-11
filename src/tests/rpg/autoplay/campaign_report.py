@@ -71,6 +71,37 @@ def _render_gate_table(evaluation: Dict[str, Any]) -> str:
     )
 
 
+def _render_hundred_turn_evaluation_gates(evaluation: Dict[str, Any]) -> str:
+    gates = _safe_dict(_safe_dict(evaluation).get("gates"))
+    overall_ok = bool(evaluation.get("ok", True))
+
+    gate_rows = ""
+    for name, gate in gates.items():
+        gate = _safe_dict(gate)
+        ok = bool(gate.get("ok"))
+        gate_rows += (
+            "<tr>"
+            f"<td>{html.escape(str(name))}</td>"
+            f'<td><span class="rpg-badge {_status_badge_class(ok)}">{html.escape(_yes_no(ok))}</span></td>'
+            "</tr>"
+        )
+    if not gate_rows:
+        gate_rows = "<tr><td colspan='2'>No gate details available.</td></tr>"
+
+    return f"""
+    <section class="rpg-card span-12" id="hundred-turn-evaluation-gates">
+      <div class="rpg-section-title">
+        <h2>100-Turn Evaluation Gates</h2>
+        <span class="rpg-badge {_status_badge_class(overall_ok)}">{html.escape(_yes_no(overall_ok))}</span>
+      </div>
+      <table class="rpg-table">
+        <thead><tr><th>Gate</th><th>Status</th></tr></thead>
+        <tbody>{gate_rows}</tbody>
+      </table>
+    </section>
+    """
+
+
 def _render_grounding_summary(summary: Dict[str, Any]) -> str:
     summary = _safe_dict(summary)
     return (
@@ -6477,7 +6508,7 @@ pre {
         ("runtime-narration-diagnostics", "Runtime Diagnostics"),
         ("debug", "Debug"),
     ]
-    evaluation_html = _render_gate_table(_safe_dict(summary.get("hundred_turn_evaluation")))
+    evaluation_html = _render_hundred_turn_evaluation_gates(_safe_dict(summary.get("hundred_turn_evaluation")))
     grounding_html = _render_grounding_summary(_safe_dict(summary.get("narration_grounding_summary")))
     progress_html = _render_progress_quality(_safe_dict(summary.get("canonical_progress_quality")))
     performance_html = _render_performance_seconds(_safe_dict(summary.get("performance_seconds_summary")))
