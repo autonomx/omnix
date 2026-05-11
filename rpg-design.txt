@@ -1,588 +1,1080 @@
-N101 Stabilization Cleanup Patch
+N79-N81 — 100-Turn Autoplay Evaluation + Report Hardening
 Goal
 
-Fix the two blockers from the stabilization gate:
+Now that N101 grounding is stable, upgrade the 100-turn autoplay run from “it completed” to “it produced a useful product-quality evaluation artifact.”
 
-1. npc_bran_refuses_fake_debt crashes:
-   NameError: name 'regression_warnings' is not defined
+This bundle adds:
 
-2. Runtime narration provider can fail with:
-   HTTP 400: Context size has been exceeded
-
-3. Manual gate currently passes even when provider call failed/fell back.
-
-4. Autoplay grounding summary reports:
-   checked_count = 0
+N79 — 100-turn evaluation gates and summary
+N80 — HTML report hardening / readability
+N81 — zipped artifact completeness and debugging payloads
 
 Expected after patch:
 
-- fake-debt scenario runs and fails/passes normally, no NameError
-- provider prompt uses compact narration context
-- context overflow becomes a regression warning in N101 gate
-- manual debug artifact exposes provider failure cleanly
-- autoplay rows collect grounding_validation metadata
-- narration_grounding_summary.checked_count > 0 for LLM narrated turns
-1. Fix fake-debt regression_warnings NameError
-
-Patch:
-
-src/tests/rpg/manual/scenario_execution.py
-1A. Make N101 gate helper return warnings only
-
-Find your recently added N101 warning integration. It likely looks like this inside the turn loop:
-
-        n101_gate_warnings = _n101_stabilization_gate_warnings(
-            scenario_name=scenario_name,
-            turn_index=turn_index,
-            turn_record=turn_record,
-        )
-        for warning in n101_gate_warnings:
-            tagged = f"{scenario_name}:turn_{turn_index}:{warning}"
-            turn_record.setdefault("scenario_warnings", []).append(tagged)
-            _add_regression_warning(regression_warnings, tagged)
-
-If this block exists inside a function where regression_warnings does not exist, replace it with this safer version:
-
-        n101_gate_warnings = _n101_stabilization_gate_warnings(
-            scenario_name=scenario_name,
-            turn_index=turn_index,
-            turn_record=turn_record,
-        )
-        for warning in n101_gate_warnings:
-            tagged = f"{scenario_name}:turn_{turn_index}:{warning}"
-            turn_record.setdefault("scenario_warnings", []).append(tagged)
-
-Then, in the outer scenario result assembly where scenario_warnings and regression_warnings are both available, add this after all turns are collected:
-
-    for turn_record in turn_summaries:
-        for warning in _safe_list(_safe_dict(turn_record).get("scenario_warnings")):
-            warning_text = _safe_str(warning)
-            if not warning_text:
-                continue
-            if warning_text not in scenario_warnings:
-                scenario_warnings.append(warning_text)
-
-            # N101 stabilization warnings are gate warnings and should fail
-            # when --fail-on-regression-warnings is enabled.
-            if ":n101_" in warning_text or warning_text.startswith("n101_"):
-                _add_regression_warning(regression_warnings, warning_text)
-
-If your file does not have a scenario_warnings list, use the equivalent final warning list in that scenario function.
-
-1B. If _n101_stabilization_gate_warnings(...) directly references regression_warnings
-
-Find inside _n101_stabilization_gate_warnings(...):
-
-_add_regression_warning(regression_warnings, ...)
-
-Remove it. That helper should only do:
-
-warnings.append("...")
-
-Final helper rule:
-
-def _n101_stabilization_gate_warnings(...) -> List[str]:
-    warnings = []
-    ...
-    return warnings
-
-No mutation of outer state from inside the helper.
-
-2. Add compact runtime narration context
-
-Patch:
-
-src/app/rpg/narration/runtime_narration_contract.py
-2A. Add compacting helpers
-
-Add near other _safe_* helpers:
-
-RUNTIME_NARRATION_CONTEXT_JSON_LIMIT = 9000
-RUNTIME_NARRATION_STATE_JSON_LIMIT = 3500
-RUNTIME_NARRATION_CONTRACT_JSON_LIMIT = 5500
-
-
-def _cap_text(value: Any, limit: int) -> str:
-    text = _safe_str(value)
-    if limit <= 0 or len(text) <= limit:
-        return text
-    return text[: max(0, limit - 80)] + f"... [truncated {len(text) - limit} chars]"
-
-
-def _cap_list(value: Any, limit: int = 12) -> List[Any]:
-    if not isinstance(value, list):
-        return []
-    return value[:limit]
-
-
-def _compact_mapping(value: Any, *, max_keys: int = 40, max_text: int = 500, max_list: int = 12) -> Dict[str, Any]:
-    raw = _safe_dict(value)
-    compact: Dict[str, Any] = {}
-    for index, key in enumerate(sorted(raw.keys(), key=str)):
-        if index >= max_keys:
-            compact["_truncated_keys"] = max(0, len(raw) - max_keys)
-            break
-        item = raw.get(key)
-        if isinstance(item, str):
-            compact[key] = _cap_text(item, max_text)
-        elif isinstance(item, dict):
-            compact[key] = _compact_mapping(item, max_keys=max_keys, max_text=max_text, max_list=max_list)
-        elif isinstance(item, list):
-            compact[key] = [
-                _compact_mapping(v, max_keys=max_keys, max_text=max_text, max_list=max_list)
-                if isinstance(v, dict)
-                else _cap_text(v, max_text) if isinstance(v, str)
-                else v
-                for v in item[:max_list]
-            ]
-            if len(item) > max_list:
-                compact[f"{key}_truncated_count"] = len(item) - max_list
-        else:
-            compact[key] = item
-    return compact
-
-
-def _extract_compact_runtime_state_for_narration(simulation_state: Any) -> Dict[str, Any]:
-    state = _safe_dict(simulation_state)
-
-    compact: Dict[str, Any] = {
-        "tick": state.get("tick"),
-        "scene_id": state.get("scene_id"),
-        "current_location": (
-            state.get("current_location")
-            or state.get("current_location_id")
-            or state.get("location")
-        ),
-        "current_location_name": state.get("current_location_name") or state.get("location_name"),
-    }
-
-    for key in (
-        "present_npcs",
-        "known_npcs",
-        "unlocked_locations",
-        "allowed_locations",
-        "active_quests",
-        "quest_log",
-        "recent_world_events",
-        "recent_journal_entries",
-        "recent_memory",
-        "currency",
-        "inventory",
-        "runtime_settings",
-    ):
-        value = state.get(key)
-        if value not in (None, "", [], {}):
-            if isinstance(value, dict):
-                compact[key] = _compact_mapping(value, max_keys=20, max_text=300, max_list=8)
-            elif isinstance(value, list):
-                compact[key] = _cap_list(value, 8)
-            else:
-                compact[key] = value
-
-    # Never send giant full histories/session blobs to the narrator.
-    compact["omitted_from_prompt"] = [
-        "full_runtime_state",
-        "full_session",
-        "full_transcript",
-        "full_memory_store",
-        "full_debug_artifacts",
-    ]
-
-    return compact
-
-
-def _extract_compact_turn_contract_for_narration(turn_contract: Any) -> Dict[str, Any]:
-    contract = _safe_dict(turn_contract)
-    result = _safe_dict(
-        contract.get("result")
-        or contract.get("resolved_result")
-        or contract.get("resolved_action")
-    )
-
-    keys = (
-        "action_type",
-        "semantic_action_type",
-        "player_action",
-        "current_location",
-        "current_location_id",
-        "location",
-        "present_npcs",
-        "allowed_npcs",
-        "target_id",
-        "target_name",
-        "speaker",
-        "npc_backbone_decision",
-        "service_result",
-        "interaction_result",
-        "conversation_result",
-        "combat_result",
-        "combat_delta",
-        "damage_delta",
-        "health_delta",
-        "defeat",
-        "currency_delta",
-        "inventory_delta",
-        "items_added",
-        "items_removed",
-        "reward",
-        "quest_log_delta",
-        "completed_quests",
-        "completed_objectives",
-        "new_facts",
-        "allowed_facts",
-        "new_leads",
-        "allowed_leads",
-        "suggested_actions",
-        "allowed_next_actions",
-        "narration_brief",
-        "summary",
-        "message",
-    )
-
-    compact: Dict[str, Any] = {}
-    for key in keys:
-        value = contract.get(key)
-        if value in (None, "", [], {}):
-            value = result.get(key)
-        if value in (None, "", [], {}):
-            continue
-
-        if isinstance(value, dict):
-            compact[key] = _compact_mapping(value, max_keys=20, max_text=300, max_list=8)
-        elif isinstance(value, list):
-            compact[key] = _cap_list(value, 8)
-        elif isinstance(value, str):
-            compact[key] = _cap_text(value, 700)
-        else:
-            compact[key] = value
-
-    compact["result"] = _compact_mapping(result, max_keys=20, max_text=300, max_list=8) if result else {}
-    return compact
-
-
-def _json_for_prompt(value: Any, *, limit: int) -> str:
-    try:
-        text = json.dumps(value, ensure_ascii=False, indent=2, default=str)
-    except Exception:
-        text = json.dumps(_safe_str(value), ensure_ascii=False)
-    return _cap_text(text, limit)
-
-If json is not imported, add:
-
-import json
-2B. Use compact context in the runtime narration prompt
-
-Find where the provider prompt is assembled. It likely includes:
-
-json.dumps(turn_contract, ensure_ascii=False, indent=2)
-json.dumps(simulation_state, ensure_ascii=False, indent=2)
-
-Replace with:
-
-compact_turn_contract = _extract_compact_turn_contract_for_narration(turn_contract)
-compact_simulation_state = _extract_compact_runtime_state_for_narration(simulation_state)
-
-turn_contract_json = _json_for_prompt(
-    compact_turn_contract,
-    limit=RUNTIME_NARRATION_CONTRACT_JSON_LIMIT,
-)
-simulation_state_json = _json_for_prompt(
-    compact_simulation_state,
-    limit=RUNTIME_NARRATION_STATE_JSON_LIMIT,
-)
-
-Then in the prompt, replace full JSON sections with:
-
-Authoritative compact turn contract:
-{turn_contract_json}
-
-Compact state snapshot:
-{simulation_state_json}
-
-Add this instruction to the prompt:
-
-Only use the compact turn contract and compact state snapshot as authoritative truth.
-If something is omitted, do not invent it.
-
-Do not include full runtime_state, full session, full transcript, or full memory arrays in the provider prompt.
-
-3. Make provider context overflow a N101 warning
-
-Patch:
-
-src/tests/rpg/manual/scenario_execution.py
-
-Inside _n101_stabilization_gate_warnings(...), after getting provider_diagnostics, add:
-
-    provider_error_blob = json.dumps(provider_diagnostics, ensure_ascii=False).lower()
-    if "context size has been exceeded" in provider_error_blob or "context" in provider_error_blob and "exceeded" in provider_error_blob:
-        warnings.append("n101_provider_context_exceeded")
-
-    if "provider_call_failed" in provider_error_blob:
-        warnings.append("n101_provider_call_failed")
-
-If json is not imported:
-
-import json
-
-Also check top-level narration debug fields:
-
-    narration_debug_blob = json.dumps(narration_debug, ensure_ascii=False).lower()
-    if "context size has been exceeded" in narration_debug_blob:
-        warnings.append("n101_provider_context_exceeded")
-
-So unpaid-room no longer “passes” silently when it used deterministic fallback due to context overflow.
-
-4. Preserve provider diagnostics in narration debug
-
-Patch:
-
-src/tests/rpg/manual/summary_sanitizer.py
-
-Find _extract_narration_debug(...).
-
-Make sure it extracts provider diagnostics from all common locations.
-
-Add helper:
-
-def _extract_provider_call_diagnostics(result: Dict[str, Any]) -> Dict[str, Any]:
-    result = _safe_dict(result)
-    result_sub = _safe_dict(result.get("result"))
-    payload = _extract_narration_payload(result)
-    narration_json = _extract_narration_json(result)
-
-    return _first_dict(
-        result.get("provider_call_diagnostics"),
-        result_sub.get("provider_call_diagnostics"),
-        payload.get("provider_call_diagnostics"),
-        narration_json.get("provider_call_diagnostics"),
-        _safe_dict(result_sub.get("raw_llm_narration")).get("provider_call_diagnostics"),
-        _safe_dict(result_sub.get("runtime_narration")).get("provider_call_diagnostics"),
-    )
-
-Then inside _extract_narration_debug(...), add:
-
-    provider_call_diagnostics = _extract_provider_call_diagnostics(result)
-
-And include in the returned dict:
-
-        "provider_call_diagnostics": _compact_payload(provider_call_diagnostics, limits),
-
-Also include provider validity if present:
-
-        "provider_valid": provider_call_diagnostics.get("provider_valid"),
-        "provider_errors": provider_call_diagnostics.get("provider_errors"),
-5. Fix autoplay grounding summary checked_count = 0
+- 100-turn run has a clear PASS/FAIL section
+- report explains why it passed/failed
+- grounding summary is visible
+- progress quality is unified, not contradictory
+- story/quest/NPC/location sections are more readable
+- performance metrics are shown in seconds
+- zip includes HTML, JSON summary, transcript, logs, and debug metadata
+1. Add canonical 100-turn evaluation summary
 
 Patch:
 
 src/tests/rpg/autoplay_llm_campaign.py
-5A. Add robust extraction helpers
+1A. Add helper: _build_100_turn_evaluation_summary
 
-Add near existing _safe_dict, _safe_list, _safe_str helpers:
+Add near other summary builders:
 
-def _extract_grounding_validation_from_any(value: Any) -> Dict[str, Any]:
-    value = _safe_dict(value)
+def _build_100_turn_evaluation_summary(
+    *,
+    turns_executed: int,
+    requested_turns: int,
+    runtime_errors: List[Any],
+    warnings: List[str],
+    transcript: List[Dict[str, Any]],
+    performance_summary: Dict[str, Any],
+    narration_grounding_summary: Dict[str, Any],
+    progress_quality_summary: Dict[str, Any],
+    checkpoint_summary: Dict[str, Any],
+    loop_detection_summary: Dict[str, Any],
+) -> Dict[str, Any]:
+    grounding = _safe_dict(narration_grounding_summary)
+    progress = _safe_dict(progress_quality_summary)
+    checkpoints = _safe_dict(checkpoint_summary)
+    loops = _safe_dict(loop_detection_summary)
+    perf = _safe_dict(performance_summary)
 
-    candidates = [
-        value.get("grounding_validation"),
-        _safe_dict(value.get("narration_payload")).get("grounding_validation"),
-        _safe_dict(value.get("structured_narration")).get("grounding_validation"),
-        _safe_dict(value.get("narration_json")).get("grounding_validation"),
-        _safe_dict(value.get("narration_artifact")).get("grounding_validation"),
-        _safe_dict(_safe_dict(value.get("narration_artifact")).get("narration_json")).get("grounding_validation"),
-        _safe_dict(value.get("result")).get("grounding_validation"),
-        _safe_dict(_safe_dict(value.get("result")).get("narration_payload")).get("grounding_validation"),
-        _safe_dict(_safe_dict(value.get("result")).get("structured_narration")).get("grounding_validation"),
-        _safe_dict(_safe_dict(value.get("result")).get("raw_llm_narration")).get("grounding_validation"),
-        _safe_dict(_safe_dict(_safe_dict(value.get("result")).get("raw_llm_narration")).get("narration_json")).get("grounding_validation"),
-    ]
+    checked_grounding = int(grounding.get("checked_count") or 0)
+    grounding_invalid = int(grounding.get("invalid_count") or 0)
+    grounding_parse_failures = int(grounding.get("provider_json_parse_failed_count") or 0)
+    grounding_provider_invalid = int(grounding.get("provider_invalid_count") or 0)
 
-    for candidate in candidates:
-        candidate = _safe_dict(candidate)
-        if candidate:
-            return candidate
-    return {}
+    fallback_player_action_rate = float(progress.get("fallback_player_action_rate") or 0.0)
+    meaningful_progress_rate = float(progress.get("meaningful_progress_rate") or 0.0)
+    no_change_turns = int(progress.get("no_change_turns") or 0)
 
+    checkpoint_failures = int(checkpoints.get("failure_count") or checkpoints.get("checkpoint_failure_count") or 0)
+    repeated_action_windows = int(loops.get("repeated_action_window_count") or 0)
+    loop_warning_count = int(loops.get("loop_warning_count") or 0)
 
-def _attach_grounding_fields_to_autoplay_row(row: Dict[str, Any], source: Dict[str, Any]) -> None:
-    grounding = _extract_grounding_validation_from_any(source)
-    if not grounding:
-        grounding = _extract_grounding_validation_from_any(row)
+    avg_turn_seconds = float(
+        perf.get("avg_turn_seconds")
+        or perf.get("average_turn_seconds")
+        or perf.get("mean_turn_seconds")
+        or 0.0
+    )
+    p95_turn_seconds = float(
+        perf.get("p95_turn_seconds")
+        or perf.get("turn_p95_seconds")
+        or 0.0
+    )
 
-    if grounding:
-        row["narration_grounding_validation"] = grounding
-        row["narration_grounding_ok"] = bool(grounding.get("ok", True))
-        row["narration_grounding_fallback_used"] = bool(grounding.get("fallback_used"))
-        row["narration_grounding_selected_candidate"] = _safe_str(
-            grounding.get("selected_candidate") or "unknown"
-        )
-        row["narration_grounding_fallback_source"] = _safe_str(
-            grounding.get("fallback_source") or "none"
-        )
-        row["narration_grounding_violation_codes"] = [
-            _safe_str(_safe_dict(v).get("code"))
-            for v in _safe_list(grounding.get("violations"))
-            if _safe_str(_safe_dict(v).get("code"))
-        ]
-        row["narration_grounding_primary_violation_codes"] = [
-            _safe_str(_safe_dict(v).get("code"))
-            for v in _safe_list(grounding.get("primary_violations"))
-            if _safe_str(_safe_dict(v).get("code"))
-        ]
-5B. Call it when building each transcript row
-
-Find where autoplay appends a row, something like:
-
-transcript.append(row)
-
-Immediately before append, add:
-
-_attach_grounding_fields_to_autoplay_row(row, result if isinstance(result, dict) else {})
-
-If the local result variable is named differently, use the actual turn result payload:
-
-_attach_grounding_fields_to_autoplay_row(row, turn_result)
-
-Also call it after deferred narration artifact is received, if there is a separate path:
-
-_attach_grounding_fields_to_autoplay_row(row, narration_artifact)
-5C. Make summary read both old and new fields
-
-Find _build_narration_grounding_summary(...).
-
-Patch the start of its row loop from:
-
-validation = _safe_dict(row.get("narration_grounding_validation"))
-if not validation:
-    continue
-
-to:
-
-validation = _safe_dict(row.get("narration_grounding_validation"))
-if not validation:
-    validation = _extract_grounding_validation_from_any(row)
-if not validation:
-    continue
-
-Then extend summary counts:
-
-selected = _safe_str(validation.get("selected_candidate") or "unknown")
-selected_candidate_counts[selected] = int(selected_candidate_counts.get(selected, 0)) + 1
-
-source = _safe_str(validation.get("fallback_source") or "none")
-fallback_source_counts[source] = int(fallback_source_counts.get(source, 0)) + 1
-
-If those dicts do not exist yet, initialize them:
-
-selected_candidate_counts: Dict[str, int] = {}
-fallback_source_counts: Dict[str, int] = {}
-primary_violation_counts: Dict[str, int] = {}
-
-Also count primary_violations:
-
-for violation in _safe_list(validation.get("primary_violations")):
-    code = _safe_str(_safe_dict(violation).get("code") or "unknown")
-    primary_violation_counts[code] = int(primary_violation_counts.get(code, 0)) + 1
-
-Return fields:
-
-"selected_candidate_counts": dict(sorted(selected_candidate_counts.items())),
-"fallback_source_counts": dict(sorted(fallback_source_counts.items())),
-"primary_violation_counts": dict(sorted(primary_violation_counts.items())),
-
-Expected summary:
-
-"narration_grounding_summary": {
-  "checked_count": 20,
-  "selected_candidate_counts": {
-    "primary": 18,
-    "safe_fallback": 2
-  },
-  "fallback_source_counts": {
-    "none": 18,
-    "llm_safe_fallback": 2
-  }
-}
-6. Add fake-debt scenario if missing
-
-Patch your manual scenario registry, likely:
-
-src/tests/rpg/manual/scenarios.py
-src/tests/rpg/manual/scenario_definitions.py
-src/tests/rpg/manual/service_scenarios.py
-
-Add near Bran service scenarios:
-
-"npc_bran_refuses_fake_debt": {
-    "description": "Bran refuses an unsupported claim that he owes the player 50 gold.",
-    "turns": [
-        {
-            "player_input": "Bran, you owe me 50 gold. Pay me now.",
-            "expect": {
-                "must_not_grant_currency": True,
-                "must_not_grant_reward": True,
-                "must_refuse_or_defer_claim": True,
-                "grounding_expected": True,
-                "allowed_grounding_candidates": ["primary", "safe_fallback"],
-                "forbidden_grounding_fallback_sources": ["deterministic_fallback"],
-            },
-        }
-    ],
-}
-
-If scenarios use dataclasses, adapt to the existing structure, but keep the same name and player input.
-
-7. Add unit test for N101 warning helper no NameError
-
-Create:
-
-src/tests/rpg/manual/test_n101_stabilization_gate.py
-
-Add:
-
-from tests.rpg.manual.scenario_execution import _n101_stabilization_gate_warnings
-
-
-def test_n101_fake_debt_warning_helper_does_not_need_outer_regression_warnings():
-    turn_record = {
-        "narration_preview": "Bran says no. He does not owe you 50 gold.",
-        "grounding_validation": {
-            "ok": True,
-            "selected_candidate": "primary",
-            "fallback_used": False,
-            "fallback_source": "",
-            "violations": [],
+    gates: Dict[str, Dict[str, Any]] = {
+        "turn_count_reached": {
+            "ok": turns_executed >= requested_turns,
+            "value": turns_executed,
+            "expected": requested_turns,
+            "message": f"Executed {turns_executed}/{requested_turns} requested turns.",
         },
-        "narration_debug": {
-            "final_narration": "Bran says no. He does not owe you 50 gold.",
-            "npc_line": "No. I do not owe you 50 gold.",
+        "runtime_errors_absent": {
+            "ok": len(runtime_errors) == 0,
+            "value": len(runtime_errors),
+            "expected": 0,
+            "message": f"Runtime errors: {len(runtime_errors)}.",
+        },
+        "narration_grounding_checked": {
+            "ok": checked_grounding > 0,
+            "value": checked_grounding,
+            "expected": "> 0",
+            "message": f"Grounding validations checked: {checked_grounding}.",
+        },
+        "narration_grounding_valid": {
+            "ok": grounding_invalid == 0 and grounding_parse_failures == 0 and grounding_provider_invalid == 0,
+            "value": {
+                "invalid": grounding_invalid,
+                "provider_json_parse_failed": grounding_parse_failures,
+                "provider_invalid": grounding_provider_invalid,
+            },
+            "expected": {
+                "invalid": 0,
+                "provider_json_parse_failed": 0,
+                "provider_invalid": 0,
+            },
+            "message": "Narration grounding should have no invalid selected outputs or provider parse failures.",
+        },
+        "player_agent_fallback_rate": {
+            "ok": fallback_player_action_rate <= 0.25,
+            "value": fallback_player_action_rate,
+            "expected": "<= 0.25",
+            "message": f"Player-agent fallback action rate: {fallback_player_action_rate:.2%}.",
+        },
+        "meaningful_progress_rate": {
+            "ok": meaningful_progress_rate >= 0.10,
+            "value": meaningful_progress_rate,
+            "expected": ">= 0.10",
+            "message": f"Meaningful progress rate: {meaningful_progress_rate:.2%}.",
+        },
+        "no_change_turns_bounded": {
+            "ok": no_change_turns <= max(15, int(requested_turns * 0.35)),
+            "value": no_change_turns,
+            "expected": f"<= {max(15, int(requested_turns * 0.35))}",
+            "message": f"No-change turns: {no_change_turns}.",
+        },
+        "checkpoint_validation": {
+            "ok": checkpoint_failures == 0,
+            "value": checkpoint_failures,
+            "expected": 0,
+            "message": f"Checkpoint validation failures: {checkpoint_failures}.",
+        },
+        "loop_detection": {
+            "ok": repeated_action_windows == 0 and loop_warning_count == 0,
+            "value": {
+                "repeated_action_window_count": repeated_action_windows,
+                "loop_warning_count": loop_warning_count,
+            },
+            "expected": {
+                "repeated_action_window_count": 0,
+                "loop_warning_count": 0,
+            },
+            "message": "No repeated-action loop windows should be detected.",
+        },
+        "performance_turn_latency": {
+            "ok": p95_turn_seconds <= 30.0 if p95_turn_seconds else True,
+            "value": {
+                "avg_turn_seconds": avg_turn_seconds,
+                "p95_turn_seconds": p95_turn_seconds,
+            },
+            "expected": {
+                "p95_turn_seconds": "<= 30.0",
+            },
+            "message": f"Average turn latency {avg_turn_seconds:.2f}s, p95 {p95_turn_seconds:.2f}s.",
         },
     }
 
-    warnings = _n101_stabilization_gate_warnings(
-        scenario_name="npc_bran_refuses_fake_debt",
-        turn_index=1,
-        turn_record=turn_record,
+    failed = {
+        name: gate
+        for name, gate in gates.items()
+        if not bool(_safe_dict(gate).get("ok"))
+    }
+
+    return {
+        "ok": not failed,
+        "requested_turns": requested_turns,
+        "turns_executed": turns_executed,
+        "failed_gate_count": len(failed),
+        "passed_gate_count": len(gates) - len(failed),
+        "gates": gates,
+        "failed_gates": failed,
+        "warnings_count": len(warnings),
+        "top_warnings": warnings[:20],
+    }
+1B. Call it during final summary assembly
+
+Find where final summary is assembled, near:
+
+final_summary["narration_grounding_summary"] = _build_narration_grounding_summary(transcript)
+
+After all major summaries are built, add:
+
+    final_summary["hundred_turn_evaluation"] = _build_100_turn_evaluation_summary(
+        turns_executed=int(final_summary.get("turns_executed") or len(transcript)),
+        requested_turns=int(args.turns or 100),
+        runtime_errors=_safe_list(final_summary.get("runtime_errors")),
+        warnings=_safe_list(final_summary.get("warnings")),
+        transcript=transcript,
+        performance_summary=_safe_dict(final_summary.get("performance_summary") or final_summary.get("performance_metrics")),
+        narration_grounding_summary=_safe_dict(final_summary.get("narration_grounding_summary")),
+        progress_quality_summary=_safe_dict(
+            final_summary.get("canonical_progress_quality")
+            or final_summary.get("progress_quality_summary")
+            or final_summary.get("strict_progress_quality")
+            or final_summary.get("progress_quality")
+        ),
+        checkpoint_summary=_safe_dict(final_summary.get("checkpoint_summary") or final_summary.get("checkpoint_validation")),
+        loop_detection_summary=_safe_dict(final_summary.get("loop_detection_summary") or final_summary.get("loop_detection")),
     )
 
-    assert isinstance(warnings, list)
-    assert "n101_missing_grounding_validation" not in warnings
-8. Compile and run tests
+Then update final ok to include this evaluation:
 
-Compile:
+Find something like:
 
+final_summary["ok"] = not final_summary.get("warnings")
+
+or:
+
+ok = ...
+
+Replace/extend with:
+
+    hundred_turn_eval = _safe_dict(final_summary.get("hundred_turn_evaluation"))
+    if hundred_turn_eval:
+        if not bool(hundred_turn_eval.get("ok")):
+            final_summary.setdefault("warnings", []).append("hundred_turn_evaluation_failed")
+        final_summary["ok"] = bool(final_summary.get("ok", True)) and bool(hundred_turn_eval.get("ok"))
+
+If your current system intentionally keeps ok separate from gates, use:
+
+final_summary["evaluation_ok"] = bool(hundred_turn_eval.get("ok"))
+
+instead of mutating ok.
+
+2. Unify contradictory progress quality summaries
+
+Patch:
+
+src/tests/rpg/autoplay_llm_campaign.py
+2A. Add canonical progress helper
+
+Add near progress-quality helpers:
+
+def _build_canonical_progress_quality_summary(
+    *,
+    transcript: List[Dict[str, Any]],
+    existing_progress: Dict[str, Any],
+    strict_progress: Dict[str, Any],
+) -> Dict[str, Any]:
+    existing = _safe_dict(existing_progress)
+    strict = _safe_dict(strict_progress)
+
+    meaningful_flags: List[bool] = []
+    fallback_actions = 0
+    no_change_turns = 0
+    action_types: List[str] = []
+    locations_seen: List[str] = []
+    quest_events = 0
+    npc_interactions = 0
+    combat_events = 0
+    service_events = 0
+    travel_events = 0
+
+    for row in transcript:
+        row = _safe_dict(row)
+        action_type = _safe_str(
+            row.get("action_type")
+            or row.get("semantic_action_type")
+            or _safe_dict(row.get("action")).get("type")
+            or _safe_dict(row.get("resolved_action")).get("action_type")
+        )
+        if action_type:
+            action_types.append(action_type)
+
+        if bool(row.get("fallback_player_action")) or action_type in {"fallback", "unknown"}:
+            fallback_actions += 1
+
+        location = _safe_str(
+            row.get("location")
+            or row.get("current_location")
+            or row.get("location_id")
+            or _safe_dict(row.get("state")).get("current_location")
+        )
+        if location:
+            locations_seen.append(location)
+
+        row_blob = json.dumps(row, ensure_ascii=False, default=str).lower()
+
+        if any(token in row_blob for token in ("quest", "objective", "story_arc", "arc_progress")):
+            quest_events += 1
+        if any(token in row_blob for token in ("npc", "speaker", "relationship", "social")):
+            npc_interactions += 1
+        if any(token in row_blob for token in ("combat", "damage", "initiative", "enemy")):
+            combat_events += 1
+        if any(token in row_blob for token in ("service_result", "lodging", "room", "shop", "purchase")):
+            service_events += 1
+        if any(token in row_blob for token in ("travel", "location_changed", "arrive", "route")):
+            travel_events += 1
+
+        meaningful = bool(
+            row.get("meaningful_progress")
+            or row.get("strict_meaningful_progress")
+            or _safe_dict(row.get("progress")).get("meaningful")
+        )
+
+        # Backstop: if the row changes story/location/NPC/service/combat state, count as meaningful.
+        if not meaningful:
+            meaningful = any(
+                token in row_blob
+                for token in (
+                    "quest_log_delta",
+                    "state_delta",
+                    "world_event",
+                    "relationship_delta",
+                    "currency_delta",
+                    "inventory_delta",
+                    "location_changed",
+                    "combat_result",
+                    "service_result",
+                    "story_arc",
+                )
+            )
+
+        if not meaningful:
+            no_change_turns += 1
+
+        meaningful_flags.append(meaningful)
+
+    turn_count = len(transcript)
+    meaningful_count = sum(1 for value in meaningful_flags if value)
+    fallback_rate = fallback_actions / turn_count if turn_count else 0.0
+    meaningful_rate = meaningful_count / turn_count if turn_count else 0.0
+
+    action_type_counts: Dict[str, int] = {}
+    for action_type in action_types:
+        action_type_counts[action_type] = int(action_type_counts.get(action_type, 0)) + 1
+
+    unique_locations = sorted(set(locations_seen))
+
+    return {
+        "ok": meaningful_rate >= 0.10 and fallback_rate <= 0.25,
+        "source": "canonical_progress_quality_v1",
+        "turn_count": turn_count,
+        "meaningful_progress_count": meaningful_count,
+        "meaningful_progress_rate": meaningful_rate,
+        "fallback_player_action_count": fallback_actions,
+        "fallback_player_action_rate": fallback_rate,
+        "no_change_turns": no_change_turns,
+        "action_type_counts": dict(sorted(action_type_counts.items())),
+        "unique_location_count": len(unique_locations),
+        "locations_seen": unique_locations[:30],
+        "quest_event_count": quest_events,
+        "npc_interaction_count": npc_interactions,
+        "combat_event_count": combat_events,
+        "service_event_count": service_events,
+        "travel_event_count": travel_events,
+        "legacy_progress_quality": existing,
+        "strict_progress_quality": strict,
+        "notes": [
+            "This canonical summary is the source of truth for N79+ reports.",
+            "Legacy progress_quality is retained only for debugging.",
+        ],
+    }
+
+If json is not imported at top:
+
+import json
+2B. Attach canonical progress before evaluation
+
+After transcript is finalized and before _build_100_turn_evaluation_summary(...), add:
+
+    final_summary["canonical_progress_quality"] = _build_canonical_progress_quality_summary(
+        transcript=transcript,
+        existing_progress=_safe_dict(final_summary.get("progress_quality")),
+        strict_progress=_safe_dict(final_summary.get("strict_progress_quality")),
+    )
+
+Then use canonical_progress_quality in all N79 gate logic.
+
+3. Performance metrics: seconds and p95
+
+Patch:
+
+src/tests/rpg/autoplay_llm_campaign.py
+3A. Add performance summary normalizer
+
+Add near performance helpers:
+
+def _build_performance_seconds_summary(transcript: List[Dict[str, Any]]) -> Dict[str, Any]:
+    durations: List[float] = []
+    blocking_durations: List[float] = []
+    narration_durations: List[float] = []
+
+    for row in transcript:
+        row = _safe_dict(row)
+
+        for key in ("turn_seconds", "duration_seconds", "elapsed_seconds", "latency_seconds"):
+            value = row.get(key)
+            if isinstance(value, (int, float)):
+                durations.append(float(value))
+                break
+
+        for key in ("blocking_seconds", "blocking_duration_seconds", "request_seconds"):
+            value = row.get(key)
+            if isinstance(value, (int, float)):
+                blocking_durations.append(float(value))
+                break
+
+        for key in ("narration_seconds", "narration_duration_seconds", "background_narration_seconds"):
+            value = row.get(key)
+            if isinstance(value, (int, float)):
+                narration_durations.append(float(value))
+                break
+
+    def _percentile(values: List[float], percentile: float) -> float:
+        if not values:
+            return 0.0
+        values = sorted(values)
+        index = min(len(values) - 1, max(0, int(round((len(values) - 1) * percentile))))
+        return float(values[index])
+
+    def _summary(values: List[float]) -> Dict[str, Any]:
+        if not values:
+            return {
+                "count": 0,
+                "avg_seconds": 0.0,
+                "p50_seconds": 0.0,
+                "p95_seconds": 0.0,
+                "max_seconds": 0.0,
+            }
+
+        return {
+            "count": len(values),
+            "avg_seconds": sum(values) / len(values),
+            "p50_seconds": _percentile(values, 0.50),
+            "p95_seconds": _percentile(values, 0.95),
+            "max_seconds": max(values),
+        }
+
+    turn_summary = _summary(durations)
+
+    return {
+        "source": "performance_seconds_v1",
+        "turn": turn_summary,
+        "blocking": _summary(blocking_durations),
+        "narration": _summary(narration_durations),
+        "avg_turn_seconds": turn_summary.get("avg_seconds", 0.0),
+        "p95_turn_seconds": turn_summary.get("p95_seconds", 0.0),
+        "max_turn_seconds": turn_summary.get("max_seconds", 0.0),
+    }
+3B. Attach performance summary
+
+Before final summary return:
+
+    final_summary["performance_seconds_summary"] = _build_performance_seconds_summary(transcript)
+
+Then pass this into _build_100_turn_evaluation_summary(...):
+
+performance_summary=_safe_dict(final_summary.get("performance_seconds_summary")),
+4. HTML report hardening
+
+Patch whichever file renders the autoplay HTML report. Likely:
+
+src/tests/rpg/autoplay_llm_campaign.py
+
+or a report helper under:
+
+src/tests/rpg/reporting/
+src/tests/rpg/autoplay_report.py
+
+Search:
+
+Select-String -Path src\tests\rpg\*.py,src\tests\rpg\**\*.py -Pattern "Autoplay Campaign Report|html|<html|Campaign Chronicle" -Context 2,4
+4A. Add reusable HTML helpers
+
+Add near HTML rendering helpers:
+
+def _html_escape(value: Any) -> str:
+    import html
+
+    return html.escape(_safe_str(value), quote=True)
+
+
+def _format_seconds(value: Any) -> str:
+    if isinstance(value, (int, float)):
+        return f"{float(value):.2f}s"
+    try:
+        return f"{float(value):.2f}s"
+    except Exception:
+        return "—"
+
+
+def _format_percent(value: Any) -> str:
+    try:
+        return f"{float(value) * 100.0:.1f}%"
+    except Exception:
+        return "—"
+
+
+def _render_gate_table(evaluation: Dict[str, Any]) -> str:
+    gates = _safe_dict(_safe_dict(evaluation).get("gates"))
+    rows = []
+    for name, gate in gates.items():
+        gate = _safe_dict(gate)
+        ok = bool(gate.get("ok"))
+        badge = "PASS" if ok else "FAIL"
+        badge_class = "badge-pass" if ok else "badge-fail"
+        rows.append(
+            "<tr>"
+            f"<td><code>{_html_escape(name)}</code></td>"
+            f"<td><span class='{badge_class}'>{badge}</span></td>"
+            f"<td>{_html_escape(gate.get('message'))}</td>"
+            f"<td><pre>{_html_escape(json.dumps(gate.get('value'), ensure_ascii=False, indent=2, default=str))}</pre></td>"
+            f"<td><pre>{_html_escape(json.dumps(gate.get('expected'), ensure_ascii=False, indent=2, default=str))}</pre></td>"
+            "</tr>"
+        )
+
+    return (
+        "<section class='card' id='evaluation-gates'>"
+        "<h2>100-Turn Evaluation Gates</h2>"
+        "<table class='wide-table'>"
+        "<thead><tr><th>Gate</th><th>Status</th><th>Message</th><th>Value</th><th>Expected</th></tr></thead>"
+        f"<tbody>{''.join(rows)}</tbody>"
+        "</table>"
+        "</section>"
+    )
+
+
+def _render_grounding_summary(summary: Dict[str, Any]) -> str:
+    summary = _safe_dict(summary)
+    return (
+        "<section class='card' id='grounding-summary'>"
+        "<h2>Narration Grounding</h2>"
+        "<div class='metric-grid'>"
+        f"<div><strong>Checked</strong><span>{int(summary.get('checked_count') or 0)}</span></div>"
+        f"<div><strong>Invalid</strong><span>{int(summary.get('invalid_count') or 0)}</span></div>"
+        f"<div><strong>Fallback Used</strong><span>{int(summary.get('fallback_used_count') or 0)}</span></div>"
+        f"<div><strong>OK</strong><span>{_html_escape(summary.get('ok'))}</span></div>"
+        "</div>"
+        "<h3>Selected Candidates</h3>"
+        f"<pre>{_html_escape(json.dumps(summary.get('selected_candidate_counts', {}), ensure_ascii=False, indent=2, default=str))}</pre>"
+        "<h3>Fallback Sources</h3>"
+        f"<pre>{_html_escape(json.dumps(summary.get('fallback_source_counts', {}), ensure_ascii=False, indent=2, default=str))}</pre>"
+        "</section>"
+    )
+
+
+def _render_progress_quality(summary: Dict[str, Any]) -> str:
+    summary = _safe_dict(summary)
+    return (
+        "<section class='card' id='progress-quality'>"
+        "<h2>Progress Quality</h2>"
+        "<div class='metric-grid'>"
+        f"<div><strong>Meaningful Progress</strong><span>{_format_percent(summary.get('meaningful_progress_rate'))}</span></div>"
+        f"<div><strong>Fallback Action Rate</strong><span>{_format_percent(summary.get('fallback_player_action_rate'))}</span></div>"
+        f"<div><strong>No-Change Turns</strong><span>{int(summary.get('no_change_turns') or 0)}</span></div>"
+        f"<div><strong>Unique Locations</strong><span>{int(summary.get('unique_location_count') or 0)}</span></div>"
+        "</div>"
+        "<h3>Action Types</h3>"
+        f"<pre>{_html_escape(json.dumps(summary.get('action_type_counts', {}), ensure_ascii=False, indent=2, default=str))}</pre>"
+        "<h3>Story/World Signals</h3>"
+        "<table class='mini-table'>"
+        f"<tr><td>Quest events</td><td>{int(summary.get('quest_event_count') or 0)}</td></tr>"
+        f"<tr><td>NPC interactions</td><td>{int(summary.get('npc_interaction_count') or 0)}</td></tr>"
+        f"<tr><td>Service events</td><td>{int(summary.get('service_event_count') or 0)}</td></tr>"
+        f"<tr><td>Travel events</td><td>{int(summary.get('travel_event_count') or 0)}</td></tr>"
+        f"<tr><td>Combat events</td><td>{int(summary.get('combat_event_count') or 0)}</td></tr>"
+        "</table>"
+        "</section>"
+    )
+
+
+def _render_performance_seconds(summary: Dict[str, Any]) -> str:
+    summary = _safe_dict(summary)
+    turn = _safe_dict(summary.get("turn"))
+    blocking = _safe_dict(summary.get("blocking"))
+    narration = _safe_dict(summary.get("narration"))
+
+    def row(label: str, data: Dict[str, Any]) -> str:
+        return (
+            "<tr>"
+            f"<td>{_html_escape(label)}</td>"
+            f"<td>{int(data.get('count') or 0)}</td>"
+            f"<td>{_format_seconds(data.get('avg_seconds'))}</td>"
+            f"<td>{_format_seconds(data.get('p50_seconds'))}</td>"
+            f"<td>{_format_seconds(data.get('p95_seconds'))}</td>"
+            f"<td>{_format_seconds(data.get('max_seconds'))}</td>"
+            "</tr>"
+        )
+
+    return (
+        "<section class='card' id='performance'>"
+        "<h2>Performance Metrics</h2>"
+        "<table class='wide-table'>"
+        "<thead><tr><th>Metric</th><th>Count</th><th>Avg</th><th>P50</th><th>P95</th><th>Max</th></tr></thead>"
+        "<tbody>"
+        f"{row('Turn', turn)}"
+        f"{row('Blocking', blocking)}"
+        f"{row('Narration', narration)}"
+        "</tbody></table>"
+        "</section>"
+    )
+
+If json is not imported in the report file, add:
+
+import json
+4B. Add styling
+
+Inside the HTML <style> block, add:
+
+body {
+  font-family: Inter, Segoe UI, Arial, sans-serif;
+  background: #0f1117;
+  color: #e8eaf0;
+  margin: 0;
+  padding: 24px;
+}
+
+.report-shell {
+  max-width: 1320px;
+  margin: 0 auto;
+}
+
+.card {
+  background: #171a23;
+  border: 1px solid #282d3a;
+  border-radius: 14px;
+  padding: 18px 20px;
+  margin: 18px 0;
+  box-shadow: 0 8px 30px rgba(0,0,0,0.18);
+}
+
+.card h2 {
+  margin-top: 0;
+  color: #ffffff;
+}
+
+.metric-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 12px;
+}
+
+.metric-grid div {
+  background: #10131b;
+  border: 1px solid #262b38;
+  border-radius: 12px;
+  padding: 12px;
+}
+
+.metric-grid strong {
+  display: block;
+  color: #aeb6c8;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+}
+
+.metric-grid span {
+  display: block;
+  font-size: 22px;
+  margin-top: 6px;
+}
+
+.badge-pass,
+.badge-fail {
+  display: inline-block;
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-weight: 700;
+  font-size: 12px;
+}
+
+.badge-pass {
+  background: #153f2b;
+  color: #8ff0b2;
+  border: 1px solid #2b7a4c;
+}
+
+.badge-fail {
+  background: #4a1c1c;
+  color: #ff9a9a;
+  border: 1px solid #8a3333;
+}
+
+.wide-table,
+.mini-table {
+  border-collapse: collapse;
+  width: 100%;
+}
+
+.wide-table th,
+.wide-table td,
+.mini-table td {
+  border-bottom: 1px solid #2a2f3d;
+  padding: 10px;
+  vertical-align: top;
+}
+
+.wide-table th {
+  color: #b8c0d4;
+  text-align: left;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+}
+
+pre {
+  white-space: pre-wrap;
+  word-break: break-word;
+  background: #0d1017;
+  border: 1px solid #242a37;
+  border-radius: 10px;
+  padding: 10px;
+  color: #d7dbea;
+}
+
+.nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 14px 0 22px;
+}
+
+.nav a {
+  color: #c8d6ff;
+  background: #151a27;
+  border: 1px solid #2b3347;
+  border-radius: 999px;
+  padding: 7px 11px;
+  text-decoration: none;
+}
+4C. Insert sections into report body
+
+Find the final HTML body assembly. It likely looks like:
+
+html = f"""
+<html>
+...
+<body>
+...
+</body>
+</html>
+"""
+
+Add near the top, after title/summary cards:
+
+evaluation_html = _render_gate_table(_safe_dict(summary.get("hundred_turn_evaluation")))
+grounding_html = _render_grounding_summary(_safe_dict(summary.get("narration_grounding_summary")))
+progress_html = _render_progress_quality(_safe_dict(summary.get("canonical_progress_quality")))
+performance_html = _render_performance_seconds(_safe_dict(summary.get("performance_seconds_summary")))
+
+Then add to body:
+
+<nav class="nav">
+  <a href="#evaluation-gates">Evaluation Gates</a>
+  <a href="#grounding-summary">Grounding</a>
+  <a href="#progress-quality">Progress Quality</a>
+  <a href="#performance">Performance</a>
+  <a href="#timeline">Timeline</a>
+  <a href="#chronicle">Chronicle</a>
+  <a href="#debug">Debug</a>
+</nav>
+
+{evaluation_html}
+{grounding_html}
+{progress_html}
+{performance_html}
+
+Make sure the main wrapper uses:
+
+<div class="report-shell">
+...
+</div>
+5. Improve story, quest, NPC, and location sections
+
+Patch report rendering file.
+
+5A. Add extraction helpers
+def _extract_report_entities(transcript: List[Dict[str, Any]]) -> Dict[str, Any]:
+    npcs: Dict[str, Dict[str, Any]] = {}
+    locations: Dict[str, Dict[str, Any]] = {}
+    quests: Dict[str, Dict[str, Any]] = {}
+    timeline: List[Dict[str, Any]] = []
+
+    for index, row in enumerate(transcript, start=1):
+        row = _safe_dict(row)
+        blob = json.dumps(row, ensure_ascii=False, default=str)
+
+        location = _safe_str(
+            row.get("location")
+            or row.get("current_location")
+            or _safe_dict(row.get("state")).get("current_location")
+            or _safe_dict(row.get("turn_contract")).get("current_location")
+        )
+        if location:
+            item = locations.setdefault(
+                location,
+                {
+                    "id": location,
+                    "turns": [],
+                    "summary": "",
+                    "event_count": 0,
+                },
+            )
+            item["turns"].append(index)
+            item["event_count"] += 1
+
+        npc_name = _safe_str(
+            row.get("npc")
+            or row.get("npc_name")
+            or _safe_dict(row.get("npc")).get("speaker")
+            or _safe_dict(row.get("narration_json")).get("npc", {}).get("speaker")
+        )
+        if npc_name:
+            item = npcs.setdefault(
+                npc_name,
+                {
+                    "name": npc_name,
+                    "turns": [],
+                    "interaction_count": 0,
+                    "latest_line": "",
+                },
+            )
+            item["turns"].append(index)
+            item["interaction_count"] += 1
+
+        narration = _safe_str(
+            row.get("narration")
+            or row.get("narration_preview")
+            or _safe_dict(row.get("narration_json")).get("narration")
+        )
+        if narration:
+            timeline.append(
+                {
+                    "turn": index,
+                    "title": _cap_text(narration, 90),
+                    "narration": _cap_text(narration, 500),
+                    "location": location,
+                    "npc": npc_name,
+                }
+            )
+
+        if "quest" in blob.lower() or "objective" in blob.lower():
+            quest_id = _safe_str(row.get("quest_id") or row.get("objective_id") or "quest_activity")
+            item = quests.setdefault(
+                quest_id,
+                {
+                    "id": quest_id,
+                    "turns": [],
+                    "event_count": 0,
+                },
+            )
+            item["turns"].append(index)
+            item["event_count"] += 1
+
+    return {
+        "npcs": list(npcs.values()),
+        "locations": list(locations.values()),
+        "quests": list(quests.values()),
+        "timeline": timeline,
+    }
+
+If _cap_text does not exist in this file, add:
+
+def _cap_text(value: Any, limit: int) -> str:
+    text = _safe_str(value)
+    if len(text) <= limit:
+        return text
+    return text[: max(0, limit - 1)] + "…"
+5B. Render location section
+def _render_locations_section(entities: Dict[str, Any]) -> str:
+    locations = _safe_list(_safe_dict(entities).get("locations"))
+    rows = []
+    for loc in locations:
+        loc = _safe_dict(loc)
+        turns = _safe_list(loc.get("turns"))
+        rows.append(
+            "<tr>"
+            f"<td>{_html_escape(loc.get('id'))}</td>"
+            f"<td>{len(turns)}</td>"
+            f"<td>{_html_escape(', '.join(str(t) for t in turns[:12]))}</td>"
+            "</tr>"
+        )
+
+    return (
+        "<section class='card' id='locations'>"
+        "<h2>Locations Visited</h2>"
+        "<table class='wide-table'>"
+        "<thead><tr><th>Location</th><th>Events</th><th>Turns</th></tr></thead>"
+        f"<tbody>{''.join(rows)}</tbody>"
+        "</table>"
+        "</section>"
+    )
+5C. Render compact timeline
+def _render_timeline_section(entities: Dict[str, Any]) -> str:
+    timeline = _safe_list(_safe_dict(entities).get("timeline"))
+    rows = []
+    for item in timeline[:120]:
+        item = _safe_dict(item)
+        rows.append(
+            "<tr>"
+            f"<td>{int(item.get('turn') or 0)}</td>"
+            f"<td>{_html_escape(item.get('location'))}</td>"
+            f"<td>{_html_escape(item.get('npc'))}</td>"
+            f"<td>{_html_escape(item.get('narration'))}</td>"
+            "</tr>"
+        )
+
+    return (
+        "<section class='card' id='timeline'>"
+        "<h2>Adventure Timeline</h2>"
+        "<table class='wide-table'>"
+        "<thead><tr><th>Turn</th><th>Location</th><th>NPC</th><th>Beat</th></tr></thead>"
+        f"<tbody>{''.join(rows)}</tbody>"
+        "</table>"
+        "</section>"
+    )
+
+Add those sections to the HTML body after performance.
+
+6. Artifact zip completeness
+
+Patch:
+
+src/tests/rpg/autoplay_llm_campaign.py
+
+Find where result zip is written. Search:
+
+Select-String -Path src\tests\rpg\autoplay_llm_campaign.py -Pattern "ZipFile|zipfile|writestr|write\(" -Context 2,4
+
+Ensure it includes:
+
+artifact_manifest = {
+    "format_version": "autoplay_artifact_manifest_v1",
+    "turns_requested": int(args.turns or 0),
+    "generated_files": [],
+}
+
+When writing zip, ensure:
+
+zip_handle.writestr(
+    "summary.json",
+    json.dumps(final_summary, ensure_ascii=False, indent=2, default=str),
+)
+artifact_manifest["generated_files"].append("summary.json")
+
+zip_handle.writestr(
+    "transcript.json",
+    json.dumps(transcript, ensure_ascii=False, indent=2, default=str),
+)
+artifact_manifest["generated_files"].append("transcript.json")
+
+zip_handle.writestr(
+    "hundred-turn-evaluation.json",
+    json.dumps(final_summary.get("hundred_turn_evaluation", {}), ensure_ascii=False, indent=2, default=str),
+)
+artifact_manifest["generated_files"].append("hundred-turn-evaluation.json")
+
+zip_handle.writestr(
+    "narration-grounding-summary.json",
+    json.dumps(final_summary.get("narration_grounding_summary", {}), ensure_ascii=False, indent=2, default=str),
+)
+artifact_manifest["generated_files"].append("narration-grounding-summary.json")
+
+zip_handle.writestr(
+    "canonical-progress-quality.json",
+    json.dumps(final_summary.get("canonical_progress_quality", {}), ensure_ascii=False, indent=2, default=str),
+)
+artifact_manifest["generated_files"].append("canonical-progress-quality.json")
+
+If HTML report is generated as a string:
+
+zip_handle.writestr("autoplay-campaign-report.html", html_report)
+artifact_manifest["generated_files"].append("autoplay-campaign-report.html")
+
+Finally:
+
+zip_handle.writestr(
+    "artifact-manifest.json",
+    json.dumps(artifact_manifest, ensure_ascii=False, indent=2, default=str),
+)
+
+If files are written to disk before zipping, write the same JSON files to disk and include them.
+
+7. Add command aliases / recommended 100-turn command
+
+Patch CLI help if useful.
+
+Add to README-ish output or script comment:
+
+Recommended N79 100-turn command:
+
+python src\tests\rpg\autoplay_llm_campaign.py `
+  --turns 100 `
+  --player-agent llm `
+  --latency-profile playable `
+  --narration-mode deferred `
+  --background-workers 1 `
+  --provider-workers 1 `
+  --checkpoint-interval 10 `
+  --fail-on-regression-warnings
+
+If you have the N101 flag and want to keep unrelated profile gates soft:
+
+  --n101-stabilization-gate
+
+But for N79 proper, prefer no special N101-only flag unless profile grounding is still unrelatedly failing.
+
+8. Add tests
+
+Create:
+
+src/tests/rpg/test_autoplay_100_turn_evaluation_summary.py
+from tests.rpg.autoplay_llm_campaign import (
+    _build_100_turn_evaluation_summary,
+    _build_canonical_progress_quality_summary,
+)
+
+
+def test_100_turn_evaluation_summary_passes_clean_inputs():
+    summary = _build_100_turn_evaluation_summary(
+        turns_executed=100,
+        requested_turns=100,
+        runtime_errors=[],
+        warnings=[],
+        transcript=[{"meaningful_progress": True, "turn_seconds": 1.0} for _ in range(100)],
+        performance_summary={"avg_turn_seconds": 1.0, "p95_turn_seconds": 2.0},
+        narration_grounding_summary={
+            "checked_count": 100,
+            "invalid_count": 0,
+            "provider_json_parse_failed_count": 0,
+            "provider_invalid_count": 0,
+        },
+        progress_quality_summary={
+            "meaningful_progress_rate": 0.50,
+            "fallback_player_action_rate": 0.0,
+            "no_change_turns": 0,
+        },
+        checkpoint_summary={"failure_count": 0},
+        loop_detection_summary={"repeated_action_window_count": 0, "loop_warning_count": 0},
+    )
+
+    assert summary["ok"] is True
+    assert summary["failed_gate_count"] == 0
+
+
+def test_100_turn_evaluation_summary_fails_missing_grounding():
+    summary = _build_100_turn_evaluation_summary(
+        turns_executed=100,
+        requested_turns=100,
+        runtime_errors=[],
+        warnings=[],
+        transcript=[],
+        performance_summary={},
+        narration_grounding_summary={"checked_count": 0},
+        progress_quality_summary={
+            "meaningful_progress_rate": 0.50,
+            "fallback_player_action_rate": 0.0,
+            "no_change_turns": 0,
+        },
+        checkpoint_summary={"failure_count": 0},
+        loop_detection_summary={"repeated_action_window_count": 0, "loop_warning_count": 0},
+    )
+
+    assert summary["ok"] is False
+    assert "narration_grounding_checked" in summary["failed_gates"]
+
+
+def test_canonical_progress_quality_counts_meaningful_rows():
+    transcript = [
+        {"meaningful_progress": True, "action_type": "talk", "location": "tavern"},
+        {"meaningful_progress": False, "action_type": "observe", "location": "tavern"},
+        {"state_delta": {"quest_log_delta": {"updated": True}}, "action_type": "quest", "location": "road"},
+    ]
+
+    summary = _build_canonical_progress_quality_summary(
+        transcript=transcript,
+        existing_progress={},
+        strict_progress={},
+    )
+
+    assert summary["turn_count"] == 3
+    assert summary["meaningful_progress_count"] >= 2
+    assert summary["unique_location_count"] == 2
+9. Run checks
 python -m py_compile `
-  src\app\rpg\narration\runtime_narration_contract.py `
-  src\tests\rpg\manual\scenario_execution.py `
-  src\tests\rpg\manual\summary_sanitizer.py `
   src\tests\rpg\autoplay_llm_campaign.py
-
-Run focused tests:
-
 python -m pytest `
-  src\tests\rpg\manual\test_n101_stabilization_gate.py `
-  src\tests\rpg\test_runtime_narration_provider_json_extraction.py `
-  src\tests\rpg\test_runtime_narration_candidate_envelope.py `
-  src\tests\rpg\test_narration_grounding_price_quotes.py `
+  src\tests\rpg\test_autoplay_100_turn_evaluation_summary.py `
+  src\tests\rpg\test_autoplay_grounding_scan.py `
   -q

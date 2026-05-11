@@ -15,6 +15,53 @@ def _safe_str(value: Any) -> str:
     return value if isinstance(value, str) else ""
 
 
+def _build_minimal_autoplay_html_report(final_summary: Dict[str, Any]) -> str:
+    import html
+
+    def esc(value: Any) -> str:
+        return html.escape(_safe_str(value), quote=True)
+
+    evaluation = _safe_dict(final_summary.get("hundred_turn_evaluation"))
+    grounding = _safe_dict(final_summary.get("narration_grounding_summary"))
+    progress = _safe_dict(final_summary.get("canonical_progress_quality"))
+    perf = _safe_dict(final_summary.get("performance_seconds_summary"))
+
+    return f"""<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Autoplay Campaign Report</title>
+<style>
+body {{ font-family: Segoe UI, Arial, sans-serif; background:#10131a; color:#e8eaf0; padding:24px; }}
+.card {{ background:#171b24; border:1px solid #2a3140; border-radius:14px; padding:18px; margin:16px 0; }}
+pre {{ background:#0c0f15; border:1px solid #252b38; border-radius:10px; padding:12px; white-space:pre-wrap; }}
+.pass {{ color:#8ff0b2; font-weight:700; }}
+.fail {{ color:#ff9a9a; font-weight:700; }}
+</style>
+</head>
+<body>
+<h1>Autoplay Campaign Report</h1>
+<div class="card">
+<h2>100-Turn Evaluation</h2>
+<p>Status: <span class="{ 'pass' if evaluation.get('ok') else 'fail' }">{esc('PASS' if evaluation.get('ok') else 'FAIL')}</span></p>
+<pre>{esc(json.dumps(evaluation, ensure_ascii=False, indent=2, default=str))}</pre>
+</div>
+<div class="card">
+<h2>Narration Grounding</h2>
+<pre>{esc(json.dumps(grounding, ensure_ascii=False, indent=2, default=str))}</pre>
+</div>
+<div class="card">
+<h2>Progress Quality</h2>
+<pre>{esc(json.dumps(progress, ensure_ascii=False, indent=2, default=str))}</pre>
+</div>
+<div class="card">
+<h2>Performance</h2>
+<pre>{esc(json.dumps(perf, ensure_ascii=False, indent=2, default=str))}</pre>
+</div>
+</body>
+</html>"""
+
+
 def write_json(path: Path, payload: Any) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     try:
@@ -142,6 +189,8 @@ def write_autoplay_artifacts(
     write_json(performance_path, metrics.get("performance") or {})
     write_json(story_variety_path, metrics.get("story_variety") or {})
     write_json(health_path, health)
+
+    html_report = _build_minimal_autoplay_html_report(summary)
     if artifact_detail == "full":
         # Limit transcript size to prevent memory issues
         max_transcript_length = 500  # Limit to last 500 turns
@@ -163,33 +212,95 @@ def write_autoplay_artifacts(
         if len(transcript) <= 200:
             html_path.write_text(render_autoplay_html(transcript, summary), encoding="utf-8")
 
+    artifact_manifest = {
+        "format_version": "autoplay_artifact_manifest_v1",
+        "turns_requested": int(summary.get("turns_requested") or summary.get("requested_turns") or 0),
+        "generated_files": [],
+    }
+
+    def _zip_writestr_json(zip_handle: Any, manifest: Dict[str, Any], name: str, value: Any) -> None:
+        zip_handle.writestr(
+            name,
+            json.dumps(value, ensure_ascii=False, indent=2, default=str),
+        )
+        manifest.setdefault("generated_files", []).append(name)
+
     with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as zf:
-        zf.write(summary_path, summary_path.name)
-        zf.write(metrics_path, metrics_path.name)
-        zf.write(performance_path, performance_path.name)
-        zf.write(story_variety_path, story_variety_path.name)
-        zf.write(health_path, health_path.name)
+        def add_file(path: Path, arcname: str = None):
+            if path.exists():
+                zf.write(path, arcname or path.name)
+                artifact_manifest["generated_files"].append(arcname or path.name)
+
+        add_file(summary_path, "summary.json")
+        add_file(metrics_path)
+        add_file(performance_path)
+        add_file(story_variety_path)
+        add_file(health_path)
+
         if artifact_detail == "full":
-            zf.write(transcript_path, transcript_path.name)
-            zf.write(html_path, html_path.name)
+            add_file(transcript_path, "transcript.json")
+
+            _zip_writestr_json(
+                zf,
+                artifact_manifest,
+                "hundred-turn-evaluation.json",
+                summary.get("hundred_turn_evaluation", {}),
+            )
+
+            _zip_writestr_json(
+                zf,
+                artifact_manifest,
+                "narration-grounding-summary.json",
+                summary.get("narration_grounding_summary", {}),
+            )
+
+            _zip_writestr_json(
+                zf,
+                artifact_manifest,
+                "selected-output-grounding-health.json",
+                summary.get("selected_output_grounding_health", {}),
+            )
+
+            _zip_writestr_json(
+                zf,
+                artifact_manifest,
+                "canonical-progress-quality.json",
+                summary.get("canonical_progress_quality", {}),
+            )
+
+            _zip_writestr_json(
+                zf,
+                artifact_manifest,
+                "performance-seconds-summary.json",
+                summary.get("performance_seconds_summary", {}),
+            )
+
+            zf.writestr("autoplay-campaign-report.html", html_report)
+            artifact_manifest.setdefault("generated_files", []).append("autoplay-campaign-report.html")
+
+            add_file(html_path)
             campaign_report_html = output_dir / "autoplay-campaign-report.html"
-            campaign_report_json = output_dir / "autoplay-campaign-report.json"
             if campaign_report_html.exists():
-                zf.write(campaign_report_html, campaign_report_html.name)
+                add_file(campaign_report_html)
+            campaign_report_json = output_dir / "autoplay-campaign-report.json"
             if campaign_report_json.exists():
-                zf.write(campaign_report_json, campaign_report_json.name)
+                add_file(campaign_report_json)
             code_diff_path = output_dir / "code-diff.txt"
             if code_diff_path.exists():
-                zf.write(code_diff_path, code_diff_path.name)
+                add_file(code_diff_path)
             console_log_path = output_dir / "console-log.txt"
             if console_log_path.exists():
-                zf.write(console_log_path, arcname="console-log.txt")
+                add_file(console_log_path, "console-log.txt")
             checkpoint_dir = output_dir / "checkpoints"
             if checkpoint_dir.exists():
                 session_id = str(summary.get("session_id") or "")
                 pattern = f"{session_id}_turn_*.json" if session_id else "*.json"
                 for checkpoint_path in sorted(checkpoint_dir.glob(pattern)):
-                    zf.write(checkpoint_path, f"checkpoints/{checkpoint_path.name}")
+                    add_file(checkpoint_path, f"checkpoints/{checkpoint_path.name}")
+
+        manifest_path = output_dir / "artifact-manifest.json"
+        write_json(manifest_path, artifact_manifest)
+        add_file(manifest_path)
 
     return {
         "summary": str(summary_path),
