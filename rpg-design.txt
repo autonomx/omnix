@@ -1,425 +1,635 @@
-N99.1 — Strict Progress Quality Uses Scenario Progress + Classification Sync
+N101.1 Fix — Candidate JSON Truncation / Parse Failure
 Goal
 
-Run 223 proved the 100-turn content track is now good:
+Latest result shows:
 
-turns_executed: 100
-completed_node_count: 100
-hundred_turn_readiness_summary.ok: true
-hundred_turn_readiness_summary.classification: content_sufficient_for_requested_turns
-hundred_turn_readiness_summary.failed_gates: []
+LM Studio starts returning:
+  rpg_narration_candidates_v1
 
-Remaining issues:
+But parser reports:
+  parsed_json_ok: false
+  parsed_format_version: ""
+  parsed_is_candidate_envelope: false
 
-quality_gate_summary still fails:
-  strict_100turn_strict_progress_quality_ok
+Then runtime falls into misleading old v2 errors:
+  invalid_format_version
+  missing_narration
+  npc_not_object
 
-top-level classification is stale:
-  hundred_turn_validation_classification: active_or_incomplete
+Most likely cause:
 
-Root cause:
+The candidate envelope is being truncated because provider max_tokens is still sized for the old single rpg_narration_v2 payload.
 
-strict_progress_quality_certification counts only old progress signals.
-It ignores:
-  scenario_progression_summary.changed == true
-  top_scenario_progression_action_id
-  behavioral_autoplay_eval_summary.metrics.progression_changed_count
-  behavioral_autoplay_eval_summary.metrics.unique_progression_node_count
+A candidate response is roughly 2x larger because it includes:
 
-Target after patch:
+primary
+safe_fallback
 
-hundred_turn_readiness_summary.ok: true
-hundred_turn_validation_classification: content_sufficient_for_requested_turns
+This patch does four things:
 
-strict_progress_quality_certification.ok: true
-quality_gate_summary.failed_gates:
-  max_human_playable_blocking_under_1000ms
-1. Patch strict progress quality certification
+1. Increase runtime narration max_tokens for candidate envelopes.
+2. Tighten prompt so both candidates are short.
+3. Add parse-error diagnostics.
+4. Stop reporting old v2 schema errors when candidate JSON is present but incomplete/unparseable.
+1. Increase runtime narration provider max tokens
 
-Patch src/tests/rpg/autoplay_llm_campaign.py.
+Patch:
 
-Find the function that builds:
+src/app/rpg/narration/runtime_narration_contract.py
 
-strict_progress_quality_certification
+Search for provider call settings:
 
-It likely computes:
+Select-String -Path src\app\rpg\narration\runtime_narration_contract.py -Pattern "max_tokens","max_completion_tokens","320","384","400","512" -Context 4,6
 
-meaningful_turns
-no_change_turns
-churn_only_turns
-meaningful_progress_rate
-1A. Add helper to detect scenario graph progress
+You likely have something like:
 
-Add near autoplay summary helpers:
-
---- src/tests/rpg/autoplay_llm_campaign.py
-+++ src/tests/rpg/autoplay_llm_campaign.py
-@@
-+def _row_has_scenario_progress(row: Dict[str, Any]) -> bool:
-+    row = _safe_dict(row)
-+    scenario_summary = _safe_dict(row.get("scenario_progression_summary"))
-+    action_id = _safe_str(row.get("top_scenario_progression_action_id"))
-+
-+    if bool(scenario_summary.get("changed")):
-+        return True
-+    if action_id and not action_id.startswith("arc_complete"):
-+        return True
-+
-+    completed_node = (
-+        scenario_summary.get("completed_node_id")
-+        or scenario_summary.get("node_id")
-+        or scenario_summary.get("completed_node")
-+    )
-+    if _safe_str(completed_node):
-+        return True
-+
-+    return False
-1B. Use scenario graph progress inside strict certification loop
-
-Find the loop over transcript rows inside the strict progress certification builder.
-
-Patch the classification logic so scenario graph progress counts as meaningful progress before no-change/churn logic.
-
---- src/tests/rpg/autoplay_llm_campaign.py
-+++ src/tests/rpg/autoplay_llm_campaign.py
-@@
-     for row in _safe_list(transcript):
-         row = _safe_dict(row)
-+        scenario_progress_changed = _row_has_scenario_progress(row)
-+
-+        if scenario_progress_changed:
-+            meaningful_turns += 1
-+            current_no_change_streak = 0
-+            current_churn_only_streak = 0
-+            max_no_change_streak = max(max_no_change_streak, current_no_change_streak)
-+            max_churn_only_streak = max(max_churn_only_streak, current_churn_only_streak)
-+            continue
-
-If your variables have different names, map the same idea:
-
-meaningful_turns        -> existing meaningful progress counter
-no_change_turns         -> existing no-change counter
-churn_only_turns        -> existing churn-only counter
-current_no_change_streak/current_churn_only_streak -> existing streak counters
-
-Important: do this before logic that categorizes a row as no-change or churn-only.
-
-1C. Add aggregate fallback from behavioral eval metrics
-
-After strict progress metrics are computed but before ok/gates are finalized, add an aggregate fallback.
-
---- src/tests/rpg/autoplay_llm_campaign.py
-+++ src/tests/rpg/autoplay_llm_campaign.py
-@@
-+    behavioral = _safe_dict(summary.get("behavioral_autoplay_eval_summary"))
-+    behavioral_metrics = _safe_dict(behavioral.get("metrics"))
-+    progression_changed_count = int(behavioral_metrics.get("progression_changed_count") or 0)
-+    unique_progression_node_count = int(behavioral_metrics.get("unique_progression_node_count") or 0)
-+    requested_turns = int(
-+        summary.get("requested_turns")
-+        or summary.get("effective_turns")
-+        or len(_safe_list(transcript))
-+        or 0
-+    )
-+
-+    if progression_changed_count > meaningful_turns:
-+        meaningful_turns = progression_changed_count
-+    if unique_progression_node_count > meaningful_turns:
-+        meaningful_turns = unique_progression_node_count
-
-Then recompute the rate after this fallback:
-
---- src/tests/rpg/autoplay_llm_campaign.py
-+++ src/tests/rpg/autoplay_llm_campaign.py
-@@
--    meaningful_progress_rate = meaningful_turns / max(1, total_turns)
-+    meaningful_progress_rate = meaningful_turns / max(1, total_turns)
-+    scenario_progress_satisfies_requested = bool(
-+        requested_turns > 0
-+        and (
-+            progression_changed_count >= requested_turns
-+            or unique_progression_node_count >= requested_turns
-+            or meaningful_turns >= requested_turns
-+        )
-+    )
-1D. Patch strict certification gates
-
-Find where strict certification sets ok and failed warnings/gates.
-
-Patch so scenario graph progress satisfies strict progress quality.
-
---- src/tests/rpg/autoplay_llm_campaign.py
-+++ src/tests/rpg/autoplay_llm_campaign.py
-@@
--    ok = bool(meaningful_progress_rate >= min_meaningful_progress_rate and not failed_gates)
-+    if scenario_progress_satisfies_requested:
-+        failed_gates = [
-+            gate
-+            for gate in _safe_list(failed_gates)
-+            if gate not in {
-+                "meaningful_progress_rate_below_threshold",
-+                "no_change_turns_above_threshold",
-+                "churn_only_turns_above_threshold",
-+                "no_change_streak_above_threshold",
-+                "churn_only_streak_above_threshold",
-+            }
-+        ]
-+
-+    ok = bool(
-+        scenario_progress_satisfies_requested
-+        or (meaningful_progress_rate >= min_meaningful_progress_rate and not failed_gates)
-+    )
-
-If your code uses warning strings instead of failed_gates, do the same for warnings:
-
---- src/tests/rpg/autoplay_llm_campaign.py
-+++ src/tests/rpg/autoplay_llm_campaign.py
-@@
-+    if scenario_progress_satisfies_requested:
-+        warnings = [
-+            warning
-+            for warning in _safe_list(warnings)
-+            if _safe_str(warning) not in {
-+                "meaningful_progress_rate_below_threshold",
-+                "no_change_turns_above_threshold",
-+                "churn_only_turns_above_threshold",
-+                "no_change_streak_above_threshold",
-+                "churn_only_streak_above_threshold",
-+            }
-+        ]
-1E. Include scenario progress metrics in certification output
-
-Patch returned dict:
-
---- src/tests/rpg/autoplay_llm_campaign.py
-+++ src/tests/rpg/autoplay_llm_campaign.py
-@@
-         "meaningful_turns": meaningful_turns,
-         "meaningful_progress_rate": meaningful_progress_rate,
-+        "scenario_progress_satisfies_requested": scenario_progress_satisfies_requested,
-+        "progression_changed_count": progression_changed_count,
-+        "unique_progression_node_count": unique_progression_node_count,
-+        "requested_turns": requested_turns,
-
-Expected after rerun:
-
-strict_progress_quality_certification.ok: true
-strict_progress_quality_certification.scenario_progress_satisfies_requested: true
-strict_progress_quality_certification.progression_changed_count: 100
-strict_progress_quality_certification.unique_progression_node_count: 100
-2. Patch final quality gate fallback
-
-Even after strict certification is fixed, final gates should explicitly accept content-sufficient runs.
-
-Patch the final quality gate builder in src/tests/rpg/autoplay_llm_campaign.py.
-
-Find the function that returns:
-
-source: final_lifecycle_quality_gates
-
-Add local:
-
---- src/tests/rpg/autoplay_llm_campaign.py
-+++ src/tests/rpg/autoplay_llm_campaign.py
-@@
-+    readiness = _safe_dict(summary.get("hundred_turn_readiness_summary"))
-+    readiness_classification = _safe_str(readiness.get("classification"))
-+    content_sufficient_for_requested_turns = bool(
-+        readiness.get("ok")
-+        and readiness_classification == "content_sufficient_for_requested_turns"
-+    )
-
-Patch strict progress quality gate:
-
---- src/tests/rpg/autoplay_llm_campaign.py
-+++ src/tests/rpg/autoplay_llm_campaign.py
-@@
--        "strict_100turn_strict_progress_quality_ok": bool(strict_progress_quality.get("ok", False)),
-+        "strict_100turn_strict_progress_quality_ok": bool(
-+            strict_progress_quality.get("ok", False)
-+            or content_sufficient_for_requested_turns
-+        ),
-
-If assigned later:
-
-gates["strict_100turn_strict_progress_quality_ok"] = bool(
-    strict_progress_quality.get("ok", False)
-    or content_sufficient_for_requested_turns
+response = provider.chat_completion(
+    messages=messages,
+    temperature=0.2,
+    max_tokens=320,
 )
 
-This keeps a safety net even if the strict certification builder regresses again.
+or:
 
-3. Sync top-level 100-turn validation classification
+kwargs = {
+    "temperature": 0.2,
+    "max_tokens": 320,
+}
 
-Patch src/tests/rpg/autoplay_llm_campaign.py.
+Replace runtime narration max token cap with:
 
-Find where this is assigned:
+RUNTIME_NARRATION_CANDIDATE_MAX_TOKENS = 900
+RUNTIME_NARRATION_SINGLE_MAX_TOKENS = 450
 
-final_summary["hundred_turn_validation_classification"] = ...
+Add these near module constants:
 
-Replace it with readiness-first logic:
+RUNTIME_NARRATION_CANDIDATE_MAX_TOKENS = 900
+RUNTIME_NARRATION_SINGLE_MAX_TOKENS = 450
 
---- src/tests/rpg/autoplay_llm_campaign.py
-+++ src/tests/rpg/autoplay_llm_campaign.py
-@@
--    final_summary["hundred_turn_validation_classification"] = (
--        "content_exhausted_waiting_for_next_graph_pack"
--        if _content_exhausted_waiting_for_next_graph_pack(final_summary)
--        else "active_or_incomplete"
--    )
-+    readiness = _safe_dict(final_summary.get("hundred_turn_readiness_summary"))
-+    readiness_classification = _safe_str(readiness.get("classification"))
-+    final_summary["hundred_turn_validation_classification"] = (
-+        readiness_classification
-+        if readiness_classification
-+        else "content_exhausted_waiting_for_next_graph_pack"
-+        if _content_exhausted_waiting_for_next_graph_pack(final_summary)
-+        else "active_or_incomplete"
-+    )
+Then patch the provider call to use candidate cap when candidate mode is enabled.
 
-Make sure this assignment happens after hundred_turn_readiness_summary is attached and before quality_gate_summary is built.
+If the runtime path now always requests candidates, use:
 
-Expected after rerun:
+max_tokens=RUNTIME_NARRATION_CANDIDATE_MAX_TOKENS
 
-hundred_turn_validation_classification: content_sufficient_for_requested_turns
-4. Tests
-4A. Strict progress quality test
+If the code supports both old and new prompt mode, use:
 
-Patch src/tests/rpg/test_100_turn_readiness.py or a nearby autoplay quality test file.
+max_tokens=(
+    RUNTIME_NARRATION_CANDIDATE_MAX_TOKENS
+    if use_candidate_envelope
+    else RUNTIME_NARRATION_SINGLE_MAX_TOKENS
+)
 
-Use the real function name if different.
+If the provider adapter uses max_completion_tokens, patch similarly:
 
-def test_strict_progress_quality_counts_scenario_progression_as_meaningful():
-    from tests.rpg.autoplay_llm_campaign import _build_strict_progress_quality_certification
+max_completion_tokens=RUNTIME_NARRATION_CANDIDATE_MAX_TOKENS
 
-    transcript = [
-        {
-            "turn_index": i,
-            "player_action": f"graph action {i}",
-            "top_scenario_progression_action_id": f"node_{i}",
-            "scenario_progression_summary": {"changed": True},
+If the provider call uses a generic params dict:
+
+provider_options["max_tokens"] = RUNTIME_NARRATION_CANDIDATE_MAX_TOKENS
+provider_options["max_completion_tokens"] = RUNTIME_NARRATION_CANDIDATE_MAX_TOKENS
+
+Keep only the key your provider expects if duplicated keys cause errors.
+
+2. Add safe fallback length limits to prompt
+
+Patch:
+
+src/app/rpg/narration/runtime_narration_contract.py
+
+Find:
+
+def _runtime_narration_candidate_schema_text() -> str:
+
+Inside the returned prompt text, add these rules under Candidate rules::
+
+Length rules:
+- primary.narration: 1-2 sentences, maximum 45 words.
+- primary.action: 1 short sentence, maximum 20 words.
+- primary.npc.line: 1 short in-character line, maximum 24 words.
+- safe_fallback.narration: 1 sentence, maximum 28 words.
+- safe_fallback.action: 1 short sentence, maximum 16 words.
+- safe_fallback.npc.line: 1 short in-character line, maximum 18 words.
+- followup_hooks must be [] unless the turn_contract explicitly provides allowed next actions.
+- Do not include explanations, analysis, markdown, or text outside JSON.
+
+Also tighten the JSON schema placeholders from verbose to short.
+
+Replace:
+
+"narration": "<best natural narration grounded only in the authoritative contract>",
+"action": "<short in-world consequence/result only; no meta language>",
+
+with:
+
+"narration": "<1-2 short grounded sentences>",
+"action": "<short consequence only>",
+
+Replace fallback schema placeholders:
+
+"narration": "<safe conservative narration that refuses, defers, or restates only confirmed outcomes>",
+"action": "<safe consequence only; no state changes unless explicitly in turn_contract>",
+
+with:
+
+"narration": "<1 short safe sentence>",
+"action": "<short safe consequence only>",
+
+This reduces response size and makes truncation less likely.
+
+3. Add parse-error diagnostics to robust JSON extraction
+
+Patch:
+
+src/app/rpg/narration/runtime_narration_contract.py
+
+Find the helper you added:
+
+def _extract_json_object_from_provider_text(text: Any) -> Dict[str, Any]:
+
+Replace it with a wrapper plus detailed variant.
+
+Add this detailed helper:
+
+def _extract_json_object_with_diagnostics_from_provider_text(text: Any) -> Dict[str, Any]:
+    """Extract provider JSON and return parse diagnostics.
+
+    Returns:
+      {
+        "payload": dict,
+        "ok": bool,
+        "error": str,
+        "strategy": str,
+        "raw_length": int,
+        "contains_candidate_marker": bool,
+        "brace_balance": int,
+        "ends_with_brace": bool
+      }
+    """
+    raw = _safe_str(text)
+    diagnostics: Dict[str, Any] = {
+        "payload": {},
+        "ok": False,
+        "error": "",
+        "strategy": "",
+        "raw_length": len(raw),
+        "contains_candidate_marker": "rpg_narration_candidates_v1" in raw,
+        "brace_balance": raw.count("{") - raw.count("}"),
+        "ends_with_brace": raw.rstrip().endswith("}"),
+    }
+
+    if not raw.strip():
+        diagnostics["error"] = "empty_provider_text"
+        return diagnostics
+
+    cleaned = raw.strip().lstrip("\ufeff").strip()
+
+    if cleaned.startswith("```"):
+        cleaned = re.sub(r"^```(?:json|JSON)?\s*", "", cleaned).strip()
+        cleaned = re.sub(r"\s*```$", "", cleaned).strip()
+
+    try:
+        parsed = json.loads(cleaned)
+        if isinstance(parsed, dict):
+            diagnostics.update(
+                {
+                    "payload": parsed,
+                    "ok": True,
+                    "strategy": "direct",
+                    "error": "",
+                }
+            )
+            return diagnostics
+        diagnostics["error"] = "json_root_not_object"
+    except Exception as exc:
+        diagnostics["error"] = f"direct:{type(exc).__name__}:{exc}"
+
+    start = cleaned.find("{")
+    end = cleaned.rfind("}")
+    if start >= 0 and end > start:
+        candidate = cleaned[start : end + 1].strip()
+        try:
+            parsed = json.loads(candidate)
+            if isinstance(parsed, dict):
+                diagnostics.update(
+                    {
+                        "payload": parsed,
+                        "ok": True,
+                        "strategy": "first_brace_to_last_brace",
+                        "error": "",
+                    }
+                )
+                return diagnostics
+            diagnostics["error"] = "slice_root_not_object"
+        except Exception as exc:
+            diagnostics["error"] = f"slice:{type(exc).__name__}:{exc}"
+
+    start = cleaned.find("{")
+    if start < 0:
+        diagnostics["error"] = diagnostics["error"] or "missing_open_brace"
+        return diagnostics
+
+    depth = 0
+    in_string = False
+    escape = False
+    for index in range(start, len(cleaned)):
+        char = cleaned[index]
+
+        if escape:
+            escape = False
+            continue
+
+        if char == "\\" and in_string:
+            escape = True
+            continue
+
+        if char == '"':
+            in_string = not in_string
+            continue
+
+        if in_string:
+            continue
+
+        if char == "{":
+            depth += 1
+        elif char == "}":
+            depth -= 1
+            if depth == 0:
+                candidate = cleaned[start : index + 1].strip()
+                try:
+                    parsed = json.loads(candidate)
+                    if isinstance(parsed, dict):
+                        diagnostics.update(
+                            {
+                                "payload": parsed,
+                                "ok": True,
+                                "strategy": "balanced_braces",
+                                "error": "",
+                            }
+                        )
+                        return diagnostics
+                    diagnostics["error"] = "balanced_root_not_object"
+                except Exception as exc:
+                    diagnostics["error"] = f"balanced:{type(exc).__name__}:{exc}"
+                return diagnostics
+
+    diagnostics["error"] = diagnostics["error"] or "unterminated_json_object"
+    diagnostics["brace_balance_after_scan"] = depth
+    diagnostics["in_string_after_scan"] = in_string
+    return diagnostics
+
+Then keep compatibility helper:
+
+def _extract_json_object_from_provider_text(text: Any) -> Dict[str, Any]:
+    return _safe_dict(
+        _extract_json_object_with_diagnostics_from_provider_text(text).get("payload")
+    )
+4. Patch provider diagnostics to include parse failure details
+
+Patch:
+
+src/app/rpg/narration/runtime_narration_contract.py
+
+Find _call_provider_text_with_diagnostics(...).
+
+Replace:
+
+parsed_payload = _extract_json_object_from_provider_text(text)
+
+with:
+
+parse_diagnostics = _extract_json_object_with_diagnostics_from_provider_text(text)
+parsed_payload = _safe_dict(parse_diagnostics.get("payload"))
+
+Then add these fields to provider_call_diagnostics:
+
+"parsed_json_ok": bool(parse_diagnostics.get("ok")),
+"parsed_json_strategy": _safe_str(parse_diagnostics.get("strategy")),
+"parsed_json_error": _safe_str(parse_diagnostics.get("error")),
+"parsed_json_raw_length": int(parse_diagnostics.get("raw_length") or 0),
+"parsed_json_contains_candidate_marker": bool(parse_diagnostics.get("contains_candidate_marker")),
+"parsed_json_brace_balance": int(parse_diagnostics.get("brace_balance") or 0),
+"parsed_json_ends_with_brace": bool(parse_diagnostics.get("ends_with_brace")),
+
+So diagnostics should include:
+
+{
+  "parsed_json_ok": false,
+  "parsed_json_error": "slice:JSONDecodeError:Unterminated string starting at...",
+  "parsed_json_brace_balance": 2,
+  "parsed_json_ends_with_brace": false,
+  "parsed_json_contains_candidate_marker": true
+}
+
+This will confirm truncation instead of hiding it behind old schema errors.
+
+5. Stop old v2 validation errors when candidate marker exists but parse failed
+
+Patch provider validation call site in:
+
+src/app/rpg/narration/runtime_narration_contract.py
+
+Find the code after provider call that does:
+
+validated = validate_narration_payload(
+    parsed_payload,
+    player_action=player_action,
+)
+
+Before that validation, add:
+
+contains_candidate_marker = bool(
+    _safe_dict(provider_call_diagnostics).get("parsed_json_contains_candidate_marker")
+)
+parsed_json_ok = bool(
+    _safe_dict(provider_call_diagnostics).get("parsed_json_ok")
+)
+
+if contains_candidate_marker and not parsed_json_ok:
+    parse_error = _safe_str(
+        _safe_dict(provider_call_diagnostics).get("parsed_json_error")
+    )
+    logger.warning(
+        "[N101][provider_response] candidate envelope text was not valid complete JSON; "
+        "skipping old v2 validation parse_error=%s raw_len=%s brace_balance=%s",
+        parse_error,
+        _safe_dict(provider_call_diagnostics).get("parsed_json_raw_length"),
+        _safe_dict(provider_call_diagnostics).get("parsed_json_brace_balance"),
+    )
+    validated = {
+        "ok": False,
+        "errors": [
+            "provider_json_parse_failed_candidate_envelope",
+            parse_error or "unknown_parse_error",
+        ],
+        "payload": {},
+    }
+else:
+    validated = validate_narration_payload(
+        parsed_payload,
+        player_action=player_action,
+    )
+
+This prevents misleading:
+
+invalid_format_version
+missing_narration
+npc_not_object
+
+when the real issue is:
+
+provider_json_parse_failed_candidate_envelope
+
+Apply the same guard in retry/repair path too.
+
+6. Increase raw text excerpt in diagnostics
+
+Patch _call_provider_text_with_diagnostics(...).
+
+Find:
+
+"raw_text_excerpt": _safe_str(text)[:1000],
+
+or similar.
+
+Replace with:
+
+"raw_text_excerpt": _safe_str(text)[:3000],
+"raw_text_tail_excerpt": _safe_str(text)[-1000:],
+
+This lets you see whether the JSON was cut off mid-string or mid-object.
+
+7. Add test for truncated candidate JSON diagnostics
+
+Create or patch:
+
+src/tests/rpg/test_runtime_narration_provider_json_extraction.py
+
+Add:
+
+from app.rpg.narration.runtime_narration_contract import (
+    _extract_json_object_with_diagnostics_from_provider_text,
+)
+
+
+def test_truncated_candidate_json_reports_parse_failure_with_candidate_marker():
+    raw = """
+{
+  "format_version": "rpg_narration_candidates_v1",
+  "primary": {
+    "format_version": "rpg_narration_v2",
+    "narration": "Bran starts to answer but
+"""
+
+    diagnostics = _extract_json_object_with_diagnostics_from_provider_text(raw)
+
+    assert diagnostics["ok"] is False
+    assert diagnostics["payload"] == {}
+    assert diagnostics["contains_candidate_marker"] is True
+    assert diagnostics["brace_balance"] > 0
+    assert diagnostics["ends_with_brace"] is False
+    assert diagnostics["error"]
+
+Add test for fenced complete candidate still parsing:
+
+def test_complete_candidate_json_with_fence_parses_successfully():
+    raw = """```json
+{
+  "format_version": "rpg_narration_candidates_v1",
+  "primary": {
+    "format_version": "rpg_narration_v2",
+    "narration": "Bran refuses the claim.",
+    "action": "No coin changes hands.",
+    "npc": {"speaker": "Bran", "line": "No. I do not owe you coin."},
+    "reward": null,
+    "followup_hooks": []
+  },
+  "safe_fallback": {
+    "format_version": "rpg_narration_v2",
+    "narration": "Bran does not hand over any coin.",
+    "action": "The unsupported claim is refused.",
+    "npc": {"speaker": "Bran", "line": "Sorry, friend. I do not owe you anything."},
+    "reward": null,
+    "followup_hooks": []
+  }
+}
+```"""
+
+    diagnostics = _extract_json_object_with_diagnostics_from_provider_text(raw)
+
+    assert diagnostics["ok"] is True
+    assert diagnostics["payload"]["format_version"] == "rpg_narration_candidates_v1"
+    assert diagnostics["strategy"] in {"direct", "first_brace_to_last_brace", "balanced_braces"}
+8. Add test proving parse failure does not emit old v2 errors
+
+If the provider-response handling function is hard to unit-test directly, add a small helper.
+
+Patch:
+
+src/app/rpg/narration/runtime_narration_contract.py
+
+Add:
+
+def _validate_parsed_provider_payload_or_parse_failure(
+    *,
+    parsed_payload: Dict[str, Any],
+    provider_call_diagnostics: Dict[str, Any],
+    player_action: str,
+) -> Dict[str, Any]:
+    contains_candidate_marker = bool(
+        _safe_dict(provider_call_diagnostics).get("parsed_json_contains_candidate_marker")
+    )
+    parsed_json_ok = bool(
+        _safe_dict(provider_call_diagnostics).get("parsed_json_ok")
+    )
+
+    if contains_candidate_marker and not parsed_json_ok:
+        parse_error = _safe_str(
+            _safe_dict(provider_call_diagnostics).get("parsed_json_error")
+        )
+        return {
+            "ok": False,
+            "errors": [
+                "provider_json_parse_failed_candidate_envelope",
+                parse_error or "unknown_parse_error",
+            ],
+            "payload": {},
         }
-        for i in range(1, 101)
-    ]
 
-    summary = {
-        "requested_turns": 100,
-        "effective_turns": 100,
-        "behavioral_autoplay_eval_summary": {
-            "metrics": {
-                "progression_changed_count": 100,
-                "unique_progression_node_count": 100,
-            }
-        },
-    }
-
-    result = _build_strict_progress_quality_certification(
-        transcript=transcript,
-        summary=summary,
-        min_meaningful_progress_rate=0.10,
+    return validate_narration_payload(
+        parsed_payload,
+        player_action=player_action,
     )
 
-    assert result["ok"] is True
-    assert result["scenario_progress_satisfies_requested"] is True
-    assert result["meaningful_turns"] >= 100
-    assert result["progression_changed_count"] == 100
-    assert result["unique_progression_node_count"] == 100
+Then replace validation call sites with:
 
-If your function signature differs, adapt only the call shape. The assertions should stay.
+validated = _validate_parsed_provider_payload_or_parse_failure(
+    parsed_payload=parsed_payload,
+    provider_call_diagnostics=provider_call_diagnostics,
+    player_action=player_action,
+)
 
-4B. Final quality gate test
+Add test:
 
-Patch src/tests/rpg/test_100_turn_readiness.py:
+from app.rpg.narration.runtime_narration_contract import (
+    _validate_parsed_provider_payload_or_parse_failure,
+)
 
-def test_final_quality_gates_accept_content_sufficient_progress_even_if_strict_cert_is_stale():
-    from tests.rpg.autoplay_llm_campaign import _build_final_lifecycle_quality_gates
 
-    summary = {
-        "requested_turns": 100,
-        "turns_executed": 100,
-        "hundred_turn_validation_classification": "content_sufficient_for_requested_turns",
-        "hundred_turn_readiness_summary": {
-            "ok": True,
-            "classification": "content_sufficient_for_requested_turns",
-            "failed_gates": [],
+def test_candidate_parse_failure_does_not_emit_old_v2_errors():
+    validated = _validate_parsed_provider_payload_or_parse_failure(
+        parsed_payload={},
+        provider_call_diagnostics={
+            "parsed_json_ok": False,
+            "parsed_json_contains_candidate_marker": True,
+            "parsed_json_error": "unterminated_json_object",
         },
-        "scenario_progression_arc_summary": {
-            "graph_count": 9,
-            "completed_graph_count": 8,
-            "campaign_graphs_complete": False,
-            "waiting_for_next_graph_pack": False,
-            "completed_node_count": 100,
-        },
-        "long_run_warning_summary": {"ok": True},
-        "hundred_turn_eval_summary": {"ok": True},
-        "strict_progress_quality_certification": {"ok": False},
-        "background_result_timing_summary": {"ok": True},
-        "behavioral_autoplay_eval_summary": {"ok": True},
-        "repeated_affordance_loop_summary": {"ok": True},
-    }
-
-    result = _build_final_lifecycle_quality_gates(summary)
-    gates = result["gates"]
-
-    assert gates["hundred_turn_readiness_ok"] is True
-    assert gates["strict_100turn_strict_progress_quality_ok"] is True
-
-If the real final quality function has another name, use the function returning:
-
-source: final_lifecycle_quality_gates
-4C. Classification sync test
-
-Patch src/tests/rpg/test_100_turn_readiness.py with a helper-level test if the classification assignment is not easily callable.
-
-If there is a summary-finalization helper, use it. Otherwise, this can be covered by the 100-turn smoke.
-
-Preferred test if helper exists:
-
-def test_hundred_turn_validation_classification_prefers_readiness_classification():
-    from tests.rpg.autoplay_llm_campaign import _sync_hundred_turn_validation_classification
-
-    summary = {
-        "hundred_turn_readiness_summary": {
-            "ok": True,
-            "classification": "content_sufficient_for_requested_turns",
-        },
-        "scenario_progression_arc_summary": {
-            "campaign_graphs_complete": False,
-            "waiting_for_next_graph_pack": False,
-        },
-    }
-
-    _sync_hundred_turn_validation_classification(summary)
-
-    assert summary["hundred_turn_validation_classification"] == "content_sufficient_for_requested_turns"
-
-If that helper does not exist, optionally add it:
-
-def _sync_hundred_turn_validation_classification(summary: Dict[str, Any]) -> None:
-    summary = _safe_dict(summary)
-    readiness = _safe_dict(summary.get("hundred_turn_readiness_summary"))
-    readiness_classification = _safe_str(readiness.get("classification"))
-    summary["hundred_turn_validation_classification"] = (
-        readiness_classification
-        if readiness_classification
-        else "content_exhausted_waiting_for_next_graph_pack"
-        if _content_exhausted_waiting_for_next_graph_pack(summary)
-        else "active_or_incomplete"
+        player_action="I ask Bran for a free room.",
     )
 
-Then call it from final summary assembly:
+    assert validated["ok"] is False
+    assert "provider_json_parse_failed_candidate_envelope" in validated["errors"]
+    assert "invalid_format_version" not in validated["errors"]
+    assert "missing_narration" not in validated["errors"]
+    assert "npc_not_object" not in validated["errors"]
+9. Optional: one retry on candidate JSON parse failure with stricter compact prompt
 
---- src/tests/rpg/autoplay_llm_campaign.py
-+++ src/tests/rpg/autoplay_llm_campaign.py
-@@
--    final_summary["hundred_turn_validation_classification"] = ...
-+    _sync_hundred_turn_validation_classification(final_summary)
-5. Validation commands
+This is optional but useful.
 
-Compile:
+In provider attempt loop, if validation errors include:
 
-python -m py_compile src\tests\rpg\autoplay_llm_campaign.py
+provider_json_parse_failed_candidate_envelope
 
-Run focused tests:
+retry once with a compact prompt suffix:
 
-python -m pytest src\tests\rpg\test_100_turn_readiness.py -q
+Your previous response was invalid/incomplete JSON. Return the same schema again, but make every string shorter. Output only one complete JSON object. No markdown.
+
+If your code already has repair/retry, just add this error to the repairable list.
+
+Find repairable errors:
+
+REPAIRABLE_NARRATION_ERRORS = {...}
+
+Add:
+
+"provider_json_parse_failed_candidate_envelope",
+
+And make repair prompt include:
+
+The previous response was incomplete or unparsable JSON. Return a complete compact rpg_narration_candidates_v1 object. Keep all strings short.
+
+Keep max_tokens at 900.
+
+10. Compile and run tests
+
+Run:
+
+python -m py_compile `
+  src\app\rpg\narration\runtime_narration_contract.py
+
+Run:
+
+python -m pytest `
+  src\tests\rpg\test_runtime_narration_provider_json_extraction.py `
+  src\tests\rpg\test_runtime_narration_candidate_envelope.py `
+  -q
+
+If the candidate envelope test file does not exist, run only the extraction test.
+
+11. Rerun manual scenario
+
+Restart the app/server if needed, then run:
+
+python src\tests\rpg\manual_llm_transcript.py `
+  --service-scenarios `
+  --scenario npc_bran_refuses_unpaid_room `
+  --fail-on-regression-warnings
+12. Expected next artifact
+
+Good result:
+
+"provider_call_diagnostics": {
+  "parsed_json_ok": true,
+  "parsed_json_strategy": "direct",
+  "parsed_format_version": "rpg_narration_candidates_v1",
+  "parsed_is_candidate_envelope": true,
+  "parsed_keys": ["format_version", "primary", "safe_fallback"]
+}
+
+and:
+
+"provider_valid": true,
+"provider_errors": []
+
+If still truncated, artifact should now be honest:
+
+"provider_call_diagnostics": {
+  "parsed_json_ok": false,
+  "parsed_json_contains_candidate_marker": true,
+  "parsed_json_error": "slice:JSONDecodeError:Unterminated string...",
+  "parsed_json_brace_balance": 2,
+  "parsed_json_ends_with_brace": false,
+  "raw_text_tail_excerpt": "...cut off here"
+}
+
+and provider errors should be:
+
+"provider_errors": [
+  "provider_json_parse_failed_candidate_envelope",
+  "slice:JSONDecodeError:..."
+]
+
+You should no longer see these for a candidate response:
+
+"provider_errors": [
+  "invalid_format_version",
+  "missing_narration",
+  "npc_not_object"
+]
+13. If truncation still happens after 900 tokens
+
+Increase to:
+
+RUNTIME_NARRATION_CANDIDATE_MAX_TOKENS = 1200
+
+But first check raw_text_tail_excerpt. If the tail ends mid-string or without final braces, it is definitely token truncation.

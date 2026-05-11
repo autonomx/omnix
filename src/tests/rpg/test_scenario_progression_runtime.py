@@ -531,7 +531,10 @@ def test_eight_graph_campaign_progresses_through_handler_veska_pursuit():
 
 
 def test_nine_graph_campaign_has_active_endgame_content_at_turn_100():
-    from app.rpg.progression.runtime import build_scenario_progression_arc_summary, get_active_progression_actions
+    from app.rpg.progression.runtime import (
+        build_scenario_progression_arc_summary,
+        get_active_progression_actions,
+    )
 
     state = {}
     actions = _campaign_actions_through_graph_8() + [

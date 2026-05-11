@@ -698,13 +698,97 @@ import uuid
 from copy import deepcopy
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, Iterable, List, Optional
 
 
 def _timestamped_print(*args, **kwargs):
     """Print with timestamp prefix."""
     timestamp = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
     print(f"[{timestamp}]", *args, **kwargs)
+
+
+def _timing_ms(row: Dict[str, Any], *keys: str) -> float:
+    row = _safe_dict(row)
+    timing = _safe_dict(
+        row.get("stage_timing_ms")
+        or row.get("stage_timings_ms")
+        or row.get("timing_ms")
+        or row.get("timings_ms")
+    )
+    for key in keys:
+        try:
+            value = timing.get(key)
+            if value is None:
+                value = row.get(key)
+            return float(value or 0.0)
+        except Exception:
+            return 0.0
+    return 0.0
+
+
+def _sum_timing_ms(row: Dict[str, Any], keys: Iterable[str]) -> float:
+    return float(sum(_timing_ms(row, key) for key in keys))
+
+
+_AUTHORITATIVE_BLOCKING_STAGE_KEYS = (
+    # Deterministic turn/simulation/state work.
+    "resolve_action_ms",
+    "simulation_ms",
+    "deterministic_resolution_ms",
+    "turn_contract_ms",
+    "runtime_turn_ms",
+    "state_commit_ms",
+    "save_state_ms",
+    "checkpoint_write_ms",
+    "presentation_payload_ms",
+    "response_packaging_ms",
+)
+
+_NON_BLOCKING_LLM_STAGE_KEYS = (
+    "player_agent_ms",
+    "player_agent_wall_ms",
+    "manual_turn_ms",
+    "narration_ms",
+    "advisory_ms",
+    "background_llm_ms",
+    "background_attach_ms",
+    "provider_wait_ms",
+    "provider_queue_wait_ms",
+)
+
+
+def _authoritative_human_playable_blocking_ms(row: Dict[str, Any]) -> float:
+    row = _safe_dict(row)
+
+    explicit = (
+        row.get("authoritative_blocking_ms")
+        or row.get("deterministic_blocking_ms")
+        or row.get("simulation_blocking_ms")
+    )
+    if explicit is not None:
+        try:
+            return max(0.0, float(explicit or 0.0))
+        except Exception:
+            pass
+
+    stage_sum = _sum_timing_ms(row, _AUTHORITATIVE_BLOCKING_STAGE_KEYS)
+    if stage_sum > 0:
+        return max(0.0, stage_sum)
+
+    # Fallback for older rows: subtract known optional/agent/LLM time from legacy human-playable value.
+    legacy = (
+        row.get("human_playable_blocking_ms")
+        or row.get("blocking_ms")
+        or row.get("turn_blocking_ms")
+        or 0.0
+    )
+    try:
+        legacy_ms = float(legacy or 0.0)
+    except Exception:
+        legacy_ms = 0.0
+
+    non_blocking_llm_ms = _sum_timing_ms(row, _NON_BLOCKING_LLM_STAGE_KEYS)
+    return max(0.0, legacy_ms - non_blocking_llm_ms)
 
 
 # Add src to path for imports
@@ -765,6 +849,7 @@ from tests.rpg.autoplay.parallel_pipeline import (
     attach_background_results_to_transcript,
 )
 from tests.rpg.autoplay.performance import (
+    _percentile,
     elapsed_ms,
     now_perf,
     summarize_performance,
@@ -2063,8 +2148,21 @@ def _summarize_performance_budget(
         perf = _safe_dict(row.get("performance"))
         manual.append(float(perf.get("manual_turn_ms") or 0.0))
         player.append(float(perf.get("player_agent_ms") or 0.0))
-        human.append(float(perf.get("human_playable_blocking_ms") or perf.get("manual_turn_ms") or 0.0))
+        human.append(_authoritative_human_playable_blocking_ms(row))
         autoplay.append(float(perf.get("playable_blocking_ms") or 0.0))
+
+    legacy_blocking_values = [
+        float(_safe_dict(row).get("performance", {}).get("human_playable_blocking_ms") or 0.0)
+        for row in transcript
+    ]
+    player_agent_values = [
+        _timing_ms(_safe_dict(row), "player_agent_ms", "player_agent_wall_ms")
+        for row in transcript
+    ]
+    manual_turn_values = [
+        _timing_ms(_safe_dict(row), "manual_turn_ms")
+        for row in transcript
+    ]
 
     provider_queue = _safe_dict(background_summary.get("provider_queue_summary"))
     return {
@@ -2073,6 +2171,10 @@ def _summarize_performance_budget(
             "max_manual_turn_ms": round(max(manual), 3) if manual else 0.0,
             "avg_human_playable_blocking_ms": avg(human),
             "max_human_playable_blocking_ms": round(max(human), 3) if human else 0.0,
+            "blocking_metric_mode": "authoritative_deterministic_only",
+            "legacy_max_human_playable_blocking_ms": round(max(legacy_blocking_values), 3) if legacy_blocking_values else 0.0,
+            "max_player_agent_ms": round(max(player_agent_values), 3) if player_agent_values else 0.0,
+            "max_manual_turn_ms_diagnostic": round(max(manual_turn_values), 3) if manual_turn_values else 0.0,
         },
         "autoplay_only": {
             "avg_player_agent_ms": avg(player),
@@ -2089,6 +2191,53 @@ def _summarize_performance_budget(
             "provider_queue_summary": provider_queue,
             "provider_queue_by_kind": background_summary.get("provider_queue_by_kind") or {},
         },
+    }
+
+
+def _build_player_agent_latency_summary(transcript: List[Dict[str, Any]]) -> Dict[str, Any]:
+    values = [
+        _timing_ms(_safe_dict(row), "player_agent_ms", "player_agent_wall_ms")
+        for row in _safe_list(transcript)
+    ]
+    values = [value for value in values if value > 0]
+    return {
+        "ok": True,
+        "count": len(values),
+        "avg_ms": sum(values) / max(1, len(values)),
+        "p95_ms": _percentile(values, 95),
+        "max_ms": max(values or [0.0]),
+        "quality_gate": "diagnostic_only",
+        "note": "Player-agent LLM planning is measured separately and is not counted as authoritative human-playable blocking.",
+    }
+
+
+def _build_narration_grounding_summary(transcript: List[Dict[str, Any]]) -> Dict[str, Any]:
+    rows = _safe_list(transcript)
+    checked = 0
+    invalid = 0
+    fallback_used = 0
+    violation_counts: Dict[str, int] = {}
+
+    for row in rows:
+        row = _safe_dict(row)
+        validation = _safe_dict(row.get("narration_grounding_validation"))
+        if not validation:
+            continue
+        checked += 1
+        if not bool(validation.get("ok")):
+            invalid += 1
+        if bool(validation.get("fallback_used")):
+            fallback_used += 1
+        for violation in _safe_list(validation.get("violations")):
+            code = _safe_str(_safe_dict(violation).get("code") or "unknown")
+            violation_counts[code] = int(violation_counts.get(code, 0)) + 1
+
+    return {
+        "ok": invalid == 0,
+        "checked_count": checked,
+        "invalid_count": invalid,
+        "fallback_used_count": fallback_used,
+        "violation_counts": dict(sorted(violation_counts.items())),
     }
 
 
@@ -3136,6 +3285,10 @@ def _final_lifecycle_quality_gates(summary: Dict[str, Any]) -> Dict[str, Any]:
     readiness = _safe_dict(summary.get("hundred_turn_readiness_summary"))
     if int(summary.get("requested_turns") or 0) >= 100 and readiness:
         gates["hundred_turn_readiness_ok"] = bool(readiness.get("ok"))
+
+    narration_grounding = _safe_dict(summary.get("narration_grounding_summary"))
+    if bool(summary.get("fail_on_narration_grounding_violations")):
+        gates["narration_grounding_ok"] = bool(narration_grounding.get("ok", True))
     requested_turns = int(
         summary.get("requested_turns")
         or summary.get("turns_executed")
@@ -3380,6 +3533,7 @@ def _build_authoritative_final_lifecycle_summary(
     )
     summary["final_lifecycle_field_presence_summary"] = _final_lifecycle_field_presence_summary(summary)
     summary["quality_gate_summary"] = _final_lifecycle_quality_gates(summary)
+    summary["player_agent_latency_summary"] = _build_player_agent_latency_summary(transcript)
     summary["ok"] = bool(_safe_dict(summary["quality_gate_summary"]).get("ok"))
     return summary
 
@@ -6563,6 +6717,15 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
             "runtime_state": runtime_state,
         }
 
+        narration_payload = _safe_dict(turn_result.get("narration_payload"))
+        grounding_validation = _safe_dict(narration_payload.get("grounding_validation"))
+        if grounding_validation:
+            record["narration_grounding_validation"] = grounding_validation
+            record["narration_grounding_ok"] = bool(grounding_validation.get("ok"))
+            record["narration_grounding_fallback_used"] = bool(
+                grounding_validation.get("fallback_used")
+            )
+
         turn_performance["record_build_ms"] = elapsed_ms(record_build_start)
 
         playable_blocking_keys = [
@@ -6647,6 +6810,9 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
             raise RuntimeError(
                 f"progression_sidecar_fields_missing_from_record:turn={turn_index}"
             )
+
+        record["authoritative_blocking_ms"] = _authoritative_human_playable_blocking_ms(record)
+        record["human_playable_blocking_metric_mode"] = "authoritative_deterministic_only"
 
         transcript.append(record)
 
@@ -7380,6 +7546,10 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
         ],
         "rows": checkpoint_validation_rows,
     }
+    summary["narration_grounding_summary"] = _build_narration_grounding_summary(transcript)
+    summary["fail_on_narration_grounding_violations"] = bool(
+        getattr(args, "fail_on_narration_grounding_violations", False)
+    )
     runtime_state = _safe_dict(summary.get("latest_state"))
     _assert_final_lifecycle_summary_authority(summary)
 
@@ -7601,6 +7771,11 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--fail-on-compatibility-turn-runtime", action="store_true")
     parser.add_argument("--max-player-agent-fallback-rate", type=float, default=1.0)
     parser.add_argument("--fail-on-regression-warnings", action="store_true")
+    parser.add_argument(
+        "--fail-on-narration-grounding-violations",
+        action="store_true",
+        help="Fail autoplay quality gates when grounded narration validation rejects LLM output.",
+    )
     parser.add_argument("--checkpoint-every", type=int, default=0)
     parser.add_argument("--max-state-bytes", type=int, default=2_000_000)
     parser.add_argument("--max-roots", type=int, default=80)

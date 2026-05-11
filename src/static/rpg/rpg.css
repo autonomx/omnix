@@ -218,6 +218,20 @@
   max-width: 95px;
 }
 
+.rpg-grounding-correction {
+  opacity: 0.88;
+  font-style: italic;
+  border-left: 3px solid rgba(255, 196, 87, 0.75);
+  padding-left: 0.75rem;
+}
+
+.rpg-setting-row small {
+  display: block;
+  opacity: 0.75;
+  font-size: 0.82rem;
+  margin-top: 0.15rem;
+}
+
 /* -- Character Card Panel (Bundle BJ-BK-BL) ---------------------------- */
 
 .rpg-character-cards-panel {

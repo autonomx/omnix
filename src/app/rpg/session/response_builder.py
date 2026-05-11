@@ -298,6 +298,20 @@ def build_apply_turn_response(authoritative_result: Dict[str, Any]) -> Dict[str,
         "narration": narration,
         "raw_llm_narrative": raw_llm_narrative,
         "used_llm": used_llm,
+        "grounding_validation": _first_dict(
+            authoritative.get("grounding_validation"),
+            result_sub.get("grounding_validation"),
+        ),
+        "grounding_fallback": bool(
+            _first_value(
+                authoritative.get("grounding_fallback"),
+                result_sub.get("grounding_fallback"),
+            )
+        ),
+        "settings": _first_dict(
+            authoritative.get("settings"),
+            result_sub.get("settings"),
+        ),
         "narration_status": narration_status,
         "narration_debug": _safe_dict(
             result_sub.get("narration_debug") or authoritative.get("narration_debug")

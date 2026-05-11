@@ -77,6 +77,10 @@ PRESERVE_TURN_KEYS_SUMMARY = {
     "scenario_warnings",
     "raw_result_keys",
     "narration_preview",
+    "grounding_validation",
+    "grounding_fallback",
+    "grounding_selected_candidate",
+    "grounding_fallback_source",
 }
 
 # Additional keys for debug level
@@ -89,6 +93,10 @@ PRESERVE_TURN_KEYS_DEBUG = PRESERVE_TURN_KEYS_SUMMARY | {
     "combat_narration_payload",
     "turn_contract_compact",
     "resolved_result_compact",
+    "structured_narration_compact",
+    "narration_payload_compact",
+    "grounding_primary_violations",
+    "grounding_violation_codes",
     "action_type",
     "semantic_action_type",
     "compact_state_deltas",
@@ -219,7 +227,9 @@ def compact_result_for_summary(
     compacted: Dict[str, Any] = {}
 
     for key, value in result.items():
-        if key in STRIP_KEYS_FROM_RESULT:
+        if detail in ("debug", "full") and key == "turn_contract":
+            compacted[f"{key}_compact"] = _cap_dict_keys(_safe_dict(value), limits["max_dict_keys"])
+        elif key in STRIP_KEYS_FROM_RESULT:
             # Store only a marker, not the full blob
             if key == "session":
                 session = _safe_dict(value)
@@ -235,9 +245,6 @@ def compact_result_for_summary(
         elif key in {"authoritative", "raw_llm_narration"}:
             # Keep these but strip their large sub-fields
             compacted[key] = _strip_large_state(_safe_dict(value), limits)
-        elif detail in ("debug", "full") and key == "turn_contract":
-            # Keep compact version for debug/full
-            compacted[f"{key}_compact"] = _cap_dict_keys(_safe_dict(value), limits["max_dict_keys"])
         elif detail == "full" and key == "simulation_state":
             # Keep capped version for full
             compacted[key] = _strip_large_state(_safe_dict(value), limits)
@@ -265,6 +272,96 @@ def _extract_narration_preview(result: Dict[str, Any], max_len: int) -> str:
             return _preview(value.strip(), max_len)
 
     return ""
+
+
+def _first_dict(*values: Any) -> Dict[str, Any]:
+    for value in values:
+        value = _safe_dict(value)
+        if value:
+            return value
+    return {}
+
+
+def _extract_result_sub(result: Dict[str, Any]) -> Dict[str, Any]:
+    return _safe_dict(_safe_dict(result).get("result"))
+
+
+def _extract_narration_payload(result: Dict[str, Any]) -> Dict[str, Any]:
+    result = _safe_dict(result)
+    result_sub = _extract_result_sub(result)
+    session = _safe_dict(result.get("session"))
+    runtime_state = _safe_dict(result.get("runtime_state"))
+
+    return _first_dict(
+        result.get("narration_payload"),
+        result.get("structured_narration"),
+        result.get("narration_result"),
+        result.get("raw_llm_narration"),
+        result.get("raw_llm_narrative"),
+        result_sub.get("narration_payload"),
+        result_sub.get("structured_narration"),
+        result_sub.get("narration_result"),
+        result_sub.get("raw_llm_narration"),
+        result_sub.get("raw_llm_narrative"),
+        session.get("last_narration_payload"),
+        session.get("narration_payload"),
+        runtime_state.get("last_narration_payload"),
+        runtime_state.get("narration_payload"),
+    )
+
+
+def _extract_narration_json(result: Dict[str, Any]) -> Dict[str, Any]:
+    payload = _extract_narration_payload(result)
+    return _first_dict(
+        payload.get("narration_json"),
+        payload.get("structured_narration"),
+        payload.get("payload"),
+        payload,
+    )
+
+
+def _extract_grounding_validation(result: Dict[str, Any]) -> Dict[str, Any]:
+    result = _safe_dict(result)
+    result_sub = _extract_result_sub(result)
+    payload = _extract_narration_payload(result)
+    narration_json = _extract_narration_json(result)
+
+    return _first_dict(
+        result.get("grounding_validation"),
+        result_sub.get("grounding_validation"),
+        payload.get("grounding_validation"),
+        narration_json.get("grounding_validation"),
+        _safe_dict(result.get("structured_narration")).get("grounding_validation"),
+        _safe_dict(result_sub.get("structured_narration")).get("grounding_validation"),
+    )
+
+
+def _extract_grounding_violation_codes(validation: Dict[str, Any]) -> list[str]:
+    codes: list[str] = []
+    for violation in _safe_list(_safe_dict(validation).get("violations")):
+        code = _safe_str(_safe_dict(violation).get("code")).strip()
+        if code:
+            codes.append(code)
+    return codes
+
+
+def _compact_payload(value: Any, limits: Dict[str, Any]) -> Dict[str, Any]:
+    value = _safe_dict(value)
+    if not value:
+        return {}
+
+    compacted: Dict[str, Any] = {}
+    for key, item in value.items():
+        if isinstance(item, str):
+            compacted[key] = _preview(item, limits["max_text"])
+        elif isinstance(item, dict):
+            compacted[key] = _cap_dict_keys(item, limits["max_dict_keys"])
+        elif isinstance(item, list):
+            compacted[key] = _cap_list(item, limits["max_list"])
+        else:
+            compacted[key] = item
+
+    return _cap_dict_keys(compacted, limits["max_dict_keys"])
 
 
 def _extract_combat_summary(result: Dict[str, Any]) -> Dict[str, Any]:
@@ -302,9 +399,9 @@ def _extract_combat_narration_summary(result: Dict[str, Any]) -> Dict[str, Any]:
 def _extract_narration_debug(result: Dict[str, Any], limits: Dict[str, Any]) -> Dict[str, Any]:
     """Extract LLM/narration debug info."""
     result_sub = _safe_dict(result.get("result"))
-    raw_payload = _safe_dict(result_sub.get("raw_llm_narration"))
-
-    narration_json = _safe_dict(raw_payload.get("narration_json"))
+    raw_payload = _extract_narration_payload(result)
+    narration_json = _extract_narration_json(result)
+    grounding_validation = _extract_grounding_validation(result)
     npc = _safe_dict(narration_json.get("npc"))
 
     # Cap raw LLM text
@@ -312,14 +409,26 @@ def _extract_narration_debug(result: Dict[str, Any], limits: Dict[str, Any]) -> 
     raw_request = raw_payload.get("raw_llm_request")
 
     return {
-        "llm_called": result_sub.get("llm_called") or result_sub.get("used_llm"),
-        "llm_purpose": result_sub.get("llm_purpose"),
-        "narration_status": result_sub.get("narration_status"),
+        "llm_called": (
+            result.get("llm_called")
+            or result_sub.get("llm_called")
+            or result_sub.get("used_llm")
+            or raw_payload.get("used_llm")
+        ),
+        "llm_purpose": result_sub.get("llm_purpose") or raw_payload.get("llm_purpose"),
+        "narration_status": result_sub.get("narration_status") or raw_payload.get("narration_status"),
         "final_narration": _preview(_extract_narration_preview(result, limits["max_text"]), limits["max_text"]),
         "json_narration": _preview(_safe_str(narration_json.get("narration")), limits["max_text"]),
         "json_action": _preview(_safe_str(narration_json.get("action")), limits["max_text"]),
         "npc_speaker": _safe_str(npc.get("speaker")),
         "npc_line": _preview(_safe_str(npc.get("line")), limits["max_text"]),
+        "reward": narration_json.get("reward"),
+        "followup_hooks": _cap_list(_safe_list(narration_json.get("followup_hooks")), limits["max_list"]),
+        "grounding_validation": grounding_validation,
+        "grounding_selected_candidate": _safe_str(grounding_validation.get("selected_candidate")),
+        "grounding_fallback_used": bool(grounding_validation.get("fallback_used")),
+        "grounding_fallback_source": _safe_str(grounding_validation.get("fallback_source")),
+        "grounding_violation_codes": _extract_grounding_violation_codes(grounding_validation),
         "raw_llm_narration_capped": _preview(_safe_str(raw_text), limits["max_text"]),
         "raw_llm_request_capped": _preview(_safe_str(raw_request), limits["max_text"]),
     }
@@ -327,32 +436,51 @@ def _extract_narration_debug(result: Dict[str, Any], limits: Dict[str, Any]) -> 
 
 def _extract_extracted_fields(result: Dict[str, Any]) -> Dict[str, Any]:
     """Extract narration, action, npc fields."""
-    result_sub = _safe_dict(result.get("result"))
-    raw_payload = _safe_dict(result_sub.get("raw_llm_narration"))
-    narration_json = _safe_dict(raw_payload.get("narration_json"))
+    narration_json = _extract_narration_json(result)
     npc = _safe_dict(narration_json.get("npc"))
+    grounding_validation = _extract_grounding_validation(result)
 
     return {
         "narration": _safe_str(narration_json.get("narration")),
         "action": _safe_str(narration_json.get("action")),
         "npc_speaker": _safe_str(npc.get("speaker")),
         "npc_line": _safe_str(npc.get("line")),
-        "reward": _safe_str(narration_json.get("reward")),
+        "reward": narration_json.get("reward"),
         "followup_hooks": _safe_list(narration_json.get("followup_hooks")),
+        "grounding_validation": grounding_validation,
     }
 
 
 def _extract_deterministic_contract(result: Dict[str, Any], limits: Dict[str, Any]) -> Dict[str, Any]:
     """Extract compact turn_contract and resolved_result."""
     result_sub = _safe_dict(result.get("result"))
+    narration_payload = _extract_narration_payload(result)
 
-    turn_contract = _safe_dict(result.get("turn_contract"))
-    resolved_result = _safe_dict(result_sub.get("resolved_result"))
+    turn_contract = _first_dict(
+        result.get("turn_contract"),
+        result_sub.get("turn_contract"),
+        narration_payload.get("turn_contract"),
+        _safe_dict(narration_payload.get("narration_context")).get("turn_contract"),
+        result.get("turn_contract_compact"),
+    )
+    resolved_result = _first_dict(
+        result.get("resolved_result"),
+        result_sub.get("resolved_result"),
+        result_sub.get("interaction_result"),
+        result_sub.get("conversation_result"),
+        result.get("resolved_result_compact"),
+    )
 
     return {
-        "action_type": _safe_str(turn_contract.get("action_type")),
-        "semantic_action_type": _safe_str(turn_contract.get("semantic_action_type")),
-        "visible_interaction_reason": _safe_str(result.get("visible_interaction_reason")),
+        "action_type": _safe_str(turn_contract.get("action_type") or resolved_result.get("action_type")),
+        "semantic_action_type": _safe_str(
+            turn_contract.get("semantic_action_type") or resolved_result.get("semantic_action_type")
+        ),
+        "visible_interaction_reason": _safe_str(
+            result.get("visible_interaction_reason")
+            or result_sub.get("visible_interaction_reason")
+            or resolved_result.get("reason")
+        ),
         "turn_contract_compact": _cap_dict_keys(turn_contract, limits["max_dict_keys"]),
         "resolved_result_compact": _cap_dict_keys(resolved_result, limits["max_dict_keys"]),
     }
@@ -397,6 +525,51 @@ def sanitize_turn_for_summary(
     for key in preserve_keys:
         if key in turn:
             sanitized[key] = turn[key]
+
+    if result:
+        sanitized.setdefault("raw_result_keys", sorted([str(k) for k in result.keys()]))
+        sanitized.setdefault("narration_preview", _extract_narration_preview(result, limits["max_text"]))
+
+    if detail in ("debug", "full") and result:
+        narration_payload = _extract_narration_payload(result)
+        narration_json = _extract_narration_json(result)
+        grounding_validation = _extract_grounding_validation(result)
+
+        sanitized["extracted"] = _extract_extracted_fields(result)
+        sanitized["narration_debug"] = _extract_narration_debug(result, limits)
+        sanitized["narration_payload_compact"] = _compact_payload(narration_payload, limits)
+        sanitized["structured_narration_compact"] = _compact_payload(narration_json, limits)
+        sanitized["grounding_validation"] = grounding_validation
+        sanitized["grounding_fallback"] = bool(
+            grounding_validation.get("fallback_used")
+            or narration_json.get("grounding_fallback")
+            or narration_payload.get("grounding_fallback")
+        )
+        sanitized["grounding_selected_candidate"] = _safe_str(
+            grounding_validation.get("selected_candidate")
+        )
+        sanitized["grounding_fallback_source"] = _safe_str(
+            grounding_validation.get("fallback_source")
+        )
+        sanitized["grounding_violation_codes"] = _extract_grounding_violation_codes(
+            grounding_validation
+        )
+        sanitized["grounding_primary_violations"] = _safe_list(
+            grounding_validation.get("primary_violations")
+        )
+        sanitized.update(_extract_deterministic_contract(result, limits))
+        sanitized["compact_state_deltas"] = _extract_compact_state_deltas(result)
+    elif result:
+        grounding_validation = _extract_grounding_validation(result)
+        if grounding_validation:
+            sanitized["grounding_validation"] = grounding_validation
+            sanitized["grounding_fallback"] = bool(grounding_validation.get("fallback_used"))
+            sanitized["grounding_selected_candidate"] = _safe_str(
+                grounding_validation.get("selected_candidate")
+            )
+            sanitized["grounding_fallback_source"] = _safe_str(
+                grounding_validation.get("fallback_source")
+            )
 
     spatial_check_results = turn.get("spatial_check_results")
     if isinstance(spatial_check_results, list):

@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import json
+import logging
 import re
 from typing import Any, Dict, List
 
+from app.rpg.ai.grounding_validator import select_grounded_narration_candidate
 from app.rpg.dialogue_state import get_dialogue_context, update_dialogue_state
 from app.rpg.npc_dialogue.intelligence import (
     build_npc_intelligence_prompt,
@@ -74,6 +76,11 @@ PROVIDER_CHILD_CANDIDATES = [
 
 NARRATION_FORMAT_VERSION = "rpg_narration_v2"
 
+RUNTIME_NARRATION_CANDIDATE_MAX_TOKENS = 900
+RUNTIME_NARRATION_SINGLE_MAX_TOKENS = 450
+
+logger = logging.getLogger(__name__)
+
 
 def _safe_dict(value: Any) -> Dict[str, Any]:
     return value if isinstance(value, dict) else {}
@@ -106,47 +113,6 @@ def _recent_npc_lines(simulation_state: Dict[str, Any], speaker: str, *, limit: 
     return lines[-limit:]
 
 
-def _known_facts_for_npc_reply(simulation_state: Dict[str, Any], player_action: str) -> List[str]:
-    state = _safe_dict(simulation_state)
-    lower = _norm(player_action)
-    facts: List[str] = []
-
-    if "cloaked traveler" in lower or "traveler" in lower or "witness" in lower or "side door" in lower:
-        facts.extend(
-            [
-                "The cloaked traveler left through the tavern side door.",
-                "The side door and nearby street are the next concrete places to inspect.",
-                "The road outside the tavern is the next lead after the side-door trail.",
-            ]
-        )
-
-    if "road" in lower or "bandit" in lower or "trail" in lower:
-        facts.extend(
-            [
-                "The road has been dangerous recently.",
-                "Travelers are afraid to speak openly about the road trouble.",
-                "If the trail points to the road, the danger may be larger than tavern gossip.",
-            ]
-        )
-
-    quest_state = _safe_dict(_safe_dict(state.get("quest_progress")).get("quests"))
-    for quest in quest_state.values():
-        quest = _safe_dict(quest)
-        title = _safe_str(quest.get("title"))
-        if title:
-            facts.append(f"Active quest: {title}")
-        for objective in _safe_list(quest.get("objectives")):
-            objective = _safe_dict(objective)
-            if not objective.get("completed"):
-                summary = _safe_str(objective.get("summary") or objective.get("objective_text"))
-                if summary:
-                    facts.append(f"Active objective: {summary}")
-
-    out: List[str] = []
-    for fact in facts:
-        if fact and fact not in out:
-            out.append(fact)
-    return out[:12]
 
 
 def _build_dialogue_state_update_payload(
@@ -496,7 +462,6 @@ def build_deterministic_narration_payload(
             npc_intel = normalize_npc_intelligence_payload(raw)
             if not npc_line_is_invalid(npc_intel.get("line", ""), recent_lines):
                 npc_line = npc_intel["line"]
-                npc_payload["intelligence"] = npc_intel
         except Exception:
             pass
 
@@ -534,7 +499,6 @@ def build_deterministic_narration_payload(
             npc_intel = normalize_npc_intelligence_payload(raw)
             if not npc_line_is_invalid(npc_intel.get("line", ""), recent_lines):
                 npc_line = npc_intel["line"]
-                npc_payload["intelligence"] = npc_intel
         except Exception:
             pass
 
@@ -596,23 +560,138 @@ def build_deterministic_narration_payload(
     }
 
 
-def _extract_json_object(text: str) -> Dict[str, Any]:
-    text = _safe_str(text).strip()
-    if not text:
-        return {}
+def _extract_json_object_with_diagnostics_from_provider_text(text: Any) -> Dict[str, Any]:
+    """Extract provider JSON and return parse diagnostics.
+
+    Returns:
+      {
+        "payload": dict,
+        "ok": bool,
+        "error": str,
+        "strategy": str,
+        "raw_length": int,
+        "contains_candidate_marker": bool,
+        "brace_balance": int,
+        "ends_with_brace": bool
+      }
+    """
+    raw = _safe_str(text)
+    diagnostics: Dict[str, Any] = {
+        "payload": {},
+        "ok": False,
+        "error": "",
+        "strategy": "",
+        "raw_length": len(raw),
+        "contains_candidate_marker": "rpg_narration_candidates_v1" in raw,
+        "brace_balance": raw.count("{") - raw.count("}"),
+        "ends_with_brace": raw.rstrip().endswith("}"),
+    }
+
+    if not raw.strip():
+        diagnostics["error"] = "empty_provider_text"
+        return diagnostics
+
+    cleaned = raw.strip().lstrip("\ufeff").strip()
+
+    if cleaned.startswith("```"):
+        cleaned = re.sub(r"^```(?:json|JSON)?\s*", "", cleaned).strip()
+        cleaned = re.sub(r"\s*```$", "", cleaned).strip()
+
     try:
-        value = json.loads(text)
-        return value if isinstance(value, dict) else {}
-    except Exception:
-        pass
-    match = re.search(r"\{.*\}", text, flags=re.DOTALL)
-    if not match:
-        return {}
-    try:
-        value = json.loads(match.group(0))
-        return value if isinstance(value, dict) else {}
-    except Exception:
-        return {}
+        parsed = json.loads(cleaned)
+        if isinstance(parsed, dict):
+            diagnostics.update(
+                {
+                    "payload": parsed,
+                    "ok": True,
+                    "strategy": "direct",
+                    "error": "",
+                }
+            )
+            return diagnostics
+        diagnostics["error"] = "json_root_not_object"
+    except Exception as exc:
+        diagnostics["error"] = f"direct:{type(exc).__name__}:{exc}"
+
+    start = cleaned.find("{")
+    end = cleaned.rfind("}")
+    if start >= 0 and end > start:
+        candidate = cleaned[start : end + 1].strip()
+        try:
+            parsed = json.loads(candidate)
+            if isinstance(parsed, dict):
+                diagnostics.update(
+                    {
+                        "payload": parsed,
+                        "ok": True,
+                        "strategy": "first_brace_to_last_brace",
+                        "error": "",
+                    }
+                )
+                return diagnostics
+            diagnostics["error"] = "slice_root_not_object"
+        except Exception as exc:
+            diagnostics["error"] = f"slice:{type(exc).__name__}:{exc}"
+
+    start = cleaned.find("{")
+    if start < 0:
+        diagnostics["error"] = diagnostics["error"] or "missing_open_brace"
+        return diagnostics
+
+    depth = 0
+    in_string = False
+    escape = False
+    for index in range(start, len(cleaned)):
+        char = cleaned[index]
+
+        if escape:
+            escape = False
+            continue
+
+        if char == "\\" and in_string:
+            escape = True
+            continue
+
+        if char == '"':
+            in_string = not in_string
+            continue
+
+        if in_string:
+            continue
+
+        if char == "{":
+            depth += 1
+        elif char == "}":
+            depth -= 1
+            if depth == 0:
+                candidate = cleaned[start : index + 1].strip()
+                try:
+                    parsed = json.loads(candidate)
+                    if isinstance(parsed, dict):
+                        diagnostics.update(
+                            {
+                                "payload": parsed,
+                                "ok": True,
+                                "strategy": "balanced_braces",
+                                "error": "",
+                            }
+                        )
+                        return diagnostics
+                    diagnostics["error"] = "balanced_root_not_object"
+                except Exception as exc:
+                    diagnostics["error"] = f"balanced:{type(exc).__name__}:{exc}"
+                return diagnostics
+
+    diagnostics["error"] = diagnostics["error"] or "unterminated_json_object"
+    diagnostics["brace_balance_after_scan"] = depth
+    diagnostics["in_string_after_scan"] = in_string
+    return diagnostics
+
+
+def _extract_json_object_from_provider_text(text: Any) -> Dict[str, Any]:
+    return _safe_dict(
+        _extract_json_object_with_diagnostics_from_provider_text(text).get("payload")
+    )
 
 
 def _call_provider_text(provider: Any, prompt: str, *, max_tokens: int = 320) -> str:
@@ -687,6 +766,50 @@ def _provider_shape(provider: Any) -> Dict[str, Any]:
         "has_ask": callable(getattr(provider, "ask", None)),
         "has_call": callable(getattr(provider, "__call__", None)),
     }
+
+
+def _apply_grounding_to_runtime_payload(
+    payload: Dict[str, Any],
+    *,
+    turn_contract: Dict[str, Any] | None = None,
+    simulation_state: Dict[str, Any] | None = None,
+    grounding_settings: Dict[str, Any] | None = None,
+) -> Dict[str, Any]:
+    payload = _safe_dict(payload)
+    contract = _safe_dict(turn_contract)
+    if not payload or not contract:
+        return payload
+
+    grounded = select_grounded_narration_candidate(
+        payload,
+        contract,
+        state_snapshot=_safe_dict(simulation_state),
+        grounding_settings=_safe_dict(grounding_settings),
+        strict_named_fact_check=False,
+    )
+
+    merged = dict(grounded)
+
+    # Preserve source and raw provider envelope for diagnostics if the selected output is now just v2.
+    if "source" in payload:
+        merged["source"] = payload["source"]
+    if payload.get("format_version") == "rpg_narration_candidates_v1":
+        merged["raw_narration_candidates"] = {
+            "primary": _safe_dict(payload.get("primary")),
+            "safe_fallback": _safe_dict(payload.get("safe_fallback")),
+        }
+
+    grounding_validation = _safe_dict(merged.get("grounding_validation"))
+    if grounding_validation:
+        merged["grounding_fallback"] = bool(
+            merged.get("grounding_fallback") or grounding_validation.get("fallback_used")
+        )
+        if grounding_validation.get("fallback_source"):
+            merged["grounding_fallback_source"] = grounding_validation.get("fallback_source")
+        if grounding_validation.get("selected_candidate"):
+            merged["grounding_selected_candidate"] = grounding_validation.get("selected_candidate")
+
+    return merged
 
 
 def _extract_provider_text(response: Any) -> str:
@@ -872,7 +995,7 @@ def _call_provider_text_with_diagnostics(
     }
     if provider is None:
         diagnostics["error"] = "provider_not_available"
-        return {"text": "", "diagnostics": diagnostics}
+        return {"text": "", "diagnostics": diagnostics, "parsed_payload": {}}
 
     any_supported = False
     for candidate in _provider_candidates(provider):
@@ -899,23 +1022,155 @@ def _call_provider_text_with_diagnostics(
                 )
                 text = _extract_provider_text(response)
                 diagnostics["raw_text_length"] = len(text)
-                diagnostics["raw_text_excerpt"] = text[:500]
+                diagnostics["raw_text_excerpt"] = text[:3000]
+                diagnostics["raw_text_tail_excerpt"] = text[-1000:]
+
+                # Parse JSON to add candidate envelope diagnostics
+                parse_diagnostics = _extract_json_object_with_diagnostics_from_provider_text(text)
+                parsed_payload = _safe_dict(parse_diagnostics.get("payload"))
+                if not parsed_payload:
+                    logger.warning(
+                        "[N101][provider_parse] failed to extract JSON object from provider text len=%s excerpt=%r",
+                        len(_safe_str(text)),
+                        _safe_str(text)[:700],
+                    )
+                if "rpg_narration_candidates_v1" in _safe_str(text) and not parsed_payload:
+                    logger.error(
+                        "[N101][provider_parse] provider text contains candidate marker but JSON extraction failed excerpt=%r",
+                        _safe_str(text)[:1200],
+                    )
+                diagnostics["parsed_format_version"] = _safe_str(_safe_dict(parsed_payload).get("format_version"))
+                diagnostics["parsed_keys"] = sorted([str(k) for k in _safe_dict(parsed_payload).keys()])
+                diagnostics["parsed_is_candidate_envelope"] = _is_runtime_narration_candidate_envelope(parsed_payload)
+                diagnostics["parsed_candidate_shape"] = _candidate_debug_shape(parsed_payload)
+                if _safe_str(_safe_dict(parsed_payload).get("format_version")) == "rpg_narration_candidates_v1" or "primary" in _safe_dict(parsed_payload) or "safe_fallback" in _safe_dict(parsed_payload):
+                    pass  # already set above
+                else:
+                    diagnostics["parsed_candidate_shape"] = {}
+                diagnostics["parsed_json_ok"] = bool(parse_diagnostics.get("ok"))
+                diagnostics["parsed_json_strategy"] = _safe_str(parse_diagnostics.get("strategy"))
+                diagnostics["parsed_json_error"] = _safe_str(parse_diagnostics.get("error"))
+                diagnostics["parsed_json_raw_length"] = int(parse_diagnostics.get("raw_length") or 0)
+                diagnostics["parsed_json_contains_candidate_marker"] = bool(parse_diagnostics.get("contains_candidate_marker"))
+                diagnostics["parsed_json_brace_balance"] = int(parse_diagnostics.get("brace_balance") or 0)
+                diagnostics["parsed_json_ends_with_brace"] = bool(parse_diagnostics.get("ends_with_brace"))
+
                 if text.strip():
                     diagnostics["selected_method"] = attempt_name
-                    return {"text": text, "diagnostics": diagnostics}
+                    return {"text": text, "diagnostics": diagnostics, "parsed_payload": parsed_payload}
                 diagnostics["method_errors"][attempt_name] = "provider_returned_empty_text"
             except Exception as exc:
                 diagnostics["method_errors"][attempt_name] = f"{type(exc).__name__}: {exc}"
 
     if not any_supported:
         diagnostics["error"] = "provider_has_no_supported_call_method"
-        return {"text": "", "diagnostics": diagnostics}
+        return {"text": "", "diagnostics": diagnostics, "parsed_payload": {}}
 
     if diagnostics["method_errors"]:
         diagnostics["error"] = "provider_call_failed"
     else:
         diagnostics["error"] = "provider_returned_empty_text"
-    return {"text": "", "diagnostics": diagnostics}
+    return {"text": "", "diagnostics": diagnostics, "parsed_payload": {}}
+
+
+def _normalize_candidate_narration_payload(value: Any) -> Dict[str, Any]:
+    """Normalize one candidate from rpg_narration_candidates_v1.
+
+    This is intentionally lenient. It preserves reward/followup_hooks so the
+    deterministic grounding validator can reject unsupported claims and choose
+    the safe_fallback candidate when appropriate.
+
+    Do not run the old v2 safety validator here.
+    """
+    value = _safe_dict(value)
+    npc = _safe_dict(value.get("npc"))
+
+    reward = value.get("reward")
+    if reward in ({}, [], ""):
+        reward = None
+
+    followup_hooks = value.get("followup_hooks")
+    if not isinstance(followup_hooks, list):
+        followup_hooks = []
+
+    return {
+        "format_version": NARRATION_FORMAT_VERSION,
+        "narration": _safe_str(value.get("narration")),
+        "action": _safe_str(value.get("action")),
+        "npc": {
+            "speaker": _safe_str(npc.get("speaker")),
+            "line": _safe_str(npc.get("line")),
+        },
+        "reward": reward,
+        "followup_hooks": followup_hooks,
+        "source": _safe_str(value.get("source") or "provider_runtime_narration"),
+        "authoritative_changes": False,
+    }
+
+
+def _validate_candidate_shape(value: Any, *, label: str) -> Dict[str, Any]:
+    """Validate candidate envelope shape only.
+
+    Important:
+    - Do not reject reward_not_empty here.
+    - Do not reject followup_hooks_not_empty here.
+    - Do not reject authoritative-looking action text here.
+    - Grounding validation is responsible for choosing/rejecting candidates.
+    """
+    value = _safe_dict(value)
+    errors: List[str] = []
+
+    format_version = _safe_str(value.get("format_version"))
+    if format_version and format_version != NARRATION_FORMAT_VERSION:
+        errors.append(f"{label}:invalid_format_version")
+
+    if not _safe_str(value.get("narration")):
+        errors.append(f"{label}:missing_narration")
+
+    if not isinstance(value.get("npc"), dict):
+        errors.append(f"{label}:npc_not_object")
+
+    hooks = value.get("followup_hooks")
+    if hooks not in (None, []) and not isinstance(hooks, list):
+        errors.append(f"{label}:followup_hooks_not_list")
+
+    return {
+        "ok": not errors,
+        "errors": errors,
+        "payload": _normalize_candidate_narration_payload(value),
+    }
+
+
+def _validate_parsed_provider_payload_or_parse_failure(
+    *,
+    parsed_payload: Dict[str, Any],
+    provider_call_diagnostics: Dict[str, Any],
+    player_action: str,
+) -> Dict[str, Any]:
+    contains_candidate_marker = bool(
+        _safe_dict(provider_call_diagnostics).get("parsed_json_contains_candidate_marker")
+    )
+    parsed_json_ok = bool(
+        _safe_dict(provider_call_diagnostics).get("parsed_json_ok")
+    )
+
+    if contains_candidate_marker and not parsed_json_ok:
+        parse_error = _safe_str(
+            _safe_dict(provider_call_diagnostics).get("parsed_json_error")
+        )
+        return {
+            "ok": False,
+            "errors": [
+                "provider_json_parse_failed_candidate_envelope",
+                parse_error or "unknown_parse_error",
+            ],
+            "payload": {},
+        }
+
+    return validate_narration_payload(
+        parsed_payload,
+        player_action=player_action,
+    )
 
 
 def validate_narration_payload(
@@ -924,6 +1179,85 @@ def validate_narration_payload(
     player_action: str,
 ) -> Dict[str, Any]:
     payload = _safe_dict(payload)
+
+    if _safe_str(payload.get("format_version")) == "rpg_narration_candidates_v1" or "primary" in payload or "safe_fallback" in payload:
+        logger.warning(
+            "[N101][validate_narration_payload] candidate-like payload shape=%s",
+            _candidate_debug_shape(payload),
+        )
+
+    if _is_runtime_narration_candidate_envelope(payload):
+        logger.warning(
+            "[N101][validate_narration_payload] candidate envelope branch reached shape=%s",
+            _candidate_debug_shape(payload),
+        )
+        primary_validated = _validate_candidate_shape(
+            _safe_dict(payload.get("primary")),
+            label="primary",
+        )
+        fallback_validated = _validate_candidate_shape(
+            _safe_dict(payload.get("safe_fallback")),
+            label="safe_fallback",
+        )
+
+        errors: List[str] = []
+        if not primary_validated.get("ok"):
+            errors.extend(primary_validated.get("errors", []))
+        if not fallback_validated.get("ok"):
+            errors.extend(fallback_validated.get("errors", []))
+
+        if errors:
+            return {
+                "ok": False,
+                "errors": errors,
+                "payload": payload,
+            }
+
+        return {
+            "ok": True,
+            "errors": [],
+            "payload": {
+                "format_version": "rpg_narration_candidates_v1",
+                "primary": primary_validated["payload"],
+                "safe_fallback": fallback_validated["payload"],
+            },
+        }
+
+    # Defensive backstop: if candidate envelope somehow reaches old v2 validation
+    if _safe_str(payload.get("format_version")) == "rpg_narration_candidates_v1":
+        logger.error(
+            "[N101][validate_narration_payload] BUG: candidate envelope reached old v2 validation checks shape=%s",
+            _candidate_debug_shape(payload),
+        )
+        candidate_primary_validated = _validate_candidate_shape(
+            _safe_dict(payload.get("primary")),
+            label="primary",
+        )
+        candidate_fallback_validated = _validate_candidate_shape(
+            _safe_dict(payload.get("safe_fallback")),
+            label="safe_fallback",
+        )
+        candidate_errors: List[str] = []
+        if not candidate_primary_validated.get("ok"):
+            candidate_errors.extend(candidate_primary_validated.get("errors", []))
+        if not candidate_fallback_validated.get("ok"):
+            candidate_errors.extend(candidate_fallback_validated.get("errors", []))
+        if candidate_errors:
+            return {
+                "ok": False,
+                "errors": candidate_errors,
+                "payload": payload,
+            }
+        return {
+            "ok": True,
+            "errors": [],
+            "payload": {
+                "format_version": "rpg_narration_candidates_v1",
+                "primary": candidate_primary_validated["payload"],
+                "safe_fallback": candidate_fallback_validated["payload"],
+            },
+        }
+
     errors: List[str] = []
 
     if payload.get("format_version") != NARRATION_FORMAT_VERSION:
@@ -973,6 +1307,30 @@ def _safe_action_acknowledgement(turn_contract: Dict[str, Any] | None = None) ->
         or turn_contract.get("action")
         or "The scene acknowledges the attempted action without changing any authoritative state."
     )
+
+
+def _candidate_debug_shape(value: Any) -> Dict[str, Any]:
+    value = _safe_dict(value)
+    primary = _safe_dict(value.get("primary"))
+    safe_fallback = _safe_dict(value.get("safe_fallback"))
+    return {
+        "format_version": _safe_str(value.get("format_version")),
+        "keys": sorted([str(k) for k in value.keys()]),
+        "is_candidate": _is_runtime_narration_candidate_envelope(value),
+        "primary_keys": sorted([str(k) for k in primary.keys()]),
+        "safe_fallback_keys": sorted([str(k) for k in safe_fallback.keys()]),
+        "primary_format_version": _safe_str(primary.get("format_version")),
+        "safe_fallback_format_version": _safe_str(safe_fallback.get("format_version")),
+    }
+
+
+def _is_runtime_narration_candidate_envelope(value: Any) -> bool:
+    value = _safe_dict(value)
+    if _safe_str(value.get("format_version")) != "rpg_narration_candidates_v1":
+        return False
+    primary = _safe_dict(value.get("primary"))
+    safe_fallback = _safe_dict(value.get("safe_fallback"))
+    return bool(primary) and bool(safe_fallback)
 
 
 def _provider_action_looks_authoritative(action: str) -> bool:
@@ -1049,63 +1407,114 @@ def build_provider_narration_payload(
     player_action: str,
     simulation_state: Dict[str, Any] | None = None,
     turn_contract: Dict[str, Any] | None = None,
-    max_tokens: int = 320,
+    max_tokens: int = RUNTIME_NARRATION_CANDIDATE_MAX_TOKENS,
     repair_context: Dict[str, Any] | None = None,
 ) -> Dict[str, Any]:
     simulation_state = _safe_dict(simulation_state)
     turn_contract = _safe_dict(turn_contract)
-    action_type = classify_player_action(player_action)
-    target_npc = infer_npc_speaker(player_action, simulation_state)
 
-    prompt = {
-        "task": "Produce structured RPG narration for a completed deterministic turn.",
-        "schema": {
-            "format_version": NARRATION_FORMAT_VERSION,
-            "narration": "2-5 sentences describing how the scene responds. Do not repeat the player input.",
-            "action": "Result/acknowledgement of the action, not the original action text.",
-            "npc": {"speaker": "NPC name or empty", "line": "NPC line or empty"},
-            "reward": "",
-            "followup_hooks": [],
-        },
-        "rules": [
-            "Simulation is authoritative. You cannot award XP, gold, items, damage, quest completion, or story outcomes.",
-            "Do not invent rewards.",
-            "Do not mutate state.",
-            "Do not say 'the player'.",
-            "Do not repeat the player input.",
-            "If the action addresses an NPC, include a grounded npc.speaker and npc.line.",
-            "reward MUST be an empty string.",
-            "followup_hooks MUST be an empty array.",
-            "authoritative_changes MUST be false if included.",
-            "Do not include rolls, DCs, success/failure claims, XP, gold, item changes, quest completion, or objective completion unless already present in the deterministic turn_contract.",
-            "Return JSON only.",
-        ],
-        "previous_attempt_repair_context": _safe_dict(repair_context),
-        "player_action": player_action,
-        "action_type": action_type,
-        "target_npc": target_npc,
-        "turn_contract": turn_contract,
-        "bounded_state_summary": {
-            "scene": simulation_state.get("scene"),
-            "location": simulation_state.get("location"),
-            "story_arc_state": simulation_state.get("story_arc_state"),
-            "campaign_journal_state": simulation_state.get("campaign_journal_state"),
-            "npc_profile_state": simulation_state.get("npc_profile_state"),
-        },
-    }
+    prompt = f"""
+Produce structured RPG narration for a completed deterministic turn.
+
+Authoritative turn contract:
+{json.dumps(turn_contract, ensure_ascii=False, indent=2)}
+
+Simulation state:
+{json.dumps({
+    "scene": simulation_state.get("scene"),
+    "location": simulation_state.get("location"),
+    "story_arc_state": simulation_state.get("story_arc_state"),
+    "campaign_journal_state": simulation_state.get("campaign_journal_state"),
+    "npc_profile_state": simulation_state.get("npc_profile_state"),
+}, ensure_ascii=False, indent=2)}
+
+HIGH-RISK GROUNDING RULES:
+- The simulation/turn_contract is the only source of truth.
+- You are presentation only. You cannot grant rewards, create combat results, move the player, complete quests, or reveal hidden facts.
+- Do not mention rewards, currency, items, XP, inventory changes, combat, injury, blood, death, location travel, quest completion, objective completion, secret facts, or NPC knowledge unless explicitly present in the turn_contract, state_delta, resolved_result, or combat facts.
+- If the player claims an NPC owes them money, items, favors, or information, treat that claim as unsupported unless the turn_contract confirms it.
+- The safe_fallback candidate should be a natural refusal/deferral when the player asks for an unsupported result.
+
+{_runtime_narration_candidate_schema_text()}
+"""
     call_result = _call_provider_text_with_diagnostics(
         provider,
         json.dumps(prompt, ensure_ascii=False),
         max_tokens=max_tokens,
     )
+
     raw = _safe_str(call_result.get("text"))
     call_diagnostics = _safe_dict(call_result.get("diagnostics"))
-    parsed = _extract_json_object(raw)
+    parsed = _safe_dict(call_result.get("parsed_payload"))
+    if _safe_str(_safe_dict(parsed).get("format_version")) == "rpg_narration_candidates_v1":
+        logger.warning(
+            "[N101][provider_response] robust parser produced candidate envelope shape=%s",
+            _candidate_debug_shape(parsed),
+        )
+    elif not parsed:
+        logger.warning(
+            "[N101][provider_response] robust parser produced empty payload raw_excerpt=%r",
+            _safe_str(raw)[:500],
+        )
     if parsed:
         parsed["source"] = "provider_runtime_narration"
     parsed["_raw_provider_response"] = raw
     parsed["_provider_call_diagnostics"] = call_diagnostics
     return parsed
+
+
+def _runtime_narration_candidate_schema_text() -> str:
+    return """
+Return exactly one JSON object. Do not use markdown fences.
+
+Use this exact shape:
+
+{
+  "format_version": "rpg_narration_candidates_v1",
+  "primary": {
+    "format_version": "rpg_narration_v2",
+    "narration": "<1-2 short grounded sentences>",
+    "action": "<short consequence only>",
+    "npc": {
+      "speaker": "<allowed/present NPC speaker, or empty string>",
+      "line": "<natural in-character line, or empty string>"
+    },
+    "reward": null,
+    "followup_hooks": []
+  },
+  "safe_fallback": {
+    "format_version": "rpg_narration_v2",
+    "narration": "<1 short safe sentence>",
+    "action": "<short safe consequence only>",
+    "npc": {
+      "speaker": "<same allowed speaker when possible, or empty string>",
+      "line": "<safe in-character fallback line; no rewards, no combat, no travel, no quest completion, no hidden facts>"
+    },
+    "reward": null,
+    "followup_hooks": []
+  }
+}
+
+Candidate rules:
+- primary may be expressive, but must stay inside the authoritative contract.
+- safe_fallback must be conservative, natural, and safe.
+- safe_fallback must never include rewards, currency, items, XP, inventory changes, combat, injury, blood, death, location travel, quest completion, objective completion, hidden facts, or unsupported NPC knowledge.
+- If the player makes an unsupported claim such as "you owe me gold", safe_fallback should refuse or defer the claim.
+- If the contract does not explicitly authorize a reward, both primary.reward and safe_fallback.reward must be null.
+- If the contract does not explicitly authorize combat/damage/injury/death, do not mention blood, wounds, attacks, death, damage, or combat.
+- If the contract does not explicitly authorize travel/location change, do not say the player arrives, travels, leaves, reaches, or enters a new location.
+- If no allowed NPC should speak, set npc.speaker and npc.line to empty strings.
+
+Length rules:
+- primary.narration: 1-2 sentences, maximum 45 words.
+- primary.action: 1 short sentence, maximum 20 words.
+- primary.npc.line: 1 short in-character line, maximum 24 words.
+- safe_fallback.narration: 1 sentence, maximum 28 words.
+- safe_fallback.action: 1 short sentence, maximum 16 words.
+- safe_fallback.npc.line: 1 short in-character line, maximum 18 words.
+- followup_hooks must be [] unless the turn_contract explicitly provides allowed next actions.
+- Do not include explanations, analysis, markdown, or text outside JSON.
+"""
 
 
 def build_runtime_narration_payload(
@@ -1115,7 +1524,7 @@ def build_runtime_narration_payload(
     simulation_state: Dict[str, Any] | None = None,
     turn_contract: Dict[str, Any] | None = None,
     prefer_provider: bool = True,
-    max_tokens: int = 320,
+    max_tokens: int = RUNTIME_NARRATION_CANDIDATE_MAX_TOKENS,
     max_provider_attempts: int = 2,
 ) -> Dict[str, Any]:
     diagnostics = {
@@ -1154,12 +1563,30 @@ def build_runtime_narration_payload(
             diagnostics["provider_call_diagnostics"] = _safe_dict(
                 provider_payload.get("_provider_call_diagnostics")
             )
-            validated = validate_narration_payload(provider_payload, player_action=player_action)
+            if _is_runtime_narration_candidate_envelope(provider_payload):
+                logger.warning(
+                    "[N101][provider_response] candidate envelope detected before v2 validation shape=%s",
+                    _candidate_debug_shape(provider_payload),
+                )
+            validated = _validate_parsed_provider_payload_or_parse_failure(
+                parsed_payload=provider_payload,
+                provider_call_diagnostics=diagnostics["provider_call_diagnostics"],
+                player_action=player_action,
+            )
             last_validated = validated
             if validated["ok"]:
                 diagnostics["provider_valid"] = True
                 diagnostics["provider_repaired"] = False
-                payload = validated["payload"]
+                payload = _apply_grounding_to_runtime_payload(
+                    validated["payload"],
+                    turn_contract=_safe_dict(turn_contract),
+                    simulation_state=_safe_dict(simulation_state),
+                    grounding_settings=_safe_dict(
+                        _safe_dict(simulation_state).get("runtime_settings", {}).get("grounding")
+                        if isinstance(_safe_dict(simulation_state).get("runtime_settings"), dict)
+                        else {}
+                    ),
+                )
                 payload["raw_provider_response"] = _safe_str(provider_payload.get("_raw_provider_response"))
                 payload["runtime_narration_diagnostics"] = diagnostics
                 return payload
@@ -1189,8 +1616,14 @@ def build_runtime_narration_payload(
             player_action=player_action,
             turn_contract=turn_contract,
         )
-        repaired_validated = validate_narration_payload(
-            repaired_provider_payload,
+        if _safe_str(_safe_dict(repaired_provider_payload).get("format_version")) == "rpg_narration_candidates_v1":
+            logger.warning(
+                "[N101][provider_repair] validating candidate envelope shape=%s",
+                _candidate_debug_shape(repaired_provider_payload),
+            )
+        repaired_validated = _validate_parsed_provider_payload_or_parse_failure(
+            parsed_payload=repaired_provider_payload,
+            provider_call_diagnostics=diagnostics["provider_call_diagnostics"],
             player_action=player_action,
         )
         if repaired_validated["ok"]:
@@ -1200,7 +1633,16 @@ def build_runtime_narration_payload(
                 repaired_provider_payload.get("_repair_actions") or []
             )
             diagnostics["provider_original_errors"] = list(last_validated.get("errors") or [])
-            payload = repaired_validated["payload"]
+            payload = _apply_grounding_to_runtime_payload(
+                repaired_validated["payload"],
+                turn_contract=_safe_dict(turn_contract),
+                simulation_state=_safe_dict(simulation_state),
+                grounding_settings=_safe_dict(
+                    _safe_dict(simulation_state).get("runtime_settings", {}).get("grounding")
+                    if isinstance(_safe_dict(simulation_state).get("runtime_settings"), dict)
+                    else {}
+                ),
+            )
             payload["raw_provider_response"] = _safe_str(last_provider_payload.get("_raw_provider_response"))
             payload["runtime_narration_diagnostics"] = diagnostics
             return payload
@@ -1219,7 +1661,16 @@ def build_runtime_narration_payload(
         simulation_state=simulation_state,
         turn_contract=turn_contract,
     )
-    payload = validate_narration_payload(fallback, player_action=player_action)["payload"]
+    payload = _apply_grounding_to_runtime_payload(
+        validate_narration_payload(fallback, player_action=player_action)["payload"],
+        turn_contract=_safe_dict(turn_contract),
+        simulation_state=_safe_dict(simulation_state),
+        grounding_settings=_safe_dict(
+            _safe_dict(simulation_state).get("runtime_settings", {}).get("grounding")
+            if isinstance(_safe_dict(simulation_state).get("runtime_settings"), dict)
+            else {}
+        ),
+    )
     diagnostics["fallback_used"] = True
     payload["runtime_narration_diagnostics"] = diagnostics
     return payload

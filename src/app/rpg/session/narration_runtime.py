@@ -293,6 +293,8 @@ def assemble_turn_narration_response(
         authoritative["narration_json"] = _safe_dict(narration_payload.get("narration_json"))
         authoritative["raw_llm_narrative"] = narration_payload
         authoritative["used_llm"] = _safe_bool(narration_payload.get("used_llm"), False)
+        authoritative["grounding_validation"] = _safe_dict(narration_payload.get("grounding_validation"))
+        authoritative["grounding_fallback"] = _safe_bool(narration_payload.get("grounding_fallback"), False)
         authoritative["narration_status"] = "completed"
         authoritative["turn_contract"] = turn_contract
         authoritative["narration_debug"] = {
@@ -344,6 +346,8 @@ def assemble_turn_narration_response(
             "narration": narration,
             "raw_llm_narrative": raw_llm_narrative,
             "used_llm": used_llm,
+            "grounding_validation": _safe_dict(authoritative.get("grounding_validation")),
+            "grounding_fallback": _safe_bool(authoritative.get("grounding_fallback"), False),
             "narration_status": narration_status,
             "narration_debug": _safe_dict(authoritative.get("narration_debug")),
         },
