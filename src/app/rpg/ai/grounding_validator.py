@@ -107,6 +107,38 @@ _LOCATION_MOVE_PATTERNS = [
     r"\byou leave for\b",
 ]
 
+_UNSUPPORTED_DEBT_CLAIM_PATTERNS = [
+    r"\byou\s+owe\s+me\b",
+    r"\byou\s+owed\s+me\b",
+    r"\bowe\s+me\s+(?:money|coin|coins|gold|silver|copper|payment|debt)\b",
+    r"\bpay\s+me\b",
+    r"\bpay\s+what\s+you\s+owe\b",
+    r"\bsettle\s+(?:your\s+)?debt\b",
+    r"\bdebt\b.*\b(?:pay|owed|owe|coin|gold|silver|copper)\b",
+]
+
+_CLEAR_DEBT_REFUSAL_PATTERNS = [
+    r"\bdo\s+not\s+owe\b",
+    r"\bdon't\s+owe\b",
+    r"\bdoes\s+not\s+owe\b",
+    r"\bnot\s+owe\b",
+]
+
+_AMBIGUOUS_DEBT_RESPONSE_PATTERNS = [
+    r"\bfifty\s+gold\?\b",
+    r"\b\d+\s*(?:gold|silver|copper|coin|coins|gp|sp|cp)\?\b",
+    r"\byou'?re\s+sure\s+about\s+that\b",
+    r"\bare\s+you\s+sure\b",
+    r"\bpay\s+me\s+now\?\b",
+    r"\blet\s+me\s+think\s+about\s+what\s+i\s+owe\b",
+    r"\bwhat\s+i\s+owe\s+you\b",
+    r"\bconsider(?:ing)?\s+(?:the\s+)?debt\b",
+    r"\bunder\s+discussion\b",
+    r"\bwe'?ll\s+see\b",
+    r"\bmaybe\b",
+    r"\bperhaps\b",
+]
+
 _NEGATION_MARKERS = (
     " no ",
     " not ",
@@ -356,6 +388,59 @@ def _quest_completion_exists(turn_contract: Mapping[str, Any]) -> bool:
     )
 
 
+def _payment_or_debt_authorized(turn_contract: Mapping[str, Any]) -> bool:
+    contract = _safe_dict(turn_contract)
+    result = _safe_dict(
+        contract.get("result")
+        or contract.get("resolved_result")
+        or contract.get("resolved_action")
+    )
+
+    candidates = [
+        contract,
+        result,
+        _safe_dict(contract.get("service_result")),
+        _safe_dict(contract.get("interaction_result")),
+        _safe_dict(contract.get("conversation_result")),
+        _safe_dict(contract.get("npc_backbone_decision")),
+        _safe_dict(contract.get("state_delta")),
+        _safe_dict(result.get("service_result")),
+        _safe_dict(result.get("interaction_result")),
+        _safe_dict(result.get("conversation_result")),
+        _safe_dict(result.get("npc_backbone_decision")),
+        _safe_dict(result.get("state_delta")),
+    ]
+
+    for source in candidates:
+        if not source:
+            continue
+
+        for key in (
+            "currency_delta",
+            "money_delta",
+            "reward",
+            "payment",
+            "payment_due",
+            "debt",
+            "debt_confirmed",
+            "owed_amount",
+            "inventory_delta",
+            "items_added",
+        ):
+            if source.get(key) not in (None, "", {}, []):
+                return True
+
+        if source.get("accepted") is True and (
+            source.get("service_id")
+            or source.get("service")
+            or source.get("price")
+            or source.get("cost")
+        ):
+            return True
+
+    return False
+
+
 def _allowed_speakers(
     turn_contract: Mapping[str, Any],
     state_snapshot: Optional[Mapping[str, Any]] = None,
@@ -526,6 +611,62 @@ def validate_narration_grounding(
                 )
                 break
 
+    player_action_text = _safe_str(
+        contract.get("player_action")
+        or contract.get("input")
+        or contract.get("command")
+        or _safe_dict(contract.get("result")).get("player_action")
+    )
+
+    player_made_debt_claim = bool(
+        _contains_pattern(player_action_text, _UNSUPPORTED_DEBT_CLAIM_PATTERNS)
+    )
+
+    text_mentions_payment_or_debt = bool(
+        _contains_pattern(full_text, _UNSUPPORTED_DEBT_CLAIM_PATTERNS)
+        or _contains_pattern(full_text, _REWARD_PATTERNS)
+    )
+
+    if player_made_debt_claim and not _payment_or_debt_authorized(contract):
+        clear_refusal = _contains_pattern(full_text, _CLEAR_DEBT_REFUSAL_PATTERNS)
+        ambiguous_debt_response = _contains_pattern(full_text, _AMBIGUOUS_DEBT_RESPONSE_PATTERNS)
+        explicit_grant = _contains_pattern(
+            full_text,
+            [
+                rf"\b(?:hands?|handed|gives?|gave|pays?|paid)\s+(?:you\s+)?{_MONEY_PHRASE_PATTERN}\b",
+                rf"\byou\s+(?:gain|receive|get|are\s+given)\s+{_MONEY_PHRASE_PATTERN}\b",
+                r"\bpayment\s+changes\s+hands\b",
+            ],
+        )
+
+        if explicit_grant:
+            violations.append(
+                GroundingViolation(
+                    code="unsupported_debt_payment_claim",
+                    field="narration",
+                    message="Narration grants or confirms payment for an unsupported debt claim.",
+                    evidence=explicit_grant,
+                )
+            )
+        elif ambiguous_debt_response and not clear_refusal:
+            violations.append(
+                GroundingViolation(
+                    code="unsupported_debt_claim_not_refused",
+                    field="narration",
+                    message="Player made an unsupported debt/payment claim, but narration answered ambiguously instead of clearly refusing.",
+                    evidence=ambiguous_debt_response,
+                )
+            )
+        elif text_mentions_payment_or_debt and not clear_refusal:
+            violations.append(
+                GroundingViolation(
+                    code="unsupported_debt_claim_not_refused",
+                    field="narration",
+                    message="Player made an unsupported debt/payment claim, but narration did not clearly refuse or challenge it.",
+                    evidence=player_action_text[:240],
+                )
+            )
+
     return GroundingValidationResult(ok=not violations, violations=violations)
 
 
@@ -561,11 +702,30 @@ def build_deterministic_fallback_narration(
     codes = {violation.code for violation in violations}
     speaker = _first_allowed_speaker(contract, state_snapshot)
 
+    player_action_text = _safe_str(
+        contract.get("player_action")
+        or contract.get("input")
+        or contract.get("command")
+        or _safe_dict(contract.get("result")).get("player_action")
+    )
+    player_made_debt_claim = bool(
+        _contains_pattern(player_action_text, _UNSUPPORTED_DEBT_CLAIM_PATTERNS)
+    )
+
     narration = ""
     action = ""
     npc_line = ""
 
-    if "unsupported_reward_claim" in codes or "unsupported_reward" in codes:
+    if (
+        player_made_debt_claim
+        or "unsupported_debt_payment_claim" in codes
+        or "unsupported_debt_claim_not_refused" in codes
+    ):
+        display_speaker = speaker or "The NPC"
+        narration = f"{display_speaker} does not hand over any coin."
+        action = "The unsupported debt claim is refused; no payment or reward is resolved."
+        npc_line = "No. I do not owe you coin."
+    elif "unsupported_reward_claim" in codes or "unsupported_reward" in codes:
         narration = f"{speaker or 'The NPC'} does not hand over any coin."
         action = "No payment, reward, or inventory change is resolved by the turn contract."
         npc_line = "No coin changes hands. I can't agree to that."
@@ -602,8 +762,8 @@ def build_deterministic_fallback_narration(
         action = narration
 
     npc = None
-    if speaker and npc_line:
-        npc = {"speaker": speaker, "line": npc_line}
+    if npc_line:
+        npc = {"speaker": speaker or "NPC", "line": npc_line}
 
     return {
         "format_version": "rpg_narration_v2",

@@ -168,6 +168,34 @@ NARRATION_N1_N3_SCENARIOS: Dict[str, Dict[str, Any]] = {
         "turns": ["I attack the bandit."],
     },
     "npc_bran_refuses_fake_debt": {
+        "currency": {"gold": 0, "silver": 0, "copper": 0},
+        "conversation_settings": {
+            "enabled": True,
+            "autonomous_ticks_enabled": False,
+            "frequency": "never",
+            "conversation_chance_percent": 0,
+        },
+        "setup_interaction_state": {
+            "player_location_id": "loc_rusty_flagon",
+            "player_hp": 20,
+            "player_max_hp": 20,
+            "relationships": {
+                "npc:bran": {"trust": 0, "relationship": 0, "score": 0},
+                "Bran": {"trust": 0, "relationship": 0, "score": 0},
+            },
+            "relationship_state": {
+                "npc:bran": {"trust": 0, "relationship": 0, "score": 0},
+                "Bran": {"trust": 0, "relationship": 0, "score": 0},
+            },
+            "social_state": {
+                "relationships": {
+                    "npc:bran": {"trust": 0, "relationship": 0, "score": 0},
+                    "Bran": {"trust": 0, "relationship": 0, "score": 0},
+                }
+            },
+            "service_state": {"paid_services": []},
+            "npc_memories": [],
+        },
         "description": "Bran should refuse an unsupported claim that he owes the player 50 gold.",
         "turns": [
             {
