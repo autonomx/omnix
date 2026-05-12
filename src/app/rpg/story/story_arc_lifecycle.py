@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any, Dict, Iterable, List, Mapping, Optional
 import time
 
@@ -49,7 +49,7 @@ class ArcFailureRule:
     summary: str = ""
 
 
-@dataclass
+@dataclass(frozen=True)
 class ArcRuntimeState:
     arc_id: str
     title: str
@@ -65,6 +65,8 @@ class ArcRuntimeState:
     completed_objectives: List[str] = field(default_factory=list)
     flags: Dict[str, bool] = field(default_factory=dict)
     history: List[Dict[str, Any]] = field(default_factory=list)
+    source_hook_id: str = ""
+    seeded_followup: bool = False
 
 
 def _safe_dict(value: Any) -> Dict[str, Any]:
@@ -156,6 +158,12 @@ def normalize_arc_state(raw: Mapping[str, Any]) -> ArcRuntimeState:
         completed_objectives=[str(v) for v in _safe_list(raw.get("completed_objectives"))],
         flags={str(k): bool(v) for k, v in _safe_dict(raw.get("flags")).items()},
         history=[_safe_dict(v) for v in _safe_list(raw.get("history"))],
+        source_hook_id=_safe_str(raw.get("source_hook_id")),
+        seeded_followup=bool(
+            raw.get("seeded_followup")
+            or raw.get("source_hook_id")
+            or raw.get("current_stage") == "seeded_followup"
+        ),
     )
 
 
@@ -175,6 +183,8 @@ def serialize_arc_state(arc: ArcRuntimeState) -> Dict[str, Any]:
         "completed_objectives": list(arc.completed_objectives),
         "flags": dict(arc.flags),
         "history": list(arc.history),
+        "source_hook_id": arc.source_hook_id,
+        "seeded_followup": arc.seeded_followup,
     }
 
 
@@ -262,9 +272,7 @@ def apply_story_arc_lifecycle(
             if not _rule_requirements_met(rule, state):
                 continue
 
-            arc.status = ARC_STATUS_COMPLETED
-            arc.completed_turn = int(turn_index)
-            arc.resolution_outcome = rule.outcome
+            arc = replace(arc, status=ARC_STATUS_COMPLETED, completed_turn=int(turn_index), resolution_outcome=rule.outcome)
             arc.history.append(
                 {
                     "turn": turn_index,
@@ -274,6 +282,7 @@ def apply_story_arc_lifecycle(
                     "summary": rule.summary,
                 }
             )
+            arcs[arc_id] = arc
 
             for flag in rule.set_flags:
                 state_delta["flags"][flag] = True
@@ -306,9 +315,7 @@ def apply_story_arc_lifecycle(
                 if not _failure_rule_met(rule, arc=arc, state=state, turn_index=turn_index):
                     continue
 
-                arc.status = ARC_STATUS_FAILED
-                arc.failed_turn = int(turn_index)
-                arc.failure_outcome = rule.outcome
+                arc = replace(arc, status=ARC_STATUS_FAILED, failed_turn=int(turn_index), failure_outcome=rule.outcome)
                 arc.history.append(
                     {
                         "turn": turn_index,
@@ -318,6 +325,7 @@ def apply_story_arc_lifecycle(
                         "summary": rule.summary,
                     }
                 )
+                arcs[arc_id] = arc
 
                 events.append(
                     {
