@@ -4873,6 +4873,44 @@ def build_campaign_report_model(
     model["story_arc_view"] = build_story_arc_report_rows(model)
     model["inventory_start_view"] = build_inventory_rows(_safe_dict(model["inventory_start"]))
     model["inventory_end_view"] = build_inventory_rows(_safe_dict(model["inventory_end"]))
+
+    character_inventory = _safe_dict(summary.get("character_inventory_progression"))
+    if character_inventory:
+        player = _safe_dict(character_inventory.get("player"))
+
+        model["character_inventory_progression"] = character_inventory
+
+        model["player_progression_view"] = {
+            "summary_rows": [
+                ("Name", player.get("name") or "The Player"),
+                ("Level", player.get("level", 1)),
+                ("XP", f"{player.get('xp', 0)} / {player.get('xp_to_next_level', 100)}"),
+                ("Progress Log Entries", player.get("progress_log_entries", 0)),
+            ],
+            "stats_rows": [],
+            "recent_progression_rows": [
+                [
+                    row.get("turn", ""),
+                    row.get("type", ""),
+                    row.get("xp_delta") or row.get("delta") or "",
+                    row.get("summary") or row.get("mechanic") or "",
+                    "",
+                ]
+                for row in _safe_list(character_inventory.get("progression_log"))[-8:]
+                if isinstance(row, dict)
+            ],
+        }
+
+        model["inventory_start"] = {
+            "currency": character_inventory.get("starting_currency", {}),
+            "items": character_inventory.get("starting_inventory", []),
+        }
+        model["inventory_end"] = {
+            "currency": character_inventory.get("ending_currency", {}),
+            "items": character_inventory.get("ending_inventory", []),
+        }
+        model["inventory_start_view"] = build_inventory_rows(_safe_dict(model["inventory_start"]))
+        model["inventory_end_view"] = build_inventory_rows(_safe_dict(model["inventory_end"]))
     model["location_journey"] = build_location_journey_model(
         timeline=timeline,
         state=latest_state,
@@ -6303,6 +6341,13 @@ pre {
     {("<ul>" + "".join(f"<li>{_esc(item)}</li>" for item in _safe_list(pm_summary.get("top_risks"))) + "</ul>") if _safe_list(pm_summary.get("top_risks")) else '<p class="good">No major PM-level risks detected.</p>'}
   </section>
   """
+
+    character_inventory = _safe_dict(model.get("character_inventory_progression"))
+    currency_delta = _safe_dict(character_inventory.get("currency_delta"))
+    inventory_delta = _safe_list(character_inventory.get("inventory_delta"))
+    xp_events = _safe_list(character_inventory.get("xp_events"))
+    level_events = _safe_list(character_inventory.get("level_events"))
+
     body_sections = f"""
   <section class="rpg-promoted-section" id="player">
     <h2>Player Character Progression / Stats</h2>
@@ -6343,6 +6388,28 @@ pre {
       </div>
     </div>
     {_render_json_details("Raw inventory start/end JSON", {"start": model.get("inventory_start"), "end": model.get("inventory_end")})}
+
+    <h3>Progression Deltas</h3>
+    <div class="two-col">
+      <div>
+        <h4>Currency Delta</h4>
+        <pre>{_esc(json.dumps(currency_delta, ensure_ascii=False, indent=2, default=str))}</pre>
+      </div>
+      <div>
+        <h4>Inventory Delta</h4>
+        <pre>{_esc(json.dumps(inventory_delta, ensure_ascii=False, indent=2, default=str))}</pre>
+      </div>
+    </div>
+    <div class="two-col">
+      <div>
+        <h4>XP Events</h4>
+        <pre>{_esc(json.dumps(xp_events, ensure_ascii=False, indent=2, default=str))}</pre>
+      </div>
+      <div>
+        <h4>Level Events</h4>
+        <pre>{_esc(json.dumps(level_events, ensure_ascii=False, indent=2, default=str))}</pre>
+      </div>
+    </div>
    </section>
 
   <section class="rpg-promoted-section" id="npcs">

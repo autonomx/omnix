@@ -46,5 +46,4 @@ def test_goal_pressure_repairs_vague_objective_action_to_concrete_witness_action
     assert action_is_vague_objective("I ask Bran if they know anything that can help with my current objective.")
     repaired = deterministic_goal_pressure_action(pressure)
     assert "where the witness was last seen" in repaired
-    assert "current objective" not in repaired</content>
-<parameter name="filePath">src/tests/rpg/autoplay/test_player_goal_director.py
+    assert "current objective" not in repaired
