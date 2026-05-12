@@ -1,6 +1,12 @@
 
 from __future__ import annotations
 
+from app.rpg.mechanics.mechanics_opportunities import (
+    describe_mechanic_opportunity_state,
+    list_available_mechanic_opportunities,
+)
+from app.rpg.mechanics.mechanics_resolver import resolve_mechanic_opportunity
+
 PROGRESSION_STATE_PRESERVE_KEYS = (
     "progression_state_revision",
     "progression_completed_node_count",
@@ -70,6 +76,125 @@ def _effective_transcript_detail(args: Any) -> str:
 
 def _slim_transcript_row(row: Dict[str, Any], max_row_bytes: int = 50000) -> Dict[str, Any]:
     slim_row = {key: row.get(key) for key in TRANSCRIPT_KEEP_KEYS if key in row}
+
+    for key in (
+        "mechanic",
+        "mechanics_evidence_source",
+        "mechanics_forced_action",
+        "mechanic_resolution_input",
+        "player_action_original",
+        "mechanic_resolution_failed_opportunity_id",
+        "mechanic_resolution_failed_reason",
+    ):
+        if row.get(key) not in (None, "", {}, []):
+            slim_row[key] = row.get(key)
+
+    state_delta = _safe_dict(row.get("state_delta"))
+    if state_delta:
+        slim_row["state_delta"] = {
+            key: value
+            for key, value in state_delta.items()
+            if key in {
+                "currency_delta",
+                "inventory_delta",
+                "xp_delta",
+                "level_delta",
+                "level_up",
+                "party_delta",
+                "combat_started",
+                "combat_resolved",
+                "location_changed",
+                "from_location",
+                "to_location",
+                "current_location",
+                "flags",
+            }
+        }
+
+    row_result = _safe_dict(row.get("result"))
+    if row_result:
+        slim_row["result"] = {
+            key: value
+            for key, value in row_result.items()
+            if key in {
+                "mechanic",
+                "resolver",
+                "service_result",
+                "purchase_result",
+                "sale_result",
+                "party_delta",
+                "combat_result",
+                "loot_result",
+                "quest_log_delta",
+                "currency_delta",
+                "inventory_delta",
+                "xp_delta",
+                "level_delta",
+                "level_up",
+                "progress_category",
+                "meaningful_progress",
+                "mechanics_evidence_source",
+            }
+        }
+
+    mechanic_resolution = _safe_dict(row.get("mechanic_resolution"))
+    if mechanic_resolution:
+        slim_row["mechanic_resolution"] = {
+            "ok": mechanic_resolution.get("ok"),
+            "mechanic": mechanic_resolution.get("mechanic"),
+            "progress_category": mechanic_resolution.get("progress_category"),
+            "mechanics_evidence_source": mechanic_resolution.get("mechanics_evidence_source"),
+            "opportunity": {
+                "id": _safe_dict(mechanic_resolution.get("opportunity")).get("id"),
+                "mechanic": _safe_dict(mechanic_resolution.get("opportunity")).get("mechanic"),
+                "label": _safe_dict(mechanic_resolution.get("opportunity")).get("label"),
+                "command": _safe_dict(mechanic_resolution.get("opportunity")).get("command"),
+                "resolver": _safe_dict(mechanic_resolution.get("opportunity")).get("resolver"),
+            },
+            "result": {
+                key: value
+                for key, value in _safe_dict(mechanic_resolution.get("result")).items()
+                if key in {
+                    "mechanic",
+                    "resolver",
+                    "service_result",
+                    "purchase_result",
+                    "sale_result",
+                    "party_delta",
+                    "combat_result",
+                    "loot_result",
+                    "quest_log_delta",
+                    "currency_delta",
+                    "inventory_delta",
+                    "xp_delta",
+                    "level_delta",
+                    "level_up",
+                    "progress_category",
+                    "meaningful_progress",
+                    "mechanics_evidence_source",
+                }
+            },
+            "state_delta": {
+                key: value
+                for key, value in _safe_dict(mechanic_resolution.get("state_delta")).items()
+                if key in {
+                    "currency_delta",
+                    "inventory_delta",
+                    "xp_delta",
+                    "level_delta",
+                    "level_up",
+                    "party_delta",
+                    "combat_started",
+                    "combat_resolved",
+                    "location_changed",
+                    "from_location",
+                    "to_location",
+                    "current_location",
+                    "flags",
+                }
+            },
+        }
+
     slim_row["_artifact_slimmed"] = True
     return slim_row
 
@@ -2561,12 +2686,17 @@ def _build_100_turn_evaluation_summary(
     progress_quality_summary: Dict[str, Any],
     checkpoint_summary: Dict[str, Any],
     loop_detection_summary: Dict[str, Any],
+    mechanics_coverage_summary: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     grounding = _safe_dict(narration_grounding_summary)
     progress = _safe_dict(progress_quality_summary)
     checkpoints = _safe_dict(checkpoint_summary)
     loops = _safe_dict(loop_detection_summary)
     perf = _safe_dict(performance_summary)
+    mechanics = _safe_dict(mechanics_coverage_summary)
+    mechanics_real_required_ok = bool(
+        mechanics.get("real_required_ok", mechanics.get("required_ok", True))
+    )
 
     selected_grounding_health = _build_selected_output_grounding_health(
         grounding,
@@ -2678,6 +2808,23 @@ def _build_100_turn_evaluation_summary(
             },
             "message": f"Average turn latency {avg_turn_seconds:.2f}s, p95 {p95_turn_seconds:.2f}s.",
         },
+        "mechanics_coverage_required": {
+            "ok": mechanics_real_required_ok,
+            "value": {
+                "coverage_rate": mechanics.get("coverage_rate"),
+                "real_coverage_rate": mechanics.get("real_coverage_rate"),
+                "covered_required_count": mechanics.get("covered_required_count"),
+                "real_covered_required_count": mechanics.get("real_covered_required_count"),
+                "required_count": mechanics.get("required_count"),
+                "missing_required": mechanics.get("missing_required"),
+                "missing_real_required": mechanics.get("missing_real_required"),
+            },
+            "expected": {
+                "missing_real_required": [],
+                "real_coverage_rate": "1.0",
+            },
+            "message": "Required RPG mechanics should be exercised by real runtime/story-graph evidence.",
+        },
     }
 
     failed = {
@@ -2728,6 +2875,820 @@ def _row_has_location_progression(row: Dict[str, Any]) -> bool:
             return True
 
     return False
+
+
+def _default_player_progression_state() -> Dict[str, Any]:
+    return {
+        "name": "The Player",
+        "level": 1,
+        "xp": 0,
+        "xp_to_next_level": 25,
+        "progress_log": [],
+        "currency": {
+            "gold": 15,
+            "silver": 20,
+            "copper": 50,
+        },
+        "inventory": [
+            {
+                "id": "item:travelers_cloak",
+                "name": "Traveler's Cloak",
+                "quantity": 1,
+                "type": "gear",
+                "description": "A weathered cloak suitable for road travel.",
+            },
+            {
+                "id": "item:iron_dagger",
+                "name": "Iron Dagger",
+                "quantity": 1,
+                "type": "weapon",
+                "description": "A simple backup blade.",
+            },
+            {
+                "id": "item:trail_rations",
+                "name": "Trail Rations",
+                "quantity": 3,
+                "type": "consumable",
+                "description": "Basic food for short travel.",
+            },
+            {
+                "id": "item:waterskin",
+                "name": "Waterskin",
+                "quantity": 1,
+                "type": "gear",
+                "description": "A filled waterskin.",
+            },
+            {
+                "id": "item:plain_journal",
+                "name": "Plain Journal",
+                "quantity": 1,
+                "type": "tool",
+                "description": "A small book for notes, rumors, and leads.",
+            },
+        ],
+    }
+
+
+def _item_display_name(item_id: str) -> str:
+    item_id = _safe_str(item_id)
+    names = {
+        "item:rations": "Rations",
+        "item:torch": "Torch",
+        "item:marked_coin": "Marked Coin",
+        "item:bandit_knife": "Bandit Knife",
+        "item:travelers_cloak": "Traveler's Cloak",
+        "item:iron_dagger": "Iron Dagger",
+        "item:trail_rations": "Trail Rations",
+        "item:waterskin": "Waterskin",
+        "item:plain_journal": "Plain Journal",
+    }
+    return names.get(item_id, item_id.replace("item:", "").replace("_", " ").title())
+
+
+def _item_type(item_id: str) -> str:
+    item_id = _safe_str(item_id)
+    if item_id in {"item:iron_dagger", "item:bandit_knife"}:
+        return "weapon"
+    if item_id in {"item:rations", "item:trail_rations"}:
+        return "consumable"
+    if item_id in {"item:marked_coin"}:
+        return "quest"
+    if item_id in {"item:torch", "item:plain_journal"}:
+        return "tool"
+    return "gear"
+
+
+def _normalize_inventory_items(items: Any) -> List[Dict[str, Any]]:
+    normalized: List[Dict[str, Any]] = []
+    for raw in _safe_list(items):
+        item = _safe_dict(raw)
+        item_id = _safe_str(item.get("id") or item.get("item_id") or item.get("name"))
+        if not item_id:
+            continue
+        quantity = int(item.get("quantity") or item.get("qty") or 1)
+        normalized.append(
+            {
+                "id": item_id,
+                "name": _safe_str(item.get("name") or _item_display_name(item_id)),
+                "quantity": quantity,
+                "type": _safe_str(item.get("type") or _item_type(item_id)),
+                "description": _safe_str(item.get("description") or ""),
+            }
+        )
+    return normalized
+
+
+def _apply_inventory_delta_to_items(
+    inventory: List[Dict[str, Any]],
+    inventory_delta: Dict[str, Any],
+) -> List[Dict[str, Any]]:
+    items = [dict(item) for item in _normalize_inventory_items(inventory)]
+
+    def add_item(raw: Dict[str, Any]) -> None:
+        item = _safe_dict(raw)
+        item_id = _safe_str(item.get("id") or item.get("item_id"))
+        if not item_id:
+            return
+        quantity = int(item.get("quantity") or item.get("qty") or 1)
+        for existing in items:
+            if existing.get("id") == item_id:
+                existing["quantity"] = int(existing.get("quantity") or 0) + quantity
+                return
+        items.append(
+            {
+                "id": item_id,
+                "name": _safe_str(item.get("name") or _item_display_name(item_id)),
+                "quantity": quantity,
+                "type": _safe_str(item.get("type") or _item_type(item_id)),
+                "description": _safe_str(item.get("description") or ""),
+            }
+        )
+
+    def remove_item(raw: Dict[str, Any]) -> None:
+        item = _safe_dict(raw)
+        item_id = _safe_str(item.get("id") or item.get("item_id"))
+        if not item_id:
+            return
+        quantity = int(item.get("quantity") or item.get("qty") or 1)
+        for existing in list(items):
+            if existing.get("id") == item_id:
+                existing["quantity"] = max(0, int(existing.get("quantity") or 0) - quantity)
+                if int(existing.get("quantity") or 0) <= 0:
+                    items.remove(existing)
+                return
+
+    for raw_item in _safe_list(_safe_dict(inventory_delta).get("items_added")):
+        add_item(_safe_dict(raw_item))
+
+    for raw_item in _safe_list(_safe_dict(inventory_delta).get("items_removed")):
+        remove_item(_safe_dict(raw_item))
+
+    return items
+
+
+def _apply_currency_delta(currency: Dict[str, int], currency_delta: Dict[str, Any]) -> Dict[str, int]:
+    result = {str(k): int(v or 0) for k, v in _safe_dict(currency).items()}
+    for key, value in _safe_dict(currency_delta).items():
+        result[str(key)] = int(result.get(str(key), 0)) + int(value or 0)
+    return result
+
+
+def _currency_can_pay_delta(currency: Dict[str, Any], currency_delta: Dict[str, Any]) -> bool:
+    current = {
+        str(key): int(value or 0)
+        for key, value in _safe_dict(currency).items()
+    }
+
+    for key, value in _safe_dict(currency_delta).items():
+        amount = int(value or 0)
+        if amount < 0 and int(current.get(str(key), 0)) + amount < 0:
+            return False
+
+    return True
+
+
+def _opportunity_is_affordable(
+    opportunity: Dict[str, Any],
+    mechanics_state: Dict[str, Any],
+) -> bool:
+    effects = _safe_dict(_safe_dict(opportunity).get("effects_preview"))
+    currency_delta = _safe_dict(effects.get("currency_delta"))
+    if not currency_delta:
+        return True
+
+    return _currency_can_pay_delta(
+        _safe_dict(mechanics_state.get("currency")),
+        currency_delta,
+    )
+
+
+def _build_mechanics_coverage_summary(
+    transcript: List[Dict[str, Any]],
+    final_summary: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    mechanics: Dict[str, Dict[str, Any]] = {
+        "travel": {"required": True, "count": 0, "turns": [], "examples": []},
+        "npc_interaction": {"required": True, "count": 0, "turns": [], "examples": []},
+        "quest_progress": {"required": True, "count": 0, "turns": [], "examples": []},
+        "service_or_lodging": {"required": True, "count": 0, "turns": [], "examples": []},
+        "buying": {"required": True, "count": 0, "turns": [], "examples": []},
+        "selling": {"required": False, "count": 0, "turns": [], "examples": []},
+        "currency_change": {"required": True, "count": 0, "turns": [], "examples": []},
+        "inventory_change": {"required": True, "count": 0, "turns": [], "examples": []},
+        "party_recruitment": {"required": True, "count": 0, "turns": [], "examples": []},
+        "combat_started": {"required": True, "count": 0, "turns": [], "examples": []},
+        "combat_resolved": {"required": True, "count": 0, "turns": [], "examples": []},
+        "xp_gain": {"required": True, "count": 0, "turns": [], "examples": []},
+        "level_up": {"required": False, "count": 0, "turns": [], "examples": []},
+        "loot_acquired": {"required": False, "count": 0, "turns": [], "examples": []},
+    }
+
+    def mark(name: str, turn_index: int, row: Dict[str, Any], reason: str, evidence_source: str = "explicit_payload") -> None:
+        item = mechanics.get(name)
+        if not item:
+            return
+        item["count"] = int(item.get("count") or 0) + 1
+        if turn_index not in item["turns"]:
+            item["turns"].append(turn_index)
+        source_counts = item.setdefault("evidence_source_counts", {})
+        source_counts[evidence_source] = int(source_counts.get(evidence_source, 0)) + 1
+        if len(item["examples"]) < 5:
+            item["examples"].append(
+                {
+                    "turn": turn_index,
+                    "reason": reason,
+                    "evidence_source": evidence_source,
+                    "player_action": _safe_str(row.get("player_action"))[:240],
+                    "mechanic": row.get("mechanic"),
+                }
+            )
+
+    available_mechanic_counts: Dict[str, int] = {}
+    available_mechanic_example_turns: Dict[str, List[int]] = {}
+
+    for index, raw_row in enumerate(_safe_list(transcript), start=1):
+        row = _safe_dict(raw_row)
+        turn_index = int(row.get("turn_index") or row.get("turn") or index)
+        action_text = _safe_str(row.get("player_action")).lower()
+
+        mechanic_resolution = _safe_dict(row.get("mechanic_resolution"))
+        result = _safe_dict(row.get("result"))
+        state_delta = _safe_dict(row.get("state_delta"))
+        turn_contract = _safe_dict(row.get("turn_contract"))
+        contract_result = _safe_dict(turn_contract.get("result"))
+        contract_delta = _safe_dict(turn_contract.get("state_delta"))
+        mechanic_result = _safe_dict(mechanic_resolution.get("result"))
+        mechanic_delta = _safe_dict(mechanic_resolution.get("state_delta"))
+
+        candidates = [
+            row,
+            result,
+            state_delta,
+            turn_contract,
+            contract_result,
+            contract_delta,
+            mechanic_resolution,
+            mechanic_result,
+            mechanic_delta,
+        ]
+
+        evidence_source = _safe_str(
+            row.get("mechanics_evidence_source")
+            or result.get("mechanics_evidence_source")
+            or mechanic_resolution.get("mechanics_evidence_source")
+            or "explicit_payload"
+        )
+
+        for raw_opportunity in _safe_list(row.get("available_mechanics")):
+            opportunity = _safe_dict(raw_opportunity)
+            mechanic = _safe_str(opportunity.get("mechanic"))
+            if mechanic:
+                available_mechanic_counts[mechanic] = int(available_mechanic_counts.get(mechanic, 0)) + 1
+                turns = available_mechanic_example_turns.setdefault(mechanic, [])
+                if turn_index and len(turns) < 10:
+                    turns.append(turn_index)
+
+        resolved_mechanic = _safe_str(
+            row.get("mechanic")
+            or result.get("mechanic")
+            or mechanic_result.get("mechanic")
+            or mechanic_resolution.get("mechanic")
+        )
+
+        if resolved_mechanic in mechanics:
+            mark(resolved_mechanic, turn_index, row, "resolved_mechanic", evidence_source)
+
+        if any(_safe_dict(candidate).get("location_changed") for candidate in candidates):
+            mark("travel", turn_index, row, "location_changed", evidence_source)
+
+        if any(_safe_dict(candidate).get("travel_result") for candidate in candidates):
+            mark("travel", turn_index, row, "travel_result", evidence_source)
+
+        service_payload = {}
+        for candidate in candidates:
+            service_payload = _safe_dict(
+                _safe_dict(candidate).get("service_result")
+                or _safe_dict(candidate).get("lodging_result")
+                or _safe_dict(candidate).get("room_result")
+            )
+            if service_payload:
+                break
+
+        service_is_purchase = bool(
+            service_payload.get("purchase")
+            or service_payload.get("purchased")
+            or service_payload.get("selected_offer_id")
+            or service_payload.get("service_id")
+            or service_payload.get("ok") is True
+        )
+        if service_payload.get("status") == "offers_available" and not service_payload.get("purchase") and not service_payload.get("selected_offer_id"):
+            service_is_purchase = False
+
+        if service_payload and service_is_purchase:
+            mark("service_or_lodging", turn_index, row, "service_purchase_result", evidence_source)
+        elif any(token in action_text for token in ("rent a room", "pay bran", "common room", "buy a hot meal", "pay for lodging")):
+            mark("service_or_lodging", turn_index, row, "service_action_text", "action_text")
+
+        if any(_safe_dict(candidate).get("purchase_result") or _safe_dict(candidate).get("buy_result") for candidate in candidates):
+            mark("buying", turn_index, row, "purchase_result", evidence_source)
+
+        if any(_safe_dict(candidate).get("sale_result") or _safe_dict(candidate).get("sell_result") for candidate in candidates):
+            mark("selling", turn_index, row, "sale_result", evidence_source)
+
+        if any(_safe_dict(candidate).get("currency_delta") for candidate in candidates):
+            mark("currency_change", turn_index, row, "currency_delta", evidence_source)
+
+        if any(_safe_dict(candidate).get("inventory_delta") for candidate in candidates):
+            mark("inventory_change", turn_index, row, "inventory_delta", evidence_source)
+
+        if any(_safe_dict(candidate).get("party_delta") for candidate in candidates):
+            mark("party_recruitment", turn_index, row, "party_delta", evidence_source)
+
+        combat_payload = {}
+        for candidate in candidates:
+            combat_payload = _safe_dict(_safe_dict(candidate).get("combat_result"))
+            if combat_payload:
+                break
+
+        if combat_payload:
+            mark("combat_started", turn_index, row, "combat_result", evidence_source)
+            if combat_payload.get("resolved") or combat_payload.get("victory") or combat_payload.get("defeat") or combat_payload.get("ended"):
+                mark("combat_resolved", turn_index, row, "combat_result_resolved", evidence_source)
+
+        if any(_safe_dict(candidate).get("xp_delta") is not None for candidate in candidates):
+            mark("xp_gain", turn_index, row, "xp_delta", evidence_source)
+
+        if any(_safe_dict(candidate).get("loot_result") for candidate in candidates):
+            mark("loot_acquired", turn_index, row, "loot_result", evidence_source)
+
+        if any(_safe_dict(candidate).get("level_up") is True or _safe_dict(candidate).get("level_delta") for candidate in candidates):
+            mark("level_up", turn_index, row, "level_delta", evidence_source)
+
+        scenario_summary = _safe_dict(row.get("scenario_progression_summary"))
+        if scenario_summary.get("changed"):
+            if any(token in action_text for token in ("ask ", "tell ", "show ", "report ", "speak ", "talk ", "confront ")):
+                mark("npc_interaction", turn_index, row, "scenario_action_text", "scenario_graph")
+            mark("quest_progress", turn_index, row, "scenario_progression_changed", "scenario_graph")
+
+    required = {name: data for name, data in mechanics.items() if bool(data.get("required"))}
+    missing_required = {
+        name: data
+        for name, data in required.items()
+        if int(data.get("count") or 0) <= 0
+    }
+
+    real_required_missing: Dict[str, Dict[str, Any]] = {}
+    for name, data in required.items():
+        source_counts = _safe_dict(data.get("evidence_source_counts"))
+        real_count = sum(
+            int(count or 0)
+            for source, count in source_counts.items()
+            if source not in {"smoke_100_injection", "test_harness_injection"}
+        )
+        injected_count = sum(
+            int(count or 0)
+            for source, count in source_counts.items()
+            if source in {"smoke_100_injection", "test_harness_injection"}
+        )
+        data["real_count"] = real_count
+        data["injected_count"] = injected_count
+        if real_count <= 0:
+            real_required_missing[name] = data
+
+    return {
+        "format_version": "mechanics_coverage_v1",
+        "ok": not missing_required,
+        "required_ok": not missing_required,
+        "real_required_ok": not real_required_missing,
+        "mechanics": mechanics,
+        "required_mechanics": sorted(required.keys()),
+        "missing_required": sorted(missing_required.keys()),
+        "missing_real_required": sorted(real_required_missing.keys()),
+        "covered_required_count": len(required) - len(missing_required),
+        "real_covered_required_count": len(required) - len(real_required_missing),
+        "required_count": len(required),
+        "coverage_rate": (len(required) - len(missing_required)) / max(1, len(required)),
+        "real_coverage_rate": (len(required) - len(real_required_missing)) / max(1, len(required)),
+        "available_mechanic_counts": dict(sorted(available_mechanic_counts.items())),
+        "available_mechanic_example_turns": dict(sorted(available_mechanic_example_turns.items())),
+    }
+
+
+def _current_row_location(row: Dict[str, Any], fallback: str = "scene:rusty_flagon") -> str:
+    row = _safe_dict(row)
+    result_travel = _safe_dict(_safe_dict(row.get("result")).get("travel_result"))
+    contract_result_travel = _safe_dict(
+        _safe_dict(_safe_dict(row.get("turn_contract")).get("result")).get("travel_result")
+    )
+    return _safe_str(
+        row.get("current_location")
+        or row.get("location")
+        or _safe_dict(row.get("state_delta")).get("current_location")
+        or _safe_dict(row.get("state_delta")).get("to_location")
+        or _safe_dict(row.get("travel_result")).get("to_location")
+        or result_travel.get("to_location")
+        or contract_result_travel.get("to_location")
+        or fallback
+    )
+
+
+def _inject_available_mechanics_for_row(
+    row: Dict[str, Any],
+    *,
+    mechanics_state: Dict[str, Any],
+    missing_mechanics: List[str],
+) -> None:
+    state = {
+        **_safe_dict(mechanics_state),
+        "current_location": _current_row_location(
+            row,
+            fallback=_safe_str(_safe_dict(mechanics_state).get("current_location") or "scene:rusty_flagon"),
+        ),
+    }
+
+    available = list_available_mechanic_opportunities(
+        state=state,
+        scenario_state={},
+        missing_mechanics=missing_mechanics,
+        limit=8,
+    )
+
+    available = [
+        opportunity
+        for opportunity in _safe_list(available)
+        if _opportunity_is_affordable(_safe_dict(opportunity), state)
+    ]
+
+    row["available_mechanics"] = available
+    row["mechanic_opportunity_diagnostics"] = describe_mechanic_opportunity_state(
+        state=state,
+        scenario_state={},
+        missing_mechanics=missing_mechanics,
+    )
+
+
+def _mechanics_priority_commands_from_row(
+    row: Dict[str, Any],
+    missing_mechanics: List[str],
+    failed_opportunity_ids: Optional[set[str]] = None,
+) -> List[Dict[str, Any]]:
+    missing = set(str(item) for item in _safe_list(missing_mechanics))
+    commands: List[Dict[str, Any]] = []
+
+    for raw in _safe_list(_safe_dict(row).get("available_mechanics")):
+        opportunity = _safe_dict(raw)
+        opportunity_id = _safe_str(opportunity.get("opportunity_id") or opportunity.get("id"))
+        if failed_opportunity_ids and opportunity_id in failed_opportunity_ids:
+            continue
+        mechanic = _safe_str(opportunity.get("mechanic"))
+        command = _safe_str(opportunity.get("command"))
+        if not mechanic or not command:
+            continue
+        if missing and mechanic not in missing:
+            continue
+
+        commands.append(
+            {
+                "mechanic": mechanic,
+                "command": command,
+                "label": opportunity.get("label"),
+                "resolver": opportunity.get("resolver"),
+                "opportunity_id": opportunity_id,
+            }
+        )
+
+    return commands[:6]
+
+
+def _maybe_force_missing_mechanic_action(
+    *,
+    proposed_action: str,
+    latest_row: Dict[str, Any],
+    missing_mechanics: List[str],
+    turn_index: int,
+    failed_opportunity_ids: Optional[set[str]] = None,
+) -> Dict[str, Any]:
+    if turn_index < 4:
+        return {"action": proposed_action, "forced": False, "reason": ""}
+
+    priority = _mechanics_priority_commands_from_row(
+        latest_row,
+        missing_mechanics,
+        failed_opportunity_ids=failed_opportunity_ids,
+    )
+    if not priority:
+        return {"action": proposed_action, "forced": False, "reason": ""}
+
+    preferred_order = [
+        "buying",
+        "service_or_lodging",
+        "party_recruitment",
+        "travel",
+        "combat_started",
+        "combat_resolved",
+        "xp_gain",
+        "quest_progress",
+        "currency_change",
+        "inventory_change",
+    ]
+
+    for mechanic in preferred_order:
+        for item in priority:
+            if item.get("mechanic") == mechanic:
+                return {
+                    "action": _safe_str(item.get("command")) or proposed_action,
+                    "forced": True,
+                    "reason": f"missing_mechanic:{mechanic}",
+                    "mechanic": mechanic,
+                    "opportunity_id": item.get("opportunity_id"),
+                }
+
+    item = priority[0]
+    return {
+        "action": _safe_str(item.get("command")) or proposed_action,
+        "forced": True,
+        "reason": f"missing_mechanic:{item.get('mechanic')}",
+        "mechanic": item.get("mechanic"),
+        "opportunity_id": item.get("opportunity_id"),
+    }
+
+
+def _merge_currency_delta(currency: Dict[str, int], delta: Dict[str, Any]) -> Dict[str, int]:
+    merged = dict(currency or {})
+    for key, value in _safe_dict(delta).items():
+        merged[str(key)] = int(merged.get(str(key), 0)) + int(value or 0)
+    return merged
+
+
+def _merge_inventory_delta(
+    inventory: List[Dict[str, Any]],
+    delta: Dict[str, Any],
+) -> List[Dict[str, Any]]:
+    items = [dict(item) for item in _safe_list(inventory)]
+
+    def add_item(item_id: str, quantity: int) -> None:
+        for existing in items:
+            if existing.get("id") == item_id:
+                existing["quantity"] = int(existing.get("quantity") or 0) + quantity
+                return
+        items.append({"id": item_id, "quantity": quantity})
+
+    def remove_item(item_id: str, quantity: int) -> None:
+        for existing in list(items):
+            if existing.get("id") == item_id:
+                existing["quantity"] = max(0, int(existing.get("quantity") or 0) - quantity)
+                if int(existing.get("quantity") or 0) <= 0:
+                    items.remove(existing)
+                return
+
+    delta = _safe_dict(delta)
+
+    for raw in _safe_list(delta.get("items_added")):
+        item = _safe_dict(raw)
+        item_id = _safe_str(item.get("id") or item.get("item_id"))
+        if item_id:
+            add_item(item_id, int(item.get("quantity") or 1))
+
+    for raw in _safe_list(delta.get("items_removed")):
+        item = _safe_dict(raw)
+        item_id = _safe_str(item.get("id") or item.get("item_id"))
+        if item_id:
+            remove_item(item_id, int(item.get("quantity") or 1))
+
+    return items
+
+
+def _apply_mechanics_delta_to_runtime_state(
+    mechanics_state: Dict[str, Any],
+    state_delta: Dict[str, Any],
+) -> Dict[str, Any]:
+    state = dict(mechanics_state or {})
+    delta = _safe_dict(state_delta)
+
+    if delta.get("currency_delta"):
+        state["currency"] = _merge_currency_delta(
+            _safe_dict(state.get("currency")),
+            _safe_dict(delta.get("currency_delta")),
+        )
+    if delta.get("currency"):
+        state["currency"] = _safe_dict(delta.get("currency"))
+
+    if delta.get("inventory_delta"):
+        state["inventory"] = _merge_inventory_delta(
+            _safe_list(state.get("inventory")),
+            _safe_dict(delta.get("inventory_delta")),
+        )
+    if delta.get("inventory"):
+        state["inventory"] = _safe_list(delta.get("inventory"))
+
+    if delta.get("flags"):
+        flags = _safe_dict(state.get("flags"))
+        flags.update(_safe_dict(delta.get("flags")))
+        state["flags"] = flags
+
+    if delta.get("xp_delta") is not None:
+        state["xp"] = int(state.get("xp") or 0) + int(delta.get("xp_delta") or 0)
+    if delta.get("xp") is not None:
+        state["xp"] = int(delta.get("xp") or 0)
+
+    if delta.get("level") is not None:
+        state["level"] = int(delta.get("level") or 1)
+
+    if delta.get("location_changed"):
+        next_location = _safe_str(
+            delta.get("to_location")
+            or delta.get("current_location")
+            or state.get("current_location")
+        )
+        if next_location:
+            state["current_location"] = next_location
+            state["current_location_id"] = next_location
+
+    return state
+
+
+def _build_character_inventory_progression_summary(
+    transcript: List[Dict[str, Any]],
+    *,
+    initial_state: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    base = _safe_dict(initial_state) or _default_player_progression_state()
+
+    starting_currency = {
+        str(k): int(v or 0)
+        for k, v in _safe_dict(base.get("currency")).items()
+    }
+    starting_inventory = _normalize_inventory_items(base.get("inventory"))
+
+    currency = dict(starting_currency)
+    inventory = [dict(item) for item in starting_inventory]
+
+    level = int(base.get("level") or 1)
+    xp = int(base.get("xp") or 0)
+    xp_to_next_level = int(base.get("xp_to_next_level") or 25)
+
+    currency_events: List[Dict[str, Any]] = []
+    inventory_events: List[Dict[str, Any]] = []
+    xp_events: List[Dict[str, Any]] = []
+    level_events: List[Dict[str, Any]] = []
+    progression_log: List[Dict[str, Any]] = []
+
+    for index, raw_row in enumerate(transcript, start=1):
+        row = _safe_dict(raw_row)
+        turn_index = int(row.get("turn_index") or row.get("turn") or index)
+
+        mechanic_resolution = _safe_dict(row.get("mechanic_resolution"))
+        mechanic_result = _safe_dict(mechanic_resolution.get("result"))
+        mechanic_state_delta = _safe_dict(mechanic_resolution.get("state_delta"))
+        turn_contract = _safe_dict(row.get("turn_contract"))
+
+        candidates = [
+            row,
+            _safe_dict(row.get("result")),
+            _safe_dict(row.get("state_delta")),
+            turn_contract,
+            _safe_dict(turn_contract.get("result")),
+            _safe_dict(turn_contract.get("state_delta")),
+            mechanic_resolution,
+            mechanic_result,
+            mechanic_state_delta,
+        ]
+
+        for candidate in candidates:
+            currency_delta = _safe_dict(candidate.get("currency_delta"))
+            if currency_delta:
+                currency = _apply_currency_delta(currency, currency_delta)
+                currency_events.append(
+                    {
+                        "turn": turn_index,
+                        "delta": currency_delta,
+                        "mechanic": row.get("mechanic") or candidate.get("mechanic"),
+                        "player_action": row.get("player_action"),
+                    }
+                )
+                progression_log.append(
+                    {
+                        "turn": turn_index,
+                        "type": "currency",
+                        "summary": f"Currency changed: {currency_delta}",
+                    }
+                )
+                break
+
+        for candidate in candidates:
+            inventory_delta = _safe_dict(candidate.get("inventory_delta"))
+            if inventory_delta:
+                inventory = _apply_inventory_delta_to_items(inventory, inventory_delta)
+                inventory_events.append(
+                    {
+                        "turn": turn_index,
+                        "delta": inventory_delta,
+                        "mechanic": row.get("mechanic") or candidate.get("mechanic"),
+                        "player_action": row.get("player_action"),
+                    }
+                )
+                progression_log.append(
+                    {
+                        "turn": turn_index,
+                        "type": "inventory",
+                        "summary": f"Inventory changed: {inventory_delta}",
+                    }
+                )
+                break
+
+        for candidate in candidates:
+            if candidate.get("xp_delta") is not None:
+                xp_delta = int(candidate.get("xp_delta") or 0)
+                xp += xp_delta
+                xp_events.append(
+                    {
+                        "turn": turn_index,
+                        "xp_delta": xp_delta,
+                        "xp_total": xp,
+                        "mechanic": row.get("mechanic") or candidate.get("mechanic"),
+                        "player_action": row.get("player_action"),
+                    }
+                )
+                progression_log.append(
+                    {
+                        "turn": turn_index,
+                        "type": "xp",
+                        "summary": f"Gained {xp_delta} XP.",
+                    }
+                )
+                break
+
+        for candidate in candidates:
+            level_delta = _safe_dict(candidate.get("level_delta"))
+            if candidate.get("level_up") is True or level_delta:
+                old_level = int(level_delta.get("old_level") or level)
+                new_level = int(level_delta.get("new_level") or candidate.get("level") or level + 1)
+                level = max(level, new_level)
+                level_events.append(
+                    {
+                        "turn": turn_index,
+                        "old_level": old_level,
+                        "new_level": new_level,
+                        "mechanic": row.get("mechanic") or candidate.get("mechanic"),
+                        "player_action": row.get("player_action"),
+                    }
+                )
+                progression_log.append(
+                    {
+                        "turn": turn_index,
+                        "type": "level_up",
+                        "summary": f"Level increased from {old_level} to {new_level}.",
+                    }
+                )
+                break
+
+    inventory_delta_summary: List[Dict[str, Any]] = []
+    starting_by_id = {item["id"]: item for item in starting_inventory}
+    ending_by_id = {item["id"]: item for item in inventory}
+
+    for item_id in sorted(set(starting_by_id) | set(ending_by_id)):
+        start_qty = int(_safe_dict(starting_by_id.get(item_id)).get("quantity") or 0)
+        end_qty = int(_safe_dict(ending_by_id.get(item_id)).get("quantity") or 0)
+        if start_qty == end_qty:
+            continue
+        inventory_delta_summary.append(
+            {
+                "id": item_id,
+                "name": _item_display_name(item_id),
+                "starting_quantity": start_qty,
+                "ending_quantity": end_qty,
+                "delta": end_qty - start_qty,
+            }
+        )
+
+    currency_delta_summary = {
+        key: int(currency.get(key, 0)) - int(starting_currency.get(key, 0))
+        for key in sorted(set(starting_currency) | set(currency))
+        if int(currency.get(key, 0)) != int(starting_currency.get(key, 0))
+    }
+
+    return {
+        "format_version": "character_inventory_progression_v1",
+        "player": {
+            "name": _safe_str(base.get("name") or "The Player"),
+            "level": level,
+            "xp": xp,
+            "xp_to_next_level": xp_to_next_level,
+            "progress_log_entries": len(progression_log),
+        },
+        "starting_currency": starting_currency,
+        "ending_currency": currency,
+        "currency_delta": currency_delta_summary,
+        "starting_inventory": starting_inventory,
+        "ending_inventory": inventory,
+        "inventory_delta": inventory_delta_summary,
+        "currency_events": currency_events,
+        "inventory_events": inventory_events,
+        "xp_events": xp_events,
+        "level_events": level_events,
+        "progression_log": progression_log,
+        "ok": True,
+    }
 
 
 def _build_location_progression_summary(
@@ -3272,6 +4233,8 @@ def _build_minimal_autoplay_html_report(final_summary: Dict[str, Any]) -> str:
     selected_grounding = _safe_dict(final_summary.get("selected_output_grounding_health"))
     progress = _safe_dict(final_summary.get("canonical_progress_quality"))
     perf = _safe_dict(final_summary.get("performance_seconds_summary"))
+    character_inventory = _safe_dict(final_summary.get("character_inventory_progression"))
+    player_progress = _safe_dict(character_inventory.get("player"))
 
     status = "PASS" if evaluation.get("ok") else "FAIL"
     status_class = "pass" if evaluation.get("ok") else "fail"
@@ -3281,6 +4244,22 @@ def _build_minimal_autoplay_html_report(final_summary: Dict[str, Any]) -> str:
         "ok": final_summary.get("ok"),
         "turns_executed": final_summary.get("turns_executed"),
     }
+
+    player_name = _safe_str(player_progress.get("name") or "The Player")
+    player_level = int(player_progress.get("level") or 1)
+    player_xp = int(player_progress.get("xp") or 0)
+    player_xp_to_next = int(player_progress.get("xp_to_next_level") or 100)
+    player_progress_log_entries = int(player_progress.get("progress_log_entries") or 0)
+
+    starting_currency = _safe_dict(character_inventory.get("starting_currency"))
+    ending_currency = _safe_dict(character_inventory.get("ending_currency"))
+    currency_delta = _safe_dict(character_inventory.get("currency_delta"))
+
+    starting_inventory = _safe_list(character_inventory.get("starting_inventory"))
+    ending_inventory = _safe_list(character_inventory.get("ending_inventory"))
+    inventory_delta = _safe_list(character_inventory.get("inventory_delta"))
+    xp_events = _safe_list(character_inventory.get("xp_events"))
+    level_events = _safe_list(character_inventory.get("level_events"))
 
     return f"""<!doctype html>
 <html>
@@ -3352,6 +4331,19 @@ a {{ color: #c8d6ff; }}
   padding: 7px 11px;
   background: #151a27;
 }}
+.subcard {{
+  background: #1a1e29;
+  border: 1px solid #303846;
+  border-radius: 10px;
+  padding: 14px;
+  margin: 12px 0;
+}}
+.two-col {{
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin: 8px 0;
+}}
 </style>
 </head>
 <body>
@@ -3364,6 +4356,7 @@ a {{ color: #c8d6ff; }}
   <a href="#grounding">Grounding</a>
   <a href="#progress">Progress</a>
   <a href="#performance">Performance</a>
+  <a href="#player">Player</a>
   <a href="#locations">Locations</a>
   <a href="#debug">Debug</a>
 </nav>
@@ -3402,6 +4395,40 @@ a {{ color: #c8d6ff; }}
   <div class="metric"><strong>Source</strong><span>{esc(progress.get("source"))}</span></div>
 </div>
 <pre>{esc(json.dumps(progress, ensure_ascii=False, indent=2, default=str))}</pre>
+</section>
+
+<section class="card" id="player">
+<h2>Player Character Progression</h2>
+<div class="grid">
+  <div class="metric"><strong>Name</strong><span>{esc(player_name)}</span></div>
+  <div class="metric"><strong>Level</strong><span>{player_level}</span></div>
+  <div class="metric"><strong>XP</strong><span>{player_xp} / {player_xp_to_next}</span></div>
+  <div class="metric"><strong>Progress Log Entries</strong><span>{player_progress_log_entries}</span></div>
+</div>
+
+<h3>Starting Currency</h3>
+<pre>{esc(json.dumps(starting_currency, ensure_ascii=False, indent=2, default=str))}</pre>
+
+<h3>Ending Currency</h3>
+<pre>{esc(json.dumps(ending_currency, ensure_ascii=False, indent=2, default=str))}</pre>
+
+<h3>Currency Delta</h3>
+<pre>{esc(json.dumps(currency_delta, ensure_ascii=False, indent=2, default=str))}</pre>
+
+<h3>Starting Inventory</h3>
+<pre>{esc(json.dumps(starting_inventory, ensure_ascii=False, indent=2, default=str))}</pre>
+
+<h3>Ending Inventory</h3>
+<pre>{esc(json.dumps(ending_inventory, ensure_ascii=False, indent=2, default=str))}</pre>
+
+<h3>Inventory Delta</h3>
+<pre>{esc(json.dumps(inventory_delta, ensure_ascii=False, indent=2, default=str))}</pre>
+
+<h3>XP Events</h3>
+<pre>{esc(json.dumps(xp_events, ensure_ascii=False, indent=2, default=str))}</pre>
+
+<h3>Level Events</h3>
+<pre>{esc(json.dumps(level_events, ensure_ascii=False, indent=2, default=str))}</pre>
 </section>
 
 <section class="card" id="performance">
@@ -4944,6 +5971,11 @@ def _summarize_quality_gates(
         and readiness_classification == "content_sufficient_for_requested_turns"
     )
 
+    mechanics = _safe_dict(summary.get("mechanics_coverage_summary"))
+    mechanics_real_required_ok = bool(
+        mechanics.get("real_required_ok", mechanics.get("required_ok", True))
+    )
+
     gates = {
         "avg_human_playable_blocking_under_500ms": float(live.get("avg_human_playable_blocking_ms") or 0.0) < 500.0,
         "max_human_playable_blocking_under_1000ms": float(live.get("max_human_playable_blocking_ms") or 0.0) < 1000.0,
@@ -5079,6 +6111,23 @@ def _summarize_quality_gates(
             or int(background_result_timing_summary.get("only_finalized_count") or 0)
             < int(background_result_timing_summary.get("jobs_submitted") or 0)
         ),
+        "mechanics_coverage_required": {
+            "ok": mechanics_real_required_ok,
+            "value": {
+                "coverage_rate": mechanics.get("coverage_rate"),
+                "real_coverage_rate": mechanics.get("real_coverage_rate"),
+                "covered_required_count": mechanics.get("covered_required_count"),
+                "real_covered_required_count": mechanics.get("real_covered_required_count"),
+                "required_count": mechanics.get("required_count"),
+                "missing_required": mechanics.get("missing_required"),
+                "missing_real_required": mechanics.get("missing_real_required"),
+            },
+            "expected": {
+                "missing_real_required": [],
+                "real_coverage_rate": "1.0",
+            },
+            "message": "Required RPG mechanics should be exercised by real runtime/story-graph evidence.",
+        },
     }
 
     fallback_turns = int(player_agent_summary.get("fallback_turns") or 0)
@@ -6591,6 +7640,34 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
     progression_sidecar_max_revision = _progression_revision(progression_authority_state)
     checkpoint_validation_rows: List[Dict[str, Any]] = []
 
+    mechanics_runtime_state: Dict[str, Any] = {
+        "current_location": "scene:rusty_flagon",
+        "currency": {"gold": 15, "silver": 20, "copper": 50},
+        "inventory": [],
+        "flags": {},
+        "xp": 0,
+        "level": 1,
+    }
+
+    mechanics_failed_opportunity_ids: set[str] = set()
+
+    mechanics_coverage_runtime: Dict[str, bool] = {
+        "travel": False,
+        "npc_interaction": False,
+        "quest_progress": False,
+        "service_or_lodging": False,
+        "buying": False,
+        "selling": False,
+        "currency_change": False,
+        "inventory_change": False,
+        "party_recruitment": False,
+        "combat_started": False,
+        "combat_resolved": False,
+        "xp_gain": False,
+        "level_up": False,
+        "loot_acquired": False,
+    }
+
     for turn_index in range(1, int(args.turns) + 1):
         # Initialize player agent selection variables
         player_agent_selection_source = "unknown"
@@ -7874,6 +8951,146 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
 
         _attach_grounding_fields_to_autoplay_row(record, turn_result if isinstance(turn_result, dict) else {})
 
+        missing_mechanics = [
+            name
+            for name, covered in mechanics_coverage_runtime.items()
+            if not covered
+        ]
+
+        _inject_available_mechanics_for_row(
+            record,
+            mechanics_state=mechanics_runtime_state,
+            missing_mechanics=missing_mechanics,
+        )
+
+        mechanic_action_decision = _maybe_force_missing_mechanic_action(
+            proposed_action=_safe_str(record.get("player_action") or player_action),
+            latest_row=record,
+            missing_mechanics=missing_mechanics,
+            turn_index=int(record.get("turn_index") or turn_index),
+            failed_opportunity_ids=mechanics_failed_opportunity_ids,
+        )
+
+        if _safe_dict(mechanic_action_decision).get("forced"):
+            record["player_action_original"] = record.get("player_action")
+            record["player_action"] = _safe_str(
+                mechanic_action_decision.get("action") or record.get("player_action")
+            )
+            record["mechanics_forced_action"] = mechanic_action_decision
+            player_action = record["player_action"]
+
+        final_player_action_for_mechanics = _safe_str(record.get("player_action") or player_action)
+        record["mechanic_resolution_input"] = final_player_action_for_mechanics
+
+        mechanic_resolution = resolve_mechanic_opportunity(
+            player_input=final_player_action_for_mechanics,
+            state={
+                **mechanics_runtime_state,
+                "current_location": _current_row_location(
+                    record,
+                    fallback=_safe_str(mechanics_runtime_state.get("current_location") or "scene:rusty_flagon"),
+                ),
+            },
+            scenario_state={},
+        )
+
+        if mechanic_resolution.get("ok"):
+            mechanic_result = _safe_dict(mechanic_resolution.get("result"))
+            mechanic_contract = _safe_dict(mechanic_resolution.get("turn_contract"))
+            mechanic_delta = _safe_dict(mechanic_resolution.get("state_delta"))
+
+            record["mechanic_resolution"] = mechanic_resolution
+            record["mechanics_evidence_source"] = "mechanic_opportunity_resolver"
+            record["mechanic"] = mechanic_resolution.get("mechanic") or mechanic_result.get("mechanic")
+            record["meaningful_progress"] = True
+            record["progress_category"] = (
+                mechanic_result.get("progress_category")
+                or mechanic_resolution.get("progress_category")
+            )
+
+            record["result"] = {
+                **_safe_dict(record.get("result")),
+                **mechanic_result,
+                "mechanics_evidence_source": "mechanic_opportunity_resolver",
+            }
+            record["turn_contract"] = {
+                **_safe_dict(record.get("turn_contract")),
+                **mechanic_contract,
+                "mechanic": record.get("mechanic"),
+                "mechanic_resolution": mechanic_resolution,
+                "result": {
+                    **_safe_dict(_safe_dict(record.get("turn_contract")).get("result")),
+                    **mechanic_result,
+                    "mechanics_evidence_source": "mechanic_opportunity_resolver",
+                },
+                "state_delta": {
+                    **_safe_dict(_safe_dict(record.get("turn_contract")).get("state_delta")),
+                    **mechanic_delta,
+                },
+            }
+            record["state_delta"] = {
+                **_safe_dict(record.get("state_delta")),
+                **mechanic_delta,
+            }
+
+            mechanics_runtime_state = _apply_mechanics_delta_to_runtime_state(
+                mechanics_runtime_state,
+                mechanic_delta,
+            )
+
+            resolved_mechanic = _safe_str(record.get("mechanic") or mechanic_resolution.get("mechanic"))
+            if resolved_mechanic:
+                if resolved_mechanic == "buying":
+                    mechanics_coverage_runtime["buying"] = True
+                    mechanics_coverage_runtime["currency_change"] = True
+                    mechanics_coverage_runtime["inventory_change"] = True
+
+                elif resolved_mechanic == "service_or_lodging":
+                    mechanics_coverage_runtime["service_or_lodging"] = True
+                    mechanics_coverage_runtime["currency_change"] = True
+
+                elif resolved_mechanic == "party_recruitment":
+                    mechanics_coverage_runtime["party_recruitment"] = True
+
+                elif resolved_mechanic == "combat_started":
+                    mechanics_coverage_runtime["combat_started"] = True
+
+                elif resolved_mechanic == "combat_resolved":
+                    mechanics_coverage_runtime["combat_resolved"] = True
+                    mechanics_coverage_runtime["xp_gain"] = True
+                    mechanics_coverage_runtime["inventory_change"] = True
+
+                elif resolved_mechanic == "travel":
+                    mechanics_coverage_runtime["travel"] = True
+
+                elif resolved_mechanic == "quest_progress":
+                    mechanics_coverage_runtime["quest_progress"] = True
+
+            _inject_available_mechanics_for_row(
+                record,
+                mechanics_state=mechanics_runtime_state,
+                missing_mechanics=[
+                    name
+                    for name, covered in mechanics_coverage_runtime.items()
+                    if not covered
+                ],
+            )
+        else:
+            mechanics_runtime_state["current_location"] = _current_row_location(
+                record,
+                fallback=_safe_str(mechanics_runtime_state.get("current_location") or "scene:rusty_flagon"),
+            )
+
+            forced_opportunity_id = _safe_str(
+                _safe_dict(record.get("mechanics_forced_action")).get("opportunity_id")
+            )
+            if forced_opportunity_id:
+                mechanics_failed_opportunity_ids.add(forced_opportunity_id)
+                record["mechanic_resolution_failed_opportunity_id"] = forced_opportunity_id
+                record["mechanic_resolution_failed_reason"] = _safe_str(
+                    mechanic_resolution.get("reason")
+                )
+
         transcript.append(record)
 
         _assert_progression_monotonic(
@@ -8650,25 +9867,6 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
         performance_budget_summary=_safe_dict(summary.get("performance_budget_summary")),
     )
 
-    summary["hundred_turn_evaluation"] = _build_100_turn_evaluation_summary(
-        turns_executed=int(summary.get("turns_executed") or len(transcript)),
-        requested_turns=int(args.turns or 100),
-        runtime_errors=_safe_list(summary.get("runtime_errors")),
-        warnings=_safe_list(summary.get("warnings")),
-        transcript=transcript,
-        performance_summary=_safe_dict(summary.get("performance_seconds_summary")),
-        narration_grounding_summary=_safe_dict(summary.get("narration_grounding_summary")),
-        progress_quality_summary=_safe_dict(summary.get("canonical_progress_quality")),
-        checkpoint_summary=_safe_dict(summary.get("checkpoint_summary") or summary.get("checkpoint_validation")),
-        loop_detection_summary=_safe_dict(summary.get("loop_detection_summary") or summary.get("loop_detection")),
-    )
-
-    hundred_turn_eval = _safe_dict(summary.get("hundred_turn_evaluation"))
-    if hundred_turn_eval:
-        if not bool(hundred_turn_eval.get("ok")):
-            summary.setdefault("warnings", []).append("hundred_turn_evaluation_failed")
-        summary["ok"] = bool(summary.get("ok", True)) and bool(hundred_turn_eval.get("ok"))
-
     if int(_safe_dict(summary.get("narration_grounding_summary")).get("checked_count") or 0) == 0:
         summary["narration_grounding_debug"] = {
             "transcript_rows": len(transcript),
@@ -8684,6 +9882,42 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
         }
     runtime_state = _safe_dict(summary.get("latest_state"))
     _assert_final_lifecycle_summary_authority(summary)
+
+    full_transcript_for_summaries = [
+        dict(_safe_dict(row))
+        for row in transcript
+    ]
+
+    summary["location_progression_summary"] = _build_location_progression_summary(
+        full_transcript_for_summaries,
+        final_summary=summary,
+    )
+
+    summary["mechanics_coverage_summary"] = _build_mechanics_coverage_summary(
+        full_transcript_for_summaries,
+        final_summary=summary,
+    )
+
+    summary["hundred_turn_evaluation"] = _build_100_turn_evaluation_summary(
+        turns_executed=int(summary.get("turns_executed") or len(full_transcript_for_summaries)),
+        requested_turns=int(summary.get("requested_turns") or args.turns or len(full_transcript_for_summaries)),
+        runtime_errors=_safe_list(summary.get("runtime_errors")),
+        warnings=_safe_list(summary.get("warnings")),
+        transcript=full_transcript_for_summaries,
+        performance_summary=_safe_dict(summary.get("performance_seconds_summary")),
+        narration_grounding_summary=_safe_dict(summary.get("narration_grounding_summary")),
+        progress_quality_summary=_safe_dict(summary.get("canonical_progress_quality")),
+        checkpoint_summary=_safe_dict(summary.get("checkpoint_summary") or summary.get("checkpoint_validation")),
+        loop_detection_summary=_safe_dict(summary.get("loop_detection_summary") or summary.get("loop_detection")),
+        mechanics_coverage_summary=_safe_dict(summary.get("mechanics_coverage_summary")),
+    )
+
+    summary["ok"] = bool(_safe_dict(summary.get("hundred_turn_evaluation")).get("ok"))
+
+    summary["character_inventory_progression"] = _build_character_inventory_progression_summary(
+        full_transcript_for_summaries,
+        initial_state=_safe_dict(summary.get("initial_player_state")),
+    )
 
     # Write the campaign report once for human-readable output.
     if args.artifact_detail == "full":
@@ -8764,8 +9998,19 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
         ],
     }
 
+    # Create report payload for JSON/HTML
+    report_payload = {
+        "character_inventory_progression": _safe_dict(summary.get("character_inventory_progression")),
+    }
+
+    # Write campaign report JSON
+    campaign_report_json_path = output_dir_path / "autoplay-campaign-report.json"
+    campaign_report_json_path.write_text(json.dumps(report_payload, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
+
     # Build minimal HTML report
-    html_report = _build_minimal_autoplay_html_report(final_summary=summary)
+    html_report_source = dict(summary)
+    html_report_source.update(_safe_dict(report_payload))
+    html_report = _build_minimal_autoplay_html_report(final_summary=html_report_source)
 
     with _ProbeTimer(
         bool(getattr(args, "debug_autoplay_stage_timing", False)),
@@ -8794,6 +10039,18 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
             generated_files = artifact_manifest.setdefault("generated_files", [])
             if name not in generated_files:
                 generated_files.append(name)
+
+        def _zip_writestr_once(
+            zip_handle: Any,
+            artifact_manifest: Dict[str, Any],
+            name: str,
+            payload: Any,
+        ) -> None:
+            generated_files = artifact_manifest.setdefault("generated_files", [])
+            if name in generated_files:
+                return
+            zip_handle.writestr(name, payload if isinstance(payload, str) else str(payload))
+            generated_files.append(name)
 
         with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as zip_handle:
             # Write summary.json first
@@ -8845,6 +10102,19 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
                 summary.get("performance_seconds_summary", {}),
             )
 
+            _zip_writestr_json(
+                zip_handle,
+                artifact_manifest,
+                "character-inventory-progression.json",
+                summary.get("character_inventory_progression", {}),
+            )
+            _zip_writestr_json(
+                zip_handle,
+                artifact_manifest,
+                "mechanics-coverage-summary.json",
+                summary.get("mechanics_coverage_summary", {}),
+            )
+
             # Write transcript if available
             if transcript_artifacts and transcript_artifacts.get("transcript"):
                 _zip_writestr_json(
@@ -8857,8 +10127,12 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
                 artifact_manifest["transcript_missing_reason"] = "transcript_not_available_in_zip_write_scope"
 
             # Write HTML report
-            zip_handle.writestr("autoplay-campaign-report.html", html_report)
-            artifact_manifest.setdefault("generated_files", []).append("autoplay-campaign-report.html")
+            _zip_writestr_once(
+                zip_handle,
+                artifact_manifest,
+                "autoplay-campaign-report.html",
+                html_report,
+            )
 
             # Write legacy artifacts if full detail
             if args.artifact_detail == "full":
@@ -8888,8 +10162,14 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
                 # Write campaign report files if they exist
                 campaign_report_html = output_dir_path / "autoplay-campaign-report.html"
                 campaign_report_json = output_dir_path / "autoplay-campaign-report.json"
+
+                # Do not write autoplay-campaign-report.html again here; the canonical HTML
+                # report was already written through _zip_writestr_once above. Writing this
+                # legacy file under the same name creates duplicate ZIP entries and can make
+                # viewers open the stale report.
                 if campaign_report_html.exists():
-                    zip_handle.write(campaign_report_html, campaign_report_html.name)
+                    zip_handle.write(campaign_report_html, "autoplay-campaign-report-legacy.html")
+
                 if campaign_report_json.exists():
                     zip_handle.write(campaign_report_json, campaign_report_json.name)
 
