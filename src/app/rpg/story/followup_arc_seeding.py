@@ -54,6 +54,7 @@ def seed_followup_arcs(
             "title": _safe_str(hook.get("title") or hook.get("summary") or arc_id),
             "status": "active",
             "current_stage": "seeded_followup",
+            "seeded_followup": True,
             "started_turn": turn_index,
             "last_progress_turn": turn_index,
             "progress_count": 0,
