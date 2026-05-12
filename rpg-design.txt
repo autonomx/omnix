@@ -1,76 +1,170 @@
-N85 — Story Arc Lifecycle Model
-1. Add story arc lifecycle module
+Next phase: N88-N90 + leftover fixes
+Scope
 
-Create:
+Now that N85-N87 passes, next phase should make completed arcs matter.
 
-src/app/rpg/story/story_arc_lifecycle.py
+Current state:
+
+✅ mechanics resolve
+✅ arcs complete deterministically
+✅ report shows arc lifecycle
+⚠️ completed arcs do not yet produce durable aftermath
+⚠️ faction/reputation consequences are not formalized
+⚠️ follow-up arcs are not seeded from deterministic completion outcomes
+⚠️ story package __init__.py was temporarily weakened/commented out
+⚠️ mechanics coverage over-counting is noisy
+Leftover Fix A — Clean Story Package Exports
+
+Patch:
+
+src/app/rpg/story/__init__.py
+
+Replace the whole file with this lazy-safe version:
+
+# Story module for RPG system.
+#
+# Keep this package import light. Tests and runtime modules often import
+# app.rpg.story.story_arc_lifecycle directly; __init__ should not eagerly import
+# heavier director/plot modules that may have optional dependencies.
+
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from typing import Any, Dict, Iterable, List, Mapping, Optional
-import time
+from typing import Any
 
 
-ARC_STATUS_ACTIVE = "active"
-ARC_STATUS_ADVANCED = "advanced"
-ARC_STATUS_READY_TO_RESOLVE = "ready_to_resolve"
-ARC_STATUS_COMPLETED = "completed"
-ARC_STATUS_FAILED = "failed"
-ARC_STATUS_ABANDONED = "abandoned"
-ARC_STATUS_STALLED = "stalled"
+from .story_arc_lifecycle import (
+    ArcFailureRule,
+    ArcResolutionRule,
+    ArcRuntimeState,
+    apply_story_arc_lifecycle,
+)
+from .tavern_story_arc_rules import tavern_story_arc_rules
 
-TERMINAL_ARC_STATUSES = {
-    ARC_STATUS_COMPLETED,
-    ARC_STATUS_FAILED,
-    ARC_STATUS_ABANDONED,
+
+_LEGACY_EXPORTS = {
+    "StoryDirector": ".director",
+    "DirectorAgent": ".director_agent",
+    "DirectorOutput": ".director_agent",
+    "DirectorOutputOriginal": ".director_types",
+    "DynamicQuestGenerator": ".dynamic_quest_generator",
+    "PlotEngine": ".plot_engine",
+    "Quest": ".plot_engine",
+    "QuestManager": ".plot_engine",
+    "Setup": ".plot_engine",
+    "SetupTracker": ".plot_engine",
 }
 
 
-@dataclass(frozen=True)
-class ArcResolutionRule:
-    id: str
-    arc_id: str
-    outcome: str
-    requires_objectives: tuple[str, ...] = ()
-    requires_flags: tuple[str, ...] = ()
-    requires_items: tuple[str, ...] = ()
-    requires_mechanics: tuple[str, ...] = ()
-    blocked_by_flags: tuple[str, ...] = ()
-    reward_xp: int = 0
-    reward_items: tuple[Dict[str, Any], ...] = ()
-    set_flags: tuple[str, ...] = ()
-    clear_flags: tuple[str, ...] = ()
-    summary: str = ""
+def __getattr__(name: str) -> Any:
+    if name not in _LEGACY_EXPORTS:
+        raise AttributeError(name)
+
+    import importlib
+
+    module = importlib.import_module(_LEGACY_EXPORTS[name], package=__name__)
+
+    if name == "DirectorOutputOriginal":
+        return getattr(module, "DirectorOutput")
+
+    return getattr(module, name)
+
+
+__all__ = [
+    "ArcFailureRule",
+    "ArcResolutionRule",
+    "ArcRuntimeState",
+    "apply_story_arc_lifecycle",
+    "tavern_story_arc_rules",
+    "StoryDirector",
+    "DirectorAgent",
+    "DirectorOutput",
+    "DirectorOutputOriginal",
+    "PlotEngine",
+    "Quest",
+    "QuestManager",
+    "Setup",
+    "SetupTracker",
+    "DynamicQuestGenerator",
+]
+
+Reason: do not comment out legacy exports permanently. Lazy imports avoid import-time breakage while preserving public API compatibility.
+
+Leftover Fix B — Mechanics Coverage Count Once Per Turn
+
+Patch:
+
+src/tests/rpg/autoplay_llm_campaign.py
+
+Find _build_mechanics_coverage_summary(...).
+
+Inside the transcript loop, before mark(...) is used, add:
+
+marked_this_turn: set[str] = set()
+
+Then patch mark(...).
+
+Find:
+
+def mark(name: str, turn_index: int, row: Dict[str, Any], reason: str, evidence_source: str = "explicit_payload") -> None:
+    item = mechanics.get(name)
+    if not item:
+        return
+    item["count"] = int(item.get("count") or 0) + 1
+
+Replace with:
+
+def mark(name: str, turn_index: int, row: Dict[str, Any], reason: str, evidence_source: str = "explicit_payload") -> None:
+    item = mechanics.get(name)
+    if not item:
+        return
+
+    dedupe_key = f"{turn_index}:{name}"
+    if dedupe_key in marked_this_turn:
+        return
+    marked_this_turn.add(dedupe_key)
+
+    item["count"] = int(item.get("count") or 0) + 1
+
+This prevents noisy values like:
+
+quest_progress = 102
+travel = 30
+
+while keeping pass/fail behavior unchanged.
+
+N88 — Arc Aftermath Effects v1
+Goal
+
+When an arc completes or fails, it should emit bounded deterministic aftermath:
+
+arc completed → world signal + NPC memory + faction delta + follow-up hook
+arc failed    → consequence + reputation loss + new pressure signal
+
+No LLM mutation. No freeform world edits.
+
+1. Create aftermath module
+
+Create:
+
+src/app/rpg/story/story_arc_aftermath.py
+from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import Any, Dict, Iterable, List, Mapping, Tuple
 
 
 @dataclass(frozen=True)
-class ArcFailureRule:
+class ArcAftermathRule:
     id: str
     arc_id: str
-    outcome: str
-    fail_after_turns_without_progress: int = 0
-    fail_if_flags: tuple[str, ...] = ()
-    fail_if_missing_items: tuple[str, ...] = ()
-    fail_if_location_left_without_resolution: bool = False
+    outcome: str = ""
+    on_status: str = "completed"
+    world_signals: Tuple[Dict[str, Any], ...] = ()
+    npc_memory_events: Tuple[Dict[str, Any], ...] = ()
+    faction_deltas: Tuple[Dict[str, Any], ...] = ()
+    followup_hooks: Tuple[Dict[str, Any], ...] = ()
+    set_flags: Tuple[str, ...] = ()
     summary: str = ""
-
-
-@dataclass
-class ArcRuntimeState:
-    arc_id: str
-    title: str
-    status: str = ARC_STATUS_ACTIVE
-    current_stage: str = ""
-    progress_count: int = 0
-    last_progress_turn: int = 0
-    started_turn: int = 0
-    completed_turn: int = 0
-    failed_turn: int = 0
-    resolution_outcome: str = ""
-    failure_outcome: str = ""
-    completed_objectives: List[str] = field(default_factory=list)
-    flags: Dict[str, bool] = field(default_factory=dict)
-    history: List[Dict[str, Any]] = field(default_factory=list)
 
 
 def _safe_dict(value: Any) -> Dict[str, Any]:
@@ -85,333 +179,411 @@ def _safe_str(value: Any) -> str:
     return str(value or "")
 
 
-def _inventory_item_ids(state: Mapping[str, Any]) -> set[str]:
-    ids: set[str] = set()
-    inventory = state.get("inventory") or state.get("items") or []
-    if isinstance(inventory, dict):
-        ids.update(str(k) for k, v in inventory.items() if v)
-    elif isinstance(inventory, list):
-        for item in inventory:
-            if isinstance(item, dict):
-                item_id = item.get("id") or item.get("item_id") or item.get("name")
-                if item_id:
-                    ids.add(str(item_id))
-            elif item:
-                ids.add(str(item))
-    return ids
-
-
-def _state_flags(state: Mapping[str, Any]) -> set[str]:
-    flags: set[str] = set()
-    for key in ("flags", "world_flags", "scenario_flags"):
-        raw = state.get(key)
-        if isinstance(raw, dict):
-            flags.update(str(k) for k, v in raw.items() if v)
-        elif isinstance(raw, list):
-            flags.update(str(v) for v in raw)
-    return flags
-
-
-def _completed_objectives(state: Mapping[str, Any]) -> set[str]:
-    completed: set[str] = set()
-
-    for key in ("completed_objectives", "completed_quests"):
-        raw = state.get(key)
-        if isinstance(raw, list):
-            completed.update(str(v) for v in raw)
-
-    quest_log = _safe_dict(state.get("quest_log"))
-    for raw in _safe_list(quest_log.get("objectives")):
-        objective = _safe_dict(raw)
-        if objective.get("completed") or objective.get("status") == "completed":
-            objective_id = objective.get("id") or objective.get("objective_id")
-            if objective_id:
-                completed.add(str(objective_id))
-
-    return completed
-
-
-def _covered_mechanics(state: Mapping[str, Any]) -> set[str]:
-    covered: set[str] = set()
-
-    mechanics = _safe_dict(state.get("mechanics_covered"))
-    covered.update(str(k) for k, v in mechanics.items() if v)
-
-    mechanics_summary = _safe_dict(state.get("mechanics_coverage_summary"))
-    for name, data in _safe_dict(mechanics_summary.get("mechanics")).items():
-        if int(_safe_dict(data).get("real_count") or _safe_dict(data).get("count") or 0) > 0:
-            covered.add(str(name))
-
-    return covered
-
-
-def normalize_arc_state(raw: Mapping[str, Any]) -> ArcRuntimeState:
-    raw = _safe_dict(raw)
-    return ArcRuntimeState(
-        arc_id=_safe_str(raw.get("arc_id") or raw.get("id")),
-        title=_safe_str(raw.get("title") or raw.get("name") or raw.get("arc_id") or raw.get("id")),
-        status=_safe_str(raw.get("status") or ARC_STATUS_ACTIVE),
-        current_stage=_safe_str(raw.get("current_stage") or raw.get("stage")),
-        progress_count=int(raw.get("progress_count") or 0),
-        last_progress_turn=int(raw.get("last_progress_turn") or 0),
-        started_turn=int(raw.get("started_turn") or 0),
-        completed_turn=int(raw.get("completed_turn") or 0),
-        failed_turn=int(raw.get("failed_turn") or 0),
-        resolution_outcome=_safe_str(raw.get("resolution_outcome")),
-        failure_outcome=_safe_str(raw.get("failure_outcome")),
-        completed_objectives=[str(v) for v in _safe_list(raw.get("completed_objectives"))],
-        flags={str(k): bool(v) for k, v in _safe_dict(raw.get("flags")).items()},
-        history=[_safe_dict(v) for v in _safe_list(raw.get("history"))],
+def _arc_event_key(event: Mapping[str, Any]) -> str:
+    return "|".join(
+        [
+            _safe_str(event.get("arc_id")),
+            _safe_str(event.get("subtype")),
+            _safe_str(event.get("outcome")),
+        ]
     )
 
 
-def serialize_arc_state(arc: ArcRuntimeState) -> Dict[str, Any]:
-    return {
-        "arc_id": arc.arc_id,
-        "title": arc.title,
-        "status": arc.status,
-        "current_stage": arc.current_stage,
-        "progress_count": arc.progress_count,
-        "last_progress_turn": arc.last_progress_turn,
-        "started_turn": arc.started_turn,
-        "completed_turn": arc.completed_turn,
-        "failed_turn": arc.failed_turn,
-        "resolution_outcome": arc.resolution_outcome,
-        "failure_outcome": arc.failure_outcome,
-        "completed_objectives": list(arc.completed_objectives),
-        "flags": dict(arc.flags),
-        "history": list(arc.history),
-    }
-
-
-def _rule_requirements_met(rule: ArcResolutionRule, state: Mapping[str, Any]) -> bool:
-    flags = _state_flags(state)
-    items = _inventory_item_ids(state)
-    completed = _completed_objectives(state)
-    mechanics = _covered_mechanics(state)
-
-    if any(obj not in completed for obj in rule.requires_objectives):
-        return False
-    if any(flag not in flags for flag in rule.requires_flags):
-        return False
-    if any(flag in flags for flag in rule.blocked_by_flags):
-        return False
-    if any(item not in items for item in rule.requires_items):
-        return False
-    if any(mechanic not in mechanics for mechanic in rule.requires_mechanics):
-        return False
-
-    return True
-
-
-def _failure_rule_met(
-    rule: ArcFailureRule,
+def apply_story_arc_aftermath(
     *,
-    arc: ArcRuntimeState,
-    state: Mapping[str, Any],
-    turn_index: int,
-) -> bool:
-    flags = _state_flags(state)
-    items = _inventory_item_ids(state)
-
-    if any(flag in flags for flag in rule.fail_if_flags):
-        return True
-
-    if any(item not in items for item in rule.fail_if_missing_items):
-        return True
-
-    if rule.fail_after_turns_without_progress > 0:
-        last_progress = arc.last_progress_turn or arc.started_turn or 0
-        if last_progress and turn_index - last_progress >= rule.fail_after_turns_without_progress:
-            return True
-
-    return False
-
-
-def apply_story_arc_lifecycle(
-    *,
-    arc_states: Mapping[str, Any],
-    state: Mapping[str, Any],
-    turn_index: int,
-    resolution_rules: Iterable[ArcResolutionRule],
-    failure_rules: Iterable[ArcFailureRule],
+    arc_events: Iterable[Mapping[str, Any]],
+    already_applied_keys: Iterable[str] = (),
+    rules: Iterable[ArcAftermathRule],
 ) -> Dict[str, Any]:
-    arcs = {
-        str(arc_id): normalize_arc_state(raw)
-        for arc_id, raw in _safe_dict(arc_states).items()
-    }
+    applied = set(str(key) for key in already_applied_keys)
+    events = [_safe_dict(event) for event in arc_events]
 
-    events: List[Dict[str, Any]] = []
-    state_delta: Dict[str, Any] = {
-        "story_arcs": {},
-        "flags": dict(_safe_dict(state.get("flags"))),
-        "xp_delta": 0,
-        "inventory_delta": {"items_added": []},
-    }
+    world_signals: List[Dict[str, Any]] = []
+    npc_memory_events: List[Dict[str, Any]] = []
+    faction_deltas: List[Dict[str, Any]] = []
+    followup_hooks: List[Dict[str, Any]] = []
+    flags: Dict[str, bool] = {}
+    aftermath_events: List[Dict[str, Any]] = []
+    newly_applied_keys: List[str] = []
 
-    resolution_by_arc: Dict[str, List[ArcResolutionRule]] = {}
-    for rule in resolution_rules:
-        resolution_by_arc.setdefault(rule.arc_id, []).append(rule)
-
-    failure_by_arc: Dict[str, List[ArcFailureRule]] = {}
-    for rule in failure_rules:
-        failure_by_arc.setdefault(rule.arc_id, []).append(rule)
-
-    for arc_id, arc in arcs.items():
-        if arc.status in TERMINAL_ARC_STATUSES:
-            state_delta["story_arcs"][arc_id] = serialize_arc_state(arc)
+    for event in events:
+        event_key = _arc_event_key(event)
+        if not event_key or event_key in applied:
             continue
 
-        resolved = False
+        arc_id = _safe_str(event.get("arc_id"))
+        subtype = _safe_str(event.get("subtype"))
+        status = "completed" if subtype == "arc_completed" else "failed"
+        outcome = _safe_str(event.get("outcome"))
 
-        for rule in resolution_by_arc.get(arc_id, []):
-            if not _rule_requirements_met(rule, state):
+        for rule in rules:
+            if rule.arc_id != arc_id:
+                continue
+            if rule.on_status != status:
+                continue
+            if rule.outcome and rule.outcome != outcome:
                 continue
 
-            arc.status = ARC_STATUS_COMPLETED
-            arc.completed_turn = int(turn_index)
-            arc.resolution_outcome = rule.outcome
-            arc.history.append(
-                {
-                    "turn": turn_index,
-                    "type": "arc_completed",
-                    "rule_id": rule.id,
-                    "outcome": rule.outcome,
-                    "summary": rule.summary,
-                }
-            )
-
+            for signal in rule.world_signals:
+                world_signals.append(dict(signal))
+            for memory in rule.npc_memory_events:
+                npc_memory_events.append(dict(memory))
+            for delta in rule.faction_deltas:
+                faction_deltas.append(dict(delta))
+            for hook in rule.followup_hooks:
+                followup_hooks.append(dict(hook))
             for flag in rule.set_flags:
-                state_delta["flags"][flag] = True
-            for flag in rule.clear_flags:
-                state_delta["flags"][flag] = False
+                flags[flag] = True
 
-            if rule.reward_xp:
-                state_delta["xp_delta"] = int(state_delta.get("xp_delta") or 0) + int(rule.reward_xp)
-
-            for item in rule.reward_items:
-                state_delta["inventory_delta"]["items_added"].append(dict(item))
-
-            events.append(
+            aftermath_events.append(
                 {
-                    "type": "story_arc",
-                    "subtype": "arc_completed",
+                    "type": "story_arc_aftermath",
+                    "rule_id": rule.id,
                     "arc_id": arc_id,
-                    "title": arc.title,
-                    "outcome": rule.outcome,
-                    "summary": rule.summary or f"{arc.title} is completed.",
+                    "status": status,
+                    "outcome": outcome,
+                    "summary": rule.summary,
                     "meaningful_progress": True,
-                    "progress_category": "story_arc_resolution",
+                    "progress_category": "story_arc_aftermath",
                 }
             )
-            resolved = True
-            break
 
-        if not resolved:
-            for rule in failure_by_arc.get(arc_id, []):
-                if not _failure_rule_met(rule, arc=arc, state=state, turn_index=turn_index):
-                    continue
-
-                arc.status = ARC_STATUS_FAILED
-                arc.failed_turn = int(turn_index)
-                arc.failure_outcome = rule.outcome
-                arc.history.append(
-                    {
-                        "turn": turn_index,
-                        "type": "arc_failed",
-                        "rule_id": rule.id,
-                        "outcome": rule.outcome,
-                        "summary": rule.summary,
-                    }
-                )
-
-                events.append(
-                    {
-                        "type": "story_arc",
-                        "subtype": "arc_failed",
-                        "arc_id": arc_id,
-                        "title": arc.title,
-                        "outcome": rule.outcome,
-                        "summary": rule.summary or f"{arc.title} failed.",
-                        "meaningful_progress": True,
-                        "progress_category": "story_arc_resolution",
-                    }
-                )
-                break
-
-        state_delta["story_arcs"][arc_id] = serialize_arc_state(arc)
-
-    if not state_delta["inventory_delta"]["items_added"]:
-        state_delta.pop("inventory_delta", None)
-    if not state_delta.get("xp_delta"):
-        state_delta.pop("xp_delta", None)
+        applied.add(event_key)
+        newly_applied_keys.append(event_key)
 
     return {
         "ok": True,
-        "story_arc_state_delta": state_delta,
-        "story_arc_events": events,
-        "resolved_count": sum(1 for event in events if event.get("subtype") == "arc_completed"),
-        "failed_count": sum(1 for event in events if event.get("subtype") == "arc_failed"),
+        "applied_keys": sorted(applied),
+        "newly_applied_keys": newly_applied_keys,
+        "aftermath_events": aftermath_events,
+        "world_signals": world_signals,
+        "npc_memory_events": npc_memory_events,
+        "faction_deltas": faction_deltas,
+        "followup_hooks": followup_hooks,
+        "flags": flags,
     }
-2. Add tavern story arc rules
+2. Add tavern aftermath rules
 
 Create:
 
-src/app/rpg/story/tavern_story_arc_rules.py
+src/app/rpg/story/tavern_story_aftermath_rules.py
 from __future__ import annotations
 
-from typing import List, Tuple
+from typing import List
 
-from app.rpg.story.story_arc_lifecycle import ArcFailureRule, ArcResolutionRule
+from app.rpg.story.story_arc_aftermath import ArcAftermathRule
 
 
-def tavern_story_arc_rules() -> Tuple[List[ArcResolutionRule], List[ArcFailureRule]]:
-    resolution_rules = [
-        ArcResolutionRule(
-            id="arc_rule:marked_coin_completed",
-            arc_id="arc:marked_coin_investigation",
-            outcome="completed_marked_coin_lead",
-            requires_objectives=("objective:identify_marked_coin",),
-            requires_items=("item:marked_coin",),
-            requires_mechanics=("combat_resolved", "quest_progress"),
-            reward_xp=10,
-            set_flags=("arc:marked_coin_investigation.completed",),
-            summary=(
-                "The marked coin investigation is resolved after the party defeats the scouts "
-                "and brings the proof back to Bran."
-            ),
-        ),
-        ArcResolutionRule(
-            id="arc_rule:road_threat_completed",
+def tavern_story_aftermath_rules() -> List[ArcAftermathRule]:
+    return [
+        ArcAftermathRule(
+            id="aftermath:mill_road_threat_completed",
             arc_id="arc:mill_road_threat",
             outcome="completed_bandit_scout_threat",
-            requires_flags=("encounter:mill_bandit_scouts.resolved",),
-            requires_mechanics=("combat_resolved",),
-            reward_xp=10,
-            set_flags=("arc:mill_road_threat.completed",),
-            summary="The immediate bandit threat on the mill road is resolved.",
+            on_status="completed",
+            set_flags=("aftermath:mill_road_secured",),
+            world_signals=(
+                {
+                    "id": "signal:mill_road_safer",
+                    "kind": "security",
+                    "scope": "location:old_mill",
+                    "summary": "The old mill road is safer after the scouts are defeated.",
+                    "ttl_turns": 40,
+                    "intensity": 2,
+                },
+            ),
+            npc_memory_events=(
+                {
+                    "npc_id": "npc:bran",
+                    "memory_type": "gratitude",
+                    "summary": "The party helped secure the road near the old mill.",
+                    "importance": 3,
+                },
+            ),
+            faction_deltas=(
+                {
+                    "faction_id": "faction:rusty_flagon_locals",
+                    "delta": 2,
+                    "reason": "Secured the old mill road.",
+                },
+                {
+                    "faction_id": "faction:sable_chain",
+                    "delta": -1,
+                    "reason": "Disrupted scouts near the old mill.",
+                },
+            ),
+            followup_hooks=(
+                {
+                    "id": "hook:sable_chain_route_pressure",
+                    "kind": "followup_arc_seed",
+                    "arc_id": "arc:sable_chain_route_pressure",
+                    "summary": "Someone may notice that the old mill scouts failed to return.",
+                    "priority": 2,
+                },
+            ),
+            summary="The old mill road victory creates local gratitude and Sable Chain pressure.",
         ),
-    ]
-
-    failure_rules = [
-        ArcFailureRule(
-            id="arc_fail:marked_coin_stalled",
+        ArcAftermathRule(
+            id="aftermath:marked_coin_completed",
             arc_id="arc:marked_coin_investigation",
-            outcome="failed_investigation_stalled",
-            fail_after_turns_without_progress=80,
-            summary="The marked coin trail goes cold after too many turns without progress.",
-        ),
-        ArcFailureRule(
-            id="arc_fail:road_threat_stalled",
-            arc_id="arc:mill_road_threat",
-            outcome="failed_bandits_scattered",
-            fail_after_turns_without_progress=80,
-            summary="The bandit scouts scatter before the party can resolve the road threat.",
+            outcome="completed_marked_coin_lead",
+            on_status="completed",
+            set_flags=("aftermath:marked_coin_reported",),
+            world_signals=(
+                {
+                    "id": "signal:marked_coin_rumor_spreads",
+                    "kind": "rumor",
+                    "scope": "scene:rusty_flagon",
+                    "summary": "Rumors spread that the party brought back a marked coin from the mill road.",
+                    "ttl_turns": 50,
+                    "intensity": 2,
+                },
+            ),
+            npc_memory_events=(
+                {
+                    "npc_id": "npc:mira",
+                    "memory_type": "trust",
+                    "summary": "The party followed through on the marked coin lead.",
+                    "importance": 3,
+                },
+            ),
+            faction_deltas=(
+                {
+                    "faction_id": "faction:rusty_flagon_locals",
+                    "delta": 1,
+                    "reason": "Resolved the marked coin lead.",
+                },
+                {
+                    "faction_id": "faction:sable_chain",
+                    "delta": -2,
+                    "reason": "Exposed a marked coin connected to the old mill scouts.",
+                },
+            ),
+            followup_hooks=(
+                {
+                    "id": "hook:marked_coin_backer_trace",
+                    "kind": "followup_arc_seed",
+                    "arc_id": "arc:marked_coin_backer_trace",
+                    "summary": "The marked coin points toward whoever backed the scouts.",
+                    "priority": 3,
+                },
+            ),
+            summary="The marked coin resolution creates a new lead toward the backers.",
         ),
     ]
+3. Wire aftermath into autoplay turn loop
 
-    return resolution_rules, failure_rules
-3. Initialize tavern story arcs in autoplay state
+Patch:
+
+src/tests/rpg/autoplay_llm_campaign.py
+
+Add imports:
+
+from app.rpg.story.story_arc_aftermath import apply_story_arc_aftermath
+from app.rpg.story.tavern_story_aftermath_rules import tavern_story_aftermath_rules
+
+Before the main loop, add:
+
+story_arc_aftermath_applied_keys: set[str] = set()
+story_arc_aftermath_events: List[Dict[str, Any]] = []
+world_signal_events: List[Dict[str, Any]] = []
+npc_memory_events: List[Dict[str, Any]] = []
+followup_hook_events: List[Dict[str, Any]] = []
+
+After arc_events are computed and appended to the row, add:
+
+aftermath = apply_story_arc_aftermath(
+    arc_events=arc_events,
+    already_applied_keys=story_arc_aftermath_applied_keys,
+    rules=tavern_story_aftermath_rules(),
+)
+
+if aftermath.get("ok"):
+    story_arc_aftermath_applied_keys = set(_safe_list(aftermath.get("applied_keys")))
+
+    aftermath_events = _safe_list(aftermath.get("aftermath_events"))
+    if aftermath_events:
+        story_arc_aftermath_events.extend(aftermath_events)
+        world_signal_events.extend(_safe_list(aftermath.get("world_signals")))
+        npc_memory_events.extend(_safe_list(aftermath.get("npc_memory_events")))
+        followup_hook_events.extend(_safe_list(aftermath.get("followup_hooks")))
+
+        row["story_arc_aftermath"] = aftermath
+        row["story_arc_aftermath_events"] = aftermath_events
+        row["world_signals"] = _safe_list(row.get("world_signals")) + _safe_list(aftermath.get("world_signals"))
+        row["npc_memory_events"] = _safe_list(row.get("npc_memory_events")) + _safe_list(aftermath.get("npc_memory_events"))
+        row["followup_hooks"] = _safe_list(row.get("followup_hooks")) + _safe_list(aftermath.get("followup_hooks"))
+
+        row["state_delta"] = {
+            **_safe_dict(row.get("state_delta")),
+            "story_arc_aftermath_flags": _safe_dict(aftermath.get("flags")),
+            "faction_deltas": _safe_list(aftermath.get("faction_deltas")),
+            "followup_hooks": _safe_list(aftermath.get("followup_hooks")),
+        }
+
+        row["result"] = {
+            **_safe_dict(row.get("result")),
+            "story_arc_aftermath_events": aftermath_events,
+            "world_signals": _safe_list(aftermath.get("world_signals")),
+            "npc_memory_events": _safe_list(aftermath.get("npc_memory_events")),
+            "faction_deltas": _safe_list(aftermath.get("faction_deltas")),
+            "followup_hooks": _safe_list(aftermath.get("followup_hooks")),
+        }
+4. Preserve aftermath in slim transcript
+
+Patch _slim_transcript_row(...).
+
+Add:
+
+for key in (
+    "story_arc_aftermath_events",
+    "world_signals",
+    "npc_memory_events",
+    "followup_hooks",
+):
+    if row.get(key):
+        slim_row[key] = row.get(key)
+
+if row.get("story_arc_aftermath"):
+    aftermath = _safe_dict(row.get("story_arc_aftermath"))
+    slim_row["story_arc_aftermath"] = {
+        "ok": aftermath.get("ok"),
+        "newly_applied_keys": aftermath.get("newly_applied_keys"),
+        "aftermath_events": aftermath.get("aftermath_events"),
+        "world_signals": aftermath.get("world_signals"),
+        "faction_deltas": aftermath.get("faction_deltas"),
+        "followup_hooks": aftermath.get("followup_hooks"),
+    }
+N89 — Faction Reputation Consequences v1
+5. Add faction reputation module
+
+Create:
+
+src/app/rpg/story/faction_reputation.py
+from __future__ import annotations
+
+from typing import Any, Dict, Iterable, List, Mapping
+
+
+def _safe_dict(value: Any) -> Dict[str, Any]:
+    return value if isinstance(value, dict) else {}
+
+
+def _safe_list(value: Any) -> List[Any]:
+    return value if isinstance(value, list) else []
+
+
+def _safe_str(value: Any) -> str:
+    return str(value or "")
+
+
+def _reputation_tier(value: int) -> str:
+    if value >= 5:
+        return "trusted"
+    if value >= 2:
+        return "friendly"
+    if value <= -5:
+        return "hostile"
+    if value <= -2:
+        return "suspicious"
+    return "neutral"
+
+
+def apply_faction_deltas(
+    *,
+    faction_state: Mapping[str, Any],
+    faction_deltas: Iterable[Mapping[str, Any]],
+    turn_index: int,
+) -> Dict[str, Any]:
+    factions = {
+        str(fid): dict(_safe_dict(data))
+        for fid, data in _safe_dict(faction_state).items()
+    }
+
+    events: List[Dict[str, Any]] = []
+
+    for raw_delta in faction_deltas:
+        delta = _safe_dict(raw_delta)
+        faction_id = _safe_str(delta.get("faction_id"))
+        if not faction_id:
+            continue
+
+        amount = int(delta.get("delta") or 0)
+        if amount == 0:
+            continue
+
+        row = factions.setdefault(
+            faction_id,
+            {
+                "faction_id": faction_id,
+                "reputation": 0,
+                "tier": "neutral",
+                "history": [],
+            },
+        )
+
+        previous = int(row.get("reputation") or 0)
+        current = max(-10, min(10, previous + amount))
+        previous_tier = _reputation_tier(previous)
+        current_tier = _reputation_tier(current)
+
+        row["reputation"] = current
+        row["tier"] = current_tier
+        row.setdefault("history", []).append(
+            {
+                "turn": turn_index,
+                "delta": amount,
+                "from": previous,
+                "to": current,
+                "reason": delta.get("reason", ""),
+            }
+        )
+
+        events.append(
+            {
+                "type": "faction_reputation",
+                "faction_id": faction_id,
+                "delta": amount,
+                "from": previous,
+                "to": current,
+                "previous_tier": previous_tier,
+                "tier": current_tier,
+                "reason": delta.get("reason", ""),
+                "meaningful_progress": True,
+                "progress_category": "faction_reputation",
+            }
+        )
+
+    return {
+        "ok": True,
+        "factions": factions,
+        "events": events,
+    }
+
+
+def build_faction_reputation_summary(faction_state: Mapping[str, Any]) -> Dict[str, Any]:
+    factions = _safe_dict(faction_state)
+    rows = []
+
+    for faction_id, raw in sorted(factions.items()):
+        data = _safe_dict(raw)
+        rows.append(
+            {
+                "faction_id": faction_id,
+                "reputation": int(data.get("reputation") or 0),
+                "tier": data.get("tier") or _reputation_tier(int(data.get("reputation") or 0)),
+                "history_count": len(_safe_list(data.get("history"))),
+                "recent_history": _safe_list(data.get("history"))[-5:],
+            }
+        )
+
+    return {
+        "format_version": "faction_reputation_summary_v1",
+        "ok": bool(rows),
+        "faction_count": len(rows),
+        "factions": rows,
+    }
+6. Wire faction reputation into autoplay
 
 Patch:
 
@@ -419,154 +591,194 @@ src/tests/rpg/autoplay_llm_campaign.py
 
 Add import:
 
-from app.rpg.story.story_arc_lifecycle import apply_story_arc_lifecycle
-from app.rpg.story.tavern_story_arc_rules import tavern_story_arc_rules
-
-Add helper:
-
-def _default_tavern_story_arcs() -> Dict[str, Any]:
-    return {
-        "arc:marked_coin_investigation": {
-            "arc_id": "arc:marked_coin_investigation",
-            "title": "Marked Coin Investigation",
-            "status": "active",
-            "current_stage": "follow_the_marked_coin_lead",
-            "started_turn": 1,
-            "last_progress_turn": 1,
-            "progress_count": 0,
-            "completed_objectives": [],
-            "flags": {},
-            "history": [
-                {
-                    "turn": 1,
-                    "type": "arc_started",
-                    "summary": "The marked coin lead begins at the Rusty Flagon.",
-                }
-            ],
-        },
-        "arc:mill_road_threat": {
-            "arc_id": "arc:mill_road_threat",
-            "title": "Mill Road Threat",
-            "status": "active",
-            "current_stage": "reach_and_secure_the_old_mill_road",
-            "started_turn": 1,
-            "last_progress_turn": 1,
-            "progress_count": 0,
-            "completed_objectives": [],
-            "flags": {},
-            "history": [
-                {
-                    "turn": 1,
-                    "type": "arc_started",
-                    "summary": "Rumors point toward trouble on the road to the old mill.",
-                }
-            ],
-        },
-    }
-
-Inside _run_autoplay_campaign(...), before main loop:
-
-story_arc_runtime_state: Dict[str, Any] = _default_tavern_story_arcs()
-story_arc_resolution_events: List[Dict[str, Any]] = []
-4. Feed mechanics + inventory + flags into arc lifecycle
-
-Inside the turn loop, after mechanic resolution and mechanics runtime state update, add:
-
-arc_resolution_rules, arc_failure_rules = tavern_story_arc_rules()
-
-mechanics_covered_state = {
-    name: bool(covered)
-    for name, covered in _safe_dict(mechanics_coverage_runtime).items()
-}
-
-arc_lifecycle_state = {
-    **_safe_dict(mechanics_runtime_state),
-    "mechanics_covered": mechanics_covered_state,
-    "mechanics_coverage_summary": {
-        "mechanics": {
-            name: {"count": 1 if covered else 0, "real_count": 1 if covered else 0}
-            for name, covered in mechanics_covered_state.items()
-        }
-    },
-    "completed_objectives": [
-        "objective:identify_marked_coin"
-        if mechanics_covered_state.get("quest_progress")
-        else ""
-    ],
-}
-arc_lifecycle_state["completed_objectives"] = [
-    value for value in arc_lifecycle_state["completed_objectives"] if value
-]
-
-arc_lifecycle = apply_story_arc_lifecycle(
-    arc_states=story_arc_runtime_state,
-    state=arc_lifecycle_state,
-    turn_index=int(row.get("turn_index") or turn_index),
-    resolution_rules=arc_resolution_rules,
-    failure_rules=arc_failure_rules,
+from app.rpg.story.faction_reputation import (
+    apply_faction_deltas,
+    build_faction_reputation_summary,
 )
 
-if arc_lifecycle.get("ok"):
-    story_arc_delta = _safe_dict(arc_lifecycle.get("story_arc_state_delta"))
-    story_arc_runtime_state = _safe_dict(story_arc_delta.get("story_arcs")) or story_arc_runtime_state
+Before main loop:
 
-    arc_events = _safe_list(arc_lifecycle.get("story_arc_events"))
-    if arc_events:
-        story_arc_resolution_events.extend(arc_events)
+faction_reputation_state: Dict[str, Any] = {
+    "faction:rusty_flagon_locals": {
+        "faction_id": "faction:rusty_flagon_locals",
+        "reputation": 0,
+        "tier": "neutral",
+        "history": [],
+    },
+    "faction:sable_chain": {
+        "faction_id": "faction:sable_chain",
+        "reputation": 0,
+        "tier": "neutral",
+        "history": [],
+    },
+}
+faction_reputation_events: List[Dict[str, Any]] = []
 
-        row["story_arc_lifecycle"] = arc_lifecycle
-        row["story_arc_events"] = arc_events
-        row["meaningful_progress"] = True
-        row["progress_category"] = "story_arc_resolution"
+After aftermath runs, add:
 
+faction_update = apply_faction_deltas(
+    faction_state=faction_reputation_state,
+    faction_deltas=_safe_list(_safe_dict(row.get("state_delta")).get("faction_deltas")),
+    turn_index=int(row.get("turn_index") or turn_index),
+)
+
+if faction_update.get("ok"):
+    faction_reputation_state = _safe_dict(faction_update.get("factions"))
+    new_faction_events = _safe_list(faction_update.get("events"))
+    if new_faction_events:
+        faction_reputation_events.extend(new_faction_events)
+        row["faction_reputation_events"] = new_faction_events
+        row["state_delta"] = {
+            **_safe_dict(row.get("state_delta")),
+            "faction_reputation": faction_reputation_state,
+        }
+        row["result"] = {
+            **_safe_dict(row.get("result")),
+            "faction_reputation_events": new_faction_events,
+        }
+
+Patch _slim_transcript_row(...):
+
+if row.get("faction_reputation_events"):
+    slim_row["faction_reputation_events"] = row.get("faction_reputation_events")
+N90 — Follow-Up Arc Seeding v1
+7. Add follow-up arc seeding module
+
+Create:
+
+src/app/rpg/story/followup_arc_seeding.py
+from __future__ import annotations
+
+from typing import Any, Dict, Iterable, List, Mapping
+
+
+def _safe_dict(value: Any) -> Dict[str, Any]:
+    return value if isinstance(value, dict) else {}
+
+
+def _safe_list(value: Any) -> List[Any]:
+    return value if isinstance(value, list) else []
+
+
+def _safe_str(value: Any) -> str:
+    return str(value or "")
+
+
+def seed_followup_arcs(
+    *,
+    existing_arcs: Mapping[str, Any],
+    followup_hooks: Iterable[Mapping[str, Any]],
+    turn_index: int,
+    max_active_arcs: int = 3,
+) -> Dict[str, Any]:
+    arcs = {
+        str(arc_id): dict(_safe_dict(arc))
+        for arc_id, arc in _safe_dict(existing_arcs).items()
+    }
+
+    active_count = sum(
+        1
+        for arc in arcs.values()
+        if _safe_dict(arc).get("status") not in {"completed", "failed", "abandoned"}
+    )
+
+    seeded_events: List[Dict[str, Any]] = []
+
+    hooks = sorted(
+        [_safe_dict(hook) for hook in _safe_list(list(followup_hooks))],
+        key=lambda item: int(item.get("priority") or 0),
+        reverse=True,
+    )
+
+    for hook in hooks:
+        if active_count >= max_active_arcs:
+            break
+
+        arc_id = _safe_str(hook.get("arc_id"))
+        if not arc_id or arc_id in arcs:
+            continue
+
+        arcs[arc_id] = {
+            "arc_id": arc_id,
+            "title": _safe_str(hook.get("title") or hook.get("summary") or arc_id),
+            "status": "active",
+            "current_stage": "seeded_followup",
+            "started_turn": turn_index,
+            "last_progress_turn": turn_index,
+            "progress_count": 0,
+            "source_hook_id": hook.get("id"),
+            "history": [
+                {
+                    "turn": turn_index,
+                    "type": "arc_seeded",
+                    "summary": hook.get("summary", ""),
+                }
+            ],
+        }
+        active_count += 1
+
+        seeded_events.append(
+            {
+                "type": "story_arc",
+                "subtype": "arc_seeded",
+                "arc_id": arc_id,
+                "source_hook_id": hook.get("id"),
+                "summary": hook.get("summary", ""),
+                "meaningful_progress": True,
+                "progress_category": "story_arc_seeded",
+            }
+        )
+
+    return {
+        "ok": True,
+        "story_arcs": arcs,
+        "seeded_events": seeded_events,
+        "seeded_count": len(seeded_events),
+    }
+8. Wire follow-up seeding
+
+Patch:
+
+src/tests/rpg/autoplay_llm_campaign.py
+
+Add import:
+
+from app.rpg.story.followup_arc_seeding import seed_followup_arcs
+
+Before main loop:
+
+followup_arc_seed_events: List[Dict[str, Any]] = []
+
+After aftermath/faction processing:
+
+followup_seed = seed_followup_arcs(
+    existing_arcs=story_arc_runtime_state,
+    followup_hooks=_safe_list(row.get("followup_hooks")),
+    turn_index=int(row.get("turn_index") or turn_index),
+    max_active_arcs=3,
+)
+
+if followup_seed.get("ok"):
+    story_arc_runtime_state = _safe_dict(followup_seed.get("story_arcs")) or story_arc_runtime_state
+    seeded_events = _safe_list(followup_seed.get("seeded_events"))
+    if seeded_events:
+        followup_arc_seed_events.extend(seeded_events)
+        row["followup_arc_seed_events"] = seeded_events
         row["state_delta"] = {
             **_safe_dict(row.get("state_delta")),
             "story_arcs": story_arc_runtime_state,
         }
-
         row["result"] = {
             **_safe_dict(row.get("result")),
-            "story_arc_events": arc_events,
-            "story_arc_resolution": {
-                "resolved_count": arc_lifecycle.get("resolved_count"),
-                "failed_count": arc_lifecycle.get("failed_count"),
-            },
-            "meaningful_progress": True,
-            "progress_category": "story_arc_resolution",
+            "followup_arc_seed_events": seeded_events,
         }
-5. Prevent duplicate arc completion events
 
-The lifecycle function already ignores terminal statuses, but make sure the loop does not keep appending the same event.
+Patch _slim_transcript_row(...):
 
-After updating story_arc_runtime_state, add:
-
-seen_arc_event_keys = {
-    (
-        event.get("arc_id"),
-        event.get("subtype"),
-        event.get("outcome"),
-    )
-    for event in story_arc_resolution_events
-}
-
-new_arc_events = []
-for event in _safe_list(arc_lifecycle.get("story_arc_events")):
-    key = (
-        event.get("arc_id"),
-        event.get("subtype"),
-        event.get("outcome"),
-    )
-    if key in seen_arc_event_keys:
-        continue
-    new_arc_events.append(event)
-    seen_arc_event_keys.add(key)
-
-arc_events = new_arc_events
-
-Use arc_events instead of the raw events from arc_lifecycle.
-
-N86 — Arc Report Summary
-6. Add story arc lifecycle summary builder
+if row.get("followup_arc_seed_events"):
+    slim_row["followup_arc_seed_events"] = row.get("followup_arc_seed_events")
+Final Summaries / Artifacts / HTML
+9. Add aftermath summary builder
 
 Patch:
 
@@ -574,285 +786,245 @@ src/tests/rpg/autoplay_llm_campaign.py
 
 Add:
 
-def _build_story_arc_lifecycle_summary(
+def _build_story_arc_aftermath_summary(
     *,
-    story_arcs: Dict[str, Any],
-    events: List[Dict[str, Any]],
+    aftermath_events: List[Dict[str, Any]],
+    world_signals: List[Dict[str, Any]],
+    npc_memory_events: List[Dict[str, Any]],
+    followup_hooks: List[Dict[str, Any]],
+    faction_events: List[Dict[str, Any]],
+    seeded_events: List[Dict[str, Any]],
 ) -> Dict[str, Any]:
-    arcs = _safe_dict(story_arcs)
-    event_rows = [_safe_dict(event) for event in _safe_list(events)]
-
-    status_counts: Dict[str, int] = {}
-    for arc in arcs.values():
-        status = _safe_str(_safe_dict(arc).get("status") or "unknown")
-        status_counts[status] = int(status_counts.get(status, 0)) + 1
-
-    completed = [
-        arc
-        for arc in arcs.values()
-        if _safe_dict(arc).get("status") == "completed"
-    ]
-    failed = [
-        arc
-        for arc in arcs.values()
-        if _safe_dict(arc).get("status") == "failed"
-    ]
-    active = [
-        arc
-        for arc in arcs.values()
-        if _safe_dict(arc).get("status") not in {"completed", "failed", "abandoned"}
-    ]
-
     return {
-        "format_version": "story_arc_lifecycle_summary_v1",
-        "ok": bool(completed or failed),
-        "arc_count": len(arcs),
-        "completed_count": len(completed),
-        "failed_count": len(failed),
-        "active_count": len(active),
-        "status_counts": dict(sorted(status_counts.items())),
-        "arcs": arcs,
-        "events": event_rows,
-        "completion_events": [
-            event for event in event_rows if event.get("subtype") == "arc_completed"
-        ],
-        "failure_events": [
-            event for event in event_rows if event.get("subtype") == "arc_failed"
-        ],
-        "unresolved_arcs": [
-            {
-                "arc_id": _safe_dict(arc).get("arc_id"),
-                "title": _safe_dict(arc).get("title"),
-                "status": _safe_dict(arc).get("status"),
-                "current_stage": _safe_dict(arc).get("current_stage"),
-            }
-            for arc in active
-        ],
+        "format_version": "story_arc_aftermath_summary_v1",
+        "ok": bool(aftermath_events or world_signals or faction_events or seeded_events),
+        "aftermath_event_count": len(_safe_list(aftermath_events)),
+        "world_signal_count": len(_safe_list(world_signals)),
+        "npc_memory_event_count": len(_safe_list(npc_memory_events)),
+        "followup_hook_count": len(_safe_list(followup_hooks)),
+        "faction_event_count": len(_safe_list(faction_events)),
+        "seeded_followup_arc_count": len(_safe_list(seeded_events)),
+        "aftermath_events": _safe_list(aftermath_events),
+        "world_signals": _safe_list(world_signals),
+        "npc_memory_events": _safe_list(npc_memory_events),
+        "followup_hooks": _safe_list(followup_hooks),
+        "faction_events": _safe_list(faction_events),
+        "seeded_events": _safe_list(seeded_events),
     }
 
-Near final summary build, add:
+Near final summary build, after story lifecycle summary:
 
-summary["story_arc_lifecycle_summary"] = _build_story_arc_lifecycle_summary(
-    story_arcs=story_arc_runtime_state,
-    events=story_arc_resolution_events,
+summary["story_arc_aftermath_summary"] = _build_story_arc_aftermath_summary(
+    aftermath_events=story_arc_aftermath_events,
+    world_signals=world_signal_events,
+    npc_memory_events=npc_memory_events,
+    followup_hooks=followup_hook_events,
+    faction_events=faction_reputation_events,
+    seeded_events=followup_arc_seed_events,
 )
-7. Add artifact
+
+summary["faction_reputation_summary"] = build_faction_reputation_summary(
+    faction_reputation_state
+)
+10. Add zip artifacts
 
 In zip writer:
 
 _zip_writestr_json(
     zip_handle,
     artifact_manifest,
-    "story-arc-lifecycle-summary.json",
-    summary.get("story_arc_lifecycle_summary", {}),
+    "story-arc-aftermath-summary.json",
+    summary.get("story_arc_aftermath_summary", {}),
 )
-8. Add HTML section
 
-In HTML builder, add:
-
-story_arc_lifecycle = _safe_dict(summary.get("story_arc_lifecycle_summary"))
-
-Add nav link:
-
-<a href="#story-arc-lifecycle">Story Arc Lifecycle</a>
-
-Add section:
-
-story_arc_lifecycle_html = f"""
-<section class="card" id="story-arc-lifecycle">
-  <h2>Story Arc Lifecycle</h2>
-  <div class="grid">
-    <div class="metric"><strong>Completed</strong><span>{esc(story_arc_lifecycle.get("completed_count"))}</span></div>
-    <div class="metric"><strong>Failed</strong><span>{esc(story_arc_lifecycle.get("failed_count"))}</span></div>
-    <div class="metric"><strong>Active</strong><span>{esc(story_arc_lifecycle.get("active_count"))}</span></div>
-    <div class="metric"><strong>Status</strong><span>{esc("PASS" if story_arc_lifecycle.get("ok") else "WARN")}</span></div>
-  </div>
-  <h3>Status Counts</h3>
-  <pre>{esc(json.dumps(story_arc_lifecycle.get("status_counts", {}), ensure_ascii=False, indent=2, default=str))}</pre>
-  <h3>Arc Events</h3>
-  <pre>{esc(json.dumps(story_arc_lifecycle.get("events", []), ensure_ascii=False, indent=2, default=str))}</pre>
-  <h3>Unresolved Arcs</h3>
-  <pre>{esc(json.dumps(story_arc_lifecycle.get("unresolved_arcs", []), ensure_ascii=False, indent=2, default=str))}</pre>
-</section>
-"""
-
-Insert {story_arc_lifecycle_html} into the report body.
-
-N87 — Evaluation Gate
-9. Add story arc resolution gate
+_zip_writestr_json(
+    zip_handle,
+    artifact_manifest,
+    "faction-reputation-summary.json",
+    summary.get("faction_reputation_summary", {}),
+)
+11. Add evaluation gate
 
 Patch _build_100_turn_evaluation_summary(...).
 
-Add optional parameter:
+Add optional parameters:
 
-story_arc_lifecycle_summary: Optional[Dict[str, Any]] = None,
+story_arc_aftermath_summary: Optional[Dict[str, Any]] = None,
+faction_reputation_summary: Optional[Dict[str, Any]] = None,
 
 Inside function:
 
-story_arcs = _safe_dict(story_arc_lifecycle_summary)
+aftermath = _safe_dict(story_arc_aftermath_summary)
+factions = _safe_dict(faction_reputation_summary)
 
-Inside gates, add:
+Inside gates:
 
-"story_arc_resolution_present": {
-    "ok": int(story_arcs.get("completed_count") or 0) + int(story_arcs.get("failed_count") or 0) >= 1,
+"story_arc_aftermath_present": {
+    "ok": int(aftermath.get("aftermath_event_count") or 0) >= 1,
     "value": {
-        "completed_count": story_arcs.get("completed_count"),
-        "failed_count": story_arcs.get("failed_count"),
-        "active_count": story_arcs.get("active_count"),
-        "status_counts": story_arcs.get("status_counts"),
+        "aftermath_event_count": aftermath.get("aftermath_event_count"),
+        "world_signal_count": aftermath.get("world_signal_count"),
+        "npc_memory_event_count": aftermath.get("npc_memory_event_count"),
+        "followup_hook_count": aftermath.get("followup_hook_count"),
+        "seeded_followup_arc_count": aftermath.get("seeded_followup_arc_count"),
     },
-    "expected": "at least one completed or failed story arc in 100-turn run",
-    "message": "The 100-turn campaign should demonstrate deterministic story arc closure.",
+    "expected": "at least one bounded aftermath event from completed or failed arcs",
+    "message": "Completed arcs should create deterministic aftermath.",
+},
+"faction_reputation_changed": {
+    "ok": int(factions.get("faction_count") or 0) >= 1
+    and any(
+        int(_safe_dict(row).get("history_count") or 0) > 0
+        for row in _safe_list(factions.get("factions"))
+    ),
+    "value": {
+        "faction_count": factions.get("faction_count"),
+        "factions": factions.get("factions"),
+    },
+    "expected": "at least one faction reputation delta",
+    "message": "Arc aftermath should produce bounded faction reputation consequences.",
 },
 
 Update call site:
 
-story_arc_lifecycle_summary=_safe_dict(summary.get("story_arc_lifecycle_summary")),
+story_arc_aftermath_summary=_safe_dict(summary.get("story_arc_aftermath_summary")),
+faction_reputation_summary=_safe_dict(summary.get("faction_reputation_summary")),
 
-Make sure this call happens after summary["story_arc_lifecycle_summary"] is assigned.
+Make sure this call happens after those summaries are assigned.
 
-10. Preserve arc events in slim transcript
-
-Patch _slim_transcript_row(...):
-
-if row.get("story_arc_events"):
-    slim_row["story_arc_events"] = row.get("story_arc_events")
-
-if row.get("story_arc_lifecycle"):
-    slim_row["story_arc_lifecycle"] = {
-        "ok": _safe_dict(row.get("story_arc_lifecycle")).get("ok"),
-        "resolved_count": _safe_dict(row.get("story_arc_lifecycle")).get("resolved_count"),
-        "failed_count": _safe_dict(row.get("story_arc_lifecycle")).get("failed_count"),
-        "story_arc_events": _safe_dict(row.get("story_arc_lifecycle")).get("story_arc_events"),
-    }
-11. Tests
+Tests
+12. Add aftermath tests
 
 Create:
 
-src/tests/rpg/test_story_arc_lifecycle.py
-from app.rpg.story.story_arc_lifecycle import (
-    ArcFailureRule,
-    ArcResolutionRule,
-    apply_story_arc_lifecycle,
-)
+src/tests/rpg/test_story_arc_aftermath.py
+from app.rpg.story.story_arc_aftermath import ArcAftermathRule, apply_story_arc_aftermath
 
 
-def test_story_arc_completes_when_requirements_met():
-    arcs = {
-        "arc:marked_coin_investigation": {
-            "arc_id": "arc:marked_coin_investigation",
-            "title": "Marked Coin Investigation",
-            "status": "active",
-            "started_turn": 1,
-            "last_progress_turn": 1,
-        }
+def test_story_arc_aftermath_applies_once():
+    event = {
+        "arc_id": "arc:a",
+        "subtype": "arc_completed",
+        "outcome": "done",
     }
 
-    result = apply_story_arc_lifecycle(
-        arc_states=arcs,
-        state={
-            "completed_objectives": ["objective:identify_marked_coin"],
-            "inventory": [{"id": "item:marked_coin", "quantity": 1}],
-            "mechanics_covered": {
-                "combat_resolved": True,
-                "quest_progress": True,
-            },
-        },
-        turn_index=10,
-        resolution_rules=[
-            ArcResolutionRule(
-                id="rule:complete",
-                arc_id="arc:marked_coin_investigation",
-                outcome="completed",
-                requires_objectives=("objective:identify_marked_coin",),
-                requires_items=("item:marked_coin",),
-                requires_mechanics=("combat_resolved", "quest_progress"),
-                reward_xp=10,
-                set_flags=("arc:marked_coin_investigation.completed",),
-            )
-        ],
-        failure_rules=[],
+    rule = ArcAftermathRule(
+        id="rule:a",
+        arc_id="arc:a",
+        outcome="done",
+        world_signals=(
+            {"id": "signal:a", "summary": "A happened."},
+        ),
+        faction_deltas=(
+            {"faction_id": "faction:test", "delta": 2, "reason": "A"},
+        ),
+        followup_hooks=(
+            {"id": "hook:a", "arc_id": "arc:b", "priority": 1},
+        ),
+        set_flags=("flag:a",),
     )
 
-    assert result["ok"] is True
-    assert result["resolved_count"] == 1
-
-    arc = result["story_arc_state_delta"]["story_arcs"]["arc:marked_coin_investigation"]
-    assert arc["status"] == "completed"
-    assert result["story_arc_state_delta"]["xp_delta"] == 10
-    assert result["story_arc_state_delta"]["flags"]["arc:marked_coin_investigation.completed"] is True
-
-
-def test_story_arc_fails_when_stalled():
-    arcs = {
-        "arc:marked_coin_investigation": {
-            "arc_id": "arc:marked_coin_investigation",
-            "title": "Marked Coin Investigation",
-            "status": "active",
-            "started_turn": 1,
-            "last_progress_turn": 1,
-        }
-    }
-
-    result = apply_story_arc_lifecycle(
-        arc_states=arcs,
-        state={},
-        turn_index=100,
-        resolution_rules=[],
-        failure_rules=[
-            ArcFailureRule(
-                id="rule:stalled",
-                arc_id="arc:marked_coin_investigation",
-                outcome="failed_stalled",
-                fail_after_turns_without_progress=80,
-            )
-        ],
+    first = apply_story_arc_aftermath(
+        arc_events=[event],
+        already_applied_keys=[],
+        rules=[rule],
     )
+    assert len(first["aftermath_events"]) == 1
+    assert len(first["world_signals"]) == 1
+    assert len(first["faction_deltas"]) == 1
+    assert len(first["followup_hooks"]) == 1
 
-    assert result["failed_count"] == 1
-
-    arc = result["story_arc_state_delta"]["story_arcs"]["arc:marked_coin_investigation"]
-    assert arc["status"] == "failed"
+    second = apply_story_arc_aftermath(
+        arc_events=[event],
+        already_applied_keys=first["applied_keys"],
+        rules=[rule],
+    )
+    assert second["aftermath_events"] == []
+13. Add faction tests
 
 Create:
 
-src/tests/rpg/test_autoplay_story_arc_lifecycle_summary.py
-from tests.rpg.autoplay_llm_campaign import _build_story_arc_lifecycle_summary
+src/tests/rpg/test_faction_reputation.py
+from app.rpg.story.faction_reputation import apply_faction_deltas, build_faction_reputation_summary
 
 
-def test_story_arc_lifecycle_summary_counts_statuses():
-    summary = _build_story_arc_lifecycle_summary(
-        story_arcs={
-            "arc:a": {
-                "arc_id": "arc:a",
-                "title": "A",
+def test_faction_reputation_applies_deltas_and_tiers():
+    result = apply_faction_deltas(
+        faction_state={},
+        faction_deltas=[
+            {"faction_id": "faction:locals", "delta": 2, "reason": "helped"},
+            {"faction_id": "faction:enemy", "delta": -3, "reason": "opposed"},
+        ],
+        turn_index=5,
+    )
+
+    locals_row = result["factions"]["faction:locals"]
+    enemy_row = result["factions"]["faction:enemy"]
+
+    assert locals_row["reputation"] == 2
+    assert locals_row["tier"] == "friendly"
+    assert enemy_row["reputation"] == -3
+    assert enemy_row["tier"] == "suspicious"
+
+    summary = build_faction_reputation_summary(result["factions"])
+    assert summary["ok"] is True
+    assert summary["faction_count"] == 2
+14. Add follow-up seeding tests
+
+Create:
+
+src/tests/rpg/test_followup_arc_seeding.py
+from app.rpg.story.followup_arc_seeding import seed_followup_arcs
+
+
+def test_followup_arc_seeding_adds_new_arc_once():
+    result = seed_followup_arcs(
+        existing_arcs={
+            "arc:done": {
+                "arc_id": "arc:done",
                 "status": "completed",
-            },
-            "arc:b": {
-                "arc_id": "arc:b",
-                "title": "B",
-                "status": "active",
-            },
+            }
         },
-        events=[
+        followup_hooks=[
             {
-                "type": "story_arc",
-                "subtype": "arc_completed",
-                "arc_id": "arc:a",
+                "id": "hook:next",
+                "arc_id": "arc:next",
+                "summary": "Next lead.",
+                "priority": 2,
             }
         ],
+        turn_index=12,
     )
 
-    assert summary["ok"] is True
-    assert summary["completed_count"] == 1
-    assert summary["active_count"] == 1
-    assert summary["status_counts"]["completed"] == 1
-12. Run checks
+    assert result["seeded_count"] == 1
+    assert result["story_arcs"]["arc:next"]["status"] == "active"
+
+    second = seed_followup_arcs(
+        existing_arcs=result["story_arcs"],
+        followup_hooks=[
+            {
+                "id": "hook:next",
+                "arc_id": "arc:next",
+                "summary": "Next lead.",
+                "priority": 2,
+            }
+        ],
+        turn_index=13,
+    )
+
+    assert second["seeded_count"] == 0
+Run checks
 python -m py_compile `
-  src\app\rpg\story\story_arc_lifecycle.py `
-  src\app\rpg\story\tavern_story_arc_rules.py `
+  src\app\rpg\story\__init__.py `
+  src\app\rpg\story\story_arc_aftermath.py `
+  src\app\rpg\story\tavern_story_aftermath_rules.py `
+  src\app\rpg\story\faction_reputation.py `
+  src\app\rpg\story\followup_arc_seeding.py `
   src\tests\rpg\autoplay_llm_campaign.py
 python -m pytest `
+  src\tests\rpg\test_story_arc_aftermath.py `
+  src\tests\rpg\test_faction_reputation.py `
+  src\tests\rpg\test_followup_arc_seeding.py `
   src\tests\rpg\test_story_arc_lifecycle.py `
   src\tests\rpg\test_autoplay_story_arc_lifecycle_summary.py `
   src\tests\rpg\test_autoplay_mechanics_coverage.py `
