@@ -1,467 +1,859 @@
-Literal apply-this-patch diff spec
-N84.4.3 — Restore Active Mechanics Runtime + Mechanics Gate
+N85 — Story Arc Lifecycle Model
+1. Add story arc lifecycle module
+
+Create:
+
+src/app/rpg/story/story_arc_lifecycle.py
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from typing import Any, Dict, Iterable, List, Mapping, Optional
+import time
+
+
+ARC_STATUS_ACTIVE = "active"
+ARC_STATUS_ADVANCED = "advanced"
+ARC_STATUS_READY_TO_RESOLVE = "ready_to_resolve"
+ARC_STATUS_COMPLETED = "completed"
+ARC_STATUS_FAILED = "failed"
+ARC_STATUS_ABANDONED = "abandoned"
+ARC_STATUS_STALLED = "stalled"
+
+TERMINAL_ARC_STATUSES = {
+    ARC_STATUS_COMPLETED,
+    ARC_STATUS_FAILED,
+    ARC_STATUS_ABANDONED,
+}
+
+
+@dataclass(frozen=True)
+class ArcResolutionRule:
+    id: str
+    arc_id: str
+    outcome: str
+    requires_objectives: tuple[str, ...] = ()
+    requires_flags: tuple[str, ...] = ()
+    requires_items: tuple[str, ...] = ()
+    requires_mechanics: tuple[str, ...] = ()
+    blocked_by_flags: tuple[str, ...] = ()
+    reward_xp: int = 0
+    reward_items: tuple[Dict[str, Any], ...] = ()
+    set_flags: tuple[str, ...] = ()
+    clear_flags: tuple[str, ...] = ()
+    summary: str = ""
+
+
+@dataclass(frozen=True)
+class ArcFailureRule:
+    id: str
+    arc_id: str
+    outcome: str
+    fail_after_turns_without_progress: int = 0
+    fail_if_flags: tuple[str, ...] = ()
+    fail_if_missing_items: tuple[str, ...] = ()
+    fail_if_location_left_without_resolution: bool = False
+    summary: str = ""
+
+
+@dataclass
+class ArcRuntimeState:
+    arc_id: str
+    title: str
+    status: str = ARC_STATUS_ACTIVE
+    current_stage: str = ""
+    progress_count: int = 0
+    last_progress_turn: int = 0
+    started_turn: int = 0
+    completed_turn: int = 0
+    failed_turn: int = 0
+    resolution_outcome: str = ""
+    failure_outcome: str = ""
+    completed_objectives: List[str] = field(default_factory=list)
+    flags: Dict[str, bool] = field(default_factory=dict)
+    history: List[Dict[str, Any]] = field(default_factory=list)
+
+
+def _safe_dict(value: Any) -> Dict[str, Any]:
+    return value if isinstance(value, dict) else {}
+
+
+def _safe_list(value: Any) -> List[Any]:
+    return value if isinstance(value, list) else []
+
+
+def _safe_str(value: Any) -> str:
+    return str(value or "")
+
+
+def _inventory_item_ids(state: Mapping[str, Any]) -> set[str]:
+    ids: set[str] = set()
+    inventory = state.get("inventory") or state.get("items") or []
+    if isinstance(inventory, dict):
+        ids.update(str(k) for k, v in inventory.items() if v)
+    elif isinstance(inventory, list):
+        for item in inventory:
+            if isinstance(item, dict):
+                item_id = item.get("id") or item.get("item_id") or item.get("name")
+                if item_id:
+                    ids.add(str(item_id))
+            elif item:
+                ids.add(str(item))
+    return ids
+
+
+def _state_flags(state: Mapping[str, Any]) -> set[str]:
+    flags: set[str] = set()
+    for key in ("flags", "world_flags", "scenario_flags"):
+        raw = state.get(key)
+        if isinstance(raw, dict):
+            flags.update(str(k) for k, v in raw.items() if v)
+        elif isinstance(raw, list):
+            flags.update(str(v) for v in raw)
+    return flags
+
+
+def _completed_objectives(state: Mapping[str, Any]) -> set[str]:
+    completed: set[str] = set()
+
+    for key in ("completed_objectives", "completed_quests"):
+        raw = state.get(key)
+        if isinstance(raw, list):
+            completed.update(str(v) for v in raw)
+
+    quest_log = _safe_dict(state.get("quest_log"))
+    for raw in _safe_list(quest_log.get("objectives")):
+        objective = _safe_dict(raw)
+        if objective.get("completed") or objective.get("status") == "completed":
+            objective_id = objective.get("id") or objective.get("objective_id")
+            if objective_id:
+                completed.add(str(objective_id))
+
+    return completed
+
+
+def _covered_mechanics(state: Mapping[str, Any]) -> set[str]:
+    covered: set[str] = set()
+
+    mechanics = _safe_dict(state.get("mechanics_covered"))
+    covered.update(str(k) for k, v in mechanics.items() if v)
+
+    mechanics_summary = _safe_dict(state.get("mechanics_coverage_summary"))
+    for name, data in _safe_dict(mechanics_summary.get("mechanics")).items():
+        if int(_safe_dict(data).get("real_count") or _safe_dict(data).get("count") or 0) > 0:
+            covered.add(str(name))
+
+    return covered
+
+
+def normalize_arc_state(raw: Mapping[str, Any]) -> ArcRuntimeState:
+    raw = _safe_dict(raw)
+    return ArcRuntimeState(
+        arc_id=_safe_str(raw.get("arc_id") or raw.get("id")),
+        title=_safe_str(raw.get("title") or raw.get("name") or raw.get("arc_id") or raw.get("id")),
+        status=_safe_str(raw.get("status") or ARC_STATUS_ACTIVE),
+        current_stage=_safe_str(raw.get("current_stage") or raw.get("stage")),
+        progress_count=int(raw.get("progress_count") or 0),
+        last_progress_turn=int(raw.get("last_progress_turn") or 0),
+        started_turn=int(raw.get("started_turn") or 0),
+        completed_turn=int(raw.get("completed_turn") or 0),
+        failed_turn=int(raw.get("failed_turn") or 0),
+        resolution_outcome=_safe_str(raw.get("resolution_outcome")),
+        failure_outcome=_safe_str(raw.get("failure_outcome")),
+        completed_objectives=[str(v) for v in _safe_list(raw.get("completed_objectives"))],
+        flags={str(k): bool(v) for k, v in _safe_dict(raw.get("flags")).items()},
+        history=[_safe_dict(v) for v in _safe_list(raw.get("history"))],
+    )
+
+
+def serialize_arc_state(arc: ArcRuntimeState) -> Dict[str, Any]:
+    return {
+        "arc_id": arc.arc_id,
+        "title": arc.title,
+        "status": arc.status,
+        "current_stage": arc.current_stage,
+        "progress_count": arc.progress_count,
+        "last_progress_turn": arc.last_progress_turn,
+        "started_turn": arc.started_turn,
+        "completed_turn": arc.completed_turn,
+        "failed_turn": arc.failed_turn,
+        "resolution_outcome": arc.resolution_outcome,
+        "failure_outcome": arc.failure_outcome,
+        "completed_objectives": list(arc.completed_objectives),
+        "flags": dict(arc.flags),
+        "history": list(arc.history),
+    }
+
+
+def _rule_requirements_met(rule: ArcResolutionRule, state: Mapping[str, Any]) -> bool:
+    flags = _state_flags(state)
+    items = _inventory_item_ids(state)
+    completed = _completed_objectives(state)
+    mechanics = _covered_mechanics(state)
+
+    if any(obj not in completed for obj in rule.requires_objectives):
+        return False
+    if any(flag not in flags for flag in rule.requires_flags):
+        return False
+    if any(flag in flags for flag in rule.blocked_by_flags):
+        return False
+    if any(item not in items for item in rule.requires_items):
+        return False
+    if any(mechanic not in mechanics for mechanic in rule.requires_mechanics):
+        return False
+
+    return True
+
+
+def _failure_rule_met(
+    rule: ArcFailureRule,
+    *,
+    arc: ArcRuntimeState,
+    state: Mapping[str, Any],
+    turn_index: int,
+) -> bool:
+    flags = _state_flags(state)
+    items = _inventory_item_ids(state)
+
+    if any(flag in flags for flag in rule.fail_if_flags):
+        return True
+
+    if any(item not in items for item in rule.fail_if_missing_items):
+        return True
+
+    if rule.fail_after_turns_without_progress > 0:
+        last_progress = arc.last_progress_turn or arc.started_turn or 0
+        if last_progress and turn_index - last_progress >= rule.fail_after_turns_without_progress:
+            return True
+
+    return False
+
+
+def apply_story_arc_lifecycle(
+    *,
+    arc_states: Mapping[str, Any],
+    state: Mapping[str, Any],
+    turn_index: int,
+    resolution_rules: Iterable[ArcResolutionRule],
+    failure_rules: Iterable[ArcFailureRule],
+) -> Dict[str, Any]:
+    arcs = {
+        str(arc_id): normalize_arc_state(raw)
+        for arc_id, raw in _safe_dict(arc_states).items()
+    }
+
+    events: List[Dict[str, Any]] = []
+    state_delta: Dict[str, Any] = {
+        "story_arcs": {},
+        "flags": dict(_safe_dict(state.get("flags"))),
+        "xp_delta": 0,
+        "inventory_delta": {"items_added": []},
+    }
+
+    resolution_by_arc: Dict[str, List[ArcResolutionRule]] = {}
+    for rule in resolution_rules:
+        resolution_by_arc.setdefault(rule.arc_id, []).append(rule)
+
+    failure_by_arc: Dict[str, List[ArcFailureRule]] = {}
+    for rule in failure_rules:
+        failure_by_arc.setdefault(rule.arc_id, []).append(rule)
+
+    for arc_id, arc in arcs.items():
+        if arc.status in TERMINAL_ARC_STATUSES:
+            state_delta["story_arcs"][arc_id] = serialize_arc_state(arc)
+            continue
+
+        resolved = False
+
+        for rule in resolution_by_arc.get(arc_id, []):
+            if not _rule_requirements_met(rule, state):
+                continue
+
+            arc.status = ARC_STATUS_COMPLETED
+            arc.completed_turn = int(turn_index)
+            arc.resolution_outcome = rule.outcome
+            arc.history.append(
+                {
+                    "turn": turn_index,
+                    "type": "arc_completed",
+                    "rule_id": rule.id,
+                    "outcome": rule.outcome,
+                    "summary": rule.summary,
+                }
+            )
+
+            for flag in rule.set_flags:
+                state_delta["flags"][flag] = True
+            for flag in rule.clear_flags:
+                state_delta["flags"][flag] = False
+
+            if rule.reward_xp:
+                state_delta["xp_delta"] = int(state_delta.get("xp_delta") or 0) + int(rule.reward_xp)
+
+            for item in rule.reward_items:
+                state_delta["inventory_delta"]["items_added"].append(dict(item))
+
+            events.append(
+                {
+                    "type": "story_arc",
+                    "subtype": "arc_completed",
+                    "arc_id": arc_id,
+                    "title": arc.title,
+                    "outcome": rule.outcome,
+                    "summary": rule.summary or f"{arc.title} is completed.",
+                    "meaningful_progress": True,
+                    "progress_category": "story_arc_resolution",
+                }
+            )
+            resolved = True
+            break
+
+        if not resolved:
+            for rule in failure_by_arc.get(arc_id, []):
+                if not _failure_rule_met(rule, arc=arc, state=state, turn_index=turn_index):
+                    continue
+
+                arc.status = ARC_STATUS_FAILED
+                arc.failed_turn = int(turn_index)
+                arc.failure_outcome = rule.outcome
+                arc.history.append(
+                    {
+                        "turn": turn_index,
+                        "type": "arc_failed",
+                        "rule_id": rule.id,
+                        "outcome": rule.outcome,
+                        "summary": rule.summary,
+                    }
+                )
+
+                events.append(
+                    {
+                        "type": "story_arc",
+                        "subtype": "arc_failed",
+                        "arc_id": arc_id,
+                        "title": arc.title,
+                        "outcome": rule.outcome,
+                        "summary": rule.summary or f"{arc.title} failed.",
+                        "meaningful_progress": True,
+                        "progress_category": "story_arc_resolution",
+                    }
+                )
+                break
+
+        state_delta["story_arcs"][arc_id] = serialize_arc_state(arc)
+
+    if not state_delta["inventory_delta"]["items_added"]:
+        state_delta.pop("inventory_delta", None)
+    if not state_delta.get("xp_delta"):
+        state_delta.pop("xp_delta", None)
+
+    return {
+        "ok": True,
+        "story_arc_state_delta": state_delta,
+        "story_arc_events": events,
+        "resolved_count": sum(1 for event in events if event.get("subtype") == "arc_completed"),
+        "failed_count": sum(1 for event in events if event.get("subtype") == "arc_failed"),
+    }
+2. Add tavern story arc rules
+
+Create:
+
+src/app/rpg/story/tavern_story_arc_rules.py
+from __future__ import annotations
+
+from typing import List, Tuple
+
+from app.rpg.story.story_arc_lifecycle import ArcFailureRule, ArcResolutionRule
+
+
+def tavern_story_arc_rules() -> Tuple[List[ArcResolutionRule], List[ArcFailureRule]]:
+    resolution_rules = [
+        ArcResolutionRule(
+            id="arc_rule:marked_coin_completed",
+            arc_id="arc:marked_coin_investigation",
+            outcome="completed_marked_coin_lead",
+            requires_objectives=("objective:identify_marked_coin",),
+            requires_items=("item:marked_coin",),
+            requires_mechanics=("combat_resolved", "quest_progress"),
+            reward_xp=10,
+            set_flags=("arc:marked_coin_investigation.completed",),
+            summary=(
+                "The marked coin investigation is resolved after the party defeats the scouts "
+                "and brings the proof back to Bran."
+            ),
+        ),
+        ArcResolutionRule(
+            id="arc_rule:road_threat_completed",
+            arc_id="arc:mill_road_threat",
+            outcome="completed_bandit_scout_threat",
+            requires_flags=("encounter:mill_bandit_scouts.resolved",),
+            requires_mechanics=("combat_resolved",),
+            reward_xp=10,
+            set_flags=("arc:mill_road_threat.completed",),
+            summary="The immediate bandit threat on the mill road is resolved.",
+        ),
+    ]
+
+    failure_rules = [
+        ArcFailureRule(
+            id="arc_fail:marked_coin_stalled",
+            arc_id="arc:marked_coin_investigation",
+            outcome="failed_investigation_stalled",
+            fail_after_turns_without_progress=80,
+            summary="The marked coin trail goes cold after too many turns without progress.",
+        ),
+        ArcFailureRule(
+            id="arc_fail:road_threat_stalled",
+            arc_id="arc:mill_road_threat",
+            outcome="failed_bandits_scattered",
+            fail_after_turns_without_progress=80,
+            summary="The bandit scouts scatter before the party can resolve the road threat.",
+        ),
+    ]
+
+    return resolution_rules, failure_rules
+3. Initialize tavern story arcs in autoplay state
 
 Patch:
 
 src/tests/rpg/autoplay_llm_campaign.py
-1. Make the 100-turn evaluation fail on mechanics coverage
 
-Find _build_100_turn_evaluation_summary(...).
+Add import:
 
-Inside the function, add:
+from app.rpg.story.story_arc_lifecycle import apply_story_arc_lifecycle
+from app.rpg.story.tavern_story_arc_rules import tavern_story_arc_rules
 
-mechanics = _safe_dict(mechanics_coverage_summary)
-mechanics_real_required_ok = bool(
-    mechanics.get("real_required_ok", mechanics.get("required_ok", True))
+Add helper:
+
+def _default_tavern_story_arcs() -> Dict[str, Any]:
+    return {
+        "arc:marked_coin_investigation": {
+            "arc_id": "arc:marked_coin_investigation",
+            "title": "Marked Coin Investigation",
+            "status": "active",
+            "current_stage": "follow_the_marked_coin_lead",
+            "started_turn": 1,
+            "last_progress_turn": 1,
+            "progress_count": 0,
+            "completed_objectives": [],
+            "flags": {},
+            "history": [
+                {
+                    "turn": 1,
+                    "type": "arc_started",
+                    "summary": "The marked coin lead begins at the Rusty Flagon.",
+                }
+            ],
+        },
+        "arc:mill_road_threat": {
+            "arc_id": "arc:mill_road_threat",
+            "title": "Mill Road Threat",
+            "status": "active",
+            "current_stage": "reach_and_secure_the_old_mill_road",
+            "started_turn": 1,
+            "last_progress_turn": 1,
+            "progress_count": 0,
+            "completed_objectives": [],
+            "flags": {},
+            "history": [
+                {
+                    "turn": 1,
+                    "type": "arc_started",
+                    "summary": "Rumors point toward trouble on the road to the old mill.",
+                }
+            ],
+        },
+    }
+
+Inside _run_autoplay_campaign(...), before main loop:
+
+story_arc_runtime_state: Dict[str, Any] = _default_tavern_story_arcs()
+story_arc_resolution_events: List[Dict[str, Any]] = []
+4. Feed mechanics + inventory + flags into arc lifecycle
+
+Inside the turn loop, after mechanic resolution and mechanics runtime state update, add:
+
+arc_resolution_rules, arc_failure_rules = tavern_story_arc_rules()
+
+mechanics_covered_state = {
+    name: bool(covered)
+    for name, covered in _safe_dict(mechanics_coverage_runtime).items()
+}
+
+arc_lifecycle_state = {
+    **_safe_dict(mechanics_runtime_state),
+    "mechanics_covered": mechanics_covered_state,
+    "mechanics_coverage_summary": {
+        "mechanics": {
+            name: {"count": 1 if covered else 0, "real_count": 1 if covered else 0}
+            for name, covered in mechanics_covered_state.items()
+        }
+    },
+    "completed_objectives": [
+        "objective:identify_marked_coin"
+        if mechanics_covered_state.get("quest_progress")
+        else ""
+    ],
+}
+arc_lifecycle_state["completed_objectives"] = [
+    value for value in arc_lifecycle_state["completed_objectives"] if value
+]
+
+arc_lifecycle = apply_story_arc_lifecycle(
+    arc_states=story_arc_runtime_state,
+    state=arc_lifecycle_state,
+    turn_index=int(row.get("turn_index") or turn_index),
+    resolution_rules=arc_resolution_rules,
+    failure_rules=arc_failure_rules,
 )
 
-Then inside gates, add:
+if arc_lifecycle.get("ok"):
+    story_arc_delta = _safe_dict(arc_lifecycle.get("story_arc_state_delta"))
+    story_arc_runtime_state = _safe_dict(story_arc_delta.get("story_arcs")) or story_arc_runtime_state
 
-"mechanics_coverage_required": {
-    "ok": mechanics_real_required_ok,
-    "value": {
-        "coverage_rate": mechanics.get("coverage_rate"),
-        "real_coverage_rate": mechanics.get("real_coverage_rate"),
-        "covered_required_count": mechanics.get("covered_required_count"),
-        "real_covered_required_count": mechanics.get("real_covered_required_count"),
-        "required_count": mechanics.get("required_count"),
-        "missing_required": mechanics.get("missing_required"),
-        "missing_real_required": mechanics.get("missing_real_required"),
-    },
-    "expected": {
-        "missing_real_required": [],
-        "real_coverage_rate": "1.0",
-    },
-    "message": "Required RPG mechanics should be exercised by real runtime/story-graph evidence.",
-},
+    arc_events = _safe_list(arc_lifecycle.get("story_arc_events"))
+    if arc_events:
+        story_arc_resolution_events.extend(arc_events)
 
-Find the call site for _build_100_turn_evaluation_summary(...) and ensure it passes:
+        row["story_arc_lifecycle"] = arc_lifecycle
+        row["story_arc_events"] = arc_events
+        row["meaningful_progress"] = True
+        row["progress_category"] = "story_arc_resolution"
 
-mechanics_coverage_summary=_safe_dict(summary.get("mechanics_coverage_summary")),
+        row["state_delta"] = {
+            **_safe_dict(row.get("state_delta")),
+            "story_arcs": story_arc_runtime_state,
+        }
 
-Run 244 should not have had hundred_turn_evaluation.ok = true.
+        row["result"] = {
+            **_safe_dict(row.get("result")),
+            "story_arc_events": arc_events,
+            "story_arc_resolution": {
+                "resolved_count": arc_lifecycle.get("resolved_count"),
+                "failed_count": arc_lifecycle.get("failed_count"),
+            },
+            "meaningful_progress": True,
+            "progress_category": "story_arc_resolution",
+        }
+5. Prevent duplicate arc completion events
 
-2. Restore mechanics opportunity imports
+The lifecycle function already ignores terminal statuses, but make sure the loop does not keep appending the same event.
 
-At the top of:
+After updating story_arc_runtime_state, add:
+
+seen_arc_event_keys = {
+    (
+        event.get("arc_id"),
+        event.get("subtype"),
+        event.get("outcome"),
+    )
+    for event in story_arc_resolution_events
+}
+
+new_arc_events = []
+for event in _safe_list(arc_lifecycle.get("story_arc_events")):
+    key = (
+        event.get("arc_id"),
+        event.get("subtype"),
+        event.get("outcome"),
+    )
+    if key in seen_arc_event_keys:
+        continue
+    new_arc_events.append(event)
+    seen_arc_event_keys.add(key)
+
+arc_events = new_arc_events
+
+Use arc_events instead of the raw events from arc_lifecycle.
+
+N86 — Arc Report Summary
+6. Add story arc lifecycle summary builder
+
+Patch:
 
 src/tests/rpg/autoplay_llm_campaign.py
 
-add:
-
-from app.rpg.mechanics.mechanics_opportunities import (
-    describe_mechanic_opportunity_state,
-    list_available_mechanic_opportunities,
-)
-from app.rpg.mechanics.mechanics_resolver import resolve_mechanic_opportunity
-3. Restore mechanics runtime state
-
-Inside _run_autoplay_campaign(...), before the main turn loop, add:
-
-mechanics_runtime_state: Dict[str, Any] = {
-    "current_location": "scene:rusty_flagon",
-    "currency": {"gold": 15, "silver": 8},
-    "inventory": [],
-    "flags": {},
-    "xp": 0,
-    "level": 1,
-}
-
-Use the same starting currency as the report default so currency deltas line up.
-
-4. Add helper to inject available mechanics
-
-Add near the existing mechanics/report helpers:
-
-def _current_row_location(row: Dict[str, Any], fallback: str = "scene:rusty_flagon") -> str:
-    row = _safe_dict(row)
-    result_travel = _safe_dict(_safe_dict(row.get("result")).get("travel_result"))
-    contract_result_travel = _safe_dict(
-        _safe_dict(_safe_dict(row.get("turn_contract")).get("result")).get("travel_result")
-    )
-    return _safe_str(
-        row.get("current_location")
-        or row.get("location")
-        or _safe_dict(row.get("state_delta")).get("current_location")
-        or _safe_dict(row.get("state_delta")).get("to_location")
-        or _safe_dict(row.get("travel_result")).get("to_location")
-        or result_travel.get("to_location")
-        or contract_result_travel.get("to_location")
-        or fallback
-    )
-
-
-def _inject_available_mechanics_for_row(
-    row: Dict[str, Any],
-    *,
-    mechanics_state: Dict[str, Any],
-    missing_mechanics: List[str],
-) -> None:
-    state = {
-        **_safe_dict(mechanics_state),
-        "current_location": _current_row_location(
-            row,
-            fallback=_safe_str(_safe_dict(mechanics_state).get("current_location") or "scene:rusty_flagon"),
-        ),
-    }
-
-    available = list_available_mechanic_opportunities(
-        state=state,
-        scenario_state={},
-        missing_mechanics=missing_mechanics,
-        limit=8,
-    )
-
-    row["available_mechanics"] = available
-    row["mechanic_opportunity_diagnostics"] = describe_mechanic_opportunity_state(
-        state=state,
-        scenario_state={},
-        missing_mechanics=missing_mechanics,
-    )
-5. Restore forced mechanics command selection
-
-Add near player-agent helpers:
-
-def _mechanics_priority_commands_from_row(
-    row: Dict[str, Any],
-    missing_mechanics: List[str],
-) -> List[Dict[str, Any]]:
-    missing = set(str(item) for item in _safe_list(missing_mechanics))
-    commands: List[Dict[str, Any]] = []
-
-    for raw in _safe_list(_safe_dict(row).get("available_mechanics")):
-        opportunity = _safe_dict(raw)
-        mechanic = _safe_str(opportunity.get("mechanic"))
-        command = _safe_str(opportunity.get("command"))
-        if not mechanic or not command:
-            continue
-        if missing and mechanic not in missing:
-            continue
-
-        commands.append(
-            {
-                "mechanic": mechanic,
-                "command": command,
-                "label": opportunity.get("label"),
-                "resolver": opportunity.get("resolver"),
-                "opportunity_id": opportunity.get("opportunity_id") or opportunity.get("id"),
-            }
-        )
-
-    return commands[:6]
-
-
-def _maybe_force_missing_mechanic_action(
-    *,
-    proposed_action: str,
-    latest_row: Dict[str, Any],
-    missing_mechanics: List[str],
-    turn_index: int,
-) -> Dict[str, Any]:
-    if turn_index < 4:
-        return {"action": proposed_action, "forced": False, "reason": ""}
-
-    priority = _mechanics_priority_commands_from_row(latest_row, missing_mechanics)
-    if not priority:
-        return {"action": proposed_action, "forced": False, "reason": ""}
-
-    preferred_order = [
-        "service_or_lodging",
-        "buying",
-        "currency_change",
-        "inventory_change",
-        "party_recruitment",
-        "travel",
-        "combat_started",
-        "combat_resolved",
-        "xp_gain",
-        "quest_progress",
-    ]
-
-    for mechanic in preferred_order:
-        for item in priority:
-            if item.get("mechanic") == mechanic:
-                return {
-                    "action": _safe_str(item.get("command")) or proposed_action,
-                    "forced": True,
-                    "reason": f"missing_mechanic:{mechanic}",
-                    "mechanic": mechanic,
-                    "opportunity_id": item.get("opportunity_id"),
-                }
-
-    item = priority[0]
-    return {
-        "action": _safe_str(item.get("command")) or proposed_action,
-        "forced": True,
-        "reason": f"missing_mechanic:{item.get('mechanic')}",
-        "mechanic": item.get("mechanic"),
-        "opportunity_id": item.get("opportunity_id"),
-    }
-6. Restore state-delta carry-forward
-
 Add:
 
-def _merge_currency_delta(currency: Dict[str, int], delta: Dict[str, Any]) -> Dict[str, int]:
-    merged = dict(currency or {})
-    for key, value in _safe_dict(delta).items():
-        merged[str(key)] = int(merged.get(str(key), 0)) + int(value or 0)
-    return merged
-
-
-def _merge_inventory_delta(
-    inventory: List[Dict[str, Any]],
-    delta: Dict[str, Any],
-) -> List[Dict[str, Any]]:
-    items = [dict(item) for item in _safe_list(inventory)]
-
-    def add_item(item_id: str, quantity: int) -> None:
-        for existing in items:
-            if existing.get("id") == item_id:
-                existing["quantity"] = int(existing.get("quantity") or 0) + quantity
-                return
-        items.append({"id": item_id, "quantity": quantity})
-
-    def remove_item(item_id: str, quantity: int) -> None:
-        for existing in list(items):
-            if existing.get("id") == item_id:
-                existing["quantity"] = max(0, int(existing.get("quantity") or 0) - quantity)
-                if int(existing.get("quantity") or 0) <= 0:
-                    items.remove(existing)
-                return
-
-    delta = _safe_dict(delta)
-
-    for raw in _safe_list(delta.get("items_added")):
-        item = _safe_dict(raw)
-        item_id = _safe_str(item.get("id") or item.get("item_id"))
-        if item_id:
-            add_item(item_id, int(item.get("quantity") or 1))
-
-    for raw in _safe_list(delta.get("items_removed")):
-        item = _safe_dict(raw)
-        item_id = _safe_str(item.get("id") or item.get("item_id"))
-        if item_id:
-            remove_item(item_id, int(item.get("quantity") or 1))
-
-    return items
-
-
-def _apply_mechanics_delta_to_runtime_state(
-    mechanics_state: Dict[str, Any],
-    state_delta: Dict[str, Any],
+def _build_story_arc_lifecycle_summary(
+    *,
+    story_arcs: Dict[str, Any],
+    events: List[Dict[str, Any]],
 ) -> Dict[str, Any]:
-    state = dict(mechanics_state or {})
-    delta = _safe_dict(state_delta)
+    arcs = _safe_dict(story_arcs)
+    event_rows = [_safe_dict(event) for event in _safe_list(events)]
 
-    if delta.get("currency_delta"):
-        state["currency"] = _merge_currency_delta(
-            _safe_dict(state.get("currency")),
-            _safe_dict(delta.get("currency_delta")),
-        )
-    if delta.get("currency"):
-        state["currency"] = _safe_dict(delta.get("currency"))
+    status_counts: Dict[str, int] = {}
+    for arc in arcs.values():
+        status = _safe_str(_safe_dict(arc).get("status") or "unknown")
+        status_counts[status] = int(status_counts.get(status, 0)) + 1
 
-    if delta.get("inventory_delta"):
-        state["inventory"] = _merge_inventory_delta(
-            _safe_list(state.get("inventory")),
-            _safe_dict(delta.get("inventory_delta")),
-        )
-    if delta.get("inventory"):
-        state["inventory"] = _safe_list(delta.get("inventory"))
+    completed = [
+        arc
+        for arc in arcs.values()
+        if _safe_dict(arc).get("status") == "completed"
+    ]
+    failed = [
+        arc
+        for arc in arcs.values()
+        if _safe_dict(arc).get("status") == "failed"
+    ]
+    active = [
+        arc
+        for arc in arcs.values()
+        if _safe_dict(arc).get("status") not in {"completed", "failed", "abandoned"}
+    ]
 
-    if delta.get("flags"):
-        flags = _safe_dict(state.get("flags"))
-        flags.update(_safe_dict(delta.get("flags")))
-        state["flags"] = flags
+    return {
+        "format_version": "story_arc_lifecycle_summary_v1",
+        "ok": bool(completed or failed),
+        "arc_count": len(arcs),
+        "completed_count": len(completed),
+        "failed_count": len(failed),
+        "active_count": len(active),
+        "status_counts": dict(sorted(status_counts.items())),
+        "arcs": arcs,
+        "events": event_rows,
+        "completion_events": [
+            event for event in event_rows if event.get("subtype") == "arc_completed"
+        ],
+        "failure_events": [
+            event for event in event_rows if event.get("subtype") == "arc_failed"
+        ],
+        "unresolved_arcs": [
+            {
+                "arc_id": _safe_dict(arc).get("arc_id"),
+                "title": _safe_dict(arc).get("title"),
+                "status": _safe_dict(arc).get("status"),
+                "current_stage": _safe_dict(arc).get("current_stage"),
+            }
+            for arc in active
+        ],
+    }
 
-    if delta.get("xp_delta") is not None:
-        state["xp"] = int(state.get("xp") or 0) + int(delta.get("xp_delta") or 0)
-    if delta.get("xp") is not None:
-        state["xp"] = int(delta.get("xp") or 0)
+Near final summary build, add:
 
-    if delta.get("level") is not None:
-        state["level"] = int(delta.get("level") or 1)
-
-    if delta.get("location_changed"):
-        next_location = _safe_str(
-            delta.get("to_location")
-            or delta.get("current_location")
-            or state.get("current_location")
-        )
-        if next_location:
-            state["current_location"] = next_location
-            state["current_location_id"] = next_location
-
-    return state
-7. Apply mechanic opportunity resolver in the turn loop
-
-Find the section where each transcript row is assembled, before appending it to transcript.
-
-Add this block after row exists and before append/slimming:
-
-missing_mechanics = [
-    name
-    for name, covered in mechanics_coverage_runtime.items()
-    if not covered
-]
-
-_inject_available_mechanics_for_row(
-    row,
-    mechanics_state=mechanics_runtime_state,
-    missing_mechanics=missing_mechanics,
+summary["story_arc_lifecycle_summary"] = _build_story_arc_lifecycle_summary(
+    story_arcs=story_arc_runtime_state,
+    events=story_arc_resolution_events,
 )
+7. Add artifact
 
-mechanic_action_decision = _maybe_force_missing_mechanic_action(
-    proposed_action=_safe_str(row.get("player_action") or player_action),
-    latest_row=row,
-    missing_mechanics=missing_mechanics,
-    turn_index=int(row.get("turn_index") or turn_index),
+In zip writer:
+
+_zip_writestr_json(
+    zip_handle,
+    artifact_manifest,
+    "story-arc-lifecycle-summary.json",
+    summary.get("story_arc_lifecycle_summary", {}),
 )
+8. Add HTML section
 
-if _safe_dict(mechanic_action_decision).get("forced"):
-    row["player_action_original"] = row.get("player_action")
-    row["player_action"] = _safe_str(
-        mechanic_action_decision.get("action") or row.get("player_action")
-    )
-    row["mechanics_forced_action"] = mechanic_action_decision
-    player_action = row["player_action"]
+In HTML builder, add:
 
-final_player_action_for_mechanics = _safe_str(row.get("player_action") or player_action)
-row["mechanic_resolution_input"] = final_player_action_for_mechanics
+story_arc_lifecycle = _safe_dict(summary.get("story_arc_lifecycle_summary"))
 
-mechanic_resolution = resolve_mechanic_opportunity(
-    player_input=final_player_action_for_mechanics,
-    state={
-        **mechanics_runtime_state,
-        "current_location": _current_row_location(
-            row,
-            fallback=_safe_str(mechanics_runtime_state.get("current_location") or "scene:rusty_flagon"),
-        ),
+Add nav link:
+
+<a href="#story-arc-lifecycle">Story Arc Lifecycle</a>
+
+Add section:
+
+story_arc_lifecycle_html = f"""
+<section class="card" id="story-arc-lifecycle">
+  <h2>Story Arc Lifecycle</h2>
+  <div class="grid">
+    <div class="metric"><strong>Completed</strong><span>{esc(story_arc_lifecycle.get("completed_count"))}</span></div>
+    <div class="metric"><strong>Failed</strong><span>{esc(story_arc_lifecycle.get("failed_count"))}</span></div>
+    <div class="metric"><strong>Active</strong><span>{esc(story_arc_lifecycle.get("active_count"))}</span></div>
+    <div class="metric"><strong>Status</strong><span>{esc("PASS" if story_arc_lifecycle.get("ok") else "WARN")}</span></div>
+  </div>
+  <h3>Status Counts</h3>
+  <pre>{esc(json.dumps(story_arc_lifecycle.get("status_counts", {}), ensure_ascii=False, indent=2, default=str))}</pre>
+  <h3>Arc Events</h3>
+  <pre>{esc(json.dumps(story_arc_lifecycle.get("events", []), ensure_ascii=False, indent=2, default=str))}</pre>
+  <h3>Unresolved Arcs</h3>
+  <pre>{esc(json.dumps(story_arc_lifecycle.get("unresolved_arcs", []), ensure_ascii=False, indent=2, default=str))}</pre>
+</section>
+"""
+
+Insert {story_arc_lifecycle_html} into the report body.
+
+N87 — Evaluation Gate
+9. Add story arc resolution gate
+
+Patch _build_100_turn_evaluation_summary(...).
+
+Add optional parameter:
+
+story_arc_lifecycle_summary: Optional[Dict[str, Any]] = None,
+
+Inside function:
+
+story_arcs = _safe_dict(story_arc_lifecycle_summary)
+
+Inside gates, add:
+
+"story_arc_resolution_present": {
+    "ok": int(story_arcs.get("completed_count") or 0) + int(story_arcs.get("failed_count") or 0) >= 1,
+    "value": {
+        "completed_count": story_arcs.get("completed_count"),
+        "failed_count": story_arcs.get("failed_count"),
+        "active_count": story_arcs.get("active_count"),
+        "status_counts": story_arcs.get("status_counts"),
     },
-    scenario_state={},
+    "expected": "at least one completed or failed story arc in 100-turn run",
+    "message": "The 100-turn campaign should demonstrate deterministic story arc closure.",
+},
+
+Update call site:
+
+story_arc_lifecycle_summary=_safe_dict(summary.get("story_arc_lifecycle_summary")),
+
+Make sure this call happens after summary["story_arc_lifecycle_summary"] is assigned.
+
+10. Preserve arc events in slim transcript
+
+Patch _slim_transcript_row(...):
+
+if row.get("story_arc_events"):
+    slim_row["story_arc_events"] = row.get("story_arc_events")
+
+if row.get("story_arc_lifecycle"):
+    slim_row["story_arc_lifecycle"] = {
+        "ok": _safe_dict(row.get("story_arc_lifecycle")).get("ok"),
+        "resolved_count": _safe_dict(row.get("story_arc_lifecycle")).get("resolved_count"),
+        "failed_count": _safe_dict(row.get("story_arc_lifecycle")).get("failed_count"),
+        "story_arc_events": _safe_dict(row.get("story_arc_lifecycle")).get("story_arc_events"),
+    }
+11. Tests
+
+Create:
+
+src/tests/rpg/test_story_arc_lifecycle.py
+from app.rpg.story.story_arc_lifecycle import (
+    ArcFailureRule,
+    ArcResolutionRule,
+    apply_story_arc_lifecycle,
 )
 
-if mechanic_resolution.get("ok"):
-    mechanic_result = _safe_dict(mechanic_resolution.get("result"))
-    mechanic_contract = _safe_dict(mechanic_resolution.get("turn_contract"))
-    mechanic_delta = _safe_dict(mechanic_resolution.get("state_delta"))
 
-    row["mechanic_resolution"] = mechanic_resolution
-    row["mechanics_evidence_source"] = "mechanic_opportunity_resolver"
-    row["mechanic"] = mechanic_resolution.get("mechanic") or mechanic_result.get("mechanic")
-    row["meaningful_progress"] = True
-    row["progress_category"] = (
-        mechanic_result.get("progress_category")
-        or mechanic_resolution.get("progress_category")
+def test_story_arc_completes_when_requirements_met():
+    arcs = {
+        "arc:marked_coin_investigation": {
+            "arc_id": "arc:marked_coin_investigation",
+            "title": "Marked Coin Investigation",
+            "status": "active",
+            "started_turn": 1,
+            "last_progress_turn": 1,
+        }
+    }
+
+    result = apply_story_arc_lifecycle(
+        arc_states=arcs,
+        state={
+            "completed_objectives": ["objective:identify_marked_coin"],
+            "inventory": [{"id": "item:marked_coin", "quantity": 1}],
+            "mechanics_covered": {
+                "combat_resolved": True,
+                "quest_progress": True,
+            },
+        },
+        turn_index=10,
+        resolution_rules=[
+            ArcResolutionRule(
+                id="rule:complete",
+                arc_id="arc:marked_coin_investigation",
+                outcome="completed",
+                requires_objectives=("objective:identify_marked_coin",),
+                requires_items=("item:marked_coin",),
+                requires_mechanics=("combat_resolved", "quest_progress"),
+                reward_xp=10,
+                set_flags=("arc:marked_coin_investigation.completed",),
+            )
+        ],
+        failure_rules=[],
     )
 
-    row["result"] = {
-        **_safe_dict(row.get("result")),
-        **mechanic_result,
-        "mechanics_evidence_source": "mechanic_opportunity_resolver",
-    }
-    row["turn_contract"] = {
-        **_safe_dict(row.get("turn_contract")),
-        **mechanic_contract,
-        "mechanic": row.get("mechanic"),
-        "mechanic_resolution": mechanic_resolution,
-        "result": {
-            **_safe_dict(_safe_dict(row.get("turn_contract")).get("result")),
-            **mechanic_result,
-            "mechanics_evidence_source": "mechanic_opportunity_resolver",
-        },
-        "state_delta": {
-            **_safe_dict(_safe_dict(row.get("turn_contract")).get("state_delta")),
-            **mechanic_delta,
-        },
-    }
-    row["state_delta"] = {
-        **_safe_dict(row.get("state_delta")),
-        **mechanic_delta,
+    assert result["ok"] is True
+    assert result["resolved_count"] == 1
+
+    arc = result["story_arc_state_delta"]["story_arcs"]["arc:marked_coin_investigation"]
+    assert arc["status"] == "completed"
+    assert result["story_arc_state_delta"]["xp_delta"] == 10
+    assert result["story_arc_state_delta"]["flags"]["arc:marked_coin_investigation.completed"] is True
+
+
+def test_story_arc_fails_when_stalled():
+    arcs = {
+        "arc:marked_coin_investigation": {
+            "arc_id": "arc:marked_coin_investigation",
+            "title": "Marked Coin Investigation",
+            "status": "active",
+            "started_turn": 1,
+            "last_progress_turn": 1,
+        }
     }
 
-    mechanics_runtime_state = _apply_mechanics_delta_to_runtime_state(
-        mechanics_runtime_state,
-        mechanic_delta,
-    )
-
-    resolved_mechanic = _safe_str(row.get("mechanic") or mechanic_resolution.get("mechanic"))
-    if resolved_mechanic:
-        if resolved_mechanic in mechanics_coverage_runtime:
-            mechanics_coverage_runtime[resolved_mechanic] = True
-
-        if resolved_mechanic in {"service_or_lodging", "buying", "selling"}:
-            mechanics_coverage_runtime["currency_change"] = True
-
-        if resolved_mechanic in {"buying", "selling", "combat_resolved", "quest_progress"}:
-            mechanics_coverage_runtime["inventory_change"] = True
-
-        if resolved_mechanic == "combat_resolved":
-            mechanics_coverage_runtime["xp_gain"] = True
-
-    _inject_available_mechanics_for_row(
-        row,
-        mechanics_state=mechanics_runtime_state,
-        missing_mechanics=[
-            name
-            for name, covered in mechanics_coverage_runtime.items()
-            if not covered
+    result = apply_story_arc_lifecycle(
+        arc_states=arcs,
+        state={},
+        turn_index=100,
+        resolution_rules=[],
+        failure_rules=[
+            ArcFailureRule(
+                id="rule:stalled",
+                arc_id="arc:marked_coin_investigation",
+                outcome="failed_stalled",
+                fail_after_turns_without_progress=80,
+            )
         ],
     )
-else:
-    mechanics_runtime_state["current_location"] = _current_row_location(
-        row,
-        fallback=_safe_str(mechanics_runtime_state.get("current_location") or "scene:rusty_flagon"),
+
+    assert result["failed_count"] == 1
+
+    arc = result["story_arc_state_delta"]["story_arcs"]["arc:marked_coin_investigation"]
+    assert arc["status"] == "failed"
+
+Create:
+
+src/tests/rpg/test_autoplay_story_arc_lifecycle_summary.py
+from tests.rpg.autoplay_llm_campaign import _build_story_arc_lifecycle_summary
+
+
+def test_story_arc_lifecycle_summary_counts_statuses():
+    summary = _build_story_arc_lifecycle_summary(
+        story_arcs={
+            "arc:a": {
+                "arc_id": "arc:a",
+                "title": "A",
+                "status": "completed",
+            },
+            "arc:b": {
+                "arc_id": "arc:b",
+                "title": "B",
+                "status": "active",
+            },
+        },
+        events=[
+            {
+                "type": "story_arc",
+                "subtype": "arc_completed",
+                "arc_id": "arc:a",
+            }
+        ],
     )
 
-This is the missing piece in run 244.
-
-8. Fix summary ok source
-
-After building summary["hundred_turn_evaluation"], set:
-
-summary["ok"] = bool(_safe_dict(summary.get("hundred_turn_evaluation")).get("ok"))
-
-This prevents top-level ok from disagreeing with the canonical evaluation.
-
-Run checks
+    assert summary["ok"] is True
+    assert summary["completed_count"] == 1
+    assert summary["active_count"] == 1
+    assert summary["status_counts"]["completed"] == 1
+12. Run checks
 python -m py_compile `
+  src\app\rpg\story\story_arc_lifecycle.py `
+  src\app\rpg\story\tavern_story_arc_rules.py `
   src\tests\rpg\autoplay_llm_campaign.py
 python -m pytest `
+  src\tests\rpg\test_story_arc_lifecycle.py `
+  src\tests\rpg\test_autoplay_story_arc_lifecycle_summary.py `
   src\tests\rpg\test_autoplay_mechanics_coverage.py `
-  src\tests\rpg\test_autoplay_character_inventory_summary_build_order.py `
-  src\tests\rpg\test_character_inventory_progression_report.py `
   -q
-Expected next run
-
-The next zip should show:
-
-"mechanics_coverage_summary": {
-  "real_required_ok": true,
-  "missing_real_required": [],
-  "available_mechanic_counts": {
-    "service_or_lodging": ">0",
-    "buying": ">0",
-    "party_recruitment": ">0",
-    "combat_started": ">0",
-    "combat_resolved": ">0"
-  }
-}
-
-And:
-
-"character_inventory_progression": {
-  "player": {
-    "xp": 25
-  },
-  "currency_delta": {
-    "silver": "<negative>"
-  },
-  "inventory_delta": [
-    {"id": "item:rations", "delta": ">0"},
-    {"id": "item:marked_coin", "delta": 1},
-    {"id": "item:bandit_knife", "delta": 1}
-  ]
-}
-
-Visible report should then finally show XP and inventory changes

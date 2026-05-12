@@ -89,6 +89,19 @@ def _slim_transcript_row(row: Dict[str, Any], max_row_bytes: int = 50000) -> Dic
         if row.get(key) not in (None, "", {}, []):
             slim_row[key] = row.get(key)
 
+    for key in ("available_mechanics_before", "available_mechanics_after"):
+        if row.get(key):
+            slim_row[key] = [
+                {
+                    "id": _safe_dict(item).get("id"),
+                    "mechanic": _safe_dict(item).get("mechanic"),
+                    "label": _safe_dict(item).get("label"),
+                    "command": _safe_dict(item).get("command"),
+                    "resolver": _safe_dict(item).get("resolver"),
+                }
+                for item in _safe_list(row.get(key))[:8]
+            ]
+
     state_delta = _safe_dict(row.get("state_delta"))
     if state_delta:
         slim_row["state_delta"] = {
@@ -193,6 +206,17 @@ def _slim_transcript_row(row: Dict[str, Any], max_row_bytes: int = 50000) -> Dic
                     "flags",
                 }
             },
+        }
+
+    if row.get("story_arc_events"):
+        slim_row["story_arc_events"] = row.get("story_arc_events")
+
+    if row.get("story_arc_lifecycle"):
+        slim_row["story_arc_lifecycle"] = {
+            "ok": _safe_dict(row.get("story_arc_lifecycle")).get("ok"),
+            "resolved_count": _safe_dict(row.get("story_arc_lifecycle")).get("resolved_count"),
+            "failed_count": _safe_dict(row.get("story_arc_lifecycle")).get("failed_count"),
+            "story_arc_events": _safe_dict(row.get("story_arc_lifecycle")).get("story_arc_events"),
         }
 
     slim_row["_artifact_slimmed"] = True
@@ -1030,6 +1054,8 @@ from tests.rpg.autoplay.story_hooks import (
     autoplay_story_hook_player_hints,
 )
 from tests.rpg.autoplay.story_variety import compute_story_variety_metrics
+from app.rpg.story.story_arc_lifecycle import apply_story_arc_lifecycle
+from app.rpg.story.tavern_story_arc_rules import tavern_story_arc_rules
 from tests.rpg.autoplay.strategy_profiles import (
     action_diversity_metrics,
     build_strategy_guidance,
@@ -1279,6 +1305,7 @@ def _build_100_turn_readiness_summary(
     summary: Dict[str, Any],
     transcript: List[Dict[str, Any]],
     requested_turns: int,
+    story_arc_lifecycle_summary: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     summary = _safe_dict(summary)
     arc = _safe_dict(summary.get("scenario_progression_arc_summary"))
@@ -1286,6 +1313,9 @@ def _build_100_turn_readiness_summary(
         latest_state = _safe_dict(summary.get("latest_state"))
         arc = _safe_dict(latest_state.get("scenario_progression_arc_summary"))
     behavioral = _safe_dict(summary.get("behavioral_autoplay_eval_summary"))
+
+    if story_arc_lifecycle_summary:
+        summary["story_arc_lifecycle_summary"] = _safe_dict(story_arc_lifecycle_summary)
 
     progression_changed_count = int(
         _safe_dict(behavioral.get("metrics")).get("progression_changed_count")
@@ -1316,6 +1346,14 @@ def _build_100_turn_readiness_summary(
         action = _safe_str(row.get("player_action")).lower()
         if ("arc_complete" in action_id or "arc_complete" in source or "completed ambush and mill investigation" in action):
             arc_complete_action_count += 1
+
+    story_arcs = _safe_dict(story_arc_lifecycle_summary)
+    if not story_arcs:
+        story_arcs = _safe_dict(summary.get("story_arc_lifecycle_summary"))
+    if not story_arcs:
+        story_arcs = _safe_dict(_safe_dict(summary.get("final_summary")).get("story_arc_lifecycle_summary"))
+
+    completed_or_failed_arc_count = int(story_arcs.get("completed_count") or 0) + int(story_arcs.get("failed_count") or 0)
 
     min_progression_turns = 30
     gates = {
@@ -1355,9 +1393,26 @@ def _build_100_turn_readiness_summary(
             graph_count > 1
             or progression_changed_count >= min_progression_turns
         ),
+        "story_arc_resolution_present": {
+            "ok": completed_or_failed_arc_count >= 1,
+            "value": {
+                "completed_count": story_arcs.get("completed_count"),
+                "failed_count": story_arcs.get("failed_count"),
+                "active_count": story_arcs.get("active_count"),
+                "status_counts": story_arcs.get("status_counts"),
+            },
+            "expected": "at least one completed or failed story arc in 100-turn run",
+            "message": "The 100-turn campaign should demonstrate deterministic story arc closure.",
+        },
     }
 
-    failed_gates = [name for name, ok in gates.items() if not ok]
+    failed_gates = []
+    for name, gate in gates.items():
+        if isinstance(gate, dict):
+            if not bool(gate.get("ok")):
+                failed_gates.append(name)
+        elif not bool(gate):
+            failed_gates.append(name)
 
     return {
         "ok": not failed_gates,
@@ -2687,6 +2742,7 @@ def _build_100_turn_evaluation_summary(
     checkpoint_summary: Dict[str, Any],
     loop_detection_summary: Dict[str, Any],
     mechanics_coverage_summary: Optional[Dict[str, Any]] = None,
+    story_arc_lifecycle_summary: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     grounding = _safe_dict(narration_grounding_summary)
     progress = _safe_dict(progress_quality_summary)
@@ -2697,7 +2753,7 @@ def _build_100_turn_evaluation_summary(
     mechanics_real_required_ok = bool(
         mechanics.get("real_required_ok", mechanics.get("required_ok", True))
     )
-
+    story_arcs = _safe_dict(story_arc_lifecycle_summary)
     selected_grounding_health = _build_selected_output_grounding_health(
         grounding,
         requested_turns=requested_turns,
@@ -2727,6 +2783,8 @@ def _build_100_turn_evaluation_summary(
         or perf.get("turn_p95_seconds")
         or 0.0
     )
+
+    completed_or_failed_arc_count = int(story_arcs.get("completed_count") or 0) + int(story_arcs.get("failed_count") or 0)
 
     gates: Dict[str, Dict[str, Any]] = {
         "turn_count_reached": {
@@ -2824,6 +2882,17 @@ def _build_100_turn_evaluation_summary(
                 "real_coverage_rate": "1.0",
             },
             "message": "Required RPG mechanics should be exercised by real runtime/story-graph evidence.",
+        },
+        "story_arc_resolution_present": {
+            "ok": completed_or_failed_arc_count >= 1,
+            "value": {
+                "completed_count": story_arcs.get("completed_count"),
+                "failed_count": story_arcs.get("failed_count"),
+                "active_count": story_arcs.get("active_count"),
+                "status_counts": story_arcs.get("status_counts"),
+            },
+            "expected": "at least one completed or failed story arc in 100-turn run",
+            "message": "The 100-turn campaign should demonstrate deterministic story arc closure.",
         },
     }
 
@@ -4235,6 +4304,7 @@ def _build_minimal_autoplay_html_report(final_summary: Dict[str, Any]) -> str:
     perf = _safe_dict(final_summary.get("performance_seconds_summary"))
     character_inventory = _safe_dict(final_summary.get("character_inventory_progression"))
     player_progress = _safe_dict(character_inventory.get("player"))
+    story_arc_lifecycle = _safe_dict(final_summary.get("story_arc_lifecycle_summary"))
 
     status = "PASS" if evaluation.get("ok") else "FAIL"
     status_class = "pass" if evaluation.get("ok") else "fail"
@@ -4260,6 +4330,24 @@ def _build_minimal_autoplay_html_report(final_summary: Dict[str, Any]) -> str:
     inventory_delta = _safe_list(character_inventory.get("inventory_delta"))
     xp_events = _safe_list(character_inventory.get("xp_events"))
     level_events = _safe_list(character_inventory.get("level_events"))
+
+    story_arc_lifecycle_html = f"""
+<section class="card" id="story-arc-lifecycle">
+  <h2>Story Arc Lifecycle</h2>
+  <div class="grid">
+    <div class="metric"><strong>Completed</strong><span>{esc(story_arc_lifecycle.get("completed_count"))}</span></div>
+    <div class="metric"><strong>Failed</strong><span>{esc(story_arc_lifecycle.get("failed_count"))}</span></div>
+    <div class="metric"><strong>Active</strong><span>{esc(story_arc_lifecycle.get("active_count"))}</span></div>
+    <div class="metric"><strong>Status</strong><span>{esc("PASS" if story_arc_lifecycle.get("ok") else "WARN")}</span></div>
+  </div>
+  <h3>Status Counts</h3>
+  <pre>{esc(json.dumps(story_arc_lifecycle.get("status_counts", {}), ensure_ascii=False, indent=2, default=str))}</pre>
+  <h3>Arc Events</h3>
+  <pre>{esc(json.dumps(story_arc_lifecycle.get("events", []), ensure_ascii=False, indent=2, default=str))}</pre>
+  <h3>Unresolved Arcs</h3>
+  <pre>{esc(json.dumps(story_arc_lifecycle.get("unresolved_arcs", []), ensure_ascii=False, indent=2, default=str))}</pre>
+</section>
+"""
 
     return f"""<!doctype html>
 <html>
@@ -4358,6 +4446,7 @@ a {{ color: #c8d6ff; }}
   <a href="#performance">Performance</a>
   <a href="#player">Player</a>
   <a href="#locations">Locations</a>
+  <a href="#story-arc-lifecycle">Story Arc Lifecycle</a>
   <a href="#debug">Debug</a>
 </nav>
 
@@ -4446,6 +4535,8 @@ a {{ color: #c8d6ff; }}
 <h2>Location Progression</h2>
 <pre>{esc(json.dumps(final_summary.get("location_progression_summary", {}), ensure_ascii=False, indent=2, default=str))}</pre>
 </section>
+
+{story_arc_lifecycle_html}
 
 <section class="card" id="debug">
 <h2>Debug Summary</h2>
@@ -5389,9 +5480,66 @@ def _final_lifecycle_quality_gates(summary: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
+def _build_story_arc_lifecycle_summary(
+    *,
+    story_arcs: Dict[str, Any],
+    events: List[Dict[str, Any]],
+) -> Dict[str, Any]:
+    arcs = _safe_dict(story_arcs)
+    event_rows = [_safe_dict(event) for event in _safe_list(events)]
+
+    status_counts: Dict[str, int] = {}
+    for arc in arcs.values():
+        status = _safe_str(_safe_dict(arc).get("status") or "unknown")
+        status_counts[status] = int(status_counts.get(status, 0)) + 1
+
+    completed = [
+        arc
+        for arc in arcs.values()
+        if _safe_dict(arc).get("status") == "completed"
+    ]
+    failed = [
+        arc
+        for arc in arcs.values()
+        if _safe_dict(arc).get("status") == "failed"
+    ]
+    active = [
+        arc
+        for arc in arcs.values()
+        if _safe_dict(arc).get("status") not in {"completed", "failed", "abandoned"}
+    ]
+
+    return {
+        "format_version": "story_arc_lifecycle_summary_v1",
+        "ok": bool(completed or failed),
+        "arc_count": len(arcs),
+        "completed_count": len(completed),
+        "failed_count": len(failed),
+        "active_count": len(active),
+        "status_counts": dict(sorted(status_counts.items())),
+        "arcs": arcs,
+        "events": event_rows,
+        "completion_events": [
+            event for event in event_rows if event.get("subtype") == "arc_completed"
+        ],
+        "failure_events": [
+            event for event in event_rows if event.get("subtype") == "arc_failed"
+        ],
+        "unresolved_arcs": [
+            {
+                "arc_id": _safe_dict(arc).get("arc_id"),
+                "title": _safe_dict(arc).get("title"),
+                "status": _safe_dict(arc).get("status"),
+                "current_stage": _safe_dict(arc).get("current_stage"),
+            }
+            for arc in active
+        ],
+    }
+
+
 def _build_authoritative_final_lifecycle_summary(
     *,
-    args: Any,
+    args: argparse.Namespace,
     summary: Dict[str, Any],
     runtime_state: Dict[str, Any],
     transcript: List[Dict[str, Any]],
@@ -5399,6 +5547,7 @@ def _build_authoritative_final_lifecycle_summary(
     pre_turn_advisory_promotion_slow_events: List[Dict[str, Any]],
     pre_turn_advisory_promotion_auto_disabled: bool,
     pre_turn_advisory_promotion_disable_reason: str,
+    story_arc_lifecycle_summary: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """Final authoritative summary override.
 
@@ -5459,6 +5608,10 @@ def _build_authoritative_final_lifecycle_summary(
             summary=summary,
             transcript=transcript,
             requested_turns=requested_turns_for_readiness,
+            story_arc_lifecycle_summary=_safe_dict(
+                story_arc_lifecycle_summary
+                or summary.get("story_arc_lifecycle_summary")
+            ),
         )
     _sync_hundred_turn_validation_classification(summary)
     campaign_commit_summary = _safe_dict(runtime_state.get("campaign_state_commit_summary"))
@@ -7668,6 +7821,49 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
         "loot_acquired": False,
     }
 
+    def _default_tavern_story_arcs() -> Dict[str, Any]:
+        return {
+            "arc:marked_coin_investigation": {
+                "arc_id": "arc:marked_coin_investigation",
+                "title": "Marked Coin Investigation",
+                "status": "active",
+                "current_stage": "follow_the_marked_coin_lead",
+                "started_turn": 1,
+                "last_progress_turn": 1,
+                "progress_count": 0,
+                "completed_objectives": [],
+                "flags": {},
+                "history": [
+                    {
+                        "turn": 1,
+                        "type": "arc_started",
+                        "summary": "The marked coin lead begins at the Rusty Flagon.",
+                    }
+                ],
+            },
+            "arc:mill_road_threat": {
+                "arc_id": "arc:mill_road_threat",
+                "title": "Mill Road Threat",
+                "status": "active",
+                "current_stage": "reach_and_secure_the_old_mill_road",
+                "started_turn": 1,
+                "last_progress_turn": 1,
+                "progress_count": 0,
+                "completed_objectives": [],
+                "flags": {},
+                "history": [
+                    {
+                        "turn": 1,
+                        "type": "arc_started",
+                        "summary": "Rumors point toward trouble on the road to the old mill.",
+                    }
+                ],
+            },
+        }
+
+    story_arc_runtime_state: Dict[str, Any] = _default_tavern_story_arcs()
+    story_arc_resolution_events: List[Dict[str, Any]] = []
+
     for turn_index in range(1, int(args.turns) + 1):
         # Initialize player agent selection variables
         player_agent_selection_source = "unknown"
@@ -8963,6 +9159,8 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
             missing_mechanics=missing_mechanics,
         )
 
+        record["available_mechanics_before"] = _safe_list(record.get("available_mechanics"))
+
         mechanic_action_decision = _maybe_force_missing_mechanic_action(
             proposed_action=_safe_str(record.get("player_action") or player_action),
             latest_row=record,
@@ -9075,6 +9273,92 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
                     if not covered
                 ],
             )
+
+            record["available_mechanics_after"] = _safe_list(record.get("available_mechanics"))
+
+        arc_resolution_rules, arc_failure_rules = tavern_story_arc_rules()
+
+        mechanics_covered_state = {
+            name: bool(covered)
+            for name, covered in _safe_dict(mechanics_coverage_runtime).items()
+        }
+
+        arc_lifecycle_state = {
+            **_safe_dict(mechanics_runtime_state),
+            "mechanics_covered": mechanics_covered_state,
+            "mechanics_coverage_summary": {
+                "mechanics": {
+                    name: {"count": 1 if covered else 0, "real_count": 1 if covered else 0}
+                    for name, covered in mechanics_covered_state.items()
+                }
+            },
+            "completed_objectives": [
+                "objective:identify_marked_coin"
+                if mechanics_covered_state.get("quest_progress")
+                else ""
+            ],
+        }
+        arc_lifecycle_state["completed_objectives"] = [
+            value for value in arc_lifecycle_state["completed_objectives"] if value
+        ]
+
+        arc_lifecycle = apply_story_arc_lifecycle(
+            arc_states=story_arc_runtime_state,
+            state=arc_lifecycle_state,
+            turn_index=turn_index,
+            resolution_rules=arc_resolution_rules,
+            failure_rules=arc_failure_rules,
+        )
+
+        if arc_lifecycle.get("ok"):
+            story_arc_delta = _safe_dict(arc_lifecycle.get("story_arc_state_delta"))
+            story_arc_runtime_state = _safe_dict(story_arc_delta.get("story_arcs")) or story_arc_runtime_state
+
+            seen_arc_event_keys = {
+                (
+                    event.get("arc_id"),
+                    event.get("subtype"),
+                    event.get("outcome"),
+                )
+                for event in story_arc_resolution_events
+            }
+
+            new_arc_events = []
+            for event in _safe_list(arc_lifecycle.get("story_arc_events")):
+                key = (
+                    event.get("arc_id"),
+                    event.get("subtype"),
+                    event.get("outcome"),
+                )
+                if key in seen_arc_event_keys:
+                    continue
+                new_arc_events.append(event)
+                seen_arc_event_keys.add(key)
+
+            arc_events = new_arc_events
+            if arc_events:
+                story_arc_resolution_events.extend(arc_events)
+
+                record["story_arc_lifecycle"] = arc_lifecycle
+                record["story_arc_events"] = arc_events
+                record["meaningful_progress"] = True
+                record["progress_category"] = "story_arc_resolution"
+
+                record["state_delta"] = {
+                    **_safe_dict(record.get("state_delta")),
+                    "story_arcs": story_arc_runtime_state,
+                }
+
+                record["result"] = {
+                    **_safe_dict(record.get("result")),
+                    "story_arc_events": arc_events,
+                    "story_arc_resolution": {
+                        "resolved_count": arc_lifecycle.get("resolved_count"),
+                        "failed_count": arc_lifecycle.get("failed_count"),
+                    },
+                    "meaningful_progress": True,
+                    "progress_category": "story_arc_resolution",
+                }
         else:
             mechanics_runtime_state["current_location"] = _current_row_location(
                 record,
@@ -9806,6 +10090,12 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
         reason="before_final_summary",
         turn_index=int(args.turns or len(transcript)),
     )
+
+    summary["story_arc_lifecycle_summary"] = _build_story_arc_lifecycle_summary(
+        story_arcs=story_arc_runtime_state,
+        events=story_arc_resolution_events,
+    )
+
     summary = _build_authoritative_final_lifecycle_summary(
         args=args,
         summary=summary,
@@ -9815,6 +10105,7 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
         pre_turn_advisory_promotion_slow_events=pre_turn_advisory_promotion_slow_events,
         pre_turn_advisory_promotion_auto_disabled=pre_turn_advisory_promotion_auto_disabled,
         pre_turn_advisory_promotion_disable_reason=pre_turn_advisory_promotion_disable_reason,
+        story_arc_lifecycle_summary=_safe_dict(summary.get("story_arc_lifecycle_summary")),
     )
     summary["checkpoint_validation_summary"] = {
         "ok": all(bool(row.get("ok")) for row in checkpoint_validation_rows),
@@ -9910,6 +10201,21 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
         checkpoint_summary=_safe_dict(summary.get("checkpoint_summary") or summary.get("checkpoint_validation")),
         loop_detection_summary=_safe_dict(summary.get("loop_detection_summary") or summary.get("loop_detection")),
         mechanics_coverage_summary=_safe_dict(summary.get("mechanics_coverage_summary")),
+    )
+
+    summary["hundred_turn_evaluation"] = _build_100_turn_evaluation_summary(
+        turns_executed=int(summary.get("turns_executed") or len(full_transcript_for_summaries)),
+        requested_turns=int(summary.get("requested_turns") or args.turns or len(full_transcript_for_summaries)),
+        runtime_errors=_safe_list(summary.get("runtime_errors")),
+        warnings=_safe_list(summary.get("warnings")),
+        transcript=full_transcript_for_summaries,
+        performance_summary=_safe_dict(summary.get("performance_seconds_summary")),
+        narration_grounding_summary=_safe_dict(summary.get("narration_grounding_summary")),
+        progress_quality_summary=_safe_dict(summary.get("canonical_progress_quality")),
+        checkpoint_summary=_safe_dict(summary.get("checkpoint_summary") or summary.get("checkpoint_validation")),
+        loop_detection_summary=_safe_dict(summary.get("loop_detection_summary") or summary.get("loop_detection")),
+        mechanics_coverage_summary=_safe_dict(summary.get("mechanics_coverage_summary")),
+        story_arc_lifecycle_summary=_safe_dict(summary.get("story_arc_lifecycle_summary")),
     )
 
     summary["ok"] = bool(_safe_dict(summary.get("hundred_turn_evaluation")).get("ok"))
@@ -10125,6 +10431,13 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
                 )
             else:
                 artifact_manifest["transcript_missing_reason"] = "transcript_not_available_in_zip_write_scope"
+
+            _zip_writestr_json(
+                zip_handle,
+                artifact_manifest,
+                "story-arc-lifecycle-summary.json",
+                summary.get("story_arc_lifecycle_summary", {}),
+            )
 
             # Write HTML report
             _zip_writestr_once(
