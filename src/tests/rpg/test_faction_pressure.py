@@ -1,4 +1,8 @@
-from app.rpg.story.faction_pressure import FactionPressureRule, emit_faction_pressure_events
+from app.rpg.story.faction_pressure import (
+    FactionPressureRule,
+    emit_faction_pressure_events,
+)
+from app.rpg.story.tavern_faction_pressure_rules import tavern_faction_pressure_rules
 
 
 def test_faction_pressure_emits_when_tier_matches():
@@ -80,3 +84,9 @@ def test_faction_pressure_respects_cooldown():
 
     assert first["event_count"] == 1
     assert second["event_count"] == 0
+
+
+def test_tavern_pressure_rules_delegate_cooldown_to_pacing():
+    rules = tavern_faction_pressure_rules()
+    assert rules
+    assert all(rule.cooldown_turns == 0 for rule in rules)

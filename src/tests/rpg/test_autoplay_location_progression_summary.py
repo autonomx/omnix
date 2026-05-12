@@ -1,7 +1,7 @@
 from tests.rpg.autoplay_llm_campaign import (
     _apply_scenario_progression_location_bridge,
-    _build_location_progression_summary,
     _build_canonical_progress_quality_summary,
+    _build_location_progression_summary,
 )
 
 

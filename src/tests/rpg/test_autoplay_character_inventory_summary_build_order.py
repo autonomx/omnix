@@ -1,4 +1,6 @@
-from tests.rpg.autoplay_llm_campaign import _build_character_inventory_progression_summary
+from tests.rpg.autoplay_llm_campaign import (
+    _build_character_inventory_progression_summary,
+)
 
 
 def test_character_inventory_summary_reads_mechanic_resolution_state_delta():

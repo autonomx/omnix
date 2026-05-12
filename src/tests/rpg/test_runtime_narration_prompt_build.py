@@ -1,4 +1,6 @@
-from app.rpg.narration.runtime_narration_contract import build_provider_narration_payload
+from app.rpg.narration.runtime_narration_contract import (
+    build_provider_narration_payload,
+)
 
 
 def test_provider_prompt_builds_with_repair_context_without_fstring_format_error():

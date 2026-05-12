@@ -13,7 +13,7 @@ def tavern_faction_pressure_rules() -> List[FactionPressureRule]:
             min_reputation=-10,
             max_reputation=-2,
             required_tier="suspicious",
-            cooldown_turns=12,
+            cooldown_turns=0,
             pressure_event={
                 "type": "faction_pressure",
                 "subtype": "watchers",
@@ -37,7 +37,7 @@ def tavern_faction_pressure_rules() -> List[FactionPressureRule]:
             min_reputation=2,
             max_reputation=10,
             required_tier="friendly",
-            cooldown_turns=15,
+            cooldown_turns=0,
             pressure_event={
                 "type": "faction_pressure",
                 "subtype": "local_support",

@@ -29,6 +29,26 @@ def _safe_str(value: Any) -> str:
     return str(value or "")
 
 
+_TIER_RANK = {
+    "hostile": -2,
+    "suspicious": -1,
+    "neutral": 0,
+    "friendly": 1,
+    "trusted": 2,
+}
+
+
+def _tier_requirement_met(actual: str, required: str) -> bool:
+    actual_rank = _TIER_RANK.get(_safe_str(actual), 0)
+    required_rank = _TIER_RANK.get(_safe_str(required), 0)
+
+    if required_rank < 0:
+        return actual_rank <= required_rank
+    if required_rank > 0:
+        return actual_rank >= required_rank
+    return actual_rank == required_rank
+
+
 def emit_faction_pressure_events(
     *,
     faction_state: Mapping[str, Any],
@@ -55,7 +75,7 @@ def emit_faction_pressure_events(
 
         if reputation < rule.min_reputation or reputation > rule.max_reputation:
             continue
-        if rule.required_tier and tier != rule.required_tier:
+        if rule.required_tier and not _tier_requirement_met(tier, rule.required_tier):
             continue
 
         last_turn = int(last_emitted.get(rule.id) or 0)

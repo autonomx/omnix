@@ -8,7 +8,6 @@ from __future__ import annotations
 
 from typing import Any
 
-
 from .story_arc_lifecycle import (
     ArcFailureRule,
     ArcResolutionRule,
@@ -16,7 +15,6 @@ from .story_arc_lifecycle import (
     apply_story_arc_lifecycle,
 )
 from .tavern_story_arc_rules import tavern_story_arc_rules
-
 
 _LEGACY_EXPORTS = {
     "StoryDirector": ".director",
