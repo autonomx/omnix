@@ -1,5 +1,8 @@
 from app.rpg.ai.grounding_validator import select_grounded_narration_candidate
-from app.rpg.narration.runtime_narration_contract import validate_narration_payload, _apply_grounding_to_runtime_payload
+from app.rpg.narration.runtime_narration_contract import (
+    _apply_grounding_to_runtime_payload,
+    validate_narration_payload,
+)
 
 
 def _contract():

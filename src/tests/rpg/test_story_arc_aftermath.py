@@ -1,4 +1,7 @@
-from app.rpg.story.story_arc_aftermath import ArcAftermathRule, apply_story_arc_aftermath
+from app.rpg.story.story_arc_aftermath import (
+    ArcAftermathRule,
+    apply_story_arc_aftermath,
+)
 
 
 def test_story_arc_aftermath_applies_once():

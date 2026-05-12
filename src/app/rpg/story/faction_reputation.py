@@ -40,6 +40,8 @@ def apply_faction_deltas(
 
     events: List[Dict[str, Any]] = []
 
+    seen_delta_keys: set[tuple[str, int, str, int]] = set()
+
     for raw_delta in faction_deltas:
         delta = _safe_dict(raw_delta)
         faction_id = _safe_str(delta.get("faction_id"))
@@ -49,6 +51,12 @@ def apply_faction_deltas(
         amount = int(delta.get("delta") or 0)
         if amount == 0:
             continue
+
+        reason = _safe_str(delta.get("reason"))
+        delta_key = (faction_id, int(turn_index), reason, amount)
+        if delta_key in seen_delta_keys:
+            continue
+        seen_delta_keys.add(delta_key)
 
         row = factions.setdefault(
             faction_id,
@@ -73,7 +81,7 @@ def apply_faction_deltas(
                 "delta": amount,
                 "from": previous,
                 "to": current,
-                "reason": delta.get("reason", ""),
+                "reason": reason,
             }
         )
 
@@ -86,7 +94,7 @@ def apply_faction_deltas(
                 "to": current,
                 "previous_tier": previous_tier,
                 "tier": current_tier,
-                "reason": delta.get("reason", ""),
+                "reason": reason,
                 "meaningful_progress": True,
                 "progress_category": "faction_reputation",
             }

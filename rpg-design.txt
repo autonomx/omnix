@@ -1,1302 +1,547 @@
-N91-N93 — Follow-Up Arc Progression + Faction Pressure Events + Report Polish
-Scope
-
-Current state after run 249:
-
-✅ Core mechanics pass
-✅ Original arcs complete
-✅ Arc aftermath exists
-✅ Faction reputation changes
-✅ Follow-up arcs are seeded
-⚠️ Follow-up arcs do not progress yet
-⚠️ Faction pressure is just reputation history, not active world pressure
-⚠️ Story lifecycle summary mixes completed original arcs with active seeded follow-ups
-⚠️ Report needs clearer aftermath/faction/follow-up presentation
-⚠️ Gate typo cleanup: story_arc_aftermap_present → story_arc_aftermath_present
-
-This phase makes seeded arcs advance deterministically and makes faction hostility create bounded pressure events.
-
-Leftover Fix 1 — Rename typo gate
+Literal apply-this-patch diff spec
+N94.1 — Tier Threshold Matching + Faction Delta Dedup
 
 Patch:
-
-src/tests/rpg/autoplay_llm_campaign.py
-
-Search:
-
-Select-String -Path src\tests\rpg\autoplay_llm_campaign.py -Pattern "aftermap|aftermath" -Context 2,4
-
-Replace all user-facing / artifact / gate keys:
-
-"story_arc_aftermap_present"
-
-with:
-
-"story_arc_aftermath_present"
-
-Do not change already-written old zip files. This is only for future summaries.
-
-Leftover Fix 2 — Split seeded follow-ups from unresolved original arcs
-
-Patch:
-
-src/tests/rpg/autoplay_llm_campaign.py
-
-Find _build_story_arc_lifecycle_summary(...).
-
-Inside it, find:
-
-active = [
-    arc
-    for arc in arcs.values()
-    if _safe_dict(arc).get("status") not in {"completed", "failed", "abandoned"}
-]
-
-Immediately after it, add:
-
-seeded_followups = [
-    arc
-    for arc in active
-    if _safe_dict(arc).get("source_hook_id")
-    or _safe_dict(arc).get("current_stage") == "seeded_followup"
-]
-
-original_active = [
-    arc
-    for arc in active
-    if arc not in seeded_followups
-]
-
-In the return dict, replace:
-
-"active_count": len(active),
-
-with:
-
-"active_count": len(active),
-"original_active_count": len(original_active),
-"seeded_followup_active_count": len(seeded_followups),
-
-Replace:
-
-"unresolved_arcs": [
-    {
-        "arc_id": _safe_dict(arc).get("arc_id"),
-        "title": _safe_dict(arc).get("title"),
-        "status": _safe_dict(arc).get("status"),
-        "current_stage": _safe_dict(arc).get("current_stage"),
-    }
-    for arc in active
-],
-
-with:
-
-"unresolved_original_arcs": [
-    {
-        "arc_id": _safe_dict(arc).get("arc_id"),
-        "title": _safe_dict(arc).get("title"),
-        "status": _safe_dict(arc).get("status"),
-        "current_stage": _safe_dict(arc).get("current_stage"),
-    }
-    for arc in original_active
-],
-"active_followup_arcs": [
-    {
-        "arc_id": _safe_dict(arc).get("arc_id"),
-        "title": _safe_dict(arc).get("title"),
-        "status": _safe_dict(arc).get("status"),
-        "current_stage": _safe_dict(arc).get("current_stage"),
-        "source_hook_id": _safe_dict(arc).get("source_hook_id"),
-        "progress_count": _safe_dict(arc).get("progress_count"),
-        "last_progress_turn": _safe_dict(arc).get("last_progress_turn"),
-    }
-    for arc in seeded_followups
-],
-
-Keep backward compatibility by also adding:
-
-"unresolved_arcs": [
-    {
-        "arc_id": _safe_dict(arc).get("arc_id"),
-        "title": _safe_dict(arc).get("title"),
-        "status": _safe_dict(arc).get("status"),
-        "current_stage": _safe_dict(arc).get("current_stage"),
-    }
-    for arc in active
-],
-N91 — Follow-Up Arc Progression v1
-1. Create follow-up progression module
-
-Create:
 
 src/app/rpg/story/followup_arc_progression.py
-from __future__ import annotations
+src/app/rpg/story/followup_arc_resolution.py
+src/app/rpg/story/faction_pressure.py
+src/app/rpg/story/faction_reputation.py
+src/tests/rpg/autoplay_llm_campaign.py
+1. Make faction tier requirements threshold-based, not exact
 
-from dataclasses import dataclass
-from typing import Any, Dict, Iterable, List, Mapping, Tuple
+Patch:
 
+src/app/rpg/story/followup_arc_progression.py
 
-@dataclass(frozen=True)
-class FollowupArcProgressionRule:
-    id: str
-    arc_id: str
-    from_stage: str = "seeded_followup"
-    to_stage: str = ""
-    requires_turns_since_started: int = 0
-    requires_faction_tier: Tuple[str, str] = ()
-    requires_flags: Tuple[str, ...] = ()
-    blocked_by_flags: Tuple[str, ...] = ()
-    set_flags: Tuple[str, ...] = ()
-    world_signals: Tuple[Dict[str, Any], ...] = ()
-    followup_hooks: Tuple[Dict[str, Any], ...] = ()
-    summary: str = ""
-
-
-def _safe_dict(value: Any) -> Dict[str, Any]:
-    return value if isinstance(value, dict) else {}
-
-
-def _safe_list(value: Any) -> List[Any]:
-    return value if isinstance(value, list) else []
-
-
-def _safe_str(value: Any) -> str:
-    return str(value or "")
-
-
-def _state_flags(state: Mapping[str, Any]) -> set[str]:
-    flags: set[str] = set()
-    raw_flags = state.get("flags")
-    if isinstance(raw_flags, dict):
-        flags.update(str(k) for k, v in raw_flags.items() if v)
-    elif isinstance(raw_flags, list):
-        flags.update(str(v) for v in raw_flags)
-    return flags
-
+Find:
 
 def _faction_tier(state: Mapping[str, Any], faction_id: str) -> str:
     factions = _safe_dict(state.get("faction_reputation"))
     faction = _safe_dict(factions.get(faction_id))
     return _safe_str(faction.get("tier") or "neutral")
 
+After it, add:
 
-def _rule_met(
-    rule: FollowupArcProgressionRule,
-    *,
-    arc: Mapping[str, Any],
-    state: Mapping[str, Any],
-    turn_index: int,
-) -> bool:
-    if rule.from_stage and _safe_str(arc.get("current_stage")) != rule.from_stage:
+_TIER_RANK = {
+    "hostile": -2,
+    "suspicious": -1,
+    "neutral": 0,
+    "friendly": 1,
+    "trusted": 2,
+}
+
+
+def _tier_requirement_met(actual: str, required: str) -> bool:
+    actual_rank = _TIER_RANK.get(_safe_str(actual), 0)
+    required_rank = _TIER_RANK.get(_safe_str(required), 0)
+
+    # Negative requirements are ceilings:
+    # suspicious means suspicious OR worse/hostile.
+    if required_rank < 0:
+        return actual_rank <= required_rank
+
+    # Positive requirements are floors:
+    # friendly means friendly OR better/trusted.
+    if required_rank > 0:
+        return actual_rank >= required_rank
+
+    return actual_rank == required_rank
+
+Find:
+
+if rule.requires_faction_tier:
+    faction_id, required_tier = rule.requires_faction_tier
+    if _faction_tier(state, faction_id) != required_tier:
         return False
 
-    started_turn = int(arc.get("started_turn") or 0)
-    if rule.requires_turns_since_started > 0:
-        if not started_turn or turn_index - started_turn < rule.requires_turns_since_started:
-            return False
+Replace with:
 
-    flags = _state_flags(state)
-    if any(flag not in flags for flag in rule.requires_flags):
-        return False
-    if any(flag in flags for flag in rule.blocked_by_flags):
+if rule.requires_faction_tier:
+    faction_id, required_tier = rule.requires_faction_tier
+    if not _tier_requirement_met(_faction_tier(state, faction_id), required_tier):
         return False
 
-    if rule.requires_faction_tier:
-        faction_id, required_tier = rule.requires_faction_tier
-        if _faction_tier(state, faction_id) != required_tier:
-            return False
+This makes:
 
-    return True
+hostile satisfy suspicious
+trusted satisfy friendly
+2. Apply the same tier threshold logic to follow-up resolution
+
+Patch:
+
+src/app/rpg/story/followup_arc_resolution.py
+
+Find _faction_tier(...).
+
+After it, add:
+
+_TIER_RANK = {
+    "hostile": -2,
+    "suspicious": -1,
+    "neutral": 0,
+    "friendly": 1,
+    "trusted": 2,
+}
 
 
-def progress_followup_arcs(
-    *,
-    story_arcs: Mapping[str, Any],
-    state: Mapping[str, Any],
-    turn_index: int,
-    rules: Iterable[FollowupArcProgressionRule],
-    already_progressed_keys: Iterable[str] = (),
-) -> Dict[str, Any]:
-    arcs = {
-        str(arc_id): dict(_safe_dict(arc))
-        for arc_id, arc in _safe_dict(story_arcs).items()
+def _tier_requirement_met(actual: str, required: str) -> bool:
+    actual_rank = _TIER_RANK.get(_safe_str(actual), 0)
+    required_rank = _TIER_RANK.get(_safe_str(required), 0)
+
+    if required_rank < 0:
+        return actual_rank <= required_rank
+    if required_rank > 0:
+        return actual_rank >= required_rank
+    return actual_rank == required_rank
+
+Find:
+
+if rule.requires_faction_tier:
+    faction_id, tier = rule.requires_faction_tier
+    if _faction_tier(state, faction_id) != tier:
+        return False
+
+Replace with:
+
+if rule.requires_faction_tier:
+    faction_id, tier = rule.requires_faction_tier
+    if not _tier_requirement_met(_faction_tier(state, faction_id), tier):
+        return False
+3. Apply tier threshold logic to faction pressure rules too
+
+Patch:
+
+src/app/rpg/story/faction_pressure.py
+
+Find:
+
+def _safe_str(value: Any) -> str:
+    return str(value or "")
+
+After it, add:
+
+_TIER_RANK = {
+    "hostile": -2,
+    "suspicious": -1,
+    "neutral": 0,
+    "friendly": 1,
+    "trusted": 2,
+}
+
+
+def _tier_requirement_met(actual: str, required: str) -> bool:
+    actual_rank = _TIER_RANK.get(_safe_str(actual), 0)
+    required_rank = _TIER_RANK.get(_safe_str(required), 0)
+
+    if required_rank < 0:
+        return actual_rank <= required_rank
+    if required_rank > 0:
+        return actual_rank >= required_rank
+    return actual_rank == required_rank
+
+Find:
+
+if rule.required_tier and tier != rule.required_tier:
+    continue
+
+Replace with:
+
+if rule.required_tier and not _tier_requirement_met(tier, rule.required_tier):
+    continue
+
+This lets hostile still emit suspicious-class pressure and trusted still emit friendly-class support.
+
+4. Deduplicate faction deltas by turn + faction + reason
+
+Patch:
+
+src/app/rpg/story/faction_reputation.py
+
+Inside apply_faction_deltas(...), after:
+
+events: List[Dict[str, Any]] = []
+
+add:
+
+seen_delta_keys: set[tuple[str, int, str, int]] = set()
+
+Inside the loop, after:
+
+amount = int(delta.get("delta") or 0)
+if amount == 0:
+    continue
+
+add:
+
+reason = _safe_str(delta.get("reason"))
+delta_key = (faction_id, int(turn_index), reason, amount)
+if delta_key in seen_delta_keys:
+    continue
+seen_delta_keys.add(delta_key)
+
+Then replace later uses of:
+
+delta.get("reason", "")
+
+with:
+
+reason
+
+Specifically:
+
+row.setdefault("history", []).append(
+    {
+        "turn": turn_index,
+        "delta": amount,
+        "from": previous,
+        "to": current,
+        "reason": reason,
     }
+)
 
-    applied = set(str(key) for key in already_progressed_keys)
-    events: List[Dict[str, Any]] = []
-    world_signals: List[Dict[str, Any]] = []
-    followup_hooks: List[Dict[str, Any]] = []
-    flags: Dict[str, bool] = {}
-    newly_applied_keys: List[str] = []
+and:
 
-    for rule in rules:
-        arc = _safe_dict(arcs.get(rule.arc_id))
-        if not arc:
-            continue
-        if _safe_str(arc.get("status")) in {"completed", "failed", "abandoned"}:
-            continue
+"reason": reason,
 
-        key = f"{rule.arc_id}|{rule.id}|{rule.from_stage}|{rule.to_stage}"
-        if key in applied:
-            continue
+This prevents duplicate same-turn deltas from double-applying when both aftermath and state_delta replay the same faction delta.
 
-        if not _rule_met(rule, arc=arc, state=state, turn_index=turn_index):
-            continue
-
-        previous_stage = _safe_str(arc.get("current_stage"))
-        next_stage = rule.to_stage or previous_stage
-
-        arc["current_stage"] = next_stage
-        arc["last_progress_turn"] = int(turn_index)
-        arc["progress_count"] = int(arc.get("progress_count") or 0) + 1
-        arc.setdefault("history", []).append(
-            {
-                "turn": turn_index,
-                "type": "followup_arc_progressed",
-                "rule_id": rule.id,
-                "from_stage": previous_stage,
-                "to_stage": next_stage,
-                "summary": rule.summary,
-            }
-        )
-        arcs[rule.arc_id] = arc
-
-        for flag in rule.set_flags:
-            flags[flag] = True
-        for signal in rule.world_signals:
-            world_signals.append(dict(signal))
-        for hook in rule.followup_hooks:
-            followup_hooks.append(dict(hook))
-
-        event = {
-            "type": "story_arc",
-            "subtype": "followup_arc_progressed",
-            "arc_id": rule.arc_id,
-            "rule_id": rule.id,
-            "from_stage": previous_stage,
-            "to_stage": next_stage,
-            "summary": rule.summary,
-            "meaningful_progress": True,
-            "progress_category": "followup_arc_progression",
-        }
-        events.append(event)
-
-        applied.add(key)
-        newly_applied_keys.append(key)
-
-    return {
-        "ok": True,
-        "story_arcs": arcs,
-        "events": events,
-        "world_signals": world_signals,
-        "followup_hooks": followup_hooks,
-        "flags": flags,
-        "applied_keys": sorted(applied),
-        "newly_applied_keys": newly_applied_keys,
-        "progressed_count": len(events),
-    }
-2. Add tavern follow-up progression rules
-
-Create:
-
-src/app/rpg/story/tavern_followup_progression_rules.py
-from __future__ import annotations
-
-from typing import List
-
-from app.rpg.story.followup_arc_progression import FollowupArcProgressionRule
-
-
-def tavern_followup_progression_rules() -> List[FollowupArcProgressionRule]:
-    return [
-        FollowupArcProgressionRule(
-            id="followup:route_pressure_notice",
-            arc_id="arc:sable_chain_route_pressure",
-            from_stage="seeded_followup",
-            to_stage="chain_notices_missing_scouts",
-            requires_turns_since_started=3,
-            requires_faction_tier=("faction:sable_chain", "suspicious"),
-            set_flags=("followup:sable_chain_route_pressure.progressed",),
-            world_signals=(
-                {
-                    "id": "signal:sable_chain_missing_scouts",
-                    "kind": "faction_pressure",
-                    "scope": "region:mill_road",
-                    "summary": "The Sable Chain notices that its scouts near the old mill failed to report back.",
-                    "ttl_turns": 40,
-                    "intensity": 3,
-                    "faction_id": "faction:sable_chain",
-                },
-            ),
-            followup_hooks=(
-                {
-                    "id": "hook:sable_chain_watchers",
-                    "kind": "pressure_escalation",
-                    "arc_id": "arc:sable_chain_watchers",
-                    "summary": "Sable Chain watchers may begin tracking the party.",
-                    "priority": 2,
-                },
-            ),
-            summary="The Sable Chain notices the missing scouts and begins watching the road.",
-        ),
-        FollowupArcProgressionRule(
-            id="followup:marked_coin_backer_trace",
-            arc_id="arc:marked_coin_backer_trace",
-            from_stage="seeded_followup",
-            to_stage="backer_trace_identified",
-            requires_turns_since_started=2,
-            requires_faction_tier=("faction:rusty_flagon_locals", "friendly"),
-            set_flags=("followup:marked_coin_backer_trace.progressed",),
-            world_signals=(
-                {
-                    "id": "signal:marked_coin_backer_whisper",
-                    "kind": "rumor",
-                    "scope": "scene:rusty_flagon",
-                    "summary": "A local whisper suggests the marked coin came through a paid backer, not the scouts themselves.",
-                    "ttl_turns": 35,
-                    "intensity": 2,
-                    "faction_id": "faction:rusty_flagon_locals",
-                },
-            ),
-            followup_hooks=(
-                {
-                    "id": "hook:voss_backer_investigation",
-                    "kind": "followup_arc_seed",
-                    "arc_id": "arc:voss_backer_investigation",
-                    "summary": "The marked coin trail points toward a backer named Voss.",
-                    "priority": 3,
-                },
-            ),
-            summary="Local trust turns the marked coin into a backer lead.",
-        ),
-    ]
-3. Wire follow-up progression into autoplay
+5. Avoid reapplying all previous row faction deltas during resolution
 
 Patch:
 
 src/tests/rpg/autoplay_llm_campaign.py
 
-Add imports:
+Find the follow-up resolution block where you add faction deltas into row["state_delta"]:
 
-from app.rpg.story.followup_arc_progression import progress_followup_arcs
-from app.rpg.story.tavern_followup_progression_rules import tavern_followup_progression_rules
+"faction_deltas": _safe_list(_safe_dict(row.get("state_delta")).get("faction_deltas"))
++ _safe_list(followup_resolution.get("faction_deltas")),
 
-Before the main loop, near follow-up seed state, add:
+Replace with:
 
-followup_arc_progression_applied_keys: set[str] = set()
-followup_arc_progression_events: List[Dict[str, Any]] = []
-followup_arc_progression_world_signals: List[Dict[str, Any]] = []
+"faction_deltas": _safe_list(_safe_dict(row.get("state_delta")).get("faction_deltas"))
++ _safe_list(followup_resolution.get("faction_deltas")),
+"followup_resolution_faction_deltas": _safe_list(followup_resolution.get("faction_deltas")),
 
-Inside the turn loop, after faction reputation is applied and after follow-up arcs may be seeded, add:
+Then find:
+
+resolution_faction_update = apply_faction_deltas(
+    faction_state=faction_reputation_state,
+    faction_deltas=_safe_list(_safe_dict(row.get("state_delta")).get("faction_deltas")),
+    turn_index=int(row.get("turn_index") or turn_index),
+)
+
+Replace with:
+
+resolution_faction_update = apply_faction_deltas(
+    faction_state=faction_reputation_state,
+    faction_deltas=_safe_list(_safe_dict(row.get("state_delta")).get("followup_resolution_faction_deltas")),
+    turn_index=int(row.get("turn_index") or turn_index),
+)
+
+This prevents old aftermath faction deltas from being re-applied when a follow-up resolution happens later.
+
+6. Make follow-up progression run every turn, not only inside event blocks
+
+Patch:
+
+src/tests/rpg/autoplay_llm_campaign.py
+
+Find the follow-up progression block:
+
+followup_progression = progress_followup_arcs(
+    story_arcs=story_arc_runtime_state,
+    ...
+)
+
+Make sure this entire block is at the top level of the turn loop, not nested inside:
+
+if seeded_events:
+if aftermath_events:
+if pressure_events:
+if mechanic_resolution.get("ok"):
+
+Correct ordering per turn should be:
+
+1. mechanic resolution, if any
+2. story arc lifecycle, if any
+3. aftermath, if any
+4. faction reputation update, if any
+5. follow-up seeding
+6. faction pressure
+7. follow-up progression        ← must run every turn
+8. follow-up resolution         ← must run every turn after progression
+9. escalation seeding
+
+The progression call should execute even on turns 12, 13, 14, etc. where there is no new mechanic event.
+
+If it is currently indented inside another if, dedent it to the main per-turn row assembly level.
+
+7. Build progression state from current faction tier
+
+Still in src/tests/rpg/autoplay_llm_campaign.py, find:
+
+followup_progression_state = {
+    "flags": {
+        ...
+    },
+    "faction_reputation": faction_reputation_state,
+}
+
+Replace with:
 
 followup_progression_state = {
     "flags": {
         **_safe_dict(mechanics_runtime_state.get("flags")),
         **_safe_dict(_safe_dict(row.get("state_delta")).get("story_arc_aftermath_flags")),
         **_safe_dict(_safe_dict(row.get("state_delta")).get("followup_arc_progression_flags")),
+        **_safe_dict(_safe_dict(row.get("state_delta")).get("faction_pressure_flags")),
     },
     "faction_reputation": faction_reputation_state,
 }
 
-followup_progression = progress_followup_arcs(
-    story_arcs=story_arc_runtime_state,
-    state=followup_progression_state,
-    turn_index=int(row.get("turn_index") or turn_index),
-    rules=tavern_followup_progression_rules(),
-    already_progressed_keys=followup_arc_progression_applied_keys,
-)
+Add diagnostic row fields immediately before calling progress_followup_arcs(...):
 
-if followup_progression.get("ok"):
-    followup_arc_progression_applied_keys = set(
-        _safe_list(followup_progression.get("applied_keys"))
-    )
-
-    progression_events = _safe_list(followup_progression.get("events"))
-    if progression_events:
-        story_arc_runtime_state = _safe_dict(followup_progression.get("story_arcs")) or story_arc_runtime_state
-        followup_arc_progression_events.extend(progression_events)
-        followup_arc_progression_world_signals.extend(
-            _safe_list(followup_progression.get("world_signals"))
-        )
-        world_signal_events.extend(_safe_list(followup_progression.get("world_signals")))
-        followup_hook_events.extend(_safe_list(followup_progression.get("followup_hooks")))
-
-        row["followup_arc_progression"] = followup_progression
-        row["followup_arc_progression_events"] = progression_events
-        row["world_signals"] = _safe_list(row.get("world_signals")) + _safe_list(
-            followup_progression.get("world_signals")
-        )
-        row["followup_hooks"] = _safe_list(row.get("followup_hooks")) + _safe_list(
-            followup_progression.get("followup_hooks")
-        )
-
-        row["state_delta"] = {
-            **_safe_dict(row.get("state_delta")),
-            "story_arcs": story_arc_runtime_state,
-            "followup_arc_progression_flags": _safe_dict(followup_progression.get("flags")),
-            "followup_hooks": _safe_list(row.get("followup_hooks")),
+row["followup_progression_probe"] = {
+    "turn_index": int(row.get("turn_index") or turn_index),
+    "active_followup_arcs": [
+        {
+            "arc_id": _safe_dict(arc).get("arc_id"),
+            "status": _safe_dict(arc).get("status"),
+            "current_stage": _safe_dict(arc).get("current_stage"),
+            "started_turn": _safe_dict(arc).get("started_turn"),
+            "last_progress_turn": _safe_dict(arc).get("last_progress_turn"),
+            "progress_count": _safe_dict(arc).get("progress_count"),
+            "source_hook_id": _safe_dict(arc).get("source_hook_id"),
+            "seeded_followup": _safe_dict(arc).get("seeded_followup"),
         }
-
-        row["result"] = {
-            **_safe_dict(row.get("result")),
-            "followup_arc_progression_events": progression_events,
-            "world_signals": _safe_list(row.get("world_signals")),
-            "followup_hooks": _safe_list(row.get("followup_hooks")),
-            "meaningful_progress": True,
-            "progress_category": "followup_arc_progression",
-        }
-
-        row["meaningful_progress"] = True
-        row["progress_category"] = "followup_arc_progression"
-
-Important ordering:
-
-1. arc completion
-2. aftermath
-3. faction reputation
-4. follow-up seeding
-5. follow-up progression
-
-Follow-up progression depends on the faction tiers created by aftermath.
-
-4. Preserve follow-up progression in slim transcript
-
-Patch _slim_transcript_row(...).
-
-Add:
-
-if row.get("followup_arc_progression_events"):
-    slim_row["followup_arc_progression_events"] = row.get("followup_arc_progression_events")
-
-if row.get("followup_arc_progression"):
-    progression = _safe_dict(row.get("followup_arc_progression"))
-    slim_row["followup_arc_progression"] = {
-        "ok": progression.get("ok"),
-        "progressed_count": progression.get("progressed_count"),
-        "newly_applied_keys": progression.get("newly_applied_keys"),
-        "events": progression.get("events"),
-        "world_signals": progression.get("world_signals"),
-        "followup_hooks": progression.get("followup_hooks"),
-    }
-N92 — Faction Pressure Events v1
-5. Add faction pressure module
-
-Create:
-
-src/app/rpg/story/faction_pressure.py
-from __future__ import annotations
-
-from dataclasses import dataclass
-from typing import Any, Dict, Iterable, List, Mapping, Tuple
-
-
-@dataclass(frozen=True)
-class FactionPressureRule:
-    id: str
-    faction_id: str
-    min_reputation: int = -10
-    max_reputation: int = 10
-    required_tier: str = ""
-    cooldown_turns: int = 10
-    pressure_event: Dict[str, Any] | None = None
-    world_signal: Dict[str, Any] | None = None
-    set_flags: Tuple[str, ...] = ()
-
-
-def _safe_dict(value: Any) -> Dict[str, Any]:
-    return value if isinstance(value, dict) else {}
-
-
-def _safe_list(value: Any) -> List[Any]:
-    return value if isinstance(value, list) else []
-
-
-def _safe_str(value: Any) -> str:
-    return str(value or "")
-
-
-def emit_faction_pressure_events(
-    *,
-    faction_state: Mapping[str, Any],
-    turn_index: int,
-    rules: Iterable[FactionPressureRule],
-    last_emitted_turn_by_rule: Mapping[str, Any] | None = None,
-) -> Dict[str, Any]:
-    last_emitted = {
-        str(k): int(v or 0)
-        for k, v in _safe_dict(last_emitted_turn_by_rule).items()
-    }
-
-    events: List[Dict[str, Any]] = []
-    world_signals: List[Dict[str, Any]] = []
-    flags: Dict[str, bool] = {}
-
-    for rule in rules:
-        faction = _safe_dict(_safe_dict(faction_state).get(rule.faction_id))
-        if not faction:
-            continue
-
-        reputation = int(faction.get("reputation") or 0)
-        tier = _safe_str(faction.get("tier") or "neutral")
-
-        if reputation < rule.min_reputation or reputation > rule.max_reputation:
-            continue
-        if rule.required_tier and tier != rule.required_tier:
-            continue
-
-        last_turn = int(last_emitted.get(rule.id) or 0)
-        if last_turn and turn_index - last_turn < rule.cooldown_turns:
-            continue
-
-        event = dict(rule.pressure_event or {})
-        if not event:
-            event = {
-                "type": "faction_pressure",
-                "faction_id": rule.faction_id,
-                "summary": f"{rule.faction_id} applies pressure.",
-            }
-
-        event.setdefault("type", "faction_pressure")
-        event.setdefault("faction_id", rule.faction_id)
-        event.setdefault("turn", turn_index)
-        event.setdefault("meaningful_progress", True)
-        event.setdefault("progress_category", "faction_pressure")
-        events.append(event)
-
-        if rule.world_signal:
-            signal = dict(rule.world_signal)
-            signal.setdefault("faction_id", rule.faction_id)
-            signal.setdefault("kind", "faction_pressure")
-            world_signals.append(signal)
-
-        for flag in rule.set_flags:
-            flags[flag] = True
-
-        last_emitted[rule.id] = turn_index
-
-    return {
-        "ok": True,
-        "events": events,
-        "world_signals": world_signals,
-        "flags": flags,
-        "last_emitted_turn_by_rule": last_emitted,
-        "event_count": len(events),
-    }
-6. Add tavern faction pressure rules
-
-Create:
-
-src/app/rpg/story/tavern_faction_pressure_rules.py
-from __future__ import annotations
-
-from typing import List
-
-from app.rpg.story.faction_pressure import FactionPressureRule
-
-
-def tavern_faction_pressure_rules() -> List[FactionPressureRule]:
-    return [
-        FactionPressureRule(
-            id="pressure:sable_chain_suspicious_watchers",
-            faction_id="faction:sable_chain",
-            min_reputation=-10,
-            max_reputation=-2,
-            required_tier="suspicious",
-            cooldown_turns=12,
-            pressure_event={
-                "type": "faction_pressure",
-                "subtype": "watchers",
-                "faction_id": "faction:sable_chain",
-                "summary": "Sable Chain watchers begin asking questions along the mill road.",
-                "severity": 2,
-            },
-            world_signal={
-                "id": "signal:sable_chain_watchers",
-                "kind": "faction_pressure",
-                "scope": "region:mill_road",
-                "summary": "Travelers notice quiet watchers asking after the party.",
-                "ttl_turns": 30,
-                "intensity": 2,
-            },
-            set_flags=("pressure:sable_chain_watchers.active",),
-        ),
-        FactionPressureRule(
-            id="pressure:locals_friendly_support",
-            faction_id="faction:rusty_flagon_locals",
-            min_reputation=2,
-            max_reputation=10,
-            required_tier="friendly",
-            cooldown_turns=15,
-            pressure_event={
-                "type": "faction_pressure",
-                "subtype": "local_support",
-                "faction_id": "faction:rusty_flagon_locals",
-                "summary": "Rusty Flagon locals quietly offer useful rumors after the party's help.",
-                "severity": 1,
-            },
-            world_signal={
-                "id": "signal:locals_offer_rumors",
-                "kind": "support",
-                "scope": "scene:rusty_flagon",
-                "summary": "Locals are more willing to share rumors with the party.",
-                "ttl_turns": 30,
-                "intensity": 1,
-            },
-            set_flags=("pressure:locals_support.active",),
-        ),
-    ]
-7. Wire faction pressure into autoplay
-
-Patch:
-
-src/tests/rpg/autoplay_llm_campaign.py
-
-Add imports:
-
-from app.rpg.story.faction_pressure import emit_faction_pressure_events
-from app.rpg.story.tavern_faction_pressure_rules import tavern_faction_pressure_rules
-
-Before main loop:
-
-faction_pressure_last_emitted_turn_by_rule: Dict[str, int] = {}
-faction_pressure_events: List[Dict[str, Any]] = []
-
-Inside the turn loop, after faction reputation updates, add:
-
-pressure = emit_faction_pressure_events(
-    faction_state=faction_reputation_state,
-    turn_index=int(row.get("turn_index") or turn_index),
-    rules=tavern_faction_pressure_rules(),
-    last_emitted_turn_by_rule=faction_pressure_last_emitted_turn_by_rule,
-)
-
-if pressure.get("ok"):
-    faction_pressure_last_emitted_turn_by_rule = {
-        str(k): int(v or 0)
-        for k, v in _safe_dict(pressure.get("last_emitted_turn_by_rule")).items()
-    }
-
-    pressure_events = _safe_list(pressure.get("events"))
-    if pressure_events:
-        faction_pressure_events.extend(pressure_events)
-        world_signal_events.extend(_safe_list(pressure.get("world_signals")))
-
-        row["faction_pressure_events"] = pressure_events
-        row["world_signals"] = _safe_list(row.get("world_signals")) + _safe_list(
-            pressure.get("world_signals")
-        )
-
-        row["state_delta"] = {
-            **_safe_dict(row.get("state_delta")),
-            "faction_pressure_flags": _safe_dict(pressure.get("flags")),
-        }
-
-        row["result"] = {
-            **_safe_dict(row.get("result")),
-            "faction_pressure_events": pressure_events,
-            "world_signals": _safe_list(row.get("world_signals")),
-        }
+        for arc in _safe_dict(story_arc_runtime_state).values()
+        if _safe_dict(arc).get("seeded_followup")
+        and _safe_dict(arc).get("status") not in {"completed", "failed", "abandoned"}
+    ],
+    "faction_tiers": {
+        faction_id: _safe_dict(data).get("tier")
+        for faction_id, data in _safe_dict(faction_reputation_state).items()
+    },
+}
 
 Patch _slim_transcript_row(...):
 
-if row.get("faction_pressure_events"):
-    slim_row["faction_pressure_events"] = row.get("faction_pressure_events")
-N93 — Report Polish + Summary Artifacts
-8. Add follow-up progression summary builder
+if row.get("followup_progression_probe"):
+    slim_row["followup_progression_probe"] = row.get("followup_progression_probe")
 
-Patch:
+This gives us clear visibility if progression still fails.
 
-src/tests/rpg/autoplay_llm_campaign.py
+8. Make follow-up resolution run every turn after progression
 
-Add:
+Same file.
 
-def _build_followup_arc_progression_summary(
-    *,
-    progression_events: List[Dict[str, Any]],
-    progression_world_signals: List[Dict[str, Any]],
-    story_arcs: Dict[str, Any],
-) -> Dict[str, Any]:
-    events = [_safe_dict(event) for event in _safe_list(progression_events)]
-    arcs = _safe_dict(story_arcs)
+Find resolve_followup_arcs(...).
 
-    progressed_arc_ids = sorted(
-        {
-            _safe_str(event.get("arc_id"))
-            for event in events
-            if _safe_str(event.get("arc_id"))
-        }
-    )
+Make sure it is also top-level in the per-turn loop, not nested under:
 
-    active_followups = [
-        {
-            "arc_id": _safe_dict(arc).get("arc_id"),
-            "title": _safe_dict(arc).get("title"),
-            "status": _safe_dict(arc).get("status"),
-            "current_stage": _safe_dict(arc).get("current_stage"),
-            "progress_count": _safe_dict(arc).get("progress_count"),
-            "source_hook_id": _safe_dict(arc).get("source_hook_id"),
-        }
-        for arc in arcs.values()
-        if _safe_dict(arc).get("source_hook_id")
-        or _safe_dict(arc).get("current_stage") == "seeded_followup"
-        or str(_safe_dict(arc).get("arc_id", "")).startswith("arc:sable_chain")
-        or str(_safe_dict(arc).get("arc_id", "")).startswith("arc:marked_coin_backer")
-    ]
+if progression_events:
 
-    return {
-        "format_version": "followup_arc_progression_summary_v1",
-        "ok": bool(events),
-        "progressed_count": len(events),
-        "progressed_arc_ids": progressed_arc_ids,
-        "events": events,
-        "world_signal_count": len(_safe_list(progression_world_signals)),
-        "world_signals": _safe_list(progression_world_signals),
-        "active_followups": active_followups,
-    }
-9. Add faction pressure summary builder
+Resolution should run even if progression happened on an earlier turn and the required delay is now satisfied.
 
-Add:
+Correct logic:
 
-def _build_faction_pressure_summary(
-    *,
-    pressure_events: List[Dict[str, Any]],
-    world_signals: List[Dict[str, Any]],
-) -> Dict[str, Any]:
-    events = [_safe_dict(event) for event in _safe_list(pressure_events)]
-
-    by_faction: Dict[str, int] = {}
-    for event in events:
-        faction_id = _safe_str(event.get("faction_id"))
-        if faction_id:
-            by_faction[faction_id] = int(by_faction.get(faction_id, 0)) + 1
-
-    return {
-        "format_version": "faction_pressure_summary_v1",
-        "ok": bool(events),
-        "pressure_event_count": len(events),
-        "world_signal_count": len(_safe_list(world_signals)),
-        "by_faction": dict(sorted(by_faction.items())),
-        "events": events,
-        "world_signals": _safe_list(world_signals),
-    }
-10. Add final summary assignments
-
-Near final summary build, after story arc aftermath/faction summaries, add:
-
-summary["followup_arc_progression_summary"] = _build_followup_arc_progression_summary(
-    progression_events=followup_arc_progression_events,
-    progression_world_signals=followup_arc_progression_world_signals,
+followup_resolution = resolve_followup_arcs(
     story_arcs=story_arc_runtime_state,
+    state=followup_resolution_state,
+    turn_index=int(row.get("turn_index") or turn_index),
+    rules=tavern_followup_resolution_rules(),
+    already_resolved_keys=followup_arc_resolution_applied_keys,
 )
 
-summary["faction_pressure_summary"] = _build_faction_pressure_summary(
-    pressure_events=faction_pressure_events,
-    world_signals=[
-        signal
-        for signal in _safe_list(world_signal_events)
-        if _safe_dict(signal).get("kind") == "faction_pressure"
-    ],
-)
+This should execute every turn after follow-up progression processing.
 
-Make sure summary["story_arc_lifecycle_summary"] is rebuilt after follow-up progression changes story_arc_runtime_state:
+9. Adjust expected pressure pacing gate
 
-summary["story_arc_lifecycle_summary"] = _build_story_arc_lifecycle_summary(
-    story_arcs=story_arc_runtime_state,
-    events=story_arc_resolution_events,
-)
+Run 252 already proved pressure pacing works:
 
-Correct final order:
+"accepted_pressure_event_count": 1,
+"rejected_pressure_event_count": 1
 
-1. story_arc_lifecycle_summary
-2. story_arc_aftermath_summary
-3. faction_reputation_summary
-4. followup_arc_progression_summary
-5. faction_pressure_summary
-6. mechanics/location/character summaries
-7. hundred_turn_evaluation
-8. hundred_turn_readiness_summary
-11. Add zip artifacts
+Keep the gate as-is.
 
-In the zip writer, add:
+But after threshold matching, pressure may produce more accepted events. That is fine as long as:
 
-_zip_writestr_json(
-    zip_handle,
-    artifact_manifest,
-    "followup-arc-progression-summary.json",
-    summary.get("followup_arc_progression_summary", {}),
-)
-
-_zip_writestr_json(
-    zip_handle,
-    artifact_manifest,
-    "faction-pressure-summary.json",
-    summary.get("faction_pressure_summary", {}),
-)
-
-_zip_writestr_json(
-    zip_handle,
-    artifact_manifest,
-    "hundred-turn-readiness-summary.json",
-    summary.get("hundred_turn_readiness_summary", {}),
-)
-12. Add evaluation gates
-
-Patch _build_100_turn_evaluation_summary(...).
-
-Add optional parameters:
-
-followup_arc_progression_summary: Optional[Dict[str, Any]] = None,
-faction_pressure_summary: Optional[Dict[str, Any]] = None,
-
-Inside function:
-
-followup_progression = _safe_dict(followup_arc_progression_summary)
-faction_pressure = _safe_dict(faction_pressure_summary)
-
-Inside gates, add:
-
-"followup_arc_progression_present": {
-    "ok": int(followup_progression.get("progressed_count") or 0) >= 1,
-    "value": {
-        "progressed_count": followup_progression.get("progressed_count"),
-        "progressed_arc_ids": followup_progression.get("progressed_arc_ids"),
-        "world_signal_count": followup_progression.get("world_signal_count"),
-    },
-    "expected": "at least one seeded follow-up arc progresses",
-    "message": "Seeded follow-up arcs should advance deterministically after their prerequisites are met.",
-},
-"faction_pressure_present": {
-    "ok": int(faction_pressure.get("pressure_event_count") or 0) >= 1,
-    "value": {
-        "pressure_event_count": faction_pressure.get("pressure_event_count"),
-        "world_signal_count": faction_pressure.get("world_signal_count"),
-        "by_faction": faction_pressure.get("by_faction"),
-    },
-    "expected": "at least one faction pressure event",
-    "message": "Faction reputation changes should produce bounded pressure or support events.",
-},
-
-Update call site:
-
-followup_arc_progression_summary=_safe_dict(summary.get("followup_arc_progression_summary")),
-faction_pressure_summary=_safe_dict(summary.get("faction_pressure_summary")),
-
-Make sure this call happens after those summaries are assigned.
-
-13. Add readiness gates
-
-Patch _build_100_turn_readiness_summary(...).
-
-Add optional parameters:
-
-followup_arc_progression_summary: Optional[Dict[str, Any]] = None,
-faction_pressure_summary: Optional[Dict[str, Any]] = None,
-
-Inside function:
-
-followup_progression = _safe_dict(followup_arc_progression_summary)
-if not followup_progression:
-    followup_progression = _safe_dict(summary.get("followup_arc_progression_summary"))
-
-faction_pressure = _safe_dict(faction_pressure_summary)
-if not faction_pressure:
-    faction_pressure = _safe_dict(summary.get("faction_pressure_summary"))
-
-Inside gates, add:
-
-"followup_arc_progression_present": {
-    "ok": int(followup_progression.get("progressed_count") or 0) >= 1,
-    "value": {
-        "progressed_count": followup_progression.get("progressed_count"),
-        "progressed_arc_ids": followup_progression.get("progressed_arc_ids"),
-    },
-    "expected": "at least one seeded follow-up arc progresses",
-    "message": "Follow-up arcs should not remain only seeded.",
-},
-"faction_pressure_present": {
-    "ok": int(faction_pressure.get("pressure_event_count") or 0) >= 1,
-    "value": {
-        "pressure_event_count": faction_pressure.get("pressure_event_count"),
-        "by_faction": faction_pressure.get("by_faction"),
-    },
-    "expected": "at least one faction pressure event",
-    "message": "Faction consequences should be visible in the 100-turn readiness report.",
-},
-
-Patch readiness call site to pass:
-
-followup_arc_progression_summary=_safe_dict(summary.get("followup_arc_progression_summary")),
-faction_pressure_summary=_safe_dict(summary.get("faction_pressure_summary")),
-HTML Report Polish
-14. Update Story Arc Lifecycle HTML
-
-Patch _build_minimal_autoplay_html_report(...).
-
-Find:
-
-<div class="metric"><strong>Active</strong><span>{esc(story_arc_lifecycle.get("active_count"))}</span></div>
-
-Replace with:
-
-<div class="metric"><strong>Active Follow-Ups</strong><span>{esc(story_arc_lifecycle.get("seeded_followup_active_count", story_arc_lifecycle.get("active_count")))}</span></div>
-
-Find:
-
-<h3>Unresolved Arcs</h3>
-<pre>{esc(json.dumps(story_arc_lifecycle.get("unresolved_arcs", []), ensure_ascii=False, indent=2, default=str))}</pre>
-
-Replace with:
-
-<h3>Unresolved Original Arcs</h3>
-<pre>{esc(json.dumps(story_arc_lifecycle.get("unresolved_original_arcs", story_arc_lifecycle.get("unresolved_arcs", [])), ensure_ascii=False, indent=2, default=str))}</pre>
-<h3>Active Follow-Up Arcs</h3>
-<pre>{esc(json.dumps(story_arc_lifecycle.get("active_followup_arcs", []), ensure_ascii=False, indent=2, default=str))}</pre>
-15. Add aftermath/faction/follow-up sections to HTML
-
-In _build_minimal_autoplay_html_report(...), near existing summary dict reads, add:
-
-story_arc_aftermath = _safe_dict(final_summary.get("story_arc_aftermath_summary"))
-faction_reputation = _safe_dict(final_summary.get("faction_reputation_summary"))
-followup_progression = _safe_dict(final_summary.get("followup_arc_progression_summary"))
-faction_pressure = _safe_dict(final_summary.get("faction_pressure_summary"))
-
-Add nav links:
-
-<a href="#story-aftermath">Aftermath</a>
-<a href="#factions">Factions</a>
-<a href="#followups">Follow-Ups</a>
-
-Add sections:
-
-story_aftermath_html = f"""
-<section class="card" id="story-aftermath">
-  <h2>Story Arc Aftermath</h2>
-  <div class="grid">
-    <div class="metric"><strong>Aftermath Events</strong><span>{esc(story_arc_aftermath.get("aftermath_event_count"))}</span></div>
-    <div class="metric"><strong>World Signals</strong><span>{esc(story_arc_aftermath.get("world_signal_count"))}</span></div>
-    <div class="metric"><strong>NPC Memories</strong><span>{esc(story_arc_aftermath.get("npc_memory_event_count"))}</span></div>
-    <div class="metric"><strong>Seeded Arcs</strong><span>{esc(story_arc_aftermath.get("seeded_followup_arc_count"))}</span></div>
-  </div>
-  <h3>Aftermath Events</h3>
-  <pre>{esc(json.dumps(story_arc_aftermath.get("aftermath_events", []), ensure_ascii=False, indent=2, default=str))}</pre>
-  <h3>World Signals</h3>
-  <pre>{esc(json.dumps(story_arc_aftermath.get("world_signals", []), ensure_ascii=False, indent=2, default=str))}</pre>
-</section>
-"""
-
-factions_html = f"""
-<section class="card" id="factions">
-  <h2>Faction Reputation</h2>
-  <div class="grid">
-    <div class="metric"><strong>Factions</strong><span>{esc(faction_reputation.get("faction_count"))}</span></div>
-    <div class="metric"><strong>Pressure Events</strong><span>{esc(faction_pressure.get("pressure_event_count"))}</span></div>
-    <div class="metric"><strong>Pressure Signals</strong><span>{esc(faction_pressure.get("world_signal_count"))}</span></div>
-    <div class="metric"><strong>Status</strong><span>{esc("PASS" if faction_reputation.get("ok") else "WARN")}</span></div>
-  </div>
-  <h3>Reputation</h3>
-  <pre>{esc(json.dumps(faction_reputation.get("factions", []), ensure_ascii=False, indent=2, default=str))}</pre>
-  <h3>Pressure Events</h3>
-  <pre>{esc(json.dumps(faction_pressure.get("events", []), ensure_ascii=False, indent=2, default=str))}</pre>
-</section>
-"""
-
-followups_html = f"""
-<section class="card" id="followups">
-  <h2>Follow-Up Arc Progression</h2>
-  <div class="grid">
-    <div class="metric"><strong>Progressed</strong><span>{esc(followup_progression.get("progressed_count"))}</span></div>
-    <div class="metric"><strong>World Signals</strong><span>{esc(followup_progression.get("world_signal_count"))}</span></div>
-    <div class="metric"><strong>Status</strong><span>{esc("PASS" if followup_progression.get("ok") else "WARN")}</span></div>
-  </div>
-  <h3>Progressed Arc IDs</h3>
-  <pre>{esc(json.dumps(followup_progression.get("progressed_arc_ids", []), ensure_ascii=False, indent=2, default=str))}</pre>
-  <h3>Progression Events</h3>
-  <pre>{esc(json.dumps(followup_progression.get("events", []), ensure_ascii=False, indent=2, default=str))}</pre>
-  <h3>Active Follow-Ups</h3>
-  <pre>{esc(json.dumps(followup_progression.get("active_followups", []), ensure_ascii=False, indent=2, default=str))}</pre>
-</section>
-"""
-
-Insert these after {story_arc_lifecycle_html}:
-
-{story_aftermath_html}
-{factions_html}
-{followups_html}
+accepted >= 1
+rejected >= 1
 Tests
-16. Follow-up progression tests
+10. Add tier threshold tests
 
 Create:
 
-src/tests/rpg/test_followup_arc_progression.py
+src/tests/rpg/test_faction_tier_thresholds.py
 from app.rpg.story.followup_arc_progression import (
     FollowupArcProgressionRule,
     progress_followup_arcs,
 )
+from app.rpg.story.followup_arc_resolution import (
+    FollowupArcResolutionRule,
+    resolve_followup_arcs,
+)
+from app.rpg.story.faction_pressure import (
+    FactionPressureRule,
+    emit_faction_pressure_events,
+)
 
 
-def test_followup_arc_progresses_when_rule_met():
+def test_progression_suspicious_requirement_accepts_hostile():
     result = progress_followup_arcs(
         story_arcs={
-            "arc:next": {
-                "arc_id": "arc:next",
+            "arc:test": {
+                "arc_id": "arc:test",
                 "status": "active",
                 "current_stage": "seeded_followup",
-                "started_turn": 5,
-                "progress_count": 0,
-                "source_hook_id": "hook:next",
-                "history": [],
+                "started_turn": 1,
             }
         },
         state={
             "faction_reputation": {
-                "faction:test": {
-                    "tier": "suspicious",
-                    "reputation": -3,
+                "faction:enemy": {
+                    "tier": "hostile",
+                    "reputation": -6,
                 }
             }
         },
         turn_index=10,
         rules=[
             FollowupArcProgressionRule(
-                id="rule:progress",
-                arc_id="arc:next",
-                from_stage="seeded_followup",
-                to_stage="noticed",
-                requires_turns_since_started=3,
-                requires_faction_tier=("faction:test", "suspicious"),
-                set_flags=("flag:noticed",),
-                world_signals=(
-                    {"id": "signal:noticed", "summary": "Noticed."},
-                ),
+                id="rule:test",
+                arc_id="arc:test",
+                requires_turns_since_started=1,
+                requires_faction_tier=("faction:enemy", "suspicious"),
+                to_stage="progressed",
             )
         ],
     )
 
     assert result["progressed_count"] == 1
-    assert result["story_arcs"]["arc:next"]["current_stage"] == "noticed"
-    assert result["flags"]["flag:noticed"] is True
-    assert len(result["world_signals"]) == 1
 
 
-def test_followup_arc_progression_applies_once():
-    rule = FollowupArcProgressionRule(
-        id="rule:progress",
-        arc_id="arc:next",
-        from_stage="seeded_followup",
-        to_stage="noticed",
-    )
-
-    first = progress_followup_arcs(
+def test_progression_friendly_requirement_accepts_trusted():
+    result = progress_followup_arcs(
         story_arcs={
-            "arc:next": {
-                "arc_id": "arc:next",
+            "arc:test": {
+                "arc_id": "arc:test",
                 "status": "active",
                 "current_stage": "seeded_followup",
+                "started_turn": 1,
             }
         },
-        state={},
-        turn_index=1,
-        rules=[rule],
+        state={
+            "faction_reputation": {
+                "faction:ally": {
+                    "tier": "trusted",
+                    "reputation": 6,
+                }
+            }
+        },
+        turn_index=10,
+        rules=[
+            FollowupArcProgressionRule(
+                id="rule:test",
+                arc_id="arc:test",
+                requires_turns_since_started=1,
+                requires_faction_tier=("faction:ally", "friendly"),
+                to_stage="progressed",
+            )
+        ],
     )
 
-    second = progress_followup_arcs(
-        story_arcs=first["story_arcs"],
-        state={},
-        turn_index=2,
-        rules=[rule],
-        already_progressed_keys=first["applied_keys"],
+    assert result["progressed_count"] == 1
+
+
+def test_resolution_suspicious_requirement_accepts_hostile():
+    result = resolve_followup_arcs(
+        story_arcs={
+            "arc:test": {
+                "arc_id": "arc:test",
+                "status": "active",
+                "current_stage": "progressed",
+                "last_progress_turn": 1,
+            }
+        },
+        state={
+            "faction_reputation": {
+                "faction:enemy": {
+                    "tier": "hostile",
+                    "reputation": -6,
+                }
+            }
+        },
+        turn_index=10,
+        rules=[
+            FollowupArcResolutionRule(
+                id="rule:test",
+                arc_id="arc:test",
+                from_stage="progressed",
+                requires_turns_since_progress=1,
+                requires_faction_tier=("faction:enemy", "suspicious"),
+            )
+        ],
     )
 
-    assert first["progressed_count"] == 1
-    assert second["progressed_count"] == 0
-17. Faction pressure tests
-
-Create:
-
-src/tests/rpg/test_faction_pressure.py
-from app.rpg.story.faction_pressure import FactionPressureRule, emit_faction_pressure_events
+    assert result["resolved_count"] == 1
 
 
-def test_faction_pressure_emits_when_tier_matches():
+def test_pressure_suspicious_requirement_accepts_hostile():
     result = emit_faction_pressure_events(
         faction_state={
-            "faction:test": {
-                "reputation": -3,
-                "tier": "suspicious",
+            "faction:enemy": {
+                "tier": "hostile",
+                "reputation": -6,
             }
         },
         turn_index=10,
         rules=[
             FactionPressureRule(
                 id="pressure:test",
-                faction_id="faction:test",
+                faction_id="faction:enemy",
                 min_reputation=-10,
                 max_reputation=-2,
                 required_tier="suspicious",
-                cooldown_turns=5,
-                pressure_event={
-                    "summary": "Watchers appear.",
-                },
-                world_signal={
-                    "id": "signal:test",
-                    "summary": "Pressure signal.",
-                },
-                set_flags=("pressure:test.active",),
             )
         ],
     )
 
     assert result["event_count"] == 1
-    assert result["events"][0]["faction_id"] == "faction:test"
-    assert len(result["world_signals"]) == 1
-    assert result["flags"]["pressure:test.active"] is True
-
-
-def test_faction_pressure_respects_cooldown():
-    first = emit_faction_pressure_events(
-        faction_state={
-            "faction:test": {
-                "reputation": -3,
-                "tier": "suspicious",
-            }
-        },
-        turn_index=10,
-        rules=[
-            FactionPressureRule(
-                id="pressure:test",
-                faction_id="faction:test",
-                min_reputation=-10,
-                max_reputation=-2,
-                required_tier="suspicious",
-                cooldown_turns=5,
-            )
-        ],
-    )
-
-    second = emit_faction_pressure_events(
-        faction_state={
-            "faction:test": {
-                "reputation": -3,
-                "tier": "suspicious",
-            }
-        },
-        turn_index=12,
-        rules=[
-            FactionPressureRule(
-                id="pressure:test",
-                faction_id="faction:test",
-                min_reputation=-10,
-                max_reputation=-2,
-                required_tier="suspicious",
-                cooldown_turns=5,
-            )
-        ],
-        last_emitted_turn_by_rule=first["last_emitted_turn_by_rule"],
-    )
-
-    assert first["event_count"] == 1
-    assert second["event_count"] == 0
-18. Lifecycle summary split test
+11. Add faction dedup test
 
 Patch:
 
-src/tests/rpg/test_autoplay_story_arc_lifecycle_summary.py
+src/tests/rpg/test_faction_reputation.py
 
 Add:
 
-def test_story_arc_lifecycle_summary_splits_original_and_seeded_followups():
-    summary = _build_story_arc_lifecycle_summary(
-        story_arcs={
-            "arc:done": {
-                "arc_id": "arc:done",
-                "title": "Done",
-                "status": "completed",
-            },
-            "arc:next": {
-                "arc_id": "arc:next",
-                "title": "Next",
-                "status": "active",
-                "current_stage": "seeded_followup",
-                "source_hook_id": "hook:next",
-            },
-        },
-        events=[
-            {
-                "type": "story_arc",
-                "subtype": "arc_completed",
-                "arc_id": "arc:done",
-            }
+def test_faction_reputation_dedupes_same_turn_same_reason_delta():
+    result = apply_faction_deltas(
+        faction_state={},
+        faction_deltas=[
+            {"faction_id": "faction:test", "delta": 2, "reason": "helped"},
+            {"faction_id": "faction:test", "delta": 2, "reason": "helped"},
         ],
+        turn_index=5,
     )
 
-    assert summary["completed_count"] == 1
-    assert summary["active_count"] == 1
-    assert summary["original_active_count"] == 0
-    assert summary["seeded_followup_active_count"] == 1
-    assert summary["unresolved_original_arcs"] == []
-    assert summary["active_followup_arcs"][0]["arc_id"] == "arc:next"
+    row = result["factions"]["faction:test"]
+    assert row["reputation"] == 2
+    assert len(row["history"]) == 1
+    assert len(result["events"]) == 1
 Run checks
 python -m py_compile `
   src\app\rpg\story\followup_arc_progression.py `
-  src\app\rpg\story\tavern_followup_progression_rules.py `
+  src\app\rpg\story\followup_arc_resolution.py `
   src\app\rpg\story\faction_pressure.py `
-  src\app\rpg\story\tavern_faction_pressure_rules.py `
+  src\app\rpg\story\faction_reputation.py `
   src\tests\rpg\autoplay_llm_campaign.py
 python -m pytest `
-  src\tests\rpg\test_followup_arc_progression.py `
-  src\tests\rpg\test_faction_pressure.py `
-  src\tests\rpg\test_autoplay_story_arc_lifecycle_summary.py `
-  src\tests\rpg\test_story_arc_aftermath.py `
+  src\tests\rpg\test_faction_tier_thresholds.py `
   src\tests\rpg\test_faction_reputation.py `
-  src\tests\rpg\test_followup_arc_seeding.py `
-  src\tests\rpg\test_autoplay_mechanics_coverage.py `
+  src\tests\rpg\test_followup_arc_progression.py `
+  src\tests\rpg\test_followup_arc_resolution.py `
+  src\tests\rpg\test_pressure_pacing.py `
   -q
-Expected next 100-turn result
-
-New artifacts:
-
-followup-arc-progression-summary.json
-faction-pressure-summary.json
-hundred-turn-readiness-summary.json
-
-Expected lifecycle summary:
-
-{
-  "completed_count": 2,
-  "active_count": 2,
-  "original_active_count": 0,
-  "seeded_followup_active_count": 2
-}
-
-Expected follow-up progression summary:
-
-{
-  "ok": true,
-  "progressed_count": 2,
-  "progressed_arc_ids": [
-    "arc:marked_coin_backer_trace",
-    "arc:sable_chain_route_pressure"
-  ]
-}
-
-Expected faction pressure summary:
-
-{
-  "ok": true,
-  "pressure_event_count": 2,
-  "by_faction": {
-    "faction:rusty_flagon_locals": 1,
-    "faction:sable_chain": 1
-  }
-}
-
-Expected gates:
-
-✅ story_arc_aftermath_present
-✅ faction_reputation_changed
-✅ followup_arc_progression_present
-✅ faction_pressure_present
-✅ story_arc_resolution_present
-✅ mechanics_coverage_required
-
-This phase turns follow-up arcs from “seeded hooks” into bounded deterministic campaign pressure.

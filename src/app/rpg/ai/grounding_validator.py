@@ -6,7 +6,6 @@ from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Set
 
 from app.rpg.ai.grounding_settings import normalize_grounding_settings
 
-
 _MONEY_AMOUNT_PATTERN = (
     r"(?:"
     r"\d+(?:,\d{3})*(?:\.\d+)?"

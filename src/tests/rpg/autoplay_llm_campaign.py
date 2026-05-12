@@ -256,11 +256,38 @@ def _slim_transcript_row(row: Dict[str, Any], max_row_bytes: int = 50000) -> Dic
             "newly_applied_keys": progression.get("newly_applied_keys"),
             "events": progression.get("events"),
             "world_signals": progression.get("world_signals"),
-            "followup_hooks": progression.get("followup_hooks"),
         }
+
+    if row.get("followup_arc_resolution_events"):
+        slim_row["followup_arc_resolution_events"] = row.get("followup_arc_resolution_events")
+
+    if row.get("followup_arc_resolution"):
+        resolution = _safe_dict(row.get("followup_arc_resolution"))
+        slim_row["followup_arc_resolution"] = {
+            "ok": resolution.get("ok"),
+            "resolved_count": resolution.get("resolved_count"),
+            "newly_applied_keys": resolution.get("newly_applied_keys"),
+            "events": resolution.get("events"),
+            "world_signals": resolution.get("world_signals"),
+            "escalation_hooks": resolution.get("escalation_hooks"),
+        }
+
+    if row.get("escalation_arc_seed_events"):
+        slim_row["escalation_arc_seed_events"] = row.get("escalation_arc_seed_events")
 
     if row.get("faction_pressure_events"):
         slim_row["faction_pressure_events"] = row.get("faction_pressure_events")
+
+    if row.get("faction_pressure_pacing"):
+        pacing = _safe_dict(row.get("faction_pressure_pacing"))
+        slim_row["faction_pressure_pacing"] = {
+            "accepted_count": pacing.get("accepted_count"),
+            "rejected_count": pacing.get("rejected_count"),
+            "rejected_events": pacing.get("rejected_events"),
+        }
+
+    if row.get("followup_progression_probe"):
+        slim_row["followup_progression_probe"] = row.get("followup_progression_probe")
 
     slim_row["_artifact_slimmed"] = True
     return slim_row
@@ -1019,6 +1046,27 @@ from tests.rpg.autoplay.report_sections import (
 )
 
 _ACTIVE_CONSOLE_CAPTURE = None
+from app.rpg.story.escalation_branching import seed_escalation_arcs
+from app.rpg.story.faction_pressure import emit_faction_pressure_events
+from app.rpg.story.faction_reputation import (
+    apply_faction_deltas,
+    build_faction_reputation_summary,
+)
+from app.rpg.story.followup_arc_progression import progress_followup_arcs
+from app.rpg.story.followup_arc_resolution import resolve_followup_arcs
+from app.rpg.story.followup_arc_seeding import seed_followup_arcs
+from app.rpg.story.pressure_pacing import filter_pressure_events_for_pacing
+from app.rpg.story.story_arc_aftermath import apply_story_arc_aftermath
+from app.rpg.story.story_arc_lifecycle import apply_story_arc_lifecycle
+from app.rpg.story.tavern_faction_pressure_rules import tavern_faction_pressure_rules
+from app.rpg.story.tavern_followup_progression_rules import (
+    tavern_followup_progression_rules,
+)
+from app.rpg.story.tavern_followup_resolution_rules import (
+    tavern_followup_resolution_rules,
+)
+from app.rpg.story.tavern_story_aftermath_rules import tavern_story_aftermath_rules
+from app.rpg.story.tavern_story_arc_rules import tavern_story_arc_rules
 from tests.rpg.autoplay.checkpoints import (
     collect_state_bounds,
     validate_save_load_checkpoint,
@@ -1086,7 +1134,6 @@ from tests.rpg.autoplay.provider_adapter import (
     call_provider_text,
     describe_provider_shape,
 )
-
 from tests.rpg.autoplay.seeding import (
     available_campaign_seeds,
     resolve_campaign_seed_name,
@@ -1097,19 +1144,6 @@ from tests.rpg.autoplay.story_hooks import (
     autoplay_story_hook_player_hints,
 )
 from tests.rpg.autoplay.story_variety import compute_story_variety_metrics
-from app.rpg.story.story_arc_lifecycle import apply_story_arc_lifecycle
-from app.rpg.story.tavern_story_arc_rules import tavern_story_arc_rules
-from app.rpg.story.story_arc_aftermath import apply_story_arc_aftermath
-from app.rpg.story.tavern_story_aftermath_rules import tavern_story_aftermath_rules
-from app.rpg.story.followup_arc_progression import progress_followup_arcs
-from app.rpg.story.tavern_followup_progression_rules import tavern_followup_progression_rules
-from app.rpg.story.faction_pressure import emit_faction_pressure_events
-from app.rpg.story.tavern_faction_pressure_rules import tavern_faction_pressure_rules
-from app.rpg.story.faction_reputation import (
-    apply_faction_deltas,
-    build_faction_reputation_summary,
-)
-from app.rpg.story.followup_arc_seeding import seed_followup_arcs
 from tests.rpg.autoplay.strategy_profiles import (
     action_diversity_metrics,
     build_strategy_guidance,
@@ -1362,6 +1396,9 @@ def _build_100_turn_readiness_summary(
     story_arc_lifecycle_summary: Optional[Dict[str, Any]] = None,
     followup_arc_progression_summary: Optional[Dict[str, Any]] = None,
     faction_pressure_summary: Optional[Dict[str, Any]] = None,
+    followup_arc_resolution_summary: Optional[Dict[str, Any]] = None,
+    pressure_pacing_summary: Optional[Dict[str, Any]] = None,
+    world_signal_summary: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     summary = _safe_dict(summary)
     arc = _safe_dict(summary.get("scenario_progression_arc_summary"))
@@ -1380,6 +1417,18 @@ def _build_100_turn_readiness_summary(
     faction_pressure = _safe_dict(faction_pressure_summary)
     if not faction_pressure:
         faction_pressure = _safe_dict(summary.get("faction_pressure_summary"))
+
+    followup_resolution = _safe_dict(followup_arc_resolution_summary)
+    if not followup_resolution:
+        followup_resolution = _safe_dict(summary.get("followup_arc_resolution_summary"))
+
+    pressure_pacing = _safe_dict(pressure_pacing_summary)
+    if not pressure_pacing:
+        pressure_pacing = _safe_dict(summary.get("pressure_pacing_summary"))
+
+    world_signals = _safe_dict(world_signal_summary)
+    if not world_signals:
+        world_signals = _safe_dict(summary.get("world_signal_summary"))
 
     progression_changed_count = int(
         _safe_dict(behavioral.get("metrics")).get("progression_changed_count")
@@ -1485,6 +1534,46 @@ def _build_100_turn_readiness_summary(
             },
             "expected": "at least one faction pressure event",
             "message": "Faction consequences should be visible in the 100-turn readiness report.",
+        },
+        "followup_arc_resolution_present": {
+            "ok": int(followup_resolution.get("resolved_count") or 0) >= 1,
+            "value": {
+                "resolved_count": followup_resolution.get("resolved_count"),
+                "resolved_arc_ids": followup_resolution.get("resolved_arc_ids"),
+                "escalation_seed_count": followup_resolution.get("escalation_seed_count"),
+            },
+            "expected": "at least one progressed follow-up arc resolves or escalates",
+            "message": "Follow-up arcs should not remain only progressed; at least one should resolve or branch.",
+        },
+        "escalation_branch_seeded": {
+            "ok": int(followup_resolution.get("escalation_seed_count") or 0) >= 1,
+            "value": {
+                "escalation_seed_count": followup_resolution.get("escalation_seed_count"),
+                "escalation_arcs": followup_resolution.get("escalation_arcs"),
+            },
+            "expected": "at least one escalation branch seeded from follow-up resolution",
+            "message": "Resolved follow-up arcs should create bounded escalation branches.",
+        },
+        "pressure_pacing_active": {
+            "ok": int(pressure_pacing.get("accepted_pressure_event_count") or 0) >= 1
+            and int(pressure_pacing.get("rejected_pressure_event_count") or 0) >= 1,
+            "value": {
+                "accepted_pressure_event_count": pressure_pacing.get("accepted_pressure_event_count"),
+                "rejected_pressure_event_count": pressure_pacing.get("rejected_pressure_event_count"),
+                "rejected_by_reason": pressure_pacing.get("rejected_by_reason"),
+            },
+            "expected": "pressure events accepted and some spam rejected",
+            "message": "Faction pressure should be paced instead of emitted every eligible turn.",
+        },
+        "world_signal_summary_present": {
+            "ok": int(world_signals.get("world_signal_count") or 0) >= 1,
+            "value": {
+                "world_signal_count": world_signals.get("world_signal_count"),
+                "by_kind": world_signals.get("by_kind"),
+                "by_faction": world_signals.get("by_faction"),
+            },
+            "expected": "global world signal summary exists",
+            "message": "Report should separate pure aftermath signals from global world signals.",
         },
     }
 
@@ -2829,6 +2918,9 @@ def _build_100_turn_evaluation_summary(
     faction_reputation_summary: Optional[Dict[str, Any]] = None,
     followup_arc_progression_summary: Optional[Dict[str, Any]] = None,
     faction_pressure_summary: Optional[Dict[str, Any]] = None,
+    followup_arc_resolution_summary: Optional[Dict[str, Any]] = None,
+    pressure_pacing_summary: Optional[Dict[str, Any]] = None,
+    world_signal_summary: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     grounding = _safe_dict(narration_grounding_summary)
     progress = _safe_dict(progress_quality_summary)
@@ -2844,6 +2936,9 @@ def _build_100_turn_evaluation_summary(
     factions = _safe_dict(faction_reputation_summary)
     followup_progression = _safe_dict(followup_arc_progression_summary)
     faction_pressure = _safe_dict(faction_pressure_summary)
+    followup_resolution = _safe_dict(followup_arc_resolution_summary)
+    pressure_pacing = _safe_dict(pressure_pacing_summary)
+    world_signals = _safe_dict(world_signal_summary)
     selected_grounding_health = _build_selected_output_grounding_health(
         grounding,
         requested_turns=requested_turns,
@@ -3028,6 +3123,46 @@ def _build_100_turn_evaluation_summary(
             },
             "expected": "at least one faction pressure event",
             "message": "Faction reputation changes should produce bounded pressure or support events.",
+        },
+        "followup_arc_resolution_present": {
+            "ok": int(followup_resolution.get("resolved_count") or 0) >= 1,
+            "value": {
+                "resolved_count": followup_resolution.get("resolved_count"),
+                "resolved_arc_ids": followup_resolution.get("resolved_arc_ids"),
+                "escalation_seed_count": followup_resolution.get("escalation_seed_count"),
+            },
+            "expected": "at least one progressed follow-up arc resolves or escalates",
+            "message": "Follow-up arcs should not remain only progressed; at least one should resolve or branch.",
+        },
+        "escalation_branch_seeded": {
+            "ok": int(followup_resolution.get("escalation_seed_count") or 0) >= 1,
+            "value": {
+                "escalation_seed_count": followup_resolution.get("escalation_seed_count"),
+                "escalation_arcs": followup_resolution.get("escalation_arcs"),
+            },
+            "expected": "at least one escalation branch seeded from follow-up resolution",
+            "message": "Resolved follow-up arcs should create bounded escalation branches.",
+        },
+        "pressure_pacing_active": {
+            "ok": int(pressure_pacing.get("accepted_pressure_event_count") or 0) >= 1
+            and int(pressure_pacing.get("rejected_pressure_event_count") or 0) >= 1,
+            "value": {
+                "accepted_pressure_event_count": pressure_pacing.get("accepted_pressure_event_count"),
+                "rejected_pressure_event_count": pressure_pacing.get("rejected_pressure_event_count"),
+                "rejected_by_reason": pressure_pacing.get("rejected_by_reason"),
+            },
+            "expected": "pressure events accepted and some spam rejected",
+            "message": "Faction pressure should be paced instead of emitted every eligible turn.",
+        },
+        "world_signal_summary_present": {
+            "ok": int(world_signals.get("world_signal_count") or 0) >= 1,
+            "value": {
+                "world_signal_count": world_signals.get("world_signal_count"),
+                "by_kind": world_signals.get("by_kind"),
+                "by_faction": world_signals.get("by_faction"),
+            },
+            "expected": "global world signal summary exists",
+            "message": "Report should separate pure aftermath signals from global world signals.",
         },
     }
 
@@ -4452,6 +4587,9 @@ def _build_minimal_autoplay_html_report(final_summary: Dict[str, Any]) -> str:
     faction_reputation = _safe_dict(final_summary.get("faction_reputation_summary"))
     followup_progression = _safe_dict(final_summary.get("followup_arc_progression_summary"))
     faction_pressure = _safe_dict(final_summary.get("faction_pressure_summary"))
+    followup_resolution = _safe_dict(final_summary.get("followup_arc_resolution_summary"))
+    pressure_pacing = _safe_dict(final_summary.get("pressure_pacing_summary"))
+    world_signal_summary = _safe_dict(final_summary.get("world_signal_summary"))
 
     status = "PASS" if evaluation.get("ok") else "FAIL"
     status_class = "pass" if evaluation.get("ok") else "fail"
@@ -4544,6 +4682,52 @@ def _build_minimal_autoplay_html_report(final_summary: Dict[str, Any]) -> str:
   <pre>{esc(json.dumps(followup_progression.get("events", []), ensure_ascii=False, indent=2, default=str))}</pre>
   <h3>Active Follow-Ups</h3>
   <pre>{esc(json.dumps(followup_progression.get("active_followups", []), ensure_ascii=False, indent=2, default=str))}</pre>
+</section>
+"""
+
+    followup_resolution_html = f"""
+<section class="card" id="followup-resolution">
+  <h2>Follow-Up Resolution</h2>
+  <div class="grid">
+    <div class="metric"><strong>Resolved</strong><span>{esc(followup_resolution.get("resolved_count"))}</span></div>
+    <div class="metric"><strong>Escalation Hooks</strong><span>{esc(followup_resolution.get("escalation_hook_count"))}</span></div>
+    <div class="metric"><strong>Escalation Seeds</strong><span>{esc(followup_resolution.get("escalation_seed_count"))}</span></div>
+    <div class="metric"><strong>Status</strong><span>{esc("PASS" if followup_resolution.get("ok") else "WARN")}</span></div>
+  </div>
+  <h3>Resolved Arc IDs</h3>
+  <pre>{esc(json.dumps(followup_resolution.get("resolved_arc_ids", []), ensure_ascii=False, indent=2, default=str))}</pre>
+  <h3>Resolution Events</h3>
+  <pre>{esc(json.dumps(followup_resolution.get("events", []), ensure_ascii=False, indent=2, default=str))}</pre>
+  <h3>Escalation Arcs</h3>
+  <pre>{esc(json.dumps(followup_resolution.get("escalation_arcs", []), ensure_ascii=False, indent=2, default=str))}</pre>
+</section>
+"""
+
+    pressure_pacing_html = f"""
+<section class="card" id="pressure-pacing">
+  <h2>Pressure Pacing</h2>
+  <div class="grid">
+    <div class="metric"><strong>Accepted</strong><span>{esc(pressure_pacing.get("accepted_pressure_event_count"))}</span></div>
+    <div class="metric"><strong>Rejected</strong><span>{esc(pressure_pacing.get("rejected_pressure_event_count"))}</span></div>
+    <div class="metric"><strong>Rejected Signals</strong><span>{esc(pressure_pacing.get("rejected_world_signal_count"))}</span></div>
+    <div class="metric"><strong>Status</strong><span>{esc("PASS" if pressure_pacing.get("ok") else "WARN")}</span></div>
+  </div>
+  <h3>Rejected By Reason</h3>
+  <pre>{esc(json.dumps(pressure_pacing.get("rejected_by_reason", {}), ensure_ascii=False, indent=2, default=str))}</pre>
+</section>
+"""
+
+    world_signals_html = f"""
+<section class="card" id="world-signals">
+  <h2>World Signals</h2>
+  <div class="grid">
+    <div class="metric"><strong>Total Signals</strong><span>{esc(world_signal_summary.get("world_signal_count"))}</span></div>
+    <div class="metric"><strong>Status</strong><span>{esc("PASS" if world_signal_summary.get("ok") else "WARN")}</span></div>
+  </div>
+  <h3>By Kind</h3>
+  <pre>{esc(json.dumps(world_signal_summary.get("by_kind", {}), ensure_ascii=False, indent=2, default=str))}</pre>
+  <h3>By Faction</h3>
+  <pre>{esc(json.dumps(world_signal_summary.get("by_faction", {}), ensure_ascii=False, indent=2, default=str))}</pre>
 </section>
 """
 
@@ -4647,8 +4831,11 @@ a {{ color: #c8d6ff; }}
    <a href="#story-arc-lifecycle">Story Arc Lifecycle</a>
    <a href="#story-aftermath">Aftermath</a>
    <a href="#factions">Factions</a>
-   <a href="#followups">Follow-Ups</a>
-   <a href="#debug">Debug</a>
+    <a href="#followups">Follow-Ups</a>
+    <a href="#followup-resolution">Follow-Up Resolution</a>
+    <a href="#pressure-pacing">Pressure Pacing</a>
+    <a href="#world-signals">World Signals</a>
+    <a href="#debug">Debug</a>
 </nav>
 
 <section class="card" id="evaluation">
@@ -4742,6 +4929,9 @@ a {{ color: #c8d6ff; }}
 {story_aftermath_html}
 {factions_html}
 {followups_html}
+{followup_resolution_html}
+{pressure_pacing_html}
+{world_signals_html}
 
 <section class="card" id="debug">
 <h2>Debug Summary</h2>
@@ -5810,6 +6000,35 @@ def _build_story_arc_aftermath_summary(
     }
 
 
+def _build_world_signal_summary(world_signals: List[Dict[str, Any]]) -> Dict[str, Any]:
+    signals = [_safe_dict(signal) for signal in _safe_list(world_signals)]
+
+    by_kind: Dict[str, int] = {}
+    by_scope: Dict[str, int] = {}
+    by_faction: Dict[str, int] = {}
+
+    for signal in signals:
+        kind = _safe_str(signal.get("kind") or "unknown")
+        scope = _safe_str(signal.get("scope") or "unknown")
+        faction_id = _safe_str(signal.get("faction_id"))
+
+        by_kind[kind] = int(by_kind.get(kind, 0)) + 1
+        by_scope[scope] = int(by_scope.get(scope, 0)) + 1
+
+        if faction_id:
+            by_faction[faction_id] = int(by_faction.get(faction_id, 0)) + 1
+
+    return {
+        "format_version": "world_signal_summary_v1",
+        "ok": bool(signals),
+        "world_signal_count": len(signals),
+        "by_kind": dict(sorted(by_kind.items())),
+        "by_scope": dict(sorted(by_scope.items())),
+        "by_faction": dict(sorted(by_faction.items())),
+        "signals": signals,
+    }
+
+
 def _build_followup_arc_progression_summary(
     *,
     progression_events: List[Dict[str, Any]],
@@ -5851,7 +6070,12 @@ def _build_followup_arc_progression_summary(
         "events": events,
         "world_signal_count": len(_safe_list(progression_world_signals)),
         "world_signals": _safe_list(progression_world_signals),
-        "active_followups": active_followups,
+        "followup_threads": active_followups,
+        "active_followups": [
+            row
+            for row in active_followups
+            if _safe_dict(row).get("status") not in {"completed", "failed", "abandoned"}
+        ],
     }
 
 
@@ -5879,6 +6103,92 @@ def _build_faction_pressure_summary(
     }
 
 
+def _build_followup_arc_resolution_summary(
+    *,
+    resolution_events: List[Dict[str, Any]],
+    resolution_world_signals: List[Dict[str, Any]],
+    escalation_hooks: List[Dict[str, Any]],
+    escalation_seed_events: List[Dict[str, Any]],
+    story_arcs: Dict[str, Any],
+) -> Dict[str, Any]:
+    events = [_safe_dict(event) for event in _safe_list(resolution_events)]
+    arcs = _safe_dict(story_arcs)
+
+    resolved_arc_ids = sorted(
+        {
+            _safe_str(event.get("arc_id"))
+            for event in events
+            if _safe_str(event.get("arc_id"))
+        }
+    )
+
+    escalation_arcs = [
+        {
+            "arc_id": _safe_dict(arc).get("arc_id"),
+            "title": _safe_dict(arc).get("title"),
+            "status": _safe_dict(arc).get("status"),
+            "current_stage": _safe_dict(arc).get("current_stage"),
+            "source_hook_id": _safe_dict(arc).get("source_hook_id"),
+        }
+        for arc in arcs.values()
+        if _safe_dict(arc).get("escalation_arc")
+    ]
+
+    return {
+        "format_version": "followup_arc_resolution_summary_v1",
+        "ok": bool(events),
+        "resolved_count": len(events),
+        "resolved_arc_ids": resolved_arc_ids,
+        "events": events,
+        "world_signal_count": len(_safe_list(resolution_world_signals)),
+        "world_signals": _safe_list(resolution_world_signals),
+        "escalation_hook_count": len(_safe_list(escalation_hooks)),
+        "escalation_hooks": _safe_list(escalation_hooks),
+        "escalation_seed_count": len(_safe_list(escalation_seed_events)),
+        "escalation_seed_events": _safe_list(escalation_seed_events),
+        "escalation_arcs": escalation_arcs,
+    }
+
+
+def _build_pressure_pacing_summary(
+    *,
+    accepted_events: List[Dict[str, Any]],
+    rejected_events: List[Dict[str, Any]],
+    rejected_world_signals: List[Dict[str, Any]],
+) -> Dict[str, Any]:
+    rejected = [_safe_dict(event) for event in _safe_list(rejected_events)]
+
+    rejected_by_reason: Dict[str, int] = {}
+    for event in rejected:
+        reason = _safe_str(event.get("pacing_reject_reason") or "unknown")
+        rejected_by_reason[reason] = int(rejected_by_reason.get(reason, 0)) + 1
+
+    accepted = [_safe_dict(event) for event in _safe_list(accepted_events)]
+    accepted_turns = [
+        int(event.get("turn") or 0)
+        for event in accepted
+        if int(event.get("turn") or 0)
+    ]
+    rejected_turns = [
+        int(event.get("turn") or 0)
+        for event in rejected
+        if int(event.get("turn") or 0)
+    ]
+
+    return {
+        "format_version": "pressure_pacing_summary_v1",
+        "ok": True,
+        "accepted_pressure_event_count": len(_safe_list(accepted_events)),
+        "rejected_pressure_event_count": len(rejected),
+        "rejected_world_signal_count": len(_safe_list(rejected_world_signals)),
+        "rejected_by_reason": dict(sorted(rejected_by_reason.items())),
+        "accepted_turns": accepted_turns[:20],
+        "rejected_turns": rejected_turns[:20],
+        "rejected_events": rejected,
+        "rejected_world_signals": _safe_list(rejected_world_signals),
+    }
+
+
 def _build_authoritative_final_lifecycle_summary(
     *,
     args: argparse.Namespace,
@@ -5892,6 +6202,9 @@ def _build_authoritative_final_lifecycle_summary(
     story_arc_lifecycle_summary: Optional[Dict[str, Any]] = None,
     followup_arc_progression_summary: Optional[Dict[str, Any]] = None,
     faction_pressure_summary: Optional[Dict[str, Any]] = None,
+    followup_arc_resolution_summary: Optional[Dict[str, Any]] = None,
+    pressure_pacing_summary: Optional[Dict[str, Any]] = None,
+    world_signal_summary: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """Final authoritative summary override.
 
@@ -5947,6 +6260,14 @@ def _build_authoritative_final_lifecycle_summary(
         or len(transcript)
         or 0
     )
+
+    if followup_arc_resolution_summary:
+        summary["followup_arc_resolution_summary"] = _safe_dict(followup_arc_resolution_summary)
+    if pressure_pacing_summary:
+        summary["pressure_pacing_summary"] = _safe_dict(pressure_pacing_summary)
+    if world_signal_summary:
+        summary["world_signal_summary"] = _safe_dict(world_signal_summary)
+
     if requested_turns_for_readiness >= 100:
         summary["hundred_turn_readiness_summary"] = _build_100_turn_readiness_summary(
             summary=summary,
@@ -5958,6 +6279,9 @@ def _build_authoritative_final_lifecycle_summary(
             ),
             followup_arc_progression_summary=_safe_dict(summary.get("followup_arc_progression_summary")),
             faction_pressure_summary=_safe_dict(summary.get("faction_pressure_summary")),
+            followup_arc_resolution_summary=_safe_dict(summary.get("followup_arc_resolution_summary")),
+            pressure_pacing_summary=_safe_dict(summary.get("pressure_pacing_summary")),
+            world_signal_summary=_safe_dict(summary.get("world_signal_summary")),
         )
     _sync_hundred_turn_validation_classification(summary)
     campaign_commit_summary = _safe_dict(runtime_state.get("campaign_state_commit_summary"))
@@ -6086,6 +6410,64 @@ def _build_authoritative_final_lifecycle_summary(
     summary["quality_gate_summary"] = _final_lifecycle_quality_gates(summary)
     summary["player_agent_latency_summary"] = _build_player_agent_latency_summary(transcript)
     summary["ok"] = bool(_safe_dict(summary["quality_gate_summary"]).get("ok"))
+    return summary
+
+
+def _rebuild_final_100_turn_evaluation(
+    *,
+    args: argparse.Namespace,
+    summary: Dict[str, Any],
+    transcript: List[Dict[str, Any]],
+) -> Dict[str, Any]:
+    full_transcript_for_eval = [
+        dict(_safe_dict(row))
+        for row in _safe_list(transcript)
+    ]
+
+    summary["hundred_turn_evaluation"] = _build_100_turn_evaluation_summary(
+        turns_executed=int(summary.get("turns_executed") or len(full_transcript_for_eval)),
+        requested_turns=int(
+            summary.get("requested_turns")
+            or getattr(args, "turns", 0)
+            or len(full_transcript_for_eval)
+        ),
+        runtime_errors=_safe_list(summary.get("runtime_errors")),
+        warnings=_safe_list(summary.get("warnings")),
+        transcript=full_transcript_for_eval,
+        performance_summary=_safe_dict(summary.get("performance_seconds_summary")),
+        narration_grounding_summary=_safe_dict(summary.get("narration_grounding_summary")),
+        progress_quality_summary=_safe_dict(summary.get("canonical_progress_quality")),
+        checkpoint_summary=_safe_dict(summary.get("checkpoint_summary") or summary.get("checkpoint_validation")),
+        loop_detection_summary=_safe_dict(summary.get("loop_detection_summary") or summary.get("loop_detection")),
+        mechanics_coverage_summary=_safe_dict(summary.get("mechanics_coverage_summary")),
+        story_arc_lifecycle_summary=_safe_dict(summary.get("story_arc_lifecycle_summary")),
+        story_arc_aftermath_summary=_safe_dict(summary.get("story_arc_aftermath_summary")),
+        faction_reputation_summary=_safe_dict(summary.get("faction_reputation_summary")),
+        followup_arc_progression_summary=_safe_dict(summary.get("followup_arc_progression_summary")),
+        faction_pressure_summary=_safe_dict(summary.get("faction_pressure_summary")),
+        followup_arc_resolution_summary=_safe_dict(summary.get("followup_arc_resolution_summary")),
+        pressure_pacing_summary=_safe_dict(summary.get("pressure_pacing_summary")),
+        world_signal_summary=_safe_dict(summary.get("world_signal_summary")),
+    )
+
+    summary["ok"] = bool(_safe_dict(summary.get("hundred_turn_evaluation")).get("ok"))
+
+    gates = _safe_dict(_safe_dict(summary.get("hundred_turn_evaluation")).get("gates"))
+
+    for gate_name, summary_key, expected_key in (
+        ("followup_arc_resolution_present", "followup_arc_resolution_summary", "resolved_count"),
+        ("pressure_pacing_active", "pressure_pacing_summary", "accepted_pressure_event_count"),
+        ("world_signal_summary_present", "world_signal_summary", "world_signal_count"),
+    ):
+        gate = _safe_dict(gates.get(gate_name))
+        gate_value = _safe_dict(gate.get("value"))
+        source_summary = _safe_dict(summary.get(summary_key))
+
+        if source_summary and gate_value.get(expected_key) is None:
+            summary.setdefault("warnings", []).append(
+                f"final_evaluation_gate_missing_source_value:{gate_name}:{summary_key}.{expected_key}"
+            )
+
     return summary
 
 
@@ -8212,6 +8594,8 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
 
     story_arc_aftermath_applied_keys: set[str] = set()
     story_arc_aftermath_events: List[Dict[str, Any]] = []
+    story_arc_aftermath_world_signals: List[Dict[str, Any]] = []
+    story_arc_aftermath_followup_hooks: List[Dict[str, Any]] = []
     world_signal_events: List[Dict[str, Any]] = []
     npc_memory_events: List[Dict[str, Any]] = []
     followup_hook_events: List[Dict[str, Any]] = []
@@ -8222,6 +8606,17 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
 
     faction_pressure_last_emitted_turn_by_rule: Dict[str, int] = {}
     faction_pressure_events: List[Dict[str, Any]] = []
+
+    followup_arc_resolution_applied_keys: set[str] = set()
+    followup_arc_resolution_events: List[Dict[str, Any]] = []
+    followup_arc_resolution_world_signals: List[Dict[str, Any]] = []
+    followup_arc_resolution_escalation_hooks: List[Dict[str, Any]] = []
+
+    escalation_arc_seed_events: List[Dict[str, Any]] = []
+
+    pressure_pacing_emitted_key_turns: Dict[str, int] = {}
+    pressure_pacing_rejected_events: List[Dict[str, Any]] = []
+    pressure_pacing_rejected_world_signals: List[Dict[str, Any]] = []
 
     faction_reputation_state: Dict[str, Any] = {
         "faction:rusty_flagon_locals": {
@@ -9749,9 +10144,15 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
             aftermath_events = _safe_list(aftermath.get("aftermath_events"))
             if aftermath_events:
                 story_arc_aftermath_events.extend(aftermath_events)
-                world_signal_events.extend(_safe_list(aftermath.get("world_signals")))
+                pure_aftermath_world_signals = _safe_list(aftermath.get("world_signals"))
+                pure_aftermath_followup_hooks = _safe_list(aftermath.get("followup_hooks"))
+
+                story_arc_aftermath_world_signals.extend(pure_aftermath_world_signals)
+                story_arc_aftermath_followup_hooks.extend(pure_aftermath_followup_hooks)
+
+                world_signal_events.extend(pure_aftermath_world_signals)
                 npc_memory_events.extend(_safe_list(aftermath.get("npc_memory_events")))
-                followup_hook_events.extend(_safe_list(aftermath.get("followup_hooks")))
+                followup_hook_events.extend(pure_aftermath_followup_hooks)
 
                 record["story_arc_aftermath"] = aftermath
                 record["story_arc_aftermath_events"] = aftermath_events
@@ -9823,8 +10224,32 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
                 **_safe_dict(mechanics_runtime_state.get("flags")),
                 **_safe_dict(_safe_dict(record.get("state_delta")).get("story_arc_aftermath_flags")),
                 **_safe_dict(_safe_dict(record.get("state_delta")).get("followup_arc_progression_flags")),
+                **_safe_dict(_safe_dict(record.get("state_delta")).get("faction_pressure_flags")),
             },
             "faction_reputation": faction_reputation_state,
+        }
+
+        record["followup_progression_probe"] = {
+            "turn_index": int(record.get("turn_index") or turn_index),
+            "active_followup_arcs": [
+                {
+                    "arc_id": _safe_dict(arc).get("arc_id"),
+                    "status": _safe_dict(arc).get("status"),
+                    "current_stage": _safe_dict(arc).get("current_stage"),
+                    "started_turn": _safe_dict(arc).get("started_turn"),
+                    "last_progress_turn": _safe_dict(arc).get("last_progress_turn"),
+                    "progress_count": _safe_dict(arc).get("progress_count"),
+                    "source_hook_id": _safe_dict(arc).get("source_hook_id"),
+                    "seeded_followup": _safe_dict(arc).get("seeded_followup"),
+                }
+                for arc in _safe_dict(story_arc_runtime_state).values()
+                if _safe_dict(arc).get("seeded_followup")
+                and _safe_dict(arc).get("status") not in {"completed", "failed", "abandoned"}
+            ],
+            "faction_tiers": {
+                faction_id: _safe_dict(data).get("tier")
+                for faction_id, data in _safe_dict(faction_reputation_state).items()
+            },
         }
 
         followup_progression = progress_followup_arcs(
@@ -9878,6 +10303,123 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
                 record["meaningful_progress"] = True
                 record["progress_category"] = "followup_arc_progression"
 
+        followup_resolution_state = {
+            "flags": {
+                **_safe_dict(mechanics_runtime_state.get("flags")),
+                **_safe_dict(_safe_dict(record.get("state_delta")).get("story_arc_aftermath_flags")),
+                **_safe_dict(_safe_dict(record.get("state_delta")).get("followup_arc_progression_flags")),
+                **_safe_dict(_safe_dict(record.get("state_delta")).get("faction_pressure_flags")),
+            },
+            "faction_reputation": faction_reputation_state,
+        }
+
+        followup_resolution = resolve_followup_arcs(
+            story_arcs=story_arc_runtime_state,
+            state=followup_resolution_state,
+            turn_index=int(record.get("turn_index") or turn_index),
+            rules=tavern_followup_resolution_rules(),
+            already_resolved_keys=followup_arc_resolution_applied_keys,
+        )
+
+        if followup_resolution.get("ok"):
+            followup_arc_resolution_applied_keys = set(
+                _safe_list(followup_resolution.get("applied_keys"))
+            )
+
+            resolution_events = _safe_list(followup_resolution.get("events"))
+            if resolution_events:
+                story_arc_runtime_state = _safe_dict(followup_resolution.get("story_arcs")) or story_arc_runtime_state
+                followup_arc_resolution_events.extend(resolution_events)
+                followup_arc_resolution_world_signals.extend(
+                    _safe_list(followup_resolution.get("world_signals"))
+                )
+                followup_arc_resolution_escalation_hooks.extend(
+                    _safe_list(followup_resolution.get("escalation_hooks"))
+                )
+
+                world_signal_events.extend(_safe_list(followup_resolution.get("world_signals")))
+
+                record["followup_arc_resolution"] = followup_resolution
+                record["followup_arc_resolution_events"] = resolution_events
+                record["world_signals"] = _safe_list(record.get("world_signals")) + _safe_list(
+                    followup_resolution.get("world_signals")
+                )
+
+                record["state_delta"] = {
+                    **_safe_dict(record.get("state_delta")),
+                    "story_arcs": story_arc_runtime_state,
+                    "followup_arc_resolution_flags": _safe_dict(followup_resolution.get("flags")),
+                    "faction_deltas": _safe_list(_safe_dict(record.get("state_delta")).get("faction_deltas"))
+                    + _safe_list(followup_resolution.get("faction_deltas")),
+                    "followup_resolution_faction_deltas": _safe_list(followup_resolution.get("faction_deltas")),
+                    "xp_delta": int(_safe_dict(record.get("state_delta")).get("xp_delta") or 0)
+                    + int(followup_resolution.get("xp_delta") or 0),
+                }
+
+                record["result"] = {
+                    **_safe_dict(record.get("result")),
+                    "followup_arc_resolution_events": resolution_events,
+                    "world_signals": _safe_list(record.get("world_signals")),
+                    "faction_deltas": _safe_list(followup_resolution.get("faction_deltas")),
+                    "escalation_hooks": _safe_list(followup_resolution.get("escalation_hooks")),
+                    "xp_delta": followup_resolution.get("xp_delta"),
+                    "meaningful_progress": True,
+                    "progress_category": "followup_arc_resolution",
+                }
+
+                record["meaningful_progress"] = True
+                record["progress_category"] = "followup_arc_resolution"
+
+        resolution_faction_update = apply_faction_deltas(
+            faction_state=faction_reputation_state,
+            faction_deltas=_safe_list(_safe_dict(record.get("state_delta")).get("followup_resolution_faction_deltas")),
+            turn_index=int(record.get("turn_index") or turn_index),
+        )
+
+        if resolution_faction_update.get("ok"):
+            faction_reputation_state = _safe_dict(resolution_faction_update.get("factions"))
+            new_resolution_faction_events = _safe_list(resolution_faction_update.get("events"))
+            if new_resolution_faction_events:
+                faction_reputation_events.extend(new_resolution_faction_events)
+                record["faction_reputation_events"] = _safe_list(record.get("faction_reputation_events")) + new_resolution_faction_events
+                record["state_delta"] = {
+                    **_safe_dict(record.get("state_delta")),
+                    "faction_reputation": faction_reputation_state,
+                }
+                record["result"] = {
+                    **_safe_dict(record.get("result")),
+                    "faction_reputation_events": _safe_list(record.get("faction_reputation_events")),
+                }
+
+        escalation_seed = seed_escalation_arcs(
+            existing_arcs=story_arc_runtime_state,
+            escalation_hooks=_safe_list(followup_arc_resolution_escalation_hooks),
+            turn_index=int(record.get("turn_index") or turn_index),
+            max_active_escalations=2,
+        )
+
+        if escalation_seed.get("ok"):
+            story_arc_runtime_state = _safe_dict(escalation_seed.get("story_arcs")) or story_arc_runtime_state
+            seeded_escalations = _safe_list(escalation_seed.get("seeded_events"))
+
+            if seeded_escalations:
+                escalation_arc_seed_events.extend(seeded_escalations)
+
+                record["escalation_arc_seed_events"] = seeded_escalations
+                record["state_delta"] = {
+                    **_safe_dict(record.get("state_delta")),
+                    "story_arcs": story_arc_runtime_state,
+                }
+                record["result"] = {
+                    **_safe_dict(record.get("result")),
+                    "escalation_arc_seed_events": seeded_escalations,
+                    "meaningful_progress": True,
+                    "progress_category": "escalation_branching",
+                }
+
+                record["meaningful_progress"] = True
+                record["progress_category"] = "escalation_branching"
+
         pressure = emit_faction_pressure_events(
             faction_state=faction_reputation_state,
             turn_index=int(record.get("turn_index") or turn_index),
@@ -9892,25 +10434,54 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
             }
 
             pressure_events = _safe_list(pressure.get("events"))
-            if pressure_events:
-                faction_pressure_events.extend(pressure_events)
-                world_signal_events.extend(_safe_list(pressure.get("world_signals")))
+            pressure_world_signals = _safe_list(pressure.get("world_signals"))
 
-                record["faction_pressure_events"] = pressure_events
-                record["world_signals"] = _safe_list(record.get("world_signals")) + _safe_list(
-                    pressure.get("world_signals")
-                )
+            paced_pressure = filter_pressure_events_for_pacing(
+                pressure_events=pressure_events,
+                world_signals=pressure_world_signals,
+                turn_index=int(record.get("turn_index") or turn_index),
+                emitted_key_turns=pressure_pacing_emitted_key_turns,
+                min_gap_turns=12,
+                max_events_per_turn=1,
+            )
 
-                record["state_delta"] = {
-                    **_safe_dict(record.get("state_delta")),
-                    "faction_pressure_flags": _safe_dict(pressure.get("flags")),
+            if paced_pressure.get("ok"):
+                pressure_pacing_emitted_key_turns = {
+                    str(k): int(v or 0)
+                    for k, v in _safe_dict(paced_pressure.get("emitted_key_turns")).items()
                 }
 
-                record["result"] = {
-                    **_safe_dict(record.get("result")),
-                    "faction_pressure_events": pressure_events,
-                    "world_signals": _safe_list(record.get("world_signals")),
-                }
+                accepted_pressure_events = _safe_list(paced_pressure.get("accepted_events"))
+                accepted_pressure_signals = _safe_list(paced_pressure.get("accepted_world_signals"))
+                rejected_pressure_events = _safe_list(paced_pressure.get("rejected_events"))
+                rejected_pressure_signals = _safe_list(paced_pressure.get("rejected_world_signals"))
+
+                pressure_pacing_rejected_events.extend(rejected_pressure_events)
+                pressure_pacing_rejected_world_signals.extend(rejected_pressure_signals)
+
+                record["faction_pressure_pacing"] = paced_pressure
+
+                if accepted_pressure_events:
+                    faction_pressure_events.extend(accepted_pressure_events)
+                    world_signal_events.extend(accepted_pressure_signals)
+
+                    record["faction_pressure_events"] = accepted_pressure_events
+                    record["world_signals"] = _safe_list(record.get("world_signals")) + accepted_pressure_signals
+
+                    record["state_delta"] = {
+                        **_safe_dict(record.get("state_delta")),
+                        "faction_pressure_flags": _safe_dict(pressure.get("flags")),
+                    }
+
+                    record["result"] = {
+                        **_safe_dict(record.get("result")),
+                        "faction_pressure_events": accepted_pressure_events,
+                        "faction_pressure_pacing": {
+                            "accepted_count": paced_pressure.get("accepted_count"),
+                            "rejected_count": paced_pressure.get("rejected_count"),
+                        },
+                        "world_signals": _safe_list(record.get("world_signals")),
+                    }
 
         else:
             mechanics_runtime_state["current_location"] = _current_row_location(
@@ -10651,9 +11222,9 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
 
     summary["story_arc_aftermath_summary"] = _build_story_arc_aftermath_summary(
         aftermath_events=story_arc_aftermath_events,
-        world_signals=world_signal_events,
+        world_signals=story_arc_aftermath_world_signals,
         npc_memory_events=npc_memory_events,
-        followup_hooks=followup_hook_events,
+        followup_hooks=story_arc_aftermath_followup_hooks,
         faction_events=faction_reputation_events,
         seeded_events=followup_arc_seed_events,
     )
@@ -10668,6 +11239,8 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
         story_arcs=story_arc_runtime_state,
     )
 
+    summary["world_signal_summary"] = _build_world_signal_summary(world_signal_events)
+
     summary["faction_pressure_summary"] = _build_faction_pressure_summary(
         pressure_events=faction_pressure_events,
         world_signals=[
@@ -10677,10 +11250,24 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
         ],
     )
 
+    summary["followup_arc_resolution_summary"] = _build_followup_arc_resolution_summary(
+        resolution_events=followup_arc_resolution_events,
+        resolution_world_signals=followup_arc_resolution_world_signals,
+        escalation_hooks=followup_arc_resolution_escalation_hooks,
+        escalation_seed_events=escalation_arc_seed_events,
+        story_arcs=story_arc_runtime_state,
+    )
+
+    summary["pressure_pacing_summary"] = _build_pressure_pacing_summary(
+        accepted_events=faction_pressure_events,
+        rejected_events=pressure_pacing_rejected_events,
+        rejected_world_signals=pressure_pacing_rejected_world_signals,
+    )
+
     # Rebuild story_arc_lifecycle_summary after follow-up progression changes story_arc_runtime_state
     summary["story_arc_lifecycle_summary"] = _build_story_arc_lifecycle_summary(
         story_arcs=story_arc_runtime_state,
-        events=story_arc_resolution_events,
+        events=story_arc_resolution_events + followup_arc_resolution_events + escalation_arc_seed_events,
     )
 
     summary = _build_authoritative_final_lifecycle_summary(
@@ -10695,6 +11282,14 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
         story_arc_lifecycle_summary=_safe_dict(summary.get("story_arc_lifecycle_summary")),
         followup_arc_progression_summary=_safe_dict(summary.get("followup_arc_progression_summary")),
         faction_pressure_summary=_safe_dict(summary.get("faction_pressure_summary")),
+        followup_arc_resolution_summary=_safe_dict(summary.get("followup_arc_resolution_summary")),
+        pressure_pacing_summary=_safe_dict(summary.get("pressure_pacing_summary")),
+        world_signal_summary=_safe_dict(summary.get("world_signal_summary")),
+    )
+    summary = _rebuild_final_100_turn_evaluation(
+        args=args,
+        summary=summary,
+        transcript=transcript,
     )
     summary["checkpoint_validation_summary"] = {
         "ok": all(bool(row.get("ok")) for row in checkpoint_validation_rows),
@@ -10795,6 +11390,9 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
         faction_reputation_summary=_safe_dict(summary.get("faction_reputation_summary")),
         followup_arc_progression_summary=_safe_dict(summary.get("followup_arc_progression_summary")),
         faction_pressure_summary=_safe_dict(summary.get("faction_pressure_summary")),
+        followup_arc_resolution_summary=_safe_dict(summary.get("followup_arc_resolution_summary")),
+        pressure_pacing_summary=_safe_dict(summary.get("pressure_pacing_summary")),
+        world_signal_summary=_safe_dict(summary.get("world_signal_summary")),
     )
 
     summary["hundred_turn_evaluation"] = _build_100_turn_evaluation_summary(
@@ -10814,6 +11412,9 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
         faction_reputation_summary=_safe_dict(summary.get("faction_reputation_summary")),
         followup_arc_progression_summary=_safe_dict(summary.get("followup_arc_progression_summary")),
         faction_pressure_summary=_safe_dict(summary.get("faction_pressure_summary")),
+        followup_arc_resolution_summary=_safe_dict(summary.get("followup_arc_resolution_summary")),
+        pressure_pacing_summary=_safe_dict(summary.get("pressure_pacing_summary")),
+        world_signal_summary=_safe_dict(summary.get("world_signal_summary")),
     )
 
     summary["ok"] = bool(_safe_dict(summary.get("hundred_turn_evaluation")).get("ok"))
@@ -11070,6 +11671,27 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
                 artifact_manifest,
                 "hundred-turn-readiness-summary.json",
                 summary.get("hundred_turn_readiness_summary", {}),
+            )
+
+            _zip_writestr_json(
+                zip_handle,
+                artifact_manifest,
+                "world-signal-summary.json",
+                summary.get("world_signal_summary", {}),
+            )
+
+            _zip_writestr_json(
+                zip_handle,
+                artifact_manifest,
+                "followup-arc-resolution-summary.json",
+                summary.get("followup_arc_resolution_summary", {}),
+            )
+
+            _zip_writestr_json(
+                zip_handle,
+                artifact_manifest,
+                "pressure-pacing-summary.json",
+                summary.get("pressure_pacing_summary", {}),
             )
 
             # Write HTML report

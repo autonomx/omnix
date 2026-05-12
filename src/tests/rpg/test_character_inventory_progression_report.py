@@ -1,4 +1,6 @@
-from tests.rpg.autoplay_llm_campaign import _build_character_inventory_progression_summary
+from tests.rpg.autoplay_llm_campaign import (
+    _build_character_inventory_progression_summary,
+)
 
 
 def test_character_inventory_progression_applies_currency_inventory_and_xp():
