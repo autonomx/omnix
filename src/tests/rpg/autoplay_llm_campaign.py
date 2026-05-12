@@ -219,6 +219,32 @@ def _slim_transcript_row(row: Dict[str, Any], max_row_bytes: int = 50000) -> Dic
             "story_arc_events": _safe_dict(row.get("story_arc_lifecycle")).get("story_arc_events"),
         }
 
+    for key in (
+        "story_arc_aftermath_events",
+        "world_signals",
+        "npc_memory_events",
+        "followup_hooks",
+    ):
+        if row.get(key):
+            slim_row[key] = row.get(key)
+
+    if row.get("story_arc_aftermath"):
+        aftermath = _safe_dict(row.get("story_arc_aftermath"))
+        slim_row["story_arc_aftermath"] = {
+            "ok": aftermath.get("ok"),
+            "newly_applied_keys": aftermath.get("newly_applied_keys"),
+            "aftermath_events": aftermath.get("aftermath_events"),
+            "world_signals": aftermath.get("world_signals"),
+            "faction_deltas": aftermath.get("faction_deltas"),
+            "followup_hooks": aftermath.get("followup_hooks"),
+        }
+
+    if row.get("faction_reputation_events"):
+        slim_row["faction_reputation_events"] = row.get("faction_reputation_events")
+
+    if row.get("followup_arc_seed_events"):
+        slim_row["followup_arc_seed_events"] = row.get("followup_arc_seed_events")
+
     slim_row["_artifact_slimmed"] = True
     return slim_row
 
@@ -1056,6 +1082,13 @@ from tests.rpg.autoplay.story_hooks import (
 from tests.rpg.autoplay.story_variety import compute_story_variety_metrics
 from app.rpg.story.story_arc_lifecycle import apply_story_arc_lifecycle
 from app.rpg.story.tavern_story_arc_rules import tavern_story_arc_rules
+from app.rpg.story.story_arc_aftermath import apply_story_arc_aftermath
+from app.rpg.story.tavern_story_aftermath_rules import tavern_story_aftermath_rules
+from app.rpg.story.faction_reputation import (
+    apply_faction_deltas,
+    build_faction_reputation_summary,
+)
+from app.rpg.story.followup_arc_seeding import seed_followup_arcs
 from tests.rpg.autoplay.strategy_profiles import (
     action_diversity_metrics,
     build_strategy_guidance,
@@ -2743,6 +2776,8 @@ def _build_100_turn_evaluation_summary(
     loop_detection_summary: Dict[str, Any],
     mechanics_coverage_summary: Optional[Dict[str, Any]] = None,
     story_arc_lifecycle_summary: Optional[Dict[str, Any]] = None,
+    story_arc_aftermath_summary: Optional[Dict[str, Any]] = None,
+    faction_reputation_summary: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     grounding = _safe_dict(narration_grounding_summary)
     progress = _safe_dict(progress_quality_summary)
@@ -2754,6 +2789,8 @@ def _build_100_turn_evaluation_summary(
         mechanics.get("real_required_ok", mechanics.get("required_ok", True))
     )
     story_arcs = _safe_dict(story_arc_lifecycle_summary)
+    aftermath = _safe_dict(story_arc_aftermath_summary)
+    factions = _safe_dict(faction_reputation_summary)
     selected_grounding_health = _build_selected_output_grounding_health(
         grounding,
         requested_turns=requested_turns,
@@ -2893,6 +2930,31 @@ def _build_100_turn_evaluation_summary(
             },
             "expected": "at least one completed or failed story arc in 100-turn run",
             "message": "The 100-turn campaign should demonstrate deterministic story arc closure.",
+        },
+        "story_arc_aftermath_present": {
+            "ok": int(aftermath.get("aftermath_event_count") or 0) >= 1,
+            "value": {
+                "aftermath_event_count": aftermath.get("aftermath_event_count"),
+                "world_signal_count": aftermath.get("world_signal_count"),
+                "npc_memory_event_count": aftermath.get("npc_memory_event_count"),
+                "followup_hook_count": aftermath.get("followup_hook_count"),
+                "seeded_followup_arc_count": aftermath.get("seeded_followup_arc_count"),
+            },
+            "expected": "at least one bounded aftermath event from completed or failed arcs",
+            "message": "Completed arcs should create deterministic aftermath.",
+        },
+        "faction_reputation_changed": {
+            "ok": int(factions.get("faction_count") or 0) >= 1
+            and any(
+                int(_safe_dict(row).get("history_count") or 0) > 0
+                for row in _safe_list(factions.get("factions"))
+            ),
+            "value": {
+                "faction_count": factions.get("faction_count"),
+                "factions": factions.get("factions"),
+            },
+            "expected": "at least one faction reputation delta",
+            "message": "Arc aftermath should produce bounded faction reputation consequences.",
         },
     }
 
@@ -3156,6 +3218,12 @@ def _build_mechanics_coverage_summary(
         item = mechanics.get(name)
         if not item:
             return
+
+        dedupe_key = f"{turn_index}:{name}"
+        if dedupe_key in marked_this_turn:
+            return
+        marked_this_turn.add(dedupe_key)
+
         item["count"] = int(item.get("count") or 0) + 1
         if turn_index not in item["turns"]:
             item["turns"].append(turn_index)
@@ -3174,6 +3242,8 @@ def _build_mechanics_coverage_summary(
 
     available_mechanic_counts: Dict[str, int] = {}
     available_mechanic_example_turns: Dict[str, List[int]] = {}
+
+    marked_this_turn: set[str] = set()
 
     for index, raw_row in enumerate(_safe_list(transcript), start=1):
         row = _safe_dict(raw_row)
@@ -5537,6 +5607,33 @@ def _build_story_arc_lifecycle_summary(
     }
 
 
+def _build_story_arc_aftermath_summary(
+    *,
+    aftermath_events: List[Dict[str, Any]],
+    world_signals: List[Dict[str, Any]],
+    npc_memory_events: List[Dict[str, Any]],
+    followup_hooks: List[Dict[str, Any]],
+    faction_events: List[Dict[str, Any]],
+    seeded_events: List[Dict[str, Any]],
+) -> Dict[str, Any]:
+    return {
+        "format_version": "story_arc_aftermath_summary_v1",
+        "ok": bool(aftermath_events or world_signals or faction_events or seeded_events),
+        "aftermath_event_count": len(_safe_list(aftermath_events)),
+        "world_signal_count": len(_safe_list(world_signals)),
+        "npc_memory_event_count": len(_safe_list(npc_memory_events)),
+        "followup_hook_count": len(_safe_list(followup_hooks)),
+        "faction_event_count": len(_safe_list(faction_events)),
+        "seeded_followup_arc_count": len(_safe_list(seeded_events)),
+        "aftermath_events": _safe_list(aftermath_events),
+        "world_signals": _safe_list(world_signals),
+        "npc_memory_events": _safe_list(npc_memory_events),
+        "followup_hooks": _safe_list(followup_hooks),
+        "faction_events": _safe_list(faction_events),
+        "seeded_events": _safe_list(seeded_events),
+    }
+
+
 def _build_authoritative_final_lifecycle_summary(
     *,
     args: argparse.Namespace,
@@ -7864,6 +7961,30 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
     story_arc_runtime_state: Dict[str, Any] = _default_tavern_story_arcs()
     story_arc_resolution_events: List[Dict[str, Any]] = []
 
+    story_arc_aftermath_applied_keys: set[str] = set()
+    story_arc_aftermath_events: List[Dict[str, Any]] = []
+    world_signal_events: List[Dict[str, Any]] = []
+    npc_memory_events: List[Dict[str, Any]] = []
+    followup_hook_events: List[Dict[str, Any]] = []
+
+    faction_reputation_state: Dict[str, Any] = {
+        "faction:rusty_flagon_locals": {
+            "faction_id": "faction:rusty_flagon_locals",
+            "reputation": 0,
+            "tier": "neutral",
+            "history": [],
+        },
+        "faction:sable_chain": {
+            "faction_id": "faction:sable_chain",
+            "reputation": 0,
+            "tier": "neutral",
+            "history": [],
+        },
+    }
+    faction_reputation_events: List[Dict[str, Any]] = []
+
+    followup_arc_seed_events: List[Dict[str, Any]] = []
+
     for turn_index in range(1, int(args.turns) + 1):
         # Initialize player agent selection variables
         player_agent_selection_source = "unknown"
@@ -9359,6 +9480,87 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
                     "meaningful_progress": True,
                     "progress_category": "story_arc_resolution",
                 }
+
+        aftermath = apply_story_arc_aftermath(
+            arc_events=arc_events,
+            already_applied_keys=story_arc_aftermath_applied_keys,
+            rules=tavern_story_aftermath_rules(),
+        )
+
+        if aftermath.get("ok"):
+            story_arc_aftermath_applied_keys = set(_safe_list(aftermath.get("applied_keys")))
+
+            aftermath_events = _safe_list(aftermath.get("aftermath_events"))
+            if aftermath_events:
+                story_arc_aftermath_events.extend(aftermath_events)
+                world_signal_events.extend(_safe_list(aftermath.get("world_signals")))
+                npc_memory_events.extend(_safe_list(aftermath.get("npc_memory_events")))
+                followup_hook_events.extend(_safe_list(aftermath.get("followup_hooks")))
+
+                record["story_arc_aftermath"] = aftermath
+                record["story_arc_aftermath_events"] = aftermath_events
+                record["world_signals"] = _safe_list(record.get("world_signals")) + _safe_list(aftermath.get("world_signals"))
+                record["npc_memory_events"] = _safe_list(record.get("npc_memory_events")) + _safe_list(aftermath.get("npc_memory_events"))
+                record["followup_hooks"] = _safe_list(record.get("followup_hooks")) + _safe_list(aftermath.get("followup_hooks"))
+
+                record["state_delta"] = {
+                    **_safe_dict(record.get("state_delta")),
+                    "story_arc_aftermath_flags": _safe_dict(aftermath.get("flags")),
+                    "faction_deltas": _safe_list(aftermath.get("faction_deltas")),
+                    "followup_hooks": _safe_list(aftermath.get("followup_hooks")),
+                }
+
+                record["result"] = {
+                    **_safe_dict(record.get("result")),
+                    "story_arc_aftermath_events": aftermath_events,
+                    "world_signals": _safe_list(aftermath.get("world_signals")),
+                    "npc_memory_events": _safe_list(aftermath.get("npc_memory_events")),
+                    "faction_deltas": _safe_list(aftermath.get("faction_deltas")),
+                    "followup_hooks": _safe_list(aftermath.get("followup_hooks")),
+                }
+
+        faction_update = apply_faction_deltas(
+            faction_state=faction_reputation_state,
+            faction_deltas=_safe_list(_safe_dict(record.get("state_delta")).get("faction_deltas")),
+            turn_index=int(record.get("turn_index") or turn_index),
+        )
+
+        if faction_update.get("ok"):
+            faction_reputation_state = _safe_dict(faction_update.get("factions"))
+            new_faction_events = _safe_list(faction_update.get("events"))
+            if new_faction_events:
+                faction_reputation_events.extend(new_faction_events)
+                record["faction_reputation_events"] = new_faction_events
+                record["state_delta"] = {
+                    **_safe_dict(record.get("state_delta")),
+                    "faction_reputation": faction_reputation_state,
+                }
+                record["result"] = {
+                    **_safe_dict(record.get("result")),
+                    "faction_reputation_events": new_faction_events,
+                }
+
+        followup_seed = seed_followup_arcs(
+            existing_arcs=story_arc_runtime_state,
+            followup_hooks=_safe_list(record.get("followup_hooks")),
+            turn_index=int(record.get("turn_index") or turn_index),
+            max_active_arcs=3,
+        )
+
+        if followup_seed.get("ok"):
+            story_arc_runtime_state = _safe_dict(followup_seed.get("story_arcs")) or story_arc_runtime_state
+            seeded_events = _safe_list(followup_seed.get("seeded_events"))
+            if seeded_events:
+                followup_arc_seed_events.extend(seeded_events)
+                record["followup_arc_seed_events"] = seeded_events
+                record["state_delta"] = {
+                    **_safe_dict(record.get("state_delta")),
+                    "story_arcs": story_arc_runtime_state,
+                }
+                record["result"] = {
+                    **_safe_dict(record.get("result")),
+                    "followup_arc_seed_events": seeded_events,
+                }
         else:
             mechanics_runtime_state["current_location"] = _current_row_location(
                 record,
@@ -10096,6 +10298,19 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
         events=story_arc_resolution_events,
     )
 
+    summary["story_arc_aftermath_summary"] = _build_story_arc_aftermath_summary(
+        aftermath_events=story_arc_aftermath_events,
+        world_signals=world_signal_events,
+        npc_memory_events=npc_memory_events,
+        followup_hooks=followup_hook_events,
+        faction_events=faction_reputation_events,
+        seeded_events=followup_arc_seed_events,
+    )
+
+    summary["faction_reputation_summary"] = build_faction_reputation_summary(
+        faction_reputation_state
+    )
+
     summary = _build_authoritative_final_lifecycle_summary(
         args=args,
         summary=summary,
@@ -10201,6 +10416,8 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
         checkpoint_summary=_safe_dict(summary.get("checkpoint_summary") or summary.get("checkpoint_validation")),
         loop_detection_summary=_safe_dict(summary.get("loop_detection_summary") or summary.get("loop_detection")),
         mechanics_coverage_summary=_safe_dict(summary.get("mechanics_coverage_summary")),
+        story_arc_aftermath_summary=_safe_dict(summary.get("story_arc_aftermath_summary")),
+        faction_reputation_summary=_safe_dict(summary.get("faction_reputation_summary")),
     )
 
     summary["hundred_turn_evaluation"] = _build_100_turn_evaluation_summary(
@@ -10216,6 +10433,8 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
         loop_detection_summary=_safe_dict(summary.get("loop_detection_summary") or summary.get("loop_detection")),
         mechanics_coverage_summary=_safe_dict(summary.get("mechanics_coverage_summary")),
         story_arc_lifecycle_summary=_safe_dict(summary.get("story_arc_lifecycle_summary")),
+        story_arc_aftermath_summary=_safe_dict(summary.get("story_arc_aftermath_summary")),
+        faction_reputation_summary=_safe_dict(summary.get("faction_reputation_summary")),
     )
 
     summary["ok"] = bool(_safe_dict(summary.get("hundred_turn_evaluation")).get("ok"))
@@ -10437,6 +10656,20 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
                 artifact_manifest,
                 "story-arc-lifecycle-summary.json",
                 summary.get("story_arc_lifecycle_summary", {}),
+            )
+
+            _zip_writestr_json(
+                zip_handle,
+                artifact_manifest,
+                "story-arc-aftermath-summary.json",
+                summary.get("story_arc_aftermath_summary", {}),
+            )
+
+            _zip_writestr_json(
+                zip_handle,
+                artifact_manifest,
+                "faction-reputation-summary.json",
+                summary.get("faction_reputation_summary", {}),
             )
 
             # Write HTML report
