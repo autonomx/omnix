@@ -1,117 +1,22 @@
-N99.5 — Add N97-N99 Evaluation + Readiness Gates
+N99.6 — Fix Readiness Wiring + Summary OK Includes Readiness
 
 Patch only:
 
 src/tests/rpg/autoplay_llm_campaign.py
 
+Do not touch the runtime loop.
+
 Do not replace _run_autoplay_campaign(...).
 
-Do not move helper functions into the middle of _run_autoplay_campaign(...).
+Do not create run_autoplay_campaign(...).
 
-Do not create or use run_autoplay_campaign(...).
-
-1. Extend _build_100_turn_evaluation_summary(...)
-
-Find:
-
-def _build_100_turn_evaluation_summary(
-
-Add these optional params near the existing summary params:
-
-escalation_arc_progression_summary: Optional[Dict[str, Any]] = None,
-world_state_compression_summary: Optional[Dict[str, Any]] = None,
-
-The tail of the signature should include:
-
-followup_arc_resolution_summary: Optional[Dict[str, Any]] = None,
-pressure_pacing_summary: Optional[Dict[str, Any]] = None,
-world_signal_summary: Optional[Dict[str, Any]] = None,
-escalation_arc_progression_summary: Optional[Dict[str, Any]] = None,
-world_state_compression_summary: Optional[Dict[str, Any]] = None,
-
-Inside the function, find the existing locals:
-
-followup_resolution = _safe_dict(followup_arc_resolution_summary)
-pressure_pacing = _safe_dict(pressure_pacing_summary)
-world_signals = _safe_dict(world_signal_summary)
-
-Immediately after them, add:
-
-escalation_progression = _safe_dict(escalation_arc_progression_summary)
-world_compression = _safe_dict(world_state_compression_summary)
-
-Inside the gates = { ... } dict, add:
-
-"escalation_arc_progression_present": {
-    "ok": int(escalation_progression.get("progressed_count") or 0) >= 1,
-    "value": {
-        "progressed_count": escalation_progression.get("progressed_count"),
-        "progressed_arc_ids": escalation_progression.get("progressed_arc_ids"),
-        "pressure_event_count": escalation_progression.get("pressure_event_count"),
-        "world_signal_count": escalation_progression.get("world_signal_count"),
-    },
-    "expected": "at least one escalation arc progresses",
-    "message": "Seeded escalation arcs should advance deterministically.",
-},
-"world_state_compression_active": {
-    "ok": int(world_compression.get("compression_event_count") or 0) >= 1
-    and bool(_safe_dict(world_compression.get("latest_state_budget")).get("ok", True)),
-    "value": {
-        "compression_event_count": world_compression.get("compression_event_count"),
-        "compressed_state_preview": world_compression.get("compressed_state_preview"),
-        "latest_state_budget": world_compression.get("latest_state_budget"),
-    },
-    "expected": "compression events occur and state budget is respected",
-    "message": "Long-run campaigns need bounded world state and memory compression.",
-},
-2. Extend _rebuild_final_100_turn_evaluation(...)
-
-Find:
-
-summary["hundred_turn_evaluation"] = _build_100_turn_evaluation_summary(
-
-Inside that call, add:
-
-escalation_arc_progression_summary=_safe_dict(summary.get("escalation_arc_progression_summary")),
-world_state_compression_summary=_safe_dict(summary.get("world_state_compression_summary")),
-
-The final tail should look like:
-
-followup_arc_resolution_summary=_safe_dict(summary.get("followup_arc_resolution_summary")),
-pressure_pacing_summary=_safe_dict(summary.get("pressure_pacing_summary")),
-world_signal_summary=_safe_dict(summary.get("world_signal_summary")),
-escalation_arc_progression_summary=_safe_dict(summary.get("escalation_arc_progression_summary")),
-world_state_compression_summary=_safe_dict(summary.get("world_state_compression_summary")),
-
-Then find the diagnostic loop:
-
-for gate_name, summary_key, expected_key in (
-    ("followup_arc_resolution_present", "followup_arc_resolution_summary", "resolved_count"),
-    ("pressure_pacing_active", "pressure_pacing_summary", "accepted_pressure_event_count"),
-    ("world_signal_summary_present", "world_signal_summary", "world_signal_count"),
-):
-
-Replace with:
-
-for gate_name, summary_key, expected_key in (
-    ("followup_arc_resolution_present", "followup_arc_resolution_summary", "resolved_count"),
-    ("pressure_pacing_active", "pressure_pacing_summary", "accepted_pressure_event_count"),
-    ("world_signal_summary_present", "world_signal_summary", "world_signal_count"),
-    ("escalation_arc_progression_present", "escalation_arc_progression_summary", "progressed_count"),
-    ("world_state_compression_active", "world_state_compression_summary", "compression_event_count"),
-):
-3. Extend _build_100_turn_readiness_summary(...)
+1. Fix _build_100_turn_readiness_summary(...) N97-N99 fallback lookup
 
 Find:
 
 def _build_100_turn_readiness_summary(
 
-Add these optional params near the existing summary params:
-
-escalation_arc_progression_summary: Optional[Dict[str, Any]] = None,
-world_state_compression_summary: Optional[Dict[str, Any]] = None,
-
-Inside the function, near the other summary locals, add:
+Inside it, find your N97-N99 locals:
 
 escalation_progression = _safe_dict(escalation_arc_progression_summary)
 if not escalation_progression:
@@ -121,40 +26,31 @@ world_compression = _safe_dict(world_state_compression_summary)
 if not world_compression:
     world_compression = _safe_dict(summary.get("world_state_compression_summary"))
 
-Inside the readiness gates = { ... } dict, add:
+Replace with:
 
-"escalation_arc_progression_present": {
-    "ok": int(escalation_progression.get("progressed_count") or 0) >= 1,
-    "value": {
-        "progressed_count": escalation_progression.get("progressed_count"),
-        "progressed_arc_ids": escalation_progression.get("progressed_arc_ids"),
-    },
-    "expected": "at least one escalation arc progresses",
-    "message": "Escalation branches should not remain only seeded.",
-},
-"world_state_compression_active": {
-    "ok": int(world_compression.get("compression_event_count") or 0) >= 1
-    and bool(_safe_dict(world_compression.get("latest_state_budget")).get("ok", True)),
-    "value": {
-        "compression_event_count": world_compression.get("compression_event_count"),
-        "compressed_state_preview": world_compression.get("compressed_state_preview"),
-        "latest_state_budget": world_compression.get("latest_state_budget"),
-    },
-    "expected": "compression events occur and state budget is respected",
-    "message": "100-turn readiness should prove bounded state management is active.",
-},
-4. Extend _build_authoritative_final_lifecycle_summary(...)
+escalation_progression = _safe_dict(escalation_arc_progression_summary)
+if not escalation_progression:
+    escalation_progression = _safe_dict(
+        _safe_dict(summary).get("escalation_arc_progression_summary")
+    )
+
+world_compression = _safe_dict(world_state_compression_summary)
+if not world_compression:
+    world_compression = _safe_dict(
+        _safe_dict(summary).get("world_state_compression_summary")
+    )
+2. Fix readiness call inside _build_authoritative_final_lifecycle_summary(...)
 
 Find:
 
 def _build_authoritative_final_lifecycle_summary(
 
-Add optional params to the function signature:
+Confirm the signature includes:
 
 escalation_arc_progression_summary: Optional[Dict[str, Any]] = None,
 world_state_compression_summary: Optional[Dict[str, Any]] = None,
 
-The tail should look like:
+If missing, add them near the other summary params:
 
 story_arc_lifecycle_summary: Optional[Dict[str, Any]] = None,
 followup_arc_progression_summary: Optional[Dict[str, Any]] = None,
@@ -165,16 +61,7 @@ world_signal_summary: Optional[Dict[str, Any]] = None,
 escalation_arc_progression_summary: Optional[Dict[str, Any]] = None,
 world_state_compression_summary: Optional[Dict[str, Any]] = None,
 
-Inside _build_authoritative_final_lifecycle_summary(...), find the existing block like:
-
-if followup_arc_resolution_summary:
-    summary["followup_arc_resolution_summary"] = _safe_dict(followup_arc_resolution_summary)
-if pressure_pacing_summary:
-    summary["pressure_pacing_summary"] = _safe_dict(pressure_pacing_summary)
-if world_signal_summary:
-    summary["world_signal_summary"] = _safe_dict(world_signal_summary)
-
-After it, add:
+Inside the function, before any readiness/evaluation rebuild, add:
 
 if escalation_arc_progression_summary:
     summary["escalation_arc_progression_summary"] = _safe_dict(escalation_arc_progression_summary)
@@ -182,22 +69,21 @@ if escalation_arc_progression_summary:
 if world_state_compression_summary:
     summary["world_state_compression_summary"] = _safe_dict(world_state_compression_summary)
 
-Then find the internal call:
+Place this near the existing blocks:
+
+if followup_arc_resolution_summary:
+    summary["followup_arc_resolution_summary"] = _safe_dict(followup_arc_resolution_summary)
+if pressure_pacing_summary:
+    summary["pressure_pacing_summary"] = _safe_dict(pressure_pacing_summary)
+if world_signal_summary:
+    summary["world_signal_summary"] = _safe_dict(world_signal_summary)
+3. Patch the readiness rebuild inside _build_authoritative_final_lifecycle_summary(...)
+
+Still inside _build_authoritative_final_lifecycle_summary(...), find:
 
 summary["hundred_turn_readiness_summary"] = _build_100_turn_readiness_summary(
 
-Add these args:
-
-escalation_arc_progression_summary=_safe_dict(
-    escalation_arc_progression_summary
-    or summary.get("escalation_arc_progression_summary")
-),
-world_state_compression_summary=_safe_dict(
-    world_state_compression_summary
-    or summary.get("world_state_compression_summary")
-),
-
-The final tail of that readiness call should include:
+Make sure the call includes this exact tail:
 
 followup_arc_resolution_summary=_safe_dict(
     followup_arc_resolution_summary
@@ -219,18 +105,26 @@ world_state_compression_summary=_safe_dict(
     world_state_compression_summary
     or summary.get("world_state_compression_summary")
 ),
-5. Pass N97-N99 summaries into authoritative final lifecycle rebuild
 
-Find the call near the end of _run_autoplay_campaign(...):
+If it currently has:
+
+escalation_arc_progression_summary=_safe_dict(escalation_arc_progression_summary),
+world_state_compression_summary=_safe_dict(world_state_compression_summary),
+
+replace those two lines with the fallback version above.
+
+4. Pass N97-N99 summaries into _build_authoritative_final_lifecycle_summary(...)
+
+Near the end of _run_autoplay_campaign(...), find:
 
 summary = _build_authoritative_final_lifecycle_summary(
 
-Add:
+Make sure the call includes:
 
 escalation_arc_progression_summary=_safe_dict(summary.get("escalation_arc_progression_summary")),
 world_state_compression_summary=_safe_dict(summary.get("world_state_compression_summary")),
 
-The tail should look like:
+The final tail should look like:
 
 followup_arc_resolution_summary=_safe_dict(summary.get("followup_arc_resolution_summary")),
 pressure_pacing_summary=_safe_dict(summary.get("pressure_pacing_summary")),
@@ -238,143 +132,125 @@ world_signal_summary=_safe_dict(summary.get("world_signal_summary")),
 escalation_arc_progression_summary=_safe_dict(summary.get("escalation_arc_progression_summary")),
 world_state_compression_summary=_safe_dict(summary.get("world_state_compression_summary")),
 )
-6. Fix all direct evaluation/readiness calls
+5. Add final readiness rebuild after final evaluation rebuild
 
-Run:
+Find this block near the end of _run_autoplay_campaign(...):
 
-Select-String -Path src\tests\rpg\autoplay_llm_campaign.py -Pattern "_build_100_turn_evaluation_summary|_build_100_turn_readiness_summary" -Context 3,45
+summary = _rebuild_final_100_turn_evaluation(
+    args=args,
+    summary=summary,
+    transcript=transcript,
+)
 
-Every _build_100_turn_evaluation_summary(...) call must include:
+Immediately after it, add:
+
+summary["hundred_turn_readiness_summary"] = _build_100_turn_readiness_summary(
+    summary=summary,
+    requested_turns=int(summary.get("requested_turns") or getattr(args, "turns", 0) or 0),
+    turns_executed=int(summary.get("turns_executed") or len(_safe_list(transcript))),
+    runtime_errors=_safe_list(summary.get("runtime_errors")),
+    warnings=_safe_list(summary.get("warnings")),
+    story_arc_lifecycle_summary=_safe_dict(summary.get("story_arc_lifecycle_summary")),
+    story_arc_aftermath_summary=_safe_dict(summary.get("story_arc_aftermath_summary")),
+    faction_reputation_summary=_safe_dict(summary.get("faction_reputation_summary")),
+    followup_arc_progression_summary=_safe_dict(summary.get("followup_arc_progression_summary")),
+    faction_pressure_summary=_safe_dict(summary.get("faction_pressure_summary")),
+    followup_arc_resolution_summary=_safe_dict(summary.get("followup_arc_resolution_summary")),
+    pressure_pacing_summary=_safe_dict(summary.get("pressure_pacing_summary")),
+    world_signal_summary=_safe_dict(summary.get("world_signal_summary")),
+    escalation_arc_progression_summary=_safe_dict(summary.get("escalation_arc_progression_summary")),
+    world_state_compression_summary=_safe_dict(summary.get("world_state_compression_summary")),
+)
+
+summary["ok"] = (
+    bool(_safe_dict(summary.get("hundred_turn_evaluation")).get("ok"))
+    and bool(_safe_dict(summary.get("hundred_turn_readiness_summary")).get("ok"))
+    and not _safe_list(summary.get("runtime_errors"))
+)
+
+If your _build_100_turn_readiness_summary(...) signature does not include one of these older summary args, omit only that unknown arg. Keep these two:
 
 escalation_arc_progression_summary=_safe_dict(summary.get("escalation_arc_progression_summary")),
 world_state_compression_summary=_safe_dict(summary.get("world_state_compression_summary")),
+6. Make _rebuild_final_100_turn_evaluation(...) not set summary.ok true while readiness is false
 
-Every _build_100_turn_readiness_summary(...) call must include:
+Find inside _rebuild_final_100_turn_evaluation(...):
 
-escalation_arc_progression_summary=_safe_dict(summary.get("escalation_arc_progression_summary")),
-world_state_compression_summary=_safe_dict(summary.get("world_state_compression_summary")),
+summary["ok"] = bool(_safe_dict(summary.get("hundred_turn_evaluation")).get("ok"))
 
-If the call has local params, use the local-param fallback style:
+Replace with:
 
-escalation_arc_progression_summary=_safe_dict(
-    escalation_arc_progression_summary
-    or summary.get("escalation_arc_progression_summary")
-),
-world_state_compression_summary=_safe_dict(
-    world_state_compression_summary
-    or summary.get("world_state_compression_summary")
-),
-7. Update final summary integrity validator
+summary["ok"] = (
+    bool(_safe_dict(summary.get("hundred_turn_evaluation")).get("ok"))
+    and bool(_safe_dict(summary.get("hundred_turn_readiness_summary")).get("ok", True))
+    and not _safe_list(summary.get("runtime_errors"))
+)
+
+This prevents:
+
+summary.ok = true
+hundred_turn_readiness_summary.ok = false
+7. Extend final integrity validator
 
 Find:
 
 def _validate_final_autoplay_summary_integrity(
 
-Inside required_summary_keys, add if missing:
+Inside:
+
+if int(requested_turns or 0) >= 100:
+
+after the existing empty-gate checks:
+
+if not evaluation_gates:
+    runtime_errors.append("final_summary_integrity:hundred_turn_evaluation_gates_empty")
+
+if not readiness_gates:
+    runtime_errors.append("final_summary_integrity:hundred_turn_readiness_gates_empty")
+
+add:
+
+if evaluation and evaluation.get("ok") is False:
+    runtime_errors.append("final_summary_integrity:hundred_turn_evaluation_failed")
+
+if readiness and readiness.get("ok") is False:
+    runtime_errors.append("final_summary_integrity:hundred_turn_readiness_failed")
+
+Then confirm required_summary_keys includes:
 
 "escalation_arc_progression_summary",
 "world_state_compression_summary",
 
-Inside required_gate_keys, add if missing:
+and required_gate_keys includes:
 
 "escalation_arc_progression_present",
 "world_state_compression_active",
+8. Add regression test for readiness args + fallback
 
-This prevents run 262’s problem from silently passing again.
+Create or replace:
 
-Regression tests
-8. Add evaluation gate test
+src/tests/rpg/test_autoplay_readiness_escalation_compression_gates.py
 
-Create:
+with:
 
-src/tests/rpg/test_autoplay_evaluation_escalation_compression_gates.py
-from tests.rpg.autoplay_llm_campaign import _build_100_turn_evaluation_summary
+from tests.rpg.autoplay_llm_campaign import _build_100_turn_readiness_summary
 
 
-def test_evaluation_uses_escalation_and_compression_summaries():
-    evaluation = _build_100_turn_evaluation_summary(
-        turns_executed=100,
-        requested_turns=100,
-        runtime_errors=[],
-        warnings=[],
-        transcript=[{"turn_index": i + 1} for i in range(100)],
-        performance_summary={
-            "avg_turn_seconds": 1.0,
-            "p95_turn_seconds": 2.0,
-            "max_turn_seconds": 3.0,
-        },
-        narration_grounding_summary={
-            "checked_count": 100,
-            "selected_output_invalid_count": 0,
-            "provider_json_parse_failed_count": 0,
-            "provider_invalid_count": 0,
-            "deterministic_fallback_rate": 0.0,
-        },
-        progress_quality_summary={
-            "meaningful_progress_rate": 1.0,
-            "no_change_turn_count": 0,
-            "max_no_change_streak": 0,
-        },
-        checkpoint_summary={
-            "checkpoint_validation_failures": 0,
-            "checkpoint_count": 4,
-            "validated_count": 4,
-        },
-        loop_detection_summary={
-            "repeated_action_window_count": 0,
-            "loop_warning_count": 0,
-        },
-        mechanics_coverage_summary={
-            "required_ok": True,
-            "real_required_ok": True,
-            "coverage_rate": 1.0,
-            "real_coverage_rate": 1.0,
-            "missing_required": [],
-            "missing_real_required": [],
-        },
-        story_arc_lifecycle_summary={
-            "completed_count": 4,
-            "failed_count": 0,
-            "active_count": 2,
-            "status_counts": {"completed": 4, "active": 2},
-        },
-        story_arc_aftermath_summary={
-            "aftermath_event_count": 2,
-            "world_signal_count": 2,
-            "npc_memory_event_count": 2,
-            "followup_hook_count": 2,
-            "seeded_followup_arc_count": 2,
-        },
-        faction_reputation_summary={
-            "faction_count": 2,
-            "factions": [{"faction_id": "faction:test", "history_count": 1}],
-        },
-        followup_arc_progression_summary={
-            "progressed_count": 2,
-            "progressed_arc_ids": ["arc:a", "arc:b"],
-            "world_signal_count": 2,
-        },
-        faction_pressure_summary={
-            "pressure_event_count": 16,
-            "world_signal_count": 10,
-            "by_faction": {"faction:test": 16},
-        },
-        followup_arc_resolution_summary={
-            "resolved_count": 2,
-            "resolved_arc_ids": ["arc:a", "arc:b"],
-            "escalation_seed_count": 2,
-            "escalation_arcs": [{"arc_id": "arc:next"}],
-        },
-        pressure_pacing_summary={
-            "accepted_pressure_event_count": 16,
-            "rejected_pressure_event_count": 167,
-            "rejected_by_reason": {"min_gap_turns": 159},
-        },
-        world_signal_summary={
-            "world_signal_count": 24,
-            "by_kind": {"faction_pressure": 11},
-            "by_faction": {"faction:test": 11},
-        },
+def _call_readiness(**kwargs):
+    base = {
+        "summary": kwargs.pop("summary", {}),
+        "requested_turns": 100,
+        "turns_executed": 100,
+        "runtime_errors": [],
+        "warnings": [],
+    }
+    base.update(kwargs)
+    return _build_100_turn_readiness_summary(**base)
+
+
+def test_readiness_uses_escalation_and_compression_summaries_from_args():
+    readiness = _call_readiness(
+        summary={},
         escalation_arc_progression_summary={
             "ok": True,
             "progressed_count": 2,
@@ -382,8 +258,6 @@ def test_evaluation_uses_escalation_and_compression_summaries():
                 "arc:sable_chain_handler",
                 "arc:voss_backer_pressure",
             ],
-            "pressure_event_count": 2,
-            "world_signal_count": 2,
         },
         world_state_compression_summary={
             "ok": True,
@@ -391,60 +265,12 @@ def test_evaluation_uses_escalation_and_compression_summaries():
             "compressed_state_preview": {
                 "story_arc_count": 6,
                 "world_signal_count": 24,
-                "faction_count": 2,
-                "npc_memory_event_count": 2,
             },
             "latest_state_budget": {
                 "ok": True,
                 "sections": {},
             },
         },
-    )
-
-    assert evaluation["gates"]["escalation_arc_progression_present"]["ok"] is True
-    assert evaluation["gates"]["world_state_compression_active"]["ok"] is True
-    assert "escalation_arc_progression_present" not in evaluation["failed_gates"]
-    assert "world_state_compression_active" not in evaluation["failed_gates"]
-9. Add readiness gate test
-
-Create:
-
-src/tests/rpg/test_autoplay_readiness_escalation_compression_gates.py
-from tests.rpg.autoplay_llm_campaign import _build_100_turn_readiness_summary
-
-
-def test_readiness_uses_escalation_and_compression_summaries():
-    summary = {
-        "escalation_arc_progression_summary": {
-            "ok": True,
-            "progressed_count": 2,
-            "progressed_arc_ids": [
-                "arc:sable_chain_handler",
-                "arc:voss_backer_pressure",
-            ],
-        },
-        "world_state_compression_summary": {
-            "ok": True,
-            "compression_event_count": 4,
-            "compressed_state_preview": {
-                "story_arc_count": 6,
-                "world_signal_count": 24,
-            },
-            "latest_state_budget": {
-                "ok": True,
-                "sections": {},
-            },
-        },
-    }
-
-    readiness = _build_100_turn_readiness_summary(
-        summary=summary,
-        requested_turns=100,
-        turns_executed=100,
-        runtime_errors=[],
-        warnings=[],
-        escalation_arc_progression_summary=summary["escalation_arc_progression_summary"],
-        world_state_compression_summary=summary["world_state_compression_summary"],
     )
 
     assert readiness["gates"]["escalation_arc_progression_present"]["ok"] is True
@@ -452,16 +278,119 @@ def test_readiness_uses_escalation_and_compression_summaries():
     assert "escalation_arc_progression_present" not in readiness["failed_gates"]
     assert "world_state_compression_active" not in readiness["failed_gates"]
 
-If your readiness builder requires additional args, copy default args from the nearest existing readiness test and add the two new summary params.
+
+def test_readiness_uses_escalation_and_compression_summaries_from_summary_fallback():
+    readiness = _call_readiness(
+        summary={
+            "escalation_arc_progression_summary": {
+                "ok": True,
+                "progressed_count": 2,
+                "progressed_arc_ids": [
+                    "arc:sable_chain_handler",
+                    "arc:voss_backer_pressure",
+                ],
+            },
+            "world_state_compression_summary": {
+                "ok": True,
+                "compression_event_count": 4,
+                "compressed_state_preview": {
+                    "story_arc_count": 6,
+                    "world_signal_count": 24,
+                },
+                "latest_state_budget": {
+                    "ok": True,
+                    "sections": {},
+                },
+            },
+        }
+    )
+
+    assert readiness["gates"]["escalation_arc_progression_present"]["ok"] is True
+    assert readiness["gates"]["world_state_compression_active"]["ok"] is True
+    assert "escalation_arc_progression_present" not in readiness["failed_gates"]
+    assert "world_state_compression_active" not in readiness["failed_gates"]
+
+If this test errors because _build_100_turn_readiness_summary(...) requires more arguments in your source, update _call_readiness(...) by copying the default arguments from your nearest existing readiness test. Do not remove the two new summary fields.
+
+9. Add regression test for summary ok requiring readiness ok
+
+Create:
+
+src/tests/rpg/test_autoplay_summary_ok_requires_readiness.py
+from argparse import Namespace
+
+from tests.rpg.autoplay_llm_campaign import _rebuild_final_100_turn_evaluation
+
+
+def test_summary_ok_does_not_ignore_failed_readiness():
+    summary = {
+        "requested_turns": 100,
+        "turns_executed": 100,
+        "runtime_errors": [],
+        "warnings": [],
+        "hundred_turn_readiness_summary": {
+            "ok": False,
+            "gates": {
+                "world_state_compression_active": {
+                    "ok": False,
+                }
+            },
+        },
+        "performance_seconds_summary": {
+            "avg_turn_seconds": 1.0,
+            "p95_turn_seconds": 2.0,
+            "max_turn_seconds": 3.0,
+        },
+        "narration_grounding_summary": {
+            "checked_count": 100,
+            "selected_output_invalid_count": 0,
+            "provider_json_parse_failed_count": 0,
+            "provider_invalid_count": 0,
+            "deterministic_fallback_rate": 0.0,
+        },
+        "canonical_progress_quality": {
+            "meaningful_progress_rate": 1.0,
+            "no_change_turn_count": 0,
+            "max_no_change_streak": 0,
+        },
+        "checkpoint_validation_summary": {
+            "checkpoint_validation_failures": 0,
+            "checkpoint_count": 4,
+            "validated_count": 4,
+        },
+        "loop_detection_summary": {
+            "repeated_action_window_count": 0,
+            "loop_warning_count": 0,
+        },
+        "mechanics_coverage_summary": {
+            "required_ok": True,
+            "real_required_ok": True,
+            "coverage_rate": 1.0,
+            "real_coverage_rate": 1.0,
+            "missing_required": [],
+            "missing_real_required": [],
+        },
+    }
+
+    rebuilt = _rebuild_final_100_turn_evaluation(
+        args=Namespace(turns=100),
+        summary=summary,
+        transcript=[{"turn_index": i + 1} for i in range(100)],
+    )
+
+    assert rebuilt["hundred_turn_evaluation"]["ok"] is True
+    assert rebuilt["hundred_turn_readiness_summary"]["ok"] is False
+    assert rebuilt["ok"] is False
+
+If your _build_100_turn_evaluation_summary(...) now requires additional summaries to pass, add minimal passing summaries to this test.
 
 Run checks
 python -m py_compile `
   src\tests\rpg\autoplay_llm_campaign.py
 python -m pytest `
-  src\tests\rpg\test_autoplay_evaluation_escalation_compression_gates.py `
   src\tests\rpg\test_autoplay_readiness_escalation_compression_gates.py `
+  src\tests\rpg\test_autoplay_summary_ok_requires_readiness.py `
+  src\tests\rpg\test_autoplay_evaluation_escalation_compression_gates.py `
   src\tests\rpg\test_autoplay_final_evaluation_rebuild.py `
   src\tests\rpg\test_autoplay_real_runner_present.py `
-  src\tests\rpg\test_world_state_compression.py `
-  src\tests\rpg\test_escalation_arc_progression.py `
   -q
