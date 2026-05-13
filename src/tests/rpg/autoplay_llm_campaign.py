@@ -228,6 +228,15 @@ def _slim_transcript_row(row: Dict[str, Any], max_row_bytes: int = 50000) -> Dic
         if row.get(key):
             slim_row[key] = row.get(key)
 
+    if row.get("npc_presence"):
+        slim_row["npc_presence"] = row.get("npc_presence")
+
+    if row.get("npc_schedule_events"):
+        slim_row["npc_schedule_events"] = row.get("npc_schedule_events")
+
+    if row.get("npc_agency_events"):
+        slim_row["npc_agency_events"] = row.get("npc_agency_events")
+
     if row.get("story_arc_aftermath"):
         aftermath = _safe_dict(row.get("story_arc_aftermath"))
         slim_row["story_arc_aftermath"] = {
@@ -1073,6 +1082,13 @@ from app.rpg.state.world_state_compression import (
 )
 from app.rpg.story.escalation_arc_progression import progress_escalation_arcs
 from app.rpg.story.tavern_escalation_progression_rules import tavern_escalation_progression_rules
+from app.rpg.npc.npc_agency import emit_npc_agency_events
+from app.rpg.npc.npc_schedule import resolve_npc_schedule_state
+from app.rpg.npc.tavern_npc_agency_rules import tavern_npc_agency_rules
+from app.rpg.npc.tavern_npc_schedules import (
+    tavern_npc_ids,
+    tavern_npc_schedule_blocks,
+)
 from tests.rpg.autoplay.checkpoints import (
     collect_state_bounds,
     validate_save_load_checkpoint,
@@ -1412,6 +1428,7 @@ def _build_100_turn_readiness_summary(
     world_signal_summary: Optional[Dict[str, Any]] = None,
     escalation_arc_progression_summary: Optional[Dict[str, Any]] = None,
     world_state_compression_summary: Optional[Dict[str, Any]] = None,
+    npc_agency_summary: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     summary = _safe_dict(summary)
     arc = _safe_dict(summary.get("scenario_progression_arc_summary"))
@@ -1466,6 +1483,10 @@ def _build_100_turn_readiness_summary(
         world_compression = _safe_dict(
             _safe_dict(summary).get("world_state_compression_summary")
         )
+
+    npc_agency = _safe_dict(npc_agency_summary)
+    if not npc_agency:
+        npc_agency = _safe_dict(_safe_dict(summary).get("npc_agency_summary"))
 
     progression_changed_count = int(
         _safe_dict(behavioral.get("metrics")).get("progression_changed_count")
@@ -1631,6 +1652,17 @@ def _build_100_turn_readiness_summary(
             },
             "expected": "compression events occur and state budget is respected",
             "message": "100-turn readiness should prove bounded state management is active.",
+        },
+        "npc_agency_present": {
+            "ok": int(npc_agency.get("agency_event_count") or 0) >= 1,
+            "value": {
+                "npc_count": npc_agency.get("npc_count"),
+                "schedule_event_count": npc_agency.get("schedule_event_count"),
+                "agency_event_count": npc_agency.get("agency_event_count"),
+                "memory_event_count": npc_agency.get("memory_event_count"),
+            },
+            "expected": "at least one deterministic NPC agency event",
+            "message": "Long-term NPCs should act from schedules, arc state, and faction pressure.",
         },
     }
 
@@ -2980,6 +3012,7 @@ def _build_100_turn_evaluation_summary(
     world_signal_summary: Optional[Dict[str, Any]] = None,
     escalation_arc_progression_summary: Optional[Dict[str, Any]] = None,
     world_state_compression_summary: Optional[Dict[str, Any]] = None,
+    npc_agency_summary: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     grounding = _safe_dict(narration_grounding_summary)
     progress = _safe_dict(progress_quality_summary)
@@ -3000,6 +3033,7 @@ def _build_100_turn_evaluation_summary(
     world_signals = _safe_dict(world_signal_summary)
     escalation_progression = _safe_dict(escalation_arc_progression_summary)
     world_compression = _safe_dict(world_state_compression_summary)
+    npc_agency = _safe_dict(npc_agency_summary)
     selected_grounding_health = _build_selected_output_grounding_health(
         grounding,
         requested_turns=requested_turns,
@@ -3246,6 +3280,17 @@ def _build_100_turn_evaluation_summary(
             },
             "expected": "compression events occur and state budget is respected",
             "message": "Long-run campaigns need bounded world state and memory compression.",
+        },
+        "npc_agency_present": {
+            "ok": int(npc_agency.get("agency_event_count") or 0) >= 1,
+            "value": {
+                "npc_count": npc_agency.get("npc_count"),
+                "schedule_event_count": npc_agency.get("schedule_event_count"),
+                "agency_event_count": npc_agency.get("agency_event_count"),
+                "memory_event_count": npc_agency.get("memory_event_count"),
+            },
+            "expected": "at least one deterministic NPC agency event",
+            "message": "100-turn readiness should demonstrate schedule-driven NPC agency.",
         },
     }
 
@@ -4673,6 +4718,7 @@ def _build_minimal_autoplay_html_report(final_summary: Dict[str, Any]) -> str:
     followup_resolution = _safe_dict(final_summary.get("followup_arc_resolution_summary"))
     pressure_pacing = _safe_dict(final_summary.get("pressure_pacing_summary"))
     world_signal_summary = _safe_dict(final_summary.get("world_signal_summary"))
+    npc_agency = _safe_dict(final_summary.get("npc_agency_summary"))
 
     status = "PASS" if evaluation.get("ok") else "FAIL"
     status_class = "pass" if evaluation.get("ok") else "fail"
@@ -4810,7 +4856,23 @@ def _build_minimal_autoplay_html_report(final_summary: Dict[str, Any]) -> str:
   <h3>By Kind</h3>
   <pre>{esc(json.dumps(world_signal_summary.get("by_kind", {}), ensure_ascii=False, indent=2, default=str))}</pre>
   <h3>By Faction</h3>
-  <pre>{esc(json.dumps(world_signal_summary.get("by_faction", {}), ensure_ascii=False, indent=2, default=str))}</pre>
+   <pre>{esc(json.dumps(world_signal_summary.get("by_faction", {}), ensure_ascii=False, indent=2, default=str))}</pre>
+</section>
+"""
+
+    npc_agency_html = f"""
+<section class="card" id="npc-agency">
+  <h2>NPC Agency / Schedules</h2>
+  <div class="grid">
+    <div class="metric"><strong>NPCs Tracked</strong><span>{esc(npc_agency.get("npc_count"))}</span></div>
+    <div class="metric"><strong>Schedule Events</strong><span>{esc(npc_agency.get("schedule_event_count"))}</span></div>
+    <div class="metric"><strong>Agency Events</strong><span>{esc(npc_agency.get("agency_event_count"))}</span></div>
+    <div class="metric"><strong>Memory Events</strong><span>{esc(npc_agency.get("memory_event_count"))}</span></div>
+  </div>
+  <h3>By NPC</h3>
+  <pre>{esc(json.dumps(npc_agency.get("by_npc", []), ensure_ascii=False, indent=2, default=str))}</pre>
+  <h3>Agency Events</h3>
+  <pre>{esc(json.dumps(npc_agency.get("agency_events", []), ensure_ascii=False, indent=2, default=str))}</pre>
 </section>
 """
 
@@ -4918,6 +4980,7 @@ a {{ color: #c8d6ff; }}
     <a href="#followup-resolution">Follow-Up Resolution</a>
     <a href="#pressure-pacing">Pressure Pacing</a>
     <a href="#world-signals">World Signals</a>
+    <a href="#npc-agency">NPC Agency</a>
     <a href="#debug">Debug</a>
 </nav>
 
@@ -5015,6 +5078,7 @@ a {{ color: #c8d6ff; }}
 {followup_resolution_html}
 {pressure_pacing_html}
 {world_signals_html}
+{npc_agency_html}
 
 <section class="card" id="debug">
 <h2>Debug Summary</h2>
@@ -6186,6 +6250,74 @@ def _build_faction_pressure_summary(
     }
 
 
+def _build_npc_agency_summary(
+    *,
+    npc_presence: Dict[str, Any],
+    schedule_events: List[Dict[str, Any]],
+    agency_events: List[Dict[str, Any]],
+    world_signals: List[Dict[str, Any]],
+    memory_events: List[Dict[str, Any]],
+) -> Dict[str, Any]:
+    schedule_rows = [_safe_dict(event) for event in _safe_list(schedule_events)]
+    agency_rows = [_safe_dict(event) for event in _safe_list(agency_events)]
+    signal_rows = [_safe_dict(signal) for signal in _safe_list(world_signals)]
+    memory_rows = [_safe_dict(memory) for memory in _safe_list(memory_events)]
+
+    by_npc: Dict[str, Dict[str, Any]] = {}
+
+    for npc_id, presence in _safe_dict(npc_presence).items():
+        by_npc.setdefault(
+            str(npc_id),
+            {
+                "npc_id": str(npc_id),
+                "current_presence": _safe_dict(presence),
+                "schedule_event_count": 0,
+                "agency_event_count": 0,
+                "memory_event_count": 0,
+            },
+        )
+
+    for event in schedule_rows:
+        npc_id = _safe_str(event.get("npc_id"))
+        if npc_id:
+            by_npc.setdefault(npc_id, {"npc_id": npc_id})
+            by_npc[npc_id]["schedule_event_count"] = int(
+                by_npc[npc_id].get("schedule_event_count") or 0
+            ) + 1
+
+    for event in agency_rows:
+        npc_id = _safe_str(event.get("npc_id"))
+        if npc_id:
+            by_npc.setdefault(npc_id, {"npc_id": npc_id})
+            by_npc[npc_id]["agency_event_count"] = int(
+                by_npc[npc_id].get("agency_event_count") or 0
+            ) + 1
+
+    for memory in memory_rows:
+        npc_id = _safe_str(memory.get("npc_id"))
+        if npc_id:
+            by_npc.setdefault(npc_id, {"npc_id": npc_id})
+            by_npc[npc_id]["memory_event_count"] = int(
+                by_npc[npc_id].get("memory_event_count") or 0
+            ) + 1
+
+    return {
+        "format_version": "npc_agency_summary_v1",
+        "ok": bool(agency_rows),
+        "npc_count": len(_safe_dict(npc_presence)),
+        "schedule_event_count": len(schedule_rows),
+        "agency_event_count": len(agency_rows),
+        "world_signal_count": len(signal_rows),
+        "memory_event_count": len(memory_rows),
+        "npc_presence": _safe_dict(npc_presence),
+        "by_npc": sorted(by_npc.values(), key=lambda row: _safe_str(row.get("npc_id"))),
+        "agency_events": agency_rows,
+        "schedule_events": schedule_rows,
+        "world_signals": signal_rows,
+        "memory_events": memory_rows,
+    }
+
+
 def _build_followup_arc_resolution_summary(
     *,
     resolution_events: List[Dict[str, Any]],
@@ -6290,6 +6422,7 @@ def _build_authoritative_final_lifecycle_summary(
     world_signal_summary: Optional[Dict[str, Any]] = None,
     escalation_arc_progression_summary: Optional[Dict[str, Any]] = None,
     world_state_compression_summary: Optional[Dict[str, Any]] = None,
+    npc_agency_summary: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """Final authoritative summary override.
 
@@ -6357,6 +6490,9 @@ def _build_authoritative_final_lifecycle_summary(
     if world_state_compression_summary:
         summary["world_state_compression_summary"] = _safe_dict(world_state_compression_summary)
 
+    if npc_agency_summary:
+        summary["npc_agency_summary"] = _safe_dict(npc_agency_summary)
+
     if requested_turns_for_readiness >= 100:
         summary["hundred_turn_readiness_summary"] = _build_100_turn_readiness_summary(
             summary=summary,
@@ -6392,6 +6528,10 @@ def _build_authoritative_final_lifecycle_summary(
         world_state_compression_summary=_safe_dict(
             world_state_compression_summary
             or summary.get("world_state_compression_summary")
+        ),
+        npc_agency_summary=_safe_dict(
+            npc_agency_summary
+            or summary.get("npc_agency_summary")
         ),
     )
     _sync_hundred_turn_validation_classification(summary)
@@ -6610,6 +6750,7 @@ def _rebuild_final_100_turn_evaluation(
     args: argparse.Namespace,
     summary: Dict[str, Any],
     transcript: List[Dict[str, Any]],
+    npc_agency_summary: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     full_transcript_for_eval = [
         dict(_safe_dict(row))
@@ -6642,6 +6783,7 @@ def _rebuild_final_100_turn_evaluation(
         world_signal_summary=_safe_dict(summary.get("world_signal_summary")),
         escalation_arc_progression_summary=_safe_dict(summary.get("escalation_arc_progression_summary")),
         world_state_compression_summary=_safe_dict(summary.get("world_state_compression_summary")),
+        npc_agency_summary=_safe_dict(summary.get("npc_agency_summary")),
     )
 
     summary["ok"] = (
@@ -6658,6 +6800,7 @@ def _rebuild_final_100_turn_evaluation(
         ("world_signal_summary_present", "world_signal_summary", "world_signal_count"),
         ("escalation_arc_progression_present", "escalation_arc_progression_summary", "progressed_count"),
         ("world_state_compression_active", "world_state_compression_summary", "compression_event_count"),
+        ("npc_agency_present", "npc_agency_summary", "agency_event_count"),
     ):
         gate = _safe_dict(gates.get(gate_name))
         gate_value = _safe_dict(gate.get("value"))
@@ -8679,6 +8822,7 @@ def _validate_final_autoplay_summary_integrity(
         "world_signal_summary",
         "escalation_arc_progression_summary",
         "world_state_compression_summary",
+        "npc_agency_summary",
     }
 
     required_gate_keys = {
@@ -8691,6 +8835,7 @@ def _validate_final_autoplay_summary_integrity(
         "world_signal_summary_present",
         "escalation_arc_progression_present",
         "world_state_compression_active",
+        "npc_agency_present",
     }
 
     for key in required_summary_keys:
@@ -8912,6 +9057,13 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
     faction_reputation_events: List[Dict[str, Any]] = []
 
     followup_arc_seed_events: List[Dict[str, Any]] = []
+
+    npc_presence_state: Dict[str, Any] = {}
+    npc_schedule_events: List[Dict[str, Any]] = []
+    npc_agency_events: List[Dict[str, Any]] = []
+    npc_agency_world_signals: List[Dict[str, Any]] = []
+    npc_agency_memory_events: List[Dict[str, Any]] = []
+    npc_agency_last_emitted_turn_by_rule: Dict[str, int] = {}
 
     for turn_index in range(1, int(args.turns) + 1):
         # Initialize player agent selection variables
@@ -10836,6 +10988,73 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
                     mechanic_resolution.get("reason")
                 )
 
+        schedule_state = resolve_npc_schedule_state(
+            npc_ids=tavern_npc_ids(),
+            schedule_blocks=tavern_npc_schedule_blocks(),
+            turn_index=int(record.get("turn_index") or turn_index),
+            minutes_per_turn=int(getattr(args, "campaign_minutes_per_turn", 60) or 60),
+            start_hour=8,
+            previous_presence=npc_presence_state,
+        )
+
+        if schedule_state.get("ok"):
+            npc_presence_state = _safe_dict(schedule_state.get("presence"))
+            movement_events = _safe_list(schedule_state.get("movement_events"))
+
+            if movement_events:
+                npc_schedule_events.extend(movement_events)
+                record["npc_schedule_events"] = movement_events
+
+            record["npc_presence"] = npc_presence_state
+
+        npc_agency_state = {
+            "npc_presence": npc_presence_state,
+            "story_arcs": story_arc_runtime_state,
+            "faction_reputation": faction_reputation_state,
+            "world_signals": world_signal_events,
+        }
+
+        agency = emit_npc_agency_events(
+            state=npc_agency_state,
+            turn_index=int(record.get("turn_index") or turn_index),
+            rules=tavern_npc_agency_rules(),
+            last_emitted_turn_by_rule=npc_agency_last_emitted_turn_by_rule,
+            max_events_per_turn=2,
+        )
+
+        if agency.get("ok"):
+            npc_agency_last_emitted_turn_by_rule = {
+                str(k): int(v or 0)
+                for k, v in _safe_dict(agency.get("last_emitted_turn_by_rule")).items()
+            }
+
+            agency_events = _safe_list(agency.get("events"))
+            agency_signals = _safe_list(agency.get("world_signals"))
+            agency_memories = _safe_list(agency.get("memory_events"))
+
+            if agency_events:
+                npc_agency_events.extend(agency_events)
+                npc_agency_world_signals.extend(agency_signals)
+                npc_agency_memory_events.extend(agency_memories)
+
+                world_signal_events.extend(agency_signals)
+                npc_memory_events.extend(agency_memories)
+
+                record["npc_agency_events"] = agency_events
+                record["world_signals"] = _safe_list(record.get("world_signals")) + agency_signals
+                record["npc_memory_events"] = _safe_list(record.get("npc_memory_events")) + agency_memories
+                record["state_delta"] = {
+                    **_safe_dict(record.get("state_delta")),
+                    "npc_agency_flags": _safe_dict(agency.get("flags")),
+                    "npc_presence": npc_presence_state,
+                }
+                record["result"] = {
+                    **_safe_dict(record.get("result")),
+                    "npc_agency_events": agency_events,
+                    "world_signals": _safe_list(record.get("world_signals")),
+                    "npc_memory_events": _safe_list(record.get("npc_memory_events")),
+                }
+
         compression_interval = 25
         if int(record.get("turn_index") or turn_index) % compression_interval == 0:
             compression_input = {
@@ -11645,6 +11864,14 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
         events=story_arc_resolution_events + followup_arc_resolution_events + escalation_arc_seed_events,
     )
 
+    summary["npc_agency_summary"] = _build_npc_agency_summary(
+        npc_presence=npc_presence_state,
+        schedule_events=npc_schedule_events,
+        agency_events=npc_agency_events,
+        world_signals=npc_agency_world_signals,
+        memory_events=npc_agency_memory_events,
+    )
+
     summary = _build_authoritative_final_lifecycle_summary(
         args=args,
         summary=summary,
@@ -11685,6 +11912,7 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
         args=args,
         summary=summary,
         transcript=transcript,
+        npc_agency_summary=_safe_dict(summary.get("npc_agency_summary")),
     )
 
     summary["hundred_turn_readiness_summary"] = _build_100_turn_readiness_summary(
@@ -11704,7 +11932,40 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
         world_signal_summary=_safe_dict(summary.get("world_signal_summary")),
         escalation_arc_progression_summary=_safe_dict(summary.get("escalation_arc_progression_summary")),
         world_state_compression_summary=_safe_dict(summary.get("world_state_compression_summary")),
+        npc_agency_summary=_safe_dict(summary.get("npc_agency_summary")),
     )
+
+    evaluation = _safe_dict(summary.get("hundred_turn_evaluation"))
+    evaluation_gates = _safe_dict(evaluation.get("gates"))
+    npc_gate = _safe_dict(evaluation_gates.get("npc_agency_present"))
+    npc_gate_value = _safe_dict(npc_gate.get("value"))
+    npc_summary = _safe_dict(summary.get("npc_agency_summary"))
+
+    if npc_summary and npc_gate and npc_gate_value.get("agency_event_count") is None:
+        summary["hundred_turn_evaluation"] = _build_100_turn_evaluation_summary(
+            turns_executed=int(summary.get("turns_executed") or len(_safe_list(transcript))),
+            requested_turns=int(summary.get("requested_turns") or getattr(args, "turns", 0) or 0),
+            runtime_errors=_safe_list(summary.get("runtime_errors")),
+            warnings=_safe_list(summary.get("warnings")),
+            transcript=_safe_list(transcript),
+            performance_summary=_safe_dict(summary.get("performance_seconds_summary")),
+            narration_grounding_summary=_safe_dict(summary.get("narration_grounding_summary")),
+            progress_quality_summary=_safe_dict(summary.get("canonical_progress_quality")),
+            checkpoint_summary=_safe_dict(summary.get("checkpoint_summary")),
+            loop_detection_summary=_safe_dict(summary.get("loop_detection_summary")),
+            mechanics_coverage_summary=_safe_dict(summary.get("mechanics_coverage_summary")),
+            story_arc_lifecycle_summary=_safe_dict(summary.get("story_arc_lifecycle_summary")),
+            story_arc_aftermath_summary=_safe_dict(summary.get("story_arc_aftermath_summary")),
+            faction_reputation_summary=_safe_dict(summary.get("faction_reputation_summary")),
+            followup_arc_progression_summary=_safe_dict(summary.get("followup_arc_progression_summary")),
+            faction_pressure_summary=_safe_dict(summary.get("faction_pressure_summary")),
+            followup_arc_resolution_summary=_safe_dict(summary.get("followup_arc_resolution_summary")),
+            pressure_pacing_summary=_safe_dict(summary.get("pressure_pacing_summary")),
+            world_signal_summary=_safe_dict(summary.get("world_signal_summary")),
+            escalation_arc_progression_summary=_safe_dict(summary.get("escalation_arc_progression_summary")),
+            world_state_compression_summary=_safe_dict(summary.get("world_state_compression_summary")),
+            npc_agency_summary=npc_summary,
+        )
 
     summary["ok"] = (
         bool(_safe_dict(summary.get("hundred_turn_evaluation")).get("ok"))
@@ -11814,6 +12075,9 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
         followup_arc_resolution_summary=_safe_dict(summary.get("followup_arc_resolution_summary")),
         pressure_pacing_summary=_safe_dict(summary.get("pressure_pacing_summary")),
         world_signal_summary=_safe_dict(summary.get("world_signal_summary")),
+        escalation_arc_progression_summary=_safe_dict(summary.get("escalation_arc_progression_summary")),
+        world_state_compression_summary=_safe_dict(summary.get("world_state_compression_summary")),
+        npc_agency_summary=_safe_dict(summary.get("npc_agency_summary")),
     )
 
     summary["hundred_turn_evaluation"] = _build_100_turn_evaluation_summary(
@@ -11838,6 +12102,7 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
         world_signal_summary=_safe_dict(summary.get("world_signal_summary")),
         escalation_arc_progression_summary=_safe_dict(summary.get("escalation_arc_progression_summary")),
         world_state_compression_summary=_safe_dict(summary.get("world_state_compression_summary")),
+        npc_agency_summary=_safe_dict(summary.get("npc_agency_summary")),
     )
 
     summary["ok"] = bool(_safe_dict(summary.get("hundred_turn_evaluation")).get("ok"))
@@ -12129,6 +12394,13 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
                 artifact_manifest,
                 "world-state-compression-summary.json",
                 summary.get("world_state_compression_summary", {}),
+            )
+
+            _zip_writestr_json(
+                zip_handle,
+                artifact_manifest,
+                "npc-agency-summary.json",
+                summary.get("npc_agency_summary", {}),
             )
 
             # Write HTML report
