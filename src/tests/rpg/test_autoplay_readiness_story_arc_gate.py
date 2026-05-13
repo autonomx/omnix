@@ -23,6 +23,9 @@ def test_readiness_story_arc_gate_uses_lifecycle_summary():
         summary=summary,
         transcript=[{"turn_index": i + 1} for i in range(100)],
         requested_turns=100,
+        turns_executed=100,
+        runtime_errors=[],
+        warnings=[],
         story_arc_lifecycle_summary=summary["story_arc_lifecycle_summary"],
     )
 

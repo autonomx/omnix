@@ -1399,7 +1399,12 @@ def _build_100_turn_readiness_summary(
     summary: Dict[str, Any],
     transcript: List[Dict[str, Any]],
     requested_turns: int,
+    turns_executed: int,
+    runtime_errors: List[Any],
+    warnings: List[str],
     story_arc_lifecycle_summary: Optional[Dict[str, Any]] = None,
+    story_arc_aftermath_summary: Optional[Dict[str, Any]] = None,
+    faction_reputation_summary: Optional[Dict[str, Any]] = None,
     followup_arc_progression_summary: Optional[Dict[str, Any]] = None,
     faction_pressure_summary: Optional[Dict[str, Any]] = None,
     followup_arc_resolution_summary: Optional[Dict[str, Any]] = None,
@@ -1417,6 +1422,18 @@ def _build_100_turn_readiness_summary(
 
     if story_arc_lifecycle_summary:
         summary["story_arc_lifecycle_summary"] = _safe_dict(story_arc_lifecycle_summary)
+
+    story_arc_aftermath = _safe_dict(story_arc_aftermath_summary)
+    if not story_arc_aftermath:
+        story_arc_aftermath = _safe_dict(
+            _safe_dict(summary).get("story_arc_aftermath_summary")
+        )
+
+    faction_reputation = _safe_dict(faction_reputation_summary)
+    if not faction_reputation:
+        faction_reputation = _safe_dict(
+            _safe_dict(summary).get("faction_reputation_summary")
+        )
 
     followup_progression = _safe_dict(followup_arc_progression_summary)
     if not followup_progression:
@@ -1440,11 +1457,15 @@ def _build_100_turn_readiness_summary(
 
     escalation_progression = _safe_dict(escalation_arc_progression_summary)
     if not escalation_progression:
-        escalation_progression = _safe_dict(summary.get("escalation_arc_progression_summary"))
+        escalation_progression = _safe_dict(
+            _safe_dict(summary).get("escalation_arc_progression_summary")
+        )
 
     world_compression = _safe_dict(world_state_compression_summary)
     if not world_compression:
-        world_compression = _safe_dict(summary.get("world_state_compression_summary"))
+        world_compression = _safe_dict(
+            _safe_dict(summary).get("world_state_compression_summary")
+        )
 
     progression_changed_count = int(
         _safe_dict(behavioral.get("metrics")).get("progression_changed_count")
@@ -6339,12 +6360,17 @@ def _build_authoritative_final_lifecycle_summary(
     if requested_turns_for_readiness >= 100:
         summary["hundred_turn_readiness_summary"] = _build_100_turn_readiness_summary(
             summary=summary,
+            turns_executed=int(summary.get("turns_executed") or len(_safe_list(transcript))),
+            runtime_errors=_safe_list(summary.get("runtime_errors")),
+            warnings=_safe_list(summary.get("warnings")),
             transcript=transcript,
             requested_turns=requested_turns_for_readiness,
             story_arc_lifecycle_summary=_safe_dict(
                 story_arc_lifecycle_summary
                 or summary.get("story_arc_lifecycle_summary")
             ),
+            story_arc_aftermath_summary=_safe_dict(summary.get("story_arc_aftermath_summary")),
+            faction_reputation_summary=_safe_dict(summary.get("faction_reputation_summary")),
             followup_arc_progression_summary=_safe_dict(summary.get("followup_arc_progression_summary")),
             faction_pressure_summary=_safe_dict(summary.get("faction_pressure_summary")),
         followup_arc_resolution_summary=_safe_dict(
@@ -6618,7 +6644,11 @@ def _rebuild_final_100_turn_evaluation(
         world_state_compression_summary=_safe_dict(summary.get("world_state_compression_summary")),
     )
 
-    summary["ok"] = bool(_safe_dict(summary.get("hundred_turn_evaluation")).get("ok"))
+    summary["ok"] = (
+        bool(_safe_dict(summary.get("hundred_turn_evaluation")).get("ok"))
+        and bool(_safe_dict(summary.get("hundred_turn_readiness_summary")).get("ok", True))
+        and not _safe_list(summary.get("runtime_errors"))
+    )
 
     gates = _safe_dict(_safe_dict(summary.get("hundred_turn_evaluation")).get("gates"))
 
@@ -8608,6 +8638,75 @@ def _select_player_action(
         )
         fallback["player_agent_exception"] = f"{type(exc).__name__}: {exc}"
         return fallback
+
+
+def _validate_final_autoplay_summary_integrity(
+    *,
+    summary: Dict[str, Any],
+    requested_turns: int,
+) -> Dict[str, Any]:
+    summary = _safe_dict(summary)
+    requested_turns = int(requested_turns or 0)
+    runtime_errors: List[str] = []
+
+    evaluation = _safe_dict(summary.get("hundred_turn_evaluation"))
+    readiness = _safe_dict(summary.get("hundred_turn_readiness_summary"))
+
+    evaluation_gates = _safe_dict(evaluation.get("gates"))
+    readiness_gates = _safe_dict(readiness.get("gates"))
+
+    if int(requested_turns or 0) >= 100:
+        if not evaluation_gates:
+            runtime_errors.append("final_summary_integrity:hundred_turn_evaluation_gates_empty")
+
+        if not readiness_gates:
+            runtime_errors.append("final_summary_integrity:hundred_turn_readiness_gates_empty")
+
+        if evaluation and evaluation.get("ok") is False:
+            runtime_errors.append("final_summary_integrity:hundred_turn_evaluation_failed")
+
+        if readiness and readiness.get("ok") is False:
+            runtime_errors.append("final_summary_integrity:hundred_turn_readiness_failed")
+
+    required_summary_keys = {
+        "hundred_turn_evaluation",
+        "hundred_turn_readiness_summary",
+        "story_arc_lifecycle_summary",
+        "followup_arc_progression_summary",
+        "faction_pressure_summary",
+        "followup_arc_resolution_summary",
+        "pressure_pacing_summary",
+        "world_signal_summary",
+        "escalation_arc_progression_summary",
+        "world_state_compression_summary",
+    }
+
+    required_gate_keys = {
+        "story_arc_resolution_present",
+        "followup_arc_progression_present",
+        "faction_pressure_present",
+        "followup_arc_resolution_present",
+        "escalation_branch_seeded",
+        "pressure_pacing_active",
+        "world_signal_summary_present",
+        "escalation_arc_progression_present",
+        "world_state_compression_active",
+    }
+
+    for key in required_summary_keys:
+        if key not in summary:
+            runtime_errors.append(f"final_summary_integrity:missing_summary_key:{key}")
+
+    for key in required_gate_keys:
+        if key not in readiness_gates:
+            runtime_errors.append(f"final_summary_integrity:missing_gate_key:{key}")
+
+    return {
+        "ok": not runtime_errors,
+        "runtime_errors": runtime_errors,
+        "required_summary_keys": sorted(required_summary_keys),
+        "required_gate_keys": sorted(required_gate_keys),
+    }
 
 
 def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
@@ -11587,6 +11686,32 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
         summary=summary,
         transcript=transcript,
     )
+
+    summary["hundred_turn_readiness_summary"] = _build_100_turn_readiness_summary(
+        summary=summary,
+        transcript=transcript,
+        requested_turns=int(summary.get("requested_turns") or getattr(args, "turns", 0) or 0),
+        turns_executed=int(summary.get("turns_executed") or len(_safe_list(transcript))),
+        runtime_errors=_safe_list(summary.get("runtime_errors")),
+        warnings=_safe_list(summary.get("warnings")),
+        story_arc_lifecycle_summary=_safe_dict(summary.get("story_arc_lifecycle_summary")),
+        story_arc_aftermath_summary=_safe_dict(summary.get("story_arc_aftermath_summary")),
+        faction_reputation_summary=_safe_dict(summary.get("faction_reputation_summary")),
+        followup_arc_progression_summary=_safe_dict(summary.get("followup_arc_progression_summary")),
+        faction_pressure_summary=_safe_dict(summary.get("faction_pressure_summary")),
+        followup_arc_resolution_summary=_safe_dict(summary.get("followup_arc_resolution_summary")),
+        pressure_pacing_summary=_safe_dict(summary.get("pressure_pacing_summary")),
+        world_signal_summary=_safe_dict(summary.get("world_signal_summary")),
+        escalation_arc_progression_summary=_safe_dict(summary.get("escalation_arc_progression_summary")),
+        world_state_compression_summary=_safe_dict(summary.get("world_state_compression_summary")),
+    )
+
+    summary["ok"] = (
+        bool(_safe_dict(summary.get("hundred_turn_evaluation")).get("ok"))
+        and bool(_safe_dict(summary.get("hundred_turn_readiness_summary")).get("ok"))
+        and not _safe_list(summary.get("runtime_errors"))
+    )
+
     summary["checkpoint_validation_summary"] = {
         "ok": all(bool(row.get("ok")) for row in checkpoint_validation_rows),
         "checkpoint_count": len(checkpoint_validation_rows),
