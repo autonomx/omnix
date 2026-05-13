@@ -1,547 +1,340 @@
-Literal apply-this-patch diff spec
-N94.1 — Tier Threshold Matching + Faction Delta Dedup
+N99.1 — Add N97-N99 Gates To Evaluation + Readiness
 
 Patch:
 
-src/app/rpg/story/followup_arc_progression.py
-src/app/rpg/story/followup_arc_resolution.py
-src/app/rpg/story/faction_pressure.py
-src/app/rpg/story/faction_reputation.py
 src/tests/rpg/autoplay_llm_campaign.py
-1. Make faction tier requirements threshold-based, not exact
-
-Patch:
-
-src/app/rpg/story/followup_arc_progression.py
+1. Extend _build_100_turn_evaluation_summary(...)
 
 Find:
 
-def _faction_tier(state: Mapping[str, Any], faction_id: str) -> str:
-    factions = _safe_dict(state.get("faction_reputation"))
-    faction = _safe_dict(factions.get(faction_id))
-    return _safe_str(faction.get("tier") or "neutral")
+def _build_100_turn_evaluation_summary(
 
-After it, add:
+Add optional params:
 
-_TIER_RANK = {
-    "hostile": -2,
-    "suspicious": -1,
-    "neutral": 0,
-    "friendly": 1,
-    "trusted": 2,
-}
+escalation_arc_progression_summary: Optional[Dict[str, Any]] = None,
+world_state_compression_summary: Optional[Dict[str, Any]] = None,
 
+Inside the function, near the existing final summary locals:
 
-def _tier_requirement_met(actual: str, required: str) -> bool:
-    actual_rank = _TIER_RANK.get(_safe_str(actual), 0)
-    required_rank = _TIER_RANK.get(_safe_str(required), 0)
-
-    # Negative requirements are ceilings:
-    # suspicious means suspicious OR worse/hostile.
-    if required_rank < 0:
-        return actual_rank <= required_rank
-
-    # Positive requirements are floors:
-    # friendly means friendly OR better/trusted.
-    if required_rank > 0:
-        return actual_rank >= required_rank
-
-    return actual_rank == required_rank
-
-Find:
-
-if rule.requires_faction_tier:
-    faction_id, required_tier = rule.requires_faction_tier
-    if _faction_tier(state, faction_id) != required_tier:
-        return False
-
-Replace with:
-
-if rule.requires_faction_tier:
-    faction_id, required_tier = rule.requires_faction_tier
-    if not _tier_requirement_met(_faction_tier(state, faction_id), required_tier):
-        return False
-
-This makes:
-
-hostile satisfy suspicious
-trusted satisfy friendly
-2. Apply the same tier threshold logic to follow-up resolution
-
-Patch:
-
-src/app/rpg/story/followup_arc_resolution.py
-
-Find _faction_tier(...).
-
-After it, add:
-
-_TIER_RANK = {
-    "hostile": -2,
-    "suspicious": -1,
-    "neutral": 0,
-    "friendly": 1,
-    "trusted": 2,
-}
-
-
-def _tier_requirement_met(actual: str, required: str) -> bool:
-    actual_rank = _TIER_RANK.get(_safe_str(actual), 0)
-    required_rank = _TIER_RANK.get(_safe_str(required), 0)
-
-    if required_rank < 0:
-        return actual_rank <= required_rank
-    if required_rank > 0:
-        return actual_rank >= required_rank
-    return actual_rank == required_rank
-
-Find:
-
-if rule.requires_faction_tier:
-    faction_id, tier = rule.requires_faction_tier
-    if _faction_tier(state, faction_id) != tier:
-        return False
-
-Replace with:
-
-if rule.requires_faction_tier:
-    faction_id, tier = rule.requires_faction_tier
-    if not _tier_requirement_met(_faction_tier(state, faction_id), tier):
-        return False
-3. Apply tier threshold logic to faction pressure rules too
-
-Patch:
-
-src/app/rpg/story/faction_pressure.py
-
-Find:
-
-def _safe_str(value: Any) -> str:
-    return str(value or "")
-
-After it, add:
-
-_TIER_RANK = {
-    "hostile": -2,
-    "suspicious": -1,
-    "neutral": 0,
-    "friendly": 1,
-    "trusted": 2,
-}
-
-
-def _tier_requirement_met(actual: str, required: str) -> bool:
-    actual_rank = _TIER_RANK.get(_safe_str(actual), 0)
-    required_rank = _TIER_RANK.get(_safe_str(required), 0)
-
-    if required_rank < 0:
-        return actual_rank <= required_rank
-    if required_rank > 0:
-        return actual_rank >= required_rank
-    return actual_rank == required_rank
-
-Find:
-
-if rule.required_tier and tier != rule.required_tier:
-    continue
-
-Replace with:
-
-if rule.required_tier and not _tier_requirement_met(tier, rule.required_tier):
-    continue
-
-This lets hostile still emit suspicious-class pressure and trusted still emit friendly-class support.
-
-4. Deduplicate faction deltas by turn + faction + reason
-
-Patch:
-
-src/app/rpg/story/faction_reputation.py
-
-Inside apply_faction_deltas(...), after:
-
-events: List[Dict[str, Any]] = []
+followup_resolution = _safe_dict(followup_arc_resolution_summary)
+pressure_pacing = _safe_dict(pressure_pacing_summary)
+world_signals = _safe_dict(world_signal_summary)
 
 add:
 
-seen_delta_keys: set[tuple[str, int, str, int]] = set()
+escalation_progression = _safe_dict(escalation_arc_progression_summary)
+world_compression = _safe_dict(world_state_compression_summary)
 
-Inside the loop, after:
+Inside gates, add:
 
-amount = int(delta.get("delta") or 0)
-if amount == 0:
-    continue
-
-add:
-
-reason = _safe_str(delta.get("reason"))
-delta_key = (faction_id, int(turn_index), reason, amount)
-if delta_key in seen_delta_keys:
-    continue
-seen_delta_keys.add(delta_key)
-
-Then replace later uses of:
-
-delta.get("reason", "")
-
-with:
-
-reason
-
-Specifically:
-
-row.setdefault("history", []).append(
-    {
-        "turn": turn_index,
-        "delta": amount,
-        "from": previous,
-        "to": current,
-        "reason": reason,
-    }
-)
-
-and:
-
-"reason": reason,
-
-This prevents duplicate same-turn deltas from double-applying when both aftermath and state_delta replay the same faction delta.
-
-5. Avoid reapplying all previous row faction deltas during resolution
-
-Patch:
-
-src/tests/rpg/autoplay_llm_campaign.py
-
-Find the follow-up resolution block where you add faction deltas into row["state_delta"]:
-
-"faction_deltas": _safe_list(_safe_dict(row.get("state_delta")).get("faction_deltas"))
-+ _safe_list(followup_resolution.get("faction_deltas")),
-
-Replace with:
-
-"faction_deltas": _safe_list(_safe_dict(row.get("state_delta")).get("faction_deltas"))
-+ _safe_list(followup_resolution.get("faction_deltas")),
-"followup_resolution_faction_deltas": _safe_list(followup_resolution.get("faction_deltas")),
-
-Then find:
-
-resolution_faction_update = apply_faction_deltas(
-    faction_state=faction_reputation_state,
-    faction_deltas=_safe_list(_safe_dict(row.get("state_delta")).get("faction_deltas")),
-    turn_index=int(row.get("turn_index") or turn_index),
-)
-
-Replace with:
-
-resolution_faction_update = apply_faction_deltas(
-    faction_state=faction_reputation_state,
-    faction_deltas=_safe_list(_safe_dict(row.get("state_delta")).get("followup_resolution_faction_deltas")),
-    turn_index=int(row.get("turn_index") or turn_index),
-)
-
-This prevents old aftermath faction deltas from being re-applied when a follow-up resolution happens later.
-
-6. Make follow-up progression run every turn, not only inside event blocks
-
-Patch:
-
-src/tests/rpg/autoplay_llm_campaign.py
-
-Find the follow-up progression block:
-
-followup_progression = progress_followup_arcs(
-    story_arcs=story_arc_runtime_state,
-    ...
-)
-
-Make sure this entire block is at the top level of the turn loop, not nested inside:
-
-if seeded_events:
-if aftermath_events:
-if pressure_events:
-if mechanic_resolution.get("ok"):
-
-Correct ordering per turn should be:
-
-1. mechanic resolution, if any
-2. story arc lifecycle, if any
-3. aftermath, if any
-4. faction reputation update, if any
-5. follow-up seeding
-6. faction pressure
-7. follow-up progression        ← must run every turn
-8. follow-up resolution         ← must run every turn after progression
-9. escalation seeding
-
-The progression call should execute even on turns 12, 13, 14, etc. where there is no new mechanic event.
-
-If it is currently indented inside another if, dedent it to the main per-turn row assembly level.
-
-7. Build progression state from current faction tier
-
-Still in src/tests/rpg/autoplay_llm_campaign.py, find:
-
-followup_progression_state = {
-    "flags": {
-        ...
+"escalation_arc_progression_present": {
+    "ok": int(escalation_progression.get("progressed_count") or 0) >= 1,
+    "value": {
+        "progressed_count": escalation_progression.get("progressed_count"),
+        "progressed_arc_ids": escalation_progression.get("progressed_arc_ids"),
+        "pressure_event_count": escalation_progression.get("pressure_event_count"),
+        "world_signal_count": escalation_progression.get("world_signal_count"),
     },
-    "faction_reputation": faction_reputation_state,
-}
-
-Replace with:
-
-followup_progression_state = {
-    "flags": {
-        **_safe_dict(mechanics_runtime_state.get("flags")),
-        **_safe_dict(_safe_dict(row.get("state_delta")).get("story_arc_aftermath_flags")),
-        **_safe_dict(_safe_dict(row.get("state_delta")).get("followup_arc_progression_flags")),
-        **_safe_dict(_safe_dict(row.get("state_delta")).get("faction_pressure_flags")),
+    "expected": "at least one escalation arc progresses",
+    "message": "Seeded escalation arcs should advance deterministically.",
+},
+"world_state_compression_active": {
+    "ok": int(world_compression.get("compression_event_count") or 0) >= 1
+    and bool(_safe_dict(world_compression.get("latest_state_budget")).get("ok", True)),
+    "value": {
+        "compression_event_count": world_compression.get("compression_event_count"),
+        "compressed_state_preview": world_compression.get("compressed_state_preview"),
+        "latest_state_budget": world_compression.get("latest_state_budget"),
     },
-    "faction_reputation": faction_reputation_state,
-}
+    "expected": "compression events occur and state budget is respected",
+    "message": "Long-run campaigns need bounded world state and memory compression.",
+},
+2. Extend _rebuild_final_100_turn_evaluation(...)
 
-Add diagnostic row fields immediately before calling progress_followup_arcs(...):
+Find the helper:
 
-row["followup_progression_probe"] = {
-    "turn_index": int(row.get("turn_index") or turn_index),
-    "active_followup_arcs": [
-        {
-            "arc_id": _safe_dict(arc).get("arc_id"),
-            "status": _safe_dict(arc).get("status"),
-            "current_stage": _safe_dict(arc).get("current_stage"),
-            "started_turn": _safe_dict(arc).get("started_turn"),
-            "last_progress_turn": _safe_dict(arc).get("last_progress_turn"),
-            "progress_count": _safe_dict(arc).get("progress_count"),
-            "source_hook_id": _safe_dict(arc).get("source_hook_id"),
-            "seeded_followup": _safe_dict(arc).get("seeded_followup"),
-        }
-        for arc in _safe_dict(story_arc_runtime_state).values()
-        if _safe_dict(arc).get("seeded_followup")
-        and _safe_dict(arc).get("status") not in {"completed", "failed", "abandoned"}
-    ],
-    "faction_tiers": {
-        faction_id: _safe_dict(data).get("tier")
-        for faction_id, data in _safe_dict(faction_reputation_state).items()
+def _rebuild_final_100_turn_evaluation(
+
+Inside its _build_100_turn_evaluation_summary(...) call, add:
+
+escalation_arc_progression_summary=_safe_dict(summary.get("escalation_arc_progression_summary")),
+world_state_compression_summary=_safe_dict(summary.get("world_state_compression_summary")),
+
+The final tail should now include:
+
+followup_arc_resolution_summary=_safe_dict(summary.get("followup_arc_resolution_summary")),
+pressure_pacing_summary=_safe_dict(summary.get("pressure_pacing_summary")),
+world_signal_summary=_safe_dict(summary.get("world_signal_summary")),
+escalation_arc_progression_summary=_safe_dict(summary.get("escalation_arc_progression_summary")),
+world_state_compression_summary=_safe_dict(summary.get("world_state_compression_summary")),
+
+Also extend its diagnostic warning loop:
+
+for gate_name, summary_key, expected_key in (
+    ("followup_arc_resolution_present", "followup_arc_resolution_summary", "resolved_count"),
+    ("pressure_pacing_active", "pressure_pacing_summary", "accepted_pressure_event_count"),
+    ("world_signal_summary_present", "world_signal_summary", "world_signal_count"),
+    ("escalation_arc_progression_present", "escalation_arc_progression_summary", "progressed_count"),
+    ("world_state_compression_active", "world_state_compression_summary", "compression_event_count"),
+):
+3. Fix every direct _build_100_turn_evaluation_summary(...) call
+
+Search:
+
+Select-String -Path src\tests\rpg\autoplay_llm_campaign.py -Pattern "_build_100_turn_evaluation_summary" -Context 3,40
+
+Every call must now pass:
+
+escalation_arc_progression_summary=_safe_dict(summary.get("escalation_arc_progression_summary")),
+world_state_compression_summary=_safe_dict(summary.get("world_state_compression_summary")),
+4. Extend _build_100_turn_readiness_summary(...)
+
+Find:
+
+def _build_100_turn_readiness_summary(
+
+Add optional params:
+
+escalation_arc_progression_summary: Optional[Dict[str, Any]] = None,
+world_state_compression_summary: Optional[Dict[str, Any]] = None,
+
+Inside the function, near existing follow-up/pressure locals, add:
+
+escalation_progression = _safe_dict(escalation_arc_progression_summary)
+if not escalation_progression:
+    escalation_progression = _safe_dict(summary.get("escalation_arc_progression_summary"))
+
+world_compression = _safe_dict(world_state_compression_summary)
+if not world_compression:
+    world_compression = _safe_dict(summary.get("world_state_compression_summary"))
+
+Inside readiness gates, add:
+
+"escalation_arc_progression_present": {
+    "ok": int(escalation_progression.get("progressed_count") or 0) >= 1,
+    "value": {
+        "progressed_count": escalation_progression.get("progressed_count"),
+        "progressed_arc_ids": escalation_progression.get("progressed_arc_ids"),
     },
-}
+    "expected": "at least one escalation arc progresses",
+    "message": "Escalation branches should not remain only seeded.",
+},
+"world_state_compression_active": {
+    "ok": int(world_compression.get("compression_event_count") or 0) >= 1
+    and bool(_safe_dict(world_compression.get("latest_state_budget")).get("ok", True)),
+    "value": {
+        "compression_event_count": world_compression.get("compression_event_count"),
+        "compressed_state_preview": world_compression.get("compressed_state_preview"),
+    },
+    "expected": "compression events occur and state budget is respected",
+    "message": "100-turn readiness should prove bounded state management is active.",
+},
+5. Pass new summaries to readiness call sites
 
-Patch _slim_transcript_row(...):
+Search:
 
-if row.get("followup_progression_probe"):
-    slim_row["followup_progression_probe"] = row.get("followup_progression_probe")
+Select-String -Path src\tests\rpg\autoplay_llm_campaign.py -Pattern "_build_100_turn_readiness_summary" -Context 3,35
 
-This gives us clear visibility if progression still fails.
+Every call should include:
 
-8. Make follow-up resolution run every turn after progression
+escalation_arc_progression_summary=_safe_dict(summary.get("escalation_arc_progression_summary")),
+world_state_compression_summary=_safe_dict(summary.get("world_state_compression_summary")),
 
-Same file.
+If the call is inside _build_authoritative_final_lifecycle_summary(...), add matching params to that function signature:
 
-Find resolve_followup_arcs(...).
+escalation_arc_progression_summary: Optional[Dict[str, Any]] = None,
+world_state_compression_summary: Optional[Dict[str, Any]] = None,
 
-Make sure it is also top-level in the per-turn loop, not nested under:
+and pass:
 
-if progression_events:
-
-Resolution should run even if progression happened on an earlier turn and the required delay is now satisfied.
-
-Correct logic:
-
-followup_resolution = resolve_followup_arcs(
-    story_arcs=story_arc_runtime_state,
-    state=followup_resolution_state,
-    turn_index=int(row.get("turn_index") or turn_index),
-    rules=tavern_followup_resolution_rules(),
-    already_resolved_keys=followup_arc_resolution_applied_keys,
-)
-
-This should execute every turn after follow-up progression processing.
-
-9. Adjust expected pressure pacing gate
-
-Run 252 already proved pressure pacing works:
-
-"accepted_pressure_event_count": 1,
-"rejected_pressure_event_count": 1
-
-Keep the gate as-is.
-
-But after threshold matching, pressure may produce more accepted events. That is fine as long as:
-
-accepted >= 1
-rejected >= 1
-Tests
-10. Add tier threshold tests
+escalation_arc_progression_summary=_safe_dict(
+    escalation_arc_progression_summary
+    or summary.get("escalation_arc_progression_summary")
+),
+world_state_compression_summary=_safe_dict(
+    world_state_compression_summary
+    or summary.get("world_state_compression_summary")
+),
+Regression test
 
 Create:
 
-src/tests/rpg/test_faction_tier_thresholds.py
-from app.rpg.story.followup_arc_progression import (
-    FollowupArcProgressionRule,
-    progress_followup_arcs,
-)
-from app.rpg.story.followup_arc_resolution import (
-    FollowupArcResolutionRule,
-    resolve_followup_arcs,
-)
-from app.rpg.story.faction_pressure import (
-    FactionPressureRule,
-    emit_faction_pressure_events,
-)
+src/tests/rpg/test_autoplay_evaluation_escalation_compression_gates.py
+from tests.rpg.autoplay_llm_campaign import _build_100_turn_evaluation_summary
 
 
-def test_progression_suspicious_requirement_accepts_hostile():
-    result = progress_followup_arcs(
-        story_arcs={
-            "arc:test": {
-                "arc_id": "arc:test",
-                "status": "active",
-                "current_stage": "seeded_followup",
-                "started_turn": 1,
-            }
+def test_evaluation_uses_escalation_and_compression_summaries():
+    evaluation = _build_100_turn_evaluation_summary(
+        turns_executed=100,
+        requested_turns=100,
+        runtime_errors=[],
+        warnings=[],
+        transcript=[{"turn_index": i + 1} for i in range(100)],
+        performance_summary={
+            "avg_turn_seconds": 1.0,
+            "p95_turn_seconds": 2.0,
+            "max_turn_seconds": 3.0,
         },
-        state={
-            "faction_reputation": {
-                "faction:enemy": {
-                    "tier": "hostile",
-                    "reputation": -6,
-                }
-            }
+        narration_grounding_summary={
+            "checked_count": 100,
+            "selected_output_invalid_count": 0,
+            "provider_json_parse_failed_count": 0,
+            "provider_invalid_count": 0,
+            "deterministic_fallback_rate": 0.0,
         },
-        turn_index=10,
-        rules=[
-            FollowupArcProgressionRule(
-                id="rule:test",
-                arc_id="arc:test",
-                requires_turns_since_started=1,
-                requires_faction_tier=("faction:enemy", "suspicious"),
-                to_stage="progressed",
-            )
-        ],
+        progress_quality_summary={
+            "meaningful_progress_rate": 1.0,
+            "no_change_turn_count": 0,
+            "max_no_change_streak": 0,
+        },
+        checkpoint_summary={
+            "checkpoint_validation_failures": 0,
+            "checkpoint_count": 4,
+            "validated_count": 4,
+        },
+        loop_detection_summary={
+            "repeated_action_window_count": 0,
+            "loop_warning_count": 0,
+        },
+        mechanics_coverage_summary={
+            "required_ok": True,
+            "real_required_ok": True,
+            "coverage_rate": 1.0,
+            "real_coverage_rate": 1.0,
+            "missing_required": [],
+            "missing_real_required": [],
+        },
+        story_arc_lifecycle_summary={
+            "completed_count": 4,
+            "failed_count": 0,
+            "active_count": 2,
+            "status_counts": {"completed": 4, "active": 2},
+        },
+        story_arc_aftermath_summary={
+            "aftermath_event_count": 2,
+            "world_signal_count": 2,
+            "npc_memory_event_count": 2,
+            "followup_hook_count": 2,
+            "seeded_followup_arc_count": 2,
+        },
+        faction_reputation_summary={
+            "faction_count": 2,
+            "factions": [{"faction_id": "faction:test", "history_count": 1}],
+        },
+        followup_arc_progression_summary={
+            "progressed_count": 2,
+            "progressed_arc_ids": ["arc:a", "arc:b"],
+            "world_signal_count": 2,
+        },
+        faction_pressure_summary={
+            "pressure_event_count": 16,
+            "world_signal_count": 10,
+            "by_faction": {"faction:test": 16},
+        },
+        followup_arc_resolution_summary={
+            "resolved_count": 2,
+            "resolved_arc_ids": ["arc:a", "arc:b"],
+            "escalation_seed_count": 2,
+            "escalation_arcs": [{"arc_id": "arc:next"}],
+        },
+        pressure_pacing_summary={
+            "accepted_pressure_event_count": 16,
+            "rejected_pressure_event_count": 167,
+            "rejected_by_reason": {"min_gap_turns": 159},
+        },
+        world_signal_summary={
+            "world_signal_count": 22,
+            "by_kind": {"faction_pressure": 10},
+            "by_faction": {"faction:test": 10},
+        },
+        escalation_arc_progression_summary={
+            "progressed_count": 2,
+            "progressed_arc_ids": ["arc:handler", "arc:voss"],
+            "pressure_event_count": 2,
+            "world_signal_count": 2,
+        },
+        world_state_compression_summary={
+            "compression_event_count": 4,
+            "compressed_state_preview": {
+                "story_arc_count": 6,
+                "world_signal_count": 20,
+            },
+            "latest_state_budget": {
+                "ok": True,
+                "sections": {},
+            },
+        },
     )
 
-    assert result["progressed_count"] == 1
+    assert evaluation["gates"]["escalation_arc_progression_present"]["ok"] is True
+    assert evaluation["gates"]["world_state_compression_active"]["ok"] is True
+    assert "escalation_arc_progression_present" not in evaluation["failed_gates"]
+    assert "world_state_compression_active" not in evaluation["failed_gates"]
 
+Also update src/tests/rpg/test_autoplay_final_evaluation_rebuild.py to include:
 
-def test_progression_friendly_requirement_accepts_trusted():
-    result = progress_followup_arcs(
-        story_arcs={
-            "arc:test": {
-                "arc_id": "arc:test",
-                "status": "active",
-                "current_stage": "seeded_followup",
-                "started_turn": 1,
-            }
-        },
-        state={
-            "faction_reputation": {
-                "faction:ally": {
-                    "tier": "trusted",
-                    "reputation": 6,
-                }
-            }
-        },
-        turn_index=10,
-        rules=[
-            FollowupArcProgressionRule(
-                id="rule:test",
-                arc_id="arc:test",
-                requires_turns_since_started=1,
-                requires_faction_tier=("faction:ally", "friendly"),
-                to_stage="progressed",
-            )
-        ],
-    )
+"escalation_arc_progression_summary": {
+    "progressed_count": 2,
+    "progressed_arc_ids": ["arc:handler", "arc:voss"],
+    "pressure_event_count": 2,
+    "world_signal_count": 2,
+},
+"world_state_compression_summary": {
+    "compression_event_count": 4,
+    "compressed_state_preview": {
+        "story_arc_count": 6,
+        "world_signal_count": 20,
+    },
+    "latest_state_budget": {
+        "ok": True,
+        "sections": {},
+    },
+},
 
-    assert result["progressed_count"] == 1
+and assertions:
 
-
-def test_resolution_suspicious_requirement_accepts_hostile():
-    result = resolve_followup_arcs(
-        story_arcs={
-            "arc:test": {
-                "arc_id": "arc:test",
-                "status": "active",
-                "current_stage": "progressed",
-                "last_progress_turn": 1,
-            }
-        },
-        state={
-            "faction_reputation": {
-                "faction:enemy": {
-                    "tier": "hostile",
-                    "reputation": -6,
-                }
-            }
-        },
-        turn_index=10,
-        rules=[
-            FollowupArcResolutionRule(
-                id="rule:test",
-                arc_id="arc:test",
-                from_stage="progressed",
-                requires_turns_since_progress=1,
-                requires_faction_tier=("faction:enemy", "suspicious"),
-            )
-        ],
-    )
-
-    assert result["resolved_count"] == 1
-
-
-def test_pressure_suspicious_requirement_accepts_hostile():
-    result = emit_faction_pressure_events(
-        faction_state={
-            "faction:enemy": {
-                "tier": "hostile",
-                "reputation": -6,
-            }
-        },
-        turn_index=10,
-        rules=[
-            FactionPressureRule(
-                id="pressure:test",
-                faction_id="faction:enemy",
-                min_reputation=-10,
-                max_reputation=-2,
-                required_tier="suspicious",
-            )
-        ],
-    )
-
-    assert result["event_count"] == 1
-11. Add faction dedup test
-
-Patch:
-
-src/tests/rpg/test_faction_reputation.py
-
-Add:
-
-def test_faction_reputation_dedupes_same_turn_same_reason_delta():
-    result = apply_faction_deltas(
-        faction_state={},
-        faction_deltas=[
-            {"faction_id": "faction:test", "delta": 2, "reason": "helped"},
-            {"faction_id": "faction:test", "delta": 2, "reason": "helped"},
-        ],
-        turn_index=5,
-    )
-
-    row = result["factions"]["faction:test"]
-    assert row["reputation"] == 2
-    assert len(row["history"]) == 1
-    assert len(result["events"]) == 1
+assert evaluation["gates"]["escalation_arc_progression_present"]["ok"] is True
+assert evaluation["gates"]["world_state_compression_active"]["ok"] is True
 Run checks
 python -m py_compile `
-  src\app\rpg\story\followup_arc_progression.py `
-  src\app\rpg\story\followup_arc_resolution.py `
-  src\app\rpg\story\faction_pressure.py `
-  src\app\rpg\story\faction_reputation.py `
   src\tests\rpg\autoplay_llm_campaign.py
 python -m pytest `
-  src\tests\rpg\test_faction_tier_thresholds.py `
-  src\tests\rpg\test_faction_reputation.py `
-  src\tests\rpg\test_followup_arc_progression.py `
-  src\tests\rpg\test_followup_arc_resolution.py `
-  src\tests\rpg\test_pressure_pacing.py `
+  src\tests\rpg\test_autoplay_evaluation_escalation_compression_gates.py `
+  src\tests\rpg\test_autoplay_final_evaluation_rebuild.py `
+  src\tests\rpg\test_world_state_compression.py `
+  src\tests\rpg\test_escalation_arc_progression.py `
   -q
+Expected next run
+
+Evaluation gates should now include:
+
+✅ escalation_arc_progression_present
+✅ world_state_compression_active
+
+Expected values:
+
+"escalation_arc_progression_present": {
+  "ok": true,
+  "value": {
+    "progressed_count": 2,
+    "progressed_arc_ids": [
+      "arc:sable_chain_handler",
+      "arc:voss_backer_pressure"
+    ]
+  }
+}
+"world_state_compression_active": {
+  "ok": true,
+  "value": {
+    "compression_event_count": 4,
+    "latest_state_budget": {
+      "ok": true
+    }
+  }
+}
+Verdict for run 257
+N97 — Memory Aging + World-State Compression: ✅ runtime/artifacts working
+N98 — Escalation Arc Progression: ✅ runtime/artifacts working
+N99 — State Budget Gates + Compression Report: ⚠️ artifacts exist, gates not enforced yet
+
+After N99.1, N97-N99 should be fully enforced.
