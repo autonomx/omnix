@@ -298,6 +298,15 @@ def _slim_transcript_row(row: Dict[str, Any], max_row_bytes: int = 50000) -> Dic
     if row.get("followup_progression_probe"):
         slim_row["followup_progression_probe"] = row.get("followup_progression_probe")
 
+    if row.get("economy_pressure_events"):
+        slim_row["economy_pressure_events"] = row.get("economy_pressure_events")
+
+    if row.get("economy_pressure_warnings"):
+        slim_row["economy_pressure_warnings"] = row.get("economy_pressure_warnings")
+
+    if row.get("economy_pressure_currency_deltas"):
+        slim_row["economy_pressure_currency_deltas"] = row.get("economy_pressure_currency_deltas")
+
     slim_row["_artifact_slimmed"] = True
     return slim_row
 
@@ -1076,6 +1085,8 @@ from app.rpg.story.tavern_followup_resolution_rules import (
 )
 from app.rpg.story.tavern_story_aftermath_rules import tavern_story_aftermath_rules
 from app.rpg.story.tavern_story_arc_rules import tavern_story_arc_rules
+from app.rpg.economy.economy_pressure import apply_economy_pressure
+from app.rpg.economy.tavern_economy_pressure_rules import tavern_economy_pressure_rules
 from app.rpg.state.world_state_compression import (
     build_state_budget_summary,
     compress_world_state_snapshot,
@@ -1429,6 +1440,7 @@ def _build_100_turn_readiness_summary(
     escalation_arc_progression_summary: Optional[Dict[str, Any]] = None,
     world_state_compression_summary: Optional[Dict[str, Any]] = None,
     npc_agency_summary: Optional[Dict[str, Any]] = None,
+    economy_pressure_summary: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     summary = _safe_dict(summary)
     arc = _safe_dict(summary.get("scenario_progression_arc_summary"))
@@ -1487,6 +1499,10 @@ def _build_100_turn_readiness_summary(
     npc_agency = _safe_dict(npc_agency_summary)
     if not npc_agency:
         npc_agency = _safe_dict(_safe_dict(summary).get("npc_agency_summary"))
+
+    economy_pressure = _safe_dict(economy_pressure_summary)
+    if not economy_pressure:
+        economy_pressure = _safe_dict(_safe_dict(summary).get("economy_pressure_summary"))
 
     progression_changed_count = int(
         _safe_dict(behavioral.get("metrics")).get("progression_changed_count")
@@ -1663,6 +1679,19 @@ def _build_100_turn_readiness_summary(
             },
             "expected": "at least one deterministic NPC agency event",
             "message": "Long-term NPCs should act from schedules, arc state, and faction pressure.",
+        },
+        "economy_pressure_present": {
+            "ok": int(economy_pressure.get("event_count") or 0) >= 1,
+            "value": {
+                "event_count": economy_pressure.get("event_count"),
+                "paid_count": economy_pressure.get("paid_count"),
+                "unpaid_count": economy_pressure.get("unpaid_count"),
+                "warning_count": economy_pressure.get("warning_count"),
+                "ending_currency": economy_pressure.get("ending_currency"),
+                "total_spent": economy_pressure.get("total_spent"),
+            },
+            "expected": "at least one deterministic economy pressure/resource sink event",
+            "message": "100-turn readiness should demonstrate resource pressure and sinks.",
         },
     }
 
@@ -3013,6 +3042,7 @@ def _build_100_turn_evaluation_summary(
     escalation_arc_progression_summary: Optional[Dict[str, Any]] = None,
     world_state_compression_summary: Optional[Dict[str, Any]] = None,
     npc_agency_summary: Optional[Dict[str, Any]] = None,
+    economy_pressure_summary: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     grounding = _safe_dict(narration_grounding_summary)
     progress = _safe_dict(progress_quality_summary)
@@ -3034,6 +3064,7 @@ def _build_100_turn_evaluation_summary(
     escalation_progression = _safe_dict(escalation_arc_progression_summary)
     world_compression = _safe_dict(world_state_compression_summary)
     npc_agency = _safe_dict(npc_agency_summary)
+    economy_pressure = _safe_dict(economy_pressure_summary)
     selected_grounding_health = _build_selected_output_grounding_health(
         grounding,
         requested_turns=requested_turns,
@@ -3291,6 +3322,19 @@ def _build_100_turn_evaluation_summary(
             },
             "expected": "at least one deterministic NPC agency event",
             "message": "100-turn readiness should demonstrate schedule-driven NPC agency.",
+        },
+        "economy_pressure_present": {
+            "ok": int(economy_pressure.get("event_count") or 0) >= 1,
+            "value": {
+                "event_count": economy_pressure.get("event_count"),
+                "paid_count": economy_pressure.get("paid_count"),
+                "unpaid_count": economy_pressure.get("unpaid_count"),
+                "warning_count": economy_pressure.get("warning_count"),
+                "ending_currency": economy_pressure.get("ending_currency"),
+                "total_spent": economy_pressure.get("total_spent"),
+            },
+            "expected": "at least one deterministic economy pressure/resource sink event",
+            "message": "Long-run campaigns should include recurring resource pressure and sinks.",
         },
     }
 
@@ -4719,6 +4763,7 @@ def _build_minimal_autoplay_html_report(final_summary: Dict[str, Any]) -> str:
     pressure_pacing = _safe_dict(final_summary.get("pressure_pacing_summary"))
     world_signal_summary = _safe_dict(final_summary.get("world_signal_summary"))
     npc_agency = _safe_dict(final_summary.get("npc_agency_summary"))
+    economy_pressure = _safe_dict(final_summary.get("economy_pressure_summary"))
 
     status = "PASS" if evaluation.get("ok") else "FAIL"
     status_class = "pass" if evaluation.get("ok") else "fail"
@@ -4876,6 +4921,24 @@ def _build_minimal_autoplay_html_report(final_summary: Dict[str, Any]) -> str:
 </section>
 """
 
+    economy_pressure_html = f"""
+<section class="card" id="economy-pressure">
+  <h2>Economy Pressure / Resource Sinks</h2>
+  <div class="grid">
+    <div class="metric"><strong>Events</strong><span>{esc(economy_pressure.get("event_count"))}</span></div>
+    <div class="metric"><strong>Paid</strong><span>{esc(economy_pressure.get("paid_count"))}</span></div>
+    <div class="metric"><strong>Unpaid</strong><span>{esc(economy_pressure.get("unpaid_count"))}</span></div>
+    <div class="metric"><strong>Warnings</strong><span>{esc(economy_pressure.get("warning_count"))}</span></div>
+  </div>
+  <h3>Ending Currency</h3>
+  <pre>{esc(json.dumps(economy_pressure.get("ending_currency", {}), ensure_ascii=False, indent=2, default=str))}</pre>
+  <h3>Total Spent</h3>
+  <pre>{esc(json.dumps(economy_pressure.get("total_spent", {}), ensure_ascii=False, indent=2, default=str))}</pre>
+  <h3>Events</h3>
+  <pre>{esc(json.dumps(economy_pressure.get("events", []), ensure_ascii=False, indent=2, default=str))}</pre>
+</section>
+"""
+
     return f"""<!doctype html>
 <html>
 <head>
@@ -4981,6 +5044,7 @@ a {{ color: #c8d6ff; }}
     <a href="#pressure-pacing">Pressure Pacing</a>
     <a href="#world-signals">World Signals</a>
     <a href="#npc-agency">NPC Agency</a>
+    <a href="#economy-pressure">Economy</a>
     <a href="#debug">Debug</a>
 </nav>
 
@@ -5077,8 +5141,9 @@ a {{ color: #c8d6ff; }}
 {followups_html}
 {followup_resolution_html}
 {pressure_pacing_html}
-{world_signals_html}
-{npc_agency_html}
+  {world_signals_html}
+  {npc_agency_html}
+  {economy_pressure_html}
 
 <section class="card" id="debug">
 <h2>Debug Summary</h2>
@@ -6176,6 +6241,53 @@ def _build_world_signal_summary(world_signals: List[Dict[str, Any]]) -> Dict[str
     }
 
 
+def _build_economy_pressure_summary(
+    *,
+    economy_state: Dict[str, Any],
+    events: List[Dict[str, Any]],
+    world_signals: List[Dict[str, Any]],
+    warnings: List[Dict[str, Any]],
+    currency_deltas: List[Dict[str, Any]],
+) -> Dict[str, Any]:
+    event_rows = [_safe_dict(event) for event in _safe_list(events)]
+    signal_rows = [_safe_dict(signal) for signal in _safe_list(world_signals)]
+    warning_rows = [_safe_dict(warning) for warning in _safe_list(warnings)]
+    delta_rows = [_safe_dict(delta) for delta in _safe_list(currency_deltas)]
+
+    paid_count = sum(1 for event in event_rows if event.get("paid") is True)
+    unpaid_count = sum(1 for event in event_rows if event.get("paid") is False)
+
+    by_kind: Dict[str, int] = {}
+    for event in event_rows:
+        kind = _safe_str(event.get("subtype") or event.get("kind") or "unknown")
+        by_kind[kind] = by_kind.get(kind, 0) + 1
+
+    total_spent: Dict[str, int] = {}
+    for delta in delta_rows:
+        currency = _safe_str(delta.get("currency"))
+        amount = int(delta.get("delta") or 0)
+        if currency and amount < 0:
+            total_spent[currency] = total_spent.get(currency, 0) + abs(amount)
+
+    return {
+        "format_version": "economy_pressure_summary_v1",
+        "ok": bool(event_rows),
+        "event_count": len(event_rows),
+        "world_signal_count": len(signal_rows),
+        "warning_count": len(warning_rows),
+        "currency_delta_count": len(delta_rows),
+        "paid_count": paid_count,
+        "unpaid_count": unpaid_count,
+        "by_kind": by_kind,
+        "total_spent": total_spent,
+        "ending_currency": _safe_dict(_safe_dict(economy_state).get("currency")),
+        "events": event_rows,
+        "warnings": warning_rows,
+        "world_signals": signal_rows,
+        "currency_deltas": delta_rows,
+    }
+
+
 def _build_followup_arc_progression_summary(
     *,
     progression_events: List[Dict[str, Any]],
@@ -6423,6 +6535,7 @@ def _build_authoritative_final_lifecycle_summary(
     escalation_arc_progression_summary: Optional[Dict[str, Any]] = None,
     world_state_compression_summary: Optional[Dict[str, Any]] = None,
     npc_agency_summary: Optional[Dict[str, Any]] = None,
+    economy_pressure_summary: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """Final authoritative summary override.
 
@@ -6489,6 +6602,8 @@ def _build_authoritative_final_lifecycle_summary(
         summary["escalation_arc_progression_summary"] = _safe_dict(escalation_arc_progression_summary)
     if world_state_compression_summary:
         summary["world_state_compression_summary"] = _safe_dict(world_state_compression_summary)
+    if economy_pressure_summary:
+        summary["economy_pressure_summary"] = _safe_dict(economy_pressure_summary)
 
     if npc_agency_summary:
         summary["npc_agency_summary"] = _safe_dict(npc_agency_summary)
@@ -6532,6 +6647,10 @@ def _build_authoritative_final_lifecycle_summary(
         npc_agency_summary=_safe_dict(
             npc_agency_summary
             or summary.get("npc_agency_summary")
+        ),
+        economy_pressure_summary=_safe_dict(
+            economy_pressure_summary
+            or summary.get("economy_pressure_summary")
         ),
     )
     _sync_hundred_turn_validation_classification(summary)
@@ -6784,6 +6903,7 @@ def _rebuild_final_100_turn_evaluation(
         escalation_arc_progression_summary=_safe_dict(summary.get("escalation_arc_progression_summary")),
         world_state_compression_summary=_safe_dict(summary.get("world_state_compression_summary")),
         npc_agency_summary=_safe_dict(summary.get("npc_agency_summary")),
+        economy_pressure_summary=_safe_dict(summary.get("economy_pressure_summary")),
     )
 
     summary["ok"] = (
@@ -6801,6 +6921,7 @@ def _rebuild_final_100_turn_evaluation(
         ("escalation_arc_progression_present", "escalation_arc_progression_summary", "progressed_count"),
         ("world_state_compression_active", "world_state_compression_summary", "compression_event_count"),
         ("npc_agency_present", "npc_agency_summary", "agency_event_count"),
+        ("economy_pressure_present", "economy_pressure_summary", "event_count"),
     ):
         gate = _safe_dict(gates.get(gate_name))
         gate_value = _safe_dict(gate.get("value"))
@@ -8823,6 +8944,7 @@ def _validate_final_autoplay_summary_integrity(
         "escalation_arc_progression_summary",
         "world_state_compression_summary",
         "npc_agency_summary",
+        "economy_pressure_summary",
     }
 
     required_gate_keys = {
@@ -8836,6 +8958,7 @@ def _validate_final_autoplay_summary_integrity(
         "escalation_arc_progression_present",
         "world_state_compression_active",
         "npc_agency_present",
+        "economy_pressure_present",
     }
 
     for key in required_summary_keys:
@@ -9054,6 +9177,19 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
             "history": [],
         },
     }
+
+    economy_pressure_state: Dict[str, Any] = {
+        "currency": {
+            "gold": 10,
+            "silver": 0,
+            "copper": 30,
+        }
+    }
+    economy_pressure_events: List[Dict[str, Any]] = []
+    economy_pressure_world_signals: List[Dict[str, Any]] = []
+    economy_pressure_warnings: List[Dict[str, Any]] = []
+    economy_pressure_currency_deltas: List[Dict[str, Any]] = []
+    economy_pressure_last_emitted_turn_by_rule: Dict[str, int] = {}
     faction_reputation_events: List[Dict[str, Any]] = []
 
     followup_arc_seed_events: List[Dict[str, Any]] = []
@@ -11055,6 +11191,63 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
                     "npc_memory_events": _safe_list(record.get("npc_memory_events")),
                 }
 
+        economy_flags = {
+            **_safe_dict(mechanics_runtime_state.get("flags")),
+            **_safe_dict(_safe_dict(record.get("state_delta")).get("story_arc_aftermath_flags")),
+            **_safe_dict(_safe_dict(record.get("state_delta")).get("faction_pressure_flags")),
+            **_safe_dict(_safe_dict(record.get("state_delta")).get("npc_agency_flags")),
+        }
+
+        economy_pressure = apply_economy_pressure(
+            economy_state=economy_pressure_state,
+            turn_index=int(record.get("turn_index") or turn_index),
+            rules=tavern_economy_pressure_rules(),
+            flags=economy_flags,
+            last_emitted_turn_by_rule=economy_pressure_last_emitted_turn_by_rule,
+            max_events_per_turn=2,
+        )
+
+        if economy_pressure.get("ok"):
+            economy_pressure_state = _safe_dict(economy_pressure.get("economy_state"))
+            economy_pressure_last_emitted_turn_by_rule = {
+                str(k): int(v or 0)
+                for k, v in _safe_dict(economy_pressure.get("last_emitted_turn_by_rule")).items()
+            }
+
+            pressure_events = _safe_list(economy_pressure.get("events"))
+            pressure_signals = _safe_list(economy_pressure.get("world_signals"))
+            pressure_warnings = _safe_list(economy_pressure.get("warnings"))
+            currency_deltas = _safe_list(economy_pressure.get("currency_deltas"))
+
+            if pressure_events:
+                economy_pressure_events.extend(pressure_events)
+                economy_pressure_world_signals.extend(pressure_signals)
+                economy_pressure_warnings.extend(pressure_warnings)
+                economy_pressure_currency_deltas.extend(currency_deltas)
+
+                world_signal_events.extend(pressure_signals)
+
+                record["economy_pressure_events"] = pressure_events
+                record["economy_pressure_warnings"] = pressure_warnings
+                record["economy_pressure_currency_deltas"] = currency_deltas
+                record["world_signals"] = _safe_list(record.get("world_signals")) + pressure_signals
+
+                record["state_delta"] = {
+                    **_safe_dict(record.get("state_delta")),
+                    "economy_pressure": {
+                        "currency": _safe_dict(economy_pressure_state.get("currency")),
+                        "warnings": pressure_warnings,
+                        "currency_deltas": currency_deltas,
+                    },
+                }
+
+                record["result"] = {
+                    **_safe_dict(record.get("result")),
+                    "economy_pressure_events": pressure_events,
+                    "economy_pressure_warnings": pressure_warnings,
+                    "world_signals": _safe_list(record.get("world_signals")),
+                }
+
         compression_interval = 25
         if int(record.get("turn_index") or turn_index) % compression_interval == 0:
             compression_input = {
@@ -11062,6 +11255,7 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
                 "world_signals": world_signal_events,
                 "faction_reputation": faction_reputation_state,
                 "npc_memory_events": npc_memory_events,
+                "economy_pressure": economy_pressure_state,
             }
 
             compression = compress_world_state_snapshot(
@@ -11872,6 +12066,14 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
         memory_events=npc_agency_memory_events,
     )
 
+    summary["economy_pressure_summary"] = _build_economy_pressure_summary(
+        economy_state=economy_pressure_state,
+        events=economy_pressure_events,
+        world_signals=economy_pressure_world_signals,
+        warnings=economy_pressure_warnings,
+        currency_deltas=economy_pressure_currency_deltas,
+    )
+
     summary = _build_authoritative_final_lifecycle_summary(
         args=args,
         summary=summary,
@@ -11962,9 +12164,43 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
             followup_arc_resolution_summary=_safe_dict(summary.get("followup_arc_resolution_summary")),
             pressure_pacing_summary=_safe_dict(summary.get("pressure_pacing_summary")),
             world_signal_summary=_safe_dict(summary.get("world_signal_summary")),
+        escalation_arc_progression_summary=_safe_dict(summary.get("escalation_arc_progression_summary")),
+        world_state_compression_summary=_safe_dict(summary.get("world_state_compression_summary")),
+        npc_agency_summary=_safe_dict(summary.get("npc_agency_summary")),
+        economy_pressure_summary=_safe_dict(summary.get("economy_pressure_summary")),
+    )
+
+    evaluation = _safe_dict(summary.get("hundred_turn_evaluation"))
+    evaluation_gates = _safe_dict(evaluation.get("gates"))
+    economy_gate = _safe_dict(evaluation_gates.get("economy_pressure_present"))
+    economy_gate_value = _safe_dict(economy_gate.get("value"))
+    economy_summary = _safe_dict(summary.get("economy_pressure_summary"))
+
+    if economy_summary and economy_gate and economy_gate_value.get("event_count") is None:
+        summary["hundred_turn_evaluation"] = _build_100_turn_evaluation_summary(
+            turns_executed=int(summary.get("turns_executed") or len(_safe_list(transcript))),
+            requested_turns=int(summary.get("requested_turns") or getattr(args, "turns", 0) or 0),
+            runtime_errors=_safe_list(summary.get("runtime_errors")),
+            warnings=_safe_list(summary.get("warnings")),
+            transcript=_safe_list(transcript),
+            performance_summary=_safe_dict(summary.get("performance_seconds_summary")),
+            narration_grounding_summary=_safe_dict(summary.get("narration_grounding_summary")),
+            progress_quality_summary=_safe_dict(summary.get("canonical_progress_quality")),
+            checkpoint_summary=_safe_dict(summary.get("checkpoint_summary")),
+            loop_detection_summary=_safe_dict(summary.get("loop_detection_summary")),
+            mechanics_coverage_summary=_safe_dict(summary.get("mechanics_coverage_summary")),
+            story_arc_lifecycle_summary=_safe_dict(summary.get("story_arc_lifecycle_summary")),
+            story_arc_aftermath_summary=_safe_dict(summary.get("story_arc_aftermath_summary")),
+            faction_reputation_summary=_safe_dict(summary.get("faction_reputation_summary")),
+            followup_arc_progression_summary=_safe_dict(summary.get("followup_arc_progression_summary")),
+            faction_pressure_summary=_safe_dict(summary.get("faction_pressure_summary")),
+            followup_arc_resolution_summary=_safe_dict(summary.get("followup_arc_resolution_summary")),
+            pressure_pacing_summary=_safe_dict(summary.get("pressure_pacing_summary")),
+            world_signal_summary=_safe_dict(summary.get("world_signal_summary")),
             escalation_arc_progression_summary=_safe_dict(summary.get("escalation_arc_progression_summary")),
             world_state_compression_summary=_safe_dict(summary.get("world_state_compression_summary")),
-            npc_agency_summary=npc_summary,
+            npc_agency_summary=_safe_dict(summary.get("npc_agency_summary")),
+            economy_pressure_summary=economy_summary,
         )
 
     summary["ok"] = (
@@ -12103,6 +12339,7 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
         escalation_arc_progression_summary=_safe_dict(summary.get("escalation_arc_progression_summary")),
         world_state_compression_summary=_safe_dict(summary.get("world_state_compression_summary")),
         npc_agency_summary=_safe_dict(summary.get("npc_agency_summary")),
+        economy_pressure_summary=_safe_dict(summary.get("economy_pressure_summary")),
     )
 
     summary["ok"] = bool(_safe_dict(summary.get("hundred_turn_evaluation")).get("ok"))
@@ -12401,6 +12638,13 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
                 artifact_manifest,
                 "npc-agency-summary.json",
                 summary.get("npc_agency_summary", {}),
+            )
+
+            _zip_writestr_json(
+                zip_handle,
+                artifact_manifest,
+                "economy-pressure-summary.json",
+                summary.get("economy_pressure_summary", {}),
             )
 
             # Write HTML report
