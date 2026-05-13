@@ -81,21 +81,28 @@ def test_evaluation_uses_escalation_and_compression_summaries():
             "rejected_by_reason": {"min_gap_turns": 159},
         },
         world_signal_summary={
-            "world_signal_count": 22,
-            "by_kind": {"faction_pressure": 10},
-            "by_faction": {"faction:test": 10},
+            "world_signal_count": 24,
+            "by_kind": {"faction_pressure": 11},
+            "by_faction": {"faction:test": 11},
         },
         escalation_arc_progression_summary={
+            "ok": True,
             "progressed_count": 2,
-            "progressed_arc_ids": ["arc:handler", "arc:voss"],
+            "progressed_arc_ids": [
+                "arc:sable_chain_handler",
+                "arc:voss_backer_pressure",
+            ],
             "pressure_event_count": 2,
             "world_signal_count": 2,
         },
         world_state_compression_summary={
+            "ok": True,
             "compression_event_count": 4,
             "compressed_state_preview": {
                 "story_arc_count": 6,
-                "world_signal_count": 20,
+                "world_signal_count": 24,
+                "faction_count": 2,
+                "npc_memory_event_count": 2,
             },
             "latest_state_budget": {
                 "ok": True,

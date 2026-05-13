@@ -1067,6 +1067,12 @@ from app.rpg.story.tavern_followup_resolution_rules import (
 )
 from app.rpg.story.tavern_story_aftermath_rules import tavern_story_aftermath_rules
 from app.rpg.story.tavern_story_arc_rules import tavern_story_arc_rules
+from app.rpg.state.world_state_compression import (
+    build_state_budget_summary,
+    compress_world_state_snapshot,
+)
+from app.rpg.story.escalation_arc_progression import progress_escalation_arcs
+from app.rpg.story.tavern_escalation_progression_rules import tavern_escalation_progression_rules
 from tests.rpg.autoplay.checkpoints import (
     collect_state_bounds,
     validate_save_load_checkpoint,
@@ -1399,6 +1405,8 @@ def _build_100_turn_readiness_summary(
     followup_arc_resolution_summary: Optional[Dict[str, Any]] = None,
     pressure_pacing_summary: Optional[Dict[str, Any]] = None,
     world_signal_summary: Optional[Dict[str, Any]] = None,
+    escalation_arc_progression_summary: Optional[Dict[str, Any]] = None,
+    world_state_compression_summary: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     summary = _safe_dict(summary)
     arc = _safe_dict(summary.get("scenario_progression_arc_summary"))
@@ -1429,6 +1437,14 @@ def _build_100_turn_readiness_summary(
     world_signals = _safe_dict(world_signal_summary)
     if not world_signals:
         world_signals = _safe_dict(summary.get("world_signal_summary"))
+
+    escalation_progression = _safe_dict(escalation_arc_progression_summary)
+    if not escalation_progression:
+        escalation_progression = _safe_dict(summary.get("escalation_arc_progression_summary"))
+
+    world_compression = _safe_dict(world_state_compression_summary)
+    if not world_compression:
+        world_compression = _safe_dict(summary.get("world_state_compression_summary"))
 
     progression_changed_count = int(
         _safe_dict(behavioral.get("metrics")).get("progression_changed_count")
@@ -1574,6 +1590,26 @@ def _build_100_turn_readiness_summary(
             },
             "expected": "global world signal summary exists",
             "message": "Report should separate pure aftermath signals from global world signals.",
+        },
+        "escalation_arc_progression_present": {
+            "ok": int(escalation_progression.get("progressed_count") or 0) >= 1,
+            "value": {
+                "progressed_count": escalation_progression.get("progressed_count"),
+                "progressed_arc_ids": escalation_progression.get("progressed_arc_ids"),
+            },
+            "expected": "at least one escalation arc progresses",
+            "message": "Escalation branches should not remain only seeded.",
+        },
+        "world_state_compression_active": {
+            "ok": int(world_compression.get("compression_event_count") or 0) >= 1
+            and bool(_safe_dict(world_compression.get("latest_state_budget")).get("ok", True)),
+            "value": {
+                "compression_event_count": world_compression.get("compression_event_count"),
+                "compressed_state_preview": world_compression.get("compressed_state_preview"),
+                "latest_state_budget": world_compression.get("latest_state_budget"),
+            },
+            "expected": "compression events occur and state budget is respected",
+            "message": "100-turn readiness should prove bounded state management is active.",
         },
     }
 
@@ -2921,6 +2957,8 @@ def _build_100_turn_evaluation_summary(
     followup_arc_resolution_summary: Optional[Dict[str, Any]] = None,
     pressure_pacing_summary: Optional[Dict[str, Any]] = None,
     world_signal_summary: Optional[Dict[str, Any]] = None,
+    escalation_arc_progression_summary: Optional[Dict[str, Any]] = None,
+    world_state_compression_summary: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     grounding = _safe_dict(narration_grounding_summary)
     progress = _safe_dict(progress_quality_summary)
@@ -2939,6 +2977,8 @@ def _build_100_turn_evaluation_summary(
     followup_resolution = _safe_dict(followup_arc_resolution_summary)
     pressure_pacing = _safe_dict(pressure_pacing_summary)
     world_signals = _safe_dict(world_signal_summary)
+    escalation_progression = _safe_dict(escalation_arc_progression_summary)
+    world_compression = _safe_dict(world_state_compression_summary)
     selected_grounding_health = _build_selected_output_grounding_health(
         grounding,
         requested_turns=requested_turns,
@@ -3163,6 +3203,28 @@ def _build_100_turn_evaluation_summary(
             },
             "expected": "global world signal summary exists",
             "message": "Report should separate pure aftermath signals from global world signals.",
+        },
+        "escalation_arc_progression_present": {
+            "ok": int(escalation_progression.get("progressed_count") or 0) >= 1,
+            "value": {
+                "progressed_count": escalation_progression.get("progressed_count"),
+                "progressed_arc_ids": escalation_progression.get("progressed_arc_ids"),
+                "pressure_event_count": escalation_progression.get("pressure_event_count"),
+                "world_signal_count": escalation_progression.get("world_signal_count"),
+            },
+            "expected": "at least one escalation arc progresses",
+            "message": "Seeded escalation arcs should advance deterministically.",
+        },
+        "world_state_compression_active": {
+            "ok": int(world_compression.get("compression_event_count") or 0) >= 1
+            and bool(_safe_dict(world_compression.get("latest_state_budget")).get("ok", True)),
+            "value": {
+                "compression_event_count": world_compression.get("compression_event_count"),
+                "compressed_state_preview": world_compression.get("compressed_state_preview"),
+                "latest_state_budget": world_compression.get("latest_state_budget"),
+            },
+            "expected": "compression events occur and state budget is respected",
+            "message": "Long-run campaigns need bounded world state and memory compression.",
         },
     }
 
@@ -6205,6 +6267,8 @@ def _build_authoritative_final_lifecycle_summary(
     followup_arc_resolution_summary: Optional[Dict[str, Any]] = None,
     pressure_pacing_summary: Optional[Dict[str, Any]] = None,
     world_signal_summary: Optional[Dict[str, Any]] = None,
+    escalation_arc_progression_summary: Optional[Dict[str, Any]] = None,
+    world_state_compression_summary: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """Final authoritative summary override.
 
@@ -6267,6 +6331,10 @@ def _build_authoritative_final_lifecycle_summary(
         summary["pressure_pacing_summary"] = _safe_dict(pressure_pacing_summary)
     if world_signal_summary:
         summary["world_signal_summary"] = _safe_dict(world_signal_summary)
+    if escalation_arc_progression_summary:
+        summary["escalation_arc_progression_summary"] = _safe_dict(escalation_arc_progression_summary)
+    if world_state_compression_summary:
+        summary["world_state_compression_summary"] = _safe_dict(world_state_compression_summary)
 
     if requested_turns_for_readiness >= 100:
         summary["hundred_turn_readiness_summary"] = _build_100_turn_readiness_summary(
@@ -6279,10 +6347,27 @@ def _build_authoritative_final_lifecycle_summary(
             ),
             followup_arc_progression_summary=_safe_dict(summary.get("followup_arc_progression_summary")),
             faction_pressure_summary=_safe_dict(summary.get("faction_pressure_summary")),
-            followup_arc_resolution_summary=_safe_dict(summary.get("followup_arc_resolution_summary")),
-            pressure_pacing_summary=_safe_dict(summary.get("pressure_pacing_summary")),
-            world_signal_summary=_safe_dict(summary.get("world_signal_summary")),
-        )
+        followup_arc_resolution_summary=_safe_dict(
+            followup_arc_resolution_summary
+            or summary.get("followup_arc_resolution_summary")
+        ),
+        pressure_pacing_summary=_safe_dict(
+            pressure_pacing_summary
+            or summary.get("pressure_pacing_summary")
+        ),
+        world_signal_summary=_safe_dict(
+            world_signal_summary
+            or summary.get("world_signal_summary")
+        ),
+        escalation_arc_progression_summary=_safe_dict(
+            escalation_arc_progression_summary
+            or summary.get("escalation_arc_progression_summary")
+        ),
+        world_state_compression_summary=_safe_dict(
+            world_state_compression_summary
+            or summary.get("world_state_compression_summary")
+        ),
+    )
     _sync_hundred_turn_validation_classification(summary)
     campaign_commit_summary = _safe_dict(runtime_state.get("campaign_state_commit_summary"))
     summary["campaign_state_commit_summary"] = campaign_commit_summary
@@ -6413,6 +6498,87 @@ def _build_authoritative_final_lifecycle_summary(
     return summary
 
 
+def _build_escalation_arc_progression_summary(
+    *,
+    progression_events: List[Dict[str, Any]],
+    progression_world_signals: List[Dict[str, Any]],
+    pressure_events: List[Dict[str, Any]],
+    story_arcs: Dict[str, Any],
+) -> Dict[str, Any]:
+    events = [_safe_dict(event) for event in _safe_list(progression_events)]
+    arcs = _safe_dict(story_arcs)
+
+    progressed_arc_ids = sorted(
+        {
+            _safe_str(event.get("arc_id"))
+            for event in events
+            if _safe_str(event.get("arc_id"))
+        }
+    )
+
+    escalation_arcs = [
+        {
+            "arc_id": _safe_dict(arc).get("arc_id"),
+            "title": _safe_dict(arc).get("title"),
+            "status": _safe_dict(arc).get("status"),
+            "current_stage": _safe_dict(arc).get("current_stage"),
+            "progress_count": _safe_dict(arc).get("progress_count"),
+            "source_hook_id": _safe_dict(arc).get("source_hook_id"),
+        }
+        for arc in arcs.values()
+        if _safe_dict(arc).get("escalation_arc")
+        or _safe_dict(arc).get("current_stage") in {
+            "seeded_escalation",
+            "handler_assigns_watchers",
+            "voss_name_draws_attention",
+        }
+    ]
+
+    return {
+        "format_version": "escalation_arc_progression_summary_v1",
+        "ok": bool(events),
+        "progressed_count": len(events),
+        "progressed_arc_ids": progressed_arc_ids,
+        "events": events,
+        "world_signal_count": len(_safe_list(progression_world_signals)),
+        "world_signals": _safe_list(progression_world_signals),
+        "pressure_event_count": len(_safe_list(pressure_events)),
+        "pressure_events": _safe_list(pressure_events),
+        "escalation_arcs": escalation_arcs,
+    }
+
+
+def _build_world_state_compression_summary(
+    *,
+    compression_events: List[Dict[str, Any]],
+    compressed_state: Dict[str, Any],
+) -> Dict[str, Any]:
+    events = [_safe_dict(event) for event in _safe_list(compression_events)]
+
+    budget = build_state_budget_summary(
+        state={
+            "story_arcs": _safe_dict(compressed_state.get("story_arcs")),
+            "world_signals": _safe_list(compressed_state.get("world_signals")),
+            "faction_reputation": _safe_dict(compressed_state.get("faction_reputation")),
+            "npc_memory_events": _safe_list(compressed_state.get("npc_memory_events")),
+        }
+    )
+
+    return {
+        "format_version": "world_state_compression_summary_v1",
+        "ok": bool(events) and bool(budget.get("ok")),
+        "compression_event_count": len(events),
+        "events": events,
+        "latest_state_budget": budget,
+        "compressed_state_preview": {
+            "story_arc_count": len(_safe_dict(compressed_state.get("story_arcs"))),
+            "world_signal_count": len(_safe_list(compressed_state.get("world_signals"))),
+            "faction_count": len(_safe_dict(compressed_state.get("faction_reputation"))),
+            "npc_memory_event_count": len(_safe_list(compressed_state.get("npc_memory_events"))),
+        },
+    }
+
+
 def _rebuild_final_100_turn_evaluation(
     *,
     args: argparse.Namespace,
@@ -6448,6 +6614,8 @@ def _rebuild_final_100_turn_evaluation(
         followup_arc_resolution_summary=_safe_dict(summary.get("followup_arc_resolution_summary")),
         pressure_pacing_summary=_safe_dict(summary.get("pressure_pacing_summary")),
         world_signal_summary=_safe_dict(summary.get("world_signal_summary")),
+        escalation_arc_progression_summary=_safe_dict(summary.get("escalation_arc_progression_summary")),
+        world_state_compression_summary=_safe_dict(summary.get("world_state_compression_summary")),
     )
 
     summary["ok"] = bool(_safe_dict(summary.get("hundred_turn_evaluation")).get("ok"))
@@ -6458,6 +6626,8 @@ def _rebuild_final_100_turn_evaluation(
         ("followup_arc_resolution_present", "followup_arc_resolution_summary", "resolved_count"),
         ("pressure_pacing_active", "pressure_pacing_summary", "accepted_pressure_event_count"),
         ("world_signal_summary_present", "world_signal_summary", "world_signal_count"),
+        ("escalation_arc_progression_present", "escalation_arc_progression_summary", "progressed_count"),
+        ("world_state_compression_active", "world_state_compression_summary", "compression_event_count"),
     ):
         gate = _safe_dict(gates.get(gate_name))
         gate_value = _safe_dict(gate.get("value"))
@@ -8618,6 +8788,14 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
     pressure_pacing_rejected_events: List[Dict[str, Any]] = []
     pressure_pacing_rejected_world_signals: List[Dict[str, Any]] = []
 
+    escalation_arc_progression_applied_keys: set[str] = set()
+    escalation_arc_progression_events: List[Dict[str, Any]] = []
+    escalation_arc_progression_world_signals: List[Dict[str, Any]] = []
+    escalation_arc_pressure_events: List[Dict[str, Any]] = []
+
+    world_state_compression_events: List[Dict[str, Any]] = []
+    latest_compressed_world_state: Dict[str, Any] = {}
+
     faction_reputation_state: Dict[str, Any] = {
         "faction:rusty_flagon_locals": {
             "faction_id": "faction:rusty_flagon_locals",
@@ -10420,6 +10598,66 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
                 record["meaningful_progress"] = True
                 record["progress_category"] = "escalation_branching"
 
+        escalation_progression_state = {
+            "faction_reputation": faction_reputation_state,
+            "flags": {
+                **_safe_dict(mechanics_runtime_state.get("flags")),
+                **_safe_dict(_safe_dict(record.get("state_delta")).get("story_arc_aftermath_flags")),
+                **_safe_dict(_safe_dict(record.get("state_delta")).get("followup_arc_progression_flags")),
+                **_safe_dict(_safe_dict(record.get("state_delta")).get("followup_arc_resolution_flags")),
+                **_safe_dict(_safe_dict(record.get("state_delta")).get("faction_pressure_flags")),
+            },
+        }
+
+        escalation_progression = progress_escalation_arcs(
+            story_arcs=story_arc_runtime_state,
+            state=escalation_progression_state,
+            turn_index=int(record.get("turn_index") or turn_index),
+            rules=tavern_escalation_progression_rules(),
+            already_progressed_keys=escalation_arc_progression_applied_keys,
+        )
+
+        if escalation_progression.get("ok"):
+            escalation_arc_progression_applied_keys = set(
+                _safe_list(escalation_progression.get("applied_keys"))
+            )
+
+            escalation_events = _safe_list(escalation_progression.get("events"))
+            if escalation_events:
+                story_arc_runtime_state = _safe_dict(escalation_progression.get("story_arcs")) or story_arc_runtime_state
+
+                escalation_arc_progression_events.extend(escalation_events)
+                escalation_arc_progression_world_signals.extend(
+                    _safe_list(escalation_progression.get("world_signals"))
+                )
+                escalation_arc_pressure_events.extend(
+                    _safe_list(escalation_progression.get("pressure_events"))
+                )
+                world_signal_events.extend(_safe_list(escalation_progression.get("world_signals")))
+
+                record["escalation_arc_progression"] = escalation_progression
+                record["escalation_arc_progression_events"] = escalation_events
+                record["world_signals"] = _safe_list(record.get("world_signals")) + _safe_list(
+                    escalation_progression.get("world_signals")
+                )
+
+                record["state_delta"] = {
+                    **_safe_dict(record.get("state_delta")),
+                    "story_arcs": story_arc_runtime_state,
+                    "escalation_arc_progression_flags": _safe_dict(escalation_progression.get("flags")),
+                }
+
+                record["result"] = {
+                    **_safe_dict(record.get("result")),
+                    "escalation_arc_progression_events": escalation_events,
+                    "world_signals": _safe_list(record.get("world_signals")),
+                    "meaningful_progress": True,
+                    "progress_category": "escalation_arc_progression",
+                }
+
+                record["meaningful_progress"] = True
+                record["progress_category"] = "escalation_arc_progression"
+
         pressure = emit_faction_pressure_events(
             faction_state=faction_reputation_state,
             turn_index=int(record.get("turn_index") or turn_index),
@@ -10498,6 +10736,44 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
                 record["mechanic_resolution_failed_reason"] = _safe_str(
                     mechanic_resolution.get("reason")
                 )
+
+        compression_interval = 25
+        if int(record.get("turn_index") or turn_index) % compression_interval == 0:
+            compression_input = {
+                "story_arcs": story_arc_runtime_state,
+                "world_signals": world_signal_events,
+                "faction_reputation": faction_reputation_state,
+                "npc_memory_events": npc_memory_events,
+            }
+
+            compression = compress_world_state_snapshot(
+                state=compression_input,
+                current_turn=int(record.get("turn_index") or turn_index),
+            )
+
+            if compression.get("ok"):
+                latest_compressed_world_state = _safe_dict(compression.get("compressed_state"))
+
+                story_arc_runtime_state = _safe_dict(latest_compressed_world_state.get("story_arcs")) or story_arc_runtime_state
+                world_signal_events = _safe_list(latest_compressed_world_state.get("world_signals"))
+                faction_reputation_state = _safe_dict(latest_compressed_world_state.get("faction_reputation")) or faction_reputation_state
+                npc_memory_events = _safe_list(latest_compressed_world_state.get("npc_memory_events"))
+
+                compression_event = {
+                    "type": "world_state_compression",
+                    "turn": int(record.get("turn_index") or turn_index),
+                    "summary": {
+                        "expired_world_signal_count": _safe_dict(compression.get("world_signals")).get("expired_count"),
+                        "compacted_arc_count": _safe_dict(compression.get("story_arcs")).get("compacted_arc_count"),
+                        "compacted_faction_count": _safe_dict(compression.get("faction_reputation")).get("compacted_faction_count"),
+                        "npc_memory_dropped_count": _safe_dict(compression.get("npc_memory")).get("dropped_count"),
+                    },
+                }
+
+                world_state_compression_events.append(compression_event)
+
+                record["world_state_compression"] = compression_event
+                record["state_budget_summary"] = compression.get("state_budget_summary")
 
         transcript.append(record)
 
@@ -11285,7 +11561,27 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
         followup_arc_resolution_summary=_safe_dict(summary.get("followup_arc_resolution_summary")),
         pressure_pacing_summary=_safe_dict(summary.get("pressure_pacing_summary")),
         world_signal_summary=_safe_dict(summary.get("world_signal_summary")),
+        escalation_arc_progression_summary=_safe_dict(summary.get("escalation_arc_progression_summary")),
+        world_state_compression_summary=_safe_dict(summary.get("world_state_compression_summary")),
     )
+
+    summary["escalation_arc_progression_summary"] = _build_escalation_arc_progression_summary(
+        progression_events=escalation_arc_progression_events,
+        progression_world_signals=escalation_arc_progression_world_signals,
+        pressure_events=escalation_arc_pressure_events,
+        story_arcs=story_arc_runtime_state,
+    )
+
+    summary["world_state_compression_summary"] = _build_world_state_compression_summary(
+        compression_events=world_state_compression_events,
+        compressed_state=latest_compressed_world_state or {
+            "story_arcs": story_arc_runtime_state,
+            "world_signals": world_signal_events,
+            "faction_reputation": faction_reputation_state,
+            "npc_memory_events": npc_memory_events,
+        },
+    )
+
     summary = _rebuild_final_100_turn_evaluation(
         args=args,
         summary=summary,
@@ -11415,6 +11711,8 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
         followup_arc_resolution_summary=_safe_dict(summary.get("followup_arc_resolution_summary")),
         pressure_pacing_summary=_safe_dict(summary.get("pressure_pacing_summary")),
         world_signal_summary=_safe_dict(summary.get("world_signal_summary")),
+        escalation_arc_progression_summary=_safe_dict(summary.get("escalation_arc_progression_summary")),
+        world_state_compression_summary=_safe_dict(summary.get("world_state_compression_summary")),
     )
 
     summary["ok"] = bool(_safe_dict(summary.get("hundred_turn_evaluation")).get("ok"))
@@ -11692,6 +11990,20 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
                 artifact_manifest,
                 "pressure-pacing-summary.json",
                 summary.get("pressure_pacing_summary", {}),
+            )
+
+            _zip_writestr_json(
+                zip_handle,
+                artifact_manifest,
+                "escalation-arc-progression-summary.json",
+                summary.get("escalation_arc_progression_summary", {}),
+            )
+
+            _zip_writestr_json(
+                zip_handle,
+                artifact_manifest,
+                "world-state-compression-summary.json",
+                summary.get("world_state_compression_summary", {}),
             )
 
             # Write HTML report
@@ -12181,6 +12493,52 @@ def build_arg_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _assert_real_autoplay_runner_present() -> None:
+    import inspect
+
+    runner = globals().get("_run_autoplay_campaign")
+    if runner is None or not callable(runner):
+        raise RuntimeError(
+            "real_autoplay_runner_missing:_run_autoplay_campaign was deleted."
+        )
+
+    source = inspect.getsource(runner)
+
+    required_markers = [
+        "AutoplayBackgroundPipeline",
+        "for turn_index in range",
+        "transcript.append",
+        "return summary",
+    ]
+
+    missing = [
+        marker for marker in required_markers
+        if marker not in source
+    ]
+
+    if missing:
+        raise RuntimeError(
+            "real_autoplay_runner_truncated:missing_markers:"
+            + ",".join(missing)
+        )
+
+    forbidden_markers = [
+        "campaign_execution:not_implemented",
+        "TODO: Implement actual turn loop here",
+    ]
+
+    found_forbidden = [
+        marker for marker in forbidden_markers
+        if marker in source
+    ]
+
+    if found_forbidden:
+        raise RuntimeError(
+            "real_autoplay_runner_placeholder_detected:"
+            + ",".join(found_forbidden)
+        )
+
+
 def _run_with_console_capture(args: argparse.Namespace) -> int:
     global _ACTIVE_CONSOLE_CAPTURE
     output_dir = Path(args.output_dir)
@@ -12188,7 +12546,12 @@ def _run_with_console_capture(args: argparse.Namespace) -> int:
     console_log_path = output_dir / "console-log.txt"
     if not getattr(args, "capture_console_log", True):
         summary = _run_autoplay_campaign(args)
-        return 0 if summary.get("ok") else 1
+        if summary is None:
+            raise RuntimeError(
+                "autoplay_runner_returned_none:_run_autoplay_campaign ended before returning a summary. "
+                "The real turn loop was likely truncated or helper functions were inserted inside/over the runner."
+            )
+        return 0 if _safe_dict(summary).get("ok") else 1
 
     with ConsoleCapture(
         output_path=console_log_path,
@@ -12200,13 +12563,25 @@ def _run_with_console_capture(args: argparse.Namespace) -> int:
             capture.write_file()
         finally:
             _ACTIVE_CONSOLE_CAPTURE = None
-    return 0 if summary.get("ok") else 1
+
+    if summary is None:
+        raise RuntimeError(
+            "autoplay_runner_returned_none:_run_autoplay_campaign ended before returning a summary. "
+            "The real turn loop was likely truncated or helper functions were inserted inside/over the runner."
+        )
+
+    if not _safe_dict(summary).get("ok"):
+        for error in _safe_list(_safe_dict(summary).get("runtime_errors")):
+            _timestamped_print(f"[AUTOPLAY-ERROR] {error}")
+
+    return 0 if _safe_dict(summary).get("ok") else 1
 
 
 def main(argv: List[str] | None = None) -> int:
     parser = build_arg_parser()
     args = parser.parse_args(argv)
     args = _apply_autoplay_profile_defaults(args)
+    _assert_real_autoplay_runner_present()
     if _safe_str(getattr(args, "autoplay_profile", "")) == "smoke_100" and int(getattr(args, "turns", 0) or 0) != 100:
         raise RuntimeError(
             f"smoke_100_profile_expected_100_turns:actual={getattr(args, 'turns', None)}"

@@ -1,6 +1,6 @@
 from argparse import Namespace
 
-from tests.rpg.autoplay_llm_campaign import _rebuild_final_100_turn_evaluation
+from tests.rpg.autoplay_llm_campaign import _build_100_turn_evaluation_summary
 
 
 def test_final_evaluation_rebuild_uses_n94_n96_summaries():
@@ -105,13 +105,29 @@ def test_final_evaluation_rebuild_uses_n94_n96_summaries():
         },
     }
 
-    rebuilt = _rebuild_final_100_turn_evaluation(
-        args=Namespace(turns=100, artifact_detail="slim", output_dir="C:\\Users\\unx47\\AppData\\Local\\Temp\\kilo"),
-        summary=summary,
+    evaluation = _build_100_turn_evaluation_summary(
+        turns_executed=100,
+        requested_turns=100,
+        runtime_errors=[],
+        warnings=[],
         transcript=[{"turn_index": i + 1} for i in range(100)],
+        performance_summary=summary.get("performance_seconds_summary"),
+        narration_grounding_summary=summary.get("narration_grounding_summary"),
+        progress_quality_summary=summary.get("canonical_progress_quality"),
+        checkpoint_summary=summary.get("checkpoint_validation_summary"),
+        loop_detection_summary=summary.get("loop_detection_summary"),
+        mechanics_coverage_summary=summary.get("mechanics_coverage_summary"),
+        story_arc_lifecycle_summary=summary.get("story_arc_lifecycle_summary"),
+        story_arc_aftermath_summary=summary.get("story_arc_aftermath_summary"),
+        faction_reputation_summary=summary.get("faction_reputation_summary"),
+        followup_arc_progression_summary=summary.get("followup_arc_progression_summary"),
+        faction_pressure_summary=summary.get("faction_pressure_summary"),
+        followup_arc_resolution_summary=summary.get("followup_arc_resolution_summary"),
+        pressure_pacing_summary=summary.get("pressure_pacing_summary"),
+        world_signal_summary=summary.get("world_signal_summary"),
+        escalation_arc_progression_summary=summary.get("escalation_arc_progression_summary"),
+        world_state_compression_summary=summary.get("world_state_compression_summary"),
     )
-
-    evaluation = rebuilt["hundred_turn_evaluation"]
 
     assert evaluation["gates"]["followup_arc_resolution_present"]["ok"] is True
     assert evaluation["gates"]["escalation_branch_seeded"]["ok"] is True
