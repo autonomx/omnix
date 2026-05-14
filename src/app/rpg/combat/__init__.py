@@ -1,1 +1,1 @@
-"""Deterministic RPG combat runtime."""
+# Combat runtime modules.
