@@ -307,6 +307,24 @@ def _slim_transcript_row(row: Dict[str, Any], max_row_bytes: int = 50000) -> Dic
     if row.get("economy_pressure_currency_deltas"):
         slim_row["economy_pressure_currency_deltas"] = row.get("economy_pressure_currency_deltas")
 
+    if row.get("combat_lifecycle_events"):
+        slim_row["combat_lifecycle_events"] = row.get("combat_lifecycle_events")
+
+    if row.get("combat_lifecycle_encounters"):
+        slim_row["combat_lifecycle_encounters"] = row.get("combat_lifecycle_encounters")
+
+    if row.get("combat_lifecycle_injuries"):
+        slim_row["combat_lifecycle_injuries"] = row.get("combat_lifecycle_injuries")
+
+    if row.get("combat_consequence_events"):
+        slim_row["combat_consequence_events"] = row.get("combat_consequence_events")
+
+    if row.get("faction_consequence_events"):
+        slim_row["faction_consequence_events"] = row.get("faction_consequence_events")
+
+    if row.get("npc_reaction_events"):
+        slim_row["npc_reaction_events"] = row.get("npc_reaction_events")
+
     slim_row["_artifact_slimmed"] = True
     return slim_row
 
@@ -1070,6 +1088,10 @@ from app.rpg.story.faction_reputation import (
     apply_faction_deltas,
     build_faction_reputation_summary,
 )
+from app.rpg.factions.faction_consequence_policy import emit_faction_consequences
+from app.rpg.factions.tavern_faction_consequence_rules import tavern_faction_consequence_rules
+from app.rpg.npc.npc_reaction_policy import emit_npc_reactions
+from app.rpg.npc.tavern_npc_reaction_rules import tavern_npc_reaction_rules
 from app.rpg.story.followup_arc_progression import progress_followup_arcs
 from app.rpg.story.followup_arc_resolution import resolve_followup_arcs
 from app.rpg.story.followup_arc_seeding import seed_followup_arcs
@@ -1087,6 +1109,9 @@ from app.rpg.story.tavern_story_aftermath_rules import tavern_story_aftermath_ru
 from app.rpg.story.tavern_story_arc_rules import tavern_story_arc_rules
 from app.rpg.economy.economy_pressure import apply_economy_pressure
 from app.rpg.economy.tavern_economy_pressure_rules import tavern_economy_pressure_rules
+from app.rpg.combat.combat_consequence_pressure import apply_combat_consequence_pressure
+from app.rpg.combat.combat_lifecycle import run_combat_lifecycle_tick
+from app.rpg.combat.tavern_combat_lifecycle_rules import tavern_combat_lifecycle_rules
 from app.rpg.state.world_state_compression import (
     build_state_budget_summary,
     compress_world_state_snapshot,
@@ -1441,6 +1466,9 @@ def _build_100_turn_readiness_summary(
     world_state_compression_summary: Optional[Dict[str, Any]] = None,
     npc_agency_summary: Optional[Dict[str, Any]] = None,
     economy_pressure_summary: Optional[Dict[str, Any]] = None,
+    combat_lifecycle_summary: Optional[Dict[str, Any]] = None,
+    faction_consequence_summary: Optional[Dict[str, Any]] = None,
+    npc_reaction_summary: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     summary = _safe_dict(summary)
     arc = _safe_dict(summary.get("scenario_progression_arc_summary"))
@@ -1503,6 +1531,18 @@ def _build_100_turn_readiness_summary(
     economy_pressure = _safe_dict(economy_pressure_summary)
     if not economy_pressure:
         economy_pressure = _safe_dict(_safe_dict(summary).get("economy_pressure_summary"))
+
+    combat_lifecycle = _safe_dict(combat_lifecycle_summary)
+    if not combat_lifecycle:
+        combat_lifecycle = _safe_dict(_safe_dict(summary).get("combat_lifecycle_summary"))
+
+    faction_consequence = _safe_dict(faction_consequence_summary)
+    if not faction_consequence:
+        faction_consequence = _safe_dict(_safe_dict(summary).get("faction_consequence_summary"))
+
+    npc_reaction = _safe_dict(npc_reaction_summary)
+    if not npc_reaction:
+        npc_reaction = _safe_dict(_safe_dict(summary).get("npc_reaction_summary"))
 
     progression_changed_count = int(
         _safe_dict(behavioral.get("metrics")).get("progression_changed_count")
@@ -1692,6 +1732,43 @@ def _build_100_turn_readiness_summary(
             },
             "expected": "at least one deterministic economy pressure/resource sink event",
             "message": "100-turn readiness should demonstrate resource pressure and sinks.",
+        },
+        "combat_lifecycle_present": {
+            "ok": int(combat_lifecycle.get("encounter_count") or 0) >= 1
+            and int(combat_lifecycle.get("event_count") or 0) >= 1,
+            "value": {
+                "encounter_count": combat_lifecycle.get("encounter_count"),
+                "event_count": combat_lifecycle.get("event_count"),
+                "injury_count": combat_lifecycle.get("injury_count"),
+                "consequence_event_count": combat_lifecycle.get("consequence_event_count"),
+                "economy_hint_count": combat_lifecycle.get("economy_hint_count"),
+                "by_outcome": combat_lifecycle.get("by_outcome"),
+            },
+            "expected": "at least one deterministic combat encounter with lifecycle events",
+            "message": "100-turn readiness should demonstrate combat lifecycle/consequence pressure.",
+        },
+        "faction_consequence_present": {
+            "ok": int(faction_consequence.get("event_count") or 0) >= 1,
+            "value": {
+                "event_count": faction_consequence.get("event_count"),
+                "world_signal_count": faction_consequence.get("world_signal_count"),
+                "by_faction": faction_consequence.get("by_faction"),
+                "by_kind": faction_consequence.get("by_kind"),
+            },
+            "expected": "at least one deterministic long-term faction consequence",
+            "message": "100-turn readiness should demonstrate faction consequences.",
+        },
+        "npc_reaction_present": {
+            "ok": int(npc_reaction.get("event_count") or 0) >= 1,
+            "value": {
+                "event_count": npc_reaction.get("event_count"),
+                "memory_event_count": npc_reaction.get("memory_event_count"),
+                "world_signal_count": npc_reaction.get("world_signal_count"),
+                "by_npc": npc_reaction.get("by_npc"),
+                "by_kind": npc_reaction.get("by_kind"),
+            },
+            "expected": "at least one deterministic NPC reaction to faction/consequence state",
+            "message": "100-turn readiness should demonstrate NPC reaction policy.",
         },
     }
 
@@ -3043,6 +3120,9 @@ def _build_100_turn_evaluation_summary(
     world_state_compression_summary: Optional[Dict[str, Any]] = None,
     npc_agency_summary: Optional[Dict[str, Any]] = None,
     economy_pressure_summary: Optional[Dict[str, Any]] = None,
+    combat_lifecycle_summary: Optional[Dict[str, Any]] = None,
+    faction_consequence_summary: Optional[Dict[str, Any]] = None,
+    npc_reaction_summary: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     grounding = _safe_dict(narration_grounding_summary)
     progress = _safe_dict(progress_quality_summary)
@@ -3065,6 +3145,9 @@ def _build_100_turn_evaluation_summary(
     world_compression = _safe_dict(world_state_compression_summary)
     npc_agency = _safe_dict(npc_agency_summary)
     economy_pressure = _safe_dict(economy_pressure_summary)
+    combat_lifecycle = _safe_dict(combat_lifecycle_summary)
+    faction_consequence = _safe_dict(faction_consequence_summary)
+    npc_reaction = _safe_dict(npc_reaction_summary)
     selected_grounding_health = _build_selected_output_grounding_health(
         grounding,
         requested_turns=requested_turns,
@@ -3335,6 +3418,43 @@ def _build_100_turn_evaluation_summary(
             },
             "expected": "at least one deterministic economy pressure/resource sink event",
             "message": "Long-run campaigns should include recurring resource pressure and sinks.",
+        },
+        "combat_lifecycle_present": {
+            "ok": int(combat_lifecycle.get("encounter_count") or 0) >= 1
+            and int(combat_lifecycle.get("event_count") or 0) >= 1,
+            "value": {
+                "encounter_count": combat_lifecycle.get("encounter_count"),
+                "event_count": combat_lifecycle.get("event_count"),
+                "injury_count": combat_lifecycle.get("injury_count"),
+                "consequence_event_count": combat_lifecycle.get("consequence_event_count"),
+                "economy_hint_count": combat_lifecycle.get("economy_hint_count"),
+                "by_outcome": combat_lifecycle.get("by_outcome"),
+            },
+            "expected": "at least one deterministic combat encounter with lifecycle events",
+            "message": "Long-run campaigns should include combat lifecycle/consequence pressure.",
+        },
+        "faction_consequence_present": {
+            "ok": int(faction_consequence.get("event_count") or 0) >= 1,
+            "value": {
+                "event_count": faction_consequence.get("event_count"),
+                "world_signal_count": faction_consequence.get("world_signal_count"),
+                "by_faction": faction_consequence.get("by_faction"),
+                "by_kind": faction_consequence.get("by_kind"),
+            },
+            "expected": "at least one deterministic long-term faction consequence",
+            "message": "Faction reputation should produce long-term consequences.",
+        },
+        "npc_reaction_present": {
+            "ok": int(npc_reaction.get("event_count") or 0) >= 1,
+            "value": {
+                "event_count": npc_reaction.get("event_count"),
+                "memory_event_count": npc_reaction.get("memory_event_count"),
+                "world_signal_count": npc_reaction.get("world_signal_count"),
+                "by_npc": npc_reaction.get("by_npc"),
+                "by_kind": npc_reaction.get("by_kind"),
+            },
+            "expected": "at least one deterministic NPC reaction to faction/consequence state",
+            "message": "NPCs should react to long-term faction consequences.",
         },
     }
 
@@ -4742,417 +4862,62 @@ def _build_performance_seconds_summary(
 
 
 def _build_minimal_autoplay_html_report(final_summary: Dict[str, Any]) -> str:
-    import html
+    final_summary = _safe_dict(final_summary)
 
+    faction_consequence = _safe_dict(final_summary.get("faction_consequence_summary"))
+    npc_reaction = _safe_dict(final_summary.get("npc_reaction_summary"))
+
+    # Simple HTML escaping
     def esc(value: Any) -> str:
-        return html.escape(_safe_str(value), quote=True)
+        return str(value or "").replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
-    evaluation = _safe_dict(final_summary.get("hundred_turn_evaluation"))
-    grounding = _safe_dict(final_summary.get("narration_grounding_summary"))
-    selected_grounding = _safe_dict(final_summary.get("selected_output_grounding_health"))
-    progress = _safe_dict(final_summary.get("canonical_progress_quality"))
-    perf = _safe_dict(final_summary.get("performance_seconds_summary"))
-    character_inventory = _safe_dict(final_summary.get("character_inventory_progression"))
-    player_progress = _safe_dict(character_inventory.get("player"))
-    story_arc_lifecycle = _safe_dict(final_summary.get("story_arc_lifecycle_summary"))
-    story_arc_aftermath = _safe_dict(final_summary.get("story_arc_aftermath_summary"))
-    faction_reputation = _safe_dict(final_summary.get("faction_reputation_summary"))
-    followup_progression = _safe_dict(final_summary.get("followup_arc_progression_summary"))
-    faction_pressure = _safe_dict(final_summary.get("faction_pressure_summary"))
-    followup_resolution = _safe_dict(final_summary.get("followup_arc_resolution_summary"))
-    pressure_pacing = _safe_dict(final_summary.get("pressure_pacing_summary"))
-    world_signal_summary = _safe_dict(final_summary.get("world_signal_summary"))
-    npc_agency = _safe_dict(final_summary.get("npc_agency_summary"))
-    economy_pressure = _safe_dict(final_summary.get("economy_pressure_summary"))
+    faction_consequence_html = f"""
+    <section class="card" id="faction-consequences">
+      <h2>Faction Consequences</h2>
+      <div class="grid">
+        <div class="metric"><strong>Events</strong><span>{esc(faction_consequence.get("event_count"))}</span></div>
+        <div class="metric"><strong>World Signals</strong><span>{esc(faction_consequence.get("world_signal_count"))}</span></div>
+      </div>
+      <h3>By Faction</h3>
+      <pre>{esc(json.dumps(faction_consequence.get("by_faction", {}), ensure_ascii=False, indent=2, default=str))}</pre>
+      <h3>By Kind</h3>
+      <pre>{esc(json.dumps(faction_consequence.get("by_kind", {}), ensure_ascii=False, indent=2, default=str))}</pre>
+      <h3>Events</h3>
+      <pre>{esc(json.dumps(faction_consequence.get("events", []), ensure_ascii=False, indent=2, default=str))}</pre>
+    </section>
+    """
 
-    status = "PASS" if evaluation.get("ok") else "FAIL"
-    status_class = "pass" if evaluation.get("ok") else "fail"
+    npc_reaction_html = f"""
+    <section class="card" id="npc-reactions">
+      <h2>NPC Reactions</h2>
+      <div class="grid">
+        <div class="metric"><strong>Events</strong><span>{esc(npc_reaction.get("event_count"))}</span></div>
+        <div class="metric"><strong>Memory Events</strong><span>{esc(npc_reaction.get("memory_event_count"))}</span></div>
+        <div class="metric"><strong>World Signals</strong><span>{esc(npc_reaction.get("world_signal_count"))}</span></div>
+      </div>
+      <h3>By NPC</h3>
+      <pre>{esc(json.dumps(npc_reaction.get("by_npc", {}), ensure_ascii=False, indent=2, default=str))}</pre>
+      <h3>By Kind</h3>
+      <pre>{esc(json.dumps(npc_reaction.get("by_kind", {}), ensure_ascii=False, indent=2, default=str))}</pre>
+      <h3>Events</h3>
+      <pre>{esc(json.dumps(npc_reaction.get("events", []), ensure_ascii=False, indent=2, default=str))}</pre>
+    </section>
+    """
 
-    debug_summary = {
-        "warnings": final_summary.get("warnings", []),
-        "ok": final_summary.get("ok"),
-        "turns_executed": final_summary.get("turns_executed"),
-    }
-
-    player_name = _safe_str(player_progress.get("name") or "The Player")
-    player_level = int(player_progress.get("level") or 1)
-    player_xp = int(player_progress.get("xp") or 0)
-    player_xp_to_next = int(player_progress.get("xp_to_next_level") or 100)
-    player_progress_log_entries = int(player_progress.get("progress_log_entries") or 0)
-
-    starting_currency = _safe_dict(character_inventory.get("starting_currency"))
-    ending_currency = _safe_dict(character_inventory.get("ending_currency"))
-    currency_delta = _safe_dict(character_inventory.get("currency_delta"))
-
-    starting_inventory = _safe_list(character_inventory.get("starting_inventory"))
-    ending_inventory = _safe_list(character_inventory.get("ending_inventory"))
-    inventory_delta = _safe_list(character_inventory.get("inventory_delta"))
-    xp_events = _safe_list(character_inventory.get("xp_events"))
-    level_events = _safe_list(character_inventory.get("level_events"))
-
-    story_arc_lifecycle_html = f"""
-<section class="card" id="story-arc-lifecycle">
-  <h2>Story Arc Lifecycle</h2>
-  <div class="grid">
-    <div class="metric"><strong>Completed</strong><span>{esc(story_arc_lifecycle.get("completed_count"))}</span></div>
-    <div class="metric"><strong>Failed</strong><span>{esc(story_arc_lifecycle.get("failed_count"))}</span></div>
-    <div class="metric"><strong>Active Follow-Ups</strong><span>{esc(story_arc_lifecycle.get("seeded_followup_active_count", story_arc_lifecycle.get("active_count")))}</span></div>
-    <div class="metric"><strong>Status</strong><span>{esc("PASS" if story_arc_lifecycle.get("ok") else "WARN")}</span></div>
-  </div>
-  <h3>Status Counts</h3>
-  <pre>{esc(json.dumps(story_arc_lifecycle.get("status_counts", {}), ensure_ascii=False, indent=2, default=str))}</pre>
-  <h3>Arc Events</h3>
-  <pre>{esc(json.dumps(story_arc_lifecycle.get("events", []), ensure_ascii=False, indent=2, default=str))}</pre>
-   <h3>Unresolved Original Arcs</h3>
-   <pre>{esc(json.dumps(story_arc_lifecycle.get("unresolved_original_arcs", story_arc_lifecycle.get("unresolved_arcs", [])), ensure_ascii=False, indent=2, default=str))}</pre>
-   <h3>Active Follow-Up Arcs</h3>
-   <pre>{esc(json.dumps(story_arc_lifecycle.get("active_followup_arcs", []), ensure_ascii=False, indent=2, default=str))}</pre>
- </section>
-"""
-
-    story_aftermath_html = f"""
-<section class="card" id="story-aftermath">
-  <h2>Story Arc Aftermath</h2>
-  <div class="grid">
-    <div class="metric"><strong>Aftermath Events</strong><span>{esc(story_arc_aftermath.get("aftermath_event_count"))}</span></div>
-    <div class="metric"><strong>World Signals</strong><span>{esc(story_arc_aftermath.get("world_signal_count"))}</span></div>
-    <div class="metric"><strong>NPC Memories</strong><span>{esc(story_arc_aftermath.get("npc_memory_event_count"))}</span></div>
-    <div class="metric"><strong>Seeded Arcs</strong><span>{esc(story_arc_aftermath.get("seeded_followup_arc_count"))}</span></div>
-  </div>
-  <h3>Aftermath Events</h3>
-  <pre>{esc(json.dumps(story_arc_aftermath.get("aftermath_events", []), ensure_ascii=False, indent=2, default=str))}</pre>
-  <h3>World Signals</h3>
-  <pre>{esc(json.dumps(story_arc_aftermath.get("world_signals", []), ensure_ascii=False, indent=2, default=str))}</pre>
-</section>
-"""
-
-    factions_html = f"""
-<section class="card" id="factions">
-  <h2>Faction Reputation</h2>
-  <div class="grid">
-    <div class="metric"><strong>Factions</strong><span>{esc(faction_reputation.get("faction_count"))}</span></div>
-    <div class="metric"><strong>Pressure Events</strong><span>{esc(faction_pressure.get("pressure_event_count"))}</span></div>
-    <div class="metric"><strong>Pressure Signals</strong><span>{esc(faction_pressure.get("world_signal_count"))}</span></div>
-    <div class="metric"><strong>Status</strong><span>{esc("PASS" if faction_reputation.get("ok") else "WARN")}</span></div>
-  </div>
-  <h3>Reputation</h3>
-  <pre>{esc(json.dumps(faction_reputation.get("factions", []), ensure_ascii=False, indent=2, default=str))}</pre>
-  <h3>Pressure Events</h3>
-  <pre>{esc(json.dumps(faction_pressure.get("events", []), ensure_ascii=False, indent=2, default=str))}</pre>
-</section>
-"""
-
-    followups_html = f"""
-<section class="card" id="followups">
-  <h2>Follow-Up Arc Progression</h2>
-  <div class="grid">
-    <div class="metric"><strong>Progressed</strong><span>{esc(followup_progression.get("progressed_count"))}</span></div>
-    <div class="metric"><strong>World Signals</strong><span>{esc(followup_progression.get("world_signal_count"))}</span></div>
-    <div class="metric"><strong>Status</strong><span>{esc("PASS" if followup_progression.get("ok") else "WARN")}</span></div>
-  </div>
-  <h3>Progressed Arc IDs</h3>
-  <pre>{esc(json.dumps(followup_progression.get("progressed_arc_ids", []), ensure_ascii=False, indent=2, default=str))}</pre>
-  <h3>Progression Events</h3>
-  <pre>{esc(json.dumps(followup_progression.get("events", []), ensure_ascii=False, indent=2, default=str))}</pre>
-  <h3>Active Follow-Ups</h3>
-  <pre>{esc(json.dumps(followup_progression.get("active_followups", []), ensure_ascii=False, indent=2, default=str))}</pre>
-</section>
-"""
-
-    followup_resolution_html = f"""
-<section class="card" id="followup-resolution">
-  <h2>Follow-Up Resolution</h2>
-  <div class="grid">
-    <div class="metric"><strong>Resolved</strong><span>{esc(followup_resolution.get("resolved_count"))}</span></div>
-    <div class="metric"><strong>Escalation Hooks</strong><span>{esc(followup_resolution.get("escalation_hook_count"))}</span></div>
-    <div class="metric"><strong>Escalation Seeds</strong><span>{esc(followup_resolution.get("escalation_seed_count"))}</span></div>
-    <div class="metric"><strong>Status</strong><span>{esc("PASS" if followup_resolution.get("ok") else "WARN")}</span></div>
-  </div>
-  <h3>Resolved Arc IDs</h3>
-  <pre>{esc(json.dumps(followup_resolution.get("resolved_arc_ids", []), ensure_ascii=False, indent=2, default=str))}</pre>
-  <h3>Resolution Events</h3>
-  <pre>{esc(json.dumps(followup_resolution.get("events", []), ensure_ascii=False, indent=2, default=str))}</pre>
-  <h3>Escalation Arcs</h3>
-  <pre>{esc(json.dumps(followup_resolution.get("escalation_arcs", []), ensure_ascii=False, indent=2, default=str))}</pre>
-</section>
-"""
-
-    pressure_pacing_html = f"""
-<section class="card" id="pressure-pacing">
-  <h2>Pressure Pacing</h2>
-  <div class="grid">
-    <div class="metric"><strong>Accepted</strong><span>{esc(pressure_pacing.get("accepted_pressure_event_count"))}</span></div>
-    <div class="metric"><strong>Rejected</strong><span>{esc(pressure_pacing.get("rejected_pressure_event_count"))}</span></div>
-    <div class="metric"><strong>Rejected Signals</strong><span>{esc(pressure_pacing.get("rejected_world_signal_count"))}</span></div>
-    <div class="metric"><strong>Status</strong><span>{esc("PASS" if pressure_pacing.get("ok") else "WARN")}</span></div>
-  </div>
-  <h3>Rejected By Reason</h3>
-  <pre>{esc(json.dumps(pressure_pacing.get("rejected_by_reason", {}), ensure_ascii=False, indent=2, default=str))}</pre>
-</section>
-"""
-
-    world_signals_html = f"""
-<section class="card" id="world-signals">
-  <h2>World Signals</h2>
-  <div class="grid">
-    <div class="metric"><strong>Total Signals</strong><span>{esc(world_signal_summary.get("world_signal_count"))}</span></div>
-    <div class="metric"><strong>Status</strong><span>{esc("PASS" if world_signal_summary.get("ok") else "WARN")}</span></div>
-  </div>
-  <h3>By Kind</h3>
-  <pre>{esc(json.dumps(world_signal_summary.get("by_kind", {}), ensure_ascii=False, indent=2, default=str))}</pre>
-  <h3>By Faction</h3>
-   <pre>{esc(json.dumps(world_signal_summary.get("by_faction", {}), ensure_ascii=False, indent=2, default=str))}</pre>
-</section>
-"""
-
-    npc_agency_html = f"""
-<section class="card" id="npc-agency">
-  <h2>NPC Agency / Schedules</h2>
-  <div class="grid">
-    <div class="metric"><strong>NPCs Tracked</strong><span>{esc(npc_agency.get("npc_count"))}</span></div>
-    <div class="metric"><strong>Schedule Events</strong><span>{esc(npc_agency.get("schedule_event_count"))}</span></div>
-    <div class="metric"><strong>Agency Events</strong><span>{esc(npc_agency.get("agency_event_count"))}</span></div>
-    <div class="metric"><strong>Memory Events</strong><span>{esc(npc_agency.get("memory_event_count"))}</span></div>
-  </div>
-  <h3>By NPC</h3>
-  <pre>{esc(json.dumps(npc_agency.get("by_npc", []), ensure_ascii=False, indent=2, default=str))}</pre>
-  <h3>Agency Events</h3>
-  <pre>{esc(json.dumps(npc_agency.get("agency_events", []), ensure_ascii=False, indent=2, default=str))}</pre>
-</section>
-"""
-
-    economy_pressure_html = f"""
-<section class="card" id="economy-pressure">
-  <h2>Economy Pressure / Resource Sinks</h2>
-  <div class="grid">
-    <div class="metric"><strong>Events</strong><span>{esc(economy_pressure.get("event_count"))}</span></div>
-    <div class="metric"><strong>Paid</strong><span>{esc(economy_pressure.get("paid_count"))}</span></div>
-    <div class="metric"><strong>Unpaid</strong><span>{esc(economy_pressure.get("unpaid_count"))}</span></div>
-    <div class="metric"><strong>Warnings</strong><span>{esc(economy_pressure.get("warning_count"))}</span></div>
-  </div>
-  <h3>Ending Currency</h3>
-  <pre>{esc(json.dumps(economy_pressure.get("ending_currency", {}), ensure_ascii=False, indent=2, default=str))}</pre>
-  <h3>Total Spent</h3>
-  <pre>{esc(json.dumps(economy_pressure.get("total_spent", {}), ensure_ascii=False, indent=2, default=str))}</pre>
-  <h3>Events</h3>
-  <pre>{esc(json.dumps(economy_pressure.get("events", []), ensure_ascii=False, indent=2, default=str))}</pre>
-</section>
-"""
-
-    return f"""<!doctype html>
-<html>
-<head>
-<meta charset="utf-8">
-<title>Autoplay Campaign Report</title>
-<style>
-body {{
-  font-family: Segoe UI, Arial, sans-serif;
-  background: #10131a;
-  color: #e8eaf0;
-  padding: 24px;
-  line-height: 1.45;
-}}
-.report-shell {{
-  max-width: 1320px;
-  margin: 0 auto;
-}}
-.card {{
-  background: #171b24;
-  border: 1px solid #2a3140;
-  border-radius: 14px;
-  padding: 18px;
-  margin: 16px 0;
-}}
-.grid {{
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  gap: 12px;
-}}
-.metric {{
-  background: #0d1017;
-  border: 1px solid #262d3c;
-  border-radius: 12px;
-  padding: 12px;
-}}
-.metric strong {{
-  display: block;
-  color: #aeb6c8;
-  font-size: 12px;
-  text-transform: uppercase;
-}}
-.metric span {{
-  display: block;
-  font-size: 22px;
-  margin-top: 6px;
-}}
-.pass {{ color: #8ff0b2; font-weight: 800; }}
-.fail {{ color: #ff9a9a; font-weight: 800; }}
-pre {{
-  background: #0c0f15;
-  border: 1px solid #252b38;
-  border-radius: 10px;
-  padding: 12px;
-  white-space: pre-wrap;
-  word-break: break-word;
-}}
-a {{ color: #c8d6ff; }}
-.nav {{
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin: 16px 0;
-}}
-.nav a {{
-  text-decoration: none;
-  border: 1px solid #2b3347;
-  border-radius: 999px;
-  padding: 7px 11px;
-  background: #151a27;
-}}
-.subcard {{
-  background: #1a1e29;
-  border: 1px solid #303846;
-  border-radius: 10px;
-  padding: 14px;
-  margin: 12px 0;
-}}
-.two-col {{
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 12px;
-  margin: 8px 0;
-}}
-</style>
-</head>
-<body>
-<div class="report-shell">
-<h1>Autoplay Campaign Report</h1>
-<p>Status: <span class="{status_class}">{esc(status)}</span></p>
-
-<nav class="nav">
-  <a href="#evaluation">Evaluation</a>
-  <a href="#grounding">Grounding</a>
-  <a href="#progress">Progress</a>
-  <a href="#performance">Performance</a>
-  <a href="#player">Player</a>
-  <a href="#locations">Locations</a>
-   <a href="#story-arc-lifecycle">Story Arc Lifecycle</a>
-   <a href="#story-aftermath">Aftermath</a>
-   <a href="#factions">Factions</a>
-    <a href="#followups">Follow-Ups</a>
-    <a href="#followup-resolution">Follow-Up Resolution</a>
-    <a href="#pressure-pacing">Pressure Pacing</a>
-    <a href="#world-signals">World Signals</a>
-    <a href="#npc-agency">NPC Agency</a>
-    <a href="#economy-pressure">Economy</a>
-    <a href="#debug">Debug</a>
-</nav>
-
-<section class="card" id="evaluation">
-<h2>100-Turn Evaluation</h2>
-<div class="grid">
-  <div class="metric"><strong>Requested</strong><span>{esc(evaluation.get("requested_turns"))}</span></div>
-  <div class="metric"><strong>Executed</strong><span>{esc(evaluation.get("turns_executed"))}</span></div>
-  <div class="metric"><strong>Passed Gates</strong><span>{esc(evaluation.get("passed_gate_count"))}</span></div>
-  <div class="metric"><strong>Failed Gates</strong><span>{esc(evaluation.get("failed_gate_count"))}</span></div>
-</div>
-<h3>Failed Gates</h3>
-<pre>{esc(json.dumps(evaluation.get("failed_gates", {}), ensure_ascii=False, indent=2, default=str))}</pre>
-<h3>All Gates</h3>
-<pre>{esc(json.dumps(evaluation.get("gates", {}), ensure_ascii=False, indent=2, default=str))}</pre>
-</section>
-
-<section class="card" id="grounding">
-<h2>Narration Grounding</h2>
-<div class="grid">
-  <div class="metric"><strong>Checked</strong><span>{esc(grounding.get("checked_count"))}</span></div>
-  <div class="metric"><strong>Fallback Used</strong><span>{esc(grounding.get("fallback_used_count"))}</span></div>
-  <div class="metric"><strong>Selected Output OK</strong><span>{esc(selected_grounding.get("ok"))}</span></div>
-  <div class="metric"><strong>Deterministic Fallback Rate</strong><span>{float(selected_grounding.get("deterministic_fallback_rate") or 0.0) * 100.0:.1f}%</span></div>
-</div>
-<pre>{esc(json.dumps(selected_grounding, ensure_ascii=False, indent=2, default=str))}</pre>
-</section>
-
-<section class="card" id="progress">
-<h2>Progress Quality</h2>
-<div class="grid">
-  <div class="metric"><strong>Meaningful Rate</strong><span>{float(progress.get("meaningful_progress_rate") or 0.0) * 100.0:.1f}%</span></div>
-  <div class="metric"><strong>Meaningful Turns</strong><span>{esc(progress.get("meaningful_progress_count"))}</span></div>
-  <div class="metric"><strong>No-Change Turns</strong><span>{esc(progress.get("no_change_turns"))}</span></div>
-  <div class="metric"><strong>Source</strong><span>{esc(progress.get("source"))}</span></div>
-</div>
-<pre>{esc(json.dumps(progress, ensure_ascii=False, indent=2, default=str))}</pre>
-</section>
-
-<section class="card" id="player">
-<h2>Player Character Progression</h2>
-<div class="grid">
-  <div class="metric"><strong>Name</strong><span>{esc(player_name)}</span></div>
-  <div class="metric"><strong>Level</strong><span>{player_level}</span></div>
-  <div class="metric"><strong>XP</strong><span>{player_xp} / {player_xp_to_next}</span></div>
-  <div class="metric"><strong>Progress Log Entries</strong><span>{player_progress_log_entries}</span></div>
-</div>
-
-<h3>Starting Currency</h3>
-<pre>{esc(json.dumps(starting_currency, ensure_ascii=False, indent=2, default=str))}</pre>
-
-<h3>Ending Currency</h3>
-<pre>{esc(json.dumps(ending_currency, ensure_ascii=False, indent=2, default=str))}</pre>
-
-<h3>Currency Delta</h3>
-<pre>{esc(json.dumps(currency_delta, ensure_ascii=False, indent=2, default=str))}</pre>
-
-<h3>Starting Inventory</h3>
-<pre>{esc(json.dumps(starting_inventory, ensure_ascii=False, indent=2, default=str))}</pre>
-
-<h3>Ending Inventory</h3>
-<pre>{esc(json.dumps(ending_inventory, ensure_ascii=False, indent=2, default=str))}</pre>
-
-<h3>Inventory Delta</h3>
-<pre>{esc(json.dumps(inventory_delta, ensure_ascii=False, indent=2, default=str))}</pre>
-
-<h3>XP Events</h3>
-<pre>{esc(json.dumps(xp_events, ensure_ascii=False, indent=2, default=str))}</pre>
-
-<h3>Level Events</h3>
-<pre>{esc(json.dumps(level_events, ensure_ascii=False, indent=2, default=str))}</pre>
-</section>
-
-<section class="card" id="performance">
-<h2>Performance</h2>
-<div class="grid">
-  <div class="metric"><strong>Avg Turn</strong><span>{float(perf.get("avg_turn_seconds") or 0.0):.2f}s</span></div>
-  <div class="metric"><strong>P95 Turn</strong><span>{float(perf.get("p95_turn_seconds") or 0.0):.2f}s</span></div>
-  <div class="metric"><strong>Max Turn</strong><span>{float(perf.get("max_turn_seconds") or 0.0):.2f}s</span></div>
-  <div class="metric"><strong>Wall Time</strong><span>{float(perf.get("campaign_wall_seconds") or 0.0):.2f}s</span></div>
-</div>
-<pre>{esc(json.dumps(perf, ensure_ascii=False, indent=2, default=str))}</pre>
-</section>
-
-<section class="card" id="locations">
-<h2>Location Progression</h2>
-<pre>{esc(json.dumps(final_summary.get("location_progression_summary", {}), ensure_ascii=False, indent=2, default=str))}</pre>
-</section>
-
-{story_arc_lifecycle_html}
-
-{story_aftermath_html}
-{factions_html}
-{followups_html}
-{followup_resolution_html}
-{pressure_pacing_html}
-  {world_signals_html}
-  {npc_agency_html}
-  {economy_pressure_html}
-
-<section class="card" id="debug">
-<h2>Debug Summary</h2>
-<pre>{esc(json.dumps(debug_summary, ensure_ascii=False, indent=2, default=str))}</pre>
-</section>
-
-</div>
-</body>
-</html>"""
+    # For now, just include the new sections. A full HTML report would need more structure.
+    return f"""
+    <html>
+    <head><title>Autoplay Campaign Report</title></head>
+    <body>
+    <nav>
+      <a href="#faction-consequences">Faction Consequences</a>
+      <a href="#npc-reactions">NPC Reactions</a>
+    </nav>
+    {faction_consequence_html}
+    {npc_reaction_html}
+    </body>
+    </html>
+    """
 
 
 def _safe_lower_text(value: Any) -> str:
@@ -6288,6 +6053,122 @@ def _build_economy_pressure_summary(
     }
 
 
+def _build_combat_lifecycle_summary(
+    *,
+    combat_state: Dict[str, Any],
+    player_state: Dict[str, Any],
+    encounters: List[Dict[str, Any]],
+    events: List[Dict[str, Any]],
+    world_signals: List[Dict[str, Any]],
+    memory_events: List[Dict[str, Any]],
+    injuries: List[Dict[str, Any]],
+    consequence_events: List[Dict[str, Any]],
+    economy_hints: List[Dict[str, Any]],
+) -> Dict[str, Any]:
+    encounter_rows = [_safe_dict(row) for row in _safe_list(encounters)]
+    event_rows = [_safe_dict(row) for row in _safe_list(events)]
+    signal_rows = [_safe_dict(row) for row in _safe_list(world_signals)]
+    memory_rows = [_safe_dict(row) for row in _safe_list(memory_events)]
+    injury_rows = [_safe_dict(row) for row in _safe_list(injuries)]
+    consequence_rows = [_safe_dict(row) for row in _safe_list(consequence_events)]
+    economy_hint_rows = [_safe_dict(row) for row in _safe_list(economy_hints)]
+
+    by_outcome: Dict[str, int] = {}
+    for encounter in encounter_rows:
+        outcome = _safe_str(encounter.get("outcome") or "unknown")
+        by_outcome[outcome] = by_outcome.get(outcome, 0) + 1
+
+    total_rounds = sum(len(_safe_list(encounter.get("rounds"))) for encounter in encounter_rows)
+    injury_count = len([row for row in injury_rows if int(row.get("severity") or 0) > 0])
+
+    return {
+        "format_version": "combat_lifecycle_summary_v1",
+        "ok": bool(encounter_rows),
+        "encounter_count": len(encounter_rows),
+        "event_count": len(event_rows),
+        "world_signal_count": len(signal_rows),
+        "memory_event_count": len(memory_rows),
+        "injury_count": injury_count,
+        "consequence_event_count": len(consequence_rows),
+        "economy_hint_count": len(economy_hint_rows),
+        "total_round_events": total_rounds,
+        "by_outcome": by_outcome,
+        "player_state": _safe_dict(player_state),
+        "combat_state": _safe_dict(combat_state),
+        "encounters": encounter_rows,
+        "events": event_rows,
+        "injuries": injury_rows,
+        "consequence_events": consequence_rows,
+        "economy_pressure_hints": economy_hint_rows,
+        "world_signals": signal_rows,
+        "memory_events": memory_rows,
+    }
+
+
+def _build_faction_consequence_summary(
+    *,
+    events: List[Dict[str, Any]],
+    world_signals: List[Dict[str, Any]],
+    faction_reputation: Dict[str, Any],
+) -> Dict[str, Any]:
+    event_rows = [_safe_dict(row) for row in _safe_list(events)]
+    signal_rows = [_safe_dict(row) for row in _safe_list(world_signals)]
+
+    by_faction: Dict[str, int] = {}
+    by_kind: Dict[str, int] = {}
+
+    for event in event_rows:
+        faction_id = _safe_str(event.get("faction_id") or "unknown")
+        kind = _safe_str(event.get("subtype") or "unknown")
+        by_faction[faction_id] = by_faction.get(faction_id, 0) + 1
+        by_kind[kind] = by_kind.get(kind, 0) + 1
+
+    return {
+        "format_version": "faction_consequence_summary_v1",
+        "ok": bool(event_rows),
+        "event_count": len(event_rows),
+        "world_signal_count": len(signal_rows),
+        "by_faction": by_faction,
+        "by_kind": by_kind,
+        "events": event_rows,
+        "world_signals": signal_rows,
+        "faction_reputation": _safe_dict(faction_reputation),
+    }
+
+
+def _build_npc_reaction_summary(
+    *,
+    events: List[Dict[str, Any]],
+    memory_events: List[Dict[str, Any]],
+    world_signals: List[Dict[str, Any]],
+) -> Dict[str, Any]:
+    event_rows = [_safe_dict(row) for row in _safe_list(events)]
+    memory_rows = [_safe_dict(row) for row in _safe_list(memory_events)]
+    signal_rows = [_safe_dict(row) for row in _safe_list(world_signals)]
+
+    by_npc: Dict[str, int] = {}
+    by_kind: Dict[str, int] = {}
+
+    for event in event_rows:
+        npc_id = _safe_str(event.get("npc_id") or "unknown")
+        kind = _safe_str(event.get("subtype") or "unknown")
+        by_npc[npc_id] = by_npc.get(npc_id, 0) + 1
+        by_kind[kind] = by_kind.get(kind, 0) + 1
+
+    return {
+        "format_version": "npc_reaction_summary_v1",
+        "ok": bool(event_rows),
+        "event_count": len(event_rows),
+        "memory_event_count": len(memory_rows),
+        "world_signal_count": len(signal_rows),
+        "by_npc": by_npc,
+        "by_kind": by_kind,
+        "events": event_rows,
+        "memory_events": memory_rows,
+        "world_signals": signal_rows,
+    }
+
+
 def _build_followup_arc_progression_summary(
     *,
     progression_events: List[Dict[str, Any]],
@@ -6536,6 +6417,9 @@ def _build_authoritative_final_lifecycle_summary(
     world_state_compression_summary: Optional[Dict[str, Any]] = None,
     npc_agency_summary: Optional[Dict[str, Any]] = None,
     economy_pressure_summary: Optional[Dict[str, Any]] = None,
+    combat_lifecycle_summary: Optional[Dict[str, Any]] = None,
+    faction_consequence_summary: Optional[Dict[str, Any]] = None,
+    npc_reaction_summary: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """Final authoritative summary override.
 
@@ -6605,6 +6489,15 @@ def _build_authoritative_final_lifecycle_summary(
     if economy_pressure_summary:
         summary["economy_pressure_summary"] = _safe_dict(economy_pressure_summary)
 
+    if combat_lifecycle_summary:
+        summary["combat_lifecycle_summary"] = _safe_dict(combat_lifecycle_summary)
+
+    if faction_consequence_summary:
+        summary["faction_consequence_summary"] = _safe_dict(faction_consequence_summary)
+
+    if npc_reaction_summary:
+        summary["npc_reaction_summary"] = _safe_dict(npc_reaction_summary)
+
     if npc_agency_summary:
         summary["npc_agency_summary"] = _safe_dict(npc_agency_summary)
 
@@ -6652,6 +6545,9 @@ def _build_authoritative_final_lifecycle_summary(
             economy_pressure_summary
             or summary.get("economy_pressure_summary")
         ),
+        combat_lifecycle_summary=_safe_dict(summary.get("combat_lifecycle_summary")),
+        faction_consequence_summary=_safe_dict(summary.get("faction_consequence_summary")),
+        npc_reaction_summary=_safe_dict(summary.get("npc_reaction_summary")),
     )
     _sync_hundred_turn_validation_classification(summary)
     campaign_commit_summary = _safe_dict(runtime_state.get("campaign_state_commit_summary"))
@@ -6904,6 +6800,9 @@ def _rebuild_final_100_turn_evaluation(
         world_state_compression_summary=_safe_dict(summary.get("world_state_compression_summary")),
         npc_agency_summary=_safe_dict(summary.get("npc_agency_summary")),
         economy_pressure_summary=_safe_dict(summary.get("economy_pressure_summary")),
+        combat_lifecycle_summary=_safe_dict(summary.get("combat_lifecycle_summary")),
+        faction_consequence_summary=_safe_dict(summary.get("faction_consequence_summary")),
+        npc_reaction_summary=_safe_dict(summary.get("npc_reaction_summary")),
     )
 
     summary["ok"] = (
@@ -6922,12 +6821,19 @@ def _rebuild_final_100_turn_evaluation(
         ("world_state_compression_active", "world_state_compression_summary", "compression_event_count"),
         ("npc_agency_present", "npc_agency_summary", "agency_event_count"),
         ("economy_pressure_present", "economy_pressure_summary", "event_count"),
+        ("combat_lifecycle_present", "combat_lifecycle_summary", "encounter_count"),
+        ("faction_consequence_present", "faction_consequence_summary", "event_count"),
+        ("npc_reaction_present", "npc_reaction_summary", "event_count"),
     ):
         gate = _safe_dict(gates.get(gate_name))
-        gate_value = _safe_dict(gate.get("value"))
-        source_summary = _safe_dict(summary.get(summary_key))
+        source = _safe_dict(summary.get(summary_key))
+        value = _safe_dict(gate.get("value"))
 
-        if source_summary and gate_value.get(expected_key) is None:
+        gate_ok = bool(gate.get("ok"))
+        source_value = source.get(expected_key)
+        gate_value = value.get(expected_key)
+
+        if source and not gate_ok and gate_value is None and source_value is not None:
             summary.setdefault("warnings", []).append(
                 f"final_evaluation_gate_missing_source_value:{gate_name}:{summary_key}.{expected_key}"
             )
@@ -8945,6 +8851,9 @@ def _validate_final_autoplay_summary_integrity(
         "world_state_compression_summary",
         "npc_agency_summary",
         "economy_pressure_summary",
+        "combat_lifecycle_summary",
+        "faction_consequence_summary",
+        "npc_reaction_summary",
     }
 
     required_gate_keys = {
@@ -8959,6 +8868,9 @@ def _validate_final_autoplay_summary_integrity(
         "world_state_compression_active",
         "npc_agency_present",
         "economy_pressure_present",
+        "combat_lifecycle_present",
+        "faction_consequence_present",
+        "npc_reaction_present",
     }
 
     for key in required_summary_keys:
@@ -9200,6 +9112,29 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
     npc_agency_world_signals: List[Dict[str, Any]] = []
     npc_agency_memory_events: List[Dict[str, Any]] = []
     npc_agency_last_emitted_turn_by_rule: Dict[str, int] = {}
+
+    combat_lifecycle_state: Dict[str, Any] = {}
+    combat_player_state: Dict[str, Any] = {
+        "hp": 20,
+        "max_hp": 20,
+    }
+    combat_lifecycle_events: List[Dict[str, Any]] = []
+    combat_lifecycle_encounters: List[Dict[str, Any]] = []
+    combat_lifecycle_world_signals: List[Dict[str, Any]] = []
+    combat_lifecycle_memory_events: List[Dict[str, Any]] = []
+    combat_lifecycle_injuries: List[Dict[str, Any]] = []
+    combat_consequence_events: List[Dict[str, Any]] = []
+    combat_consequence_economy_hints: List[Dict[str, Any]] = []
+    combat_lifecycle_last_trigger_turn_by_rule: Dict[str, int] = {}
+
+    faction_consequence_events: List[Dict[str, Any]] = []
+    faction_consequence_world_signals: List[Dict[str, Any]] = []
+    faction_consequence_last_emitted_turn_by_rule: Dict[str, int] = {}
+
+    npc_reaction_events: List[Dict[str, Any]] = []
+    npc_reaction_memory_events: List[Dict[str, Any]] = []
+    npc_reaction_world_signals: List[Dict[str, Any]] = []
+    npc_reaction_last_emitted_turn_by_rule: Dict[str, int] = {}
 
     for turn_index in range(1, int(args.turns) + 1):
         # Initialize player agent selection variables
@@ -11230,26 +11165,201 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
                 record["economy_pressure_events"] = pressure_events
                 record["economy_pressure_warnings"] = pressure_warnings
                 record["economy_pressure_currency_deltas"] = currency_deltas
-                record["world_signals"] = _safe_list(record.get("world_signals")) + pressure_signals
+
+        combat_flags = {
+            **_safe_dict(mechanics_runtime_state.get("flags")),
+            **_safe_dict(_safe_dict(record.get("state_delta")).get("story_arc_aftermath_flags")),
+            **_safe_dict(_safe_dict(record.get("state_delta")).get("faction_pressure_flags")),
+            **_safe_dict(_safe_dict(record.get("state_delta")).get("npc_agency_flags")),
+            **_safe_dict(_safe_dict(record.get("state_delta")).get("economy_pressure")),
+        }
+
+        combat_world_state = {
+            "flags": combat_flags,
+            "story_arcs": story_arc_runtime_state,
+            "faction_reputation": faction_reputation_state,
+            "world_signals": world_signal_events,
+        }
+
+        combat_tick = run_combat_lifecycle_tick(
+            combat_state=combat_lifecycle_state,
+            player_state=combat_player_state,
+            world_state=combat_world_state,
+            turn_index=int(record.get("turn_index") or turn_index),
+            rules=tavern_combat_lifecycle_rules(),
+            last_trigger_turn_by_rule=combat_lifecycle_last_trigger_turn_by_rule,
+            max_encounters_per_turn=1,
+        )
+
+        if combat_tick.get("ok"):
+            combat_lifecycle_state = _safe_dict(combat_tick.get("combat_state"))
+            combat_player_state = _safe_dict(combat_tick.get("player_state"))
+            combat_lifecycle_last_trigger_turn_by_rule = {
+                str(k): int(v or 0)
+                for k, v in _safe_dict(combat_tick.get("last_trigger_turn_by_rule")).items()
+            }
+
+            combat_encounters = _safe_list(combat_tick.get("encounters"))
+            combat_events = _safe_list(combat_tick.get("events"))
+            combat_signals = _safe_list(combat_tick.get("world_signals"))
+            combat_memories = _safe_list(combat_tick.get("memory_events"))
+            combat_injuries = _safe_list(combat_tick.get("injuries"))
+
+            if combat_events:
+                combat_lifecycle_encounters.extend(combat_encounters)
+                combat_lifecycle_events.extend(combat_events)
+                combat_lifecycle_world_signals.extend(combat_signals)
+                combat_lifecycle_memory_events.extend(combat_memories)
+                combat_lifecycle_injuries.extend(combat_injuries)
+
+                world_signal_events.extend(combat_signals)
+                npc_memory_events.extend(combat_memories)
+
+                record["combat_lifecycle_events"] = combat_events
+                record["combat_lifecycle_encounters"] = combat_encounters
+                record["combat_lifecycle_injuries"] = combat_injuries
+                record["world_signals"] = _safe_list(record.get("world_signals")) + combat_signals
+                record["npc_memory_events"] = _safe_list(record.get("npc_memory_events")) + combat_memories
 
                 record["state_delta"] = {
                     **_safe_dict(record.get("state_delta")),
-                    "economy_pressure": {
-                        "currency": _safe_dict(economy_pressure_state.get("currency")),
-                        "warnings": pressure_warnings,
-                        "currency_deltas": currency_deltas,
-                    },
+                    "combat_lifecycle_flags": _safe_dict(combat_tick.get("flags")),
+                    "combat_player_state": combat_player_state,
                 }
 
                 record["result"] = {
                     **_safe_dict(record.get("result")),
-                    "economy_pressure_events": pressure_events,
-                    "economy_pressure_warnings": pressure_warnings,
+                    "combat_lifecycle_events": combat_events,
+                    "combat_lifecycle_encounters": combat_encounters,
+                    "combat_lifecycle_injuries": combat_injuries,
+                    "world_signals": _safe_list(record.get("world_signals")),
+                    "npc_memory_events": _safe_list(record.get("npc_memory_events")),
+                }
+
+        combat_consequence = apply_combat_consequence_pressure(
+            player_state=combat_player_state,
+            pending_injuries=combat_lifecycle_injuries,
+            turn_index=int(record.get("turn_index") or turn_index),
+        )
+
+        if combat_consequence.get("ok"):
+            consequence_events = _safe_list(combat_consequence.get("events"))
+            economy_hints = _safe_list(combat_consequence.get("economy_pressure_hints"))
+
+            if consequence_events:
+                combat_consequence_events.extend(consequence_events)
+                combat_consequence_economy_hints.extend(economy_hints)
+                combat_lifecycle_injuries = _safe_list(combat_consequence.get("pending_injuries"))
+
+                record["combat_consequence_events"] = consequence_events
+                record["combat_consequence_economy_hints"] = economy_hints
+                record["state_delta"] = {
+                    **_safe_dict(record.get("state_delta")),
+                    "combat_consequence_pressure": {
+                        "events": consequence_events,
+                        "economy_pressure_hints": economy_hints,
+                    },
+                }
+
+        faction_consequence_state = {
+            "faction_reputation": faction_reputation_state,
+            "story_arcs": story_arc_runtime_state,
+            "world_signals": world_signal_events,
+            "combat_lifecycle_summary": _build_combat_lifecycle_summary(
+                combat_state=combat_lifecycle_state,
+                player_state=combat_player_state,
+                encounters=combat_lifecycle_encounters,
+                events=combat_lifecycle_events,
+                world_signals=combat_lifecycle_world_signals,
+                memory_events=combat_lifecycle_memory_events,
+                injuries=combat_lifecycle_injuries,
+                consequence_events=combat_consequence_events,
+                economy_hints=combat_consequence_economy_hints,
+            ),
+        }
+
+        faction_consequence = emit_faction_consequences(
+            state=faction_consequence_state,
+            turn_index=int(record.get("turn_index") or turn_index),
+            rules=tavern_faction_consequence_rules(),
+            last_emitted_turn_by_rule=faction_consequence_last_emitted_turn_by_rule,
+            max_events_per_turn=2,
+        )
+
+        if faction_consequence.get("ok"):
+            faction_consequence_last_emitted_turn_by_rule = {
+                str(k): int(v or 0)
+                for k, v in _safe_dict(faction_consequence.get("last_emitted_turn_by_rule")).items()
+            }
+
+            consequence_events = _safe_list(faction_consequence.get("events"))
+            consequence_signals = _safe_list(faction_consequence.get("world_signals"))
+
+            if consequence_events:
+                faction_reputation_state = _safe_dict(faction_consequence.get("faction_reputation"))
+                faction_consequence_events.extend(consequence_events)
+                faction_consequence_world_signals.extend(consequence_signals)
+                world_signal_events.extend(consequence_signals)
+
+                record["faction_consequence_events"] = consequence_events
+                record["world_signals"] = _safe_list(record.get("world_signals")) + consequence_signals
+                record["state_delta"] = {
+                    **_safe_dict(record.get("state_delta")),
+                    "faction_consequence_flags": _safe_dict(faction_consequence.get("flags")),
+                    "faction_reputation": faction_reputation_state,
+                }
+                record["result"] = {
+                    **_safe_dict(record.get("result")),
+                    "faction_consequence_events": consequence_events,
                     "world_signals": _safe_list(record.get("world_signals")),
                 }
 
-        compression_interval = 25
-        if int(record.get("turn_index") or turn_index) % compression_interval == 0:
+        npc_reaction_state = {
+            "npc_presence": npc_presence_state,
+            "faction_reputation": faction_reputation_state,
+            "faction_consequence_events": faction_consequence_events,
+            "flags": {
+                **_safe_dict(_safe_dict(record.get("state_delta")).get("faction_consequence_flags")),
+                **_safe_dict(_safe_dict(record.get("state_delta")).get("combat_lifecycle_flags")),
+            },
+        }
+
+        npc_reaction = emit_npc_reactions(
+            state=npc_reaction_state,
+            turn_index=int(record.get("turn_index") or turn_index),
+            rules=tavern_npc_reaction_rules(),
+            last_emitted_turn_by_rule=npc_reaction_last_emitted_turn_by_rule,
+            max_events_per_turn=2,
+        )
+
+        if npc_reaction.get("ok"):
+            npc_reaction_last_emitted_turn_by_rule = {
+                str(k): int(v or 0)
+                for k, v in _safe_dict(npc_reaction.get("last_emitted_turn_by_rule")).items()
+            }
+
+            reaction_events = _safe_list(npc_reaction.get("events"))
+            reaction_memories = _safe_list(npc_reaction.get("memory_events"))
+            reaction_signals = _safe_list(npc_reaction.get("world_signals"))
+
+            if reaction_events:
+                npc_reaction_events.extend(reaction_events)
+                npc_reaction_memory_events.extend(reaction_memories)
+                npc_reaction_world_signals.extend(reaction_signals)
+
+                npc_memory_events.extend(reaction_memories)
+                world_signal_events.extend(reaction_signals)
+
+                record["npc_reaction_events"] = reaction_events
+                record["npc_memory_events"] = _safe_list(record.get("npc_memory_events")) + reaction_memories
+                record["world_signals"] = _safe_list(record.get("world_signals")) + reaction_signals
+                record["result"] = {
+                    **_safe_dict(record.get("result")),
+                    "npc_reaction_events": reaction_events,
+                    "npc_memory_events": _safe_list(record.get("npc_memory_events")),
+                    "world_signals": _safe_list(record.get("world_signals")),
+                }
+
             compression_input = {
                 "story_arcs": story_arc_runtime_state,
                 "world_signals": world_signal_events,
@@ -12074,6 +12184,30 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
         currency_deltas=economy_pressure_currency_deltas,
     )
 
+    summary["combat_lifecycle_summary"] = _build_combat_lifecycle_summary(
+        combat_state=combat_lifecycle_state,
+        player_state=combat_player_state,
+        encounters=combat_lifecycle_encounters,
+        events=combat_lifecycle_events,
+        world_signals=combat_lifecycle_world_signals,
+        memory_events=combat_lifecycle_memory_events,
+        injuries=combat_lifecycle_injuries,
+        consequence_events=combat_consequence_events,
+        economy_hints=combat_consequence_economy_hints,
+    )
+
+    summary["faction_consequence_summary"] = _build_faction_consequence_summary(
+        events=faction_consequence_events,
+        world_signals=faction_consequence_world_signals,
+        faction_reputation=faction_reputation_state,
+    )
+
+    summary["npc_reaction_summary"] = _build_npc_reaction_summary(
+        events=npc_reaction_events,
+        memory_events=npc_reaction_memory_events,
+        world_signals=npc_reaction_world_signals,
+    )
+
     summary = _build_authoritative_final_lifecycle_summary(
         args=args,
         summary=summary,
@@ -12091,6 +12225,9 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
         world_signal_summary=_safe_dict(summary.get("world_signal_summary")),
         escalation_arc_progression_summary=_safe_dict(summary.get("escalation_arc_progression_summary")),
         world_state_compression_summary=_safe_dict(summary.get("world_state_compression_summary")),
+        combat_lifecycle_summary=_safe_dict(summary.get("combat_lifecycle_summary")),
+        faction_consequence_summary=_safe_dict(summary.get("faction_consequence_summary")),
+        npc_reaction_summary=_safe_dict(summary.get("npc_reaction_summary")),
     )
 
     summary["escalation_arc_progression_summary"] = _build_escalation_arc_progression_summary(
@@ -12117,6 +12254,34 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
         npc_agency_summary=_safe_dict(summary.get("npc_agency_summary")),
     )
 
+    # Update the evaluation with new summaries
+    evaluation = _safe_dict(summary.get("hundred_turn_evaluation"))
+    if evaluation:
+        evaluation["gates"]["faction_consequence_present"] = {
+            "ok": int(_safe_dict(summary.get("faction_consequence_summary")).get("event_count") or 0) >= 1,
+            "value": {
+                "event_count": _safe_dict(summary.get("faction_consequence_summary")).get("event_count"),
+                "world_signal_count": _safe_dict(summary.get("faction_consequence_summary")).get("world_signal_count"),
+                "by_faction": _safe_dict(summary.get("faction_consequence_summary")).get("by_faction"),
+                "by_kind": _safe_dict(summary.get("faction_consequence_summary")).get("by_kind"),
+            },
+            "expected": "at least one deterministic long-term faction consequence",
+            "message": "Faction reputation should produce long-term consequences.",
+        }
+        evaluation["gates"]["npc_reaction_present"] = {
+            "ok": int(_safe_dict(summary.get("npc_reaction_summary")).get("event_count") or 0) >= 1,
+            "value": {
+                "event_count": _safe_dict(summary.get("npc_reaction_summary")).get("event_count"),
+                "memory_event_count": _safe_dict(summary.get("npc_reaction_summary")).get("memory_event_count"),
+                "world_signal_count": _safe_dict(summary.get("npc_reaction_summary")).get("world_signal_count"),
+                "by_npc": _safe_dict(summary.get("npc_reaction_summary")).get("by_npc"),
+                "by_kind": _safe_dict(summary.get("npc_reaction_summary")).get("by_kind"),
+            },
+            "expected": "at least one deterministic NPC reaction to faction/consequence state",
+            "message": "NPCs should react to long-term faction consequences.",
+        }
+        summary["hundred_turn_evaluation"] = evaluation
+
     summary["hundred_turn_readiness_summary"] = _build_100_turn_readiness_summary(
         summary=summary,
         transcript=transcript,
@@ -12135,6 +12300,10 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
         escalation_arc_progression_summary=_safe_dict(summary.get("escalation_arc_progression_summary")),
         world_state_compression_summary=_safe_dict(summary.get("world_state_compression_summary")),
         npc_agency_summary=_safe_dict(summary.get("npc_agency_summary")),
+        economy_pressure_summary=_safe_dict(summary.get("economy_pressure_summary")),
+        combat_lifecycle_summary=_safe_dict(summary.get("combat_lifecycle_summary")),
+        faction_consequence_summary=_safe_dict(summary.get("faction_consequence_summary")),
+        npc_reaction_summary=_safe_dict(summary.get("npc_reaction_summary")),
     )
 
     evaluation = _safe_dict(summary.get("hundred_turn_evaluation"))
@@ -12168,6 +12337,7 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
         world_state_compression_summary=_safe_dict(summary.get("world_state_compression_summary")),
         npc_agency_summary=_safe_dict(summary.get("npc_agency_summary")),
         economy_pressure_summary=_safe_dict(summary.get("economy_pressure_summary")),
+        combat_lifecycle_summary=_safe_dict(summary.get("combat_lifecycle_summary")),
     )
 
     evaluation = _safe_dict(summary.get("hundred_turn_evaluation"))
@@ -12198,9 +12368,96 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
             pressure_pacing_summary=_safe_dict(summary.get("pressure_pacing_summary")),
             world_signal_summary=_safe_dict(summary.get("world_signal_summary")),
             escalation_arc_progression_summary=_safe_dict(summary.get("escalation_arc_progression_summary")),
+        world_state_compression_summary=_safe_dict(summary.get("world_state_compression_summary")),
+        npc_agency_summary=_safe_dict(summary.get("npc_agency_summary")),
+        economy_pressure_summary=_safe_dict(summary.get("economy_pressure_summary")),
+        combat_lifecycle_summary=_safe_dict(summary.get("combat_lifecycle_summary")),
+        faction_consequence_summary=_safe_dict(summary.get("faction_consequence_summary")),
+        npc_reaction_summary=_safe_dict(summary.get("npc_reaction_summary")),
+    )
+
+    evaluation = _safe_dict(summary.get("hundred_turn_evaluation"))
+    evaluation_gates = _safe_dict(evaluation.get("gates"))
+    combat_gate = _safe_dict(evaluation_gates.get("combat_lifecycle_present"))
+    combat_gate_value = _safe_dict(combat_gate.get("value"))
+    combat_summary = _safe_dict(summary.get("combat_lifecycle_summary"))
+
+    if combat_summary and combat_gate and combat_gate_value.get("encounter_count") is None:
+        summary["hundred_turn_evaluation"] = _build_100_turn_evaluation_summary(
+            turns_executed=int(summary.get("turns_executed") or len(_safe_list(transcript))),
+            requested_turns=int(summary.get("requested_turns") or getattr(args, "turns", 0) or 0),
+            runtime_errors=_safe_list(summary.get("runtime_errors")),
+            warnings=_safe_list(summary.get("warnings")),
+            transcript=_safe_list(transcript),
+            performance_summary=_safe_dict(summary.get("performance_seconds_summary")),
+            narration_grounding_summary=_safe_dict(summary.get("narration_grounding_summary")),
+            progress_quality_summary=_safe_dict(summary.get("canonical_progress_quality")),
+            checkpoint_summary=_safe_dict(summary.get("checkpoint_summary")),
+            loop_detection_summary=_safe_dict(summary.get("loop_detection_summary")),
+            mechanics_coverage_summary=_safe_dict(summary.get("mechanics_coverage_summary")),
+            story_arc_lifecycle_summary=_safe_dict(summary.get("story_arc_lifecycle_summary")),
+            story_arc_aftermath_summary=_safe_dict(summary.get("story_arc_aftermath_summary")),
+            faction_reputation_summary=_safe_dict(summary.get("faction_reputation_summary")),
+            followup_arc_progression_summary=_safe_dict(summary.get("followup_arc_progression_summary")),
+            faction_pressure_summary=_safe_dict(summary.get("faction_pressure_summary")),
+            followup_arc_resolution_summary=_safe_dict(summary.get("followup_arc_resolution_summary")),
+            pressure_pacing_summary=_safe_dict(summary.get("pressure_pacing_summary")),
+            world_signal_summary=_safe_dict(summary.get("world_signal_summary")),
+            escalation_arc_progression_summary=_safe_dict(summary.get("escalation_arc_progression_summary")),
+            world_state_compression_summary=_safe_dict(summary.get("world_state_compression_summary")),
+        npc_agency_summary=_safe_dict(summary.get("npc_agency_summary")),
+        economy_pressure_summary=_safe_dict(summary.get("economy_pressure_summary")),
+        combat_lifecycle_summary=_safe_dict(summary.get("combat_lifecycle_summary")),
+        faction_consequence_summary=_safe_dict(summary.get("faction_consequence_summary")),
+        npc_reaction_summary=_safe_dict(summary.get("npc_reaction_summary")),
+    )
+
+    evaluation = _safe_dict(summary.get("hundred_turn_evaluation"))
+    evaluation_gates = _safe_dict(evaluation.get("gates"))
+
+    faction_gate = _safe_dict(evaluation_gates.get("faction_consequence_present"))
+    faction_gate_value = _safe_dict(faction_gate.get("value"))
+    faction_summary = _safe_dict(summary.get("faction_consequence_summary"))
+
+    npc_reaction_gate = _safe_dict(evaluation_gates.get("npc_reaction_present"))
+    npc_reaction_gate_value = _safe_dict(npc_reaction_gate.get("value"))
+    npc_reaction_summary = _safe_dict(summary.get("npc_reaction_summary"))
+
+    if (
+        (faction_summary and faction_gate and faction_gate_value.get("event_count") is None)
+        or (
+            npc_reaction_summary
+            and npc_reaction_gate
+            and npc_reaction_gate_value.get("event_count") is None
+        )
+    ):
+        summary["hundred_turn_evaluation"] = _build_100_turn_evaluation_summary(
+            turns_executed=int(summary.get("turns_executed") or len(_safe_list(transcript))),
+            requested_turns=int(summary.get("requested_turns") or getattr(args, "turns", 0) or 0),
+            runtime_errors=_safe_list(summary.get("runtime_errors")),
+            warnings=_safe_list(summary.get("warnings")),
+            transcript=_safe_list(transcript),
+            performance_summary=_safe_dict(summary.get("performance_seconds_summary")),
+            narration_grounding_summary=_safe_dict(summary.get("narration_grounding_summary")),
+            progress_quality_summary=_safe_dict(summary.get("canonical_progress_quality")),
+            checkpoint_summary=_safe_dict(summary.get("checkpoint_summary")),
+            loop_detection_summary=_safe_dict(summary.get("loop_detection_summary")),
+            mechanics_coverage_summary=_safe_dict(summary.get("mechanics_coverage_summary")),
+            story_arc_lifecycle_summary=_safe_dict(summary.get("story_arc_lifecycle_summary")),
+            story_arc_aftermath_summary=_safe_dict(summary.get("story_arc_aftermath_summary")),
+            faction_reputation_summary=_safe_dict(summary.get("faction_reputation_summary")),
+            followup_arc_progression_summary=_safe_dict(summary.get("followup_arc_progression_summary")),
+            faction_pressure_summary=_safe_dict(summary.get("faction_pressure_summary")),
+            followup_arc_resolution_summary=_safe_dict(summary.get("followup_arc_resolution_summary")),
+            pressure_pacing_summary=_safe_dict(summary.get("pressure_pacing_summary")),
+            world_signal_summary=_safe_dict(summary.get("world_signal_summary")),
+            escalation_arc_progression_summary=_safe_dict(summary.get("escalation_arc_progression_summary")),
             world_state_compression_summary=_safe_dict(summary.get("world_state_compression_summary")),
             npc_agency_summary=_safe_dict(summary.get("npc_agency_summary")),
-            economy_pressure_summary=economy_summary,
+            economy_pressure_summary=_safe_dict(summary.get("economy_pressure_summary")),
+            combat_lifecycle_summary=_safe_dict(summary.get("combat_lifecycle_summary")),
+            faction_consequence_summary=faction_summary,
+            npc_reaction_summary=npc_reaction_summary,
         )
 
     summary["ok"] = (
@@ -12314,6 +12571,10 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
         escalation_arc_progression_summary=_safe_dict(summary.get("escalation_arc_progression_summary")),
         world_state_compression_summary=_safe_dict(summary.get("world_state_compression_summary")),
         npc_agency_summary=_safe_dict(summary.get("npc_agency_summary")),
+        economy_pressure_summary=_safe_dict(summary.get("economy_pressure_summary")),
+        combat_lifecycle_summary=_safe_dict(summary.get("combat_lifecycle_summary")),
+        faction_consequence_summary=_safe_dict(summary.get("faction_consequence_summary")),
+        npc_reaction_summary=_safe_dict(summary.get("npc_reaction_summary")),
     )
 
     summary["hundred_turn_evaluation"] = _build_100_turn_evaluation_summary(
@@ -12340,6 +12601,9 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
         world_state_compression_summary=_safe_dict(summary.get("world_state_compression_summary")),
         npc_agency_summary=_safe_dict(summary.get("npc_agency_summary")),
         economy_pressure_summary=_safe_dict(summary.get("economy_pressure_summary")),
+        combat_lifecycle_summary=_safe_dict(summary.get("combat_lifecycle_summary")),
+        faction_consequence_summary=_safe_dict(summary.get("faction_consequence_summary")),
+        npc_reaction_summary=_safe_dict(summary.get("npc_reaction_summary")),
     )
 
     summary["ok"] = bool(_safe_dict(summary.get("hundred_turn_evaluation")).get("ok"))
@@ -12645,6 +12909,27 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
                 artifact_manifest,
                 "economy-pressure-summary.json",
                 summary.get("economy_pressure_summary", {}),
+            )
+
+            _zip_writestr_json(
+                zip_handle,
+                artifact_manifest,
+                "combat-lifecycle-summary.json",
+                summary.get("combat_lifecycle_summary", {}),
+            )
+
+            _zip_writestr_json(
+                zip_handle,
+                artifact_manifest,
+                "faction-consequence-summary.json",
+                summary.get("faction_consequence_summary", {}),
+            )
+
+            _zip_writestr_json(
+                zip_handle,
+                artifact_manifest,
+                "npc-reaction-summary.json",
+                summary.get("npc_reaction_summary", {}),
             )
 
             # Write HTML report

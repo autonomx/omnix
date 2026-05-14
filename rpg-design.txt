@@ -1,27 +1,219 @@
-N103-N105 — Economy Pressure + Resource Sinks
+N108.2 + N109-N111 — Faction Consequences / NPC Reaction Policy
 
-Patch targeted files only. Do not replace _run_autoplay_campaign(...).
+Patch targeted files only.
 
-N103 — Economy Pressure State + Upkeep Rules
-N104 — Resource Sink Events + Merchant/Service Pressure
-N105 — Autoplay/Report/Gates for Economy Pressure
+N108.2 — Remove stale final-evaluation source warning after repair
+N109 — Long-Term Faction Consequence Rules
+N110 — NPC Reaction Policy v1
+N111 — Autoplay/Report/Gates for Faction Consequences + NPC Reactions
 
 Goal:
 
-- deterministic recurring expenses
-- lodging/food/travel upkeep pressure
-- resource warnings when gold/supplies are low
-- bounded economy world signals
-- economy events summarized in report/artifacts
-- economy pressure gated in 100-turn evaluation/readiness
+- Remove stale final_evaluation_gate_missing_source_value warning after successful repair.
+- Add deterministic faction consequence events over long runs.
+- NPCs react to faction reputation, combat, economy, and story state.
+- NPC reaction policy is bounded, schedule/presence-aware, and non-LLM.
+- Final evaluation/readiness gates prove faction consequences and NPC reactions occurred.
 
-No LLM calls. No freeform economy mutation. Everything must be deterministic and replay-safe.
+Do not replace _run_autoplay_campaign(...).
+Do not create run_autoplay_campaign(...).
+Do not add LLM calls.
+Do not let the LLM decide faction reputation, NPC reactions, combat, costs, rewards, or consequences.
 
-1. Add economy pressure module
+Part A — N108.2 stale warning cleanup
+
+Patch:
+
+src/tests/rpg/autoplay_llm_campaign.py
+1. Fix final evaluation diagnostic loop to only warn when gate is still failing
+
+Find inside _rebuild_final_100_turn_evaluation(...):
+
+for gate_name, summary_key, expected_key in (
+
+Inside that loop, you likely have logic similar to:
+
+gate = _safe_dict(gates.get(gate_name))
+source = _safe_dict(summary.get(summary_key))
+value = _safe_dict(gate.get("value"))
+if source and value.get(expected_key) is None:
+    warnings.append(
+        f"final_evaluation_gate_missing_source_value:{gate_name}:{summary_key}.{expected_key}"
+    )
+
+Replace that condition with:
+
+gate = _safe_dict(gates.get(gate_name))
+source = _safe_dict(summary.get(summary_key))
+value = _safe_dict(gate.get("value"))
+
+gate_ok = bool(gate.get("ok"))
+source_value = source.get(expected_key)
+gate_value = value.get(expected_key)
+
+if source and not gate_ok and gate_value is None and source_value is not None:
+    warnings.append(
+        f"final_evaluation_gate_missing_source_value:{gate_name}:{summary_key}.{expected_key}"
+    )
+
+This keeps the diagnostic useful only when the gate still failed. It prevents run-270’s stale warning:
+
+final_evaluation_gate_missing_source_value:combat_lifecycle_present:combat_lifecycle_summary.encounter_count
+
+when combat_lifecycle_present.ok == true.
+
+2. Add regression test
 
 Create:
 
-src/app/rpg/economy/economy_pressure.py
+src/tests/rpg/test_autoplay_final_evaluation_warning_cleanup.py
+from argparse import Namespace
+
+from tests.rpg.autoplay_llm_campaign import _rebuild_final_100_turn_evaluation
+
+
+def _passing_base_summary():
+    return {
+        "requested_turns": 100,
+        "turns_executed": 100,
+        "runtime_errors": [],
+        "warnings": [],
+        "performance_seconds_summary": {
+            "avg_turn_seconds": 1.0,
+            "p95_turn_seconds": 2.0,
+            "max_turn_seconds": 3.0,
+        },
+        "narration_grounding_summary": {
+            "checked_count": 100,
+            "selected_output_invalid_count": 0,
+            "provider_json_parse_failed_count": 0,
+            "provider_invalid_count": 0,
+            "deterministic_fallback_rate": 0.0,
+        },
+        "canonical_progress_quality": {
+            "meaningful_progress_rate": 1.0,
+            "no_change_turn_count": 0,
+            "max_no_change_streak": 0,
+        },
+        "checkpoint_validation_summary": {
+            "checkpoint_validation_failures": 0,
+            "checkpoint_count": 4,
+            "validated_count": 4,
+        },
+        "loop_detection_summary": {
+            "repeated_action_window_count": 0,
+            "loop_warning_count": 0,
+        },
+        "mechanics_coverage_summary": {
+            "required_ok": True,
+            "real_required_ok": True,
+            "coverage_rate": 1.0,
+            "real_coverage_rate": 1.0,
+            "missing_required": [],
+            "missing_real_required": [],
+        },
+        "story_arc_lifecycle_summary": {
+            "completed_count": 4,
+            "failed_count": 0,
+            "active_count": 2,
+            "status_counts": {"completed": 4, "active": 2},
+        },
+        "story_arc_aftermath_summary": {
+            "aftermath_event_count": 2,
+            "world_signal_count": 2,
+            "npc_memory_event_count": 2,
+            "followup_hook_count": 2,
+            "seeded_followup_arc_count": 2,
+        },
+        "faction_reputation_summary": {
+            "faction_count": 2,
+            "factions": [{"faction_id": "faction:test", "history_count": 1}],
+        },
+        "followup_arc_progression_summary": {
+            "progressed_count": 2,
+            "progressed_arc_ids": ["arc:a", "arc:b"],
+            "world_signal_count": 2,
+        },
+        "faction_pressure_summary": {
+            "pressure_event_count": 16,
+            "world_signal_count": 10,
+            "by_faction": {"faction:test": 16},
+        },
+        "followup_arc_resolution_summary": {
+            "resolved_count": 2,
+            "resolved_arc_ids": ["arc:a", "arc:b"],
+            "escalation_seed_count": 2,
+            "escalation_arcs": [{"arc_id": "arc:next"}],
+        },
+        "pressure_pacing_summary": {
+            "accepted_pressure_event_count": 16,
+            "rejected_pressure_event_count": 167,
+            "rejected_by_reason": {"min_gap_turns": 159},
+        },
+        "world_signal_summary": {
+            "world_signal_count": 24,
+            "by_kind": {"faction_pressure": 11},
+            "by_faction": {"faction:test": 11},
+        },
+        "escalation_arc_progression_summary": {
+            "ok": True,
+            "progressed_count": 2,
+            "progressed_arc_ids": ["arc:sable_chain_handler", "arc:voss_backer_pressure"],
+            "pressure_event_count": 2,
+            "world_signal_count": 2,
+        },
+        "world_state_compression_summary": {
+            "ok": True,
+            "compression_event_count": 4,
+            "compressed_state_preview": {"story_arc_count": 6},
+            "latest_state_budget": {"ok": True, "sections": {}},
+        },
+        "npc_agency_summary": {
+            "ok": True,
+            "npc_count": 3,
+            "schedule_event_count": 32,
+            "agency_event_count": 11,
+            "memory_event_count": 11,
+        },
+        "economy_pressure_summary": {
+            "ok": True,
+            "event_count": 12,
+            "paid_count": 12,
+            "unpaid_count": 0,
+            "warning_count": 3,
+            "ending_currency": {"gold": 3, "silver": 0, "copper": 5},
+            "total_spent": {"gold": 7, "copper": 25},
+        },
+        "combat_lifecycle_summary": {
+            "ok": True,
+            "encounter_count": 5,
+            "event_count": 5,
+            "injury_count": 1,
+            "consequence_event_count": 5,
+            "economy_hint_count": 5,
+            "by_outcome": {"victory": 4, "player_defeated": 1},
+        },
+    }
+
+
+def test_final_evaluation_does_not_warn_for_repaired_passing_combat_gate():
+    rebuilt = _rebuild_final_100_turn_evaluation(
+        args=Namespace(turns=100),
+        summary=_passing_base_summary(),
+        transcript=[{"turn_index": i + 1} for i in range(100)],
+    )
+
+    assert rebuilt["hundred_turn_evaluation"]["gates"]["combat_lifecycle_present"]["ok"] is True
+    assert not any(
+        "final_evaluation_gate_missing_source_value:combat_lifecycle_present" in str(warning)
+        for warning in rebuilt.get("warnings", [])
+    )
+Part B — N109-N111 implementation
+3. Add faction consequence module
+
+Create:
+
+src/app/rpg/factions/faction_consequence_policy.py
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -29,17 +221,29 @@ from typing import Any, Dict, Iterable, List, Mapping, Tuple
 
 
 @dataclass(frozen=True)
-class EconomyPressureRule:
+class FactionConsequenceRule:
     id: str
-    kind: str
-    every_turns: int
-    cost_currency: Tuple[str, int] = ("gold", 0)
-    required_flag: str = ""
-    blocked_flag: str = ""
-    world_signal: Dict[str, Any] | None = None
+    faction_id: str
+    consequence_kind: str
+    required_tier: str = ""
+    required_arc_stage: Tuple[str, str] = ()
+    required_signal_kind: str = ""
+    required_combat_outcome: str = ""
+    cooldown_turns: int = 20
+    severity: int = 1
+    reputation_delta: int = 0
     event: Dict[str, Any] | None = None
-    warning_threshold_currency: Tuple[str, int] = ("gold", 0)
-    cooldown_turns: int = 0
+    world_signal: Dict[str, Any] | None = None
+    set_flags: Tuple[str, ...] = ()
+
+
+_TIER_RANK = {
+    "hostile": -2,
+    "suspicious": -1,
+    "neutral": 0,
+    "friendly": 1,
+    "trusted": 2,
+}
 
 
 def _safe_dict(value: Any) -> Dict[str, Any]:
@@ -54,247 +258,505 @@ def _safe_str(value: Any) -> str:
     return str(value or "")
 
 
-def _currency_amount(currency: Mapping[str, Any], key: str) -> int:
-    try:
-        return int(_safe_dict(currency).get(key) or 0)
-    except Exception:
-        return 0
+def _tier_requirement_met(actual: str, required: str) -> bool:
+    actual_rank = _TIER_RANK.get(_safe_str(actual), 0)
+    required_rank = _TIER_RANK.get(_safe_str(required), 0)
+
+    if required_rank < 0:
+        return actual_rank <= required_rank
+    if required_rank > 0:
+        return actual_rank >= required_rank
+    return actual_rank == required_rank
 
 
-def _set_currency_amount(currency: Dict[str, Any], key: str, amount: int) -> None:
-    currency[str(key)] = max(0, int(amount))
+def _faction_row(state: Mapping[str, Any], faction_id: str) -> Dict[str, Any]:
+    return _safe_dict(_safe_dict(state.get("faction_reputation")).get(faction_id))
 
 
-def apply_currency_delta(
+def _has_signal_kind(state: Mapping[str, Any], kind: str) -> bool:
+    if not kind:
+        return True
+    for signal in _safe_list(state.get("world_signals")):
+        if _safe_str(_safe_dict(signal).get("kind")) == kind:
+            return True
+    return False
+
+
+def _has_combat_outcome(state: Mapping[str, Any], outcome: str) -> bool:
+    if not outcome:
+        return True
+    combat = _safe_dict(state.get("combat_lifecycle_summary"))
+    by_outcome = _safe_dict(combat.get("by_outcome"))
+    return int(by_outcome.get(outcome) or 0) > 0
+
+
+def _rule_met(
+    rule: FactionConsequenceRule,
     *,
-    currency: Mapping[str, Any],
-    delta: Mapping[str, Any],
-) -> Dict[str, Any]:
-    result = dict(_safe_dict(currency))
-    for key, raw_amount in _safe_dict(delta).items():
-        try:
-            amount = int(raw_amount or 0)
-        except Exception:
-            amount = 0
-        _set_currency_amount(result, str(key), _currency_amount(result, str(key)) + amount)
-    return result
-
-
-def _rule_due(
-    *,
-    rule: EconomyPressureRule,
+    state: Mapping[str, Any],
     turn_index: int,
-    flags: Mapping[str, Any],
     last_emitted_turn_by_rule: Mapping[str, Any],
 ) -> bool:
-    if rule.required_flag and not bool(_safe_dict(flags).get(rule.required_flag)):
+    faction = _faction_row(state, rule.faction_id)
+
+    if rule.required_tier:
+        if not _tier_requirement_met(_safe_str(faction.get("tier") or "neutral"), rule.required_tier):
+            return False
+
+    if rule.required_arc_stage:
+        arc_id, stage = rule.required_arc_stage
+        arc = _safe_dict(_safe_dict(state.get("story_arcs")).get(arc_id))
+        if _safe_str(arc.get("current_stage")) != _safe_str(stage):
+            return False
+
+    if not _has_signal_kind(state, rule.required_signal_kind):
         return False
 
-    if rule.blocked_flag and bool(_safe_dict(flags).get(rule.blocked_flag)):
-        return False
-
-    if int(rule.every_turns) > 0 and int(turn_index) % int(rule.every_turns) != 0:
+    if not _has_combat_outcome(state, rule.required_combat_outcome):
         return False
 
     last_turn = int(_safe_dict(last_emitted_turn_by_rule).get(rule.id) or 0)
-    if last_turn and int(rule.cooldown_turns) > 0:
-        if int(turn_index) - last_turn < int(rule.cooldown_turns):
-            return False
+    if last_turn and int(turn_index) - last_turn < int(rule.cooldown_turns or 0):
+        return False
 
     return True
 
 
-def apply_economy_pressure(
+def _apply_reputation_delta(
+    faction_reputation: Mapping[str, Any],
+    faction_id: str,
+    delta: int,
     *,
-    economy_state: Mapping[str, Any],
     turn_index: int,
-    rules: Iterable[EconomyPressureRule],
-    flags: Mapping[str, Any] | None = None,
-    last_emitted_turn_by_rule: Mapping[str, Any] | None = None,
-    max_events_per_turn: int = 3,
+    reason: str,
 ) -> Dict[str, Any]:
-    state = dict(_safe_dict(economy_state))
-    currency = dict(_safe_dict(state.get("currency")))
+    factions = dict(_safe_dict(faction_reputation))
+    row = dict(_safe_dict(factions.get(faction_id)))
+    current = int(row.get("reputation") or 0)
+    updated = current + int(delta or 0)
+
+    row["faction_id"] = faction_id
+    row["reputation"] = updated
+    row.setdefault("tier", "neutral")
+
+    history = _safe_list(row.get("history"))
+    history.append(
+        {
+            "turn": int(turn_index),
+            "delta": int(delta or 0),
+            "reason": reason,
+            "source": "faction_consequence",
+        }
+    )
+    row["history"] = history[-25:]
+    factions[faction_id] = row
+    return factions
+
+
+def emit_faction_consequences(
+    *,
+    state: Mapping[str, Any],
+    turn_index: int,
+    rules: Iterable[FactionConsequenceRule],
+    last_emitted_turn_by_rule: Mapping[str, Any] | None = None,
+    max_events_per_turn: int = 2,
+) -> Dict[str, Any]:
+    faction_reputation = dict(_safe_dict(state.get("faction_reputation")))
     last_emitted = {
-        str(k): int(v or 0)
-        for k, v in _safe_dict(last_emitted_turn_by_rule).items()
+        str(key): int(value or 0)
+        for key, value in _safe_dict(last_emitted_turn_by_rule).items()
     }
 
     events: List[Dict[str, Any]] = []
     world_signals: List[Dict[str, Any]] = []
-    warnings: List[Dict[str, Any]] = []
-    applied_rules: List[str] = []
-    currency_deltas: List[Dict[str, Any]] = []
+    flags: Dict[str, bool] = {}
 
     for rule in rules:
         if len(events) >= int(max_events_per_turn):
             break
 
-        if not _rule_due(
-            rule=rule,
+        if not _rule_met(
+            rule,
+            state={**_safe_dict(state), "faction_reputation": faction_reputation},
             turn_index=turn_index,
-            flags=_safe_dict(flags),
             last_emitted_turn_by_rule=last_emitted,
         ):
             continue
 
-        currency_key, cost_amount = rule.cost_currency
-        cost_amount = int(cost_amount or 0)
-        current_amount = _currency_amount(currency, currency_key)
-
         event = dict(rule.event or {})
-        event.setdefault("type", "economy_pressure")
-        event.setdefault("subtype", rule.kind)
+        event.setdefault("type", "faction_consequence")
+        event.setdefault("subtype", rule.consequence_kind)
         event.setdefault("rule_id", rule.id)
+        event.setdefault("faction_id", rule.faction_id)
         event.setdefault("turn", int(turn_index))
-        event.setdefault("currency_key", currency_key)
-        event.setdefault("cost_amount", cost_amount)
-        event.setdefault("meaningful_progress", False)
-        event.setdefault("progress_category", "economy_pressure")
+        event.setdefault("severity", int(rule.severity))
+        event.setdefault("reputation_delta", int(rule.reputation_delta or 0))
+        event.setdefault("meaningful_progress", True)
+        event.setdefault("progress_category", "faction_consequence")
+        events.append(event)
 
-        if cost_amount > 0:
-            if current_amount >= cost_amount:
-                _set_currency_amount(currency, currency_key, current_amount - cost_amount)
-                event["paid"] = True
-                event["currency_before"] = current_amount
-                event["currency_after"] = _currency_amount(currency, currency_key)
-                currency_deltas.append(
-                    {
-                        "currency": currency_key,
-                        "delta": -cost_amount,
-                        "reason": rule.kind,
-                        "turn": int(turn_index),
-                    }
-                )
-            else:
-                event["paid"] = False
-                event["shortfall"] = cost_amount - current_amount
-                warnings.append(
-                    {
-                        "type": "economy_warning",
-                        "subtype": "insufficient_currency",
-                        "rule_id": rule.id,
-                        "currency": currency_key,
-                        "needed": cost_amount,
-                        "available": current_amount,
-                        "turn": int(turn_index),
-                    }
-                )
-
-        warn_key, warn_threshold = rule.warning_threshold_currency
-        if warn_threshold and _currency_amount(currency, warn_key) <= int(warn_threshold):
-            warnings.append(
-                {
-                    "type": "economy_warning",
-                    "subtype": "low_currency",
-                    "rule_id": rule.id,
-                    "currency": warn_key,
-                    "threshold": int(warn_threshold),
-                    "available": _currency_amount(currency, warn_key),
-                    "turn": int(turn_index),
-                }
+        if int(rule.reputation_delta or 0) != 0:
+            faction_reputation = _apply_reputation_delta(
+                faction_reputation,
+                rule.faction_id,
+                int(rule.reputation_delta or 0),
+                turn_index=turn_index,
+                reason=rule.consequence_kind,
             )
 
         if rule.world_signal:
             signal = dict(rule.world_signal)
-            signal.setdefault("kind", "economy_pressure")
+            signal.setdefault("kind", "faction_consequence")
+            signal.setdefault("faction_id", rule.faction_id)
+            signal.setdefault("turn", int(turn_index))
+            signal.setdefault("created_turn", int(turn_index))
+            signal.setdefault("ttl_turns", 60)
+            signal.setdefault("intensity", int(rule.severity))
+            world_signals.append(signal)
+
+        for flag in rule.set_flags:
+            flags[str(flag)] = True
+
+        last_emitted[rule.id] = int(turn_index)
+
+    return {
+        "ok": True,
+        "faction_reputation": faction_reputation,
+        "events": events,
+        "world_signals": world_signals,
+        "flags": flags,
+        "last_emitted_turn_by_rule": last_emitted,
+        "event_count": len(events),
+    }
+
+Create init if missing:
+
+src/app/rpg/factions/__init__.py
+# Faction runtime modules.
+4. Add tavern faction consequence rules
+
+Create:
+
+src/app/rpg/factions/tavern_faction_consequence_rules.py
+from __future__ import annotations
+
+from typing import List
+
+from app.rpg.factions.faction_consequence_policy import FactionConsequenceRule
+
+
+def tavern_faction_consequence_rules() -> List[FactionConsequenceRule]:
+    return [
+        FactionConsequenceRule(
+            id="faction_consequence:sable_chain_retaliates_after_defeat",
+            faction_id="faction:sable_chain",
+            consequence_kind="retaliation_after_combat",
+            required_tier="suspicious",
+            required_arc_stage=("arc:sable_chain_handler", "handler_assigns_watchers"),
+            required_combat_outcome="victory",
+            cooldown_turns=24,
+            severity=2,
+            reputation_delta=-1,
+            event={
+                "summary": "The Sable Chain hardens its posture after losing a probe.",
+            },
+            world_signal={
+                "id": "signal:sable_chain_retaliation_posture",
+                "scope": "region:mill_road",
+                "summary": "The Sable Chain tightens its posture after a failed probe.",
+            },
+            set_flags=("faction_consequence:sable_chain_retaliation_active",),
+        ),
+        FactionConsequenceRule(
+            id="faction_consequence:locals_rally_after_victory",
+            faction_id="faction:rusty_flagon_locals",
+            consequence_kind="locals_rally_after_combat",
+            required_tier="friendly",
+            required_combat_outcome="victory",
+            cooldown_turns=30,
+            severity=1,
+            reputation_delta=1,
+            event={
+                "summary": "Rusty Flagon locals become more willing to help after the party survives violence.",
+            },
+            world_signal={
+                "id": "signal:locals_rally_after_combat",
+                "scope": "scene:rusty_flagon",
+                "summary": "Locals rally after hearing the party survived a dangerous fight.",
+            },
+            set_flags=("faction_consequence:locals_rallied",),
+        ),
+        FactionConsequenceRule(
+            id="faction_consequence:voss_backers_apply_pressure",
+            faction_id="faction:voss_backers",
+            consequence_kind="backer_pressure_after_name_spread",
+            required_arc_stage=("arc:voss_backer_pressure", "voss_name_draws_attention"),
+            required_signal_kind="combat_consequence",
+            cooldown_turns=30,
+            severity=2,
+            reputation_delta=-1,
+            event={
+                "summary": "Voss-linked backers apply pressure after the name draws public attention.",
+            },
+            world_signal={
+                "id": "signal:voss_backers_apply_pressure",
+                "scope": "scene:rusty_flagon",
+                "summary": "Voss-linked backers apply pressure as the name spreads.",
+            },
+            set_flags=("faction_consequence:voss_backer_pressure_active",),
+        ),
+    ]
+5. Add NPC reaction policy module
+
+Create:
+
+src/app/rpg/npc/npc_reaction_policy.py
+from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import Any, Dict, Iterable, List, Mapping, Tuple
+
+
+@dataclass(frozen=True)
+class NPCReactionRule:
+    id: str
+    npc_id: str
+    reaction_kind: str
+    required_location_id: str = ""
+    required_faction_tier: Tuple[str, str] = ()
+    required_consequence_kind: str = ""
+    required_flag: str = ""
+    cooldown_turns: int = 12
+    event: Dict[str, Any] | None = None
+    memory_event: Dict[str, Any] | None = None
+    world_signal: Dict[str, Any] | None = None
+
+
+_TIER_RANK = {
+    "hostile": -2,
+    "suspicious": -1,
+    "neutral": 0,
+    "friendly": 1,
+    "trusted": 2,
+}
+
+
+def _safe_dict(value: Any) -> Dict[str, Any]:
+    return value if isinstance(value, dict) else {}
+
+
+def _safe_list(value: Any) -> List[Any]:
+    return value if isinstance(value, list) else []
+
+
+def _safe_str(value: Any) -> str:
+    return str(value or "")
+
+
+def _tier_requirement_met(actual: str, required: str) -> bool:
+    actual_rank = _TIER_RANK.get(_safe_str(actual), 0)
+    required_rank = _TIER_RANK.get(_safe_str(required), 0)
+
+    if required_rank < 0:
+        return actual_rank <= required_rank
+    if required_rank > 0:
+        return actual_rank >= required_rank
+    return actual_rank == required_rank
+
+
+def _faction_tier(state: Mapping[str, Any], faction_id: str) -> str:
+    faction = _safe_dict(_safe_dict(state.get("faction_reputation")).get(faction_id))
+    return _safe_str(faction.get("tier") or "neutral")
+
+
+def _has_consequence_kind(state: Mapping[str, Any], kind: str) -> bool:
+    if not kind:
+        return True
+    for event in _safe_list(state.get("faction_consequence_events")):
+        if _safe_str(_safe_dict(event).get("subtype")) == _safe_str(kind):
+            return True
+    return False
+
+
+def _rule_met(
+    rule: NPCReactionRule,
+    *,
+    state: Mapping[str, Any],
+    turn_index: int,
+    last_emitted_turn_by_rule: Mapping[str, Any],
+) -> bool:
+    presence = _safe_dict(_safe_dict(state.get("npc_presence")).get(rule.npc_id))
+
+    if rule.required_location_id:
+        if _safe_str(presence.get("location_id")) != _safe_str(rule.required_location_id):
+            return False
+
+    if rule.required_faction_tier:
+        faction_id, tier = rule.required_faction_tier
+        if not _tier_requirement_met(_faction_tier(state, faction_id), tier):
+            return False
+
+    if rule.required_consequence_kind:
+        if not _has_consequence_kind(state, rule.required_consequence_kind):
+            return False
+
+    if rule.required_flag:
+        if not bool(_safe_dict(state.get("flags")).get(rule.required_flag)):
+            return False
+
+    last_turn = int(_safe_dict(last_emitted_turn_by_rule).get(rule.id) or 0)
+    if last_turn and int(turn_index) - last_turn < int(rule.cooldown_turns or 0):
+        return False
+
+    return True
+
+
+def emit_npc_reactions(
+    *,
+    state: Mapping[str, Any],
+    turn_index: int,
+    rules: Iterable[NPCReactionRule],
+    last_emitted_turn_by_rule: Mapping[str, Any] | None = None,
+    max_events_per_turn: int = 2,
+) -> Dict[str, Any]:
+    last_emitted = {
+        str(key): int(value or 0)
+        for key, value in _safe_dict(last_emitted_turn_by_rule).items()
+    }
+
+    events: List[Dict[str, Any]] = []
+    memory_events: List[Dict[str, Any]] = []
+    world_signals: List[Dict[str, Any]] = []
+
+    for rule in rules:
+        if len(events) >= int(max_events_per_turn):
+            break
+
+        if not _rule_met(
+            rule,
+            state=state,
+            turn_index=turn_index,
+            last_emitted_turn_by_rule=last_emitted,
+        ):
+            continue
+
+        presence = _safe_dict(_safe_dict(state.get("npc_presence")).get(rule.npc_id))
+
+        event = dict(rule.event or {})
+        event.setdefault("type", "npc_reaction")
+        event.setdefault("subtype", rule.reaction_kind)
+        event.setdefault("rule_id", rule.id)
+        event.setdefault("npc_id", rule.npc_id)
+        event.setdefault("location_id", presence.get("location_id"))
+        event.setdefault("turn", int(turn_index))
+        event.setdefault("meaningful_progress", False)
+        event.setdefault("progress_category", "npc_reaction")
+        events.append(event)
+
+        if rule.memory_event:
+            memory = dict(rule.memory_event)
+            memory.setdefault("kind", "npc_memory")
+            memory.setdefault("type", "npc_reaction")
+            memory.setdefault("npc_id", rule.npc_id)
+            memory.setdefault("turn", int(turn_index))
+            memory.setdefault("created_turn", int(turn_index))
+            memory_events.append(memory)
+
+        if rule.world_signal:
+            signal = dict(rule.world_signal)
+            signal.setdefault("kind", "npc_reaction")
+            signal.setdefault("npc_id", rule.npc_id)
             signal.setdefault("turn", int(turn_index))
             signal.setdefault("created_turn", int(turn_index))
             signal.setdefault("ttl_turns", 40)
             world_signals.append(signal)
 
-        events.append(event)
-        applied_rules.append(rule.id)
         last_emitted[rule.id] = int(turn_index)
-
-    state["currency"] = currency
-    state["last_pressure_turn"] = int(turn_index) if events else state.get("last_pressure_turn")
 
     return {
         "ok": True,
-        "economy_state": state,
-        "currency": currency,
         "events": events,
+        "memory_events": memory_events,
         "world_signals": world_signals,
-        "warnings": warnings,
-        "currency_deltas": currency_deltas,
-        "applied_rules": applied_rules,
         "last_emitted_turn_by_rule": last_emitted,
         "event_count": len(events),
-        "warning_count": len(warnings),
     }
-
-Create init if missing:
-
-src/app/rpg/economy/__init__.py
-# Economy runtime modules.
-2. Add tavern economy pressure rules
+6. Add tavern NPC reaction rules
 
 Create:
 
-src/app/rpg/economy/tavern_economy_pressure_rules.py
+src/app/rpg/npc/tavern_npc_reaction_rules.py
 from __future__ import annotations
 
 from typing import List
 
-from app.rpg.economy.economy_pressure import EconomyPressureRule
+from app.rpg.npc.npc_reaction_policy import NPCReactionRule
 
 
-def tavern_economy_pressure_rules() -> List[EconomyPressureRule]:
+def tavern_npc_reaction_rules() -> List[NPCReactionRule]:
     return [
-        EconomyPressureRule(
-            id="economy:daily_lodging",
-            kind="lodging_upkeep",
-            every_turns=24,
-            cost_currency=("gold", 1),
-            warning_threshold_currency=("gold", 3),
+        NPCReactionRule(
+            id="npc_reaction:bran_warns_after_sable_retaliation",
+            npc_id="npc:bran",
+            reaction_kind="warns_about_retaliation",
+            required_location_id="scene:rusty_flagon",
+            required_consequence_kind="retaliation_after_combat",
             cooldown_turns=20,
             event={
-                "summary": "Daily lodging upkeep comes due at the Rusty Flagon.",
+                "summary": "Bran warns that retaliation will not stay on the road forever.",
+            },
+            memory_event={
+                "summary": "Bran remembers warning the party after Sable Chain retaliation escalated.",
+                "importance": 2,
             },
             world_signal={
-                "id": "signal:economy_lodging_due",
+                "id": "signal:bran_reacts_to_retaliation",
                 "scope": "scene:rusty_flagon",
-                "summary": "Lodging costs continue to matter during the investigation.",
-                "intensity": 1,
+                "summary": "Bran grows wary after signs of Sable Chain retaliation.",
             },
         ),
-        EconomyPressureRule(
-            id="economy:food_and_supplies",
-            kind="food_supply_upkeep",
-            every_turns=18,
-            cost_currency=("copper", 5),
-            warning_threshold_currency=("copper", 10),
-            cooldown_turns=12,
+        NPCReactionRule(
+            id="npc_reaction:garran_arms_locals_after_rally",
+            npc_id="npc:garran",
+            reaction_kind="arms_locals",
+            required_location_id="scene:rusty_flagon",
+            required_consequence_kind="locals_rally_after_combat",
+            cooldown_turns=24,
             event={
-                "summary": "Food, candles, and small supplies drain coin.",
+                "summary": "Garran starts organizing tavern regulars into a rough watch.",
+            },
+            memory_event={
+                "summary": "Garran remembers organizing locals after the party survived combat.",
+                "importance": 2,
             },
             world_signal={
-                "id": "signal:economy_supplies_drain",
+                "id": "signal:garran_arms_locals",
                 "scope": "scene:rusty_flagon",
-                "summary": "Small supplies are being consumed as the days pass.",
-                "intensity": 1,
+                "summary": "Garran begins organizing regulars into a rough watch.",
             },
         ),
-        EconomyPressureRule(
-            id="economy:road_risk_surcharge",
-            kind="travel_surcharge",
-            every_turns=30,
-            cost_currency=("gold", 1),
-            warning_threshold_currency=("gold", 2),
-            cooldown_turns=20,
+        NPCReactionRule(
+            id="npc_reaction:sera_tracks_voss_pressure",
+            npc_id="npc:sera",
+            reaction_kind="tracks_voss_pressure",
+            required_location_id="scene:rusty_flagon",
+            required_consequence_kind="backer_pressure_after_name_spread",
+            cooldown_turns=24,
             event={
-                "summary": "Road risk raises the cost of travel and resupply.",
+                "summary": "Sera starts watching who repeats the Voss name too carefully.",
+            },
+            memory_event={
+                "summary": "Sera remembers tracking careful reactions to Voss pressure.",
+                "importance": 2,
             },
             world_signal={
-                "id": "signal:economy_road_surcharge",
-                "scope": "region:mill_road",
-                "summary": "Merchants raise prices while road pressure remains high.",
-                "intensity": 2,
+                "id": "signal:sera_tracks_voss_pressure",
+                "scope": "scene:rusty_flagon",
+                "summary": "Sera watches who repeats the Voss name too carefully.",
             },
         ),
     ]
-3. Wire imports into autoplay runner
+7. Wire imports into autoplay runner
 
 Patch:
 
@@ -302,410 +764,581 @@ src/tests/rpg/autoplay_llm_campaign.py
 
 Add near other runtime imports:
 
-from app.rpg.economy.economy_pressure import apply_economy_pressure
-from app.rpg.economy.tavern_economy_pressure_rules import tavern_economy_pressure_rules
-4. Add economy runtime state inside _run_autoplay_campaign(...)
+from app.rpg.factions.faction_consequence_policy import emit_faction_consequences
+from app.rpg.factions.tavern_faction_consequence_rules import tavern_faction_consequence_rules
+from app.rpg.npc.npc_reaction_policy import emit_npc_reactions
+from app.rpg.npc.tavern_npc_reaction_rules import tavern_npc_reaction_rules
+8. Add runtime accumulators inside _run_autoplay_campaign(...)
 
-Inside _run_autoplay_campaign(...), near other runtime accumulators, add:
+Near other runtime accumulators:
 
-economy_pressure_state: Dict[str, Any] = {
-    "currency": {
-        "gold": 10,
-        "silver": 0,
-        "copper": 30,
-    }
+faction_consequence_events: List[Dict[str, Any]] = []
+faction_consequence_world_signals: List[Dict[str, Any]] = []
+faction_consequence_last_emitted_turn_by_rule: Dict[str, int] = {}
+
+npc_reaction_events: List[Dict[str, Any]] = []
+npc_reaction_memory_events: List[Dict[str, Any]] = []
+npc_reaction_world_signals: List[Dict[str, Any]] = []
+npc_reaction_last_emitted_turn_by_rule: Dict[str, int] = {}
+9. Add faction consequence + NPC reaction tick inside turn loop
+
+Inside existing turn loop, after combat lifecycle/consequence pressure and before world-state compression, add:
+
+faction_consequence_state = {
+    "faction_reputation": faction_reputation_state,
+    "story_arcs": story_arc_runtime_state,
+    "world_signals": world_signal_events,
+    "combat_lifecycle_summary": _build_combat_lifecycle_summary(
+        combat_state=combat_lifecycle_state,
+        player_state=combat_player_state,
+        encounters=combat_lifecycle_encounters,
+        events=combat_lifecycle_events,
+        world_signals=combat_lifecycle_world_signals,
+        memory_events=combat_lifecycle_memory_events,
+        injuries=combat_lifecycle_injuries,
+        consequence_events=combat_consequence_events,
+        economy_hints=combat_consequence_economy_hints,
+    ),
 }
-economy_pressure_events: List[Dict[str, Any]] = []
-economy_pressure_world_signals: List[Dict[str, Any]] = []
-economy_pressure_warnings: List[Dict[str, Any]] = []
-economy_pressure_currency_deltas: List[Dict[str, Any]] = []
-economy_pressure_last_emitted_turn_by_rule: Dict[str, int] = {}
 
-If there is already a canonical player inventory/currency state, initialize from that instead:
-
-starting_currency = _safe_dict(_safe_dict(runtime_state.get("player")).get("currency"))
-
-but keep the fallback:
-
-{"gold": 10, "silver": 0, "copper": 30}
-5. Add economy pressure tick inside the turn loop
-
-Inside the existing turn loop, after deterministic mechanics and NPC agency, but before world-state compression, add:
-
-economy_flags = {
-    **_safe_dict(mechanics_runtime_state.get("flags")),
-    **_safe_dict(_safe_dict(row.get("state_delta")).get("story_arc_aftermath_flags")),
-    **_safe_dict(_safe_dict(row.get("state_delta")).get("faction_pressure_flags")),
-    **_safe_dict(_safe_dict(row.get("state_delta")).get("npc_agency_flags")),
-}
-
-economy_pressure = apply_economy_pressure(
-    economy_state=economy_pressure_state,
+faction_consequence = emit_faction_consequences(
+    state=faction_consequence_state,
     turn_index=int(row.get("turn_index") or turn_index),
-    rules=tavern_economy_pressure_rules(),
-    flags=economy_flags,
-    last_emitted_turn_by_rule=economy_pressure_last_emitted_turn_by_rule,
+    rules=tavern_faction_consequence_rules(),
+    last_emitted_turn_by_rule=faction_consequence_last_emitted_turn_by_rule,
     max_events_per_turn=2,
 )
 
-if economy_pressure.get("ok"):
-    economy_pressure_state = _safe_dict(economy_pressure.get("economy_state"))
-    economy_pressure_last_emitted_turn_by_rule = {
+if faction_consequence.get("ok"):
+    faction_consequence_last_emitted_turn_by_rule = {
         str(k): int(v or 0)
-        for k, v in _safe_dict(economy_pressure.get("last_emitted_turn_by_rule")).items()
+        for k, v in _safe_dict(faction_consequence.get("last_emitted_turn_by_rule")).items()
     }
 
-    pressure_events = _safe_list(economy_pressure.get("events"))
-    pressure_signals = _safe_list(economy_pressure.get("world_signals"))
-    pressure_warnings = _safe_list(economy_pressure.get("warnings"))
-    currency_deltas = _safe_list(economy_pressure.get("currency_deltas"))
+    consequence_events = _safe_list(faction_consequence.get("events"))
+    consequence_signals = _safe_list(faction_consequence.get("world_signals"))
 
-    if pressure_events:
-        economy_pressure_events.extend(pressure_events)
-        economy_pressure_world_signals.extend(pressure_signals)
-        economy_pressure_warnings.extend(pressure_warnings)
-        economy_pressure_currency_deltas.extend(currency_deltas)
+    if consequence_events:
+        faction_reputation_state = _safe_dict(faction_consequence.get("faction_reputation"))
+        faction_consequence_events.extend(consequence_events)
+        faction_consequence_world_signals.extend(consequence_signals)
+        world_signal_events.extend(consequence_signals)
 
-        world_signal_events.extend(pressure_signals)
-
-        row["economy_pressure_events"] = pressure_events
-        row["economy_pressure_warnings"] = pressure_warnings
-        row["economy_pressure_currency_deltas"] = currency_deltas
-        row["world_signals"] = _safe_list(row.get("world_signals")) + pressure_signals
-
+        row["faction_consequence_events"] = consequence_events
+        row["world_signals"] = _safe_list(row.get("world_signals")) + consequence_signals
         row["state_delta"] = {
             **_safe_dict(row.get("state_delta")),
-            "economy_pressure": {
-                "currency": _safe_dict(economy_pressure_state.get("currency")),
-                "warnings": pressure_warnings,
-                "currency_deltas": currency_deltas,
-            },
+            "faction_consequence_flags": _safe_dict(faction_consequence.get("flags")),
+            "faction_reputation": faction_reputation_state,
         }
-
         row["result"] = {
             **_safe_dict(row.get("result")),
-            "economy_pressure_events": pressure_events,
-            "economy_pressure_warnings": pressure_warnings,
+            "faction_consequence_events": consequence_events,
             "world_signals": _safe_list(row.get("world_signals")),
         }
 
-Important ordering:
-
-1. player/mechanics
-2. story/faction/follow-up/escalation
-3. NPC schedule/agency
-4. economy pressure
-5. world-state compression
-6. Include economy state in compression input
-
-Find compression input:
-
-compression_input = {
-    "story_arcs": story_arc_runtime_state,
-    "world_signals": world_signal_events,
+npc_reaction_state = {
+    "npc_presence": npc_presence_state,
     "faction_reputation": faction_reputation_state,
-    "npc_memory_events": npc_memory_events,
+    "faction_consequence_events": faction_consequence_events,
+    "flags": {
+        **_safe_dict(_safe_dict(row.get("state_delta")).get("faction_consequence_flags")),
+        **_safe_dict(_safe_dict(row.get("state_delta")).get("combat_lifecycle_flags")),
+    },
 }
 
-Replace with:
+npc_reaction = emit_npc_reactions(
+    state=npc_reaction_state,
+    turn_index=int(row.get("turn_index") or turn_index),
+    rules=tavern_npc_reaction_rules(),
+    last_emitted_turn_by_rule=npc_reaction_last_emitted_turn_by_rule,
+    max_events_per_turn=2,
+)
 
-compression_input = {
-    "story_arcs": story_arc_runtime_state,
-    "world_signals": world_signal_events,
-    "faction_reputation": faction_reputation_state,
-    "npc_memory_events": npc_memory_events,
-    "economy_pressure": economy_pressure_state,
-}
+if npc_reaction.get("ok"):
+    npc_reaction_last_emitted_turn_by_rule = {
+        str(k): int(v or 0)
+        for k, v in _safe_dict(npc_reaction.get("last_emitted_turn_by_rule")).items()
+    }
 
-The compression module may ignore economy_pressure for now; this makes it available for future budget summaries without changing current behavior.
+    reaction_events = _safe_list(npc_reaction.get("events"))
+    reaction_memories = _safe_list(npc_reaction.get("memory_events"))
+    reaction_signals = _safe_list(npc_reaction.get("world_signals"))
 
-7. Preserve economy pressure in slim transcript
+    if reaction_events:
+        npc_reaction_events.extend(reaction_events)
+        npc_reaction_memory_events.extend(reaction_memories)
+        npc_reaction_world_signals.extend(reaction_signals)
+
+        npc_memory_events.extend(reaction_memories)
+        world_signal_events.extend(reaction_signals)
+
+        row["npc_reaction_events"] = reaction_events
+        row["npc_memory_events"] = _safe_list(row.get("npc_memory_events")) + reaction_memories
+        row["world_signals"] = _safe_list(row.get("world_signals")) + reaction_signals
+        row["result"] = {
+            **_safe_dict(row.get("result")),
+            "npc_reaction_events": reaction_events,
+            "npc_memory_events": _safe_list(row.get("npc_memory_events")),
+            "world_signals": _safe_list(row.get("world_signals")),
+        }
+
+Ordering:
+
+1. story/faction/follow-up/escalation
+2. NPC schedule/agency
+3. economy pressure
+4. combat lifecycle/consequences
+5. faction consequences
+6. NPC reactions
+7. compression
+10. Preserve new fields in slim transcript
 
 Patch _slim_transcript_row(...):
 
-if row.get("economy_pressure_events"):
-    slim_row["economy_pressure_events"] = row.get("economy_pressure_events")
+if row.get("faction_consequence_events"):
+    slim_row["faction_consequence_events"] = row.get("faction_consequence_events")
 
-if row.get("economy_pressure_warnings"):
-    slim_row["economy_pressure_warnings"] = row.get("economy_pressure_warnings")
+if row.get("npc_reaction_events"):
+    slim_row["npc_reaction_events"] = row.get("npc_reaction_events")
+11. Add summary builders
 
-if row.get("economy_pressure_currency_deltas"):
-    slim_row["economy_pressure_currency_deltas"] = row.get("economy_pressure_currency_deltas")
-8. Add economy pressure summary builder
+Add near other summary builders:
 
-Add near summary builders:
-
-def _build_economy_pressure_summary(
+def _build_faction_consequence_summary(
     *,
-    economy_state: Dict[str, Any],
     events: List[Dict[str, Any]],
     world_signals: List[Dict[str, Any]],
-    warnings: List[Dict[str, Any]],
-    currency_deltas: List[Dict[str, Any]],
+    faction_reputation: Dict[str, Any],
 ) -> Dict[str, Any]:
-    event_rows = [_safe_dict(event) for event in _safe_list(events)]
-    signal_rows = [_safe_dict(signal) for signal in _safe_list(world_signals)]
-    warning_rows = [_safe_dict(warning) for warning in _safe_list(warnings)]
-    delta_rows = [_safe_dict(delta) for delta in _safe_list(currency_deltas)]
+    event_rows = [_safe_dict(row) for row in _safe_list(events)]
+    signal_rows = [_safe_dict(row) for row in _safe_list(world_signals)]
 
-    paid_count = sum(1 for event in event_rows if event.get("paid") is True)
-    unpaid_count = sum(1 for event in event_rows if event.get("paid") is False)
-
+    by_faction: Dict[str, int] = {}
     by_kind: Dict[str, int] = {}
+
     for event in event_rows:
-        kind = _safe_str(event.get("subtype") or event.get("kind") or "unknown")
+        faction_id = _safe_str(event.get("faction_id") or "unknown")
+        kind = _safe_str(event.get("subtype") or "unknown")
+        by_faction[faction_id] = by_faction.get(faction_id, 0) + 1
         by_kind[kind] = by_kind.get(kind, 0) + 1
 
-    total_spent: Dict[str, int] = {}
-    for delta in delta_rows:
-        currency = _safe_str(delta.get("currency"))
-        amount = int(delta.get("delta") or 0)
-        if currency and amount < 0:
-            total_spent[currency] = total_spent.get(currency, 0) + abs(amount)
-
     return {
-        "format_version": "economy_pressure_summary_v1",
+        "format_version": "faction_consequence_summary_v1",
         "ok": bool(event_rows),
         "event_count": len(event_rows),
         "world_signal_count": len(signal_rows),
-        "warning_count": len(warning_rows),
-        "currency_delta_count": len(delta_rows),
-        "paid_count": paid_count,
-        "unpaid_count": unpaid_count,
+        "by_faction": by_faction,
         "by_kind": by_kind,
-        "total_spent": total_spent,
-        "ending_currency": _safe_dict(_safe_dict(economy_state).get("currency")),
         "events": event_rows,
-        "warnings": warning_rows,
         "world_signals": signal_rows,
-        "currency_deltas": delta_rows,
+        "faction_reputation": _safe_dict(faction_reputation),
     }
-9. Add final summary assignment
+
+
+def _build_npc_reaction_summary(
+    *,
+    events: List[Dict[str, Any]],
+    memory_events: List[Dict[str, Any]],
+    world_signals: List[Dict[str, Any]],
+) -> Dict[str, Any]:
+    event_rows = [_safe_dict(row) for row in _safe_list(events)]
+    memory_rows = [_safe_dict(row) for row in _safe_list(memory_events)]
+    signal_rows = [_safe_dict(row) for row in _safe_list(world_signals)]
+
+    by_npc: Dict[str, int] = {}
+    by_kind: Dict[str, int] = {}
+
+    for event in event_rows:
+        npc_id = _safe_str(event.get("npc_id") or "unknown")
+        kind = _safe_str(event.get("subtype") or "unknown")
+        by_npc[npc_id] = by_npc.get(npc_id, 0) + 1
+        by_kind[kind] = by_kind.get(kind, 0) + 1
+
+    return {
+        "format_version": "npc_reaction_summary_v1",
+        "ok": bool(event_rows),
+        "event_count": len(event_rows),
+        "memory_event_count": len(memory_rows),
+        "world_signal_count": len(signal_rows),
+        "by_npc": by_npc,
+        "by_kind": by_kind,
+        "events": event_rows,
+        "memory_events": memory_rows,
+        "world_signals": signal_rows,
+    }
+12. Add final summary assignment
 
 Before _build_authoritative_final_lifecycle_summary(...) and _rebuild_final_100_turn_evaluation(...), add:
 
-summary["economy_pressure_summary"] = _build_economy_pressure_summary(
-    economy_state=economy_pressure_state,
-    events=economy_pressure_events,
-    world_signals=economy_pressure_world_signals,
-    warnings=economy_pressure_warnings,
-    currency_deltas=economy_pressure_currency_deltas,
+summary["faction_consequence_summary"] = _build_faction_consequence_summary(
+    events=faction_consequence_events,
+    world_signals=faction_consequence_world_signals,
+    faction_reputation=faction_reputation_state,
 )
-10. Add artifact
+
+summary["npc_reaction_summary"] = _build_npc_reaction_summary(
+    events=npc_reaction_events,
+    memory_events=npc_reaction_memory_events,
+    world_signals=npc_reaction_world_signals,
+)
+13. Add artifacts
 
 In artifact zip writer, add:
 
 _zip_writestr_json(
     zip_handle,
     artifact_manifest,
-    "economy-pressure-summary.json",
-    summary.get("economy_pressure_summary", {}),
+    "faction-consequence-summary.json",
+    summary.get("faction_consequence_summary", {}),
 )
-11. Add evaluation gate
+
+_zip_writestr_json(
+    zip_handle,
+    artifact_manifest,
+    "npc-reaction-summary.json",
+    summary.get("npc_reaction_summary", {}),
+)
+14. Add evaluation gates
 
 Patch _build_100_turn_evaluation_summary(...).
 
-Add param:
+Add params:
 
-economy_pressure_summary: Optional[Dict[str, Any]] = None,
+faction_consequence_summary: Optional[Dict[str, Any]] = None,
+npc_reaction_summary: Optional[Dict[str, Any]] = None,
 
 Inside function:
 
-economy_pressure = _safe_dict(economy_pressure_summary)
+faction_consequence = _safe_dict(faction_consequence_summary)
+npc_reaction = _safe_dict(npc_reaction_summary)
 
-Add gate:
+Add gates:
 
-"economy_pressure_present": {
-    "ok": int(economy_pressure.get("event_count") or 0) >= 1,
+"faction_consequence_present": {
+    "ok": int(faction_consequence.get("event_count") or 0) >= 1,
     "value": {
-        "event_count": economy_pressure.get("event_count"),
-        "paid_count": economy_pressure.get("paid_count"),
-        "unpaid_count": economy_pressure.get("unpaid_count"),
-        "warning_count": economy_pressure.get("warning_count"),
-        "ending_currency": economy_pressure.get("ending_currency"),
-        "total_spent": economy_pressure.get("total_spent"),
+        "event_count": faction_consequence.get("event_count"),
+        "world_signal_count": faction_consequence.get("world_signal_count"),
+        "by_faction": faction_consequence.get("by_faction"),
+        "by_kind": faction_consequence.get("by_kind"),
     },
-    "expected": "at least one deterministic economy pressure/resource sink event",
-    "message": "Long-run campaigns should include recurring resource pressure and sinks.",
+    "expected": "at least one deterministic long-term faction consequence",
+    "message": "Faction reputation should produce long-term consequences.",
+},
+"npc_reaction_present": {
+    "ok": int(npc_reaction.get("event_count") or 0) >= 1,
+    "value": {
+        "event_count": npc_reaction.get("event_count"),
+        "memory_event_count": npc_reaction.get("memory_event_count"),
+        "world_signal_count": npc_reaction.get("world_signal_count"),
+        "by_npc": npc_reaction.get("by_npc"),
+        "by_kind": npc_reaction.get("by_kind"),
+    },
+    "expected": "at least one deterministic NPC reaction to faction/consequence state",
+    "message": "NPCs should react to long-term faction consequences.",
 },
 
 Patch _rebuild_final_100_turn_evaluation(...):
 
-economy_pressure_summary=_safe_dict(summary.get("economy_pressure_summary")),
+faction_consequence_summary=_safe_dict(summary.get("faction_consequence_summary")),
+npc_reaction_summary=_safe_dict(summary.get("npc_reaction_summary")),
 
-Also add to its diagnostic loop:
+Add to diagnostic loop:
 
-("economy_pressure_present", "economy_pressure_summary", "event_count"),
-12. Add readiness gate
+("faction_consequence_present", "faction_consequence_summary", "event_count"),
+("npc_reaction_present", "npc_reaction_summary", "event_count"),
+15. Add readiness gates
 
 Patch _build_100_turn_readiness_summary(...).
 
-Add param:
+Add params:
 
-economy_pressure_summary: Optional[Dict[str, Any]] = None,
+faction_consequence_summary: Optional[Dict[str, Any]] = None,
+npc_reaction_summary: Optional[Dict[str, Any]] = None,
 
 Inside function:
 
-economy_pressure = _safe_dict(economy_pressure_summary)
-if not economy_pressure:
-    economy_pressure = _safe_dict(_safe_dict(summary).get("economy_pressure_summary"))
+faction_consequence = _safe_dict(faction_consequence_summary)
+if not faction_consequence:
+    faction_consequence = _safe_dict(_safe_dict(summary).get("faction_consequence_summary"))
 
-Add gate:
+npc_reaction = _safe_dict(npc_reaction_summary)
+if not npc_reaction:
+    npc_reaction = _safe_dict(_safe_dict(summary).get("npc_reaction_summary"))
 
-"economy_pressure_present": {
-    "ok": int(economy_pressure.get("event_count") or 0) >= 1,
+Add readiness gates:
+
+"faction_consequence_present": {
+    "ok": int(faction_consequence.get("event_count") or 0) >= 1,
     "value": {
-        "event_count": economy_pressure.get("event_count"),
-        "paid_count": economy_pressure.get("paid_count"),
-        "unpaid_count": economy_pressure.get("unpaid_count"),
-        "warning_count": economy_pressure.get("warning_count"),
-        "ending_currency": economy_pressure.get("ending_currency"),
-        "total_spent": economy_pressure.get("total_spent"),
+        "event_count": faction_consequence.get("event_count"),
+        "world_signal_count": faction_consequence.get("world_signal_count"),
+        "by_faction": faction_consequence.get("by_faction"),
+        "by_kind": faction_consequence.get("by_kind"),
     },
-    "expected": "at least one deterministic economy pressure/resource sink event",
-    "message": "100-turn readiness should demonstrate resource pressure and sinks.",
+    "expected": "at least one deterministic long-term faction consequence",
+    "message": "100-turn readiness should demonstrate faction consequences.",
+},
+"npc_reaction_present": {
+    "ok": int(npc_reaction.get("event_count") or 0) >= 1,
+    "value": {
+        "event_count": npc_reaction.get("event_count"),
+        "memory_event_count": npc_reaction.get("memory_event_count"),
+        "world_signal_count": npc_reaction.get("world_signal_count"),
+        "by_npc": npc_reaction.get("by_npc"),
+        "by_kind": npc_reaction.get("by_kind"),
+    },
+    "expected": "at least one deterministic NPC reaction to faction/consequence state",
+    "message": "100-turn readiness should demonstrate NPC reaction policy.",
 },
 
 Patch all readiness/evaluation call sites to pass:
 
-economy_pressure_summary=_safe_dict(summary.get("economy_pressure_summary")),
+faction_consequence_summary=_safe_dict(summary.get("faction_consequence_summary")),
+npc_reaction_summary=_safe_dict(summary.get("npc_reaction_summary")),
 
-For _build_authoritative_final_lifecycle_summary(...), add param:
+For _build_authoritative_final_lifecycle_summary(...), add params:
 
-economy_pressure_summary: Optional[Dict[str, Any]] = None,
+faction_consequence_summary: Optional[Dict[str, Any]] = None,
+npc_reaction_summary: Optional[Dict[str, Any]] = None,
 
 Attach:
 
-if economy_pressure_summary:
-    summary["economy_pressure_summary"] = _safe_dict(economy_pressure_summary)
+if faction_consequence_summary:
+    summary["faction_consequence_summary"] = _safe_dict(faction_consequence_summary)
+
+if npc_reaction_summary:
+    summary["npc_reaction_summary"] = _safe_dict(npc_reaction_summary)
 
 Pass into readiness:
 
-economy_pressure_summary=_safe_dict(
-    economy_pressure_summary
-    or summary.get("economy_pressure_summary")
+faction_consequence_summary=_safe_dict(
+    faction_consequence_summary
+    or summary.get("faction_consequence_summary")
 ),
-13. Update integrity validator
+npc_reaction_summary=_safe_dict(
+    npc_reaction_summary
+    or summary.get("npc_reaction_summary")
+),
+16. Update integrity validator
 
-In _validate_final_autoplay_summary_integrity(...), add required summary:
+In _validate_final_autoplay_summary_integrity(...), add required summaries:
 
-"economy_pressure_summary",
+"faction_consequence_summary",
+"npc_reaction_summary",
 
-and required gate:
+and required gates:
 
-"economy_pressure_present",
-14. Add HTML report section
+"faction_consequence_present",
+"npc_reaction_present",
+17. Add HTML report section
 
-In _build_minimal_autoplay_html_report(...), add summary read:
+In _build_minimal_autoplay_html_report(...), add:
 
-economy_pressure = _safe_dict(final_summary.get("economy_pressure_summary"))
+faction_consequence = _safe_dict(final_summary.get("faction_consequence_summary"))
+npc_reaction = _safe_dict(final_summary.get("npc_reaction_summary"))
 
-Add nav link:
+Add nav links:
 
-<a href="#economy-pressure">Economy</a>
+<a href="#faction-consequences">Faction Consequences</a>
+<a href="#npc-reactions">NPC Reactions</a>
 
-Add section:
+Add sections:
 
-economy_pressure_html = f"""
-<section class="card" id="economy-pressure">
-  <h2>Economy Pressure / Resource Sinks</h2>
+faction_consequence_html = f"""
+<section class="card" id="faction-consequences">
+  <h2>Faction Consequences</h2>
   <div class="grid">
-    <div class="metric"><strong>Events</strong><span>{esc(economy_pressure.get("event_count"))}</span></div>
-    <div class="metric"><strong>Paid</strong><span>{esc(economy_pressure.get("paid_count"))}</span></div>
-    <div class="metric"><strong>Unpaid</strong><span>{esc(economy_pressure.get("unpaid_count"))}</span></div>
-    <div class="metric"><strong>Warnings</strong><span>{esc(economy_pressure.get("warning_count"))}</span></div>
+    <div class="metric"><strong>Events</strong><span>{esc(faction_consequence.get("event_count"))}</span></div>
+    <div class="metric"><strong>World Signals</strong><span>{esc(faction_consequence.get("world_signal_count"))}</span></div>
   </div>
-  <h3>Ending Currency</h3>
-  <pre>{esc(json.dumps(economy_pressure.get("ending_currency", {}), ensure_ascii=False, indent=2, default=str))}</pre>
-  <h3>Total Spent</h3>
-  <pre>{esc(json.dumps(economy_pressure.get("total_spent", {}), ensure_ascii=False, indent=2, default=str))}</pre>
+  <h3>By Faction</h3>
+  <pre>{esc(json.dumps(faction_consequence.get("by_faction", {}), ensure_ascii=False, indent=2, default=str))}</pre>
+  <h3>By Kind</h3>
+  <pre>{esc(json.dumps(faction_consequence.get("by_kind", {}), ensure_ascii=False, indent=2, default=str))}</pre>
   <h3>Events</h3>
-  <pre>{esc(json.dumps(economy_pressure.get("events", []), ensure_ascii=False, indent=2, default=str))}</pre>
+  <pre>{esc(json.dumps(faction_consequence.get("events", []), ensure_ascii=False, indent=2, default=str))}</pre>
 </section>
 """
 
-Insert after NPC agency or pressure sections:
+npc_reaction_html = f"""
+<section class="card" id="npc-reactions">
+  <h2>NPC Reactions</h2>
+  <div class="grid">
+    <div class="metric"><strong>Events</strong><span>{esc(npc_reaction.get("event_count"))}</span></div>
+    <div class="metric"><strong>Memory Events</strong><span>{esc(npc_reaction.get("memory_event_count"))}</span></div>
+    <div class="metric"><strong>World Signals</strong><span>{esc(npc_reaction.get("world_signal_count"))}</span></div>
+  </div>
+  <h3>By NPC</h3>
+  <pre>{esc(json.dumps(npc_reaction.get("by_npc", {}), ensure_ascii=False, indent=2, default=str))}</pre>
+  <h3>By Kind</h3>
+  <pre>{esc(json.dumps(npc_reaction.get("by_kind", {}), ensure_ascii=False, indent=2, default=str))}</pre>
+  <h3>Events</h3>
+  <pre>{esc(json.dumps(npc_reaction.get("events", []), ensure_ascii=False, indent=2, default=str))}</pre>
+</section>
+"""
 
-{economy_pressure_html}
-15. Tests
-Add economy pressure tests
+Insert after combat/faction/economy sections:
+
+{faction_consequence_html}
+{npc_reaction_html}
+Tests
+18. Add faction consequence tests
 
 Create:
 
-src/tests/rpg/test_economy_pressure.py
-from app.rpg.economy.economy_pressure import EconomyPressureRule, apply_economy_pressure
+src/tests/rpg/test_faction_consequence_policy.py
+from app.rpg.factions.faction_consequence_policy import (
+    FactionConsequenceRule,
+    emit_faction_consequences,
+)
 
 
-def test_economy_pressure_deducts_currency_when_due():
-    result = apply_economy_pressure(
-        economy_state={"currency": {"gold": 5}},
-        turn_index=10,
+def test_faction_consequence_emits_when_combat_outcome_and_tier_match():
+    result = emit_faction_consequences(
+        state={
+            "faction_reputation": {
+                "faction:test": {"tier": "hostile", "reputation": -5}
+            },
+            "combat_lifecycle_summary": {
+                "by_outcome": {"victory": 1}
+            },
+        },
+        turn_index=20,
         rules=[
-            EconomyPressureRule(
-                id="economy:test",
-                kind="upkeep",
-                every_turns=5,
-                cost_currency=("gold", 2),
-                event={"summary": "Upkeep."},
+            FactionConsequenceRule(
+                id="faction:test_rule",
+                faction_id="faction:test",
+                consequence_kind="retaliation",
+                required_tier="suspicious",
+                required_combat_outcome="victory",
+                reputation_delta=-1,
+                world_signal={"id": "signal:test", "summary": "Faction signal."},
             )
         ],
     )
 
     assert result["event_count"] == 1
-    assert result["currency"]["gold"] == 3
-    assert result["events"][0]["paid"] is True
-    assert result["currency_deltas"][0]["delta"] == -2
+    assert result["events"][0]["subtype"] == "retaliation"
+    assert result["world_signals"]
+    assert result["faction_reputation"]["faction:test"]["reputation"] == -6
 
 
-def test_economy_pressure_warns_when_insufficient_currency():
-    result = apply_economy_pressure(
-        economy_state={"currency": {"gold": 1}},
-        turn_index=10,
+def test_faction_consequence_respects_cooldown():
+    first = emit_faction_consequences(
+        state={
+            "faction_reputation": {"faction:test": {"tier": "hostile"}},
+            "combat_lifecycle_summary": {"by_outcome": {"victory": 1}},
+        },
+        turn_index=20,
         rules=[
-            EconomyPressureRule(
-                id="economy:test",
-                kind="upkeep",
-                every_turns=5,
-                cost_currency=("gold", 2),
-                event={"summary": "Upkeep."},
+            FactionConsequenceRule(
+                id="faction:test_rule",
+                faction_id="faction:test",
+                consequence_kind="retaliation",
+                required_tier="suspicious",
+                required_combat_outcome="victory",
+                cooldown_turns=20,
+            )
+        ],
+    )
+
+    second = emit_faction_consequences(
+        state={
+            "faction_reputation": {"faction:test": {"tier": "hostile"}},
+            "combat_lifecycle_summary": {"by_outcome": {"victory": 1}},
+        },
+        turn_index=25,
+        rules=[
+            FactionConsequenceRule(
+                id="faction:test_rule",
+                faction_id="faction:test",
+                consequence_kind="retaliation",
+                required_tier="suspicious",
+                required_combat_outcome="victory",
+                cooldown_turns=20,
+            )
+        ],
+        last_emitted_turn_by_rule=first["last_emitted_turn_by_rule"],
+    )
+
+    assert first["event_count"] == 1
+    assert second["event_count"] == 0
+19. Add NPC reaction tests
+
+Create:
+
+src/tests/rpg/test_npc_reaction_policy.py
+from app.rpg.npc.npc_reaction_policy import NPCReactionRule, emit_npc_reactions
+
+
+def test_npc_reaction_emits_when_present_and_consequence_matches():
+    result = emit_npc_reactions(
+        state={
+            "npc_presence": {
+                "npc:test": {"location_id": "scene:test"}
+            },
+            "faction_consequence_events": [
+                {"subtype": "retaliation"}
+            ],
+        },
+        turn_index=30,
+        rules=[
+            NPCReactionRule(
+                id="npc_reaction:test",
+                npc_id="npc:test",
+                reaction_kind="warns",
+                required_location_id="scene:test",
+                required_consequence_kind="retaliation",
+                event={"summary": "NPC reacts."},
+                memory_event={"summary": "NPC remembers.", "importance": 2},
+                world_signal={"id": "signal:test", "summary": "NPC signal."},
             )
         ],
     )
 
     assert result["event_count"] == 1
-    assert result["currency"]["gold"] == 1
-    assert result["events"][0]["paid"] is False
-    assert result["warnings"][0]["subtype"] == "insufficient_currency"
+    assert result["events"][0]["npc_id"] == "npc:test"
+    assert result["memory_events"]
+    assert result["world_signals"]
 
 
-def test_economy_pressure_respects_due_interval():
-    result = apply_economy_pressure(
-        economy_state={"currency": {"gold": 5}},
-        turn_index=11,
+def test_npc_reaction_requires_presence_location():
+    result = emit_npc_reactions(
+        state={
+            "npc_presence": {
+                "npc:test": {"location_id": "scene:elsewhere"}
+            },
+            "faction_consequence_events": [
+                {"subtype": "retaliation"}
+            ],
+        },
+        turn_index=30,
         rules=[
-            EconomyPressureRule(
-                id="economy:test",
-                kind="upkeep",
-                every_turns=5,
-                cost_currency=("gold", 2),
+            NPCReactionRule(
+                id="npc_reaction:test",
+                npc_id="npc:test",
+                reaction_kind="warns",
+                required_location_id="scene:test",
+                required_consequence_kind="retaliation",
             )
         ],
     )
 
     assert result["event_count"] == 0
-    assert result["currency"]["gold"] == 5
-Add autoplay gate tests
+20. Add autoplay gate tests
 
 Create:
 
-src/tests/rpg/test_autoplay_economy_pressure_gates.py
+src/tests/rpg/test_autoplay_faction_consequence_reaction_gates.py
 from tests.rpg.autoplay_llm_campaign import (
     _build_100_turn_evaluation_summary,
     _build_100_turn_readiness_summary,
 )
 
 
-def test_evaluation_economy_pressure_gate_passes():
+def test_evaluation_faction_consequence_and_npc_reaction_gates_pass():
     evaluation = _build_100_turn_evaluation_summary(
         turns_executed=100,
         requested_turns=100,
@@ -718,32 +1351,45 @@ def test_evaluation_economy_pressure_gate_passes():
         checkpoint_summary={"checkpoint_validation_failures": 0},
         loop_detection_summary={"loop_warning_count": 0},
         mechanics_coverage_summary={"required_ok": True, "real_required_ok": True},
-        economy_pressure_summary={
+        faction_consequence_summary={
             "ok": True,
-            "event_count": 4,
-            "paid_count": 4,
-            "unpaid_count": 0,
-            "warning_count": 1,
-            "ending_currency": {"gold": 6, "copper": 15},
-            "total_spent": {"gold": 4, "copper": 15},
+            "event_count": 2,
+            "world_signal_count": 2,
+            "by_faction": {"faction:sable_chain": 1, "faction:rusty_flagon_locals": 1},
+            "by_kind": {"retaliation_after_combat": 1, "locals_rally_after_combat": 1},
+        },
+        npc_reaction_summary={
+            "ok": True,
+            "event_count": 2,
+            "memory_event_count": 2,
+            "world_signal_count": 2,
+            "by_npc": {"npc:bran": 1, "npc:garran": 1},
+            "by_kind": {"warns_about_retaliation": 1, "arms_locals": 1},
         },
     )
 
-    assert evaluation["gates"]["economy_pressure_present"]["ok"] is True
+    assert evaluation["gates"]["faction_consequence_present"]["ok"] is True
+    assert evaluation["gates"]["npc_reaction_present"]["ok"] is True
 
 
-def test_readiness_economy_pressure_gate_passes():
+def test_readiness_faction_consequence_and_npc_reaction_gates_pass():
     readiness = _build_100_turn_readiness_summary(
         summary={
-            "economy_pressure_summary": {
+            "faction_consequence_summary": {
                 "ok": True,
-                "event_count": 4,
-                "paid_count": 4,
-                "unpaid_count": 0,
-                "warning_count": 1,
-                "ending_currency": {"gold": 6, "copper": 15},
-                "total_spent": {"gold": 4, "copper": 15},
-            }
+                "event_count": 2,
+                "world_signal_count": 2,
+                "by_faction": {"faction:sable_chain": 1},
+                "by_kind": {"retaliation_after_combat": 1},
+            },
+            "npc_reaction_summary": {
+                "ok": True,
+                "event_count": 2,
+                "memory_event_count": 2,
+                "world_signal_count": 2,
+                "by_npc": {"npc:bran": 1},
+                "by_kind": {"warns_about_retaliation": 1},
+            },
         },
         transcript=[],
         requested_turns=100,
@@ -752,17 +1398,5 @@ def test_readiness_economy_pressure_gate_passes():
         warnings=[],
     )
 
-    assert readiness["gates"]["economy_pressure_present"]["ok"] is True
-
-If your current evaluation/readiness builders now require additional summaries to make the whole object pass, the tests only need to assert the economy gate exists and passes.
-
-16. Run checks
-python -m py_compile `
-  src\app\rpg\economy\economy_pressure.py `
-  src\app\rpg\economy\tavern_economy_pressure_rules.py `
-  src\tests\rpg\autoplay_llm_campaign.py
-python -m pytest `
-  src\tests\rpg\test_economy_pressure.py `
-  src\tests\rpg\test_autoplay_economy_pressure_gates.py `
-  src\tests\rpg\test_autoplay_real_runner_present.py `
-  -q
+    assert readiness["gates"]["faction_consequence_present"]["ok"] is True
+    assert readiness["gates"]["npc_reaction_present"]["ok"] is True
