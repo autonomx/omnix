@@ -147,12 +147,37 @@ def _compact_recent_turns(transcript_tail: List[Dict[str, Any]], limit: int = 5)
 
 def _compact_objectives(latest_context: Dict[str, Any]) -> Dict[str, Any]:
     context = _safe_dict(latest_context)
+    active_objectives = _safe_list(context.get("active_objectives"))[:6]
+
+    # Extract mechanics opportunities from active objectives
+    active_mechanic_objectives = [
+        obj for obj in active_objectives
+        if _safe_str(_safe_dict(obj).get("objective_type")) == "mechanics_opportunity"
+    ]
+
     return {
         "active_objective": _short_text(context.get("active_objective") or context.get("objective"), 300),
         "known_goal": _short_text(context.get("known_goal") or context.get("goal"), 300),
         "strategy_hint": _short_text(context.get("strategy_hint"), 300),
-        "active_objectives": _safe_list(context.get("active_objectives"))[:6],
+        "active_objectives": active_objectives,
         "quest_log_summary": _safe_dict(context.get("quest_log_summary")),
+        "context_mechanics_opportunities": [
+            {
+                "id": obj.get("id") or obj.get("objective_id"),
+                "title": obj.get("title") or obj.get("objective_text"),
+                "required_mechanics": obj.get("required_mechanics", []),
+                "suggested_actions": obj.get("suggested_actions", []),
+            }
+            for obj in active_mechanic_objectives
+        ],
+        "context_suppressed_actions": [
+            {
+                "action_id": row.get("action_id"),
+                "reason": row.get("reason"),
+                "cooldown_turns": row.get("cooldown_turns"),
+            }
+            for row in _safe_dict(context.get("scenario_progression_suppressed_actions")).values()
+        ],
     }
 
 
