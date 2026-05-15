@@ -1,21 +1,24 @@
 import inspect
 
-from tests.rpg import autoplay_llm_campaign as campaign
+from tests.rpg.autoplay_llm_campaign import (
+    _assert_real_autoplay_runner_present,
+    _run_autoplay_campaign,
+)
 
 
-def test_real_autoplay_runner_exists_and_is_not_truncated():
-    assert hasattr(campaign, "_run_autoplay_campaign")
+def test_real_runner_contains_finalization_block():
+    _assert_real_autoplay_runner_present()
 
-    source = inspect.getsource(campaign._run_autoplay_campaign)
+    source = inspect.getsource(_run_autoplay_campaign)
 
-    assert "campaign_execution:not_implemented" not in source
-    assert "TODO: Implement actual turn loop here" not in source
-
-    assert "AutoplayBackgroundPipeline" in source
-    assert "for turn_index in range" in source
-    assert "transcript.append" in source
+    assert "write_results_zip.start" in source
+    assert "write_results_zip.end" in source
+    assert "summary[\"artifact_paths\"]" in source
+    assert "_force_exit_if_background_threads_remain" in source
     assert "return summary" in source
 
 
-def test_real_autoplay_runner_guard_accepts_current_runner():
-    campaign._assert_real_autoplay_runner_present()
+def test_no_placeholder_run_campaign_autoplay_exists():
+    import tests.rpg.autoplay_llm_campaign as mod
+
+    assert not hasattr(mod, "_run_campaign_autoplay")

@@ -12,6 +12,14 @@ class ProgressionAction:
     target_type: str = ""
     target_id: str = ""
     priority: int = 50
+    mechanic: str = ""
+    required_mechanic: str = ""
+    completes_mechanic: str = ""
+    completion_flags: List[str] = field(default_factory=list)
+    changed_parts: List[str] = field(default_factory=list)
+    effects: Dict[str, Any] = field(default_factory=dict)
+    display: Dict[str, Any] = field(default_factory=dict)
+    action_terms: List[str] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -24,6 +32,8 @@ class ProgressionNode:
     effects: List[Dict[str, Any]] = field(default_factory=list)
     repeatable: bool = False
     priority: int = 50
+    objective_type: str = ""
+    required_mechanics: List[str] = field(default_factory=list)
 
 
 @dataclass

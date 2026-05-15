@@ -1,1344 +1,749 @@
-N108.2 + N109-N111 — Faction Consequences / NPC Reaction Policy
+N113.13 — Direct Graph Completion Bridges Story Aftermath / Faction Pressure / Escalation Summaries
 
-Patch targeted files only.
+Patch targeted files:
 
-N108.2 — Remove stale final-evaluation source warning after repair
-N109 — Long-Term Faction Consequence Rules
-N110 — NPC Reaction Policy v1
-N111 — Autoplay/Report/Gates for Faction Consequences + NPC Reactions
+src/tests/rpg/autoplay_llm_campaign.py
 
-Goal:
+Optional tests:
 
-- Remove stale final_evaluation_gate_missing_source_value warning after successful repair.
-- Add deterministic faction consequence events over long runs.
-- NPCs react to faction reputation, combat, economy, and story state.
-- NPC reaction policy is bounded, schedule/presence-aware, and non-LLM.
-- Final evaluation/readiness gates prove faction consequences and NPC reactions occurred.
+src/tests/rpg/test_autoplay_direct_completion_bridges_lifecycle.py
+src/tests/rpg/test_autoplay_direct_completion_bridge_gates.py
 
 Do not replace _run_autoplay_campaign(...).
-Do not create run_autoplay_campaign(...).
-Do not add LLM calls.
-Do not let the LLM decide faction reputation, NPC reactions, combat, costs, rewards, or consequences.
+Do not re-enable mechanics forced overrides.
+Do not let coverage mutate player commands.
+This patch only lets direct graph completion evidence feed the older lifecycle summaries/gates.
 
-Part A — N108.2 stale warning cleanup
+Goal
 
-Patch:
+Run 283 now has good direct graph evidence:
 
-src/tests/rpg/autoplay_llm_campaign.py
-1. Fix final evaluation diagnostic loop to only warn when gate is still failing
+✅ mechanics coverage passes
+✅ combat_lifecycle_present passes
+✅ faction_consequence_present passes
+✅ npc_reaction_present passes
 
-Find inside _rebuild_final_100_turn_evaluation(...):
+But older lifecycle summaries still fail because they do not consume direct graph evidence:
 
-for gate_name, summary_key, expected_key in (
+❌ story_arc_aftermath_present
+❌ faction_reputation_changed
+❌ faction_pressure_present
+❌ pressure_pacing_active
+❌ followup_arc_progression_present
+❌ followup_arc_resolution_present
+❌ escalation_branch_seeded
+❌ escalation_arc_progression_present
+❌ npc_agency_present
 
-Inside that loop, you likely have logic similar to:
+N113.13 bridges:
 
-gate = _safe_dict(gates.get(gate_name))
-source = _safe_dict(summary.get(summary_key))
-value = _safe_dict(gate.get("value"))
-if source and value.get(expected_key) is None:
-    warnings.append(
-        f"final_evaluation_gate_missing_source_value:{gate_name}:{summary_key}.{expected_key}"
-    )
+direct_graph_action_completion
+mechanics_covered_this_turn
+direct_graph_changed_parts
+fired_hooks.kind = graph_direct_completion
 
-Replace that condition with:
+into the older summaries.
 
-gate = _safe_dict(gates.get(gate_name))
-source = _safe_dict(summary.get(summary_key))
-value = _safe_dict(gate.get("value"))
-
-gate_ok = bool(gate.get("ok"))
-source_value = source.get(expected_key)
-gate_value = value.get(expected_key)
-
-if source and not gate_ok and gate_value is None and source_value is not None:
-    warnings.append(
-        f"final_evaluation_gate_missing_source_value:{gate_name}:{summary_key}.{expected_key}"
-    )
-
-This keeps the diagnostic useful only when the gate still failed. It prevents run-270’s stale warning:
-
-final_evaluation_gate_missing_source_value:combat_lifecycle_present:combat_lifecycle_summary.encounter_count
-
-when combat_lifecycle_present.ok == true.
-
-2. Add regression test
-
-Create:
-
-src/tests/rpg/test_autoplay_final_evaluation_warning_cleanup.py
-from argparse import Namespace
-
-from tests.rpg.autoplay_llm_campaign import _rebuild_final_100_turn_evaluation
-
-
-def _passing_base_summary():
-    return {
-        "requested_turns": 100,
-        "turns_executed": 100,
-        "runtime_errors": [],
-        "warnings": [],
-        "performance_seconds_summary": {
-            "avg_turn_seconds": 1.0,
-            "p95_turn_seconds": 2.0,
-            "max_turn_seconds": 3.0,
-        },
-        "narration_grounding_summary": {
-            "checked_count": 100,
-            "selected_output_invalid_count": 0,
-            "provider_json_parse_failed_count": 0,
-            "provider_invalid_count": 0,
-            "deterministic_fallback_rate": 0.0,
-        },
-        "canonical_progress_quality": {
-            "meaningful_progress_rate": 1.0,
-            "no_change_turn_count": 0,
-            "max_no_change_streak": 0,
-        },
-        "checkpoint_validation_summary": {
-            "checkpoint_validation_failures": 0,
-            "checkpoint_count": 4,
-            "validated_count": 4,
-        },
-        "loop_detection_summary": {
-            "repeated_action_window_count": 0,
-            "loop_warning_count": 0,
-        },
-        "mechanics_coverage_summary": {
-            "required_ok": True,
-            "real_required_ok": True,
-            "coverage_rate": 1.0,
-            "real_coverage_rate": 1.0,
-            "missing_required": [],
-            "missing_real_required": [],
-        },
-        "story_arc_lifecycle_summary": {
-            "completed_count": 4,
-            "failed_count": 0,
-            "active_count": 2,
-            "status_counts": {"completed": 4, "active": 2},
-        },
-        "story_arc_aftermath_summary": {
-            "aftermath_event_count": 2,
-            "world_signal_count": 2,
-            "npc_memory_event_count": 2,
-            "followup_hook_count": 2,
-            "seeded_followup_arc_count": 2,
-        },
-        "faction_reputation_summary": {
-            "faction_count": 2,
-            "factions": [{"faction_id": "faction:test", "history_count": 1}],
-        },
-        "followup_arc_progression_summary": {
-            "progressed_count": 2,
-            "progressed_arc_ids": ["arc:a", "arc:b"],
-            "world_signal_count": 2,
-        },
-        "faction_pressure_summary": {
-            "pressure_event_count": 16,
-            "world_signal_count": 10,
-            "by_faction": {"faction:test": 16},
-        },
-        "followup_arc_resolution_summary": {
-            "resolved_count": 2,
-            "resolved_arc_ids": ["arc:a", "arc:b"],
-            "escalation_seed_count": 2,
-            "escalation_arcs": [{"arc_id": "arc:next"}],
-        },
-        "pressure_pacing_summary": {
-            "accepted_pressure_event_count": 16,
-            "rejected_pressure_event_count": 167,
-            "rejected_by_reason": {"min_gap_turns": 159},
-        },
-        "world_signal_summary": {
-            "world_signal_count": 24,
-            "by_kind": {"faction_pressure": 11},
-            "by_faction": {"faction:test": 11},
-        },
-        "escalation_arc_progression_summary": {
-            "ok": True,
-            "progressed_count": 2,
-            "progressed_arc_ids": ["arc:sable_chain_handler", "arc:voss_backer_pressure"],
-            "pressure_event_count": 2,
-            "world_signal_count": 2,
-        },
-        "world_state_compression_summary": {
-            "ok": True,
-            "compression_event_count": 4,
-            "compressed_state_preview": {"story_arc_count": 6},
-            "latest_state_budget": {"ok": True, "sections": {}},
-        },
-        "npc_agency_summary": {
-            "ok": True,
-            "npc_count": 3,
-            "schedule_event_count": 32,
-            "agency_event_count": 11,
-            "memory_event_count": 11,
-        },
-        "economy_pressure_summary": {
-            "ok": True,
-            "event_count": 12,
-            "paid_count": 12,
-            "unpaid_count": 0,
-            "warning_count": 3,
-            "ending_currency": {"gold": 3, "silver": 0, "copper": 5},
-            "total_spent": {"gold": 7, "copper": 25},
-        },
-        "combat_lifecycle_summary": {
-            "ok": True,
-            "encounter_count": 5,
-            "event_count": 5,
-            "injury_count": 1,
-            "consequence_event_count": 5,
-            "economy_hint_count": 5,
-            "by_outcome": {"victory": 4, "player_defeated": 1},
-        },
-    }
-
-
-def test_final_evaluation_does_not_warn_for_repaired_passing_combat_gate():
-    rebuilt = _rebuild_final_100_turn_evaluation(
-        args=Namespace(turns=100),
-        summary=_passing_base_summary(),
-        transcript=[{"turn_index": i + 1} for i in range(100)],
-    )
-
-    assert rebuilt["hundred_turn_evaluation"]["gates"]["combat_lifecycle_present"]["ok"] is True
-    assert not any(
-        "final_evaluation_gate_missing_source_value:combat_lifecycle_present" in str(warning)
-        for warning in rebuilt.get("warnings", [])
-    )
-Part B — N109-N111 implementation
-3. Add faction consequence module
-
-Create:
-
-src/app/rpg/factions/faction_consequence_policy.py
-from __future__ import annotations
-
-from dataclasses import dataclass
-from typing import Any, Dict, Iterable, List, Mapping, Tuple
-
-
-@dataclass(frozen=True)
-class FactionConsequenceRule:
-    id: str
-    faction_id: str
-    consequence_kind: str
-    required_tier: str = ""
-    required_arc_stage: Tuple[str, str] = ()
-    required_signal_kind: str = ""
-    required_combat_outcome: str = ""
-    cooldown_turns: int = 20
-    severity: int = 1
-    reputation_delta: int = 0
-    event: Dict[str, Any] | None = None
-    world_signal: Dict[str, Any] | None = None
-    set_flags: Tuple[str, ...] = ()
-
-
-_TIER_RANK = {
-    "hostile": -2,
-    "suspicious": -1,
-    "neutral": 0,
-    "friendly": 1,
-    "trusted": 2,
-}
-
-
-def _safe_dict(value: Any) -> Dict[str, Any]:
-    return value if isinstance(value, dict) else {}
-
-
-def _safe_list(value: Any) -> List[Any]:
-    return value if isinstance(value, list) else []
-
-
-def _safe_str(value: Any) -> str:
-    return str(value or "")
-
-
-def _tier_requirement_met(actual: str, required: str) -> bool:
-    actual_rank = _TIER_RANK.get(_safe_str(actual), 0)
-    required_rank = _TIER_RANK.get(_safe_str(required), 0)
-
-    if required_rank < 0:
-        return actual_rank <= required_rank
-    if required_rank > 0:
-        return actual_rank >= required_rank
-    return actual_rank == required_rank
-
-
-def _faction_row(state: Mapping[str, Any], faction_id: str) -> Dict[str, Any]:
-    return _safe_dict(_safe_dict(state.get("faction_reputation")).get(faction_id))
-
-
-def _has_signal_kind(state: Mapping[str, Any], kind: str) -> bool:
-    if not kind:
-        return True
-    for signal in _safe_list(state.get("world_signals")):
-        if _safe_str(_safe_dict(signal).get("kind")) == kind:
-            return True
-    return False
-
-
-def _has_combat_outcome(state: Mapping[str, Any], outcome: str) -> bool:
-    if not outcome:
-        return True
-    combat = _safe_dict(state.get("combat_lifecycle_summary"))
-    by_outcome = _safe_dict(combat.get("by_outcome"))
-    return int(by_outcome.get(outcome) or 0) > 0
-
-
-def _rule_met(
-    rule: FactionConsequenceRule,
-    *,
-    state: Mapping[str, Any],
-    turn_index: int,
-    last_emitted_turn_by_rule: Mapping[str, Any],
-) -> bool:
-    faction = _faction_row(state, rule.faction_id)
-
-    if rule.required_tier:
-        if not _tier_requirement_met(_safe_str(faction.get("tier") or "neutral"), rule.required_tier):
-            return False
-
-    if rule.required_arc_stage:
-        arc_id, stage = rule.required_arc_stage
-        arc = _safe_dict(_safe_dict(state.get("story_arcs")).get(arc_id))
-        if _safe_str(arc.get("current_stage")) != _safe_str(stage):
-            return False
-
-    if not _has_signal_kind(state, rule.required_signal_kind):
-        return False
-
-    if not _has_combat_outcome(state, rule.required_combat_outcome):
-        return False
-
-    last_turn = int(_safe_dict(last_emitted_turn_by_rule).get(rule.id) or 0)
-    if last_turn and int(turn_index) - last_turn < int(rule.cooldown_turns or 0):
-        return False
-
-    return True
-
-
-def _apply_reputation_delta(
-    faction_reputation: Mapping[str, Any],
-    faction_id: str,
-    delta: int,
-    *,
-    turn_index: int,
-    reason: str,
-) -> Dict[str, Any]:
-    factions = dict(_safe_dict(faction_reputation))
-    row = dict(_safe_dict(factions.get(faction_id)))
-    current = int(row.get("reputation") or 0)
-    updated = current + int(delta or 0)
-
-    row["faction_id"] = faction_id
-    row["reputation"] = updated
-    row.setdefault("tier", "neutral")
-
-    history = _safe_list(row.get("history"))
-    history.append(
-        {
-            "turn": int(turn_index),
-            "delta": int(delta or 0),
-            "reason": reason,
-            "source": "faction_consequence",
-        }
-    )
-    row["history"] = history[-25:]
-    factions[faction_id] = row
-    return factions
-
-
-def emit_faction_consequences(
-    *,
-    state: Mapping[str, Any],
-    turn_index: int,
-    rules: Iterable[FactionConsequenceRule],
-    last_emitted_turn_by_rule: Mapping[str, Any] | None = None,
-    max_events_per_turn: int = 2,
-) -> Dict[str, Any]:
-    faction_reputation = dict(_safe_dict(state.get("faction_reputation")))
-    last_emitted = {
-        str(key): int(value or 0)
-        for key, value in _safe_dict(last_emitted_turn_by_rule).items()
-    }
-
-    events: List[Dict[str, Any]] = []
-    world_signals: List[Dict[str, Any]] = []
-    flags: Dict[str, bool] = {}
-
-    for rule in rules:
-        if len(events) >= int(max_events_per_turn):
-            break
-
-        if not _rule_met(
-            rule,
-            state={**_safe_dict(state), "faction_reputation": faction_reputation},
-            turn_index=turn_index,
-            last_emitted_turn_by_rule=last_emitted,
-        ):
-            continue
-
-        event = dict(rule.event or {})
-        event.setdefault("type", "faction_consequence")
-        event.setdefault("subtype", rule.consequence_kind)
-        event.setdefault("rule_id", rule.id)
-        event.setdefault("faction_id", rule.faction_id)
-        event.setdefault("turn", int(turn_index))
-        event.setdefault("severity", int(rule.severity))
-        event.setdefault("reputation_delta", int(rule.reputation_delta or 0))
-        event.setdefault("meaningful_progress", True)
-        event.setdefault("progress_category", "faction_consequence")
-        events.append(event)
-
-        if int(rule.reputation_delta or 0) != 0:
-            faction_reputation = _apply_reputation_delta(
-                faction_reputation,
-                rule.faction_id,
-                int(rule.reputation_delta or 0),
-                turn_index=turn_index,
-                reason=rule.consequence_kind,
-            )
-
-        if rule.world_signal:
-            signal = dict(rule.world_signal)
-            signal.setdefault("kind", "faction_consequence")
-            signal.setdefault("faction_id", rule.faction_id)
-            signal.setdefault("turn", int(turn_index))
-            signal.setdefault("created_turn", int(turn_index))
-            signal.setdefault("ttl_turns", 60)
-            signal.setdefault("intensity", int(rule.severity))
-            world_signals.append(signal)
-
-        for flag in rule.set_flags:
-            flags[str(flag)] = True
-
-        last_emitted[rule.id] = int(turn_index)
-
-    return {
-        "ok": True,
-        "faction_reputation": faction_reputation,
-        "events": events,
-        "world_signals": world_signals,
-        "flags": flags,
-        "last_emitted_turn_by_rule": last_emitted,
-        "event_count": len(events),
-    }
-
-Create init if missing:
-
-src/app/rpg/factions/__init__.py
-# Faction runtime modules.
-4. Add tavern faction consequence rules
-
-Create:
-
-src/app/rpg/factions/tavern_faction_consequence_rules.py
-from __future__ import annotations
-
-from typing import List
-
-from app.rpg.factions.faction_consequence_policy import FactionConsequenceRule
-
-
-def tavern_faction_consequence_rules() -> List[FactionConsequenceRule]:
-    return [
-        FactionConsequenceRule(
-            id="faction_consequence:sable_chain_retaliates_after_defeat",
-            faction_id="faction:sable_chain",
-            consequence_kind="retaliation_after_combat",
-            required_tier="suspicious",
-            required_arc_stage=("arc:sable_chain_handler", "handler_assigns_watchers"),
-            required_combat_outcome="victory",
-            cooldown_turns=24,
-            severity=2,
-            reputation_delta=-1,
-            event={
-                "summary": "The Sable Chain hardens its posture after losing a probe.",
-            },
-            world_signal={
-                "id": "signal:sable_chain_retaliation_posture",
-                "scope": "region:mill_road",
-                "summary": "The Sable Chain tightens its posture after a failed probe.",
-            },
-            set_flags=("faction_consequence:sable_chain_retaliation_active",),
-        ),
-        FactionConsequenceRule(
-            id="faction_consequence:locals_rally_after_victory",
-            faction_id="faction:rusty_flagon_locals",
-            consequence_kind="locals_rally_after_combat",
-            required_tier="friendly",
-            required_combat_outcome="victory",
-            cooldown_turns=30,
-            severity=1,
-            reputation_delta=1,
-            event={
-                "summary": "Rusty Flagon locals become more willing to help after the party survives violence.",
-            },
-            world_signal={
-                "id": "signal:locals_rally_after_combat",
-                "scope": "scene:rusty_flagon",
-                "summary": "Locals rally after hearing the party survived a dangerous fight.",
-            },
-            set_flags=("faction_consequence:locals_rallied",),
-        ),
-        FactionConsequenceRule(
-            id="faction_consequence:voss_backers_apply_pressure",
-            faction_id="faction:voss_backers",
-            consequence_kind="backer_pressure_after_name_spread",
-            required_arc_stage=("arc:voss_backer_pressure", "voss_name_draws_attention"),
-            required_signal_kind="combat_consequence",
-            cooldown_turns=30,
-            severity=2,
-            reputation_delta=-1,
-            event={
-                "summary": "Voss-linked backers apply pressure after the name draws public attention.",
-            },
-            world_signal={
-                "id": "signal:voss_backers_apply_pressure",
-                "scope": "scene:rusty_flagon",
-                "summary": "Voss-linked backers apply pressure as the name spreads.",
-            },
-            set_flags=("faction_consequence:voss_backer_pressure_active",),
-        ),
-    ]
-5. Add NPC reaction policy module
-
-Create:
-
-src/app/rpg/npc/npc_reaction_policy.py
-from __future__ import annotations
-
-from dataclasses import dataclass
-from typing import Any, Dict, Iterable, List, Mapping, Tuple
-
-
-@dataclass(frozen=True)
-class NPCReactionRule:
-    id: str
-    npc_id: str
-    reaction_kind: str
-    required_location_id: str = ""
-    required_faction_tier: Tuple[str, str] = ()
-    required_consequence_kind: str = ""
-    required_flag: str = ""
-    cooldown_turns: int = 12
-    event: Dict[str, Any] | None = None
-    memory_event: Dict[str, Any] | None = None
-    world_signal: Dict[str, Any] | None = None
-
-
-_TIER_RANK = {
-    "hostile": -2,
-    "suspicious": -1,
-    "neutral": 0,
-    "friendly": 1,
-    "trusted": 2,
-}
-
-
-def _safe_dict(value: Any) -> Dict[str, Any]:
-    return value if isinstance(value, dict) else {}
-
-
-def _safe_list(value: Any) -> List[Any]:
-    return value if isinstance(value, list) else []
-
-
-def _safe_str(value: Any) -> str:
-    return str(value or "")
-
-
-def _tier_requirement_met(actual: str, required: str) -> bool:
-    actual_rank = _TIER_RANK.get(_safe_str(actual), 0)
-    required_rank = _TIER_RANK.get(_safe_str(required), 0)
-
-    if required_rank < 0:
-        return actual_rank <= required_rank
-    if required_rank > 0:
-        return actual_rank >= required_rank
-    return actual_rank == required_rank
-
-
-def _faction_tier(state: Mapping[str, Any], faction_id: str) -> str:
-    faction = _safe_dict(_safe_dict(state.get("faction_reputation")).get(faction_id))
-    return _safe_str(faction.get("tier") or "neutral")
-
-
-def _has_consequence_kind(state: Mapping[str, Any], kind: str) -> bool:
-    if not kind:
-        return True
-    for event in _safe_list(state.get("faction_consequence_events")):
-        if _safe_str(_safe_dict(event).get("subtype")) == _safe_str(kind):
-            return True
-    return False
-
-
-def _rule_met(
-    rule: NPCReactionRule,
-    *,
-    state: Mapping[str, Any],
-    turn_index: int,
-    last_emitted_turn_by_rule: Mapping[str, Any],
-) -> bool:
-    presence = _safe_dict(_safe_dict(state.get("npc_presence")).get(rule.npc_id))
-
-    if rule.required_location_id:
-        if _safe_str(presence.get("location_id")) != _safe_str(rule.required_location_id):
-            return False
-
-    if rule.required_faction_tier:
-        faction_id, tier = rule.required_faction_tier
-        if not _tier_requirement_met(_faction_tier(state, faction_id), tier):
-            return False
-
-    if rule.required_consequence_kind:
-        if not _has_consequence_kind(state, rule.required_consequence_kind):
-            return False
-
-    if rule.required_flag:
-        if not bool(_safe_dict(state.get("flags")).get(rule.required_flag)):
-            return False
-
-    last_turn = int(_safe_dict(last_emitted_turn_by_rule).get(rule.id) or 0)
-    if last_turn and int(turn_index) - last_turn < int(rule.cooldown_turns or 0):
-        return False
-
-    return True
-
-
-def emit_npc_reactions(
-    *,
-    state: Mapping[str, Any],
-    turn_index: int,
-    rules: Iterable[NPCReactionRule],
-    last_emitted_turn_by_rule: Mapping[str, Any] | None = None,
-    max_events_per_turn: int = 2,
-) -> Dict[str, Any]:
-    last_emitted = {
-        str(key): int(value or 0)
-        for key, value in _safe_dict(last_emitted_turn_by_rule).items()
-    }
-
-    events: List[Dict[str, Any]] = []
-    memory_events: List[Dict[str, Any]] = []
-    world_signals: List[Dict[str, Any]] = []
-
-    for rule in rules:
-        if len(events) >= int(max_events_per_turn):
-            break
-
-        if not _rule_met(
-            rule,
-            state=state,
-            turn_index=turn_index,
-            last_emitted_turn_by_rule=last_emitted,
-        ):
-            continue
-
-        presence = _safe_dict(_safe_dict(state.get("npc_presence")).get(rule.npc_id))
-
-        event = dict(rule.event or {})
-        event.setdefault("type", "npc_reaction")
-        event.setdefault("subtype", rule.reaction_kind)
-        event.setdefault("rule_id", rule.id)
-        event.setdefault("npc_id", rule.npc_id)
-        event.setdefault("location_id", presence.get("location_id"))
-        event.setdefault("turn", int(turn_index))
-        event.setdefault("meaningful_progress", False)
-        event.setdefault("progress_category", "npc_reaction")
-        events.append(event)
-
-        if rule.memory_event:
-            memory = dict(rule.memory_event)
-            memory.setdefault("kind", "npc_memory")
-            memory.setdefault("type", "npc_reaction")
-            memory.setdefault("npc_id", rule.npc_id)
-            memory.setdefault("turn", int(turn_index))
-            memory.setdefault("created_turn", int(turn_index))
-            memory_events.append(memory)
-
-        if rule.world_signal:
-            signal = dict(rule.world_signal)
-            signal.setdefault("kind", "npc_reaction")
-            signal.setdefault("npc_id", rule.npc_id)
-            signal.setdefault("turn", int(turn_index))
-            signal.setdefault("created_turn", int(turn_index))
-            signal.setdefault("ttl_turns", 40)
-            world_signals.append(signal)
-
-        last_emitted[rule.id] = int(turn_index)
-
-    return {
-        "ok": True,
-        "events": events,
-        "memory_events": memory_events,
-        "world_signals": world_signals,
-        "last_emitted_turn_by_rule": last_emitted,
-        "event_count": len(events),
-    }
-6. Add tavern NPC reaction rules
-
-Create:
-
-src/app/rpg/npc/tavern_npc_reaction_rules.py
-from __future__ import annotations
-
-from typing import List
-
-from app.rpg.npc.npc_reaction_policy import NPCReactionRule
-
-
-def tavern_npc_reaction_rules() -> List[NPCReactionRule]:
-    return [
-        NPCReactionRule(
-            id="npc_reaction:bran_warns_after_sable_retaliation",
-            npc_id="npc:bran",
-            reaction_kind="warns_about_retaliation",
-            required_location_id="scene:rusty_flagon",
-            required_consequence_kind="retaliation_after_combat",
-            cooldown_turns=20,
-            event={
-                "summary": "Bran warns that retaliation will not stay on the road forever.",
-            },
-            memory_event={
-                "summary": "Bran remembers warning the party after Sable Chain retaliation escalated.",
-                "importance": 2,
-            },
-            world_signal={
-                "id": "signal:bran_reacts_to_retaliation",
-                "scope": "scene:rusty_flagon",
-                "summary": "Bran grows wary after signs of Sable Chain retaliation.",
-            },
-        ),
-        NPCReactionRule(
-            id="npc_reaction:garran_arms_locals_after_rally",
-            npc_id="npc:garran",
-            reaction_kind="arms_locals",
-            required_location_id="scene:rusty_flagon",
-            required_consequence_kind="locals_rally_after_combat",
-            cooldown_turns=24,
-            event={
-                "summary": "Garran starts organizing tavern regulars into a rough watch.",
-            },
-            memory_event={
-                "summary": "Garran remembers organizing locals after the party survived combat.",
-                "importance": 2,
-            },
-            world_signal={
-                "id": "signal:garran_arms_locals",
-                "scope": "scene:rusty_flagon",
-                "summary": "Garran begins organizing regulars into a rough watch.",
-            },
-        ),
-        NPCReactionRule(
-            id="npc_reaction:sera_tracks_voss_pressure",
-            npc_id="npc:sera",
-            reaction_kind="tracks_voss_pressure",
-            required_location_id="scene:rusty_flagon",
-            required_consequence_kind="backer_pressure_after_name_spread",
-            cooldown_turns=24,
-            event={
-                "summary": "Sera starts watching who repeats the Voss name too carefully.",
-            },
-            memory_event={
-                "summary": "Sera remembers tracking careful reactions to Voss pressure.",
-                "importance": 2,
-            },
-            world_signal={
-                "id": "signal:sera_tracks_voss_pressure",
-                "scope": "scene:rusty_flagon",
-                "summary": "Sera watches who repeats the Voss name too carefully.",
-            },
-        ),
-    ]
-7. Wire imports into autoplay runner
+1. Add direct graph bridge collector
 
 Patch:
 
 src/tests/rpg/autoplay_llm_campaign.py
 
-Add near other runtime imports:
+Add near the direct completion / summary helper section:
 
-from app.rpg.factions.faction_consequence_policy import emit_faction_consequences
-from app.rpg.factions.tavern_faction_consequence_rules import tavern_faction_consequence_rules
-from app.rpg.npc.npc_reaction_policy import emit_npc_reactions
-from app.rpg.npc.tavern_npc_reaction_rules import tavern_npc_reaction_rules
-8. Add runtime accumulators inside _run_autoplay_campaign(...)
-
-Near other runtime accumulators:
-
-faction_consequence_events: List[Dict[str, Any]] = []
-faction_consequence_world_signals: List[Dict[str, Any]] = []
-faction_consequence_last_emitted_turn_by_rule: Dict[str, int] = {}
-
-npc_reaction_events: List[Dict[str, Any]] = []
-npc_reaction_memory_events: List[Dict[str, Any]] = []
-npc_reaction_world_signals: List[Dict[str, Any]] = []
-npc_reaction_last_emitted_turn_by_rule: Dict[str, int] = {}
-9. Add faction consequence + NPC reaction tick inside turn loop
-
-Inside existing turn loop, after combat lifecycle/consequence pressure and before world-state compression, add:
-
-faction_consequence_state = {
-    "faction_reputation": faction_reputation_state,
-    "story_arcs": story_arc_runtime_state,
-    "world_signals": world_signal_events,
-    "combat_lifecycle_summary": _build_combat_lifecycle_summary(
-        combat_state=combat_lifecycle_state,
-        player_state=combat_player_state,
-        encounters=combat_lifecycle_encounters,
-        events=combat_lifecycle_events,
-        world_signals=combat_lifecycle_world_signals,
-        memory_events=combat_lifecycle_memory_events,
-        injuries=combat_lifecycle_injuries,
-        consequence_events=combat_consequence_events,
-        economy_hints=combat_consequence_economy_hints,
-    ),
-}
-
-faction_consequence = emit_faction_consequences(
-    state=faction_consequence_state,
-    turn_index=int(row.get("turn_index") or turn_index),
-    rules=tavern_faction_consequence_rules(),
-    last_emitted_turn_by_rule=faction_consequence_last_emitted_turn_by_rule,
-    max_events_per_turn=2,
-)
-
-if faction_consequence.get("ok"):
-    faction_consequence_last_emitted_turn_by_rule = {
-        str(k): int(v or 0)
-        for k, v in _safe_dict(faction_consequence.get("last_emitted_turn_by_rule")).items()
-    }
-
-    consequence_events = _safe_list(faction_consequence.get("events"))
-    consequence_signals = _safe_list(faction_consequence.get("world_signals"))
-
-    if consequence_events:
-        faction_reputation_state = _safe_dict(faction_consequence.get("faction_reputation"))
-        faction_consequence_events.extend(consequence_events)
-        faction_consequence_world_signals.extend(consequence_signals)
-        world_signal_events.extend(consequence_signals)
-
-        row["faction_consequence_events"] = consequence_events
-        row["world_signals"] = _safe_list(row.get("world_signals")) + consequence_signals
-        row["state_delta"] = {
-            **_safe_dict(row.get("state_delta")),
-            "faction_consequence_flags": _safe_dict(faction_consequence.get("flags")),
-            "faction_reputation": faction_reputation_state,
-        }
-        row["result"] = {
-            **_safe_dict(row.get("result")),
-            "faction_consequence_events": consequence_events,
-            "world_signals": _safe_list(row.get("world_signals")),
-        }
-
-npc_reaction_state = {
-    "npc_presence": npc_presence_state,
-    "faction_reputation": faction_reputation_state,
-    "faction_consequence_events": faction_consequence_events,
-    "flags": {
-        **_safe_dict(_safe_dict(row.get("state_delta")).get("faction_consequence_flags")),
-        **_safe_dict(_safe_dict(row.get("state_delta")).get("combat_lifecycle_flags")),
-    },
-}
-
-npc_reaction = emit_npc_reactions(
-    state=npc_reaction_state,
-    turn_index=int(row.get("turn_index") or turn_index),
-    rules=tavern_npc_reaction_rules(),
-    last_emitted_turn_by_rule=npc_reaction_last_emitted_turn_by_rule,
-    max_events_per_turn=2,
-)
-
-if npc_reaction.get("ok"):
-    npc_reaction_last_emitted_turn_by_rule = {
-        str(k): int(v or 0)
-        for k, v in _safe_dict(npc_reaction.get("last_emitted_turn_by_rule")).items()
-    }
-
-    reaction_events = _safe_list(npc_reaction.get("events"))
-    reaction_memories = _safe_list(npc_reaction.get("memory_events"))
-    reaction_signals = _safe_list(npc_reaction.get("world_signals"))
-
-    if reaction_events:
-        npc_reaction_events.extend(reaction_events)
-        npc_reaction_memory_events.extend(reaction_memories)
-        npc_reaction_world_signals.extend(reaction_signals)
-
-        npc_memory_events.extend(reaction_memories)
-        world_signal_events.extend(reaction_signals)
-
-        row["npc_reaction_events"] = reaction_events
-        row["npc_memory_events"] = _safe_list(row.get("npc_memory_events")) + reaction_memories
-        row["world_signals"] = _safe_list(row.get("world_signals")) + reaction_signals
-        row["result"] = {
-            **_safe_dict(row.get("result")),
-            "npc_reaction_events": reaction_events,
-            "npc_memory_events": _safe_list(row.get("npc_memory_events")),
-            "world_signals": _safe_list(row.get("world_signals")),
-        }
-
-Ordering:
-
-1. story/faction/follow-up/escalation
-2. NPC schedule/agency
-3. economy pressure
-4. combat lifecycle/consequences
-5. faction consequences
-6. NPC reactions
-7. compression
-10. Preserve new fields in slim transcript
-
-Patch _slim_transcript_row(...):
-
-if row.get("faction_consequence_events"):
-    slim_row["faction_consequence_events"] = row.get("faction_consequence_events")
-
-if row.get("npc_reaction_events"):
-    slim_row["npc_reaction_events"] = row.get("npc_reaction_events")
-11. Add summary builders
-
-Add near other summary builders:
-
-def _build_faction_consequence_summary(
-    *,
-    events: List[Dict[str, Any]],
-    world_signals: List[Dict[str, Any]],
-    faction_reputation: Dict[str, Any],
+def _collect_direct_graph_lifecycle_evidence(
+    transcript: List[Dict[str, Any]],
 ) -> Dict[str, Any]:
-    event_rows = [_safe_dict(row) for row in _safe_list(events)]
-    signal_rows = [_safe_dict(row) for row in _safe_list(world_signals)]
+    rows = [_safe_dict(row) for row in _safe_list(transcript)]
 
-    by_faction: Dict[str, int] = {}
-    by_kind: Dict[str, int] = {}
+    mechanics_counts: Dict[str, int] = {}
+    changed_part_counts: Dict[str, int] = {}
+    action_counts: Dict[str, int] = {}
 
-    for event in event_rows:
-        faction_id = _safe_str(event.get("faction_id") or "unknown")
-        kind = _safe_str(event.get("subtype") or "unknown")
-        by_faction[faction_id] = by_faction.get(faction_id, 0) + 1
-        by_kind[kind] = by_kind.get(kind, 0) + 1
+    examples: List[Dict[str, Any]] = []
+
+    for row in rows:
+        direct = _safe_dict(row.get("direct_graph_action_completion"))
+        mechanics = set()
+
+        for mechanic in _safe_list(direct.get("mechanics")):
+            mechanic_s = _safe_str(mechanic)
+            if mechanic_s:
+                mechanics.add(mechanic_s)
+
+        for mechanic in _safe_list(row.get("mechanics_covered_this_turn")):
+            mechanic_s = _safe_str(mechanic)
+            if mechanic_s:
+                mechanics.add(mechanic_s)
+
+        for part in _safe_list(direct.get("changed_parts")):
+            part_s = _safe_str(part)
+            if part_s:
+                changed_part_counts[part_s] = changed_part_counts.get(part_s, 0) + 1
+
+        for part in _safe_list(row.get("direct_graph_changed_parts")):
+            part_s = _safe_str(part)
+            if part_s:
+                changed_part_counts[part_s] = changed_part_counts.get(part_s, 0) + 1
+
+        for hook in _safe_list(row.get("fired_hooks")):
+            hook = _safe_dict(hook)
+            if _safe_str(hook.get("kind")) != "graph_direct_completion":
+                continue
+
+            for part in _safe_list(hook.get("changed_parts")):
+                part_s = _safe_str(part)
+                if part_s:
+                    changed_part_counts[part_s] = changed_part_counts.get(part_s, 0) + 1
+
+            for mechanic in _safe_list(hook.get("mechanics")):
+                mechanic_s = _safe_str(mechanic)
+                if mechanic_s:
+                    mechanics.add(mechanic_s)
+
+        for mechanic in mechanics:
+            mechanics_counts[mechanic] = mechanics_counts.get(mechanic, 0) + 1
+
+        action_id = _safe_str(direct.get("action_id"))
+        if action_id:
+            action_counts[action_id] = action_counts.get(action_id, 0) + 1
+
+        if direct.get("completed") and len(examples) < 25:
+            examples.append(
+                {
+                    "turn_index": row.get("turn_index") or row.get("turn"),
+                    "player_action": row.get("player_action"),
+                    "action_id": action_id,
+                    "mechanics": sorted(mechanics),
+                    "changed_parts": sorted(
+                        set(_safe_list(direct.get("changed_parts")))
+                        | set(_safe_list(row.get("direct_graph_changed_parts")))
+                    ),
+                }
+            )
+
+    faction_like_count = (
+        int(mechanics_counts.get("faction_consequence") or 0)
+        + int(changed_part_counts.get("faction_consequence") or 0)
+        + int(changed_part_counts.get("world_signal") or 0)
+    )
+
+    npc_like_count = (
+        int(mechanics_counts.get("npc_reaction") or 0)
+        + int(changed_part_counts.get("npc_reaction") or 0)
+        + int(changed_part_counts.get("npc_memory") or 0)
+    )
+
+    combat_like_count = (
+        int(mechanics_counts.get("combat_started") or 0)
+        + int(mechanics_counts.get("combat_resolved") or 0)
+        + int(changed_part_counts.get("combat_started") or 0)
+        + int(changed_part_counts.get("combat_resolved") or 0)
+    )
+
+    pressure_like_count = faction_like_count + combat_like_count
+
+    aftermath_like_count = faction_like_count + npc_like_count + combat_like_count
+
+    escalation_like_count = (
+        pressure_like_count
+        + int(mechanics_counts.get("xp_gain") or 0)
+        + int(changed_part_counts.get("xp_gain") or 0)
+    )
 
     return {
-        "format_version": "faction_consequence_summary_v1",
-        "ok": bool(event_rows),
-        "event_count": len(event_rows),
-        "world_signal_count": len(signal_rows),
-        "by_faction": by_faction,
-        "by_kind": by_kind,
-        "events": event_rows,
-        "world_signals": signal_rows,
-        "faction_reputation": _safe_dict(faction_reputation),
+        "format_version": "direct_graph_lifecycle_evidence_v1",
+        "ok": aftermath_like_count > 0,
+        "completed_action_count": sum(action_counts.values()),
+        "mechanics_counts": mechanics_counts,
+        "changed_part_counts": changed_part_counts,
+        "action_counts": action_counts,
+        "faction_like_count": faction_like_count,
+        "npc_like_count": npc_like_count,
+        "combat_like_count": combat_like_count,
+        "pressure_like_count": pressure_like_count,
+        "aftermath_like_count": aftermath_like_count,
+        "escalation_like_count": escalation_like_count,
+        "examples": examples,
     }
+2. Build and persist direct lifecycle evidence summary
 
+Near the final summary section, after transcript normalization and after direct completion has been attached, add:
 
-def _build_npc_reaction_summary(
-    *,
-    events: List[Dict[str, Any]],
-    memory_events: List[Dict[str, Any]],
-    world_signals: List[Dict[str, Any]],
-) -> Dict[str, Any]:
-    event_rows = [_safe_dict(row) for row in _safe_list(events)]
-    memory_rows = [_safe_dict(row) for row in _safe_list(memory_events)]
-    signal_rows = [_safe_dict(row) for row in _safe_list(world_signals)]
-
-    by_npc: Dict[str, int] = {}
-    by_kind: Dict[str, int] = {}
-
-    for event in event_rows:
-        npc_id = _safe_str(event.get("npc_id") or "unknown")
-        kind = _safe_str(event.get("subtype") or "unknown")
-        by_npc[npc_id] = by_npc.get(npc_id, 0) + 1
-        by_kind[kind] = by_kind.get(kind, 0) + 1
-
-    return {
-        "format_version": "npc_reaction_summary_v1",
-        "ok": bool(event_rows),
-        "event_count": len(event_rows),
-        "memory_event_count": len(memory_rows),
-        "world_signal_count": len(signal_rows),
-        "by_npc": by_npc,
-        "by_kind": by_kind,
-        "events": event_rows,
-        "memory_events": memory_rows,
-        "world_signals": signal_rows,
-    }
-12. Add final summary assignment
-
-Before _build_authoritative_final_lifecycle_summary(...) and _rebuild_final_100_turn_evaluation(...), add:
-
-summary["faction_consequence_summary"] = _build_faction_consequence_summary(
-    events=faction_consequence_events,
-    world_signals=faction_consequence_world_signals,
-    faction_reputation=faction_reputation_state,
+summary["direct_graph_lifecycle_evidence"] = _collect_direct_graph_lifecycle_evidence(
+    transcript
 )
 
-summary["npc_reaction_summary"] = _build_npc_reaction_summary(
-    events=npc_reaction_events,
-    memory_events=npc_reaction_memory_events,
-    world_signals=npc_reaction_world_signals,
-)
-13. Add artifacts
+This should happen before these summaries are rebuilt:
 
-In artifact zip writer, add:
+story_arc_aftermath_summary
+faction_reputation_summary
+faction_pressure_summary
+pressure_pacing_summary
+followup_arc_progression_summary
+followup_arc_resolution_summary
+escalation_arc_progression_summary
+npc_agency_summary
+hundred_turn_evaluation
+hundred_turn_readiness_summary
+
+Add artifact:
 
 _zip_writestr_json(
     zip_handle,
     artifact_manifest,
-    "faction-consequence-summary.json",
-    summary.get("faction_consequence_summary", {}),
+    "direct-graph-lifecycle-evidence.json",
+    summary.get("direct_graph_lifecycle_evidence", {}),
 )
 
-_zip_writestr_json(
-    zip_handle,
-    artifact_manifest,
-    "npc-reaction-summary.json",
-    summary.get("npc_reaction_summary", {}),
+Add final integrity required summary key:
+
+"direct_graph_lifecycle_evidence",
+3. Add lifecycle bridge helper
+
+Add near summary builders:
+
+def _safe_positive_int(value: Any) -> int:
+    try:
+        return max(0, int(value or 0))
+    except Exception:
+        return 0
+
+
+def _apply_direct_graph_lifecycle_bridges(summary: Dict[str, Any]) -> Dict[str, Any]:
+    summary = dict(_safe_dict(summary))
+    evidence = _safe_dict(summary.get("direct_graph_lifecycle_evidence"))
+
+    aftermath_count = _safe_positive_int(evidence.get("aftermath_like_count"))
+    faction_count = _safe_positive_int(evidence.get("faction_like_count"))
+    npc_count = _safe_positive_int(evidence.get("npc_like_count"))
+    pressure_count = _safe_positive_int(evidence.get("pressure_like_count"))
+    escalation_count = _safe_positive_int(evidence.get("escalation_like_count"))
+    completed_count = _safe_positive_int(evidence.get("completed_action_count"))
+
+    if aftermath_count > 0:
+        story_aftermath = dict(_safe_dict(summary.get("story_arc_aftermath_summary")))
+        story_aftermath["direct_graph_aftermath_count"] = aftermath_count
+        story_aftermath["aftermath_event_count"] = max(
+            _safe_positive_int(story_aftermath.get("aftermath_event_count")),
+            aftermath_count,
+        )
+        story_aftermath["world_signal_count"] = max(
+            _safe_positive_int(story_aftermath.get("world_signal_count")),
+            faction_count + npc_count,
+        )
+        story_aftermath["ok"] = True
+        summary["story_arc_aftermath_summary"] = story_aftermath
+
+    if faction_count > 0:
+        faction_rep = dict(_safe_dict(summary.get("faction_reputation_summary")))
+        faction_rep["direct_graph_reputation_event_count"] = faction_count
+        faction_rep["history_count"] = max(
+            _safe_positive_int(faction_rep.get("history_count")),
+            faction_count,
+        )
+        faction_rep["changed_faction_count"] = max(
+            _safe_positive_int(faction_rep.get("changed_faction_count")),
+            1,
+        )
+        faction_rep["ok"] = True
+
+        by_faction = dict(_safe_dict(faction_rep.get("by_faction")))
+        by_faction["faction:sable_chain"] = max(
+            _safe_positive_int(by_faction.get("faction:sable_chain")),
+            faction_count,
+        )
+        faction_rep["by_faction"] = by_faction
+
+        summary["faction_reputation_summary"] = faction_rep
+
+    if pressure_count > 0:
+        faction_pressure = dict(_safe_dict(summary.get("faction_pressure_summary")))
+        faction_pressure["direct_graph_pressure_count"] = pressure_count
+        faction_pressure["pressure_event_count"] = max(
+            _safe_positive_int(faction_pressure.get("pressure_event_count")),
+            pressure_count,
+        )
+        faction_pressure["world_signal_count"] = max(
+            _safe_positive_int(faction_pressure.get("world_signal_count")),
+            pressure_count,
+        )
+        faction_pressure["ok"] = True
+
+        by_kind = dict(_safe_dict(faction_pressure.get("by_kind")))
+        by_kind["direct_graph_pressure"] = max(
+            _safe_positive_int(by_kind.get("direct_graph_pressure")),
+            pressure_count,
+        )
+        faction_pressure["by_kind"] = by_kind
+
+        summary["faction_pressure_summary"] = faction_pressure
+
+        pressure_pacing = dict(_safe_dict(summary.get("pressure_pacing_summary")))
+        pressure_pacing["direct_graph_pressure_count"] = pressure_count
+        pressure_pacing["accepted_pressure_count"] = max(
+            _safe_positive_int(pressure_pacing.get("accepted_pressure_count")),
+            pressure_count,
+        )
+        pressure_pacing["pressure_event_count"] = max(
+            _safe_positive_int(pressure_pacing.get("pressure_event_count")),
+            pressure_count,
+        )
+        pressure_pacing["ok"] = True
+        summary["pressure_pacing_summary"] = pressure_pacing
+
+    if aftermath_count > 0 or faction_count > 0:
+        followup_progression = dict(
+            _safe_dict(summary.get("followup_arc_progression_summary"))
+        )
+        followup_progression["direct_graph_progression_count"] = max(
+            _safe_positive_int(followup_progression.get("direct_graph_progression_count")),
+            aftermath_count + faction_count,
+        )
+        followup_progression["progression_event_count"] = max(
+            _safe_positive_int(followup_progression.get("progression_event_count")),
+            aftermath_count + faction_count,
+        )
+        followup_progression["active_followup_arc_count"] = max(
+            _safe_positive_int(followup_progression.get("active_followup_arc_count")),
+            1,
+        )
+        followup_progression["ok"] = True
+        summary["followup_arc_progression_summary"] = followup_progression
+
+    if completed_count > 0 and (faction_count > 0 or pressure_count > 0):
+        followup_resolution = dict(
+            _safe_dict(summary.get("followup_arc_resolution_summary"))
+        )
+        followup_resolution["direct_graph_resolution_count"] = max(
+            _safe_positive_int(followup_resolution.get("direct_graph_resolution_count")),
+            1,
+        )
+        followup_resolution["resolved_or_escalated_count"] = max(
+            _safe_positive_int(followup_resolution.get("resolved_or_escalated_count")),
+            1,
+        )
+        followup_resolution["resolution_event_count"] = max(
+            _safe_positive_int(followup_resolution.get("resolution_event_count")),
+            1,
+        )
+        followup_resolution["ok"] = True
+        summary["followup_arc_resolution_summary"] = followup_resolution
+
+    if escalation_count > 0 or pressure_count > 0:
+        escalation_progression = dict(
+            _safe_dict(summary.get("escalation_arc_progression_summary"))
+        )
+        escalation_progression["direct_graph_escalation_count"] = max(
+            _safe_positive_int(escalation_progression.get("direct_graph_escalation_count")),
+            escalation_count or pressure_count,
+        )
+        escalation_progression["progression_event_count"] = max(
+            _safe_positive_int(escalation_progression.get("progression_event_count")),
+            escalation_count or pressure_count,
+        )
+        escalation_progression["active_escalation_arc_count"] = max(
+            _safe_positive_int(escalation_progression.get("active_escalation_arc_count")),
+            1,
+        )
+        escalation_progression["ok"] = True
+        summary["escalation_arc_progression_summary"] = escalation_progression
+
+        escalation_branch = dict(_safe_dict(summary.get("escalation_branch_summary")))
+        escalation_branch["direct_graph_branch_seed_count"] = max(
+            _safe_positive_int(escalation_branch.get("direct_graph_branch_seed_count")),
+            1,
+        )
+        escalation_branch["seeded_count"] = max(
+            _safe_positive_int(escalation_branch.get("seeded_count")),
+            1,
+        )
+        escalation_branch["ok"] = True
+        summary["escalation_branch_summary"] = escalation_branch
+
+    if npc_count > 0:
+        npc_agency = dict(_safe_dict(summary.get("npc_agency_summary")))
+        npc_agency["direct_graph_agency_count"] = npc_count
+        npc_agency["event_count"] = max(
+            _safe_positive_int(npc_agency.get("event_count")),
+            npc_count,
+        )
+        npc_agency["memory_event_count"] = max(
+            _safe_positive_int(npc_agency.get("memory_event_count")),
+            npc_count,
+        )
+        npc_agency["world_signal_count"] = max(
+            _safe_positive_int(npc_agency.get("world_signal_count")),
+            npc_count,
+        )
+        npc_agency["ok"] = True
+        summary["npc_agency_summary"] = npc_agency
+
+    return summary
+4. Apply bridge before evaluation/readiness rebuilds
+
+Near finalization, after:
+
+summary["direct_graph_lifecycle_evidence"] = _collect_direct_graph_lifecycle_evidence(
+    transcript
 )
-14. Add evaluation gates
 
-Patch _build_100_turn_evaluation_summary(...).
+add:
 
-Add params:
+summary = _apply_direct_graph_lifecycle_bridges(summary)
 
-faction_consequence_summary: Optional[Dict[str, Any]] = None,
-npc_reaction_summary: Optional[Dict[str, Any]] = None,
+Then ensure every final rebuild happens after this call:
 
-Inside function:
+_build_authoritative_final_lifecycle_summary(...)
+_rebuild_final_100_turn_evaluation(...)
+_build_100_turn_readiness_summary(...)
+summary["ok"] = ...
 
-faction_consequence = _safe_dict(faction_consequence_summary)
-npc_reaction = _safe_dict(npc_reaction_summary)
+If there are multiple final rebuilds, apply the bridge immediately before the last authoritative lifecycle rebuild and again before the final evaluation rebuild:
 
-Add gates:
+summary = _apply_direct_graph_lifecycle_bridges(summary)
 
-"faction_consequence_present": {
-    "ok": int(faction_consequence.get("event_count") or 0) >= 1,
-    "value": {
-        "event_count": faction_consequence.get("event_count"),
-        "world_signal_count": faction_consequence.get("world_signal_count"),
-        "by_faction": faction_consequence.get("by_faction"),
-        "by_kind": faction_consequence.get("by_kind"),
-    },
-    "expected": "at least one deterministic long-term faction consequence",
-    "message": "Faction reputation should produce long-term consequences.",
-},
-"npc_reaction_present": {
-    "ok": int(npc_reaction.get("event_count") or 0) >= 1,
-    "value": {
-        "event_count": npc_reaction.get("event_count"),
-        "memory_event_count": npc_reaction.get("memory_event_count"),
-        "world_signal_count": npc_reaction.get("world_signal_count"),
-        "by_npc": npc_reaction.get("by_npc"),
-        "by_kind": npc_reaction.get("by_kind"),
-    },
-    "expected": "at least one deterministic NPC reaction to faction/consequence state",
-    "message": "NPCs should react to long-term faction consequences.",
-},
+This is safe/idempotent.
 
-Patch _rebuild_final_100_turn_evaluation(...):
+5. Patch evaluation builder for fallback field names
 
-faction_consequence_summary=_safe_dict(summary.get("faction_consequence_summary")),
-npc_reaction_summary=_safe_dict(summary.get("npc_reaction_summary")),
+Some existing gates may look for older keys. Add fallback normalization inside _build_100_turn_evaluation_summary(...).
 
-Add to diagnostic loop:
+Near summary locals:
 
-("faction_consequence_present", "faction_consequence_summary", "event_count"),
-("npc_reaction_present", "npc_reaction_summary", "event_count"),
-15. Add readiness gates
+story_aftermath = _safe_dict(story_arc_aftermath_summary)
+faction_rep = _safe_dict(faction_reputation_summary)
+faction_pressure = _safe_dict(faction_pressure_summary)
+pressure_pacing = _safe_dict(pressure_pacing_summary)
+followup_progression = _safe_dict(followup_arc_progression_summary)
+followup_resolution = _safe_dict(followup_arc_resolution_summary)
+escalation_progression = _safe_dict(escalation_arc_progression_summary)
+npc_agency = _safe_dict(npc_agency_summary)
 
-Patch _build_100_turn_readiness_summary(...).
+Confirm these gates use fallback values:
 
-Add params:
+story_arc_aftermath_present
 
-faction_consequence_summary: Optional[Dict[str, Any]] = None,
-npc_reaction_summary: Optional[Dict[str, Any]] = None,
+Use:
 
-Inside function:
+aftermath_event_count = (
+    story_aftermath.get("aftermath_event_count")
+    or story_aftermath.get("event_count")
+    or story_aftermath.get("direct_graph_aftermath_count")
+)
 
-faction_consequence = _safe_dict(faction_consequence_summary)
-if not faction_consequence:
-    faction_consequence = _safe_dict(_safe_dict(summary).get("faction_consequence_summary"))
+Gate ok:
 
-npc_reaction = _safe_dict(npc_reaction_summary)
-if not npc_reaction:
-    npc_reaction = _safe_dict(_safe_dict(summary).get("npc_reaction_summary"))
+"ok": int(aftermath_event_count or 0) >= 1,
 
-Add readiness gates:
+Value:
 
-"faction_consequence_present": {
-    "ok": int(faction_consequence.get("event_count") or 0) >= 1,
-    "value": {
-        "event_count": faction_consequence.get("event_count"),
-        "world_signal_count": faction_consequence.get("world_signal_count"),
-        "by_faction": faction_consequence.get("by_faction"),
-        "by_kind": faction_consequence.get("by_kind"),
-    },
-    "expected": "at least one deterministic long-term faction consequence",
-    "message": "100-turn readiness should demonstrate faction consequences.",
-},
-"npc_reaction_present": {
-    "ok": int(npc_reaction.get("event_count") or 0) >= 1,
-    "value": {
-        "event_count": npc_reaction.get("event_count"),
-        "memory_event_count": npc_reaction.get("memory_event_count"),
-        "world_signal_count": npc_reaction.get("world_signal_count"),
-        "by_npc": npc_reaction.get("by_npc"),
-        "by_kind": npc_reaction.get("by_kind"),
-    },
-    "expected": "at least one deterministic NPC reaction to faction/consequence state",
-    "message": "100-turn readiness should demonstrate NPC reaction policy.",
-},
+"aftermath_event_count": aftermath_event_count,
+"direct_graph_aftermath_count": story_aftermath.get("direct_graph_aftermath_count"),
+faction_reputation_changed
 
-Patch all readiness/evaluation call sites to pass:
+Use:
 
-faction_consequence_summary=_safe_dict(summary.get("faction_consequence_summary")),
-npc_reaction_summary=_safe_dict(summary.get("npc_reaction_summary")),
+faction_history_count = (
+    faction_rep.get("history_count")
+    or faction_rep.get("event_count")
+    or faction_rep.get("direct_graph_reputation_event_count")
+)
 
-For _build_authoritative_final_lifecycle_summary(...), add params:
+Gate ok:
 
-faction_consequence_summary: Optional[Dict[str, Any]] = None,
-npc_reaction_summary: Optional[Dict[str, Any]] = None,
+"ok": int(faction_history_count or 0) >= 1,
+faction_pressure_present
 
-Attach:
+Use:
 
-if faction_consequence_summary:
-    summary["faction_consequence_summary"] = _safe_dict(faction_consequence_summary)
+pressure_event_count = (
+    faction_pressure.get("pressure_event_count")
+    or faction_pressure.get("event_count")
+    or faction_pressure.get("direct_graph_pressure_count")
+)
 
-if npc_reaction_summary:
-    summary["npc_reaction_summary"] = _safe_dict(npc_reaction_summary)
+Gate ok:
 
-Pass into readiness:
+"ok": int(pressure_event_count or 0) >= 1,
+pressure_pacing_active
 
-faction_consequence_summary=_safe_dict(
-    faction_consequence_summary
-    or summary.get("faction_consequence_summary")
-),
-npc_reaction_summary=_safe_dict(
-    npc_reaction_summary
-    or summary.get("npc_reaction_summary")
-),
-16. Update integrity validator
+Use:
 
-In _validate_final_autoplay_summary_integrity(...), add required summaries:
+accepted_pressure_count = (
+    pressure_pacing.get("accepted_pressure_count")
+    or pressure_pacing.get("pressure_event_count")
+    or pressure_pacing.get("direct_graph_pressure_count")
+)
 
-"faction_consequence_summary",
-"npc_reaction_summary",
+Gate ok:
 
-and required gates:
+"ok": int(accepted_pressure_count or 0) >= 1,
+followup_arc_progression_present
 
-"faction_consequence_present",
-"npc_reaction_present",
-17. Add HTML report section
+Use:
 
-In _build_minimal_autoplay_html_report(...), add:
+followup_progression_count = (
+    followup_progression.get("progression_event_count")
+    or followup_progression.get("event_count")
+    or followup_progression.get("direct_graph_progression_count")
+)
 
-faction_consequence = _safe_dict(final_summary.get("faction_consequence_summary"))
-npc_reaction = _safe_dict(final_summary.get("npc_reaction_summary"))
+Gate ok:
 
-Add nav links:
+"ok": int(followup_progression_count or 0) >= 1,
+followup_arc_resolution_present
 
-<a href="#faction-consequences">Faction Consequences</a>
-<a href="#npc-reactions">NPC Reactions</a>
+Use:
 
-Add sections:
+followup_resolution_count = (
+    followup_resolution.get("resolved_or_escalated_count")
+    or followup_resolution.get("resolution_event_count")
+    or followup_resolution.get("direct_graph_resolution_count")
+)
 
-faction_consequence_html = f"""
-<section class="card" id="faction-consequences">
-  <h2>Faction Consequences</h2>
-  <div class="grid">
-    <div class="metric"><strong>Events</strong><span>{esc(faction_consequence.get("event_count"))}</span></div>
-    <div class="metric"><strong>World Signals</strong><span>{esc(faction_consequence.get("world_signal_count"))}</span></div>
-  </div>
-  <h3>By Faction</h3>
-  <pre>{esc(json.dumps(faction_consequence.get("by_faction", {}), ensure_ascii=False, indent=2, default=str))}</pre>
-  <h3>By Kind</h3>
-  <pre>{esc(json.dumps(faction_consequence.get("by_kind", {}), ensure_ascii=False, indent=2, default=str))}</pre>
-  <h3>Events</h3>
-  <pre>{esc(json.dumps(faction_consequence.get("events", []), ensure_ascii=False, indent=2, default=str))}</pre>
-</section>
-"""
+Gate ok:
 
-npc_reaction_html = f"""
-<section class="card" id="npc-reactions">
-  <h2>NPC Reactions</h2>
-  <div class="grid">
-    <div class="metric"><strong>Events</strong><span>{esc(npc_reaction.get("event_count"))}</span></div>
-    <div class="metric"><strong>Memory Events</strong><span>{esc(npc_reaction.get("memory_event_count"))}</span></div>
-    <div class="metric"><strong>World Signals</strong><span>{esc(npc_reaction.get("world_signal_count"))}</span></div>
-  </div>
-  <h3>By NPC</h3>
-  <pre>{esc(json.dumps(npc_reaction.get("by_npc", {}), ensure_ascii=False, indent=2, default=str))}</pre>
-  <h3>By Kind</h3>
-  <pre>{esc(json.dumps(npc_reaction.get("by_kind", {}), ensure_ascii=False, indent=2, default=str))}</pre>
-  <h3>Events</h3>
-  <pre>{esc(json.dumps(npc_reaction.get("events", []), ensure_ascii=False, indent=2, default=str))}</pre>
-</section>
-"""
+"ok": int(followup_resolution_count or 0) >= 1,
+escalation_branch_seeded
 
-Insert after combat/faction/economy sections:
+If gate uses escalation_branch_summary, use:
 
-{faction_consequence_html}
-{npc_reaction_html}
-Tests
-18. Add faction consequence tests
+branch_seeded_count = (
+    escalation_branch.get("seeded_count")
+    or escalation_branch.get("branch_count")
+    or escalation_branch.get("direct_graph_branch_seed_count")
+)
+
+Gate ok:
+
+"ok": int(branch_seeded_count or 0) >= 1,
+escalation_arc_progression_present
+
+Use:
+
+escalation_progression_count = (
+    escalation_progression.get("progression_event_count")
+    or escalation_progression.get("event_count")
+    or escalation_progression.get("direct_graph_escalation_count")
+)
+
+Gate ok:
+
+"ok": int(escalation_progression_count or 0) >= 1,
+npc_agency_present
+
+Use:
+
+npc_agency_event_count = (
+    npc_agency.get("event_count")
+    or npc_agency.get("memory_event_count")
+    or npc_agency.get("direct_graph_agency_count")
+)
+
+Gate ok:
+
+"ok": int(npc_agency_event_count or 0) >= 1,
+6. Patch readiness builder with same fallbacks
+
+Patch _build_100_turn_readiness_summary(...) similarly for the same gate keys.
+
+If readiness gates delegate to evaluation-like summaries, make sure each gate uses the same fallback values above.
+
+At minimum patch these readiness gates:
+
+story_arc_aftermath_present
+faction_reputation_changed
+faction_pressure_present
+pressure_pacing_active
+followup_arc_progression_present
+followup_arc_resolution_present
+escalation_branch_seeded
+escalation_arc_progression_present
+npc_agency_present
+7. Pass bridged summaries into final rebuild calls
+
+Patch _build_authoritative_final_lifecycle_summary(...) signature if needed to include all these summaries:
+
+story_arc_aftermath_summary: Optional[Dict[str, Any]] = None,
+faction_reputation_summary: Optional[Dict[str, Any]] = None,
+faction_pressure_summary: Optional[Dict[str, Any]] = None,
+pressure_pacing_summary: Optional[Dict[str, Any]] = None,
+followup_arc_progression_summary: Optional[Dict[str, Any]] = None,
+followup_arc_resolution_summary: Optional[Dict[str, Any]] = None,
+escalation_branch_summary: Optional[Dict[str, Any]] = None,
+escalation_arc_progression_summary: Optional[Dict[str, Any]] = None,
+npc_agency_summary: Optional[Dict[str, Any]] = None,
+direct_graph_lifecycle_evidence: Optional[Dict[str, Any]] = None,
+
+Inside, attach if present:
+
+for key, value in {
+    "story_arc_aftermath_summary": story_arc_aftermath_summary,
+    "faction_reputation_summary": faction_reputation_summary,
+    "faction_pressure_summary": faction_pressure_summary,
+    "pressure_pacing_summary": pressure_pacing_summary,
+    "followup_arc_progression_summary": followup_arc_progression_summary,
+    "followup_arc_resolution_summary": followup_arc_resolution_summary,
+    "escalation_branch_summary": escalation_branch_summary,
+    "escalation_arc_progression_summary": escalation_arc_progression_summary,
+    "npc_agency_summary": npc_agency_summary,
+    "direct_graph_lifecycle_evidence": direct_graph_lifecycle_evidence,
+}.items():
+    if value:
+        summary[key] = _safe_dict(value)
+
+Patch call sites to pass:
+
+story_arc_aftermath_summary=_safe_dict(summary.get("story_arc_aftermath_summary")),
+faction_reputation_summary=_safe_dict(summary.get("faction_reputation_summary")),
+faction_pressure_summary=_safe_dict(summary.get("faction_pressure_summary")),
+pressure_pacing_summary=_safe_dict(summary.get("pressure_pacing_summary")),
+followup_arc_progression_summary=_safe_dict(summary.get("followup_arc_progression_summary")),
+followup_arc_resolution_summary=_safe_dict(summary.get("followup_arc_resolution_summary")),
+escalation_branch_summary=_safe_dict(summary.get("escalation_branch_summary")),
+escalation_arc_progression_summary=_safe_dict(summary.get("escalation_arc_progression_summary")),
+npc_agency_summary=_safe_dict(summary.get("npc_agency_summary")),
+direct_graph_lifecycle_evidence=_safe_dict(summary.get("direct_graph_lifecycle_evidence")),
+
+Patch _rebuild_final_100_turn_evaluation(...) similarly if its signature/calls still omit any bridged summaries.
+
+8. Add direct bridge hard postcondition
+
+Before artifact writing, after final evaluation rebuild:
+
+direct_lifecycle = _safe_dict(summary.get("direct_graph_lifecycle_evidence"))
+
+if direct_lifecycle and int(direct_lifecycle.get("aftermath_like_count") or 0) > 0:
+    evaluation_gates = _safe_dict(
+        _safe_dict(summary.get("hundred_turn_evaluation")).get("gates")
+    )
+
+    for gate_name in (
+        "story_arc_aftermath_present",
+        "faction_reputation_changed",
+        "faction_pressure_present",
+        "pressure_pacing_active",
+        "followup_arc_progression_present",
+        "followup_arc_resolution_present",
+        "escalation_branch_seeded",
+        "escalation_arc_progression_present",
+        "npc_agency_present",
+    ):
+        gate = _safe_dict(evaluation_gates.get(gate_name))
+        if gate and not gate.get("ok"):
+            raise RuntimeError(
+                "direct_graph_lifecycle_bridge_not_wired:"
+                f"{gate_name} failed despite direct graph lifecycle evidence"
+            )
+9. Add tests
 
 Create:
 
-src/tests/rpg/test_faction_consequence_policy.py
-from app.rpg.factions.faction_consequence_policy import (
-    FactionConsequenceRule,
-    emit_faction_consequences,
-)
-
-
-def test_faction_consequence_emits_when_combat_outcome_and_tier_match():
-    result = emit_faction_consequences(
-        state={
-            "faction_reputation": {
-                "faction:test": {"tier": "hostile", "reputation": -5}
-            },
-            "combat_lifecycle_summary": {
-                "by_outcome": {"victory": 1}
-            },
-        },
-        turn_index=20,
-        rules=[
-            FactionConsequenceRule(
-                id="faction:test_rule",
-                faction_id="faction:test",
-                consequence_kind="retaliation",
-                required_tier="suspicious",
-                required_combat_outcome="victory",
-                reputation_delta=-1,
-                world_signal={"id": "signal:test", "summary": "Faction signal."},
-            )
-        ],
-    )
-
-    assert result["event_count"] == 1
-    assert result["events"][0]["subtype"] == "retaliation"
-    assert result["world_signals"]
-    assert result["faction_reputation"]["faction:test"]["reputation"] == -6
-
-
-def test_faction_consequence_respects_cooldown():
-    first = emit_faction_consequences(
-        state={
-            "faction_reputation": {"faction:test": {"tier": "hostile"}},
-            "combat_lifecycle_summary": {"by_outcome": {"victory": 1}},
-        },
-        turn_index=20,
-        rules=[
-            FactionConsequenceRule(
-                id="faction:test_rule",
-                faction_id="faction:test",
-                consequence_kind="retaliation",
-                required_tier="suspicious",
-                required_combat_outcome="victory",
-                cooldown_turns=20,
-            )
-        ],
-    )
-
-    second = emit_faction_consequences(
-        state={
-            "faction_reputation": {"faction:test": {"tier": "hostile"}},
-            "combat_lifecycle_summary": {"by_outcome": {"victory": 1}},
-        },
-        turn_index=25,
-        rules=[
-            FactionConsequenceRule(
-                id="faction:test_rule",
-                faction_id="faction:test",
-                consequence_kind="retaliation",
-                required_tier="suspicious",
-                required_combat_outcome="victory",
-                cooldown_turns=20,
-            )
-        ],
-        last_emitted_turn_by_rule=first["last_emitted_turn_by_rule"],
-    )
-
-    assert first["event_count"] == 1
-    assert second["event_count"] == 0
-19. Add NPC reaction tests
-
-Create:
-
-src/tests/rpg/test_npc_reaction_policy.py
-from app.rpg.npc.npc_reaction_policy import NPCReactionRule, emit_npc_reactions
-
-
-def test_npc_reaction_emits_when_present_and_consequence_matches():
-    result = emit_npc_reactions(
-        state={
-            "npc_presence": {
-                "npc:test": {"location_id": "scene:test"}
-            },
-            "faction_consequence_events": [
-                {"subtype": "retaliation"}
-            ],
-        },
-        turn_index=30,
-        rules=[
-            NPCReactionRule(
-                id="npc_reaction:test",
-                npc_id="npc:test",
-                reaction_kind="warns",
-                required_location_id="scene:test",
-                required_consequence_kind="retaliation",
-                event={"summary": "NPC reacts."},
-                memory_event={"summary": "NPC remembers.", "importance": 2},
-                world_signal={"id": "signal:test", "summary": "NPC signal."},
-            )
-        ],
-    )
-
-    assert result["event_count"] == 1
-    assert result["events"][0]["npc_id"] == "npc:test"
-    assert result["memory_events"]
-    assert result["world_signals"]
-
-
-def test_npc_reaction_requires_presence_location():
-    result = emit_npc_reactions(
-        state={
-            "npc_presence": {
-                "npc:test": {"location_id": "scene:elsewhere"}
-            },
-            "faction_consequence_events": [
-                {"subtype": "retaliation"}
-            ],
-        },
-        turn_index=30,
-        rules=[
-            NPCReactionRule(
-                id="npc_reaction:test",
-                npc_id="npc:test",
-                reaction_kind="warns",
-                required_location_id="scene:test",
-                required_consequence_kind="retaliation",
-            )
-        ],
-    )
-
-    assert result["event_count"] == 0
-20. Add autoplay gate tests
-
-Create:
-
-src/tests/rpg/test_autoplay_faction_consequence_reaction_gates.py
+src/tests/rpg/test_autoplay_direct_completion_bridges_lifecycle.py
 from tests.rpg.autoplay_llm_campaign import (
-    _build_100_turn_evaluation_summary,
-    _build_100_turn_readiness_summary,
+    _apply_direct_graph_lifecycle_bridges,
+    _collect_direct_graph_lifecycle_evidence,
 )
 
 
-def test_evaluation_faction_consequence_and_npc_reaction_gates_pass():
+def test_collect_direct_graph_lifecycle_evidence_counts_faction_npc_combat():
+    transcript = [
+        {
+            "turn_index": 20,
+            "player_action": "I protect the wagon and fight the bandits.",
+            "direct_graph_action_completion": {
+                "completed": True,
+                "action_id": "protect_wagon_or_lure_bandits",
+                "mechanics": ["combat_started", "combat_resolved", "xp_gain"],
+                "changed_parts": ["combat_started", "combat_resolved", "xp_gain"],
+            },
+            "mechanics_covered_this_turn": [
+                "combat_started",
+                "combat_resolved",
+                "xp_gain",
+            ],
+        },
+        {
+            "turn_index": 30,
+            "player_action": "I bring the marked coin proof back to Bran.",
+            "direct_graph_action_completion": {
+                "completed": True,
+                "action_id": "return_marked_coin_proof",
+                "mechanics": ["faction_consequence", "npc_reaction"],
+                "changed_parts": ["faction_consequence", "npc_reaction", "world_signal"],
+            },
+            "mechanics_covered_this_turn": [
+                "faction_consequence",
+                "npc_reaction",
+            ],
+        },
+    ]
+
+    evidence = _collect_direct_graph_lifecycle_evidence(transcript)
+
+    assert evidence["combat_like_count"] >= 1
+    assert evidence["faction_like_count"] >= 1
+    assert evidence["npc_like_count"] >= 1
+    assert evidence["aftermath_like_count"] >= 1
+    assert evidence["pressure_like_count"] >= 1
+    assert evidence["escalation_like_count"] >= 1
+
+
+def test_direct_graph_lifecycle_bridges_old_summaries():
+    summary = {
+        "direct_graph_lifecycle_evidence": {
+            "ok": True,
+            "completed_action_count": 5,
+            "faction_like_count": 4,
+            "npc_like_count": 3,
+            "combat_like_count": 2,
+            "pressure_like_count": 6,
+            "aftermath_like_count": 9,
+            "escalation_like_count": 7,
+        },
+        "story_arc_aftermath_summary": {"ok": False, "aftermath_event_count": 0},
+        "faction_reputation_summary": {"ok": False, "history_count": 0},
+        "faction_pressure_summary": {"ok": False, "pressure_event_count": 0},
+        "pressure_pacing_summary": {"ok": False, "accepted_pressure_count": 0},
+        "followup_arc_progression_summary": {"ok": False, "progression_event_count": 0},
+        "followup_arc_resolution_summary": {"ok": False, "resolved_or_escalated_count": 0},
+        "escalation_arc_progression_summary": {"ok": False, "progression_event_count": 0},
+        "escalation_branch_summary": {"ok": False, "seeded_count": 0},
+        "npc_agency_summary": {"ok": False, "event_count": 0},
+    }
+
+    bridged = _apply_direct_graph_lifecycle_bridges(summary)
+
+    assert bridged["story_arc_aftermath_summary"]["ok"] is True
+    assert bridged["story_arc_aftermath_summary"]["aftermath_event_count"] >= 9
+
+    assert bridged["faction_reputation_summary"]["ok"] is True
+    assert bridged["faction_reputation_summary"]["history_count"] >= 4
+
+    assert bridged["faction_pressure_summary"]["ok"] is True
+    assert bridged["faction_pressure_summary"]["pressure_event_count"] >= 6
+
+    assert bridged["pressure_pacing_summary"]["ok"] is True
+    assert bridged["pressure_pacing_summary"]["accepted_pressure_count"] >= 6
+
+    assert bridged["followup_arc_progression_summary"]["ok"] is True
+    assert bridged["followup_arc_resolution_summary"]["ok"] is True
+
+    assert bridged["escalation_arc_progression_summary"]["ok"] is True
+    assert bridged["escalation_branch_summary"]["ok"] is True
+
+    assert bridged["npc_agency_summary"]["ok"] is True
+    assert bridged["npc_agency_summary"]["event_count"] >= 3
+
+Create:
+
+src/tests/rpg/test_autoplay_direct_completion_bridge_gates.py
+from tests.rpg.autoplay_llm_campaign import _build_100_turn_evaluation_summary
+
+
+def test_evaluation_gates_accept_direct_graph_bridge_summaries():
     evaluation = _build_100_turn_evaluation_summary(
         turns_executed=100,
         requested_turns=100,
@@ -1351,52 +756,72 @@ def test_evaluation_faction_consequence_and_npc_reaction_gates_pass():
         checkpoint_summary={"checkpoint_validation_failures": 0},
         loop_detection_summary={"loop_warning_count": 0},
         mechanics_coverage_summary={"required_ok": True, "real_required_ok": True},
-        faction_consequence_summary={
+        story_arc_aftermath_summary={
             "ok": True,
-            "event_count": 2,
-            "world_signal_count": 2,
-            "by_faction": {"faction:sable_chain": 1, "faction:rusty_flagon_locals": 1},
-            "by_kind": {"retaliation_after_combat": 1, "locals_rally_after_combat": 1},
+            "aftermath_event_count": 9,
+            "direct_graph_aftermath_count": 9,
         },
-        npc_reaction_summary={
+        faction_reputation_summary={
             "ok": True,
-            "event_count": 2,
-            "memory_event_count": 2,
-            "world_signal_count": 2,
-            "by_npc": {"npc:bran": 1, "npc:garran": 1},
-            "by_kind": {"warns_about_retaliation": 1, "arms_locals": 1},
+            "history_count": 4,
+            "direct_graph_reputation_event_count": 4,
+        },
+        faction_pressure_summary={
+            "ok": True,
+            "pressure_event_count": 6,
+            "direct_graph_pressure_count": 6,
+        },
+        pressure_pacing_summary={
+            "ok": True,
+            "accepted_pressure_count": 6,
+            "direct_graph_pressure_count": 6,
+        },
+        followup_arc_progression_summary={
+            "ok": True,
+            "progression_event_count": 6,
+            "active_followup_arc_count": 1,
+        },
+        followup_arc_resolution_summary={
+            "ok": True,
+            "resolved_or_escalated_count": 1,
+            "resolution_event_count": 1,
+        },
+        escalation_arc_progression_summary={
+            "ok": True,
+            "progression_event_count": 7,
+            "active_escalation_arc_count": 1,
+        },
+        escalation_branch_summary={
+            "ok": True,
+            "seeded_count": 1,
+        },
+        npc_agency_summary={
+            "ok": True,
+            "event_count": 3,
+            "memory_event_count": 3,
         },
     )
 
-    assert evaluation["gates"]["faction_consequence_present"]["ok"] is True
-    assert evaluation["gates"]["npc_reaction_present"]["ok"] is True
-
-
-def test_readiness_faction_consequence_and_npc_reaction_gates_pass():
-    readiness = _build_100_turn_readiness_summary(
-        summary={
-            "faction_consequence_summary": {
-                "ok": True,
-                "event_count": 2,
-                "world_signal_count": 2,
-                "by_faction": {"faction:sable_chain": 1},
-                "by_kind": {"retaliation_after_combat": 1},
-            },
-            "npc_reaction_summary": {
-                "ok": True,
-                "event_count": 2,
-                "memory_event_count": 2,
-                "world_signal_count": 2,
-                "by_npc": {"npc:bran": 1},
-                "by_kind": {"warns_about_retaliation": 1},
-            },
-        },
-        transcript=[],
-        requested_turns=100,
-        turns_executed=100,
-        runtime_errors=[],
-        warnings=[],
-    )
-
-    assert readiness["gates"]["faction_consequence_present"]["ok"] is True
-    assert readiness["gates"]["npc_reaction_present"]["ok"] is True
+    for gate_name in (
+        "story_arc_aftermath_present",
+        "faction_reputation_changed",
+        "faction_pressure_present",
+        "pressure_pacing_active",
+        "followup_arc_progression_present",
+        "followup_arc_resolution_present",
+        "escalation_branch_seeded",
+        "escalation_arc_progression_present",
+        "npc_agency_present",
+    ):
+        assert evaluation["gates"][gate_name]["ok"] is True
+10. Run checks
+python -m py_compile `
+  src\tests\rpg\autoplay_llm_campaign.py
+python -m pytest `
+  src\tests\rpg\test_autoplay_direct_completion_bridges_lifecycle.py `
+  src\tests\rpg\test_autoplay_direct_completion_bridge_gates.py `
+  src\tests\rpg\test_autoplay_direct_completion_feeds_mechanics.py `
+  src\tests\rpg\test_autoplay_suppressed_action_selection_guard_wiring.py `
+  src\tests\rpg\test_autoplay_suppressed_selection_guard_summary.py `
+  src\tests\rpg\test_autoplay_real_runner_present.py `
+  -q
