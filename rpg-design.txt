@@ -1,4 +1,4 @@
-N113.20-lite — Direct Graph Buy-Rations Execution Only
+N113.21-lite — Direct Graph XP Execution for Explicit Combat Actions Only
 
 Patch only:
 
@@ -8,134 +8,126 @@ Do not touch:
 
 src/app/rpg/progression/graph_registry.py
 src/app/rpg/story/graph_registry.py
+buy-rations execution except shared helper style if needed
 lifecycle bridge/evaluation gates
-combat XP logic
 fallback catalogs
 mechanics forced overrides
 
-Goal: when _direct_complete_graph_action_from_command(...) completes buy_rations_from_bran, it should produce a real deterministic row mutation:
+Goal: direct graph completion should grant XP only when the completed graph action is an explicit combat-resolution action.
 
-{
-  "state_delta": {
-    "currency_delta": {"copper": -4},
-    "inventory_delta": {
-      "items_added": [
-        {"id": "item:rations", "name": "Rations", "quantity": 2}
-      ],
-      "items_removed": []
-    }
-  },
-  "result": {
-    "purchase_result": {"ok": true}
-  }
+1. Add explicit combat action ID helpers
+
+Add near the direct graph helper section, close to _apply_buy_rations_direct_graph_execution(...):
+
+_DIRECT_GRAPH_XP_COMBAT_ACTION_IDS = {
+    "protect_wagon_or_lure_bandits",
+    "ambush_bandits",
+    "fight_bandit_scouts",
+    "fight_bandits",
+    "defeat_bandit_scouts",
+    "resolve_bandit_ambush",
 }
 
-and the visible narration/NPC line must match the purchase, not stale witness/road dialogue.
 
-1. Add tiny merge helpers
+_DIRECT_GRAPH_NON_XP_ACTION_IDS = {
+    "report_findings_to_bran",
+    "warn_garran",
+    "tell_garran_about_ambush",
+    "scout_quarry_road",
+    "spot_bridge_watchers",
+    "choose_ambush_response",
+    "ask_bran_about_witness",
+    "ask_bran_who_saw_witness",
+    "question_bran_about_traveler",
+    "search_for_witness",
+    "return_marked_coin_proof",
+    "buy_rations_from_bran",
+    "rent_room_from_bran",
+    "ask_garran_to_join",
+}
 
-Add near the direct graph helper section, before _direct_complete_graph_action_from_command(...):
 
-def _merge_buy_rations_state_delta(row: Dict[str, Any]) -> Dict[str, Any]:
+def _is_direct_graph_explicit_xp_combat_action(action_id: str) -> bool:
+    action_id_s = _safe_str(action_id)
+    return action_id_s in _DIRECT_GRAPH_XP_COMBAT_ACTION_IDS
+2. Add XP execution helper
+
+Add after _apply_buy_rations_direct_graph_execution(...):
+
+def _apply_explicit_combat_xp_direct_graph_execution(
+    row: Dict[str, Any],
+    *,
+    action_id: str,
+) -> Dict[str, Any]:
     row = dict(_safe_dict(row))
+    action_id_s = _safe_str(action_id)
 
-    state_delta = dict(_safe_dict(row.get("state_delta")))
-    currency_delta = dict(_safe_dict(state_delta.get("currency_delta")))
-    currency_delta["copper"] = int(currency_delta.get("copper") or 0) - 4
-    state_delta["currency_delta"] = currency_delta
+    if not _is_direct_graph_explicit_xp_combat_action(action_id_s):
+        return row
 
-    inventory_delta = dict(_safe_dict(state_delta.get("inventory_delta")))
-    items_added = list(_safe_list(inventory_delta.get("items_added")))
-    items_removed = list(_safe_list(inventory_delta.get("items_removed")))
-
-    items_added.append(
-        {
-            "id": "item:rations",
-            "name": "Rations",
-            "quantity": 2,
-            "type": "consumable",
-        }
+    already_applied = (
+        bool(row.get("direct_graph_xp_execution_applied"))
+        and _safe_str(row.get("direct_graph_xp_execution_action_id")) == action_id_s
     )
 
-    inventory_delta["items_added"] = items_added
-    inventory_delta["items_removed"] = items_removed
-    state_delta["inventory_delta"] = inventory_delta
+    if not already_applied:
+        state_delta = dict(_safe_dict(row.get("state_delta")))
+        state_delta["xp_delta"] = int(state_delta.get("xp_delta") or 0) + 5
+        state_delta["combat_started"] = True
+        state_delta["combat_resolved"] = True
+        row["state_delta"] = state_delta
 
-    row["state_delta"] = state_delta
-    return row
-
-
-def _apply_buy_rations_direct_graph_execution(row: Dict[str, Any]) -> Dict[str, Any]:
-    row = _merge_buy_rations_state_delta(row)
-
-    purchase_result = {
+    combat_result = {
         "ok": True,
-        "merchant_id": "npc:bran",
-        "items": [
-            {
-                "id": "item:rations",
-                "name": "Rations",
-                "quantity": 2,
-            }
-        ],
-        "currency_delta": {"copper": -4},
-        "inventory_delta": {
-            "items_added": [
-                {
-                    "id": "item:rations",
-                    "name": "Rations",
-                    "quantity": 2,
-                    "type": "consumable",
-                }
-            ],
-            "items_removed": [],
-        },
-        "summary": "Bought two rations from Bran.",
+        "outcome": "direct_graph_resolved",
+        "xp_delta": 5,
+        "summary": "The combat beat resolves through the scenario graph.",
     }
 
     row["result"] = {
         **_safe_dict(row.get("result")),
-        "purchase_result": purchase_result,
-        "currency_delta": {"copper": -4},
-        "inventory_delta": purchase_result["inventory_delta"],
-        "mechanic": "buying",
+        "combat_result": combat_result,
+        "xp_delta": 5,
+        "mechanic": "combat_resolved",
         "meaningful_progress": True,
         "progress_category": "direct_graph_execution",
     }
 
     turn_contract = dict(_safe_dict(row.get("turn_contract")))
-    turn_contract["mechanic"] = "buying"
+    turn_contract["mechanic"] = "combat_resolved"
+
+    tc_state_delta = dict(_safe_dict(turn_contract.get("state_delta")))
+    if not already_applied:
+        tc_state_delta["xp_delta"] = int(tc_state_delta.get("xp_delta") or 0) + 5
+    else:
+        tc_state_delta.setdefault("xp_delta", 5)
+    tc_state_delta["combat_started"] = True
+    tc_state_delta["combat_resolved"] = True
+    turn_contract["state_delta"] = tc_state_delta
+
     turn_contract["result"] = {
         **_safe_dict(turn_contract.get("result")),
-        "purchase_result": purchase_result,
+        "combat_result": combat_result,
     }
-    turn_contract["state_delta"] = _merge_buy_rations_state_delta(
-        {"state_delta": _safe_dict(turn_contract.get("state_delta"))}
-    )["state_delta"]
     row["turn_contract"] = turn_contract
 
     narration_payload = {
         "format_version": "rpg_narration_v2",
-        "source": "direct_graph_buy_rations_execution",
+        "source": "direct_graph_explicit_combat_xp_execution",
         "dialogue_source": "direct_graph_execution",
         "narration": (
-            "Bran takes the coins and passes over two wrapped rations. "
-            "Your pack is heavier, and your coin pouch is lighter."
+            "The fight resolves in your favor, leaving the road briefly safer. "
+            "You gain 5 XP from surviving the clash."
         ),
-        "action": "Bought two rations from Bran.",
-        "npc": {
-            "speaker": "Bran",
-            "line": "Two rations. That should keep you moving if the road turns bad.",
-        },
+        "action": "Resolved the combat beat.",
+        "npc": {},
         "reward": {
-            "items_added": purchase_result["inventory_delta"]["items_added"],
-            "currency_delta": {"copper": -4},
+            "xp_delta": 5,
         },
         "followup_hooks": [],
     }
 
     narration_text = _safe_str(narration_payload.get("narration"))
-    npc_payload = _safe_dict(narration_payload.get("npc"))
 
     row["selected_narration"] = narration_payload
     row["selected_output"] = narration_payload
@@ -148,35 +140,45 @@ def _apply_buy_rations_direct_graph_execution(row: Dict[str, Any]) -> Dict[str, 
     row["visible_narration"] = narration_text
     row["selected_narration_text"] = narration_text
 
-    row["npc"] = npc_payload
-    row["npc_speaker"] = _safe_str(npc_payload.get("speaker"))
-    row["npc_line"] = _safe_str(npc_payload.get("line"))
-
     row["display_source"] = "direct_graph_execution"
     row["dialogue_source"] = "direct_graph_execution"
     row["direct_graph_display_override"] = True
-    row["direct_graph_execution_applied"] = True
-    row["direct_graph_execution_kind"] = "buy_rations_from_bran"
 
-    row["mechanic"] = "buying"
+    row["direct_graph_xp_execution_applied"] = True
+    row["direct_graph_xp_execution_action_id"] = action_id_s
+    row["direct_graph_execution_applied"] = True
+    row["direct_graph_execution_kind"] = action_id_s
+
+    row["mechanic"] = "combat_resolved"
     row["meaningful_progress"] = True
     row["progress_category"] = "direct_graph_execution"
 
     return row
-2. Apply buy-rations execution inside _direct_complete_graph_action_from_command(...)
 
-Find:
+Important: this helper is idempotent for the same action ID.
+
+3. Apply XP execution inside _direct_complete_graph_action_from_command(...)
+
+Find inside:
 
 def _direct_complete_graph_action_from_command(
 
-Inside it, after the code has found matched, action_id, mechanics, mechanic, changed_parts, and after existing row["mechanics_covered_this_turn"] / row["direct_graph_changed_parts"] updates, add this before the return dict:
+Near the existing buy-rations block:
 
 if action_id == "buy_rations_from_bran":
     row = _apply_buy_rations_direct_graph_execution(row)
 
-Then update the returned dict to include whether execution was applied.
+Immediately after it, add:
 
-Find the return shape:
+if _is_direct_graph_explicit_xp_combat_action(action_id):
+    row = _apply_explicit_combat_xp_direct_graph_execution(
+        row,
+        action_id=action_id,
+    )
+
+Then update the returned dict.
+
+Find:
 
 return {
     "completed": bool(completed_parts),
@@ -185,6 +187,8 @@ return {
     "mechanics": mechanics,
     "changed_parts": changed_parts,
     "completed_parts": sorted(set(completed_parts)),
+    "execution_applied": bool(row.get("direct_graph_execution_applied")),
+    "execution_kind": _safe_str(row.get("direct_graph_execution_kind")),
     "row": row,
 }
 
@@ -199,43 +203,13 @@ return {
     "completed_parts": sorted(set(completed_parts)),
     "execution_applied": bool(row.get("direct_graph_execution_applied")),
     "execution_kind": _safe_str(row.get("direct_graph_execution_kind")),
+    "xp_execution_applied": bool(row.get("direct_graph_xp_execution_applied")),
+    "xp_delta": _safe_dict(row.get("state_delta")).get("xp_delta"),
     "row": row,
 }
+4. Reapply XP display after dialogue repair
 
-Expected result:
-
-buy_rations_from_bran:
-  completed = true
-  execution_applied = true
-  execution_kind = buy_rations_from_bran
-
-No other action should get execution_applied.
-
-3. Ensure dialogue repair cannot overwrite the buy-rations display
-
-Find the direct graph completion call site in _run_autoplay_campaign(...).
-
-It should look roughly like:
-
-direct_graph_completion = _direct_complete_graph_action_from_command(...)
-if direct_graph_completion.get("completed"):
-    row = dict(_safe_dict(direct_graph_completion.get("row") or row))
-
-row["direct_graph_action_completion"] = {
-    key: value
-    for key, value in _safe_dict(direct_graph_completion).items()
-    if key != "row"
-}
-
-row = _apply_dialogue_action_relevance_gate(row)
-row = _assert_repaired_dialogue_visible_fields(row)
-
-Immediately after the dialogue repair calls, add:
-
-if row.get("direct_graph_execution_kind") == "buy_rations_from_bran":
-    row = _apply_buy_rations_direct_graph_execution(row)
-
-So final shape:
+Find the existing post-dialogue reapply block:
 
 row = _apply_dialogue_action_relevance_gate(row)
 row = _assert_repaired_dialogue_visible_fields(row)
@@ -243,9 +217,30 @@ row = _assert_repaired_dialogue_visible_fields(row)
 if row.get("direct_graph_execution_kind") == "buy_rations_from_bran":
     row = _apply_buy_rations_direct_graph_execution(row)
 
-This is intentionally redundant. It guarantees the deterministic buy-rations visible fields win over any stale story/witness repair.
+Add the combat XP reapply after buy-rations:
 
-4. Ensure transcript append uses the final row
+xp_action_id = _safe_str(row.get("direct_graph_xp_execution_action_id"))
+if _is_direct_graph_explicit_xp_combat_action(xp_action_id):
+    row = _apply_explicit_combat_xp_direct_graph_execution(
+        row,
+        action_id=xp_action_id,
+    )
+
+Final shape:
+
+row = _apply_dialogue_action_relevance_gate(row)
+row = _assert_repaired_dialogue_visible_fields(row)
+
+if row.get("direct_graph_execution_kind") == "buy_rations_from_bran":
+    row = _apply_buy_rations_direct_graph_execution(row)
+
+xp_action_id = _safe_str(row.get("direct_graph_xp_execution_action_id"))
+if _is_direct_graph_explicit_xp_combat_action(xp_action_id):
+    row = _apply_explicit_combat_xp_direct_graph_execution(
+        row,
+        action_id=xp_action_id,
+    )
+5. Reapply before transcript append
 
 Find:
 
@@ -256,151 +251,98 @@ Immediately before it, add:
 if row.get("direct_graph_execution_kind") == "buy_rations_from_bran":
     row = _apply_buy_rations_direct_graph_execution(row)
 
-This prevents a later local variable mutation from causing the transcript to get the stale row.
+xp_action_id = _safe_str(row.get("direct_graph_xp_execution_action_id"))
+if _is_direct_graph_explicit_xp_combat_action(xp_action_id):
+    row = _apply_explicit_combat_xp_direct_graph_execution(
+        row,
+        action_id=xp_action_id,
+    )
 
-5. Patch _slim_transcript_row(...) to prefer display narration
+Because the XP helper is idempotent, this will not double-award XP.
 
-Find _slim_transcript_row(...).
-
-If it has:
-
-slim_row["narration"] = row.get("narration")
-
-replace with:
-
-visible_narration = (
-    _safe_str(row.get("display_narration"))
-    or _safe_str(row.get("visible_narration"))
-    or _safe_str(row.get("selected_narration_text"))
-    or _safe_str(row.get("narration"))
-)
-if visible_narration:
-    slim_row["narration"] = visible_narration
-    slim_row["display_narration"] = visible_narration
-    slim_row["visible_narration"] = visible_narration
-
-Add these fields to the slim row preservation list:
-
-for key in (
-    "state_delta",
-    "result",
-    "turn_contract",
-    "direct_graph_execution_applied",
-    "direct_graph_execution_kind",
-    "direct_graph_display_override",
-    "reward",
-):
-    if row.get(key) is not None:
-        slim_row[key] = row.get(key)
-
-If the function already preserves some of these, only add the missing ones.
-
-6. Ensure _build_character_inventory_progression_summary(...) reads row state_delta
+6. Ensure _build_character_inventory_progression_summary(...) reads xp_delta
 
 Find:
 
 def _build_character_inventory_progression_summary(
 
-Inside its transcript loop, it probably already checks result, turn_contract, or known economy fields.
+Inside its transcript loop, near where you added row state_delta handling for currency/inventory, ensure XP is read from both row and turn contract.
 
-Add a small row-state-delta extraction near the top of the loop:
+Add:
 
-state_delta = _safe_dict(row.get("state_delta"))
-turn_contract_state_delta = _safe_dict(
-    _safe_dict(row.get("turn_contract")).get("state_delta")
-)
+xp_delta_value = state_delta.get("xp_delta")
+if xp_delta_value is None:
+    xp_delta_value = turn_contract_state_delta.get("xp_delta")
 
-currency_delta = _safe_dict(state_delta.get("currency_delta"))
-if not currency_delta:
-    currency_delta = _safe_dict(turn_contract_state_delta.get("currency_delta"))
+if xp_delta_value is not None:
+    xp_delta = int(xp_delta_value or 0)
+    if xp_delta != 0:
+        ending_xp = int(ending_xp or 0) + xp_delta
+        xp_events.append(
+            {
+                "turn": row.get("turn_index") or row.get("turn"),
+                "player_action": row.get("player_action"),
+                "xp_delta": xp_delta,
+                "xp_total": ending_xp,
+                "mechanic": _safe_str(row.get("mechanic") or "combat_resolved"),
+                "source": "row.state_delta",
+            }
+        )
 
-inventory_delta = _safe_dict(state_delta.get("inventory_delta"))
-if not inventory_delta:
-    inventory_delta = _safe_dict(turn_contract_state_delta.get("inventory_delta"))
+Use existing local variable names if the function uses different names, for example:
 
-Then add currency events when currency_delta exists:
+current_xp
+player_xp
+xp_total
+xp_events
 
-if currency_delta:
-    event = {
-        "turn": row.get("turn_index") or row.get("turn"),
-        "player_action": row.get("player_action"),
-        "currency_delta": currency_delta,
-        "source": "row.state_delta",
-    }
-    currency_events.append(event)
+Do not rewrite the builder. Just add row-state-delta XP as an input source.
 
-    for denomination, amount in currency_delta.items():
-        key = _safe_str(denomination)
-        ending_currency[key] = int(ending_currency.get(key, 0)) + int(amount or 0)
+7. Preserve XP fields in slim transcript
 
-Add inventory events when inventory_delta.items_added exists:
+Patch _slim_transcript_row(...).
 
-items_added = _safe_list(inventory_delta.get("items_added"))
-items_removed = _safe_list(inventory_delta.get("items_removed"))
+Add to preserved field list:
 
-if items_added or items_removed:
-    inventory_events.append(
-        {
-            "turn": row.get("turn_index") or row.get("turn"),
-            "player_action": row.get("player_action"),
-            "inventory_delta": inventory_delta,
-            "source": "row.state_delta",
-        }
-    )
+for key in (
+    "direct_graph_xp_execution_applied",
+    "direct_graph_xp_execution_action_id",
+):
+    if row.get(key) is not None:
+        slim_row[key] = row.get(key)
 
-for item in items_added:
-    item = _safe_dict(item)
-    item_id = _safe_str(item.get("id") or item.get("item_id") or item.get("name"))
-    if not item_id:
-        continue
-    quantity = int(item.get("quantity") or item.get("count") or 1)
-    existing = inventory_by_id.get(item_id, {"id": item_id, "name": item.get("name") or item_id, "quantity": 0})
-    existing["quantity"] = int(existing.get("quantity") or 0) + quantity
-    inventory_by_id[item_id] = existing
+Make sure state_delta and result are preserved already from N113.20-lite. If not, add:
 
-for item in items_removed:
-    item = _safe_dict(item)
-    item_id = _safe_str(item.get("id") or item.get("item_id") or item.get("name"))
-    if not item_id:
-        continue
-    quantity = int(item.get("quantity") or item.get("count") or 1)
-    existing = inventory_by_id.get(item_id, {"id": item_id, "name": item.get("name") or item_id, "quantity": 0})
-    existing["quantity"] = int(existing.get("quantity") or 0) - quantity
-    inventory_by_id[item_id] = existing
-
-Use existing variable names if the function already has equivalents like:
-
-currency_events
-inventory_events
-ending_currency
-inventory_by_id
-
-Do not rewrite the whole summary builder. Just make sure row-level state_delta is included as an input source.
-
-7. Add test: direct completion mutates row
+for key in ("state_delta", "result", "turn_contract"):
+    if row.get(key) is not None:
+        slim_row[key] = row.get(key)
+8. Add test: explicit combat graph action grants XP
 
 Create:
 
-src/tests/rpg/test_autoplay_direct_graph_buy_rations_execution.py
-from tests.rpg.autoplay_llm_campaign import _direct_complete_graph_action_from_command
+src/tests/rpg/test_autoplay_direct_graph_explicit_combat_xp.py
+from tests.rpg.autoplay_llm_campaign import (
+    _build_character_inventory_progression_summary,
+    _direct_complete_graph_action_from_command,
+    _apply_explicit_combat_xp_direct_graph_execution,
+)
 
 
-def test_buy_rations_direct_graph_completion_mutates_row_state_result_and_display():
+def test_explicit_combat_direct_graph_completion_grants_xp_state_result_and_display():
     result = _direct_complete_graph_action_from_command(
-        command="I buy two rations from Bran.",
+        command="I protect the wagon and fight the bandits.",
         row={
-            "turn_index": 13,
-            "player_action": "I buy two rations from Bran.",
-            "narration": "Bran talks about the frightened traveler.",
-            "npc_line": "Are you looking for the traveler?",
+            "turn_index": 21,
+            "player_action": "I protect the wagon and fight the bandits.",
         },
         all_graph_actions=[
             {
-                "action_id": "buy_rations_from_bran",
-                "command": "I buy two rations from Bran.",
-                "mechanic": "buying",
-                "mechanics": ["buying", "inventory_change", "currency_change"],
-                "action_terms": ["buy", "rations", "bran"],
+                "action_id": "protect_wagon_or_lure_bandits",
+                "command": "I protect the wagon and fight the bandits.",
+                "mechanic": "combat_started",
+                "mechanics": ["combat_started", "combat_resolved", "xp_gain"],
+                "changed_parts": ["combat_started", "combat_resolved", "xp_gain"],
+                "action_terms": ["protect", "wagon", "fight", "bandits"],
             }
         ],
         completed_action_ids=set(),
@@ -409,55 +351,37 @@ def test_buy_rations_direct_graph_completion_mutates_row_state_result_and_displa
 
     assert result["completed"] is True
     assert result["execution_applied"] is True
-    assert result["execution_kind"] == "buy_rations_from_bran"
+    assert result["xp_execution_applied"] is True
+    assert result["xp_delta"] == 5
 
     row = result["row"]
 
-    assert row["state_delta"]["currency_delta"] == {"copper": -4}
-    assert row["state_delta"]["inventory_delta"]["items_added"] == [
-        {
-            "id": "item:rations",
-            "name": "Rations",
-            "quantity": 2,
-            "type": "consumable",
-        }
-    ]
+    assert row["state_delta"]["xp_delta"] == 5
+    assert row["state_delta"]["combat_started"] is True
+    assert row["state_delta"]["combat_resolved"] is True
 
-    assert row["result"]["purchase_result"]["ok"] is True
-    assert row["result"]["purchase_result"]["merchant_id"] == "npc:bran"
+    assert row["result"]["combat_result"]["ok"] is True
+    assert row["result"]["combat_result"]["xp_delta"] == 5
 
-    assert row["direct_graph_execution_applied"] is True
-    assert row["direct_graph_execution_kind"] == "buy_rations_from_bran"
-    assert row["direct_graph_display_override"] is True
+    assert row["direct_graph_xp_execution_applied"] is True
+    assert row["direct_graph_xp_execution_action_id"] == "protect_wagon_or_lure_bandits"
 
-    assert "rations" in row["narration"].lower()
-    assert "traveler" not in row["narration"].lower()
-    assert "rations" in row["npc_line"].lower()
-8. Add test: character inventory progression sees row delta
-
-Create:
-
-src/tests/rpg/test_autoplay_character_inventory_progression_row_delta.py
-from tests.rpg.autoplay_llm_campaign import (
-    _build_character_inventory_progression_summary,
-    _direct_complete_graph_action_from_command,
-)
+    assert "5 xp" in row["narration"].lower()
+    assert row["selected_narration"]["reward"]["xp_delta"] == 5
 
 
-def test_character_inventory_progression_reads_buy_rations_row_state_delta():
+def test_explicit_combat_xp_execution_is_idempotent():
     result = _direct_complete_graph_action_from_command(
-        command="I buy two rations from Bran.",
-        row={
-            "turn_index": 13,
-            "player_action": "I buy two rations from Bran.",
-        },
+        command="I protect the wagon and fight the bandits.",
+        row={"turn_index": 21, "player_action": "I protect the wagon and fight the bandits."},
         all_graph_actions=[
             {
-                "action_id": "buy_rations_from_bran",
-                "command": "I buy two rations from Bran.",
-                "mechanic": "buying",
-                "mechanics": ["buying", "inventory_change", "currency_change"],
-                "action_terms": ["buy", "rations", "bran"],
+                "action_id": "protect_wagon_or_lure_bandits",
+                "command": "I protect the wagon and fight the bandits.",
+                "mechanic": "combat_started",
+                "mechanics": ["combat_started", "combat_resolved", "xp_gain"],
+                "changed_parts": ["combat_started", "combat_resolved", "xp_gain"],
+                "action_terms": ["protect", "wagon", "fight", "bandits"],
             }
         ],
         completed_action_ids=set(),
@@ -466,8 +390,39 @@ def test_character_inventory_progression_reads_buy_rations_row_state_delta():
 
     row = result["row"]
 
+    # Simulate real runner reapplying after dialogue repair and before transcript append.
+    row = _apply_explicit_combat_xp_direct_graph_execution(
+        row,
+        action_id="protect_wagon_or_lure_bandits",
+    )
+
+    assert row["state_delta"]["xp_delta"] == 5
+    assert row["result"]["combat_result"]["xp_delta"] == 5
+
+
+def test_character_inventory_progression_reads_explicit_combat_xp_delta():
+    result = _direct_complete_graph_action_from_command(
+        command="I protect the wagon and fight the bandits.",
+        row={
+            "turn_index": 21,
+            "player_action": "I protect the wagon and fight the bandits.",
+        },
+        all_graph_actions=[
+            {
+                "action_id": "protect_wagon_or_lure_bandits",
+                "command": "I protect the wagon and fight the bandits.",
+                "mechanic": "combat_started",
+                "mechanics": ["combat_started", "combat_resolved", "xp_gain"],
+                "changed_parts": ["combat_started", "combat_resolved", "xp_gain"],
+                "action_terms": ["protect", "wagon", "fight", "bandits"],
+            }
+        ],
+        completed_action_ids=set(),
+        completed_mechanics=set(),
+    )
+
     progression = _build_character_inventory_progression_summary(
-        [row],
+        [result["row"]],
         initial_state={
             "name": "The Player",
             "currency": {"gold": 15, "silver": 20, "copper": 50},
@@ -477,102 +432,144 @@ def test_character_inventory_progression_reads_buy_rations_row_state_delta():
         },
     )
 
-    assert progression["currency_delta"]["copper"] == -4
-    assert progression["ending_currency"]["copper"] == 46
+    assert progression["player"]["xp"] == 5
+    assert progression["xp_events"]
+    assert progression["xp_events"][0]["xp_delta"] == 5
+9. Add test: non-combat actions mentioning ambush do not grant XP
 
-    assert progression["currency_events"]
-    assert progression["currency_events"][0]["currency_delta"] == {"copper": -4}
+Create:
 
-    assert progression["inventory_events"]
-    assert progression["ending_inventory"] == [
-        {
-            "id": "item:rations",
-            "name": "Rations",
-            "quantity": 2,
-        }
-    ]
+src/tests/rpg/test_autoplay_direct_graph_no_xp_for_noncombat.py
+from tests.rpg.autoplay_llm_campaign import _direct_complete_graph_action_from_command
 
-    assert any(
-        item["id"] == "item:rations" and item["delta"] == 2
-        for item in progression["inventory_delta"]
+
+def test_report_findings_about_ambush_does_not_grant_xp():
+    result = _direct_complete_graph_action_from_command(
+        command="I report to Bran that the trail points to an ambush.",
+        row={
+            "turn_index": 22,
+            "player_action": "I report to Bran that the trail points to an ambush.",
+        },
+        all_graph_actions=[
+            {
+                "action_id": "report_findings_to_bran",
+                "command": "I report to Bran that the trail points to an ambush.",
+                "mechanic": "report",
+                "mechanics": ["report", "faction_consequence", "npc_reaction"],
+                "changed_parts": ["report", "faction_consequence", "npc_reaction"],
+                "action_terms": ["report", "bran", "ambush", "evidence"],
+            }
+        ],
+        completed_action_ids=set(),
+        completed_mechanics=set(),
     )
 
-If your inventory normalization adds "type": "consumable" to ending inventory, relax that assertion to:
+    assert result["completed"] is True
+    assert result.get("xp_execution_applied") is False
 
-assert any(
-    item["id"] == "item:rations" and int(item.get("quantity") or 0) == 2
-    for item in progression["ending_inventory"]
-)
-9. Run checks
+    row = result["row"]
+
+    assert "xp_delta" not in row.get("state_delta", {})
+    assert "combat_result" not in row.get("result", {})
+    assert not row.get("direct_graph_xp_execution_applied")
+
+
+def test_choose_ambush_response_does_not_grant_xp_without_explicit_combat_action_id():
+    result = _direct_complete_graph_action_from_command(
+        command="I choose the safest response to the ambush signs.",
+        row={
+            "turn_index": 23,
+            "player_action": "I choose the safest response to the ambush signs.",
+        },
+        all_graph_actions=[
+            {
+                "action_id": "choose_ambush_response",
+                "command": "I choose the safest response to the ambush signs.",
+                "mechanic": "story_choice",
+                "mechanics": ["story_choice", "faction_consequence"],
+                "changed_parts": ["story_choice", "faction_consequence"],
+                "action_terms": ["choose", "ambush", "response"],
+            }
+        ],
+        completed_action_ids=set(),
+        completed_mechanics=set(),
+    )
+
+    assert result["completed"] is True
+    assert result.get("xp_execution_applied") is False
+
+    row = result["row"]
+
+    assert "xp_delta" not in row.get("state_delta", {})
+    assert "combat_result" not in row.get("result", {})
+10. Add files to diff artifact tracking
+
+Run:
+
+git add -N `
+  src\tests\rpg\test_autoplay_direct_graph_explicit_combat_xp.py `
+  src\tests\rpg\test_autoplay_direct_graph_no_xp_for_noncombat.py
+
+Verify:
+
+git --no-pager diff --name-only | findstr "test_autoplay_direct_graph_explicit_combat_xp test_autoplay_direct_graph_no_xp_for_noncombat"
+
+Expected:
+
+src/tests/rpg/test_autoplay_direct_graph_explicit_combat_xp.py
+src/tests/rpg/test_autoplay_direct_graph_no_xp_for_noncombat.py
+11. Run checks
 $env:PYTHONPATH="src"; python -m py_compile `
   src\tests\rpg\autoplay_llm_campaign.py `
-  src\tests\rpg\test_autoplay_direct_graph_buy_rations_execution.py `
-  src\tests\rpg\test_autoplay_character_inventory_progression_row_delta.py
+  src\tests\rpg\test_autoplay_direct_graph_explicit_combat_xp.py `
+  src\tests\rpg\test_autoplay_direct_graph_no_xp_for_noncombat.py
 $env:PYTHONPATH="src"; python -m pytest `
+  src\tests\rpg\test_autoplay_direct_graph_explicit_combat_xp.py `
+  src\tests\rpg\test_autoplay_direct_graph_no_xp_for_noncombat.py `
   src\tests\rpg\test_autoplay_direct_graph_buy_rations_execution.py `
   src\tests\rpg\test_autoplay_character_inventory_progression_row_delta.py `
   src\tests\rpg\test_autoplay_real_runner_present.py `
   -q
 
-Then run the 2-turn smoke first.
+Then run the 2-turn smoke first. For XP specifically, the 2-turn smoke probably will not hit combat; use the tests above for fast validation.
 
 Expected result
 
-For the ration turn:
-
-Player: I buy two rations from Bran.
-
-Narration:
-Bran takes the coins and passes over two wrapped rations. Your pack is heavier, and your coin pouch is lighter.
-
-NPC: Bran —
-“Two rations. That should keep you moving if the road turns bad.”
-
-The row should include:
+When an explicit combat graph action occurs:
 
 {
   "state_delta": {
-    "currency_delta": {"copper": -4},
-    "inventory_delta": {
-      "items_added": [
-        {
-          "id": "item:rations",
-          "name": "Rations",
-          "quantity": 2,
-          "type": "consumable"
-        }
-      ],
-      "items_removed": []
-    }
+    "xp_delta": 5,
+    "combat_started": true,
+    "combat_resolved": true
   },
   "result": {
-    "purchase_result": {
+    "combat_result": {
       "ok": true,
-      "merchant_id": "npc:bran"
+      "outcome": "direct_graph_resolved",
+      "xp_delta": 5
     }
   },
   "direct_graph_action_completion": {
-    "completed": true,
-    "action_id": "buy_rations_from_bran",
-    "execution_applied": true,
-    "execution_kind": "buy_rations_from_bran"
+    "xp_execution_applied": true,
+    "xp_delta": 5
   }
 }
 
-The final player progression should show:
+The player progression report should show:
 
 {
-  "currency_delta": {"copper": -4},
-  "ending_currency": {
-    "gold": 15,
-    "silver": 20,
-    "copper": 46
-  },
-  "ending_inventory": [
+  "xp_events": [
     {
-      "id": "item:rations",
-      "name": "Rations",
-      "quantity": 2
+      "xp_delta": 5,
+      "xp_total": 5,
+      "source": "row.state_delta"
     }
-  ]
+  ],
+  "player": {
+    "xp": 5,
+    "level": 1
+  }
 }
+
+Non-combat actions that mention ambush/bandits should remain XP-neutral.
