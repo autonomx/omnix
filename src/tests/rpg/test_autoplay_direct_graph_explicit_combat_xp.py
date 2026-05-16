@@ -112,3 +112,49 @@ def test_character_inventory_progression_reads_explicit_combat_xp_delta():
     assert progression["player"]["xp"] == 5
     assert progression["xp_events"]
     assert progression["xp_events"][0]["xp_delta"] == 5
+
+
+def test_character_inventory_progression_xp_event_uses_visible_player_action():
+    result = _direct_complete_graph_action_from_command(
+        command="I check in with Garran and focus on the active wagon-road objective.",
+        row={
+            "turn_index": 19,
+            "player_action": "I check in with Garran and focus on the active wagon-road objective.",
+        },
+        all_graph_actions=[
+            {
+                "action_id": "protect_wagon_or_lure_bandits",
+                "command": "I protect the wagon and fight the bandits.",
+                "mechanic": "combat_started",
+                "mechanics": ["combat_started", "combat_resolved", "xp_gain"],
+                "changed_parts": ["combat_started", "combat_resolved", "xp_gain"],
+                "action_terms": ["protect", "wagon", "fight", "bandits"],
+            }
+        ],
+        completed_action_ids=set(),
+        completed_mechanics=set(),
+    )
+
+    row = result["row"]
+    row["direct_graph_action_completion"] = {
+        key: value for key, value in result.items() if key != "row"
+    }
+
+    from tests.rpg.autoplay_llm_campaign import _apply_direct_graph_display_quality_pass
+
+    row = _apply_direct_graph_display_quality_pass(row)
+
+    progression = _build_character_inventory_progression_summary(
+        [row],
+        initial_state={
+            "name": "The Player",
+            "currency": {"gold": 15, "silver": 20, "copper": 50},
+            "inventory": [],
+            "xp": 0,
+            "level": 1,
+        },
+    )
+
+    assert progression["xp_events"]
+    assert progression["xp_events"][0]["xp_delta"] == 5
+    assert progression["xp_events"][0]["player_action"] == "I protect the wagon and fight the bandits."

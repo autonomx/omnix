@@ -1,232 +1,204 @@
-N113.21-lite — Direct Graph XP Execution for Explicit Combat Actions Only
+N113.24.2 — Top-Level NPC Display Sync + XP Event Action Sync
 
-Patch only:
+Patch target:
 
 src/tests/rpg/autoplay_llm_campaign.py
+
+Add/update tests:
+
+src/tests/rpg/test_autoplay_social_npc_line_coverage.py
+src/tests/rpg/test_autoplay_direct_graph_explicit_combat_xp.py
 
 Do not touch:
 
 src/app/rpg/progression/graph_registry.py
 src/app/rpg/story/graph_registry.py
-buy-rations execution except shared helper style if needed
 lifecycle bridge/evaluation gates
-fallback catalogs
 mechanics forced overrides
+provider / LLM calls
+buy-rations execution
+combat XP execution
 
-Goal: direct graph completion should grant XP only when the completed graph action is an explicit combat-resolution action.
+Goal:
 
-1. Add explicit combat action ID helpers
+1. If selected_narration.npc exists, copy it into top-level npc/npc_speaker/npc_line.
+2. Run this sync after the direct graph display quality pass and before transcript append.
+3. Make XP events use display_player_action / visible_player_action / canonical_turn_action before raw player_action.
+4. Add Local Patron inference for ask_patron_bridge / local patron social actions.
+1. Add helper: preferred visible player action
 
-Add near the direct graph helper section, close to _apply_buy_rations_direct_graph_execution(...):
+Add near the display helper section:
 
-_DIRECT_GRAPH_XP_COMBAT_ACTION_IDS = {
-    "protect_wagon_or_lure_bandits",
-    "ambush_bandits",
-    "fight_bandit_scouts",
-    "fight_bandits",
-    "defeat_bandit_scouts",
-    "resolve_bandit_ambush",
-}
-
-
-_DIRECT_GRAPH_NON_XP_ACTION_IDS = {
-    "report_findings_to_bran",
-    "warn_garran",
-    "tell_garran_about_ambush",
-    "scout_quarry_road",
-    "spot_bridge_watchers",
-    "choose_ambush_response",
-    "ask_bran_about_witness",
-    "ask_bran_who_saw_witness",
-    "question_bran_about_traveler",
-    "search_for_witness",
-    "return_marked_coin_proof",
-    "buy_rations_from_bran",
-    "rent_room_from_bran",
-    "ask_garran_to_join",
-}
-
-
-def _is_direct_graph_explicit_xp_combat_action(action_id: str) -> bool:
-    action_id_s = _safe_str(action_id)
-    return action_id_s in _DIRECT_GRAPH_XP_COMBAT_ACTION_IDS
-2. Add XP execution helper
-
-Add after _apply_buy_rations_direct_graph_execution(...):
-
-def _apply_explicit_combat_xp_direct_graph_execution(
-    row: Dict[str, Any],
-    *,
-    action_id: str,
-) -> Dict[str, Any]:
-    row = dict(_safe_dict(row))
-    action_id_s = _safe_str(action_id)
-
-    if not _is_direct_graph_explicit_xp_combat_action(action_id_s):
-        return row
-
-    already_applied = (
-        bool(row.get("direct_graph_xp_execution_applied"))
-        and _safe_str(row.get("direct_graph_xp_execution_action_id")) == action_id_s
+def _preferred_visible_player_action(row: Dict[str, Any]) -> str:
+    row = _safe_dict(row)
+    return (
+        _safe_str(row.get("display_player_action"))
+        or _safe_str(row.get("visible_player_action"))
+        or _safe_str(row.get("canonical_turn_action"))
+        or _safe_str(row.get("player_action"))
     )
 
-    if not already_applied:
-        state_delta = dict(_safe_dict(row.get("state_delta")))
-        state_delta["xp_delta"] = int(state_delta.get("xp_delta") or 0) + 5
-        state_delta["combat_started"] = True
-        state_delta["combat_resolved"] = True
-        row["state_delta"] = state_delta
+This should become the default source for report-visible action text.
 
-    combat_result = {
-        "ok": True,
-        "outcome": "direct_graph_resolved",
-        "xp_delta": 5,
-        "summary": "The combat beat resolves through the scenario graph.",
+2. Add helper: sync selected narration NPC to top-level fields
+
+Add near _ensure_social_npc_line_coverage(...):
+
+def _sync_selected_narration_npc_to_top_level(row: Dict[str, Any]) -> Dict[str, Any]:
+    row = dict(_safe_dict(row))
+
+    existing_npc = _safe_dict(row.get("npc"))
+    existing_speaker = _safe_str(row.get("npc_speaker") or existing_npc.get("speaker"))
+    existing_line = _safe_str(row.get("npc_line") or existing_npc.get("line"))
+
+    if existing_speaker and existing_line:
+        row["npc"] = {
+            "speaker": existing_speaker,
+            "line": existing_line,
+        }
+        row["npc_speaker"] = existing_speaker
+        row["npc_line"] = existing_line
+        return row
+
+    selected = _safe_dict(
+        row.get("selected_narration")
+        or row.get("selected_output")
+        or row.get("resolved_narration_payload")
+        or row.get("narration_payload")
+        or row.get("structured_narration")
+    )
+    selected_npc = _safe_dict(selected.get("npc"))
+
+    selected_speaker = _safe_str(selected_npc.get("speaker"))
+    selected_line = _safe_str(selected_npc.get("line"))
+
+    if not selected_speaker or not selected_line:
+        return row
+
+    npc = {
+        "speaker": selected_speaker,
+        "line": selected_line,
     }
 
-    row["result"] = {
-        **_safe_dict(row.get("result")),
-        "combat_result": combat_result,
-        "xp_delta": 5,
-        "mechanic": "combat_resolved",
-        "meaningful_progress": True,
-        "progress_category": "direct_graph_execution",
-    }
+    row["npc"] = npc
+    row["npc_speaker"] = selected_speaker
+    row["npc_line"] = selected_line
+    row["top_level_npc_sync_applied"] = True
+    row["top_level_npc_sync_source"] = "selected_narration.npc"
 
-    turn_contract = dict(_safe_dict(row.get("turn_contract")))
-    turn_contract["mechanic"] = "combat_resolved"
-
-    tc_state_delta = dict(_safe_dict(turn_contract.get("state_delta")))
-    if not already_applied:
-        tc_state_delta["xp_delta"] = int(tc_state_delta.get("xp_delta") or 0) + 5
-    else:
-        tc_state_delta.setdefault("xp_delta", 5)
-    tc_state_delta["combat_started"] = True
-    tc_state_delta["combat_resolved"] = True
-    turn_contract["state_delta"] = tc_state_delta
-
-    turn_contract["result"] = {
-        **_safe_dict(turn_contract.get("result")),
-        "combat_result": combat_result,
-    }
-    row["turn_contract"] = turn_contract
-
-    narration_payload = {
-        "format_version": "rpg_narration_v2",
-        "source": "direct_graph_explicit_combat_xp_execution",
-        "dialogue_source": "direct_graph_execution",
-        "narration": (
-            "The fight resolves in your favor, leaving the road briefly safer. "
-            "You gain 5 XP from surviving the clash."
-        ),
-        "action": "Resolved the combat beat.",
-        "npc": {},
-        "reward": {
-            "xp_delta": 5,
-        },
-        "followup_hooks": [],
-    }
-
-    narration_text = _safe_str(narration_payload.get("narration"))
-
-    row["selected_narration"] = narration_payload
-    row["selected_output"] = narration_payload
-    row["resolved_narration_payload"] = narration_payload
-    row["narration_payload"] = narration_payload
-    row["structured_narration"] = narration_payload
-
-    row["narration"] = narration_text
-    row["display_narration"] = narration_text
-    row["visible_narration"] = narration_text
-    row["selected_narration_text"] = narration_text
-
-    row["display_source"] = "direct_graph_execution"
-    row["dialogue_source"] = "direct_graph_execution"
-    row["direct_graph_display_override"] = True
-
-    row["direct_graph_xp_execution_applied"] = True
-    row["direct_graph_xp_execution_action_id"] = action_id_s
-    row["direct_graph_execution_applied"] = True
-    row["direct_graph_execution_kind"] = action_id_s
-
-    row["mechanic"] = "combat_resolved"
-    row["meaningful_progress"] = True
-    row["progress_category"] = "direct_graph_execution"
+    # Keep all narration payload aliases consistent.
+    selected["npc"] = npc
+    row["selected_narration"] = selected
+    row["selected_output"] = selected
+    row["resolved_narration_payload"] = selected
+    row["narration_payload"] = selected
+    row["structured_narration"] = selected
 
     return row
 
-Important: this helper is idempotent for the same action ID.
+This fixes rows like:
 
-3. Apply XP execution inside _direct_complete_graph_action_from_command(...)
+{
+  "npc": {},
+  "npc_speaker": "",
+  "npc_line": "",
+  "selected_narration": {
+    "npc": {
+      "speaker": "Bran",
+      "line": "That is enough to stop guessing..."
+    }
+  }
+}
 
-Find inside:
+Expected after sync:
 
-def _direct_complete_graph_action_from_command(
-
-Near the existing buy-rations block:
-
-if action_id == "buy_rations_from_bran":
-    row = _apply_buy_rations_direct_graph_execution(row)
-
-Immediately after it, add:
-
-if _is_direct_graph_explicit_xp_combat_action(action_id):
-    row = _apply_explicit_combat_xp_direct_graph_execution(
-        row,
-        action_id=action_id,
-    )
-
-Then update the returned dict.
+{
+  "npc": {
+    "speaker": "Bran",
+    "line": "That is enough to stop guessing..."
+  },
+  "npc_speaker": "Bran",
+  "npc_line": "That is enough to stop guessing..."
+}
+3. Add Local Patron target inference
 
 Find:
 
-return {
-    "completed": bool(completed_parts),
-    "action_id": action_id,
-    "mechanic": mechanic,
-    "mechanics": mechanics,
-    "changed_parts": changed_parts,
-    "completed_parts": sorted(set(completed_parts)),
-    "execution_applied": bool(row.get("direct_graph_execution_applied")),
-    "execution_kind": _safe_str(row.get("direct_graph_execution_kind")),
-    "row": row,
-}
+def _infer_social_target_npc(row: Dict[str, Any]) -> str:
+
+Inside action-id checks, add:
+
+    if "patron" in action_id:
+        return "Local Patron"
+    if "local" in action_id and "patron" in action_id:
+        return "Local Patron"
+
+Inside text checks, add:
+
+    if "local patron" in text or "patron" in text:
+        return "Local Patron"
+
+This catches rows like:
+
+ask_patron_bridge
+I ask a local patron about the mill bridge.
+4. Add Local Patron deterministic line
+
+Find:
+
+def _deterministic_social_npc_line(row: Dict[str, Any]) -> Dict[str, str]:
+
+After speaker, text, and action_id are resolved, add this before generic ask_ cases:
+
+    if speaker == "Local Patron":
+        return {
+            "speaker": speaker,
+            "line": "If you mean the old bridge, folk avoid it before dawn. Too many quiet wagons, too few honest reasons.",
+        }
+
+This gives turn 7 a usable NPC reply.
+
+5. Include top-level NPC sync in the quality pass
+
+Find:
+
+def _apply_direct_graph_display_quality_pass(row: Dict[str, Any]) -> Dict[str, Any]:
+
+It should currently look like:
+
+def _apply_direct_graph_display_quality_pass(row: Dict[str, Any]) -> Dict[str, Any]:
+    row = dict(_safe_dict(row))
+
+    row = _sync_direct_graph_canonical_action_display(row)
+    row = _cleanup_bad_generic_fallback_narration(row)
+    row = _ensure_social_npc_line_coverage(row)
+    row = _strip_combat_mechanics_from_noncombat_direct_graph_row(row)
+
+    return row
 
 Replace with:
 
-return {
-    "completed": bool(completed_parts),
-    "action_id": action_id,
-    "mechanic": mechanic,
-    "mechanics": mechanics,
-    "changed_parts": changed_parts,
-    "completed_parts": sorted(set(completed_parts)),
-    "execution_applied": bool(row.get("direct_graph_execution_applied")),
-    "execution_kind": _safe_str(row.get("direct_graph_execution_kind")),
-    "xp_execution_applied": bool(row.get("direct_graph_xp_execution_applied")),
-    "xp_delta": _safe_dict(row.get("state_delta")).get("xp_delta"),
-    "row": row,
-}
-4. Reapply XP display after dialogue repair
+def _apply_direct_graph_display_quality_pass(row: Dict[str, Any]) -> Dict[str, Any]:
+    row = dict(_safe_dict(row))
 
-Find the existing post-dialogue reapply block:
+    row = _sync_direct_graph_canonical_action_display(row)
+    row = _cleanup_bad_generic_fallback_narration(row)
+    row = _ensure_social_npc_line_coverage(row)
+    row = _sync_selected_narration_npc_to_top_level(row)
+    row = _strip_combat_mechanics_from_noncombat_direct_graph_row(row)
 
-row = _apply_dialogue_action_relevance_gate(row)
-row = _assert_repaired_dialogue_visible_fields(row)
+    return row
 
-if row.get("direct_graph_execution_kind") == "buy_rations_from_bran":
-    row = _apply_buy_rations_direct_graph_execution(row)
+Ordering matters:
 
-Add the combat XP reapply after buy-rations:
+canonical action
+→ cleanup narration
+→ generate NPC fallback if missing
+→ sync selected_narration.npc to top-level display fields
+→ strip bad combat metadata
+6. Run top-level NPC sync after buy-rations / XP display reapply
 
-xp_action_id = _safe_str(row.get("direct_graph_xp_execution_action_id"))
-if _is_direct_graph_explicit_xp_combat_action(xp_action_id):
-    row = _apply_explicit_combat_xp_direct_graph_execution(
-        row,
-        action_id=xp_action_id,
-    )
-
-Final shape:
+Find the block after dialogue repair:
 
 row = _apply_dialogue_action_relevance_gate(row)
 row = _assert_repaired_dialogue_visible_fields(row)
@@ -240,13 +212,31 @@ if _is_direct_graph_explicit_xp_combat_action(xp_action_id):
         row,
         action_id=xp_action_id,
     )
-5. Reapply before transcript append
 
-Find:
+row = _apply_direct_graph_display_quality_pass(row)
+
+Keep it, but add a final explicit sync:
+
+row = _apply_direct_graph_display_quality_pass(row)
+row = _sync_selected_narration_npc_to_top_level(row)
+
+This is redundant but safe.
+
+7. Run top-level NPC sync before transcript append
+
+Find the block immediately before:
 
 transcript.append(row)
 
-Immediately before it, add:
+It should have:
+
+row = _apply_direct_graph_display_quality_pass(row)
+
+Immediately after it, add:
+
+row = _sync_selected_narration_npc_to_top_level(row)
+
+Final shape:
 
 if row.get("direct_graph_execution_kind") == "buy_rations_from_bran":
     row = _apply_buy_rations_direct_graph_execution(row)
@@ -258,82 +248,179 @@ if _is_direct_graph_explicit_xp_combat_action(xp_action_id):
         action_id=xp_action_id,
     )
 
-Because the XP helper is idempotent, this will not double-award XP.
+row = _apply_direct_graph_display_quality_pass(row)
+row = _sync_selected_narration_npc_to_top_level(row)
 
-6. Ensure _build_character_inventory_progression_summary(...) reads xp_delta
-
-Find:
-
-def _build_character_inventory_progression_summary(
-
-Inside its transcript loop, near where you added row state_delta handling for currency/inventory, ensure XP is read from both row and turn contract.
-
-Add:
-
-xp_delta_value = state_delta.get("xp_delta")
-if xp_delta_value is None:
-    xp_delta_value = turn_contract_state_delta.get("xp_delta")
-
-if xp_delta_value is not None:
-    xp_delta = int(xp_delta_value or 0)
-    if xp_delta != 0:
-        ending_xp = int(ending_xp or 0) + xp_delta
-        xp_events.append(
-            {
-                "turn": row.get("turn_index") or row.get("turn"),
-                "player_action": row.get("player_action"),
-                "xp_delta": xp_delta,
-                "xp_total": ending_xp,
-                "mechanic": _safe_str(row.get("mechanic") or "combat_resolved"),
-                "source": "row.state_delta",
-            }
-        )
-
-Use existing local variable names if the function uses different names, for example:
-
-current_xp
-player_xp
-xp_total
-xp_events
-
-Do not rewrite the builder. Just add row-state-delta XP as an input source.
-
-7. Preserve XP fields in slim transcript
+transcript.append(row)
+8. Preserve top-level NPC sync fields in slim transcript
 
 Patch _slim_transcript_row(...).
 
-Add to preserved field list:
+Ensure it preserves top-level NPC display fields:
+
+npc_payload = _safe_dict(row.get("npc"))
+npc_speaker = _safe_str(row.get("npc_speaker") or npc_payload.get("speaker"))
+npc_line = _safe_str(row.get("npc_line") or npc_payload.get("line"))
+
+if npc_speaker or npc_line:
+    slim_row["npc"] = {
+        "speaker": npc_speaker,
+        "line": npc_line,
+    }
+    slim_row["npc_speaker"] = npc_speaker
+    slim_row["npc_line"] = npc_line
+
+Also preserve sync diagnostics:
 
 for key in (
-    "direct_graph_xp_execution_applied",
-    "direct_graph_xp_execution_action_id",
+    "top_level_npc_sync_applied",
+    "top_level_npc_sync_source",
 ):
     if row.get(key) is not None:
         slim_row[key] = row.get(key)
 
-Make sure state_delta and result are preserved already from N113.20-lite. If not, add:
+If _slim_transcript_row(...) already has a preservation loop, just add these two keys to it.
 
-for key in ("state_delta", "result", "turn_contract"):
-    if row.get(key) is not None:
-        slim_row[key] = row.get(key)
-8. Add test: explicit combat graph action grants XP
+9. Use visible action in XP events
 
-Create:
+Find inside _build_character_inventory_progression_summary(...) where XP events are appended.
 
-src/tests/rpg/test_autoplay_direct_graph_explicit_combat_xp.py
-from tests.rpg.autoplay_llm_campaign import (
-    _build_character_inventory_progression_summary,
-    _direct_complete_graph_action_from_command,
-    _apply_explicit_combat_xp_direct_graph_execution,
+It likely looks similar to:
+
+xp_events.append(
+    {
+        "turn": row.get("turn_index") or row.get("turn"),
+        "player_action": row.get("player_action"),
+        "xp_delta": xp_delta,
+        "xp_total": ending_xp,
+        "mechanic": _safe_str(row.get("mechanic") or "combat_resolved"),
+        "source": "row.state_delta",
+    }
 )
 
+Replace the player_action line with:
 
-def test_explicit_combat_direct_graph_completion_grants_xp_state_result_and_display():
+        "player_action": _preferred_visible_player_action(row),
+
+Full shape:
+
+xp_events.append(
+    {
+        "turn": row.get("turn_index") or row.get("turn"),
+        "player_action": _preferred_visible_player_action(row),
+        "xp_delta": xp_delta,
+        "xp_total": ending_xp,
+        "mechanic": _safe_str(row.get("mechanic") or "combat_resolved"),
+        "source": "row.state_delta",
+    }
+)
+
+Do the same for any other XP event append in the same builder.
+
+Also update currency/inventory event action fields if easy and already nearby:
+
+"player_action": _preferred_visible_player_action(row),
+
+This makes the report consistently use the canonical action display.
+
+10. Add test: selected narration NPC syncs to top-level
+
+Update:
+
+src/tests/rpg/test_autoplay_social_npc_line_coverage.py
+
+Add:
+
+from tests.rpg.autoplay_llm_campaign import (
+    _sync_selected_narration_npc_to_top_level,
+)
+
+If there is already an import block from autoplay_llm_campaign, merge the import.
+
+Append:
+
+def test_selected_narration_npc_syncs_to_top_level_fields():
+    row = _sync_selected_narration_npc_to_top_level(
+        {
+            "player_action": "I report the ambush evidence to Bran.",
+            "npc": {},
+            "npc_speaker": "",
+            "npc_line": "",
+            "selected_narration": {
+                "narration": "The conversation focuses on the immediate lead.",
+                "npc": {
+                    "speaker": "Bran",
+                    "line": "That is enough to stop guessing. Show me where the proof points next.",
+                },
+            },
+        }
+    )
+
+    assert row["top_level_npc_sync_applied"] is True
+    assert row["top_level_npc_sync_source"] == "selected_narration.npc"
+    assert row["npc"] == {
+        "speaker": "Bran",
+        "line": "That is enough to stop guessing. Show me where the proof points next.",
+    }
+    assert row["npc_speaker"] == "Bran"
+    assert row["npc_line"] == "That is enough to stop guessing. Show me where the proof points next."
+
+
+def test_quality_pass_syncs_generated_social_npc_line_to_top_level():
+    row = _apply_direct_graph_display_quality_pass(
+        {
+            "player_action": "I report the ambush evidence to Bran.",
+            "direct_graph_action_completion": {
+                "action_id": "report_findings_to_bran",
+                "mechanics": ["report", "faction_consequence", "npc_reaction"],
+                "changed_parts": ["report", "faction_consequence"],
+            },
+            "npc": {},
+            "npc_speaker": "",
+            "npc_line": "",
+            "selected_narration": {
+                "narration": "The conversation focuses on the immediate lead.",
+            },
+        }
+    )
+
+    assert row["npc_speaker"] == "Bran"
+    assert row["npc_line"]
+    assert row["selected_narration"]["npc"]["speaker"] == "Bran"
+    assert row["selected_narration"]["npc"]["line"] == row["npc_line"]
+
+
+def test_local_patron_social_action_gets_npc_line():
+    row = _apply_direct_graph_display_quality_pass(
+        {
+            "player_action": "I ask a local patron about the mill bridge.",
+            "direct_graph_action_completion": {
+                "action_id": "ask_patron_bridge",
+                "mechanics": ["npc_reaction"],
+                "changed_parts": ["npc_reaction"],
+            },
+            "narration": "The conversation focuses on the immediate lead.",
+        }
+    )
+
+    assert row["npc_line_fallback_applied"] is True
+    assert row["npc_speaker"] == "Local Patron"
+    assert row["npc_line"]
+    assert "bridge" in row["npc_line"].lower()
+11. Add test: XP event uses canonical/display action
+
+Update:
+
+src/tests/rpg/test_autoplay_direct_graph_explicit_combat_xp.py
+
+Append:
+
+def test_character_inventory_progression_xp_event_uses_visible_player_action():
     result = _direct_complete_graph_action_from_command(
-        command="I protect the wagon and fight the bandits.",
+        command="I check in with Garran and focus on the active wagon-road objective.",
         row={
-            "turn_index": 21,
-            "player_action": "I protect the wagon and fight the bandits.",
+            "turn_index": 19,
+            "player_action": "I check in with Garran and focus on the active wagon-road objective.",
         },
         all_graph_actions=[
             {
@@ -349,80 +436,17 @@ def test_explicit_combat_direct_graph_completion_grants_xp_state_result_and_disp
         completed_mechanics=set(),
     )
 
-    assert result["completed"] is True
-    assert result["execution_applied"] is True
-    assert result["xp_execution_applied"] is True
-    assert result["xp_delta"] == 5
-
     row = result["row"]
+    row["direct_graph_action_completion"] = {
+        key: value for key, value in result.items() if key != "row"
+    }
 
-    assert row["state_delta"]["xp_delta"] == 5
-    assert row["state_delta"]["combat_started"] is True
-    assert row["state_delta"]["combat_resolved"] is True
+    from tests.rpg.autoplay_llm_campaign import _apply_direct_graph_display_quality_pass
 
-    assert row["result"]["combat_result"]["ok"] is True
-    assert row["result"]["combat_result"]["xp_delta"] == 5
-
-    assert row["direct_graph_xp_execution_applied"] is True
-    assert row["direct_graph_xp_execution_action_id"] == "protect_wagon_or_lure_bandits"
-
-    assert "5 xp" in row["narration"].lower()
-    assert row["selected_narration"]["reward"]["xp_delta"] == 5
-
-
-def test_explicit_combat_xp_execution_is_idempotent():
-    result = _direct_complete_graph_action_from_command(
-        command="I protect the wagon and fight the bandits.",
-        row={"turn_index": 21, "player_action": "I protect the wagon and fight the bandits."},
-        all_graph_actions=[
-            {
-                "action_id": "protect_wagon_or_lure_bandits",
-                "command": "I protect the wagon and fight the bandits.",
-                "mechanic": "combat_started",
-                "mechanics": ["combat_started", "combat_resolved", "xp_gain"],
-                "changed_parts": ["combat_started", "combat_resolved", "xp_gain"],
-                "action_terms": ["protect", "wagon", "fight", "bandits"],
-            }
-        ],
-        completed_action_ids=set(),
-        completed_mechanics=set(),
-    )
-
-    row = result["row"]
-
-    # Simulate real runner reapplying after dialogue repair and before transcript append.
-    row = _apply_explicit_combat_xp_direct_graph_execution(
-        row,
-        action_id="protect_wagon_or_lure_bandits",
-    )
-
-    assert row["state_delta"]["xp_delta"] == 5
-    assert row["result"]["combat_result"]["xp_delta"] == 5
-
-
-def test_character_inventory_progression_reads_explicit_combat_xp_delta():
-    result = _direct_complete_graph_action_from_command(
-        command="I protect the wagon and fight the bandits.",
-        row={
-            "turn_index": 21,
-            "player_action": "I protect the wagon and fight the bandits.",
-        },
-        all_graph_actions=[
-            {
-                "action_id": "protect_wagon_or_lure_bandits",
-                "command": "I protect the wagon and fight the bandits.",
-                "mechanic": "combat_started",
-                "mechanics": ["combat_started", "combat_resolved", "xp_gain"],
-                "changed_parts": ["combat_started", "combat_resolved", "xp_gain"],
-                "action_terms": ["protect", "wagon", "fight", "bandits"],
-            }
-        ],
-        completed_action_ids=set(),
-        completed_mechanics=set(),
-    )
+    row = _apply_direct_graph_display_quality_pass(row)
 
     progression = _build_character_inventory_progression_summary(
-        [result["row"]],
+        [row],
         initial_state={
             "name": "The Player",
             "currency": {"gold": 15, "silver": 20, "copper": 50},
@@ -432,144 +456,86 @@ def test_character_inventory_progression_reads_explicit_combat_xp_delta():
         },
     )
 
-    assert progression["player"]["xp"] == 5
     assert progression["xp_events"]
     assert progression["xp_events"][0]["xp_delta"] == 5
-9. Add test: non-combat actions mentioning ambush do not grant XP
+    assert progression["xp_events"][0]["player_action"] == "I protect the wagon and fight the bandits."
 
-Create:
+If _build_character_inventory_progression_summary is not imported in that test file, add it to the existing import block:
 
-src/tests/rpg/test_autoplay_direct_graph_no_xp_for_noncombat.py
-from tests.rpg.autoplay_llm_campaign import _direct_complete_graph_action_from_command
-
-
-def test_report_findings_about_ambush_does_not_grant_xp():
-    result = _direct_complete_graph_action_from_command(
-        command="I report to Bran that the trail points to an ambush.",
-        row={
-            "turn_index": 22,
-            "player_action": "I report to Bran that the trail points to an ambush.",
-        },
-        all_graph_actions=[
-            {
-                "action_id": "report_findings_to_bran",
-                "command": "I report to Bran that the trail points to an ambush.",
-                "mechanic": "report",
-                "mechanics": ["report", "faction_consequence", "npc_reaction"],
-                "changed_parts": ["report", "faction_consequence", "npc_reaction"],
-                "action_terms": ["report", "bran", "ambush", "evidence"],
-            }
-        ],
-        completed_action_ids=set(),
-        completed_mechanics=set(),
-    )
-
-    assert result["completed"] is True
-    assert result.get("xp_execution_applied") is False
-
-    row = result["row"]
-
-    assert "xp_delta" not in row.get("state_delta", {})
-    assert "combat_result" not in row.get("result", {})
-    assert not row.get("direct_graph_xp_execution_applied")
-
-
-def test_choose_ambush_response_does_not_grant_xp_without_explicit_combat_action_id():
-    result = _direct_complete_graph_action_from_command(
-        command="I choose the safest response to the ambush signs.",
-        row={
-            "turn_index": 23,
-            "player_action": "I choose the safest response to the ambush signs.",
-        },
-        all_graph_actions=[
-            {
-                "action_id": "choose_ambush_response",
-                "command": "I choose the safest response to the ambush signs.",
-                "mechanic": "story_choice",
-                "mechanics": ["story_choice", "faction_consequence"],
-                "changed_parts": ["story_choice", "faction_consequence"],
-                "action_terms": ["choose", "ambush", "response"],
-            }
-        ],
-        completed_action_ids=set(),
-        completed_mechanics=set(),
-    )
-
-    assert result["completed"] is True
-    assert result.get("xp_execution_applied") is False
-
-    row = result["row"]
-
-    assert "xp_delta" not in row.get("state_delta", {})
-    assert "combat_result" not in row.get("result", {})
-10. Add files to diff artifact tracking
+from tests.rpg.autoplay_llm_campaign import (
+    _build_character_inventory_progression_summary,
+    _direct_complete_graph_action_from_command,
+    _apply_explicit_combat_xp_direct_graph_execution,
+)
+12. Make sure the updated tests are included in diff artifacts
 
 Run:
 
 git add -N `
-  src\tests\rpg\test_autoplay_direct_graph_explicit_combat_xp.py `
-  src\tests\rpg\test_autoplay_direct_graph_no_xp_for_noncombat.py
+  src\tests\rpg\test_autoplay_social_npc_line_coverage.py `
+  src\tests\rpg\test_autoplay_direct_graph_explicit_combat_xp.py
 
 Verify:
 
-git --no-pager diff --name-only | findstr "test_autoplay_direct_graph_explicit_combat_xp test_autoplay_direct_graph_no_xp_for_noncombat"
+git --no-pager diff --name-only | findstr "test_autoplay_social_npc_line_coverage test_autoplay_direct_graph_explicit_combat_xp"
 
 Expected:
 
+src/tests/rpg/test_autoplay_social_npc_line_coverage.py
 src/tests/rpg/test_autoplay_direct_graph_explicit_combat_xp.py
-src/tests/rpg/test_autoplay_direct_graph_no_xp_for_noncombat.py
-11. Run checks
+Run checks
 $env:PYTHONPATH="src"; python -m py_compile `
   src\tests\rpg\autoplay_llm_campaign.py `
-  src\tests\rpg\test_autoplay_direct_graph_explicit_combat_xp.py `
-  src\tests\rpg\test_autoplay_direct_graph_no_xp_for_noncombat.py
+  src\tests\rpg\test_autoplay_social_npc_line_coverage.py `
+  src\tests\rpg\test_autoplay_direct_graph_explicit_combat_xp.py
 $env:PYTHONPATH="src"; python -m pytest `
+  src\tests\rpg\test_autoplay_social_npc_line_coverage.py `
   src\tests\rpg\test_autoplay_direct_graph_explicit_combat_xp.py `
+  src\tests\rpg\test_autoplay_graph_mechanics_metadata_cleanup.py `
+  src\tests\rpg\test_autoplay_direct_graph_canonical_action_display.py `
+  src\tests\rpg\test_autoplay_fallback_narration_classifier.py `
   src\tests\rpg\test_autoplay_direct_graph_no_xp_for_noncombat.py `
   src\tests\rpg\test_autoplay_direct_graph_buy_rations_execution.py `
   src\tests\rpg\test_autoplay_character_inventory_progression_row_delta.py `
   src\tests\rpg\test_autoplay_real_runner_present.py `
   -q
+Expected next run
 
-Then run the 2-turn smoke first. For XP specifically, the 2-turn smoke probably will not hit combat; use the tests above for fast validation.
-
-Expected result
-
-When an explicit combat graph action occurs:
+Rows like this:
 
 {
-  "state_delta": {
-    "xp_delta": 5,
-    "combat_started": true,
-    "combat_resolved": true
-  },
-  "result": {
-    "combat_result": {
-      "ok": true,
-      "outcome": "direct_graph_resolved",
-      "xp_delta": 5
+  "selected_narration": {
+    "npc": {
+      "speaker": "Bran",
+      "line": "That is enough to stop guessing. Show me where the proof points next."
     }
   },
-  "direct_graph_action_completion": {
-    "xp_execution_applied": true,
-    "xp_delta": 5
-  }
+  "npc": {},
+  "npc_speaker": "",
+  "npc_line": ""
 }
 
-The player progression report should show:
+should become:
 
 {
-  "xp_events": [
-    {
-      "xp_delta": 5,
-      "xp_total": 5,
-      "source": "row.state_delta"
+  "selected_narration": {
+    "npc": {
+      "speaker": "Bran",
+      "line": "That is enough to stop guessing. Show me where the proof points next."
     }
-  ],
-  "player": {
-    "xp": 5,
-    "level": 1
-  }
+  },
+  "npc": {
+    "speaker": "Bran",
+    "line": "That is enough to stop guessing. Show me where the proof points next."
+  },
+  "npc_speaker": "Bran",
+  "npc_line": "That is enough to stop guessing. Show me where the proof points next."
 }
 
-Non-combat actions that mention ambush/bandits should remain XP-neutral.
+The XP report event should change from:
+
+I check in with Garran and focus on the active wagon-road objective.
+
+to:
+
+I protect the wagon and fight the bandits.

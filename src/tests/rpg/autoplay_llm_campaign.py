@@ -77,6 +77,16 @@ def _effective_transcript_detail(args: Any) -> str:
 def _slim_transcript_row(row: Dict[str, Any], max_row_bytes: int = 50000) -> Dict[str, Any]:
     slim_row = {key: row.get(key) for key in TRANSCRIPT_KEEP_KEYS if key in row}
 
+    visible_player_action = (
+        _safe_str(row.get("display_player_action"))
+        or _safe_str(row.get("visible_player_action"))
+        or _safe_str(row.get("player_action"))
+    )
+    if visible_player_action:
+        slim_row["player_action"] = visible_player_action
+        slim_row["display_player_action"] = visible_player_action
+        slim_row["visible_player_action"] = visible_player_action
+
     for key in (
         "mechanic",
         "mechanics_evidence_source",
@@ -88,6 +98,16 @@ def _slim_transcript_row(row: Dict[str, Any], max_row_bytes: int = 50000) -> Dic
     ):
         if row.get(key) not in (None, "", {}, []):
             slim_row[key] = row.get(key)
+
+
+def _preferred_visible_player_action(row: Dict[str, Any]) -> str:
+    row = _safe_dict(row)
+    return (
+        _safe_str(row.get("display_player_action"))
+        or _safe_str(row.get("visible_player_action"))
+        or _safe_str(row.get("canonical_turn_action"))
+        or _safe_str(row.get("player_action"))
+    )
 
     if row.get("scenario_progression_suppressed_actions"):
         slim_row["scenario_progression_suppressed_actions"] = row.get(
@@ -122,6 +142,14 @@ def _slim_transcript_row(row: Dict[str, Any], max_row_bytes: int = 50000) -> Dic
         "direct_graph_changed_parts",
         "direct_graph_xp_execution_applied",
         "direct_graph_xp_execution_action_id",
+        "direct_graph_canonical_action_synced",
+        "direct_graph_canonical_action_id",
+        "fallback_narration_cleanup_applied",
+        "fallback_narration_category",
+        "npc_line_fallback_applied",
+        "npc_line_fallback_source",
+        "direct_graph_noncombat_mechanics_cleanup_applied",
+        "direct_graph_noncombat_mechanics_cleanup_action_id",
     ):
         if row.get(key) is not None:
             slim_row[key] = row.get(key)
@@ -457,6 +485,25 @@ def _slim_transcript_row(row: Dict[str, Any], max_row_bytes: int = 50000) -> Dic
         "direct_graph_execution_kind",
         "direct_graph_display_override",
         "reward",
+    ):
+        if row.get(key) is not None:
+            slim_row[key] = row.get(key)
+
+    npc_payload = _safe_dict(row.get("npc"))
+    npc_speaker = _safe_str(row.get("npc_speaker") or npc_payload.get("speaker"))
+    npc_line = _safe_str(row.get("npc_line") or npc_payload.get("line"))
+
+    if npc_speaker or npc_line:
+        slim_row["npc"] = {
+            "speaker": npc_speaker,
+            "line": npc_line,
+        }
+        slim_row["npc_speaker"] = npc_speaker
+        slim_row["npc_line"] = npc_line
+
+    for key in (
+        "top_level_npc_sync_applied",
+        "top_level_npc_sync_source",
     ):
         if row.get(key) is not None:
             slim_row[key] = row.get(key)
@@ -3647,6 +3694,700 @@ def _apply_explicit_combat_xp_direct_graph_execution(
     return row
 
 
+_DIRECT_GRAPH_CANONICAL_ACTION_TEXT = {
+    "buy_rations_from_bran": "I buy two rations from Bran.",
+    "protect_wagon_or_lure_bandits": "I protect the wagon and fight the bandits.",
+    "ask_garran_to_join": "I ask Garran to join me on the mill road.",
+    "rent_room_from_bran": "I rent a common room from Bran.",
+    "report_findings_to_bran": "I report the ambush evidence to Bran.",
+    "warn_garran": "I warn Garran about the ambush signs on the road.",
+    "tell_garran_about_ambush": "I tell Garran about the ambush signs on the road.",
+    "scout_quarry_road": "I scout the quarry road for ambush signs.",
+    "spot_bridge_watchers": "I watch the bridge for hidden watchers.",
+    "choose_ambush_response": "I choose how to respond to the ambush signs.",
+    "question_captured_bandit": "I question the captured bandit.",
+    "search_bandit_satchel": "I search the bandit's satchel for proof.",
+    "return_to_bran_with_proof": "I return to Bran with the marked coin proof.",
+    "return_marked_coin_proof": "I return to Bran with the marked coin proof.",
+}
+
+
+def _canonical_direct_graph_action_text(action_id: str, fallback: str = "") -> str:
+    action_id_s = _safe_str(action_id)
+    return _safe_str(_DIRECT_GRAPH_CANONICAL_ACTION_TEXT.get(action_id_s) or fallback)
+
+
+def _sync_direct_graph_canonical_action_display(row: Dict[str, Any]) -> Dict[str, Any]:
+    row = dict(_safe_dict(row))
+    direct = _safe_dict(row.get("direct_graph_action_completion"))
+    action_id = _safe_str(
+        direct.get("action_id")
+        or row.get("direct_graph_execution_kind")
+        or row.get("direct_graph_xp_execution_action_id")
+    )
+    canonical = _canonical_direct_graph_action_text(
+        action_id,
+        _safe_str(row.get("canonical_turn_action") or row.get("player_action")),
+    )
+
+    if not action_id or not canonical:
+        return row
+
+    row["player_action"] = canonical
+    row["visible_player_action"] = canonical
+    row["display_player_action"] = canonical
+    row["canonical_turn_action"] = canonical
+
+    turn_contract = dict(_safe_dict(row.get("turn_contract")))
+    action_payload = dict(_safe_dict(turn_contract.get("action")))
+    action_payload["text"] = canonical
+    action_payload["display_text"] = canonical
+    action_payload["canonical_text"] = canonical
+    action_payload["source"] = _safe_str(action_payload.get("source") or "direct_graph_execution")
+    turn_contract["action"] = action_payload
+    row["turn_contract"] = turn_contract
+
+    selected = dict(_safe_dict(row.get("selected_narration") or row.get("selected_output")))
+    if selected:
+        selected["action"] = _safe_str(selected.get("action") or canonical)
+        row["selected_narration"] = selected
+        row["selected_output"] = selected
+        row["resolved_narration_payload"] = selected
+        row["narration_payload"] = selected
+        row["structured_narration"] = selected
+
+    row["direct_graph_canonical_action_synced"] = True
+    row["direct_graph_canonical_action_id"] = action_id
+    return row
+
+
+def _classify_visible_action_category(row: Dict[str, Any]) -> str:
+    row = _safe_dict(row)
+    direct = _safe_dict(row.get("direct_graph_action_completion"))
+    action_id = _safe_str(direct.get("action_id") or row.get("direct_graph_execution_kind"))
+
+    social_action_prefixes = (
+        "ask_",
+        "report_",
+        "warn_",
+        "tell_",
+        "question_",
+        "confront_",
+        "counter_",
+        "press_",
+        "persuade_",
+        "accuse_",
+        "negotiate_",
+    )
+
+    evidence_action_prefixes = (
+        "return_",
+        "search_",
+        "inspect_",
+        "decipher_",
+        "read_",
+        "recover_",
+        "deliver_",
+    )
+
+    if any(action_id.startswith(prefix) for prefix in social_action_prefixes):
+        return "social"
+
+    if any(action_id.startswith(prefix) for prefix in evidence_action_prefixes):
+        return "evidence"
+
+    text = _normalize_turn_action_text(
+        " ".join(
+            [
+                _safe_str(row.get("player_action")),
+                _safe_str(row.get("canonical_turn_action")),
+                action_id,
+            ]
+        )
+    )
+
+    if action_id == "buy_rations_from_bran" or ("buy" in text and "ration" in text):
+        return "buying"
+
+    if action_id in {
+        "protect_wagon_or_lure_bandits",
+        "ambush_bandits",
+        "fight_bandit_scouts",
+        "fight_bandits",
+        "defeat_bandit_scouts",
+        "resolve_bandit_ambush",
+    }:
+        return "combat"
+
+    if any(
+        term in text
+        for term in (
+            "ask",
+            "tell",
+            "warn",
+            "report",
+            "question",
+            "confront",
+            "persuade",
+            "accuse",
+            "counter",
+            "pressure",
+            "negotiate",
+            "arrest",
+            "testify",
+            "witness",
+        )
+    ):
+        return "social"
+
+    if any(term in text for term in ("read", "decipher", "ledger", "note", "coin", "proof")):
+        return "evidence"
+
+    if any(term in text for term in ("search", "inspect", "scout", "watch", "look", "track", "examine")):
+        return "investigation"
+
+    if any(term in text for term in ("travel", "road", "wagon yard", "old mill", "quarry")):
+        return "travel"
+
+    return "general"
+
+
+_BAD_GENERIC_FALLBACK_SNIPPETS = (
+    "practical transaction",
+    "movement resolves",
+    "combat moment resolves",
+    "exchange is handled",
+    "current route",
+)
+
+
+def _fallback_narration_for_action_category(row: Dict[str, Any]) -> str:
+    category = _classify_visible_action_category(row)
+
+    if category == "buying":
+        return "The purchase resolves cleanly, with coin changing hands and supplies added to your pack."
+
+    if category == "combat":
+        return "The fight resolves through the current objective, leaving clear consequences behind."
+
+    if category == "travel":
+        return "You move along the route with purpose, carrying the investigation toward the next location."
+
+    if category == "investigation":
+        return "You examine the scene for concrete signs, narrowing the search to details that can be acted on."
+
+    if category == "social":
+        return "The conversation focuses on the immediate lead, pressing for names, places, and evidence that can move the investigation forward."
+
+    if category == "evidence":
+        return "The evidence gives the investigation a firmer shape, connecting the current lead to the next step."
+
+    return "The action advances the current objective without adding unsupported consequences."
+
+
+def _cleanup_bad_generic_fallback_narration(row: Dict[str, Any]) -> Dict[str, Any]:
+    row = dict(_safe_dict(row))
+
+    if row.get("direct_graph_display_override"):
+        return row
+
+    narration = (
+        _safe_str(row.get("display_narration"))
+        or _safe_str(row.get("visible_narration"))
+        or _safe_str(row.get("selected_narration_text"))
+        or _safe_str(row.get("narration"))
+    )
+    narration_l = narration.lower()
+
+    if not narration:
+        return row
+
+    if not any(snippet in narration_l for snippet in _BAD_GENERIC_FALLBACK_SNIPPETS):
+        return row
+
+    cleaned = _fallback_narration_for_action_category(row)
+
+    row["narration"] = cleaned
+    row["display_narration"] = cleaned
+    row["visible_narration"] = cleaned
+    row["selected_narration_text"] = cleaned
+    row["fallback_narration_cleanup_applied"] = True
+    row["fallback_narration_category"] = _classify_visible_action_category(row)
+
+    selected = dict(_safe_dict(row.get("selected_narration") or row.get("selected_output")))
+    if selected:
+        selected["narration"] = cleaned
+        selected["source"] = _safe_str(selected.get("source") or "deterministic_category_fallback")
+        row["selected_narration"] = selected
+        row["selected_output"] = selected
+        row["resolved_narration_payload"] = selected
+        row["narration_payload"] = selected
+        row["structured_narration"] = selected
+
+    return row
+
+
+def _infer_social_target_npc(row: Dict[str, Any]) -> str:
+    row = _safe_dict(row)
+    text = _normalize_turn_action_text(
+        " ".join(
+            [
+                _safe_str(row.get("player_action")),
+                _safe_str(row.get("canonical_turn_action")),
+                _safe_str(_safe_dict(row.get("direct_graph_action_completion")).get("action_id")),
+            ]
+        )
+    )
+
+    direct = _safe_dict(row.get("direct_graph_action_completion"))
+    action_id = _safe_str(
+        direct.get("action_id")
+        or row.get("direct_graph_execution_kind")
+        or row.get("direct_graph_canonical_action_id")
+    )
+
+    if "bran" in action_id:
+        return "Bran"
+    if "garran" in action_id:
+        return "Garran"
+    if "mira" in action_id:
+        return "Mira"
+    if "marlowe" in action_id:
+        return "Agent Marlowe"
+    if "magistrate" in action_id:
+        return "Magistrate"
+    if "voss" in action_id:
+        return "Captain Voss"
+    if "veska" in action_id:
+        return "Handler Veska"
+    if "teamster" in action_id:
+        return "Old Teamster"
+    if "bandit" in action_id:
+        return "Captured Bandit"
+    if "ally" in action_id or "allies" in action_id:
+        return "Garran"
+    if "magistrate" in action_id:
+        return "Magistrate"
+    if "patron" in action_id:
+        return "Local Patron"
+    if "local" in action_id and "patron" in action_id:
+        return "Local Patron"
+
+    if "bran" in text:
+        return "Bran"
+    if "garran" in text:
+        return "Garran"
+    if "mira" in text:
+        return "Mira"
+    if "sera" in text:
+        return "Sera"
+    if "marlowe" in text:
+        return "Agent Marlowe"
+    if "voss" in text:
+        return "Captain Voss"
+    if "veska" in text:
+        return "Handler Veska"
+    if "bandit" in text:
+        return "Captured Bandit"
+
+    if "magistrate" in text:
+        return "Magistrate"
+    if "teamster" in text:
+        return "Old Teamster"
+    if "agent" in text or "route pressure agent" in text:
+        return "Route Agent"
+    if "ally" in text or "allies" in text:
+        return "Garran"
+    if "local patron" in text or "patron" in text:
+        return "Local Patron"
+
+    return ""
+
+
+def _deterministic_social_npc_line(row: Dict[str, Any]) -> Dict[str, str]:
+    row = _safe_dict(row)
+    speaker = _infer_social_target_npc(row)
+    text = _normalize_turn_action_text(
+        " ".join(
+            [
+                _safe_str(row.get("player_action")),
+                _safe_str(row.get("canonical_turn_action")),
+                _safe_str(_safe_dict(row.get("direct_graph_action_completion")).get("action_id")),
+            ]
+        )
+    )
+
+    action_id = _safe_str(
+        _safe_dict(row.get("direct_graph_action_completion")).get("action_id")
+        or row.get("direct_graph_execution_kind")
+        or row.get("direct_graph_canonical_action_id")
+    )
+
+    if not speaker:
+        return {}
+
+    if "buy" in text and "ration" in text:
+        return {
+            "speaker": speaker,
+            "line": "Two rations. That should keep you moving if the road turns bad.",
+        }
+
+    if speaker == "Local Patron":
+        return {
+            "speaker": speaker,
+            "line": "If you mean the old bridge, folk avoid it before dawn. Too many quiet wagons, too few honest reasons.",
+        }
+
+    if action_id.startswith("ask_") and speaker == "Bran":
+        return {
+            "speaker": speaker,
+            "line": "Ask plainly. If it touches the road, the side door, or that traveler, I will tell you what I know.",
+        }
+
+    if action_id.startswith("ask_") and speaker == "Garran":
+        return {
+            "speaker": speaker,
+            "line": "If this is about the road, say it straight. I would rather know the danger before the wheels hit it.",
+        }
+
+    if action_id.startswith("warn_") and speaker == "Garran":
+        return {
+            "speaker": speaker,
+            "line": "Then we move carefully. I will not drive blind into a trap.",
+        }
+
+    if action_id.startswith("warn_"):
+        return {
+            "speaker": speaker,
+            "line": "Then we treat it as real trouble and warn anyone still exposed.",
+        }
+
+    if action_id.startswith("report_") and speaker == "Bran":
+        return {
+            "speaker": speaker,
+            "line": "That is enough to stop guessing. Show me where the proof points next.",
+        }
+
+    if action_id.startswith("return_") and "proof" in action_id:
+        return {
+            "speaker": speaker,
+            "line": "That proof gives us a name to push on. Now we make sure it cannot disappear.",
+        }
+
+    if action_id.startswith("question_") and speaker == "Captured Bandit":
+        return {
+            "speaker": speaker,
+            "line": "I only carried what I was paid to carry. The mark on it is the part you should fear.",
+        }
+
+    if action_id.startswith("confront_") or action_id.startswith("counter_"):
+        return {
+            "speaker": speaker,
+            "line": "Careful. If you are going to press this, make sure the proof is already in other hands.",
+        }
+
+    if "magistrate" in speaker.lower() or "arrest" in text:
+        return {
+            "speaker": speaker,
+            "line": "Bring me proof that holds under daylight, and I will act on it.",
+        }
+
+    if "teamster" in speaker.lower():
+        return {
+            "speaker": speaker,
+            "line": "If the east road is being watched, the wagons need to move in pairs or not at all.",
+        }
+
+    if "warn" in text:
+        return {
+            "speaker": speaker,
+            "line": "Then we treat it as real trouble, not tavern gossip.",
+        }
+
+    if "report" in text or "proof" in text or "evidence" in text:
+        return {
+            "speaker": speaker,
+            "line": "That is something we can act on. Tell me exactly where it points next.",
+        }
+
+    if "ask" in text or "question" in text:
+        return {
+            "speaker": speaker,
+            "line": "Ask it plainly, and I will answer what I know.",
+        }
+
+    if "confront" in text:
+        return {
+            "speaker": speaker,
+            "line": "Careful. Accusations like that need proof, not just nerve.",
+        }
+
+    if "tell" in text:
+        return {
+            "speaker": speaker,
+            "line": "Then we should move before someone else decides the next step for us.",
+        }
+
+    return {
+        "speaker": speaker,
+        "line": "That gives us a direction. Now we need the next solid piece of proof.",
+    }
+
+
+def _sync_selected_narration_npc_to_top_level(row: Dict[str, Any]) -> Dict[str, Any]:
+    row = dict(_safe_dict(row))
+
+    existing_npc = _safe_dict(row.get("npc"))
+    existing_speaker = _safe_str(row.get("npc_speaker") or existing_npc.get("speaker"))
+    existing_line = _safe_str(row.get("npc_line") or existing_npc.get("line"))
+
+    if existing_speaker and existing_line:
+        row["npc"] = {
+            "speaker": existing_speaker,
+            "line": existing_line,
+        }
+        row["npc_speaker"] = existing_speaker
+        row["npc_line"] = existing_line
+        return row
+
+    selected = _safe_dict(
+        row.get("selected_narration")
+        or row.get("selected_output")
+        or row.get("resolved_narration_payload")
+        or row.get("narration_payload")
+        or row.get("structured_narration")
+    )
+    selected_npc = _safe_dict(selected.get("npc"))
+
+    selected_speaker = _safe_str(selected_npc.get("speaker"))
+    selected_line = _safe_str(selected_npc.get("line"))
+
+    if not selected_speaker or not selected_line:
+        return row
+
+    npc = {
+        "speaker": selected_speaker,
+        "line": selected_line,
+    }
+
+    row["npc"] = npc
+    row["npc_speaker"] = selected_speaker
+    row["npc_line"] = selected_line
+    row["top_level_npc_sync_applied"] = True
+    row["top_level_npc_sync_source"] = "selected_narration.npc"
+
+    # Keep all narration payload aliases consistent.
+    selected["npc"] = npc
+    row["selected_narration"] = selected
+    row["selected_output"] = selected
+    row["resolved_narration_payload"] = selected
+    row["narration_payload"] = selected
+    row["structured_narration"] = selected
+
+    return row
+
+
+def _ensure_social_npc_line_coverage(row: Dict[str, Any]) -> Dict[str, Any]:
+    row = dict(_safe_dict(row))
+
+    if row.get("direct_graph_display_override"):
+        return row
+
+    category = _classify_visible_action_category(row)
+    direct = _safe_dict(row.get("direct_graph_action_completion"))
+    action_id = _safe_str(
+        direct.get("action_id")
+        or row.get("direct_graph_execution_kind")
+        or row.get("direct_graph_canonical_action_id")
+    )
+
+    socialish_action = (
+        action_id.startswith("ask_")
+        or action_id.startswith("report_")
+        or action_id.startswith("warn_")
+        or action_id.startswith("tell_")
+        or action_id.startswith("question_")
+        or action_id.startswith("confront_")
+        or action_id.startswith("counter_")
+        or action_id.startswith("return_")
+        or action_id.startswith("choose_")
+    )
+
+    if category not in {"social", "evidence"} and not socialish_action:
+        return row
+
+    existing_line = _safe_str(row.get("npc_line") or _safe_dict(row.get("npc")).get("line"))
+    if existing_line:
+        return row
+
+    npc = _deterministic_social_npc_line(row)
+    if not npc:
+        return row
+
+    row["npc"] = npc
+    row["npc_speaker"] = _safe_str(npc.get("speaker"))
+    row["npc_line"] = _safe_str(npc.get("line"))
+    row["npc_line_fallback_applied"] = True
+    row["npc_line_fallback_source"] = "deterministic_social_graph_line"
+
+    selected = dict(_safe_dict(row.get("selected_narration") or row.get("selected_output")))
+    selected["npc"] = npc
+    selected["dialogue_source"] = "deterministic_social_graph_line"
+    row["selected_narration"] = selected
+    row["selected_output"] = selected
+    row["resolved_narration_payload"] = selected
+    row["narration_payload"] = selected
+    row["structured_narration"] = selected
+
+    return row
+
+
+_DIRECT_GRAPH_COMBAT_MECHANICS = {
+    "combat_started",
+    "combat_resolved",
+    "xp_gain",
+}
+
+
+_DIRECT_GRAPH_EXPLICIT_COMBAT_ACTION_IDS = {
+    "protect_wagon_or_lure_bandits",
+    "ambush_bandits",
+    "fight_bandit_scouts",
+    "fight_bandits",
+    "defeat_bandit_scouts",
+    "resolve_bandit_ambush",
+}
+
+
+_DIRECT_GRAPH_NONCOMBAT_ACTION_IDS = {
+    "report_findings_to_bran",
+    "warn_garran",
+    "tell_garran_about_ambush",
+    "scout_quarry_road",
+    "spot_bridge_watchers",
+    "choose_ambush_response",
+    "question_captured_bandit",
+    "search_bandit_satchel",
+    "return_to_bran_with_proof",
+    "return_marked_coin_proof",
+    "ask_bran_about_witness",
+    "ask_bran_who_saw_witness",
+    "question_bran_about_traveler",
+    "search_for_witness",
+    "return_to_allies_with_voss_proof",
+    "counter_voss_intimidation",
+    "detect_safehouse_watchers",
+    "prepare_safehouse_defense",
+    "scout_east_road_pressure_points",
+    "scout_ridge_hideout",
+    "intercept_veska_courier",
+    "question_veska_courier",
+    "recover_veska_route_map",
+    "confront_route_pressure_agents",
+    "warn_east_road_teamsters",
+    "return_with_veska_name",
+    "plan_veska_pursuit",
+}
+
+
+def _is_direct_graph_explicit_combat_action_id(action_id: str) -> bool:
+    return _safe_str(action_id) in _DIRECT_GRAPH_EXPLICIT_COMBAT_ACTION_IDS
+
+
+def _is_direct_graph_known_noncombat_action_id(action_id: str) -> bool:
+    action_id_s = _safe_str(action_id)
+    if action_id_s in _DIRECT_GRAPH_NONCOMBAT_ACTION_IDS:
+        return True
+
+    noncombat_prefixes = (
+        "ask_",
+        "report_",
+        "warn_",
+        "tell_",
+        "question_",
+        "search_",
+        "scout_",
+        "spot_",
+        "detect_",
+        "prepare_",
+        "return_",
+        "recover_",
+        "confront_",
+        "counter_",
+        "plan_",
+        "choose_",
+        "read_",
+        "decipher_",
+        "inspect_",
+    )
+
+    return any(action_id_s.startswith(prefix) for prefix in noncombat_prefixes)
+
+
+def _strip_combat_mechanics_from_noncombat_direct_graph_row(row: Dict[str, Any]) -> Dict[str, Any]:
+    row = dict(_safe_dict(row))
+    direct = dict(_safe_dict(row.get("direct_graph_action_completion")))
+    action_id = _safe_str(direct.get("action_id") or row.get("direct_graph_execution_kind"))
+
+    if not action_id:
+        return row
+
+    if _is_direct_graph_explicit_combat_action_id(action_id):
+        return row
+
+    if not _is_direct_graph_known_noncombat_action_id(action_id):
+        return row
+
+    def _clean_list(values: Any) -> List[Any]:
+        return [
+            value
+            for value in _safe_list(values)
+            if _safe_str(value) not in _DIRECT_GRAPH_COMBAT_MECHANICS
+        ]
+
+    direct["mechanics"] = _clean_list(direct.get("mechanics"))
+    direct["changed_parts"] = _clean_list(direct.get("changed_parts"))
+    row["direct_graph_action_completion"] = direct
+
+    row["mechanics_covered_this_turn"] = _clean_list(row.get("mechanics_covered_this_turn"))
+    row["direct_graph_changed_parts"] = _clean_list(row.get("direct_graph_changed_parts"))
+
+    cleaned_hooks = []
+    changed = False
+    for hook in _safe_list(row.get("fired_hooks")):
+        hook = dict(_safe_dict(hook))
+        if _safe_str(hook.get("kind")) == "graph_direct_completion":
+            hook["mechanics"] = _clean_list(hook.get("mechanics"))
+            hook["changed_parts"] = _clean_list(hook.get("changed_parts"))
+            effects = dict(_safe_dict(hook.get("effects")))
+            flags = dict(_safe_dict(effects.get("flags")))
+            for mechanic_name in _DIRECT_GRAPH_COMBAT_MECHANICS:
+                flags.pop(f"mechanic:{mechanic_name}", None)
+            effects["flags"] = flags
+            hook["effects"] = effects
+            changed = True
+        cleaned_hooks.append(hook)
+
+    if changed:
+        row["fired_hooks"] = cleaned_hooks
+        row["direct_graph_noncombat_mechanics_cleanup_applied"] = True
+        row["direct_graph_noncombat_mechanics_cleanup_action_id"] = action_id
+
+    return row
+
+
+def _apply_direct_graph_display_quality_pass(row: Dict[str, Any]) -> Dict[str, Any]:
+    row = dict(_safe_dict(row))
+
+    row = _sync_direct_graph_canonical_action_display(row)
+    row = _cleanup_bad_generic_fallback_narration(row)
+    row = _ensure_social_npc_line_coverage(row)
+    row = _sync_selected_narration_npc_to_top_level(row)
+    row = _strip_combat_mechanics_from_noncombat_direct_graph_row(row)
+
+    return row
+
+
 def _direct_complete_graph_action_from_command(
     *,
     command: str,
@@ -3802,6 +4543,26 @@ def _direct_complete_graph_action_from_command(
             row,
             action_id=action_id,
         )
+
+    if (
+        _is_direct_graph_known_noncombat_action_id(action_id)
+        and not _is_direct_graph_explicit_combat_action_id(action_id)
+    ):
+        mechanics = [
+            mechanic_name
+            for mechanic_name in _safe_list(mechanics)
+            if _safe_str(mechanic_name) not in _DIRECT_GRAPH_COMBAT_MECHANICS
+        ]
+        changed_parts = [
+            part
+            for part in _safe_list(changed_parts)
+            if _safe_str(part) not in _DIRECT_GRAPH_COMBAT_MECHANICS
+        ]
+        completed_parts = [
+            part
+            for part in _safe_list(completed_parts)
+            if _safe_str(part) not in _DIRECT_GRAPH_COMBAT_MECHANICS
+        ]
 
     return {
         "completed": bool(completed_parts),
@@ -6705,7 +7466,7 @@ def _build_character_inventory_progression_summary(
                         "turn": turn_index,
                         "delta": inventory_delta,
                         "mechanic": row.get("mechanic") or candidate.get("mechanic"),
-                        "player_action": row.get("player_action"),
+                        "player_action": _preferred_visible_player_action(row),
                     }
                 )
                 progression_log.append(
@@ -6727,7 +7488,7 @@ def _build_character_inventory_progression_summary(
                         "xp_delta": xp_delta,
                         "xp_total": xp,
                         "mechanic": row.get("mechanic") or candidate.get("mechanic"),
-                        "player_action": row.get("player_action"),
+                        "player_action": _preferred_visible_player_action(row),
                     }
                 )
                 progression_log.append(
@@ -6751,7 +7512,7 @@ def _build_character_inventory_progression_summary(
                         "old_level": old_level,
                         "new_level": new_level,
                         "mechanic": row.get("mechanic") or candidate.get("mechanic"),
-                        "player_action": row.get("player_action"),
+                        "player_action": _preferred_visible_player_action(row),
                     }
                 )
                 progression_log.append(
@@ -14568,6 +15329,9 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
                 action_id=xp_action_id,
             )
 
+        row = _apply_direct_graph_display_quality_pass(row)
+        row = _sync_selected_narration_npc_to_top_level(row)
+
         direct_graph_completion = _direct_complete_graph_action_from_command(
             command=canonical_turn_action,
             row=row,
@@ -14584,6 +15348,8 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
             for key, value in _safe_dict(direct_graph_completion).items()
             if key != "row"
         }
+
+        row = _apply_direct_graph_display_quality_pass(row)
 
         _record_completed_graph_progress_from_row(
             row,
@@ -14622,6 +15388,8 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
                 action_id=xp_action_id,
             )
 
+        row = _apply_direct_graph_display_quality_pass(row)
+        row = _sync_selected_narration_npc_to_top_level(row)
         transcript.append(row)
 
         _assert_progression_monotonic(
