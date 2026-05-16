@@ -120,6 +120,8 @@ def _slim_transcript_row(row: Dict[str, Any], max_row_bytes: int = 50000) -> Dic
         "scenario_progression_actions_all",
         "mechanics_covered_this_turn",
         "direct_graph_changed_parts",
+        "direct_graph_xp_execution_applied",
+        "direct_graph_xp_execution_action_id",
     ):
         if row.get(key) is not None:
             slim_row[key] = row.get(key)
@@ -3510,6 +3512,141 @@ def _apply_buy_rations_direct_graph_execution(row: Dict[str, Any]) -> Dict[str, 
     return row
 
 
+_DIRECT_GRAPH_XP_COMBAT_ACTION_IDS = {
+    "protect_wagon_or_lure_bandits",
+    "ambush_bandits",
+    "fight_bandit_scouts",
+    "fight_bandits",
+    "defeat_bandit_scouts",
+    "resolve_bandit_ambush",
+}
+
+
+_DIRECT_GRAPH_NON_XP_ACTION_IDS = {
+    "report_findings_to_bran",
+    "warn_garran",
+    "tell_garran_about_ambush",
+    "scout_quarry_road",
+    "spot_bridge_watchers",
+    "choose_ambush_response",
+    "ask_bran_about_witness",
+    "ask_bran_who_saw_witness",
+    "question_bran_about_traveler",
+    "search_for_witness",
+    "return_marked_coin_proof",
+    "buy_rations_from_bran",
+    "rent_room_from_bran",
+    "ask_garran_to_join",
+}
+
+
+def _is_direct_graph_explicit_xp_combat_action(action_id: str) -> bool:
+    action_id_s = _safe_str(action_id)
+    return action_id_s in _DIRECT_GRAPH_XP_COMBAT_ACTION_IDS
+
+
+def _apply_explicit_combat_xp_direct_graph_execution(
+    row: Dict[str, Any],
+    *,
+    action_id: str,
+) -> Dict[str, Any]:
+    row = dict(_safe_dict(row))
+    action_id_s = _safe_str(action_id)
+
+    if not _is_direct_graph_explicit_xp_combat_action(action_id_s):
+        return row
+
+    already_applied = (
+        bool(row.get("direct_graph_xp_execution_applied"))
+        and _safe_str(row.get("direct_graph_xp_execution_action_id")) == action_id_s
+    )
+
+    if not already_applied:
+        state_delta = dict(_safe_dict(row.get("state_delta")))
+        state_delta["xp_delta"] = int(state_delta.get("xp_delta") or 0) + 5
+        state_delta["combat_started"] = True
+        state_delta["combat_resolved"] = True
+        row["state_delta"] = state_delta
+
+    combat_result = {
+        "ok": True,
+        "outcome": "direct_graph_resolved",
+        "xp_delta": 5,
+        "summary": "The combat beat resolves through the scenario graph.",
+    }
+
+    row["result"] = {
+        **_safe_dict(row.get("result")),
+        "combat_result": combat_result,
+        "xp_delta": 5,
+        "mechanic": "combat_resolved",
+        "meaningful_progress": True,
+        "progress_category": "direct_graph_execution",
+    }
+
+    turn_contract = dict(_safe_dict(row.get("turn_contract")))
+    turn_contract["mechanic"] = "combat_resolved"
+
+    tc_state_delta = dict(_safe_dict(turn_contract.get("state_delta")))
+    if not already_applied:
+        tc_state_delta["xp_delta"] = int(tc_state_delta.get("xp_delta") or 0) + 5
+    else:
+        tc_state_delta.setdefault("xp_delta", 5)
+    tc_state_delta["combat_started"] = True
+    tc_state_delta["combat_resolved"] = True
+    turn_contract["state_delta"] = tc_state_delta
+
+    turn_contract["result"] = {
+        **_safe_dict(turn_contract.get("result")),
+        "combat_result": combat_result,
+    }
+    row["turn_contract"] = turn_contract
+
+    narration_payload = {
+        "format_version": "rpg_narration_v2",
+        "source": "direct_graph_explicit_combat_xp_execution",
+        "dialogue_source": "direct_graph_execution",
+        "narration": (
+            "The fight resolves in your favor, leaving the road briefly safer. "
+            "You gain 5 XP from surviving the clash."
+        ),
+        "action": "Resolved the combat beat.",
+        "npc": {},
+        "reward": {
+            "xp_delta": 5,
+        },
+        "followup_hooks": [],
+    }
+
+    narration_text = _safe_str(narration_payload.get("narration"))
+
+    row["selected_narration"] = narration_payload
+    row["selected_output"] = narration_payload
+    row["resolved_narration_payload"] = narration_payload
+    row["narration_payload"] = narration_payload
+    row["structured_narration"] = narration_payload
+
+    row["narration"] = narration_text
+    row["display_narration"] = narration_text
+    row["visible_narration"] = narration_text
+    row["selected_narration_text"] = narration_text
+
+    row["display_source"] = "direct_graph_execution"
+    row["dialogue_source"] = "direct_graph_execution"
+    row["direct_graph_display_override"] = True
+
+    row["direct_graph_xp_execution_applied"] = True
+    row["direct_graph_xp_execution_action_id"] = action_id_s
+    row["direct_graph_execution_applied"] = True
+    row["direct_graph_execution_kind"] = action_id_s
+
+    row["mechanic"] = "combat_resolved"
+    row["meaningful_progress"] = True
+    row["progress_category"] = "direct_graph_execution"
+
+    return row
+
+
 def _direct_complete_graph_action_from_command(
     *,
     command: str,
@@ -3660,6 +3797,12 @@ def _direct_complete_graph_action_from_command(
     if action_id == "buy_rations_from_bran":
         row = _apply_buy_rations_direct_graph_execution(row)
 
+    if _is_direct_graph_explicit_xp_combat_action(action_id):
+        row = _apply_explicit_combat_xp_direct_graph_execution(
+            row,
+            action_id=action_id,
+        )
+
     return {
         "completed": bool(completed_parts),
         "action_id": action_id,
@@ -3669,6 +3812,8 @@ def _direct_complete_graph_action_from_command(
         "completed_parts": sorted(set(completed_parts)),
         "execution_applied": bool(row.get("direct_graph_execution_applied")),
         "execution_kind": _safe_str(row.get("direct_graph_execution_kind")),
+        "xp_execution_applied": bool(row.get("direct_graph_xp_execution_applied")),
+        "xp_delta": _safe_dict(row.get("state_delta")).get("xp_delta"),
         "row": row,
     }
 
@@ -14416,6 +14561,13 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
         if row.get("direct_graph_execution_kind") == "buy_rations_from_bran":
             row = _apply_buy_rations_direct_graph_execution(row)
 
+        xp_action_id = _safe_str(row.get("direct_graph_xp_execution_action_id"))
+        if _is_direct_graph_explicit_xp_combat_action(xp_action_id):
+            row = _apply_explicit_combat_xp_direct_graph_execution(
+                row,
+                action_id=xp_action_id,
+            )
+
         direct_graph_completion = _direct_complete_graph_action_from_command(
             command=canonical_turn_action,
             row=row,
@@ -14462,6 +14614,13 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
 
         if row.get("direct_graph_execution_kind") == "buy_rations_from_bran":
             row = _apply_buy_rations_direct_graph_execution(row)
+
+        xp_action_id = _safe_str(row.get("direct_graph_xp_execution_action_id"))
+        if _is_direct_graph_explicit_xp_combat_action(xp_action_id):
+            row = _apply_explicit_combat_xp_direct_graph_execution(
+                row,
+                action_id=xp_action_id,
+            )
 
         transcript.append(row)
 
