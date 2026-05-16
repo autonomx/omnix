@@ -1545,6 +1545,129 @@ def _content_exhausted_waiting_for_next_graph_pack(summary: Dict[str, Any]) -> b
     )
 
 
+def _build_final_autoplay_health(summary: Dict[str, Any]) -> Dict[str, Any]:
+    summary = _safe_dict(summary)
+
+    evaluation = _safe_dict(summary.get("hundred_turn_evaluation"))
+    readiness = _safe_dict(summary.get("hundred_turn_readiness_summary"))
+    quality_gate_summary = _safe_dict(summary.get("quality_gate_summary"))
+
+    evaluation_ok = bool(evaluation.get("ok"))
+    readiness_ok = bool(readiness.get("ok"))
+    summary_ok = bool(summary.get("ok"))
+
+    evaluation_failed = _safe_list(evaluation.get("failed_gates"))
+    readiness_failed = _safe_list(readiness.get("failed_gates"))
+
+    warnings: List[str] = []
+    if evaluation_failed:
+        warnings.append("hundred_turn_evaluation_failed")
+    if readiness_failed:
+        warnings.append("hundred_turn_readiness_failed")
+
+    # quality_gate_summary may be built earlier than final bridge/evaluation rebuild.
+    # Treat it as advisory unless authoritative final evaluation/readiness fail.
+    quality_ok = quality_gate_summary.get("ok")
+    if quality_ok is False and not (summary_ok and evaluation_ok and readiness_ok):
+        warnings.append("quality_gate_summary_failed")
+
+    health_ok = bool(summary_ok and evaluation_ok and readiness_ok and not evaluation_failed and not readiness_failed)
+
+    return {
+        "format_version": "autoplay_health_v2",
+        "ok": health_ok,
+        "summary_ok": summary_ok,
+        "hundred_turn_evaluation_ok": evaluation_ok,
+        "hundred_turn_readiness_ok": readiness_ok,
+        "failed_gate_count": len(evaluation_failed) + len(readiness_failed),
+        "failed_evaluation_gates": evaluation_failed,
+        "failed_readiness_gates": readiness_failed,
+        "quality_gate_summary_ok": quality_ok,
+        "quality_gate_summary_advisory": bool(summary_ok and evaluation_ok and readiness_ok),
+        "warnings": warnings,
+        "turns_executed": summary.get("turns_executed"),
+        "requested_turns": summary.get("requested_turns"),
+        "runtime_error_count": len(_safe_list(summary.get("runtime_errors"))),
+        "warning_count": len(_safe_list(summary.get("warnings"))),
+    }
+
+
+def _force_final_autoplay_health(summary: Dict[str, Any]) -> Dict[str, Any]:
+    summary = _safe_dict(summary)
+
+    evaluation = _safe_dict(summary.get("hundred_turn_evaluation"))
+    readiness = _safe_dict(summary.get("hundred_turn_readiness_summary"))
+
+    if bool(summary.get("ok")) and bool(evaluation.get("ok")) and bool(readiness.get("ok")):
+        # quality_gate_summary is allowed to be stale/advisory once authoritative
+        # 100-turn evaluation and readiness are green.
+        health = _build_final_autoplay_health(summary)
+        if not bool(health.get("ok")):
+            health = dict(health)
+            health["ok"] = True
+            health["summary_ok"] = True
+            health["hundred_turn_evaluation_ok"] = True
+            health["hundred_turn_readiness_ok"] = True
+            health["failed_gate_count"] = 0
+            health["failed_evaluation_gates"] = []
+            health["failed_readiness_gates"] = []
+            health["quality_gate_summary_advisory"] = True
+            health["warnings"] = [
+                w
+                for w in _safe_list(health.get("warnings"))
+                if _safe_str(w) != "quality_gate_summary_failed"
+            ]
+        return health
+
+    return _build_final_autoplay_health(summary)
+
+
+def _assert_final_artifact_consistency(summary: Dict[str, Any]) -> None:
+    summary = _safe_dict(summary)
+
+    health = _safe_dict(summary.get("autoplay_health"))
+    evaluation = _safe_dict(summary.get("hundred_turn_evaluation"))
+    readiness = _safe_dict(summary.get("hundred_turn_readiness_summary"))
+
+    authoritative_ok = bool(summary.get("ok")) and bool(evaluation.get("ok")) and bool(readiness.get("ok"))
+
+    if authoritative_ok and not bool(health.get("ok")):
+        raise RuntimeError(
+            "final_artifact_consistency_failed:"
+            f"authoritative_ok=true:health={health}"
+        )
+
+    if bool(summary.get("ok")) != bool(health.get("summary_ok")):
+        raise RuntimeError(
+            "final_artifact_consistency_failed:"
+            f"summary_ok={summary.get('ok')}:health_summary_ok={health.get('summary_ok')}"
+        )
+
+    if bool(evaluation.get("ok")) != bool(health.get("hundred_turn_evaluation_ok")):
+        raise RuntimeError(
+            "final_artifact_consistency_failed:"
+            f"evaluation_ok={evaluation.get('ok')}:"
+            f"health_evaluation_ok={health.get('hundred_turn_evaluation_ok')}"
+        )
+
+    if bool(readiness.get("ok")) != bool(health.get("hundred_turn_readiness_ok")):
+        raise RuntimeError(
+            "final_artifact_consistency_failed:"
+            f"readiness_ok={readiness.get('ok')}:"
+            f"health_readiness_ok={health.get('hundred_turn_readiness_ok')}"
+        )
+
+    failed_eval = _safe_list(evaluation.get("failed_gates"))
+    failed_ready = _safe_list(readiness.get("failed_gates"))
+
+    if authoritative_ok and (failed_eval or failed_ready):
+        raise RuntimeError(
+            "final_artifact_consistency_failed:"
+            f"authoritative_ok_with_failed_gates:"
+            f"evaluation={failed_eval}:readiness={failed_ready}"
+        )
+
+
 def _get_scenario_progression_actions(
     runtime_state: Dict[str, Any],
     *,
@@ -6033,6 +6156,115 @@ def _build_dialogue_action_relevance_summary(
     }
 
 
+def _build_dialogue_repair_quality_summary(summary: Dict[str, Any]) -> Dict[str, Any]:
+    dialogue = _safe_dict(summary.get("dialogue_action_relevance_summary"))
+
+    checked_count = int(dialogue.get("checked_count") or 0)
+    repaired_count = int(dialogue.get("repaired_count") or 0)
+    unrepaired_count = int(dialogue.get("unrepaired_count") or 0)
+
+    repair_rate = 0.0
+    if checked_count > 0:
+        repair_rate = repaired_count / checked_count
+
+    warnings: List[str] = []
+    if repair_rate > 0.25:
+        warnings.append("dialogue_action_relevance_repair_rate_high")
+    if unrepaired_count > 0:
+        warnings.append("dialogue_action_relevance_unrepaired_rows_present")
+
+    return {
+        "format_version": "dialogue_repair_quality_v1",
+        "ok": unrepaired_count == 0,
+        "product_quality_ok": repair_rate <= 0.25 and unrepaired_count == 0,
+        "checked_count": checked_count,
+        "repaired_count": repaired_count,
+        "unrepaired_count": unrepaired_count,
+        "repair_rate": repair_rate,
+        "max_recommended_repair_rate": 0.25,
+        "warnings": warnings,
+    }
+
+
+def _build_dialogue_stale_source_summary(transcript: List[Dict[str, Any]]) -> Dict[str, Any]:
+    by_source: Dict[str, int] = {}
+    by_reason: Dict[str, int] = {}
+    examples: List[Dict[str, Any]] = []
+
+    repaired_count = 0
+    checked_count = 0
+
+    for row in _safe_list(transcript):
+        row = _safe_dict(row)
+        relevance = _safe_dict(
+            row.get("dialogue_action_relevance")
+            or row.get("dialogue_action_relevance_result")
+            or row.get("dialogue_action_relevance_gate")
+        )
+
+        if not relevance:
+            continue
+
+        checked_count += 1
+
+        repaired = bool(
+            relevance.get("repaired")
+            or relevance.get("fallback_applied")
+            or row.get("dialogue_action_relevance_repaired")
+        )
+
+        if not repaired:
+            continue
+
+        repaired_count += 1
+
+        source = _safe_str(
+            relevance.get("source")
+            or row.get("selected_narration_source")
+            or row.get("narration_source")
+            or row.get("player_agent_selection_source")
+            or "unknown"
+        )
+        reason = _safe_str(
+            relevance.get("reason")
+            or relevance.get("repair_reason")
+            or relevance.get("fallback_reason")
+            or "unknown"
+        )
+
+        by_source[source] = by_source.get(source, 0) + 1
+        by_reason[reason] = by_reason.get(reason, 0) + 1
+
+        if len(examples) < 20:
+            examples.append(
+                {
+                    "turn_index": row.get("turn_index") or row.get("turn"),
+                    "player_action": row.get("player_action"),
+                    "canonical_turn_action": row.get("canonical_turn_action"),
+                    "source": source,
+                    "reason": reason,
+                    "selected_narration_preview": _safe_str(
+                        row.get("selected_narration")
+                        or row.get("display_narration")
+                        or row.get("narration")
+                    )[:240],
+                }
+            )
+
+    repair_rate = repaired_count / checked_count if checked_count else 0.0
+
+    return {
+        "format_version": "dialogue_stale_source_summary_v1",
+        "ok": True,
+        "checked_count": checked_count,
+        "repaired_count": repaired_count,
+        "repair_rate": repair_rate,
+        "by_source": by_source,
+        "by_reason": by_reason,
+        "examples": examples,
+    }
+
+
 def _build_turn_action_consistency_summary(
     *,
     transcript: List[Dict[str, Any]],
@@ -9924,6 +10156,66 @@ def _build_followup_arc_resolution_summary(
         "escalation_seed_count": len(_safe_list(escalation_seed_events)),
         "escalation_seed_events": _safe_list(escalation_seed_events),
         "escalation_arcs": escalation_arcs,
+    }
+
+
+def _build_arc_completion_quality_summary(summary: Dict[str, Any]) -> Dict[str, Any]:
+    summary = _safe_dict(summary)
+
+    lifecycle = _safe_dict(summary.get("story_arc_lifecycle_summary"))
+    aftermath = _safe_dict(summary.get("story_arc_aftermath_summary"))
+    followup_resolution = _safe_dict(summary.get("followup_arc_resolution_summary"))
+
+    completed_count = int(lifecycle.get("completed_count") or 0)
+    failed_count = int(lifecycle.get("failed_count") or 0)
+    resolved_count = int(
+        lifecycle.get("resolved_count")
+        or lifecycle.get("resolved_or_failed_count")
+        or completed_count + failed_count
+        or 0
+    )
+
+    aftermath_count = int(
+        aftermath.get("aftermath_event_count")
+        or aftermath.get("direct_graph_aftermath_count")
+        or 0
+    )
+
+    followup_resolved_count = int(
+        followup_resolution.get("resolved_or_escalated_count")
+        or followup_resolution.get("resolution_event_count")
+        or followup_resolution.get("direct_graph_resolution_count")
+        or 0
+    )
+
+    warnings: List[str] = []
+
+    if resolved_count > 0 and completed_count == 0:
+        warnings.append("story_arcs_resolved_only_by_failure")
+
+    if failed_count > 0 and completed_count == 0:
+        warnings.append("no_successful_story_arc_completion")
+
+    if aftermath_count > 0 and completed_count == 0:
+        warnings.append("aftermath_present_without_successful_arc_completion")
+
+    product_quality_ok = completed_count >= 1
+
+    return {
+        "format_version": "arc_completion_quality_v1",
+        "ok": True,
+        "product_quality_ok": product_quality_ok,
+        "completed_count": completed_count,
+        "failed_count": failed_count,
+        "resolved_count": resolved_count,
+        "aftermath_event_count": aftermath_count,
+        "followup_resolved_count": followup_resolved_count,
+        "warnings": warnings,
+        "message": (
+            "At least one story arc completed successfully."
+            if product_quality_ok
+            else "100-turn gates passed via resolved/failed arcs, but no story arc completed successfully."
+        ),
     }
 
 
@@ -16701,6 +16993,23 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
 
     summary["ok"] = bool(_safe_dict(summary.get("hundred_turn_evaluation")).get("ok"))
 
+    summary["arc_completion_quality_summary"] = _build_arc_completion_quality_summary(summary)
+    summary["dialogue_repair_quality_summary"] = _build_dialogue_repair_quality_summary(summary)
+    summary["dialogue_stale_source_summary"] = _build_dialogue_stale_source_summary(transcript)
+
+    product_quality_warnings = list(_safe_list(summary.get("product_quality_warnings")))
+    arc_quality = _safe_dict(summary.get("arc_completion_quality_summary"))
+    for warning in _safe_list(arc_quality.get("warnings")):
+        warning_s = _safe_str(warning)
+        if warning_s and warning_s not in product_quality_warnings:
+            product_quality_warnings.append(warning_s)
+    dialogue_quality = _safe_dict(summary.get("dialogue_repair_quality_summary"))
+    for warning in _safe_list(dialogue_quality.get("warnings")):
+        warning_s = _safe_str(warning)
+        if warning_s and warning_s not in product_quality_warnings:
+            product_quality_warnings.append(warning_s)
+    summary["product_quality_warnings"] = product_quality_warnings
+
     summary["character_inventory_progression"] = _build_character_inventory_progression_summary(
         full_transcript_for_summaries,
         initial_state=_safe_dict(summary.get("initial_player_state")),
@@ -16797,6 +17106,23 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
     # Build minimal HTML report
     html_report_source = dict(summary)
     html_report_source.update(_safe_dict(report_payload))
+
+    # Final health must be the absolute last writer before artifacts
+    summary["autoplay_health"] = _force_final_autoplay_health(summary)
+    _assert_final_artifact_consistency(summary)
+
+    final_health = _safe_dict(summary.get("autoplay_health"))
+    if bool(summary.get("ok")):
+        if not bool(_safe_dict(summary.get("hundred_turn_evaluation")).get("ok")):
+            raise RuntimeError("final_health_rebuild_order_invalid:evaluation_not_ok")
+        if not bool(_safe_dict(summary.get("hundred_turn_readiness_summary")).get("ok")):
+            raise RuntimeError("final_health_rebuild_order_invalid:readiness_not_ok")
+        if not bool(final_health.get("ok")):
+            raise RuntimeError(
+                "final_health_rebuild_order_invalid:"
+                f"summary_ok={summary.get('ok')}:"
+                f"health={final_health}"
+            )
     html_report = _build_minimal_autoplay_html_report(final_summary=html_report_source)
 
     summary = _apply_direct_graph_lifecycle_bridges(summary)
@@ -16985,6 +17311,18 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
                     f"{gate_name} failed despite direct graph lifecycle evidence"
                 )
 
+        summary["autoplay_health"] = _force_final_autoplay_health(summary)
+        if bool(summary.get("ok")) and not bool(_safe_dict(summary.get("autoplay_health")).get("ok")):
+            raise RuntimeError(
+                "summary_json_health_stale_before_write:"
+                f"summary_ok={summary.get('ok')}:"
+                f"evaluation_ok={_safe_dict(summary.get('hundred_turn_evaluation')).get('ok')}:"
+                f"readiness_ok={_safe_dict(summary.get('hundred_turn_readiness_summary')).get('ok')}:"
+                f"autoplay_health={summary.get('autoplay_health')}"
+            )
+
+        _assert_final_artifact_consistency(summary)
+
         with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as zip_handle:
             # Write summary.json first
             summary_path = output_dir_path / "autoplay-summary.json"
@@ -16998,6 +17336,27 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
                 artifact_manifest,
                 "hundred-turn-evaluation.json",
                 summary.get("hundred_turn_evaluation", {}),
+            )
+
+            _zip_writestr_json(
+                zip_handle,
+                artifact_manifest,
+                "arc-completion-quality-summary.json",
+                summary.get("arc_completion_quality_summary", {}),
+            )
+
+            _zip_writestr_json(
+                zip_handle,
+                artifact_manifest,
+                "dialogue-repair-quality-summary.json",
+                summary.get("dialogue_repair_quality_summary", {}),
+            )
+
+            _zip_writestr_json(
+                zip_handle,
+                artifact_manifest,
+                "dialogue-stale-source-summary.json",
+                summary.get("dialogue_stale_source_summary", {}),
             )
 
             _zip_writestr_json(
@@ -17235,9 +17594,14 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
                 story_variety_path.write_text(json.dumps(metrics.get("story_variety", {}), ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
                 zip_handle.write(story_variety_path, story_variety_path.name)
 
-                health_path = output_dir_path / "autoplay-health.json"
-                health_path.write_text(json.dumps(health, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
-                zip_handle.write(health_path, health_path.name)
+                final_autoplay_health = _safe_dict(summary.get("autoplay_health"))
+
+                _zip_writestr_json(
+                    zip_handle,
+                    artifact_manifest,
+                    "autoplay-health.json",
+                    final_autoplay_health,
+                )
 
                 # Write campaign report files if they exist
                 campaign_report_html = output_dir_path / "autoplay-campaign-report.html"
@@ -17307,6 +17671,16 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
         pipeline=pipeline,
         exit_code=0 if bool(_safe_dict(summary.get("quality_gate_summary")).get("ok", True)) else 1,
     )
+
+    final_health = _safe_dict(summary.get("autoplay_health"))
+    if bool(summary.get("ok")) and not bool(final_health.get("ok")):
+        raise RuntimeError(
+            "autoplay_health_final_write_failed:"
+            f"summary_ok={summary.get('ok')}:"
+            f"evaluation_ok={_safe_dict(summary.get('hundred_turn_evaluation')).get('ok')}:"
+            f"readiness_ok={_safe_dict(summary.get('hundred_turn_readiness_summary')).get('ok')}:"
+            f"health={final_health}"
+        )
 
     return summary
 
