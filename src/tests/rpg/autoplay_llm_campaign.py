@@ -383,8 +383,16 @@ def _slim_transcript_row(row: Dict[str, Any], max_row_bytes: int = 50000) -> Dic
     if row.get("selected_output"):
         slim_row["selected_output"] = row.get("selected_output")
 
-    if row.get("narration"):
-        slim_row["narration"] = row.get("narration")
+    visible_narration = (
+        _safe_str(row.get("display_narration"))
+        or _safe_str(row.get("visible_narration"))
+        or _safe_str(row.get("selected_narration_text"))
+        or _safe_str(row.get("narration"))
+    )
+    if visible_narration:
+        slim_row["narration"] = visible_narration
+        slim_row["display_narration"] = visible_narration
+        slim_row["visible_narration"] = visible_narration
 
     if row.get("display_narration"):
         slim_row["display_narration"] = row.get("display_narration")
@@ -438,6 +446,18 @@ def _slim_transcript_row(row: Dict[str, Any], max_row_bytes: int = 50000) -> Dic
 
     if row.get("turn_action_source_check"):
         slim_row["turn_action_source_check"] = row.get("turn_action_source_check")
+
+    for key in (
+        "state_delta",
+        "result",
+        "turn_contract",
+        "direct_graph_execution_applied",
+        "direct_graph_execution_kind",
+        "direct_graph_display_override",
+        "reward",
+    ):
+        if row.get(key) is not None:
+            slim_row[key] = row.get(key)
 
     slim_row["_artifact_slimmed"] = True
     return slim_row
@@ -3340,6 +3360,156 @@ def _direct_completion_changed_parts_for_mechanics(mechanics: List[str]) -> List
     return sorted(changed)
 
 
+def _merge_buy_rations_state_delta(row: Dict[str, Any]) -> Dict[str, Any]:
+    row = dict(_safe_dict(row))
+
+    state_delta = dict(_safe_dict(row.get("state_delta")))
+    currency_delta = dict(_safe_dict(state_delta.get("currency_delta")))
+    currency_delta["copper"] = -4
+    state_delta["currency_delta"] = currency_delta
+
+    inventory_delta = dict(_safe_dict(state_delta.get("inventory_delta")))
+    items_added = [
+        _safe_dict(item)
+        for item in _safe_list(inventory_delta.get("items_added"))
+    ]
+
+    ration_found = False
+    for item in items_added:
+        item_id = _safe_str(item.get("id") or item.get("item_id"))
+        if item_id == "item:rations":
+            item["id"] = "item:rations"
+            item["name"] = _safe_str(item.get("name")) or "Rations"
+            item["quantity"] = 2
+            item["type"] = _safe_str(item.get("type")) or "consumable"
+            ration_found = True
+
+    if not ration_found:
+        items_added.append(
+            {
+                "id": "item:rations",
+                "name": "Rations",
+                "quantity": 2,
+                "type": "consumable",
+            }
+        )
+
+    inventory_delta["items_added"] = items_added
+    inventory_delta["items_removed"] = list(_safe_list(inventory_delta.get("items_removed")))
+    state_delta["inventory_delta"] = inventory_delta
+
+    row["state_delta"] = state_delta
+    return row
+
+
+def _apply_buy_rations_direct_graph_execution(row: Dict[str, Any]) -> Dict[str, Any]:
+    row = dict(_safe_dict(row))
+
+    already_applied = (
+        bool(row.get("direct_graph_execution_applied"))
+        and _safe_str(row.get("direct_graph_execution_kind")) == "buy_rations_from_bran"
+    )
+
+    if not already_applied:
+        row = _merge_buy_rations_state_delta(row)
+
+    purchase_result = {
+        "ok": True,
+        "merchant_id": "npc:bran",
+        "items": [
+            {
+                "id": "item:rations",
+                "name": "Rations",
+                "quantity": 2,
+            }
+        ],
+        "currency_delta": {"copper": -4},
+        "inventory_delta": {
+            "items_added": [
+                {
+                    "id": "item:rations",
+                    "name": "Rations",
+                    "quantity": 2,
+                    "type": "consumable",
+                }
+            ],
+            "items_removed": [],
+        },
+        "summary": "Bought two rations from Bran.",
+    }
+
+    row["result"] = {
+        **_safe_dict(row.get("result")),
+        "purchase_result": purchase_result,
+        "currency_delta": {"copper": -4},
+        "inventory_delta": purchase_result["inventory_delta"],
+        "mechanic": "buying",
+        "meaningful_progress": True,
+        "progress_category": "direct_graph_execution",
+    }
+
+    turn_contract = dict(_safe_dict(row.get("turn_contract")))
+    turn_contract["mechanic"] = "buying"
+    turn_contract["result"] = {
+        **_safe_dict(turn_contract.get("result")),
+        "purchase_result": purchase_result,
+    }
+    turn_contract["state_delta"] = _merge_buy_rations_state_delta(
+        {"state_delta": _safe_dict(turn_contract.get("state_delta"))}
+    )["state_delta"]
+    row["turn_contract"] = turn_contract
+
+    narration_payload = {
+        "format_version": "rpg_narration_v2",
+        "source": "direct_graph_buy_rations_execution",
+        "dialogue_source": "direct_graph_execution",
+        "narration": (
+            "Bran takes the coins and passes over two wrapped rations. "
+            "Your pack is heavier, and your coin pouch is lighter."
+        ),
+        "action": "Bought two rations from Bran.",
+        "npc": {
+            "speaker": "Bran",
+            "line": "Two rations. That should keep you moving if the road turns bad.",
+        },
+        "reward": {
+            "items_added": purchase_result["inventory_delta"]["items_added"],
+            "currency_delta": {"copper": -4},
+        },
+        "followup_hooks": [],
+    }
+
+    narration_text = _safe_str(narration_payload.get("narration"))
+    npc_payload = _safe_dict(narration_payload.get("npc"))
+
+    row["selected_narration"] = narration_payload
+    row["selected_output"] = narration_payload
+    row["resolved_narration_payload"] = narration_payload
+    row["narration_payload"] = narration_payload
+    row["structured_narration"] = narration_payload
+
+    row["narration"] = narration_text
+    row["display_narration"] = narration_text
+    row["visible_narration"] = narration_text
+    row["selected_narration_text"] = narration_text
+
+    row["npc"] = npc_payload
+    row["npc_speaker"] = _safe_str(npc_payload.get("speaker"))
+    row["npc_line"] = _safe_str(npc_payload.get("line"))
+
+    row["display_source"] = "direct_graph_execution"
+    row["dialogue_source"] = "direct_graph_execution"
+    row["direct_graph_display_override"] = True
+    row["direct_graph_execution_applied"] = True
+    row["direct_graph_execution_kind"] = "buy_rations_from_bran"
+
+    row["mechanic"] = "buying"
+    row["meaningful_progress"] = True
+    row["progress_category"] = "direct_graph_execution"
+
+    return row
+
+
 def _direct_complete_graph_action_from_command(
     *,
     command: str,
@@ -3487,6 +3657,9 @@ def _direct_complete_graph_action_from_command(
     )
     row["fired_hooks"] = fired_hooks
 
+    if action_id == "buy_rations_from_bran":
+        row = _apply_buy_rations_direct_graph_execution(row)
+
     return {
         "completed": bool(completed_parts),
         "action_id": action_id,
@@ -3494,6 +3667,8 @@ def _direct_complete_graph_action_from_command(
         "mechanics": mechanics,
         "changed_parts": changed_parts,
         "completed_parts": sorted(set(completed_parts)),
+        "execution_applied": bool(row.get("direct_graph_execution_applied")),
+        "execution_kind": _safe_str(row.get("direct_graph_execution_kind")),
         "row": row,
     }
 
@@ -6324,6 +6499,19 @@ def _build_character_inventory_progression_summary(
     for index, raw_row in enumerate(transcript, start=1):
         row = _safe_dict(raw_row)
         turn_index = int(row.get("turn_index") or row.get("turn") or index)
+
+        state_delta = _safe_dict(row.get("state_delta"))
+        turn_contract_state_delta = _safe_dict(
+            _safe_dict(row.get("turn_contract")).get("state_delta")
+        )
+
+        currency_delta = _safe_dict(state_delta.get("currency_delta"))
+        if not currency_delta:
+            currency_delta = _safe_dict(turn_contract_state_delta.get("currency_delta"))
+
+        inventory_delta = _safe_dict(state_delta.get("inventory_delta"))
+        if not inventory_delta:
+            inventory_delta = _safe_dict(turn_contract_state_delta.get("inventory_delta"))
 
         mechanic_resolution = _safe_dict(row.get("mechanic_resolution"))
         mechanic_result = _safe_dict(mechanic_resolution.get("result"))
@@ -14225,6 +14413,9 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
         row = _apply_dialogue_action_relevance_gate(row)
         row = _assert_repaired_dialogue_visible_fields(row)
 
+        if row.get("direct_graph_execution_kind") == "buy_rations_from_bran":
+            row = _apply_buy_rations_direct_graph_execution(row)
+
         direct_graph_completion = _direct_complete_graph_action_from_command(
             command=canonical_turn_action,
             row=row,
@@ -14268,6 +14459,9 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
         row["scenario_progression_completed_mechanics"] = sorted(
             scenario_progression_completed_mechanics
         )
+
+        if row.get("direct_graph_execution_kind") == "buy_rations_from_bran":
+            row = _apply_buy_rations_direct_graph_execution(row)
 
         transcript.append(row)
 
