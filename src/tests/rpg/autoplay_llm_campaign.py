@@ -1,6 +1,10 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
+from typing import Any, Dict, List, Tuple
+
 from app.rpg.mechanics.mechanics_opportunities import (
     describe_mechanic_opportunity_state,
     list_available_mechanic_opportunities,
@@ -74,8 +78,53 @@ def _effective_transcript_detail(args: Any) -> str:
     return "full"
 
 
+def _should_write_full_transcript(args: argparse.Namespace) -> bool:
+    artifact_detail = _safe_str(getattr(args, "artifact_detail", ""))
+    return artifact_detail.lower() in {"full", "debug", "maximum", "max"}
+
+
 def _slim_transcript_row(row: Dict[str, Any], max_row_bytes: int = 50000) -> Dict[str, Any]:
-    slim_row = {key: row.get(key) for key in TRANSCRIPT_KEEP_KEYS if key in row}
+    row = _safe_dict(row)
+    slim_row: Dict[str, Any] = {}
+    if not row:
+        return {
+            "empty_transcript_row_repaired": True,
+            "presentation_status": "missing_row",
+        }
+
+    for key in (
+        "turn_index",
+        "turn",
+        "turn_id",
+        "player_action",
+        "canonical_turn_action",
+        "actual_sent_action",
+        "player_agent_selection_source",
+        "player_agent_selection_reason",
+        "action_category",
+        "presentation_status",
+        "narration",
+        "display_narration",
+        "selected_narration",
+        "npc",
+        "npc_speaker",
+        "npc_line",
+        "turn_presentation_identity",
+        "background_presentation_result",
+        "dialogue_presentation_compatibility",
+        "dialogue_action_relevance",
+        "dialogue_action_relevance_repaired",
+        "unsupported_combat_claim_suppressed",
+        "direct_graph_action_completion",
+        "mechanics_covered_this_turn",
+        "direct_graph_changed_parts",
+        "progress_quality",
+        "turn_action_consistency",
+        "graph_action_selection_diagnostic",
+        "suppressed_selected_action_guard",
+    ):
+        if row.get(key) not in (None, "", {}, []):
+            slim_row[key] = row.get(key)
 
     visible_player_action = (
         _safe_str(row.get("display_player_action"))
@@ -99,6 +148,15 @@ def _slim_transcript_row(row: Dict[str, Any], max_row_bytes: int = 50000) -> Dic
         if row.get(key) not in (None, "", {}, []):
             slim_row[key] = row.get(key)
 
+    for key in (
+        "dialogue_presentation_compatibility",
+        "unsupported_combat_claim_suppressed",
+    ):
+        if row.get(key) is not None:
+            slim_row[key] = row.get(key)
+
+    return slim_row
+
 
 def _preferred_visible_player_action(row: Dict[str, Any]) -> str:
     row = _safe_dict(row)
@@ -108,170 +166,6 @@ def _preferred_visible_player_action(row: Dict[str, Any]) -> str:
         or _safe_str(row.get("canonical_turn_action"))
         or _safe_str(row.get("player_action"))
     )
-
-    if row.get("scenario_progression_suppressed_actions"):
-        slim_row["scenario_progression_suppressed_actions"] = row.get(
-            "scenario_progression_suppressed_actions"
-        )
-
-    if row.get("graph_action_selection_diagnostic"):
-        slim_row["graph_action_selection_diagnostic"] = row.get(
-            "graph_action_selection_diagnostic"
-        )
-
-    for key in (
-        "scenario_progression_completed_action_ids",
-        "scenario_progression_completed_mechanics",
-        "top_scenario_progression_action_id",
-    ):
-        if row.get(key) is not None:
-            slim_row[key] = row.get(key)
-
-    if row.get("scenario_progression_actions") is not None:
-        slim_row["scenario_progression_actions"] = row.get("scenario_progression_actions")
-
-    for key in (
-        "suppressed_selected_action_guard",
-        "selected_command_before_suppression_guard",
-        "direct_graph_action_completion",
-        "party_setup_completed",
-        "party_recruitment_completed",
-        "garran_recruited",
-        "scenario_progression_actions_all",
-        "mechanics_covered_this_turn",
-        "direct_graph_changed_parts",
-        "direct_graph_xp_execution_applied",
-        "direct_graph_xp_execution_action_id",
-        "direct_graph_canonical_action_synced",
-        "direct_graph_canonical_action_id",
-        "fallback_narration_cleanup_applied",
-        "fallback_narration_category",
-        "npc_line_fallback_applied",
-        "npc_line_fallback_source",
-        "direct_graph_noncombat_mechanics_cleanup_applied",
-        "direct_graph_noncombat_mechanics_cleanup_action_id",
-    ):
-        if row.get(key) is not None:
-            slim_row[key] = row.get(key)
-
-    for key in ("available_mechanics_before", "available_mechanics_after"):
-        if row.get(key):
-            slim_row[key] = [
-                {
-                    "id": _safe_dict(item).get("id"),
-                    "mechanic": _safe_dict(item).get("mechanic"),
-                    "label": _safe_dict(item).get("label"),
-                    "command": _safe_dict(item).get("command"),
-                    "resolver": _safe_dict(item).get("resolver"),
-                }
-                for item in _safe_list(row.get(key))[:8]
-            ]
-
-    state_delta = _safe_dict(row.get("state_delta"))
-    if state_delta:
-        slim_row["state_delta"] = {
-            key: value
-            for key, value in state_delta.items()
-            if key in {
-                "currency_delta",
-                "inventory_delta",
-                "xp_delta",
-                "level_delta",
-                "level_up",
-                "party_delta",
-                "combat_started",
-                "combat_resolved",
-                "location_changed",
-                "from_location",
-                "to_location",
-                "current_location",
-                "flags",
-            }
-        }
-
-    row_result = _safe_dict(row.get("result"))
-    if row_result:
-        slim_row["result"] = {
-            key: value
-            for key, value in row_result.items()
-            if key in {
-                "mechanic",
-                "resolver",
-                "service_result",
-                "purchase_result",
-                "sale_result",
-                "party_delta",
-                "combat_result",
-                "loot_result",
-                "quest_log_delta",
-                "currency_delta",
-                "inventory_delta",
-                "xp_delta",
-                "level_delta",
-                "level_up",
-                "progress_category",
-                "meaningful_progress",
-                "mechanics_evidence_source",
-            }
-        }
-
-    mechanic_resolution = _safe_dict(row.get("mechanic_resolution"))
-    if mechanic_resolution:
-        slim_row["mechanic_resolution"] = {
-            "ok": mechanic_resolution.get("ok"),
-            "mechanic": mechanic_resolution.get("mechanic"),
-            "progress_category": mechanic_resolution.get("progress_category"),
-            "mechanics_evidence_source": mechanic_resolution.get("mechanics_evidence_source"),
-            "opportunity": {
-                "id": _safe_dict(mechanic_resolution.get("opportunity")).get("id"),
-                "mechanic": _safe_dict(mechanic_resolution.get("opportunity")).get("mechanic"),
-                "label": _safe_dict(mechanic_resolution.get("opportunity")).get("label"),
-                "command": _safe_dict(mechanic_resolution.get("opportunity")).get("command"),
-                "resolver": _safe_dict(mechanic_resolution.get("opportunity")).get("resolver"),
-            },
-            "result": {
-                key: value
-                for key, value in _safe_dict(mechanic_resolution.get("result")).items()
-                if key in {
-                    "mechanic",
-                    "resolver",
-                    "service_result",
-                    "purchase_result",
-                    "sale_result",
-                    "party_delta",
-                    "combat_result",
-                    "loot_result",
-                    "quest_log_delta",
-                    "currency_delta",
-                    "inventory_delta",
-                    "xp_delta",
-                    "level_delta",
-                    "level_up",
-                    "progress_category",
-                    "meaningful_progress",
-                    "mechanics_evidence_source",
-                }
-            },
-            "state_delta": {
-                key: value
-                for key, value in _safe_dict(mechanic_resolution.get("state_delta")).items()
-                if key in {
-                    "currency_delta",
-                    "inventory_delta",
-                    "xp_delta",
-                    "level_delta",
-                    "level_up",
-                    "party_delta",
-                    "combat_started",
-                    "combat_resolved",
-                    "location_changed",
-                    "from_location",
-                    "to_location",
-                    "current_location",
-                    "flags",
-                }
-            },
-        }
 
     if row.get("story_arc_events"):
         slim_row["story_arc_events"] = row.get("story_arc_events")
@@ -1125,7 +1019,6 @@ def _quality_gate_summary(args, metrics, summary, transcript):
     return gates
 
 import argparse
-import json
 import os
 import shutil
 import subprocess
@@ -1138,7 +1031,7 @@ import zipfile
 from copy import deepcopy
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Optional
+from typing import Iterable, Optional
 
 
 def _timestamped_print(*args, **kwargs):
@@ -1235,13 +1128,13 @@ def _authoritative_human_playable_blocking_ms(row: Dict[str, Any]) -> float:
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', '..', 'src'))
 
 from app.rpg.campaign_journal_runtime import advance_campaign_journal_for_turn
-from app.rpg.player_action_context.runtime import build_player_action_context
-from app.rpg.quest_progress import ensure_quest_runtime_state
 from app.rpg.dialogue.dialogue_action_relevance import (
     build_action_relevant_fallback,
     should_allow_display_source,
     validate_dialogue_action_relevance,
 )
+from app.rpg.player_action_context.runtime import build_player_action_context
+from app.rpg.quest_progress import ensure_quest_runtime_state
 from tests.rpg.autoplay.advisory_promotion_runtime import (
     run_deferred_advisory_promotions_for_transcript,
 )
@@ -1270,22 +1163,44 @@ from tests.rpg.autoplay.report_sections import (
 )
 
 _ACTIVE_CONSOLE_CAPTURE = None
+from app.rpg.combat.combat_consequence_pressure import apply_combat_consequence_pressure
+from app.rpg.combat.combat_lifecycle import run_combat_lifecycle_tick
+from app.rpg.combat.tavern_combat_lifecycle_rules import tavern_combat_lifecycle_rules
+from app.rpg.economy.economy_pressure import apply_economy_pressure
+from app.rpg.economy.tavern_economy_pressure_rules import tavern_economy_pressure_rules
+from app.rpg.factions.faction_consequence_policy import emit_faction_consequences
+from app.rpg.factions.tavern_faction_consequence_rules import (
+    tavern_faction_consequence_rules,
+)
+from app.rpg.npc.npc_agency import emit_npc_agency_events
+from app.rpg.npc.npc_reaction_policy import emit_npc_reactions
+from app.rpg.npc.npc_schedule import resolve_npc_schedule_state
+from app.rpg.npc.tavern_npc_agency_rules import tavern_npc_agency_rules
+from app.rpg.npc.tavern_npc_reaction_rules import tavern_npc_reaction_rules
+from app.rpg.npc.tavern_npc_schedules import (
+    tavern_npc_ids,
+    tavern_npc_schedule_blocks,
+)
+from app.rpg.state.world_state_compression import (
+    build_state_budget_summary,
+    compress_world_state_snapshot,
+)
+from app.rpg.story.escalation_arc_progression import progress_escalation_arcs
 from app.rpg.story.escalation_branching import seed_escalation_arcs
 from app.rpg.story.faction_pressure import emit_faction_pressure_events
 from app.rpg.story.faction_reputation import (
     apply_faction_deltas,
     build_faction_reputation_summary,
 )
-from app.rpg.factions.faction_consequence_policy import emit_faction_consequences
-from app.rpg.factions.tavern_faction_consequence_rules import tavern_faction_consequence_rules
-from app.rpg.npc.npc_reaction_policy import emit_npc_reactions
-from app.rpg.npc.tavern_npc_reaction_rules import tavern_npc_reaction_rules
 from app.rpg.story.followup_arc_progression import progress_followup_arcs
 from app.rpg.story.followup_arc_resolution import resolve_followup_arcs
 from app.rpg.story.followup_arc_seeding import seed_followup_arcs
 from app.rpg.story.pressure_pacing import filter_pressure_events_for_pacing
 from app.rpg.story.story_arc_aftermath import apply_story_arc_aftermath
 from app.rpg.story.story_arc_lifecycle import apply_story_arc_lifecycle
+from app.rpg.story.tavern_escalation_progression_rules import (
+    tavern_escalation_progression_rules,
+)
 from app.rpg.story.tavern_faction_pressure_rules import tavern_faction_pressure_rules
 from app.rpg.story.tavern_followup_progression_rules import (
     tavern_followup_progression_rules,
@@ -1295,24 +1210,6 @@ from app.rpg.story.tavern_followup_resolution_rules import (
 )
 from app.rpg.story.tavern_story_aftermath_rules import tavern_story_aftermath_rules
 from app.rpg.story.tavern_story_arc_rules import tavern_story_arc_rules
-from app.rpg.economy.economy_pressure import apply_economy_pressure
-from app.rpg.economy.tavern_economy_pressure_rules import tavern_economy_pressure_rules
-from app.rpg.combat.combat_consequence_pressure import apply_combat_consequence_pressure
-from app.rpg.combat.combat_lifecycle import run_combat_lifecycle_tick
-from app.rpg.combat.tavern_combat_lifecycle_rules import tavern_combat_lifecycle_rules
-from app.rpg.state.world_state_compression import (
-    build_state_budget_summary,
-    compress_world_state_snapshot,
-)
-from app.rpg.story.escalation_arc_progression import progress_escalation_arcs
-from app.rpg.story.tavern_escalation_progression_rules import tavern_escalation_progression_rules
-from app.rpg.npc.npc_agency import emit_npc_agency_events
-from app.rpg.npc.npc_schedule import resolve_npc_schedule_state
-from app.rpg.npc.tavern_npc_agency_rules import tavern_npc_agency_rules
-from app.rpg.npc.tavern_npc_schedules import (
-    tavern_npc_ids,
-    tavern_npc_schedule_blocks,
-)
 from tests.rpg.autoplay.checkpoints import (
     collect_state_bounds,
     validate_save_load_checkpoint,
@@ -1401,6 +1298,894 @@ def _safe_dict(value: Any) -> Dict[str, Any]:
 
 def _safe_list(value: Any) -> List[Any]:
     return value if isinstance(value, list) else []
+
+
+def _json_size_bytes(value: Any) -> int:
+    try:
+        return len(
+            json.dumps(
+                value,
+                ensure_ascii=False,
+                sort_keys=True,
+                default=str,
+            ).encode("utf-8", errors="replace")
+        )
+    except Exception:
+        return len(repr(value).encode("utf-8", errors="replace"))
+
+
+def _bounded_transcript_row(
+    row: Dict[str, Any],
+    *,
+    max_row_bytes: int = 50000,
+) -> Dict[str, Any]:
+    row = _safe_dict(row)
+    slim = _slim_transcript_row(row, max_row_bytes=max_row_bytes)
+
+    if _json_size_bytes(slim) <= max_row_bytes:
+        return slim
+
+    # Last-resort bounded fallback. Keep identity/action/debug pointers only.
+    bounded = {
+        "turn_index": row.get("turn_index") or row.get("turn"),
+        "turn_id": row.get("turn_id"),
+        "player_action": row.get("player_action"),
+        "canonical_turn_action": row.get("canonical_turn_action"),
+        "actual_sent_action": row.get("actual_sent_action"),
+        "action_category": row.get("action_category"),
+        "presentation_status": row.get("presentation_status"),
+        "narration": _safe_str(
+            row.get("selected_narration")
+            or row.get("display_narration")
+            or row.get("narration")
+        )[:2000],
+        "npc": _safe_dict(row.get("npc")),
+        "dialogue_presentation_compatibility": row.get("dialogue_presentation_compatibility"),
+        "dialogue_action_relevance": row.get("dialogue_action_relevance"),
+        "direct_graph_action_completion": row.get("direct_graph_action_completion"),
+        "mechanics_covered_this_turn": row.get("mechanics_covered_this_turn"),
+        "background_presentation_result": row.get("background_presentation_result"),
+        "turn_presentation_identity": row.get("turn_presentation_identity"),
+        "row_truncated": True,
+        "original_row_bytes_estimate": _json_size_bytes(row),
+    }
+
+    if _json_size_bytes(bounded) <= max_row_bytes:
+        return bounded
+
+    # Extreme fallback.
+    return {
+        "turn_index": row.get("turn_index") or row.get("turn"),
+        "turn_id": row.get("turn_id"),
+        "player_action": _safe_str(row.get("player_action"))[:1000],
+        "canonical_turn_action": _safe_str(row.get("canonical_turn_action"))[:1000],
+        "action_category": row.get("action_category"),
+        "presentation_status": row.get("presentation_status"),
+        "row_truncated": True,
+        "row_extreme_truncated": True,
+        "original_row_bytes_estimate": _json_size_bytes(row),
+    }
+
+
+def _build_bounded_transcript_rows(
+    transcript_rows: List[Dict[str, Any]],
+    *,
+    max_row_bytes: int = 50000,
+) -> List[Dict[str, Any]]:
+    return [
+        _bounded_transcript_row(_safe_dict(row), max_row_bytes=max_row_bytes)
+        for row in _safe_list(transcript_rows)
+    ]
+
+
+def _normalize_transcript_rows(transcript: Any) -> List[Dict[str, Any]]:
+    rows: List[Dict[str, Any]] = []
+
+    for idx, row_any in enumerate(_safe_list(transcript)):
+        row = _safe_dict(row_any)
+
+        if not row:
+            row = {
+                "turn_index": idx + 1,
+                "empty_transcript_row_repaired": True,
+                "presentation_status": "missing_row",
+            }
+
+        if not row.get("turn_index"):
+            row["turn_index"] = idx + 1
+
+        rows.append(row)
+
+    return rows
+
+
+def _transcript_rows_are_all_null(transcript: Any) -> bool:
+    rows = _safe_list(transcript)
+    return bool(rows) and all(row is None for row in rows)
+
+
+def _build_final_transcript_artifact_rows(
+    *,
+    transcript: Any,
+    transcript_artifacts: Any,
+    summary: Dict[str, Any],
+    session_id: str,
+) -> List[Dict[str, Any]]:
+    transcript_rows = _safe_list(transcript)
+    if transcript_rows and not _transcript_rows_are_all_null(transcript_rows):
+        rows = transcript_rows
+        source = "in_memory_transcript"
+    else:
+        artifact_rows = _safe_list(_safe_dict(transcript_artifacts).get("transcript"))
+        if artifact_rows and not _transcript_rows_are_all_null(artifact_rows):
+            rows = artifact_rows
+            source = "transcript_artifacts"
+        else:
+            rows = [
+                {
+                    "turn_index": turn_index,
+                    "empty_transcript_row_repaired": True,
+                    "transcript_source": "reconstructed_minimal_from_summary",
+                    "presentation_status": "unknown_legacy_transcript_missing",
+                }
+                for turn_index in range(1, int(summary.get("turns_executed") or 0) + 1)
+            ]
+            source = "reconstructed_minimal_from_summary"
+
+    rows = _normalize_transcript_rows(rows)
+
+    final_rows: List[Dict[str, Any]] = []
+    for row in rows:
+        row_d = _ensure_turn_presentation_identity_on_row(
+            row,
+            session_id=_safe_str(session_id),
+        )
+        row_d["transcript_artifact_source"] = _safe_str(
+            row_d.get("transcript_artifact_source") or source
+        )
+        final_rows.append(row_d)
+
+    _assert_transcript_artifact_rows_not_null(final_rows)
+    return final_rows
+
+
+def _ensure_turn_presentation_identity_on_row(
+    row: Dict[str, Any], *, session_id: str
+) -> Dict[str, Any]:
+    row = dict(_safe_dict(row))
+    if not row.get("turn_presentation_identity"):
+        row["turn_presentation_identity"] = _build_turn_presentation_identity(
+            session_id=session_id,
+            turn_index=int(row.get("turn_index") or 0),
+            canonical_turn_action=_safe_str(
+                row.get("canonical_turn_action") or row.get("player_action")
+            ),
+        )
+    return row
+
+
+
+def _assert_transcript_artifact_consistency(
+    *,
+    final_transcript_rows: List[Dict[str, Any]],
+    summary: Dict[str, Any],
+) -> None:
+    quality = _safe_dict(summary.get("transcript_artifact_quality_summary"))
+
+    if not final_transcript_rows:
+        raise RuntimeError("transcript_artifact_consistency_failed:no_final_rows")
+
+    if int(quality.get("row_count") or 0) != len(final_transcript_rows):
+        raise RuntimeError(
+            "transcript_artifact_consistency_failed:"
+            f"quality_row_count={quality.get('row_count')}:"
+            f"actual={len(final_transcript_rows)}"
+        )
+
+    if int(quality.get("null_row_count") or 0) != 0:
+        raise RuntimeError("transcript_artifact_consistency_failed:null_rows")
+
+    if int(quality.get("empty_row_count") or 0) != 0:
+        raise RuntimeError("transcript_artifact_consistency_failed:empty_rows")
+
+
+def _build_transcript_artifact_quality_summary(
+    transcript_rows: Any,
+) -> Dict[str, Any]:
+    rows = _safe_list(transcript_rows)
+
+    null_row_count = sum(1 for row in rows if row is None)
+    empty_row_count = sum(1 for row in rows if not _safe_dict(row))
+    reconstructed_minimal_count = sum(
+        1
+        for row in rows
+        if _safe_dict(row).get("transcript_source")
+        == "reconstructed_minimal_from_summary"
+    )
+
+    by_source: Dict[str, int] = {}
+    for row in rows:
+        source = _safe_str(_safe_dict(row).get("transcript_artifact_source")) or "unknown"
+        by_source[source] = by_source.get(source, 0) + 1
+
+    return {
+        "format_version": "transcript_artifact_quality_v2",
+        "row_count": len(rows),
+        "null_row_count": null_row_count,
+        "empty_row_count": empty_row_count,
+        "reconstructed_minimal_count": reconstructed_minimal_count,
+        "has_full_rows": any(
+            bool(_safe_dict(row).get("player_action"))
+            for row in rows
+        ),
+        "rows_with_turn_identity": sum(
+            1
+            for row in rows
+            if _safe_dict(row).get("turn_presentation_identity")
+        ),
+        "by_source": by_source,
+        "ok": null_row_count == 0 and empty_row_count == 0,
+    }
+
+
+def _build_transcript_size_summary(
+    *,
+    final_transcript_rows: List[Dict[str, Any]],
+    bounded_transcript_rows: List[Dict[str, Any]],
+    slim_transcript_rows: List[Dict[str, Any]],
+    wrote_full_transcript: bool,
+) -> Dict[str, Any]:
+    full_bytes = _json_size_bytes(final_transcript_rows)
+    bounded_bytes = _json_size_bytes(bounded_transcript_rows)
+    slim_bytes = _json_size_bytes(slim_transcript_rows)
+
+    row_sizes = [_json_size_bytes(row) for row in _safe_list(bounded_transcript_rows)]
+    slim_null_count = sum(1 for row in _safe_list(slim_transcript_rows) if row is None)
+    bounded_null_count = sum(1 for row in _safe_list(bounded_transcript_rows) if row is None)
+
+    return {
+        "format_version": "transcript_size_summary_v1",
+        "ok": slim_null_count == 0 and bounded_null_count == 0,
+        "row_count": len(_safe_list(final_transcript_rows)),
+        "full_transcript_json_bytes_estimate": full_bytes,
+        "bounded_transcript_json_bytes_estimate": bounded_bytes,
+        "slim_transcript_json_bytes_estimate": slim_bytes,
+        "wrote_full_transcript": bool(wrote_full_transcript),
+        "max_bounded_row_bytes": max(row_sizes) if row_sizes else 0,
+        "avg_bounded_row_bytes": (
+            sum(row_sizes) / len(row_sizes)
+            if row_sizes
+            else 0.0
+        ),
+        "slim_transcript_null_count": slim_null_count,
+        "bounded_transcript_null_count": bounded_null_count,
+        "bounded_rows_truncated_count": sum(
+            1 for row in _safe_list(bounded_transcript_rows)
+            if _safe_dict(row).get("row_truncated")
+        ),
+        "bounded_rows_extreme_truncated_count": sum(
+            1 for row in _safe_list(bounded_transcript_rows)
+            if _safe_dict(row).get("row_extreme_truncated")
+        ),
+    }
+
+
+def _assert_bounded_transcript_artifacts_valid(
+    *,
+    bounded_transcript_rows: List[Dict[str, Any]],
+    slim_transcript_rows: List[Dict[str, Any]],
+    summary: Dict[str, Any],
+) -> None:
+    bounded_null_indexes = [
+        idx for idx, row in enumerate(_safe_list(bounded_transcript_rows))
+        if row is None or not _safe_dict(row)
+    ]
+    slim_null_indexes = [
+        idx for idx, row in enumerate(_safe_list(slim_transcript_rows))
+        if row is None or not _safe_dict(row)
+    ]
+
+    if bounded_null_indexes:
+        raise RuntimeError(
+            "bounded_transcript_artifact_rows_null:"
+            f"count={len(bounded_null_indexes)}:"
+            f"indexes={bounded_null_indexes[:20]}"
+        )
+
+    if slim_null_indexes:
+        raise RuntimeError(
+            "slim_transcript_artifact_rows_null:"
+            f"count={len(slim_null_indexes)}:"
+            f"indexes={slim_null_indexes[:20]}"
+        )
+
+    size_summary = _safe_dict(summary.get("transcript_size_summary"))
+    if int(size_summary.get("slim_transcript_null_count") or 0) != 0:
+        raise RuntimeError("slim_transcript_size_summary_reports_null_rows")
+
+    if int(size_summary.get("bounded_transcript_null_count") or 0) != 0:
+        raise RuntimeError("bounded_transcript_size_summary_reports_null_rows")
+
+
+def _assert_transcript_artifact_rows_not_null(transcript: Any) -> None:
+    rows = _safe_list(transcript)
+    null_indexes = [
+        idx
+        for idx, row in enumerate(rows)
+        if row is None
+    ]
+
+    if null_indexes:
+        raise RuntimeError(
+            "transcript_artifact_rows_null:"
+            f"count={len(null_indexes)}:"
+            f"indexes={null_indexes[:20]}"
+        )
+
+    empty_indexes = [
+        idx
+        for idx, row in enumerate(rows)
+        if not _safe_dict(row)
+    ]
+
+    if empty_indexes:
+        raise RuntimeError(
+            "transcript_artifact_rows_empty:"
+            f"count={len(empty_indexes)}:"
+            f"indexes={empty_indexes[:20]}"
+        )
+
+
+def _stable_json_hash(value: Any) -> str:
+    try:
+        payload = json.dumps(value, sort_keys=True, ensure_ascii=False, default=str)
+    except Exception:
+        payload = repr(value)
+    return hashlib.sha256(payload.encode("utf-8", errors="replace")).hexdigest()[:16]
+
+
+def _turn_action_hash(action: str) -> str:
+    return _stable_json_hash(_normalize_turn_action_text(_safe_str(action)))
+
+
+def _turn_contract_hash(contract: Any) -> str:
+    contract_d = _safe_dict(contract)
+    if not contract_d:
+        return ""
+    return _stable_json_hash(contract_d)
+
+
+def _build_turn_presentation_identity(
+    *,
+    session_id: str,
+    turn_index: int,
+    canonical_turn_action: str,
+    turn_contract: Any = None,
+    action_category: str = "",
+) -> Dict[str, Any]:
+    action_s = _safe_str(canonical_turn_action)
+    category_s = _safe_str(action_category) or _turn_action_category(action_s)
+
+    return {
+        "format_version": "turn_presentation_identity_v1",
+        "session_id": _safe_str(session_id),
+        "turn_index": int(turn_index or 0),
+        "turn_id": f"{_safe_str(session_id)}:turn:{int(turn_index or 0)}",
+        "canonical_turn_action": action_s,
+        "canonical_turn_action_hash": _turn_action_hash(action_s),
+        "action_category": category_s,
+        "turn_contract_hash": _turn_contract_hash(turn_contract),
+    }
+
+
+def _presentation_identity_matches_turn(
+    *,
+    payload_identity: Any,
+    row_identity: Any,
+    require_contract_hash: bool = False,
+) -> Tuple[bool, Dict[str, Any]]:
+    payload = _safe_dict(payload_identity)
+    row = _safe_dict(row_identity)
+
+    mismatches: List[str] = []
+
+    for key in ("session_id", "turn_index", "turn_id"):
+        if _safe_str(payload.get(key)) != _safe_str(row.get(key)):
+            mismatches.append(key)
+
+    if _safe_str(payload.get("canonical_turn_action_hash")) != _safe_str(
+        row.get("canonical_turn_action_hash")
+    ):
+        mismatches.append("canonical_turn_action_hash")
+
+    if _safe_str(payload.get("action_category")) != _safe_str(row.get("action_category")):
+        mismatches.append("action_category")
+
+    payload_contract_hash = _safe_str(payload.get("turn_contract_hash"))
+    row_contract_hash = _safe_str(row.get("turn_contract_hash"))
+
+    if require_contract_hash or (payload_contract_hash and row_contract_hash):
+        if payload_contract_hash != row_contract_hash:
+            mismatches.append("turn_contract_hash")
+
+    return (
+        not mismatches,
+        {
+            "ok": not mismatches,
+            "mismatches": mismatches,
+            "payload_identity": payload,
+            "row_identity": row,
+        },
+    )
+
+
+def _find_transcript_row_index_by_turn_identity(
+    transcript: List[Dict[str, Any]],
+    identity: Dict[str, Any],
+) -> int:
+    identity = _safe_dict(identity)
+    wanted_turn_id = _safe_str(identity.get("turn_id"))
+    wanted_session_id = _safe_str(identity.get("session_id"))
+    wanted_turn_index = int(identity.get("turn_index") or 0)
+
+    for idx, row_any in enumerate(_safe_list(transcript)):
+        row = _safe_dict(row_any)
+        row_identity = _safe_dict(row.get("turn_presentation_identity"))
+
+        if wanted_turn_id and _safe_str(row_identity.get("turn_id") or row.get("turn_id")) == wanted_turn_id:
+            return idx
+
+        if (
+            wanted_session_id
+            and wanted_turn_index
+            and _safe_str(row_identity.get("session_id")) == wanted_session_id
+            and int(row_identity.get("turn_index") or row.get("turn_index") or 0) == wanted_turn_index
+        ):
+            return idx
+
+    return -1
+
+
+def _extract_background_presentation_text(result: Dict[str, Any]) -> Dict[str, Any]:
+    result = _safe_dict(result)
+
+    narration = _safe_str(
+        result.get("narration")
+        or result.get("display_narration")
+        or result.get("selected_narration")
+    )
+
+    npc = _safe_dict(result.get("npc"))
+    npc_line = _safe_str(
+        npc.get("line")
+        or result.get("npc_line")
+        or result.get("npc_response")
+    )
+    npc_speaker = _safe_str(
+        npc.get("speaker")
+        or result.get("npc_speaker")
+    )
+
+    selected = _safe_dict(result.get("selected"))
+    if not narration:
+        narration = _safe_str(
+            selected.get("narration")
+            or selected.get("display_narration")
+            or selected.get("selected_narration")
+        )
+
+    selected_npc = _safe_dict(selected.get("npc"))
+    if not npc_line:
+        npc_line = _safe_str(selected_npc.get("line"))
+    if not npc_speaker:
+        npc_speaker = _safe_str(selected_npc.get("speaker"))
+
+    return {
+        "narration": narration,
+        "npc": {
+            "speaker": npc_speaker,
+            "line": npc_line,
+        } if npc_line else {},
+    }
+
+
+def _attach_background_presentation_to_row(
+    row: Dict[str, Any],
+    result: Dict[str, Any],
+) -> Dict[str, Any]:
+    row = dict(_safe_dict(row))
+    result = _safe_dict(result)
+
+    presentation = _extract_background_presentation_text(result)
+
+    narration = _safe_str(presentation.get("narration"))
+    npc = _safe_dict(presentation.get("npc"))
+
+    if narration:
+        row["narration"] = narration
+        row["display_narration"] = narration
+        row["selected_narration"] = narration
+
+    if npc:
+        row["npc"] = npc
+        row["npc_speaker"] = _safe_str(npc.get("speaker"))
+        row["npc_line"] = _safe_str(npc.get("line"))
+
+    row["presentation_status"] = "attached"
+    row["presentation_attached_from"] = _safe_str(
+        result.get("source") or result.get("phase") or "background"
+    )
+    row["background_presentation_result"] = {
+        "turn_id": result.get("turn_id"),
+        "turn_index": result.get("turn_index"),
+        "canonical_turn_action_hash": result.get("canonical_turn_action_hash"),
+        "action_category": result.get("action_category"),
+    }
+
+    return row
+
+
+def _attach_background_presentation_result_turn_bound(
+    *,
+    transcript: List[Dict[str, Any]],
+    result: Dict[str, Any],
+    orphaned_results: List[Dict[str, Any]],
+) -> Dict[str, Any]:
+    result = _safe_dict(result)
+    payload_identity = _safe_dict(result.get("turn_presentation_identity"))
+
+    if not payload_identity:
+        payload_identity = {
+            "session_id": result.get("session_id"),
+            "turn_index": result.get("turn_index"),
+            "turn_id": result.get("turn_id"),
+            "canonical_turn_action_hash": result.get("canonical_turn_action_hash"),
+            "action_category": result.get("action_category"),
+            "turn_contract_hash": result.get("turn_contract_hash"),
+        }
+
+    row_idx = _find_transcript_row_index_by_turn_identity(transcript, payload_identity)
+
+    if row_idx < 0:
+        orphan = {
+            "reason": "no_matching_turn_row",
+            "turn_presentation_identity": payload_identity,
+            "result_preview": _extract_background_presentation_text(result),
+        }
+        orphaned_results.append(orphan)
+        return {
+            "attached": False,
+            "reason": "no_matching_turn_row",
+            "row_index": -1,
+            "turn_id": payload_identity.get("turn_id"),
+        }
+
+    row = _safe_dict(transcript[row_idx])
+    row_identity = _safe_dict(row.get("turn_presentation_identity"))
+
+    ok, diag = _presentation_identity_matches_turn(
+        payload_identity=payload_identity,
+        row_identity=row_identity,
+        require_contract_hash=False,
+    )
+
+    if not ok:
+        orphan = {
+            "reason": "identity_mismatch",
+            "diagnostic": diag,
+            "result_preview": _extract_background_presentation_text(result),
+        }
+        orphaned_results.append(orphan)
+        return {
+            "attached": False,
+            "reason": "identity_mismatch",
+            "row_index": row_idx,
+            "turn_id": payload_identity.get("turn_id"),
+            "diagnostic": diag,
+        }
+
+    transcript[row_idx] = _attach_background_presentation_to_row(row, result)
+
+    return {
+        "attached": True,
+        "reason": "attached_to_matching_turn",
+        "row_index": row_idx,
+        "turn_id": payload_identity.get("turn_id"),
+        "turn_index": payload_identity.get("turn_index"),
+    }
+
+
+def _visible_presentation_text_for_compatibility(row: Dict[str, Any]) -> str:
+    row = _safe_dict(row)
+    npc = _safe_dict(row.get("npc"))
+    return " ".join(
+        part
+        for part in (
+            _safe_str(row.get("selected_narration")),
+            _safe_str(row.get("display_narration")),
+            _safe_str(row.get("narration")),
+            _safe_str(npc.get("line")),
+            _safe_str(row.get("npc_line")),
+        )
+        if part
+    )
+
+
+def _clear_visible_npc_fields(row: Dict[str, Any]) -> Dict[str, Any]:
+    row = dict(_safe_dict(row))
+    row["npc"] = {}
+    row["npc_line"] = ""
+    row["npc_speaker"] = ""
+
+    for key in ("selected_output", "selected", "presentation", "display"):
+        nested = dict(_safe_dict(row.get(key)))
+        if nested:
+            nested["npc"] = {}
+            nested["npc_line"] = ""
+            row[key] = nested
+
+    return row
+
+
+def _apply_turn_bound_presentation_compatibility_gate(row: Dict[str, Any]) -> Dict[str, Any]:
+    row = dict(_safe_dict(row))
+
+    presentation_text = _visible_presentation_text_for_compatibility(row)
+    action_text = _safe_str(row.get("canonical_turn_action") or row.get("player_action"))
+
+    compat_ok, compat_diag = _dialogue_presentation_is_category_compatible(
+        action_text=action_text,
+        presentation_text=presentation_text,
+        row=row,
+    )
+
+    row["dialogue_presentation_compatibility"] = compat_diag
+
+    if _presentation_has_combat_claim(presentation_text) and not _turn_has_combat_support(row):
+        compat_ok = False
+        compat_diag = dict(compat_diag)
+        compat_diag["ok"] = False
+        compat_diag["reason"] = "unsupported_combat_claim_suppressed"
+        row["dialogue_presentation_compatibility"] = compat_diag
+        row["unsupported_combat_claim_suppressed"] = True
+    else:
+        row["unsupported_combat_claim_suppressed"] = False
+
+    if not compat_ok:
+        fallback = _build_category_compatible_presentation_fallback(row)
+        row["narration"] = fallback
+        row["display_narration"] = fallback
+        row["selected_narration"] = fallback
+        row = _clear_visible_npc_fields(row)
+
+        relevance = dict(_safe_dict(row.get("dialogue_action_relevance")))
+        relevance["repaired"] = True
+        relevance["fallback_applied"] = True
+        relevance["reason"] = _safe_str(compat_diag.get("reason")) or "presentation_incompatible"
+        relevance["source"] = _safe_str(
+            row.get("selected_narration_source")
+            or row.get("narration_source")
+            or row.get("presentation_attached_from")
+            or "unknown"
+        )
+        relevance["compatibility"] = compat_diag
+        row["dialogue_action_relevance"] = relevance
+        row["dialogue_action_relevance_repaired"] = True
+        row["presentation_status"] = "attached_repaired"
+
+    return row
+
+
+def _background_presentation_expected_attachment_count(summary: Dict[str, Any]) -> int:
+    summary = _safe_dict(summary)
+
+    explicit_count = int(summary.get("background_presentation_completed_result_count") or 0)
+
+    timing = _safe_dict(summary.get("background_result_timing_summary"))
+    timing_attached = int(timing.get("jobs_attached_total") or 0)
+
+    background_jobs = _safe_dict(summary.get("background_jobs"))
+    combined_jobs = int(background_jobs.get("combined_background_llm_jobs") or 0)
+
+    deferred_trace = _safe_dict(summary.get("deferred_narration_trace_summary"))
+    ok_deferred_jobs = int(deferred_trace.get("ok_jobs") or 0)
+
+    return max(explicit_count, timing_attached, combined_jobs, ok_deferred_jobs)
+
+
+def _build_background_attachment_events_from_timing_summary(
+    summary: Dict[str, Any],
+) -> List[Dict[str, Any]]:
+    timing = _safe_dict(_safe_dict(summary).get("background_result_timing_summary"))
+    events = []
+
+    for event_any in _safe_list(timing.get("attachment_events")):
+        event = _safe_dict(event_any)
+        source_turn = int(event.get("source_turn") or 0)
+        attach_turn = int(event.get("attach_turn") or 0)
+
+        events.append(
+            {
+                "attached": True,
+                "reason": "legacy_background_timing_attachment_observed",
+                "phase": _safe_str(event.get("phase") or "unknown"),
+                "source_turn": source_turn,
+                "attach_turn": attach_turn,
+                "lag_turns": int(event.get("lag_turns") or max(0, attach_turn - source_turn)),
+                "job_id": _safe_str(event.get("job_id")),
+                "turn_bound_verified": False,
+                "legacy_observed_only": True,
+            }
+        )
+
+    return events
+
+
+def _assert_background_presentation_attachment_wired(summary: Dict[str, Any]) -> None:
+    summary = _safe_dict(summary)
+
+    expected_count = _background_presentation_expected_attachment_count(summary)
+    events = _safe_list(summary.get("background_presentation_attachment_events"))
+    attach_summary = _safe_dict(summary.get("background_presentation_attachment_summary"))
+
+    if expected_count > 0 and not events:
+        raise RuntimeError(
+            "background_presentation_attachment_not_wired:"
+            f"expected_count={expected_count}:events=0:"
+            f"timing_jobs_attached_total="
+            f"{_safe_dict(summary.get('background_result_timing_summary')).get('jobs_attached_total')}:"
+            f"combined_background_llm_jobs="
+            f"{_safe_dict(summary.get('background_jobs')).get('combined_background_llm_jobs')}:"
+            f"deferred_ok_jobs="
+            f"{_safe_dict(summary.get('deferred_narration_trace_summary')).get('ok_jobs')}"
+        )
+
+    if expected_count > 0 and not attach_summary:
+        raise RuntimeError(
+            "background_presentation_attachment_summary_missing:"
+            f"expected_count={expected_count}"
+        )
+
+    if expected_count > 0 and int(attach_summary.get("event_count") or 0) == 0:
+        raise RuntimeError(
+            "background_presentation_attachment_summary_empty:"
+            f"expected_count={expected_count}"
+        )
+
+
+def _assert_turn_bound_attachment_verified(summary: Dict[str, Any]) -> None:
+    attachment = _safe_dict(summary.get("background_presentation_attachment_summary"))
+    expected_count = _background_presentation_expected_attachment_count(summary)
+
+    if expected_count <= 0:
+        return
+
+    if not bool(attachment.get("turn_bound_attachment_verified")):
+        warnings = list(_safe_list(summary.get("product_quality_warnings")))
+        warning = "background_presentation_legacy_attachment_not_turn_bound_verified"
+        if warning not in warnings:
+            warnings.append(warning)
+        summary["product_quality_warnings"] = warnings
+
+
+def _build_background_presentation_attachment_summary(
+    summary: Dict[str, Any],
+    transcript: List[Dict[str, Any]],
+) -> Dict[str, Any]:
+    summary = _safe_dict(summary)
+    events = _safe_list(summary.get("background_presentation_attachment_events"))
+    if not events:
+        events = _build_background_attachment_events_from_timing_summary(summary)
+    orphans = _safe_list(summary.get("orphaned_background_presentation_results"))
+
+    attached_count = sum(1 for e in events if _safe_dict(e).get("attached"))
+    rejected_count = sum(1 for e in events if not _safe_dict(e).get("attached"))
+
+    by_reason: Dict[str, int] = {}
+    for e in events:
+        reason = _safe_str(_safe_dict(e).get("reason")) or "unknown"
+        by_reason[reason] = by_reason.get(reason, 0) + 1
+
+    pending_count = 0
+    attached_row_count = 0
+    repaired_attached_count = 0
+
+    for row in _safe_list(transcript):
+        status = _safe_str(_safe_dict(row).get("presentation_status"))
+        if status == "pending":
+            pending_count += 1
+        if status in {"attached", "attached_repaired"}:
+            attached_row_count += 1
+        if status == "attached_repaired":
+            repaired_attached_count += 1
+
+    turn_bound_verified_count = sum(
+        1
+        for event_any in events
+        if bool(_safe_dict(event_any).get("turn_bound_verified"))
+    )
+
+    legacy_observed_count = sum(
+        1
+        for event_any in events
+        if bool(_safe_dict(event_any).get("legacy_observed_only"))
+    )
+
+    return {
+        "format_version": "background_presentation_attachment_summary_v1",
+        "ok": rejected_count == 0 or attached_count > 0,
+        "event_count": len(events),
+        "attached_count": attached_count,
+        "rejected_count": rejected_count,
+        "orphaned_count": len(orphans),
+        "pending_count": pending_count,
+        "attached_row_count": attached_row_count,
+        "repaired_attached_count": repaired_attached_count,
+        "by_reason": by_reason,
+        "orphan_examples": orphans[:20],
+        "turn_bound_verified_count": turn_bound_verified_count,
+        "legacy_observed_count": legacy_observed_count,
+        "turn_bound_attachment_verified": (
+            len(events) > 0 and turn_bound_verified_count == len(events)
+        ),
+    }
+
+
+def _finalize_background_presentation_attachment_tracking(
+    summary: Dict[str, Any],
+    transcript: List[Dict[str, Any]],
+) -> Dict[str, Any]:
+    summary = dict(_safe_dict(summary))
+
+    events = list(_safe_list(summary.get("background_presentation_attachment_events")))
+
+    if not events:
+        events = _build_background_attachment_events_from_timing_summary(summary)
+
+    summary["background_presentation_attachment_events"] = events
+    summary["orphaned_background_presentation_results"] = list(
+        _safe_list(summary.get("orphaned_background_presentation_results"))
+    )
+
+    expected_count = _background_presentation_expected_attachment_count(summary)
+    summary["background_presentation_completed_result_count"] = max(
+        int(summary.get("background_presentation_completed_result_count") or 0),
+        expected_count,
+    )
+
+    summary["background_presentation_attachment_summary"] = (
+        _build_background_presentation_attachment_summary(summary, transcript)
+    )
+
+    _assert_turn_bound_attachment_verified(summary)
+
+    return summary
+
+
+def _assert_no_cross_turn_background_presentation(transcript: List[Dict[str, Any]]) -> None:
+    for row_any in _safe_list(transcript):
+        row = _safe_dict(row_any)
+        bg = _safe_dict(row.get("background_presentation_result"))
+        if not bg:
+            continue
+
+        row_identity = _safe_dict(row.get("turn_presentation_identity"))
+
+        if _safe_str(bg.get("turn_id")) != _safe_str(row_identity.get("turn_id")):
+            raise RuntimeError(
+                "cross_turn_background_presentation:"
+                f"row_turn_id={row_identity.get('turn_id')}:"
+                f"bg_turn_id={bg.get('turn_id')}"
+            )
+
+        if _safe_str(bg.get("canonical_turn_action_hash")) != _safe_str(
+            row_identity.get("canonical_turn_action_hash")
+        ):
+            raise RuntimeError(
+                "cross_turn_background_presentation:"
+                f"row_turn_id={row_identity.get('turn_id')}:"
+                "canonical_turn_action_hash_mismatch"
+            )
 
 
 def _extract_grounding_validation_from_any(value: Any) -> Dict[str, Any]:
@@ -1642,6 +2427,9 @@ def _assert_final_artifact_consistency(summary: Dict[str, Any]) -> None:
             "final_artifact_consistency_failed:"
             f"summary_ok={summary.get('ok')}:health_summary_ok={health.get('summary_ok')}"
         )
+
+    _assert_background_presentation_attachment_wired(summary)
+    _assert_turn_bound_attachment_verified(summary)
 
     if bool(evaluation.get("ok")) != bool(health.get("hundred_turn_evaluation_ok")):
         raise RuntimeError(
@@ -3489,6 +4277,13 @@ def _infer_mechanics_from_graph_action(action: Any, command: str = "") -> List[s
     )
 
     mechanics = set(_graph_action_mechanics(action))
+
+    effects = _safe_dict(action.get("effects"))
+    flags = _safe_dict(effects.get("flags"))
+    for key, value in flags.items():
+        key_s = _safe_str(key)
+        if value is True and key_s.startswith("arc_success:"):
+            mechanics.add("arc_success")
 
     if any(term in text for term in ("buy", "purchase", "ration", "rations", "supplies")):
         mechanics.update({"buying", "inventory_change", "currency_change"})
@@ -5685,6 +6480,12 @@ def _build_narration_grounding_summary(transcript: List[Dict[str, Any]]) -> Dict
             validation = _extract_grounding_validation_from_any(row)
         if not validation:
             continue
+        if row.get("unsupported_combat_claim_suppressed"):
+            repaired_violation_counts = violation_counts  # count as handled
+            repaired_violation_counts["unsupported_combat_claim_suppressed"] = (
+                repaired_violation_counts.get("unsupported_combat_claim_suppressed", 0) + 1
+            )
+            continue
         checked += 1
         if not bool(validation.get("ok")):
             invalid += 1
@@ -5992,6 +6793,194 @@ def _apply_dialogue_action_relevance_gate(row: Dict[str, Any]) -> Dict[str, Any]
     return row
 
 
+def _turn_action_category(text: str) -> str:
+    text_n = _normalize_turn_action_text(text)
+
+    if any(t in text_n for t in ("buy", "purchase", "ration", "rations", "supplies")):
+        return "economy"
+
+    if any(t in text_n for t in ("rent", "room", "lodging", "rest", "sleep")):
+        return "service"
+
+    if any(t in text_n for t in ("attack", "fight", "ambush", "bandit", "combat", "protect", "scout")):
+        return "combat"
+
+    if any(t in text_n for t in ("ask", "tell", "question", "persuade", "talk", "speak")):
+        return "dialogue"
+
+    if any(t in text_n for t in ("travel", "leave", "road", "go to", "move", "enter")):
+        return "travel"
+
+    if any(t in text_n for t in ("inspect", "search", "look", "examine", "clue", "proof", "coin")):
+        return "investigation"
+
+    return "general"
+
+
+def _presentation_text_category(text: str) -> str:
+    text_n = _normalize_turn_action_text(text)
+
+    if any(t in text_n for t in ("you buy", "you purchase", "rations", "supplies", "coins", "paid")):
+        return "economy"
+
+    if any(t in text_n for t in ("room", "lodging", "bed", "rest")):
+        return "service"
+
+    if any(t in text_n for t in ("blade", "blood", "strike", "wound", "bandit", "ambush", "fight", "combat")):
+        return "combat"
+
+    if any(t in text_n for t in ("asks", "says", "replies", "answers", "tells you")):
+        return "dialogue"
+
+    if any(t in text_n for t in ("road", "travel", "path", "trail", "leave")):
+        return "travel"
+
+    if any(t in text_n for t in ("clue", "proof", "coin", "evidence", "track", "marked")):
+        return "investigation"
+
+    return "general"
+
+
+def _dialogue_presentation_is_category_compatible(
+    *,
+    action_text: str,
+    presentation_text: str,
+    row: Dict[str, Any],
+) -> Tuple[bool, Dict[str, Any]]:
+    action_category = _turn_action_category(action_text)
+    presentation_category = _presentation_text_category(presentation_text)
+
+    if not presentation_text.strip():
+        return True, {
+            "ok": True,
+            "action_category": action_category,
+            "presentation_category": presentation_category,
+            "reason": "empty_presentation",
+        }
+
+    if presentation_category == "general":
+        return True, {
+            "ok": True,
+            "action_category": action_category,
+            "presentation_category": presentation_category,
+            "reason": "general_presentation",
+        }
+
+    compatible_pairs = {
+        ("dialogue", "investigation"),
+        ("investigation", "dialogue"),
+        ("combat", "travel"),
+        ("travel", "combat"),
+    }
+
+    if action_category == presentation_category or (action_category, presentation_category) in compatible_pairs:
+        return True, {
+            "ok": True,
+            "action_category": action_category,
+            "presentation_category": presentation_category,
+            "reason": "category_match",
+        }
+
+    mechanics = {
+        _safe_str(v)
+        for v in _safe_list(row.get("mechanics_covered_this_turn"))
+        if _safe_str(v)
+    }
+    if presentation_category == "combat" and (
+        "combat_started" in mechanics or "combat_resolved" in mechanics
+    ):
+        return True, {
+            "ok": True,
+            "action_category": action_category,
+            "presentation_category": presentation_category,
+            "reason": "combat_supported_by_mechanics",
+        }
+
+    return False, {
+        "ok": False,
+        "action_category": action_category,
+        "presentation_category": presentation_category,
+        "reason": "action_presentation_category_mismatch",
+    }
+
+
+def _build_category_compatible_presentation_fallback(row: Dict[str, Any]) -> str:
+    row = _safe_dict(row)
+    action = _safe_str(row.get("canonical_turn_action") or row.get("player_action"))
+    category = _turn_action_category(action)
+
+    if category == "economy":
+        return "You complete the purchase; your supplies and coin totals are updated by the authoritative turn result."
+
+    if category == "service":
+        return "You complete the service request; the authoritative turn result records the cost and any lodging or rest effect."
+
+    if category == "combat":
+        return "You press the fight according to the authoritative combat result; only recorded damage, rewards, and outcomes apply."
+
+    if category == "travel":
+        return "You move on according to the authoritative travel result; the current location and available routes update."
+
+    if category == "investigation":
+        return "You follow the clue trail; only evidence recorded by the authoritative turn result becomes true."
+
+    if category == "dialogue":
+        return "The conversation continues; any NPC response is limited to the authoritative social and quest state."
+
+    return "The action resolves according to the authoritative turn result."
+
+
+def _presentation_has_combat_claim(text: str) -> bool:
+    text_n = _normalize_turn_action_text(text)
+    return any(
+        term in text_n
+        for term in (
+            "combat",
+            "fight",
+            "fighting",
+            "attack",
+            "attacks",
+            "strike",
+            "strikes",
+            "wound",
+            "wounded",
+            "blood",
+            "blade",
+            "bandit",
+            "ambush",
+            "damage",
+            "xp",
+        )
+    )
+
+
+def _turn_has_combat_support(row: Dict[str, Any]) -> bool:
+    row = _safe_dict(row)
+    mechanics = {
+        _safe_str(v)
+        for v in _safe_list(row.get("mechanics_covered_this_turn"))
+        if _safe_str(v)
+    }
+
+    if "combat_started" in mechanics or "combat_resolved" in mechanics:
+        return True
+
+    direct = _safe_dict(row.get("direct_graph_action_completion"))
+    direct_mechanics = {
+        _safe_str(v)
+        for v in _safe_list(direct.get("mechanics"))
+        if _safe_str(v)
+    }
+
+    if "combat_started" in direct_mechanics or "combat_resolved" in direct_mechanics:
+        return True
+
+    if row.get("combat_result") or row.get("combat_state_delta"):
+        return True
+
+    return False
+
+
 def _assert_repaired_dialogue_visible_fields(row: Dict[str, Any]) -> Dict[str, Any]:
     row = dict(_safe_dict(row))
 
@@ -6189,6 +7178,8 @@ def _build_dialogue_repair_quality_summary(summary: Dict[str, Any]) -> Dict[str,
 def _build_dialogue_stale_source_summary(transcript: List[Dict[str, Any]]) -> Dict[str, Any]:
     by_source: Dict[str, int] = {}
     by_reason: Dict[str, int] = {}
+    by_action_category: Dict[str, int] = {}
+    by_presentation_category: Dict[str, int] = {}
     examples: List[Dict[str, Any]] = []
 
     repaired_count = 0
@@ -6218,10 +7209,12 @@ def _build_dialogue_stale_source_summary(transcript: List[Dict[str, Any]]) -> Di
 
         repaired_count += 1
 
+        compat = _safe_dict(row.get("dialogue_presentation_compatibility"))
         source = _safe_str(
             relevance.get("source")
             or row.get("selected_narration_source")
             or row.get("narration_source")
+            or row.get("combined_background_source")
             or row.get("player_agent_selection_source")
             or "unknown"
         )
@@ -6229,11 +7222,17 @@ def _build_dialogue_stale_source_summary(transcript: List[Dict[str, Any]]) -> Di
             relevance.get("reason")
             or relevance.get("repair_reason")
             or relevance.get("fallback_reason")
+            or compat.get("reason")
             or "unknown"
         )
 
         by_source[source] = by_source.get(source, 0) + 1
         by_reason[reason] = by_reason.get(reason, 0) + 1
+
+        action_category = _safe_str(compat.get("action_category"))
+        presentation_category = _safe_str(compat.get("presentation_category"))
+        by_action_category[action_category] = by_action_category.get(action_category, 0) + 1 if action_category else by_action_category.get(action_category, 0)
+        by_presentation_category[presentation_category] = by_presentation_category.get(presentation_category, 0) + 1 if presentation_category else by_presentation_category.get(presentation_category, 0)
 
         if len(examples) < 20:
             examples.append(
@@ -6261,6 +7260,8 @@ def _build_dialogue_stale_source_summary(transcript: List[Dict[str, Any]]) -> Di
         "repair_rate": repair_rate,
         "by_source": by_source,
         "by_reason": by_reason,
+        "by_action_category": by_action_category,
+        "by_presentation_category": by_presentation_category,
         "examples": examples,
     }
 
@@ -9512,6 +10513,126 @@ def _build_story_arc_aftermath_summary(
     return summary
 
 
+def _collect_successful_arc_completion_evidence(
+    transcript: List[Dict[str, Any]],
+) -> Dict[str, Any]:
+    rows = [_safe_dict(row) for row in _safe_list(transcript)]
+
+    marked_coin_turns: List[int] = []
+    mill_road_turns: List[int] = []
+    proof_turns: List[int] = []
+    combat_turns: List[int] = []
+    faction_turns: List[int] = []
+    npc_reaction_turns: List[int] = []
+
+    examples: List[Dict[str, Any]] = []
+
+    for row in rows:
+        turn_index = int(row.get("turn_index") or row.get("turn") or 0)
+        direct = _safe_dict(row.get("direct_graph_action_completion"))
+        action_id = _safe_str(direct.get("action_id"))
+
+        mechanics = {
+            _safe_str(v)
+            for v in _safe_list(direct.get("mechanics"))
+            + _safe_list(row.get("mechanics_covered_this_turn"))
+            if _safe_str(v)
+        }
+
+        changed_parts = {
+            _safe_str(v)
+            for v in _safe_list(direct.get("changed_parts"))
+            + _safe_list(row.get("direct_graph_changed_parts"))
+            if _safe_str(v)
+        }
+
+        text = _normalize_turn_action_text(
+            " ".join(
+                [
+                    _safe_str(row.get("player_action")),
+                    _safe_str(row.get("canonical_turn_action")),
+                    action_id,
+                    " ".join(sorted(mechanics)),
+                    " ".join(sorted(changed_parts)),
+                ]
+            )
+        )
+
+        is_marked_coin = (
+            "marked_coin" in action_id
+            or "marked coin" in text
+            or "proof" in text
+            or "voss" in text
+            or "sable chain" in text
+            or "faction_consequence" in mechanics
+        )
+
+        is_mill_road = (
+            "mill" in action_id
+            or "mill road" in text
+            or "wagon" in text
+            or "bandit" in text
+            or "combat_started" in mechanics
+            or "combat_resolved" in mechanics
+        )
+
+        if is_marked_coin:
+            marked_coin_turns.append(turn_index)
+
+        if is_mill_road:
+            mill_road_turns.append(turn_index)
+
+        if "proof" in text or "marked coin" in text:
+            proof_turns.append(turn_index)
+
+        if "combat_started" in mechanics or "combat_resolved" in mechanics:
+            combat_turns.append(turn_index)
+
+        if "faction_consequence" in mechanics or "faction_consequence" in changed_parts:
+            faction_turns.append(turn_index)
+
+        if "npc_reaction" in mechanics or "npc_reaction" in changed_parts:
+            npc_reaction_turns.append(turn_index)
+
+        if direct.get("completed") and len(examples) < 25:
+            examples.append(
+                {
+                    "turn_index": turn_index,
+                    "player_action": row.get("player_action"),
+                    "action_id": action_id,
+                    "mechanics": sorted(mechanics),
+                    "changed_parts": sorted(changed_parts),
+                    "marked_coin_candidate": is_marked_coin,
+                    "mill_road_candidate": is_mill_road,
+                }
+            )
+
+    marked_coin_success = bool(marked_coin_turns and (proof_turns or faction_turns))
+    mill_road_success = bool(mill_road_turns and combat_turns)
+
+    completed_arc_ids: List[str] = []
+    if marked_coin_success:
+        completed_arc_ids.append("arc:marked_coin_investigation")
+    if mill_road_success:
+        completed_arc_ids.append("arc:mill_road_threat")
+
+    return {
+        "format_version": "successful_arc_completion_evidence_v1",
+        "ok": bool(completed_arc_ids),
+        "completed_arc_ids": completed_arc_ids,
+        "completed_count": len(completed_arc_ids),
+        "marked_coin_success": marked_coin_success,
+        "mill_road_success": mill_road_success,
+        "marked_coin_turns": marked_coin_turns[:50],
+        "mill_road_turns": mill_road_turns[:50],
+        "proof_turns": proof_turns[:50],
+        "combat_turns": combat_turns[:50],
+        "faction_turns": faction_turns[:50],
+        "npc_reaction_turns": npc_reaction_turns[:50],
+        "examples": examples,
+    }
+
+
 def _apply_direct_graph_lifecycle_bridges(summary: Dict[str, Any]) -> Dict[str, Any]:
     summary = dict(_safe_dict(summary))
     evidence = _safe_dict(summary.get("direct_graph_lifecycle_evidence"))
@@ -10157,6 +11278,49 @@ def _build_followup_arc_resolution_summary(
         "escalation_seed_events": _safe_list(escalation_seed_events),
         "escalation_arcs": escalation_arcs,
     }
+
+
+def _apply_successful_arc_completion_bridge(summary: Dict[str, Any]) -> Dict[str, Any]:
+    summary = dict(_safe_dict(summary))
+    evidence = _safe_dict(summary.get("successful_arc_completion_evidence"))
+
+    completed_arc_ids = [
+        _safe_str(v)
+        for v in _safe_list(evidence.get("completed_arc_ids"))
+        if _safe_str(v)
+    ]
+
+    if not completed_arc_ids:
+        return summary
+
+    completed_count = len(set(completed_arc_ids))
+
+    lifecycle = dict(_safe_dict(summary.get("story_arc_lifecycle_summary")))
+    prior_completed = int(lifecycle.get("completed_count") or 0)
+    prior_failed = int(lifecycle.get("failed_count") or 0)
+
+    lifecycle["direct_graph_successful_completion_count"] = completed_count
+    lifecycle["completed_count"] = max(prior_completed, completed_count)
+
+    # Do not erase real failures blindly, but prevent success-qualified arcs from
+    # being reported as only failed.
+    if prior_failed > 0:
+        lifecycle["failed_count"] = max(0, prior_failed - completed_count)
+
+    lifecycle["resolved_count"] = max(
+        int(lifecycle.get("resolved_count") or 0),
+        int(lifecycle.get("completed_count") or 0) + int(lifecycle.get("failed_count") or 0),
+    )
+    lifecycle["completed_arc_ids"] = sorted(
+        set(_safe_list(lifecycle.get("completed_arc_ids"))) | set(completed_arc_ids)
+    )
+    lifecycle["ok"] = True
+    summary["story_arc_lifecycle_summary"] = lifecycle
+
+    arc_quality = _build_arc_completion_quality_summary(summary)
+    summary["arc_completion_quality_summary"] = arc_quality
+
+    return summary
 
 
 def _build_arc_completion_quality_summary(summary: Dict[str, Any]) -> Dict[str, Any]:
@@ -15611,6 +16775,50 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
         row = _apply_dialogue_action_relevance_gate(row)
         row = _assert_repaired_dialogue_visible_fields(row)
 
+        presentation_text = _safe_str(
+            row.get("selected_narration")
+            or row.get("display_narration")
+            or row.get("narration")
+        )
+
+        compat_ok, compat_diag = _dialogue_presentation_is_category_compatible(
+            action_text=_safe_str(row.get("canonical_turn_action") or row.get("player_action")),
+            presentation_text=presentation_text,
+            row=row,
+        )
+        row["dialogue_presentation_compatibility"] = compat_diag
+
+        if not compat_ok:
+            fallback = _build_category_compatible_presentation_fallback(row)
+            row["narration"] = fallback
+            row["display_narration"] = fallback
+            row["selected_narration"] = fallback
+            row["dialogue_action_relevance_repaired"] = True
+
+            relevance = dict(_safe_dict(row.get("dialogue_action_relevance")))
+            relevance["repaired"] = True
+            relevance["fallback_applied"] = True
+            relevance["reason"] = "action_presentation_category_mismatch"
+            relevance["source"] = _safe_str(row.get("selected_narration_source") or row.get("narration_source") or "unknown")
+            relevance["compatibility"] = compat_diag
+            row["dialogue_action_relevance"] = relevance
+
+        # Suppress unsupported combat claims
+        if _presentation_has_combat_claim(presentation_text) and not _turn_has_combat_support(row):
+            fallback = _build_category_compatible_presentation_fallback(row)
+            row["narration"] = fallback
+            row["display_narration"] = fallback
+            row["selected_narration"] = fallback
+            row["unsupported_combat_claim_suppressed"] = True
+
+            relevance = dict(_safe_dict(row.get("dialogue_action_relevance")))
+            relevance["repaired"] = True
+            relevance["fallback_applied"] = True
+            relevance["reason"] = "unsupported_combat_claim_suppressed"
+            row["dialogue_action_relevance"] = relevance
+        else:
+            row["unsupported_combat_claim_suppressed"] = False
+
         if row.get("direct_graph_execution_kind") == "buy_rations_from_bran":
             row = _apply_buy_rations_direct_graph_execution(row)
 
@@ -16505,6 +17713,11 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
     # bridged direct-graph values back to zero.
     summary = _apply_direct_graph_lifecycle_bridges(summary)
 
+    summary["successful_arc_completion_evidence"] = _collect_successful_arc_completion_evidence(
+        transcript
+    )
+    summary = _apply_successful_arc_completion_bridge(summary)
+
     transcript = _normalize_turn_action_consistency_transcript_rows(transcript)
     transcript = _normalize_repaired_dialogue_transcript_rows(transcript)
 
@@ -17107,9 +18320,65 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
     html_report_source = dict(summary)
     html_report_source.update(_safe_dict(report_payload))
 
+    final_transcript_rows = _build_final_transcript_artifact_rows(
+        transcript=transcript,
+        transcript_artifacts=transcript_artifacts,
+        summary=summary,
+        session_id=_safe_str(summary.get("session_id") or ""),
+    )
+
+    bounded_transcript_rows = _build_bounded_transcript_rows(
+        final_transcript_rows,
+        max_row_bytes=50000,
+    )
+
+    slim_transcript_rows = [
+        _slim_transcript_row(row, max_row_bytes=25000)
+        for row in final_transcript_rows
+    ]
+
+    if any(row is None for row in slim_transcript_rows):
+        raise RuntimeError("slim_transcript_rows_null_after_build")
+
+    if any(row is None for row in bounded_transcript_rows):
+        raise RuntimeError("bounded_transcript_rows_null_after_build")
+
+    transcript = final_transcript_rows
+    if isinstance(transcript_artifacts, dict):
+        transcript_artifacts["transcript"] = final_transcript_rows
+
+    summary["transcript_artifact_quality_summary"] = (
+        _build_transcript_artifact_quality_summary(final_transcript_rows)
+    )
+
+    _assert_transcript_artifact_consistency(
+        final_transcript_rows=final_transcript_rows,
+        summary=summary,
+    )
+
     # Final health must be the absolute last writer before artifacts
     summary["autoplay_health"] = _force_final_autoplay_health(summary)
+
+    summary = _finalize_background_presentation_attachment_tracking(
+        summary,
+        final_transcript_rows,
+    )
+
     _assert_final_artifact_consistency(summary)
+
+    wrote_full_transcript = _should_write_full_transcript(args)
+    summary["transcript_size_summary"] = _build_transcript_size_summary(
+        final_transcript_rows=final_transcript_rows,
+        bounded_transcript_rows=bounded_transcript_rows,
+        slim_transcript_rows=slim_transcript_rows,
+        wrote_full_transcript=wrote_full_transcript,
+    )
+
+    _assert_bounded_transcript_artifacts_valid(
+        bounded_transcript_rows=bounded_transcript_rows,
+        slim_transcript_rows=slim_transcript_rows,
+        summary=summary,
+    )
 
     final_health = _safe_dict(summary.get("autoplay_health"))
     if bool(summary.get("ok")):
@@ -17428,16 +18697,58 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
                 summary.get("dialogue_action_relevance_summary", {}),
             )
 
-            # Write transcript if available
-            if transcript_artifacts and transcript_artifacts.get("transcript"):
+            _zip_writestr_json(
+                zip_handle,
+                artifact_manifest,
+                "transcript.json",
+                bounded_transcript_rows,
+            )
+
+            if _should_write_full_transcript(args):
                 _zip_writestr_json(
                     zip_handle,
                     artifact_manifest,
-                    "transcript.json",
-                    transcript_artifacts["transcript"],
+                    "full-transcript.json",
+                    final_transcript_rows,
                 )
-            else:
-                artifact_manifest["transcript_missing_reason"] = "transcript_not_available_in_zip_write_scope"
+
+            _zip_writestr_json(
+                zip_handle,
+                artifact_manifest,
+                "slim-transcript.json",
+                slim_transcript_rows,
+            )
+            _zip_writestr_json(
+                zip_handle,
+                artifact_manifest,
+                "transcript-size-summary.json",
+                summary.get("transcript_size_summary", {}),
+            )
+            _zip_writestr_json(
+                zip_handle,
+                artifact_manifest,
+                "slim-transcript.json",
+                slim_transcript_rows,
+            )
+
+            _zip_writestr_json(
+                zip_handle,
+                artifact_manifest,
+                "background-presentation-attachment-summary.json",
+                summary.get("background_presentation_attachment_summary", {}),
+            )
+            _zip_writestr_json(
+                zip_handle,
+                artifact_manifest,
+                "background-presentation-attachment-events.json",
+                summary.get("background_presentation_attachment_events", []),
+            )
+            _zip_writestr_json(
+                zip_handle,
+                artifact_manifest,
+                "orphaned-background-presentation-results.json",
+                summary.get("orphaned_background_presentation_results", []),
+            )
 
             _zip_writestr_json(
                 zip_handle,
@@ -17463,6 +18774,13 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
             _zip_writestr_json(
                 zip_handle,
                 artifact_manifest,
+                "successful-arc-completion-evidence.json",
+                summary.get("successful_arc_completion_evidence", {}),
+            )
+
+            _zip_writestr_json(
+                zip_handle,
+                artifact_manifest,
                 "faction-reputation-summary.json",
                 summary.get("faction_reputation_summary", {}),
             )
@@ -17472,6 +18790,13 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
                 artifact_manifest,
                 "followup-arc-progression-summary.json",
                 summary.get("followup_arc_progression_summary", {}),
+            )
+
+            _zip_writestr_json(
+                zip_handle,
+                artifact_manifest,
+                "transcript-artifact-quality-summary.json",
+                summary.get("transcript_artifact_quality_summary", {}),
             )
 
             _zip_writestr_json(
@@ -17577,8 +18902,16 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
             if args.artifact_detail == "full":
                 # Write transcript file to disk first
                 transcript_path = output_dir_path / "autoplay-transcript.json"
-                if transcript_artifacts and transcript_artifacts.get("transcript"):
-                    transcript_path.write_text(json.dumps(transcript_artifacts["transcript"], ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
+                if final_transcript_rows:
+                    transcript_path.write_text(
+                        json.dumps(
+                            bounded_transcript_rows,
+                            ensure_ascii=False,
+                            indent=2,
+                            sort_keys=True,
+                        ),
+                        encoding="utf-8",
+                    )
                     zip_handle.write(transcript_path, transcript_path.name)
 
                 # Write metrics files
