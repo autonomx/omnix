@@ -9,7 +9,6 @@ from __future__ import annotations
 import copy
 import os
 
-
 from app.rpg.encounter import (
     EncounterResolver,
     build_encounter_from_scene,

@@ -1,7 +1,7 @@
 from tests.rpg.autoplay_llm_campaign import (
+    _apply_explicit_combat_xp_direct_graph_execution,
     _build_character_inventory_progression_summary,
     _direct_complete_graph_action_from_command,
-    _apply_explicit_combat_xp_direct_graph_execution,
 )
 
 

@@ -14,7 +14,6 @@ import sys
 from dataclasses import dataclass, field
 from typing import Any, Dict, List
 
-
 # Add project path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "app"))
 

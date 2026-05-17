@@ -4,7 +4,6 @@ from __future__ import annotations
 from typing import Any, Dict, List
 
 
-
 class _PromptCapture:
     def __init__(self) -> None:
         self.payloads: List[Dict[str, Any]] = []

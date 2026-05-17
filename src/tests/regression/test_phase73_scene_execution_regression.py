@@ -6,7 +6,6 @@ and that constraint enforcement is consistently applied.
 
 from __future__ import annotations
 
-
 from app.rpg.coherence.core import CoherenceCore
 from app.rpg.execution.resolver import SUPPORTED_EVENT_TYPES, ActionResolver
 

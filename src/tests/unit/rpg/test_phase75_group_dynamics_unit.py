@@ -11,7 +11,6 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
-
 from app.rpg.group_dynamics.alliance_logic import AllianceLogic
 from app.rpg.group_dynamics.crowd_state import CrowdStateBuilder
 from app.rpg.group_dynamics.group_engine import (

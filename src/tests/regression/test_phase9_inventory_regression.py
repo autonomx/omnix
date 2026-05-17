@@ -5,7 +5,6 @@ including stack merging, capacity limits, and save migration compatibility.
 """
 from __future__ import annotations
 
-
 from app.rpg.items.inventory_state import (
     add_inventory_items,
     build_inventory_summary,

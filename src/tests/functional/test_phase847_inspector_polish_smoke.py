@@ -12,7 +12,6 @@ Tests the functional behavior of the inspector polish features:
 import os
 
 
-
 def test_inspector_filters_js_exports():
     """Verify filter JS exports expected functions."""
     path = os.path.join(os.path.dirname(__file__), "../../static/rpg/rpgInspectorFilters.js")

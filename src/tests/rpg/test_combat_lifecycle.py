@@ -1,4 +1,7 @@
-from app.rpg.combat.combat_lifecycle import CombatEncounterRule, run_combat_lifecycle_tick
+from app.rpg.combat.combat_lifecycle import (
+    CombatEncounterRule,
+    run_combat_lifecycle_tick,
+)
 
 
 def test_combat_lifecycle_resolves_encounter_when_rule_matches():

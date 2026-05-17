@@ -101,8 +101,12 @@ def _slim_transcript_row(row: Dict[str, Any], max_row_bytes: int = 50000) -> Dic
         "actual_sent_action",
         "player_agent_selection_source",
         "player_agent_selection_reason",
-        "action_category",
-        "presentation_status",
+         "action_category",
+         "presentation_intent",
+         "llm_presentation_category",
+         "validated_presentation_intent",
+         "validated_presentation_category",
+         "presentation_status",
         "narration",
         "display_narration",
         "selected_narration",
@@ -2214,6 +2218,7 @@ def _apply_turn_bound_presentation_compatibility_gate(row: Dict[str, Any]) -> Di
     row["validated_presentation_category"] = _safe_str(
         _safe_dict(row.get("validated_presentation_intent")).get("primary_category")
     )
+    row = _apply_validated_presentation_category_to_relevance(row)
 
     compat_ok, compat_diag = _dialogue_presentation_is_category_compatible(
         action_text=action_text,
@@ -7040,6 +7045,8 @@ def _apply_dialogue_action_relevance_gate(row: Dict[str, Any]) -> Dict[str, Any]
 
     row["dialogue_action_relevance"] = relevance
     row["dialogue_display_source_gate"] = source_gate
+    if row.get("validated_presentation_intent"):
+        row = _apply_validated_presentation_category_to_relevance(row)
 
     if source_gate.get("ok") and relevance.get("ok"):
         return row
@@ -7102,6 +7109,7 @@ def _apply_dialogue_action_relevance_gate(row: Dict[str, Any]) -> Dict[str, Any]
         npc_speaker="",
         npc_line="",
     )
+    row = _apply_validated_presentation_category_to_relevance(row)
 
     return row
 
@@ -7302,6 +7310,148 @@ def _authoritative_category_support(row: Dict[str, Any]) -> Dict[str, Any]:
     return supports
 
 
+_SPECIFIC_PRESENTATION_CATEGORY_PRIORITY = (
+    "combat",
+    "economy",
+    "service",
+    "travel",
+    "evidence",
+    "investigation",
+    "dialogue",
+    "quest",
+    "lore",
+    "stealth",
+    "mixed",
+)
+
+
+def _background_presentation_action_category(row: Dict[str, Any]) -> str:
+    row = _safe_dict(row)
+    category = _normalize_presentation_category(
+        _safe_dict(row.get("background_presentation_result")).get("action_category")
+        or row.get("action_category")
+    )
+    return category
+
+
+def _specific_supported_presentation_category(
+    support: Dict[str, Any],
+    *,
+    preferred: str = "",
+    row: Optional[Dict[str, Any]] = None,
+) -> str:
+    support = _safe_dict(support)
+    preferred = _normalize_presentation_category(preferred)
+    if preferred != "general" and bool(support.get(preferred)):
+        return preferred
+
+    row = _safe_dict(row)
+    action_category = _background_presentation_action_category(row)
+    if action_category != "general" and bool(support.get(action_category)):
+        return action_category
+
+    secondary_source = _normalize_presentation_intent(row.get("presentation_intent"))
+    for category in _safe_list(secondary_source.get("secondary_categories")):
+        normalized = _normalize_presentation_category(category)
+        if normalized != "general" and bool(support.get(normalized)):
+            return normalized
+
+    # Prefer evidence over generic dialogue for report/return/deliver style actions so
+    # "report the ambush evidence" does not collapse to dialogue/general.
+    action_id = _row_direct_action_id(row)
+    if action_id.startswith(("report_", "return_", "deliver_", "recover_", "decipher_", "read_")):
+        for category in ("evidence", "dialogue", "investigation", "mixed"):
+            if bool(support.get(category)):
+                return category
+
+    if action_id.startswith(("scout_", "search_", "inspect_", "watch_", "track_", "examine_")):
+        for category in ("investigation", "evidence", "mixed"):
+            if bool(support.get(category)):
+                return category
+
+    if action_id.startswith(("ask_", "tell_", "warn_", "question_", "persuade_", "confront_", "negotiate_")):
+        for category in ("dialogue", "evidence", "mixed"):
+            if bool(support.get(category)):
+                return category
+
+    for category in _SPECIFIC_PRESENTATION_CATEGORY_PRIORITY:
+        if bool(support.get(category)):
+            return category
+    return "general"
+
+
+def _derive_fallback_presentation_intent_for_row(
+    row: Dict[str, Any],
+    *,
+    support: Optional[Dict[str, Any]] = None,
+    action_text: str = "",
+) -> Dict[str, Any]:
+    row = _safe_dict(row)
+    support = _safe_dict(support) or _authoritative_category_support(row)
+    fallback_category = _normalize_presentation_category(
+        _background_presentation_action_category(row)
+        or _classify_visible_action_category_without_validated_intent(row)
+        or _turn_action_category(action_text or _safe_str(row.get("canonical_turn_action") or row.get("player_action")))
+    )
+    primary = _specific_supported_presentation_category(
+        support,
+        preferred=fallback_category,
+        row=row,
+    )
+
+    secondary: List[str] = []
+    for category in _SPECIFIC_PRESENTATION_CATEGORY_PRIORITY:
+        if category != primary and bool(support.get(category)) and category not in secondary:
+            secondary.append(category)
+        if len(secondary) >= 4:
+            break
+
+    return {
+        "format_version": "presentation_intent_v1",
+        "primary_category": primary,
+        "secondary_categories": secondary,
+        "confidence": 0.0,
+        "reason": "deterministic_specific_fallback_from_authoritative_turn",
+    }
+
+
+def _display_action_kind_for_validated_category(category: str) -> str:
+    category = _normalize_presentation_category(category)
+    if category in {"dialogue", "social"}:
+        return "social"
+    if category == "economy":
+        return "commerce"
+    return category
+
+
+def _apply_validated_presentation_category_to_relevance(row: Dict[str, Any]) -> Dict[str, Any]:
+    row = dict(_safe_dict(row))
+    relevance = dict(_safe_dict(row.get("dialogue_action_relevance")))
+    if not relevance:
+        return row
+
+    validated = _safe_dict(row.get("validated_presentation_intent"))
+    category = _normalize_presentation_category(validated.get("primary_category"))
+    if category == "general":
+        category = _normalize_presentation_category(
+            _background_presentation_action_category(row)
+            or _classify_visible_action_category_without_validated_intent(row)
+        )
+    if category == "general":
+        return row
+
+    action_kind = _display_action_kind_for_validated_category(category)
+    old_action_kind = _safe_str(relevance.get("action_kind"))
+    if old_action_kind and old_action_kind != action_kind:
+        relevance["original_action_kind"] = old_action_kind
+        relevance["action_kind_source"] = "validated_presentation_category"
+    relevance["action_kind"] = action_kind
+    relevance["validated_presentation_category"] = category
+    relevance["validated_presentation_intent"] = validated
+    row["dialogue_action_relevance"] = relevance
+    return row
+
+
 def _validate_presentation_intent_for_row(
     row: Dict[str, Any],
     *,
@@ -7312,24 +7462,55 @@ def _validate_presentation_intent_for_row(
     proposed_category = _normalize_presentation_category(proposed.get("primary_category"))
     support = _authoritative_category_support(row)
 
-    fallback_category = _normalize_presentation_category(
-        _classify_visible_action_category_without_validated_intent(row)
-        or _turn_action_category(action_text or _safe_str(row.get("canonical_turn_action") or row.get("player_action")))
+    fallback_intent = _derive_fallback_presentation_intent_for_row(
+        row,
+        support=support,
+        action_text=action_text,
     )
+    fallback_category = _normalize_presentation_category(fallback_intent.get("primary_category"))
 
-    valid = bool(support.get(proposed_category, False))
-    repaired_category = proposed_category if valid else fallback_category
-    if not support.get(repaired_category, False) and repaired_category in {"combat", "travel", "service", "economy"}:
-        repaired_category = "general"
+    provider_specific = proposed_category != "general"
+    provider_supported = provider_specific and bool(support.get(proposed_category, False))
+
+    if provider_supported:
+        repaired_category = proposed_category
+        reason = "provider_intent_supported"
+        ok = True
+    else:
+        repaired_category = _specific_supported_presentation_category(
+            support,
+            preferred=fallback_category,
+            row=row,
+        )
+        reason = (
+            "provider_intent_missing_or_general_specific_fallback_used"
+            if not provider_specific
+            else "provider_intent_not_supported_by_authoritative_turn"
+        )
+        ok = False if provider_specific else bool(repaired_category != "general")
+
+    if repaired_category == "general":
+        repaired_category = _specific_supported_presentation_category(
+            support,
+            preferred=_background_presentation_action_category(row),
+            row=row,
+        )
+
+    secondary = list(_safe_list(proposed.get("secondary_categories")))
+    for category in _safe_list(fallback_intent.get("secondary_categories")):
+        normalized = _normalize_presentation_category(category)
+        if normalized != repaired_category and normalized not in secondary:
+            secondary.append(normalized)
 
     return {
         "format_version": "validated_presentation_intent_v1",
-        "ok": valid,
+        "ok": ok,
         "primary_category": repaired_category,
         "proposed_category": proposed_category,
-        "secondary_categories": proposed.get("secondary_categories") or [],
+        "fallback_category": fallback_category,
+        "secondary_categories": secondary[:4],
         "confidence": proposed.get("confidence") or 0.0,
-        "reason": "provider_intent_supported" if valid else "provider_intent_not_supported_by_authoritative_turn",
+        "reason": reason,
         "provider_reason": proposed.get("reason") or "",
         "support": support,
     }

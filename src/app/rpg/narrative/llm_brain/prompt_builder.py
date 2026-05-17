@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-
 PROMPT = """Analyze state. World: {summary}. Tension: {tension}. Phase: {phase}. Arcs: {arcs}. Return JSON with intent, tension_delta, events, arc_updates, pacing."""  
 class PromptBuilder:  
     def build(self, c):  

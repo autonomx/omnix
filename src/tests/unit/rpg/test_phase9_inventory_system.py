@@ -1,7 +1,6 @@
 """Phase 9.0 — Unit tests for Inventory / Item System."""
 from __future__ import annotations
 
-
 from app.rpg.items.inventory_state import (
     add_inventory_items,
     build_inventory_summary,

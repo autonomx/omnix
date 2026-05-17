@@ -12,7 +12,6 @@ Coverage:
 
 from __future__ import annotations
 
-
 from app.rpg.encounter import (
     EncounterResolver,
     build_encounter_from_scene,

@@ -18,7 +18,6 @@ import os
 import sys
 from unittest.mock import MagicMock
 
-
 # Add project path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "..", "app"))
 

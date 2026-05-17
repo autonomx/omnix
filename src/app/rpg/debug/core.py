@@ -8,7 +8,6 @@ This layer consumes traces — it does not create new truth.
 
 from __future__ import annotations
 
-
 from .presenter import DebugPresenter
 from .trace_builder import DebugTraceBuilder
 

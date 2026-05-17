@@ -18,7 +18,6 @@ import sys
 from typing import Any, Dict
 from unittest.mock import MagicMock
 
-
 SRC_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "..")
 sys.path.insert(0, SRC_DIR)
 

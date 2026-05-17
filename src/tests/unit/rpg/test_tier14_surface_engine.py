@@ -15,7 +15,6 @@ from __future__ import annotations
 import random
 import sys
 
-
 # Tier 14: Narrative Surface Engine
 try:
     from app.rpg.narrative.surface_engine import NarrativeSurfaceEngine

@@ -5,7 +5,6 @@ Ensures backward compatibility and deterministic behavior.
 
 from __future__ import annotations
 
-
 from app.rpg.creator.world_debug import (
     summarize_npc_minds,
     summarize_social_state,

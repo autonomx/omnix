@@ -24,7 +24,6 @@ import types
 from typing import Any, Dict
 from unittest.mock import MagicMock
 
-
 # ---------------------------------------------------------------------------
 # Import machinery — stub all app.* dependencies that we don't test.
 # ---------------------------------------------------------------------------

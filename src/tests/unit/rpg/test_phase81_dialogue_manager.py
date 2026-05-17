@@ -2,7 +2,6 @@
 
 from unittest.mock import MagicMock
 
-
 from app.rpg.ai.dialogue.dialogue_manager import DialogueManager
 from app.rpg.ai.dialogue.dialogue_response_parser import parse_dialogue_response
 

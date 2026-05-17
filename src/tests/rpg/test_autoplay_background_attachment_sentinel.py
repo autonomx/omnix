@@ -1,7 +1,7 @@
 from tests.rpg.autoplay_llm_campaign import (
+    _assert_background_presentation_attachment_wired,
     _background_presentation_expected_attachment_count,
     _build_background_attachment_events_from_timing_summary,
-    _assert_background_presentation_attachment_wired,
 )
 
 

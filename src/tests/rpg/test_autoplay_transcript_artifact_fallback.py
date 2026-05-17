@@ -1,6 +1,6 @@
 from tests.rpg.autoplay_llm_campaign import (
-    _transcript_rows_are_all_null,
     _normalize_transcript_rows,
+    _transcript_rows_are_all_null,
 )
 
 

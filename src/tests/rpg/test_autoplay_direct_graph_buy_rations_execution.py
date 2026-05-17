@@ -71,7 +71,9 @@ def test_buy_rations_direct_graph_execution_is_idempotent():
     row = result["row"]
 
     # Simulate the real runner reapplying after dialogue repair.
-    from tests.rpg.autoplay_llm_campaign import _apply_buy_rations_direct_graph_execution
+    from tests.rpg.autoplay_llm_campaign import (
+        _apply_buy_rations_direct_graph_execution,
+    )
 
     row = _apply_buy_rations_direct_graph_execution(row)
 

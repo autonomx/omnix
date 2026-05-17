@@ -9,7 +9,6 @@ Ensures that the UX polish changes don't break existing inspector functionality:
 import os
 
 
-
 def test_player_integration_still_has_inspector():
     """RPGPlayerIntegration should still reference inspectorUI."""
     path = os.path.join(os.path.dirname(__file__), "../../static/rpg/rpgPlayerIntegration.js")
