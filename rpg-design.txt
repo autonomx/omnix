@@ -1,145 +1,419 @@
-N114.1.5 — Slim Transcript Return Fix + Bounded Transcript Artifacts
+N114.2 — Replace Legacy Background Presentation Attach Path With Turn-Bound Attach
 
 Patch only:
 
 src/tests/rpg/autoplay_llm_campaign.py
 
 Do not replace _run_autoplay_campaign(...).
-Do not remove the background attachment sentinel.
-Do not weaken the legacy/turn-bound diagnostic.
-This patch fixes the artifact problem from run 301:
+Do not disable deferred/background narration.
+Do not remove the existing sentinel.
+Do not attach late background presentation to transcript[-1], current row, or latest turn.
+This patch converts the current legacy-observed attachment path into real turn-bound verified attachment.
 
-✅ transcript.json is now real but huge
-❌ slim-transcript.json contains null rows
-❌ transcript artifacts are 700MB+
+Current state from the last patch/diff: the sentinel and legacy bridge exist, and the crash proved the old timing summary had jobs_attached_total=100 while the new event list was empty before finalization. The diff also shows the current bridge builds legacy_background_timing_attachment_observed events with turn_bound_verified=False, which is useful diagnostically but not the final architecture.
 
-The current diff already added many attachment/transcript helpers, but the slim transcript still likely fails because _slim_transcript_row(...) does not return slim_row on all paths. The diff also shows _slim_transcript_row(...) adds fields but the shown function segment has no visible return slim_row, which matches the 100-null slim artifact symptom.
+Goal
 
-1. Fix _slim_transcript_row(...) to always return a dict
+Change this:
 
-Find:
+{
+  "legacy_observed_count": 100,
+  "turn_bound_verified_count": 0,
+  "turn_bound_attachment_verified": false
+}
 
-def _slim_transcript_row(row: Dict[str, Any], max_row_bytes: int = 50000) -> Dict[str, Any]:
+to this:
 
-At the end of the function, make sure it has:
+{
+  "legacy_observed_count": 0,
+  "turn_bound_verified_count": 100,
+  "turn_bound_attachment_verified": true
+}
 
-    return slim_row
+Meaning:
 
-Also guard the function start:
+Every completed background presentation result attaches to the transcript row with the same turn identity.
+Late results update their original turn.
+No late result may overwrite the current/latest turn.
+1. Add helpers to adapt legacy timing attachment events into real background results
 
-def _slim_transcript_row(row: Dict[str, Any], max_row_bytes: int = 50000) -> Dict[str, Any]:
-    row = _safe_dict(row)
-    slim_row: Dict[str, Any] = {}
+The legacy timing summary only tells us that something attached. It may not contain the actual narration/NPC payload. First add a helper that can normalize whatever the legacy event stores.
 
-If there are early exits, replace them with dict returns:
+Add near the background attachment helpers:
 
-if not row:
-    return {
-        "empty_transcript_row_repaired": True,
-        "presentation_status": "missing_row",
-    }
+def _extract_legacy_background_result_from_event(event: Any) -> Dict[str, Any]:
+    event = _safe_dict(event)
 
-Do not allow any path to return None.
+    # Some legacy events may already include the full result. Prefer that.
+    for key in (
+        "result",
+        "background_result",
+        "combined_background_result",
+        "presentation_result",
+        "payload",
+        "job_result",
+    ):
+        value = _safe_dict(event.get(key))
+        if value:
+            return dict(value)
 
-2. Add bounded JSON helper
+    # Fallback: build a metadata-only result. This still verifies attachment
+    # identity, but does not overwrite narration/NPC unless text exists.
+    result: Dict[str, Any] = {}
 
-Add near artifact/transcript helpers:
+    for key in (
+        "session_id",
+        "turn_id",
+        "turn_index",
+        "source_turn",
+        "canonical_turn_action",
+        "canonical_turn_action_hash",
+        "action_category",
+        "turn_contract_hash",
+        "narration",
+        "display_narration",
+        "selected_narration",
+        "npc",
+        "npc_line",
+        "npc_speaker",
+        "phase",
+        "job_id",
+    ):
+        if event.get(key) not in (None, "", {}, []):
+            result[key] = event.get(key)
 
-def _json_size_bytes(value: Any) -> int:
-    try:
-        return len(
-            json.dumps(
-                value,
-                ensure_ascii=False,
-                sort_keys=True,
-                default=str,
-            ).encode("utf-8", errors="replace")
-        )
-    except Exception:
-        return len(repr(value).encode("utf-8", errors="replace"))
+    if not result.get("turn_index") and event.get("source_turn"):
+        result["turn_index"] = event.get("source_turn")
 
+    return result
+2. Add row identity fallback by turn index
 
-def _bounded_transcript_row(
-    row: Dict[str, Any],
+The real background worker may not yet carry full turn_presentation_identity. Since transcript rows now have identity, we can safely build payload identity from the target row when legacy events only provide source_turn.
+
+Add:
+
+def _build_background_result_identity_from_matching_row(
     *,
-    max_row_bytes: int = 50000,
+    transcript: List[Dict[str, Any]],
+    result: Dict[str, Any],
+    fallback_session_id: str,
 ) -> Dict[str, Any]:
-    row = _safe_dict(row)
-    slim = _slim_transcript_row(row, max_row_bytes=max_row_bytes)
+    result = dict(_safe_dict(result))
 
-    if _json_size_bytes(slim) <= max_row_bytes:
-        return slim
+    identity = _safe_dict(result.get("turn_presentation_identity"))
+    if identity:
+        result["turn_presentation_identity"] = identity
+        return result
 
-    # Last-resort bounded fallback. Keep identity/action/debug pointers only.
-    bounded = {
-        "turn_index": row.get("turn_index") or row.get("turn"),
-        "turn_id": row.get("turn_id"),
-        "player_action": row.get("player_action"),
-        "canonical_turn_action": row.get("canonical_turn_action"),
-        "actual_sent_action": row.get("actual_sent_action"),
-        "action_category": row.get("action_category"),
-        "presentation_status": row.get("presentation_status"),
-        "narration": _safe_str(
-            row.get("selected_narration")
-            or row.get("display_narration")
-            or row.get("narration")
-        )[:2000],
-        "npc": _safe_dict(row.get("npc")),
-        "dialogue_presentation_compatibility": row.get("dialogue_presentation_compatibility"),
-        "dialogue_action_relevance": row.get("dialogue_action_relevance"),
-        "direct_graph_action_completion": row.get("direct_graph_action_completion"),
-        "mechanics_covered_this_turn": row.get("mechanics_covered_this_turn"),
-        "background_presentation_result": row.get("background_presentation_result"),
-        "turn_presentation_identity": row.get("turn_presentation_identity"),
-        "row_truncated": True,
-        "original_row_bytes_estimate": _json_size_bytes(row),
-    }
+    turn_index = int(
+        result.get("turn_index")
+        or result.get("source_turn")
+        or result.get("turn")
+        or result.get("job_turn_index")
+        or 0
+    )
 
-    if _json_size_bytes(bounded) <= max_row_bytes:
-        return bounded
+    turn_id = _safe_str(result.get("turn_id"))
+    matching_row: Dict[str, Any] = {}
 
-    # Extreme fallback.
-    return {
-        "turn_index": row.get("turn_index") or row.get("turn"),
-        "turn_id": row.get("turn_id"),
-        "player_action": _safe_str(row.get("player_action"))[:1000],
-        "canonical_turn_action": _safe_str(row.get("canonical_turn_action"))[:1000],
-        "action_category": row.get("action_category"),
-        "presentation_status": row.get("presentation_status"),
-        "row_truncated": True,
-        "row_extreme_truncated": True,
-        "original_row_bytes_estimate": _json_size_bytes(row),
-    }
+    for row_any in _safe_list(transcript):
+        row = _safe_dict(row_any)
+        row_identity = _safe_dict(row.get("turn_presentation_identity"))
 
+        if turn_id and _safe_str(row_identity.get("turn_id") or row.get("turn_id")) == turn_id:
+            matching_row = row
+            break
 
-def _build_bounded_transcript_rows(
-    transcript_rows: List[Dict[str, Any]],
+        if turn_index and int(row.get("turn_index") or row.get("turn") or 0) == turn_index:
+            matching_row = row
+            break
+
+    if matching_row:
+        row_identity = _safe_dict(matching_row.get("turn_presentation_identity"))
+        if row_identity:
+            result["turn_presentation_identity"] = dict(row_identity)
+            result["session_id"] = _safe_str(result.get("session_id") or row_identity.get("session_id"))
+            result["turn_id"] = _safe_str(result.get("turn_id") or row_identity.get("turn_id"))
+            result["turn_index"] = int(result.get("turn_index") or row_identity.get("turn_index") or turn_index)
+            result["canonical_turn_action"] = _safe_str(
+                result.get("canonical_turn_action")
+                or row_identity.get("canonical_turn_action")
+            )
+            result["canonical_turn_action_hash"] = _safe_str(
+                result.get("canonical_turn_action_hash")
+                or row_identity.get("canonical_turn_action_hash")
+            )
+            result["action_category"] = _safe_str(
+                result.get("action_category")
+                or row_identity.get("action_category")
+            )
+            result["turn_contract_hash"] = _safe_str(
+                result.get("turn_contract_hash")
+                or row_identity.get("turn_contract_hash")
+            )
+            return result
+
+    # Last fallback if row is not found. This should become orphaned later.
+    result = _normalize_background_presentation_result(
+        result,
+        fallback_session_id=_safe_str(fallback_session_id),
+    )
+    return result
+
+This lets legacy events become turn-bound verified only when they can map to an existing transcript row identity.
+
+3. Add helper to attach legacy timing events through the turn-bound helper
+
+Add:
+
+def _attach_legacy_background_timing_events_turn_bound(
     *,
-    max_row_bytes: int = 50000,
+    transcript: List[Dict[str, Any]],
+    summary: Dict[str, Any],
+    session_id: str,
+    orphaned_results: List[Dict[str, Any]],
 ) -> List[Dict[str, Any]]:
-    return [
-        _bounded_transcript_row(_safe_dict(row), max_row_bytes=max_row_bytes)
-        for row in _safe_list(transcript_rows)
-    ]
-3. Add full transcript write policy
+    timing = _safe_dict(_safe_dict(summary).get("background_result_timing_summary"))
+    events: List[Dict[str, Any]] = []
 
-Add helper:
+    for event_any in _safe_list(timing.get("attachment_events")):
+        legacy_event = _safe_dict(event_any)
 
-def _should_write_full_transcript(args: argparse.Namespace) -> bool:
-    artifact_detail = _safe_str(getattr(args, "artifact_detail", ""))
-    return artifact_detail.lower() in {"full", "debug", "maximum", "max"}
+        result = _extract_legacy_background_result_from_event(legacy_event)
+        if not result:
+            result = {}
 
-The existing command uses --artifact-detail full, so full transcript can still be written for this run. But default behavior should be bounded.
+        if not result.get("turn_index") and legacy_event.get("source_turn"):
+            result["turn_index"] = legacy_event.get("source_turn")
 
-4. Use bounded rows for transcript.json
+        if not result.get("session_id"):
+            result["session_id"] = _safe_str(session_id)
 
-Find where final_transcript_rows is built.
+        result["phase"] = _safe_str(legacy_event.get("phase") or result.get("phase") or "legacy_timing")
+        result["job_id"] = _safe_str(legacy_event.get("job_id") or result.get("job_id"))
 
-Immediately after:
+        result = _build_background_result_identity_from_matching_row(
+            transcript=transcript,
+            result=result,
+            fallback_session_id=_safe_str(session_id),
+        )
+
+        attach_event = _attach_background_presentation_result_turn_bound(
+            transcript=transcript,
+            result=result,
+            orphaned_results=orphaned_results,
+        )
+
+        attach_event["phase"] = _safe_str(legacy_event.get("phase") or "legacy_timing_turn_bound")
+        attach_event["job_id"] = _safe_str(legacy_event.get("job_id"))
+        attach_event["source_turn"] = int(legacy_event.get("source_turn") or result.get("turn_index") or 0)
+        attach_event["attach_turn"] = int(legacy_event.get("attach_turn") or 0)
+        attach_event["lag_turns"] = int(
+            legacy_event.get("lag_turns")
+            or max(0, int(legacy_event.get("attach_turn") or 0) - int(legacy_event.get("source_turn") or 0))
+        )
+
+        # This event was verified by matching result identity to a transcript row.
+        attach_event["turn_bound_verified"] = bool(attach_event.get("attached"))
+        attach_event["legacy_observed_only"] = False
+        attach_event["converted_from_legacy_timing_event"] = True
+
+        events.append(attach_event)
+
+    return events
+
+Important: this does not just create synthetic observed events. It calls:
+
+_attach_background_presentation_result_turn_bound(...)
+
+So it updates the matched row only.
+
+4. Make turn-bound attach events record verification
+
+Patch _attach_background_presentation_result_turn_bound(...).
+
+In the success return, add:
+
+"turn_bound_verified": True,
+"legacy_observed_only": False,
+
+Expected success block:
+
+return {
+    "attached": True,
+    "reason": "attached_to_matching_turn",
+    "row_index": row_idx,
+    "turn_id": payload_identity.get("turn_id"),
+    "turn_index": payload_identity.get("turn_index"),
+    "turn_bound_verified": True,
+    "legacy_observed_only": False,
+}
+
+In failure returns, add:
+
+"turn_bound_verified": False,
+"legacy_observed_only": False,
+5. Apply compatibility gate after turn-bound attach
+
+Patch _attach_background_presentation_result_turn_bound(...).
+
+Replace:
+
+transcript[row_idx] = _attach_background_presentation_to_row(row, result)
+
+with:
+
+attached_row = _attach_background_presentation_to_row(row, result)
+attached_row = _apply_turn_bound_presentation_compatibility_gate(attached_row)
+transcript[row_idx] = attached_row
+
+This prevents the exact bad case from surviving even after it attaches to the correct row.
+
+6. Change legacy bridge finalizer to real turn-bound conversion
+
+Find _finalize_background_presentation_attachment_tracking(...).
+
+It likely does:
+
+events = list(_safe_list(summary.get("background_presentation_attachment_events")))
+
+if not events:
+    events = _build_background_attachment_events_from_timing_summary(summary)
+
+Replace that fallback with the real turn-bound conversion:
+
+events = list(_safe_list(summary.get("background_presentation_attachment_events")))
+orphans = list(_safe_list(summary.get("orphaned_background_presentation_results")))
+
+if not events:
+    events = _attach_legacy_background_timing_events_turn_bound(
+        transcript=transcript,
+        summary=summary,
+        session_id=_safe_str(summary.get("session_id") or ""),
+        orphaned_results=orphans,
+    )
+
+summary["background_presentation_attachment_events"] = events
+summary["orphaned_background_presentation_results"] = orphans
+
+Do not use _build_background_attachment_events_from_timing_summary(summary) here anymore, except as an emergency diagnostic when there are timing events but no row mapping.
+
+Optional fallback:
+
+if not events and _safe_list(_safe_dict(summary.get("background_result_timing_summary")).get("attachment_events")):
+    events = _build_background_attachment_events_from_timing_summary(summary)
+
+But ideally this fallback should not run once rows have turn identity.
+
+7. Set session ID before finalizing background attachment
+
+If _finalize_background_presentation_attachment_tracking(...) uses:
+
+summary.get("session_id")
+
+make sure the summary has it before finalization.
+
+Before finalization:
+
+summary["session_id"] = _safe_str(summary.get("session_id") or session_id)
+
+Then:
+
+summary = _finalize_background_presentation_attachment_tracking(
+    summary,
+    final_transcript_rows,
+)
+8. Strengthen attachment summary semantics
+
+Patch _build_background_presentation_attachment_summary(...).
+
+Current:
+
+"turn_bound_attachment_verified": (
+    len(events) > 0 and turn_bound_verified_count == len(events)
+),
+
+Change to require all expected events verified:
+
+expected_count = _background_presentation_expected_attachment_count(summary)
+
+Return:
+
+"expected_attachment_count": expected_count,
+"turn_bound_attachment_verified": (
+    expected_count > 0
+    and turn_bound_verified_count >= expected_count
+    and legacy_observed_count == 0
+    and rejected_count == 0
+),
+
+Also add:
+
+"converted_from_legacy_timing_count": sum(
+    1
+    for event_any in events
+    if bool(_safe_dict(event_any).get("converted_from_legacy_timing_event"))
+),
+9. Make legacy-only events a hard failure after N114.2
+
+Patch _assert_turn_bound_attachment_verified(summary).
+
+Currently it appends a product-quality warning. For N114.2, make it fail if expected background jobs exist and attachment is not turn-bound verified.
+
+Replace function body with:
+
+def _assert_turn_bound_attachment_verified(summary: Dict[str, Any]) -> None:
+    attachment = _safe_dict(summary.get("background_presentation_attachment_summary"))
+    expected_count = _background_presentation_expected_attachment_count(summary)
+
+    if expected_count <= 0:
+        return
+
+    if not bool(attachment.get("turn_bound_attachment_verified")):
+        raise RuntimeError(
+            "background_presentation_not_turn_bound_verified:"
+            f"expected_count={expected_count}:"
+            f"event_count={attachment.get('event_count')}:"
+            f"turn_bound_verified_count={attachment.get('turn_bound_verified_count')}:"
+            f"legacy_observed_count={attachment.get('legacy_observed_count')}:"
+            f"rejected_count={attachment.get('rejected_count')}:"
+            f"orphaned_count={attachment.get('orphaned_count')}"
+        )
+
+This is the key enforcement step. N114.2 should not pass with legacy_observed_count=100.
+
+10. Add postcondition: no row may have mismatched background result
+
+You already have _assert_no_cross_turn_background_presentation(...). Make sure it is called after finalization:
+
+_assert_no_cross_turn_background_presentation(final_transcript_rows)
+
+Call order:
+
+summary["session_id"] = _safe_str(summary.get("session_id") or session_id)
 
 final_transcript_rows = _build_final_transcript_artifact_rows(...)
+transcript = final_transcript_rows
 
-add:
+summary = _finalize_background_presentation_attachment_tracking(
+    summary,
+    final_transcript_rows,
+)
+
+_assert_no_cross_turn_background_presentation(final_transcript_rows)
+
+summary["background_presentation_attachment_summary"] = (
+    _build_background_presentation_attachment_summary(summary, final_transcript_rows)
+)
+
+summary["autoplay_health"] = _force_final_autoplay_health(summary)
+_assert_final_artifact_consistency(summary)
+
+If _finalize_background_presentation_attachment_tracking(...) already rebuilds the summary, do not rebuild twice unless necessary. If you rebuild twice, make sure it uses the updated events.
+
+11. Ensure final transcript rows include attached presentation status
+
+After finalization, rebuild bounded/slim rows from the updated final_transcript_rows:
 
 bounded_transcript_rows = _build_bounded_transcript_rows(
     final_transcript_rows,
@@ -151,390 +425,196 @@ slim_transcript_rows = [
     for row in final_transcript_rows
 ]
 
-Then force no None:
+Do not build bounded/slim rows before the background attachment finalizer, or they will miss presentation_status, background_presentation_result, and repaired NPC fields.
 
-if any(row is None for row in slim_transcript_rows):
-    raise RuntimeError("slim_transcript_rows_null_after_build")
+Correct order:
 
-if any(row is None for row in bounded_transcript_rows):
-    raise RuntimeError("bounded_transcript_rows_null_after_build")
+build final full rows
+finalize turn-bound background attachment into those rows
+then build bounded/slim artifacts
+then write artifacts
+12. Add attachment artifact writes if not already present
 
-Now write:
-
-_zip_writestr_json(
-    zip_handle,
-    artifact_manifest,
-    "transcript.json",
-    bounded_transcript_rows,
-)
-
-Do not write final_transcript_rows to transcript.json.
-
-5. Write full-transcript.json only in full artifact mode
-
-Add:
-
-if _should_write_full_transcript(args):
-    _zip_writestr_json(
-        zip_handle,
-        artifact_manifest,
-        "full-transcript.json",
-        final_transcript_rows,
-    )
-
-This preserves deep debug capability but prevents the main transcript.json from becoming 700MB.
-
-6. Fix disk autoplay-transcript.json
-
-Replace disk write payload:
-
-transcript_path.write_text(
-    json.dumps(
-        final_transcript_rows,
-        ensure_ascii=False,
-        indent=2,
-        sort_keys=True,
-    ),
-    encoding="utf-8",
-)
-
-with:
-
-transcript_path.write_text(
-    json.dumps(
-        bounded_transcript_rows,
-        ensure_ascii=False,
-        indent=2,
-        sort_keys=True,
-    ),
-    encoding="utf-8",
-)
-
-So both of these are bounded and useful:
-
-transcript.json
-autoplay-transcript.json
-
-And only this one is huge:
-
-full-transcript.json
-
-when --artifact-detail full.
-
-7. Fix slim-transcript.json
-
-Add or replace:
+Ensure these are written:
 
 _zip_writestr_json(
     zip_handle,
     artifact_manifest,
-    "slim-transcript.json",
-    slim_transcript_rows,
+    "background-presentation-attachment-summary.json",
+    summary.get("background_presentation_attachment_summary", {}),
 )
-
-Do not build slim transcript from transcript_artifacts["transcript"] if that source may be stale.
-
-Use only:
-
-final_transcript_rows
-8. Add transcript size summary
-
-Add helper:
-
-def _build_transcript_size_summary(
-    *,
-    final_transcript_rows: List[Dict[str, Any]],
-    bounded_transcript_rows: List[Dict[str, Any]],
-    slim_transcript_rows: List[Dict[str, Any]],
-    wrote_full_transcript: bool,
-) -> Dict[str, Any]:
-    full_bytes = _json_size_bytes(final_transcript_rows)
-    bounded_bytes = _json_size_bytes(bounded_transcript_rows)
-    slim_bytes = _json_size_bytes(slim_transcript_rows)
-
-    row_sizes = [_json_size_bytes(row) for row in _safe_list(bounded_transcript_rows)]
-    slim_null_count = sum(1 for row in _safe_list(slim_transcript_rows) if row is None)
-    bounded_null_count = sum(1 for row in _safe_list(bounded_transcript_rows) if row is None)
-
-    return {
-        "format_version": "transcript_size_summary_v1",
-        "ok": slim_null_count == 0 and bounded_null_count == 0,
-        "row_count": len(_safe_list(final_transcript_rows)),
-        "full_transcript_json_bytes_estimate": full_bytes,
-        "bounded_transcript_json_bytes_estimate": bounded_bytes,
-        "slim_transcript_json_bytes_estimate": slim_bytes,
-        "wrote_full_transcript": bool(wrote_full_transcript),
-        "max_bounded_row_bytes": max(row_sizes) if row_sizes else 0,
-        "avg_bounded_row_bytes": (
-            sum(row_sizes) / len(row_sizes)
-            if row_sizes
-            else 0.0
-        ),
-        "slim_transcript_null_count": slim_null_count,
-        "bounded_transcript_null_count": bounded_null_count,
-        "bounded_rows_truncated_count": sum(
-            1 for row in _safe_list(bounded_transcript_rows)
-            if _safe_dict(row).get("row_truncated")
-        ),
-        "bounded_rows_extreme_truncated_count": sum(
-            1 for row in _safe_list(bounded_transcript_rows)
-            if _safe_dict(row).get("row_extreme_truncated")
-        ),
-    }
-
-Before writing summary:
-
-wrote_full_transcript = _should_write_full_transcript(args)
-
-summary["transcript_size_summary"] = _build_transcript_size_summary(
-    final_transcript_rows=final_transcript_rows,
-    bounded_transcript_rows=bounded_transcript_rows,
-    slim_transcript_rows=slim_transcript_rows,
-    wrote_full_transcript=wrote_full_transcript,
-)
-
-Write artifact:
 
 _zip_writestr_json(
     zip_handle,
     artifact_manifest,
-    "transcript-size-summary.json",
-    summary.get("transcript_size_summary", {}),
+    "background-presentation-attachment-events.json",
+    summary.get("background_presentation_attachment_events", []),
 )
 
-Also include it in summary.json.
-
-9. Add hard postcondition for slim transcript
-
-Add helper:
-
-def _assert_bounded_transcript_artifacts_valid(
-    *,
-    bounded_transcript_rows: List[Dict[str, Any]],
-    slim_transcript_rows: List[Dict[str, Any]],
-    summary: Dict[str, Any],
-) -> None:
-    bounded_null_indexes = [
-        idx for idx, row in enumerate(_safe_list(bounded_transcript_rows))
-        if row is None or not _safe_dict(row)
-    ]
-    slim_null_indexes = [
-        idx for idx, row in enumerate(_safe_list(slim_transcript_rows))
-        if row is None or not _safe_dict(row)
-    ]
-
-    if bounded_null_indexes:
-        raise RuntimeError(
-            "bounded_transcript_artifact_rows_null:"
-            f"count={len(bounded_null_indexes)}:"
-            f"indexes={bounded_null_indexes[:20]}"
-        )
-
-    if slim_null_indexes:
-        raise RuntimeError(
-            "slim_transcript_artifact_rows_null:"
-            f"count={len(slim_null_indexes)}:"
-            f"indexes={slim_null_indexes[:20]}"
-        )
-
-    size_summary = _safe_dict(summary.get("transcript_size_summary"))
-    if int(size_summary.get("slim_transcript_null_count") or 0) != 0:
-        raise RuntimeError("slim_transcript_size_summary_reports_null_rows")
-
-    if int(size_summary.get("bounded_transcript_null_count") or 0) != 0:
-        raise RuntimeError("bounded_transcript_size_summary_reports_null_rows")
-
-Call before artifact writing:
-
-_assert_bounded_transcript_artifacts_valid(
-    bounded_transcript_rows=bounded_transcript_rows,
-    slim_transcript_rows=slim_transcript_rows,
-    summary=summary,
+_zip_writestr_json(
+    zip_handle,
+    artifact_manifest,
+    "orphaned-background-presentation-results.json",
+    summary.get("orphaned_background_presentation_results", []),
 )
-10. Expand _slim_transcript_row(...) with safe fields only
-
-Inside _slim_transcript_row(...), avoid dumping giant fields. Use explicit allowlist.
-
-Make sure these fields are included when present:
-
-for key in (
-    "turn_index",
-    "turn",
-    "turn_id",
-    "player_action",
-    "canonical_turn_action",
-    "actual_sent_action",
-    "player_agent_selection_source",
-    "player_agent_selection_reason",
-    "action_category",
-    "presentation_status",
-    "narration",
-    "display_narration",
-    "selected_narration",
-    "npc",
-    "npc_speaker",
-    "npc_line",
-    "turn_presentation_identity",
-    "background_presentation_result",
-    "dialogue_presentation_compatibility",
-    "dialogue_action_relevance",
-    "dialogue_action_relevance_repaired",
-    "unsupported_combat_claim_suppressed",
-    "direct_graph_action_completion",
-    "mechanics_covered_this_turn",
-    "direct_graph_changed_parts",
-    "progress_quality",
-    "turn_action_consistency",
-    "graph_action_selection_diagnostic",
-    "suppressed_selected_action_guard",
-):
-    if row.get(key) not in (None, "", {}, []):
-        slim_row[key] = row.get(key)
-
-Explicitly do not include:
-
-runtime_state
-authoritative_state
-simulation_state
-world_state
-npc_profiles
-profile_load_results
-full_provider_payload
-raw_provider_response
-background_jobs
-large debug arrays
-
-If you need to preserve large debug info later, put it in full-transcript.json only.
-
-11. Add tests
+13. Add regression tests
 
 Create:
 
-src/tests/rpg/test_autoplay_slim_transcript_artifacts.py
+src/tests/rpg/test_autoplay_turn_bound_legacy_conversion.py
 from tests.rpg.autoplay_llm_campaign import (
-    _bounded_transcript_row,
-    _build_bounded_transcript_rows,
-    _build_transcript_size_summary,
-    _slim_transcript_row,
+    _attach_legacy_background_timing_events_turn_bound,
+    _build_background_presentation_attachment_summary,
+    _build_turn_presentation_identity,
 )
 
 
-def test_slim_transcript_row_returns_dict():
-    row = {
-        "turn_index": 1,
-        "player_action": "I buy two rations from Bran.",
-        "canonical_turn_action": "I buy two rations from Bran.",
-        "runtime_state": {"huge": "x" * 10000},
-    }
+def test_legacy_background_timing_event_converts_to_turn_bound_attachment():
+    session_id = "s1"
 
-    slim = _slim_transcript_row(row)
-
-    assert isinstance(slim, dict)
-    assert slim["turn_index"] == 1
-    assert slim["player_action"] == "I buy two rations from Bran."
-    assert "runtime_state" not in slim
-
-
-def test_bounded_transcript_row_truncates_huge_rows():
-    row = {
-        "turn_index": 1,
-        "player_action": "I wait.",
-        "canonical_turn_action": "I wait.",
-        "runtime_state": {"huge": "x" * 200000},
-        "selected_narration": "You wait.",
-    }
-
-    bounded = _bounded_transcript_row(row, max_row_bytes=5000)
-
-    assert isinstance(bounded, dict)
-    assert bounded["turn_index"] == 1
-    assert "runtime_state" not in bounded
-    assert len(str(bounded)) < 20000
-
-
-def test_build_bounded_transcript_rows_has_no_nulls():
-    rows = _build_bounded_transcript_rows(
-        [
-            {"turn_index": 1, "player_action": "I wait."},
-            {"turn_index": 2, "player_action": "I buy rations.", "runtime_state": {"huge": "x" * 100000}},
-        ],
-        max_row_bytes=5000,
+    id_1 = _build_turn_presentation_identity(
+        session_id=session_id,
+        turn_index=1,
+        canonical_turn_action="I ask Bran about the witness.",
+        turn_contract={"ok": True, "kind": "dialogue"},
+    )
+    id_2 = _build_turn_presentation_identity(
+        session_id=session_id,
+        turn_index=2,
+        canonical_turn_action="I buy two rations from Bran.",
+        turn_contract={"ok": True, "kind": "buy"},
     )
 
-    assert len(rows) == 2
-    assert all(isinstance(row, dict) for row in rows)
-
-
-def test_transcript_size_summary_counts_nulls_and_truncation():
-    final_rows = [
-        {"turn_index": 1, "player_action": "I wait.", "runtime_state": {"huge": "x" * 100000}},
-    ]
-    bounded_rows = _build_bounded_transcript_rows(final_rows, max_row_bytes=5000)
-    slim_rows = [_slim_transcript_row(row) for row in final_rows]
-
-    summary = _build_transcript_size_summary(
-        final_transcript_rows=final_rows,
-        bounded_transcript_rows=bounded_rows,
-        slim_transcript_rows=slim_rows,
-        wrote_full_transcript=True,
-    )
-
-    assert summary["ok"] is True
-    assert summary["row_count"] == 1
-    assert summary["slim_transcript_null_count"] == 0
-    assert summary["bounded_transcript_null_count"] == 0
-    assert summary["full_transcript_json_bytes_estimate"] > summary["bounded_transcript_json_bytes_estimate"]
-
-Create or patch:
-
-src/tests/rpg/test_autoplay_final_transcript_artifact_source.py
-
-Add:
-
-def test_final_transcript_rows_can_be_slimmed_without_nulls():
-    from tests.rpg.autoplay_llm_campaign import (
-        _build_bounded_transcript_rows,
-        _slim_transcript_row,
-    )
-
-    final_rows = [
+    transcript = [
         {
             "turn_index": 1,
+            "player_action": "I ask Bran about the witness.",
+            "canonical_turn_action": "I ask Bran about the witness.",
+            "turn_presentation_identity": id_1,
+            "turn_id": id_1["turn_id"],
+            "presentation_status": "pending",
+        },
+        {
+            "turn_index": 2,
             "player_action": "I buy two rations from Bran.",
             "canonical_turn_action": "I buy two rations from Bran.",
-            "runtime_state": {"huge": "x" * 100000},
-        }
+            "turn_presentation_identity": id_2,
+            "turn_id": id_2["turn_id"],
+            "presentation_status": "pending",
+        },
     ]
 
-    bounded = _build_bounded_transcript_rows(final_rows, max_row_bytes=5000)
-    slim = [_slim_transcript_row(row) for row in final_rows]
+    summary = {
+        "session_id": session_id,
+        "background_result_timing_summary": {
+            "jobs_attached_total": 1,
+            "attachment_events": [
+                {
+                    "source_turn": 1,
+                    "attach_turn": 2,
+                    "lag_turns": 1,
+                    "phase": "pre_turn",
+                    "job_id": "job:1",
+                    "result": {
+                        "turn_index": 1,
+                        "narration": "Bran lowers his voice as the witness is mentioned.",
+                        "npc": {
+                            "speaker": "Bran",
+                            "line": "Ask plainly. Are you looking for the traveler, the road, or the person who frightened them?",
+                        },
+                    },
+                }
+            ],
+        },
+        "background_jobs": {"combined_background_llm_jobs": 1},
+        "deferred_narration_trace_summary": {"ok_jobs": 1},
+    }
 
-    assert bounded[0] is not None
-    assert slim[0] is not None
-    assert "runtime_state" not in bounded[0]
-    assert "runtime_state" not in slim[0]
-12. Run checks
+    orphans = []
+
+    events = _attach_legacy_background_timing_events_turn_bound(
+        transcript=transcript,
+        summary=summary,
+        session_id=session_id,
+        orphaned_results=orphans,
+    )
+
+    assert len(events) == 1
+    assert events[0]["attached"] is True
+    assert events[0]["turn_bound_verified"] is True
+    assert events[0]["legacy_observed_only"] is False
+    assert events[0]["row_index"] == 0
+
+    assert transcript[0]["presentation_status"] in {"attached", "attached_repaired"}
+    assert "witness" in transcript[0]["narration"].lower()
+    assert transcript[1]["presentation_status"] == "pending"
+    assert transcript[1].get("npc", {}) == {}
+    assert orphans == []
+
+
+def test_background_attachment_summary_requires_turn_bound_verified_events():
+    summary = {
+        "background_result_timing_summary": {"jobs_attached_total": 1},
+        "background_jobs": {"combined_background_llm_jobs": 1},
+        "deferred_narration_trace_summary": {"ok_jobs": 1},
+        "background_presentation_attachment_events": [
+            {
+                "attached": True,
+                "reason": "attached_to_matching_turn",
+                "turn_bound_verified": True,
+                "legacy_observed_only": False,
+                "converted_from_legacy_timing_event": True,
+            }
+        ],
+        "orphaned_background_presentation_results": [],
+    }
+
+    attachment = _build_background_presentation_attachment_summary(
+        summary,
+        [{"turn_index": 1, "presentation_status": "attached"}],
+    )
+
+    assert attachment["expected_attachment_count"] == 1
+    assert attachment["event_count"] == 1
+    assert attachment["turn_bound_verified_count"] == 1
+    assert attachment["legacy_observed_count"] == 0
+    assert attachment["turn_bound_attachment_verified"] is True
+
+Create:
+
+src/tests/rpg/test_autoplay_turn_bound_attach_enforcement.py
+from tests.rpg.autoplay_llm_campaign import _assert_turn_bound_attachment_verified
+
+
+def test_turn_bound_attachment_verified_fails_on_legacy_observed_only():
+    summary = {
+        "background_result_timing_summary": {"jobs_attached_total": 1},
+        "background_jobs": {"combined_background_llm_jobs": 1},
+        "deferred_narration_trace_summary": {"ok_jobs": 1},
+        "background_presentation_attachment_summary": {
+            "event_count": 1,
+            "turn_bound_verified_count": 0,
+            "legacy_observed_count": 1,
+            "rejected_count": 0,
+            "orphaned_count": 0,
+            "turn_bound_attachment_verified": False,
+        },
+    }
+
+    try:
+        _assert_turn_bound_attachment_verified(summary)
+    except RuntimeError as exc:
+        assert "background_presentation_not_turn_bound_verified" in str(exc)
+    else:
+        raise AssertionError("expected turn-bound verification failure")
+14. Run checks
 python -m py_compile `
   src\tests\rpg\autoplay_llm_campaign.py
 python -m pytest `
+  src\tests\rpg\test_autoplay_turn_bound_legacy_conversion.py `
+  src\tests\rpg\test_autoplay_turn_bound_attach_enforcement.py `
+  src\tests\rpg\test_autoplay_turn_bound_deferred_presentation.py `
+  src\tests\rpg\test_autoplay_npc_line_compatibility_gate.py `
   src\tests\rpg\test_autoplay_slim_transcript_artifacts.py `
-  src\tests\rpg\test_autoplay_final_transcript_artifact_source.py `
-  src\tests\rpg\test_autoplay_background_attachment_finalization.py `
-  src\tests\rpg\test_autoplay_background_attachment_sentinel.py `
   src\tests\rpg\test_autoplay_real_runner_present.py `
   -q
-Expected next run
-✅ slim-transcript.json has 100 dict rows
-✅ slim_transcript_null_count = 0
-✅ transcript.json is bounded and much smaller
-✅ autoplay-transcript.json is bounded and much smaller
-✅ full-transcript.json appears only when --artifact-detail full
-✅ transcript-size-summary.json present
-✅ transcript_size_summary.ok = true
-
-Expected background state remains honest:
-
-background_presentation_attachment_summary:
-  legacy_observed_count = 100
-  turn_bound_verified_count = 0
-  turn_bound_attachment_verified = false
