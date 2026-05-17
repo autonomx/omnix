@@ -6,7 +6,7 @@ from concurrent.futures import Future, ThreadPoolExecutor, as_completed
 from concurrent.futures import TimeoutError as FuturesTimeoutError
 from copy import deepcopy
 from datetime import datetime
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Tuple
 
 from app.rpg.narration.runtime_narration_contract import build_runtime_narration_payload
 

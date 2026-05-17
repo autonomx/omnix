@@ -2205,6 +2205,90 @@ def _clear_visible_npc_fields(row: Dict[str, Any]) -> Dict[str, Any]:
     return row
 
 
+STALE_DIALOGUE_CATEGORY_MISMATCH_REASONS = {
+    "combat_action_dialogue_mismatch",
+    "commerce_action_dialogue_mismatch",
+    "economy_action_dialogue_mismatch",
+    "service_action_dialogue_mismatch",
+    "travel_action_dialogue_mismatch",
+    "investigation_action_dialogue_mismatch",
+    "evidence_action_dialogue_mismatch",
+    "dialogue_action_dialogue_mismatch",
+    "action_presentation_category_mismatch",
+}
+
+
+def _sync_dialogue_relevance_block_with_validated_category(
+    relevance: Dict[str, Any],
+    *,
+    validated_category: str,
+    validated_intent: Dict[str, Any],
+) -> Dict[str, Any]:
+    relevance = dict(_safe_dict(relevance))
+    validated_category = _normalize_presentation_category(validated_category)
+    if not relevance or not validated_category:
+        return relevance
+
+    previous_action_kind = _safe_str(relevance.get("action_kind"))
+    relevance["action_kind_before_presentation_intent_sync"] = previous_action_kind
+    relevance["action_kind"] = validated_category
+    relevance["validated_presentation_category"] = validated_category
+    relevance["validated_presentation_intent"] = validated_intent
+
+    original_reasons = [_safe_str(reason) for reason in _safe_list(relevance.get("reasons")) if _safe_str(reason)]
+    kept_reasons = [
+        reason
+        for reason in original_reasons
+        if reason not in STALE_DIALOGUE_CATEGORY_MISMATCH_REASONS
+        and not reason.endswith("_action_dialogue_mismatch")
+    ]
+    if kept_reasons:
+        relevance["reasons"] = kept_reasons
+    else:
+        relevance.pop("reasons", None)
+
+    if _safe_str(relevance.get("reason")) in STALE_DIALOGUE_CATEGORY_MISMATCH_REASONS:
+        relevance["reason"] = "validated_presentation_category_synced"
+
+    if original_reasons and not kept_reasons:
+        relevance["ok"] = True
+        relevance["presentation_intent_sync_repaired"] = True
+        relevance["presentation_intent_sync_reason"] = "stale_category_mismatch_reasons_cleared"
+
+    return relevance
+
+
+def _sync_dialogue_action_relevance_with_validated_presentation(row: Dict[str, Any]) -> Dict[str, Any]:
+    row = dict(_safe_dict(row))
+    validated_intent = _safe_dict(row.get("validated_presentation_intent"))
+    validated_category = _normalize_presentation_category(
+        row.get("validated_presentation_category")
+        or validated_intent.get("primary_category")
+    )
+    if not validated_category:
+        return row
+
+    row["validated_presentation_category"] = validated_category
+
+    relevance = _safe_dict(row.get("dialogue_action_relevance"))
+    if relevance:
+        row["dialogue_action_relevance"] = _sync_dialogue_relevance_block_with_validated_category(
+            relevance,
+            validated_category=validated_category,
+            validated_intent=validated_intent,
+        )
+
+    after_repair = _safe_dict(row.get("dialogue_action_relevance_after_repair"))
+    if after_repair:
+        row["dialogue_action_relevance_after_repair"] = _sync_dialogue_relevance_block_with_validated_category(
+            after_repair,
+            validated_category=validated_category,
+            validated_intent=validated_intent,
+        )
+
+    return row
+
+
 def _apply_turn_bound_presentation_compatibility_gate(row: Dict[str, Any]) -> Dict[str, Any]:
     row = dict(_safe_dict(row))
 
@@ -2218,6 +2302,7 @@ def _apply_turn_bound_presentation_compatibility_gate(row: Dict[str, Any]) -> Di
     row["validated_presentation_category"] = _safe_str(
         _safe_dict(row.get("validated_presentation_intent")).get("primary_category")
     )
+    row = _sync_dialogue_action_relevance_with_validated_presentation(row)
     row = _apply_validated_presentation_category_to_relevance(row)
 
     compat_ok, compat_diag = _dialogue_presentation_is_category_compatible(
@@ -2261,6 +2346,7 @@ def _apply_turn_bound_presentation_compatibility_gate(row: Dict[str, Any]) -> Di
         row["dialogue_action_relevance_repaired"] = True
         row["presentation_status"] = "attached_repaired"
 
+    row = _sync_dialogue_action_relevance_with_validated_presentation(row)
     return row
 
 
@@ -7310,7 +7396,7 @@ def _authoritative_category_support(row: Dict[str, Any]) -> Dict[str, Any]:
     return supports
 
 
-_SPECIFIC_PRESENTATION_CATEGORY_PRIORITY = (
+PRESENTATION_INTENT_SPECIFIC_PRIORITY = (
     "combat",
     "economy",
     "service",
@@ -7321,7 +7407,6 @@ _SPECIFIC_PRESENTATION_CATEGORY_PRIORITY = (
     "quest",
     "lore",
     "stealth",
-    "mixed",
 )
 
 
@@ -7334,49 +7419,119 @@ def _background_presentation_action_category(row: Dict[str, Any]) -> str:
     return category
 
 
+def _presentation_category_is_specific(category: str) -> bool:
+    return category not in {"", "general", "mixed"}
+
+
 def _specific_supported_presentation_category(
-    support: Dict[str, Any],
     *,
-    preferred: str = "",
-    row: Optional[Dict[str, Any]] = None,
+    row: Dict[str, Any],
+    support: Dict[str, Any],
+    fallback_category: str = "",
+    action_text: str = "",
 ) -> str:
-    support = _safe_dict(support)
-    preferred = _normalize_presentation_category(preferred)
-    if preferred != "general" and bool(support.get(preferred)):
-        return preferred
+    """Choose a specific supported category before falling back to mixed/general.
 
+    The N115.2 fallback safely exposed categories but over-selected ``mixed``
+    because mixed is always supportable. This selector gives concrete
+    authoritative evidence a chance to win first, so rows like ``report ambush
+    evidence`` become evidence and ``scout ambush signs`` becomes
+    investigation instead of mixed/general.
+    """
     row = _safe_dict(row)
-    action_category = _background_presentation_action_category(row)
-    if action_category != "general" and bool(support.get(action_category)):
-        return action_category
-
-    secondary_source = _normalize_presentation_intent(row.get("presentation_intent"))
-    for category in _safe_list(secondary_source.get("secondary_categories")):
-        normalized = _normalize_presentation_category(category)
-        if normalized != "general" and bool(support.get(normalized)):
-            return normalized
-
-    # Prefer evidence over generic dialogue for report/return/deliver style actions so
-    # "report the ambush evidence" does not collapse to dialogue/general.
     action_id = _row_direct_action_id(row)
-    if action_id.startswith(("report_", "return_", "deliver_", "recover_", "decipher_", "read_")):
-        for category in ("evidence", "dialogue", "investigation", "mixed"):
-            if bool(support.get(category)):
-                return category
+    mechanics = _row_mechanics_set(row)
+    text_n = _normalize_turn_action_text(
+        " ".join(
+            part
+            for part in (
+                action_text,
+                _safe_str(row.get("canonical_turn_action")),
+                _safe_str(row.get("player_action")),
+                action_id,
+            )
+            if part
+        )
+    )
 
-    if action_id.startswith(("scout_", "search_", "inspect_", "watch_", "track_", "examine_")):
-        for category in ("investigation", "evidence", "mixed"):
-            if bool(support.get(category)):
-                return category
+    specific_fallback = _normalize_presentation_category(fallback_category)
+    if (
+        specific_fallback == "mixed"
+        and support.get("service")
+        and support.get("dialogue")
+        and not support.get("evidence")
+        and not support.get("investigation")
+    ):
+        return "mixed"
 
-    if action_id.startswith(("ask_", "tell_", "warn_", "question_", "persuade_", "confront_", "negotiate_")):
-        for category in ("dialogue", "evidence", "mixed"):
-            if bool(support.get(category)):
-                return category
+    if _presentation_category_is_specific(specific_fallback) and support.get(specific_fallback):
+        # Do not let a broad text fallback override a more precise action id.
+        if specific_fallback == "dialogue" and (
+            "evidence" in mechanics
+            or action_id.startswith(("report_", "return_", "recover_", "deliver_", "decipher_", "read_"))
+            or any(t in text_n for t in ("evidence", "proof", "clue", "ledger", "note", "marked coin"))
+        ) and support.get("evidence"):
+            return "evidence"
+        return specific_fallback
 
-    for category in _SPECIFIC_PRESENTATION_CATEGORY_PRIORITY:
-        if bool(support.get(category)):
+    if support.get("combat") and (
+        "combat_started" in mechanics
+        or "combat_resolved" in mechanics
+        or action_id.startswith(("attack_", "fight_", "defend_", "ambush_", "resolve_bandit_ambush"))
+    ):
+        return "combat"
+
+    if support.get("economy") and (
+        "economy" in mechanics
+        or "buying" in mechanics
+        or "purchase" in mechanics
+        or action_id.startswith(("buy_", "purchase_"))
+    ):
+        return "economy"
+
+    if support.get("service") and (
+        "service" in mechanics
+        or "lodging" in mechanics
+        or "rent_room" in action_id
+        or action_id.startswith(("rent_", "book_lodging"))
+    ):
+        return "service"
+
+    if support.get("travel") and (
+        "travel" in mechanics
+        or "location_changed" in mechanics
+        or action_id.startswith(("travel_", "go_to_", "enter_", "leave_"))
+    ):
+        return "travel"
+
+    if support.get("evidence") and (
+        "evidence" in mechanics
+        or action_id.startswith(("report_", "return_", "recover_", "deliver_", "decipher_", "read_"))
+        or any(t in text_n for t in ("evidence", "proof", "clue", "ledger", "note", "marked coin"))
+    ):
+        return "evidence"
+
+    if support.get("investigation") and (
+        "investigation" in mechanics
+        or action_id.startswith(("search_", "inspect_", "scout_", "watch_", "track_", "examine_"))
+        or any(t in text_n for t in ("scout", "search", "inspect", "track", "examine", "look for", "signs"))
+    ):
+        return "investigation"
+
+    if support.get("dialogue") and (
+        "dialogue" in mechanics
+        or "social" in mechanics
+        or action_id.startswith(("ask_", "tell_", "warn_", "question_", "persuade_", "confront_", "negotiate_"))
+        or any(t in text_n for t in ("ask", "tell", "warn", "question", "speak", "talk"))
+    ):
+        return "dialogue"
+
+    for category in PRESENTATION_INTENT_SPECIFIC_PRIORITY:
+        if support.get(category):
             return category
+
+    if support.get("mixed"):
+        return "mixed"
     return "general"
 
 
@@ -7394,13 +7549,14 @@ def _derive_fallback_presentation_intent_for_row(
         or _turn_action_category(action_text or _safe_str(row.get("canonical_turn_action") or row.get("player_action")))
     )
     primary = _specific_supported_presentation_category(
-        support,
-        preferred=fallback_category,
         row=row,
+        support=support,
+        fallback_category=fallback_category,
+        action_text=action_text,
     )
 
     secondary: List[str] = []
-    for category in _SPECIFIC_PRESENTATION_CATEGORY_PRIORITY:
+    for category in PRESENTATION_INTENT_SPECIFIC_PRIORITY:
         if category != primary and bool(support.get(category)) and category not in secondary:
             secondary.append(category)
         if len(secondary) >= 4:
@@ -7462,53 +7618,44 @@ def _validate_presentation_intent_for_row(
     proposed_category = _normalize_presentation_category(proposed.get("primary_category"))
     support = _authoritative_category_support(row)
 
-    fallback_intent = _derive_fallback_presentation_intent_for_row(
-        row,
-        support=support,
-        action_text=action_text,
+    fallback_category = _normalize_presentation_category(
+        _background_presentation_action_category(row)
+        or _classify_visible_action_category_without_validated_intent(row)
+        or _turn_action_category(action_text or _safe_str(row.get("canonical_turn_action") or row.get("player_action")))
     )
-    fallback_category = _normalize_presentation_category(fallback_intent.get("primary_category"))
 
-    provider_specific = proposed_category != "general"
-    provider_supported = provider_specific and bool(support.get(proposed_category, False))
-
-    if provider_supported:
+    valid = bool(support.get(proposed_category, False))
+    if valid and _presentation_category_is_specific(proposed_category):
         repaired_category = proposed_category
         reason = "provider_intent_supported"
-        ok = True
     else:
         repaired_category = _specific_supported_presentation_category(
-            support,
-            preferred=fallback_category,
             row=row,
+            support=support,
+            fallback_category=fallback_category,
+            action_text=action_text,
         )
         reason = (
-            "provider_intent_missing_or_general_specific_fallback_used"
-            if not provider_specific
+            "provider_intent_supported_but_specific_fallback_preferred"
+            if valid
             else "provider_intent_not_supported_by_authoritative_turn"
         )
-        ok = False if provider_specific else bool(repaired_category != "general")
 
-    if repaired_category == "general":
+    if not support.get(repaired_category, False) and repaired_category in {"combat", "travel", "service", "economy"}:
         repaired_category = _specific_supported_presentation_category(
-            support,
-            preferred=_background_presentation_action_category(row),
             row=row,
+            support=support,
+            fallback_category="",
+            action_text=action_text,
         )
-
-    secondary = list(_safe_list(proposed.get("secondary_categories")))
-    for category in _safe_list(fallback_intent.get("secondary_categories")):
-        normalized = _normalize_presentation_category(category)
-        if normalized != repaired_category and normalized not in secondary:
-            secondary.append(normalized)
 
     return {
         "format_version": "validated_presentation_intent_v1",
-        "ok": ok,
+        "ok": valid and repaired_category == proposed_category,
         "primary_category": repaired_category,
         "proposed_category": proposed_category,
         "fallback_category": fallback_category,
-        "secondary_categories": secondary[:4],
+        "secondary_categories": proposed.get("secondary_categories") or [],
         "confidence": proposed.get("confidence") or 0.0,
         "reason": reason,
         "provider_reason": proposed.get("reason") or "",
