@@ -5,7 +5,6 @@ Run this while the server is running on localhost:5000
 Note: Some endpoints are Flask-only and return 404 on FastAPI.
 """
 
-import json
 import sys
 
 import requests

@@ -15,15 +15,13 @@ from __future__ import annotations
 
 import json
 import math
-import os
 import random
 import subprocess
-import sys
 import time
 import urllib.error
 import urllib.request
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
 from playwright.sync_api import Page, sync_playwright
 
@@ -320,7 +318,6 @@ def get_page_state(page: Page) -> Dict[str, Any]:
 
 def human_mouse_move(page: Page, target_box: Dict[str, Any]) -> str:
     """Move mouse to target with human-like curved path."""
-    import math
     import random
     
     # Get current mouse position
@@ -596,7 +593,7 @@ def run_test():
                         })
 
                 # ---- Step 7: Final verification ----
-                print(f"\n[Step 7] Final verification")
+                print("\n[Step 7] Final verification")
                 state = get_page_state(page)
                 feed_text = page.evaluate("""() => {
                     const feed = document.getElementById('rpgNarrativeFeed');
@@ -641,7 +638,7 @@ def run_test():
     print(f"  Steps passed: {sum(1 for s in results['steps'] if s['status'] in ('pass', 'warn'))}/{len(results['steps'])}")
     print(f"  LLM calls made: {results['llm_calls']}")
     print(f"  LLM call failures: {results['llm_failures']}")
-    print(f"  Steps: ")
+    print("  Steps: ")
     for s in results["steps"]:
         print(f"    Step {s['step']}: {s['status']}")
     print(f"{'='*70}\n")

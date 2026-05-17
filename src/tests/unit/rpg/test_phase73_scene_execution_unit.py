@@ -6,14 +6,10 @@ event validation, and deterministic behavior.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from typing import Any, List, Optional
 
 import pytest
 
 from app.rpg.execution.models import (
-    ActionConsequence,
-    ActionResolutionResult,
     ResolvedAction,
 )
 from app.rpg.execution.resolver import SUPPORTED_EVENT_TYPES, ActionResolver

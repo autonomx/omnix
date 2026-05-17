@@ -4,7 +4,6 @@ Tests covering sub-phases 12.0 – 12.8.
 """
 from __future__ import annotations
 
-import copy
 import os
 import sys
 import types

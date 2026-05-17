@@ -1,7 +1,6 @@
 from app.rpg.objectives.affordances import (
     build_objective_affordances_for_state,
     command_has_planner_language,
-    infer_objective_type,
     objective_affordance_actions,
 )
 

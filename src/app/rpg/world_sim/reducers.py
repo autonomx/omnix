@@ -16,7 +16,6 @@ from __future__ import annotations
 from typing import Any
 
 from .models import (
-    SUPPORTED_WORLD_EFFECT_TYPES,
     WorldPressureState,
 )
 

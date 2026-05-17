@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from copy import deepcopy
 from typing import Any, Dict, List
 
 from app.rpg.interactions.item_model import normalize_item_instance

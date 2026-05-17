@@ -1,13 +1,9 @@
 """Phase 10.6 — Functional tests for orchestration layer."""
-import pytest
 
 from app.rpg.orchestration.controller import execute_llm_request_for_turn
 from app.rpg.orchestration.provider_interface import set_llm_provider_mode
 from app.rpg.orchestration.state import (
-    append_llm_stream_event,
     begin_llm_request,
-    fail_llm_request,
-    finalize_llm_request,
     get_llm_orchestration_state,
 )
 from app.rpg.orchestration.stream_adapter import apply_provider_result_to_runtime_turn

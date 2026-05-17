@@ -12,7 +12,7 @@ Usage:
 This modifies NPC goal state in place before the planning phase.
 """
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 
 def apply_director_to_npcs(session, director_output) -> List[str]:

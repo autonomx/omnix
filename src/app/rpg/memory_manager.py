@@ -10,7 +10,7 @@ Enhanced with importance-based filtering and tag-based retrieval.
 """
 
 import logging
-from typing import Any, Dict, List, Optional
+from typing import List
 
 from app.rpg.models import GameSession, HistoryEvent
 

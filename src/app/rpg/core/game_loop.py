@@ -53,7 +53,6 @@ from ..encounter.resolver import EncounterResolver
 from ..execution.resolver import ActionResolver
 from ..memory.core import CampaignMemoryCore
 from ..memory.presenters import MemoryPresenter
-from ..migration.models import CURRENT_SAVE_FORMAT_VERSION
 from ..migration.pack_migrator import PackMigrator
 from ..migration.save_migrator import SaveMigrator
 from ..packs.exporter import PackExporter

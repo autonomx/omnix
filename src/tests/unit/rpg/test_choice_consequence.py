@@ -11,7 +11,6 @@ Consequence Engine:
 - Integration with QuestEngine
 """
 
-from typing import Any, Dict, List
 
 import pytest
 
@@ -22,7 +21,7 @@ from app.rpg.choice.consequence_engine import ConsequenceEngine
 from app.rpg.choice.timeline_recorder import TimelineRecorder
 from app.rpg.choice.world_mutator import WorldMutator
 from app.rpg.quest.quest_engine import QuestEngine
-from app.rpg.quest.quest_models import Quest, QuestObjective, QuestStage
+from app.rpg.quest.quest_models import Quest, QuestStage
 
 # ==================== Choice Models Tests ====================
 

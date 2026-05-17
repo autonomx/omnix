@@ -250,7 +250,7 @@ def test_movement_turn_records_reaction_context(fake_session_store, patch_narrat
 
 
 def test_idle_threshold_eventually_surfaces_visible_update(fake_session_store, patch_narrator):
-    from app.rpg.session.runtime import apply_idle_tick, load_runtime_session
+    from app.rpg.session.runtime import apply_idle_tick
 
     session = _make_runtime_session()
     session["runtime_state"]["last_real_player_activity_at"] = _iso_utc_now_minus(120)

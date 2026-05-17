@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Optional
 
 from .alliance_system import AllianceSystem
 from .reputation_graph import ReputationGraph

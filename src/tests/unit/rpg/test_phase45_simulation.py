@@ -13,16 +13,13 @@ These tests verify core functionality with mocked dependencies.
 import os
 import sys
 import unittest
-from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
-from unittest.mock import MagicMock, call, patch
+from typing import Any, List, Optional
+from unittest.mock import MagicMock
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', '..'))
 
 from app.rpg.ai.branch_ai_evaluator import AIBranchEvaluator, BranchEvaluation
 from app.rpg.ai.planner.candidate_generator import (
-    DEFAULT_ACTIONS,
-    ActionOption,
     CandidateGenerator,
 )
 from app.rpg.ai.planner.npc_planner import NPCPlanner, PlanningConfig

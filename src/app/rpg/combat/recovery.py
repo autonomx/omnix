@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Dict, List
+from typing import Any, Dict
 
 from app.rpg.combat.conditions import (
     add_status_effect_to_participant,

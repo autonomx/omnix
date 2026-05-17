@@ -12,7 +12,6 @@ from app.rpg.interactions.item_model import (
     add_item_to_items_list,
     normalize_item_instance,
     recalculate_inventory_derived_fields,
-    split_stack,
 )
 
 DEFAULT_EQUIPMENT_SLOTS = {

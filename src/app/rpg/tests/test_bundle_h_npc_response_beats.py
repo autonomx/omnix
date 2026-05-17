@@ -27,7 +27,6 @@ from app.rpg.world.conversation_social_state import (
     get_player_invitation_chance_modifier,
 )
 from app.rpg.world.conversation_threads import (
-    handle_pending_player_conversation_response,
     maybe_advance_conversation_thread,
 )
 from app.rpg.world.conversation_topics import detect_topic_pivot_hint

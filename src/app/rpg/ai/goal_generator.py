@@ -10,7 +10,7 @@ goal merging with existing stateful goals.
 from __future__ import annotations
 
 import uuid
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 from .npc_actor import NPCActor, NPCGoal
 

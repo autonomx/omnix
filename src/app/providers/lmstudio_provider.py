@@ -5,7 +5,6 @@ Implements the BaseProvider interface for local LM Studio servers.
 LM Studio provides an OpenAI-compatible API on a configurable port.
 """
 
-from dataclasses import field
 from typing import Any, Dict, Iterator, List, Optional, Union
 
 import requests
@@ -20,10 +19,7 @@ from .base import (
     ChatResponse,
     ConnectionError,
     ModelInfo,
-    ModelNotFoundError,
     ProviderCapability,
-    ProviderConfig,
-    ProviderError,
 )
 from .provider_trace import provider_call_enter, provider_call_exit
 

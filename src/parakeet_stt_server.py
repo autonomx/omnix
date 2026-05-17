@@ -21,9 +21,7 @@ if platform.system() == "Windows":
     except Exception:
         pass
 
-import asyncio
 import base64
-import datetime
 import gc
 import shutil
 import tempfile
@@ -47,7 +45,6 @@ def _validate_websocket_support():
 from pathlib import Path
 from typing import List, Optional
 
-import numpy as np
 import torch
 import uvicorn
 from fastapi import (
@@ -127,7 +124,7 @@ def load_model():
             gpu_memory = torch.cuda.get_device_properties(0).total_memory / 1024**3
             print(f"[STT] GPU available: {gpu_name} ({gpu_memory:.1f} GB)")
             if device == "cpu":
-                print(f"[STT] Running on CPU to avoid GPU conflicts with LLM")
+                print("[STT] Running on CPU to avoid GPU conflicts with LLM")
                 
     except Exception as e:
         print(f"[STT] Failed to load model on {device}: {e}")
@@ -258,7 +255,7 @@ def process_audio_for_transcription(audio_path: str, session_dir: Path) -> tuple
             
         # Convert to mono if needed
         if audio.channels == 2:
-            print(f"[STT] Converting stereo to mono")
+            print("[STT] Converting stereo to mono")
             audio = audio.set_channels(1)
             mono = True
         elif audio.channels > 2:
@@ -273,7 +270,7 @@ def process_audio_for_transcription(audio_path: str, session_dir: Path) -> tuple
                 audio = audio[start:end]
                 print(f"[STT] Trimmed silence: {start}ms to {end}ms")
             else:
-                print(f"[STT] No nonsilent chunks detected, using full audio")
+                print("[STT] No nonsilent chunks detected, using full audio")
         except Exception as e:
             print(f"[STT] Silence detection failed, using full audio: {e}")
         
@@ -286,7 +283,7 @@ def process_audio_for_transcription(audio_path: str, session_dir: Path) -> tuple
             print(f"[STT] Export complete, file size: {processed_audio_path.stat().st_size} bytes")
             return processed_audio_path.as_posix(), duration_sec
         else:
-            print(f"[STT] No processing needed, using original file")
+            print("[STT] No processing needed, using original file")
             return audio_path, duration_sec
             
     except Exception as e:
@@ -406,7 +403,7 @@ def get_transcripts_and_raw_times(audio_path: str, session_dir: Path) -> Transcr
             except Exception as e:
                 print(f"Error during model cleanup: {e}")
                 
-    except torch.cuda.OutOfMemoryError as e:
+    except torch.cuda.OutOfMemoryError:
         return TranscriptionResponse(
             success=False,
             message="CUDA out of memory. Please try a shorter audio or reduce GPU load."
@@ -672,7 +669,7 @@ if __name__ == "__main__":
     print(f"[STT] WebSocket backend: {ws_backend}")
     PORT = int(os.environ.get("OMNIX_STT_PORT", "5201"))
     print(f"Starting Parakeet STT Server on http://0.0.0.0:{PORT}")
-    print(f"Endpoints:")
+    print("Endpoints:")
     print(f"  - Health:    http://0.0.0.0:{PORT}/health")
     print(f"  - Transcribe: http://0.0.0.0:{PORT}/transcribe (POST)")
     print(f"  - WebSocket:  ws://0.0.0.0:{PORT}/ws/transcribe")

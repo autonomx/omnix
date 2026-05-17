@@ -38,7 +38,6 @@ from tests.rpg.manual.quest_log_m49_m51_checks import (
 from tests.rpg.manual.quest_puzzle_checks import run_quest_puzzle_checks
 from tests.rpg.manual.safe import _compact_json, _safe_dict, _safe_list, _safe_str
 from tests.rpg.manual.scenario_setup import (
-    _apply_manual_scenario_setup,
     apply_manual_scenario_setup_by_session_id,
 )
 from tests.rpg.manual.scenario_summary import (

@@ -6,7 +6,7 @@ accessibility, audio integration, QA, release candidate polish.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 
 def _clamp(v: float, lo: float = 0.0, hi: float = 1.0) -> float:

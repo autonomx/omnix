@@ -159,7 +159,7 @@ class TestCharacterEngine:
         
         assert old_leader.get_belief("power") == -1.0
         assert new_leader.get_belief("power") == 1.0
-        assert f"Regain control of mages_guild" in old_leader.goals
+        assert "Regain control of mages_guild" in old_leader.goals
     
     def test_goal_management(self):
         """Test goal add and remove."""
@@ -355,7 +355,7 @@ class TestNarrativeRenderer:
         """Test prompt rendering truncates to max_length."""
         renderer = NarrativeRenderer()
         scenes = [
-            Scene(id=f"scene{i}", type="action", description=f"Very long description " * 50)
+            Scene(id=f"scene{i}", type="action", description="Very long description " * 50)
             for i in range(5)
         ]
         

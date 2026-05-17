@@ -5,8 +5,8 @@ import os
 
 import pytest
 
-from app.providers import CerebrasProvider, ModelInfo, ProviderConfig
-from app.providers.base import AuthenticationError, ConnectionError, ModelNotFoundError
+from app.providers import CerebrasProvider, ProviderConfig
+from app.providers.base import AuthenticationError, ConnectionError
 
 
 class TestCerebrasRealConnection:
@@ -209,7 +209,7 @@ class TestCerebrasIntegrationWithSettingsFile:
         assert provider.config.api_key == cerebras_config['api_key']
         assert provider.config.model == cerebras_config.get('model', 'llama-3.3-70b-versatile')
         
-        print(f"Successfully created Cerebras provider from settings.json")
+        print("Successfully created Cerebras provider from settings.json")
         print(f"API Key: {provider.config.api_key[:10]}...")
         print(f"Model: {provider.config.model}")
     

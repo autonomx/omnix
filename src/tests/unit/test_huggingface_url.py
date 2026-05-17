@@ -11,7 +11,6 @@ Also tests the fix for URLs with query parameters:
 were incorrectly resulting in filenames with query params
 """
 
-import json
 import os
 import sys
 from urllib.parse import unquote, urlparse

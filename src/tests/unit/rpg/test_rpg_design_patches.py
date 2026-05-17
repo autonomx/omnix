@@ -9,7 +9,7 @@ Tests for:
 """
 
 import unittest
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 from rpg.ai.behavior_driver import BehaviorContext, BehaviorDriver
 from rpg.core.agent_scheduler import AgentScheduler, AutonomousTickManager

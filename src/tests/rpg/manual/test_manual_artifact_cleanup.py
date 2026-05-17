@@ -1,4 +1,3 @@
-from pathlib import Path
 
 from tests.rpg.manual.constants import TEST_RESULTS_ROOT
 from tests.rpg.manual.output_artifacts import (

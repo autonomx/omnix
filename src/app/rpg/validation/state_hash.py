@@ -23,7 +23,7 @@ Usage:
 
 import hashlib
 import json
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 
 def stable_serialize(obj: Any) -> Any:

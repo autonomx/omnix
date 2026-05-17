@@ -9,9 +9,8 @@ Tests cover:
     Fix #6: Structured trace logging
 """
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
-import pytest
 from rpg.core.action_resolver import ActionResolver
 from rpg.core.execution_pipeline import (
     AUTHORITY_PRIORITIES,

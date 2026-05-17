@@ -21,8 +21,8 @@ import importlib.util
 import os
 import sys
 import types
-from typing import Any, Dict, List
-from unittest.mock import MagicMock, patch
+from typing import Any, Dict
+from unittest.mock import MagicMock
 
 import pytest
 

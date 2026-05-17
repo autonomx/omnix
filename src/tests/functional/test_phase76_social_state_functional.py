@@ -11,7 +11,6 @@ from __future__ import annotations
 
 from app.rpg.creator.presenters import CreatorStatePresenter
 from app.rpg.social_state.core import SocialStateCore
-from app.rpg.social_state.query import SocialStateQuery
 
 
 class TestSocialInteractionUpdatesPersistentRelationshipState:

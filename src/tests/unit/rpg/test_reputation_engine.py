@@ -15,7 +15,6 @@ Test Coverage:
 import os
 import sys
 
-import pytest
 
 # Add app directory to path (same as test_tier6_narrative_intelligence.py)
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', '..', 'app'))
@@ -24,8 +23,6 @@ from rpg.world.reputation_engine import (
     ATTITUDE_ALLY_THRESHOLD,
     ATTITUDE_FRIENDLY_THRESHOLD,
     ATTITUDE_HOSTILE_THRESHOLD,
-    MAX_REPUTATION,
-    MIN_REPUTATION,
     FactionStanding,
     ReputationEngine,
 )

@@ -6,7 +6,6 @@ Helper schema constructors and canonicalization for adventure packs.
 from __future__ import annotations
 
 import copy
-from typing import Any
 
 from .models import AdventurePack, PackContent, PackManifest, PackMetadata
 

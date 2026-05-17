@@ -19,9 +19,8 @@ _PROJECT_ROOT = pathlib.Path(__file__).resolve().parents[3]
 if str(_PROJECT_ROOT / "src" / "app") not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT / "src" / "app"))
 
-from rpg.ai.decision.decision_engine import DecisionContext, DecisionEngine
+from rpg.ai.decision.decision_engine import DecisionEngine
 from rpg.ai.decision.resolver import ActionResolver
-from rpg.ai.goap.planner import Action as GOAPAction
 from rpg.ai.goap.planner import GOAPPlanner
 
 

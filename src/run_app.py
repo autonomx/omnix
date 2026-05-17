@@ -863,7 +863,6 @@ async def _process_conversation(session: ConversationSession, user_text: str):
 
 
 # ============== REST API ENDPOINTS ==============
-import uuid
 from datetime import datetime
 
 from fastapi import HTTPException, Request

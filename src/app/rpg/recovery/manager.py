@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import copy
 import uuid
-from typing import Any
 
 from .ambiguity import AmbiguityPolicy
 from .fallbacks import FallbackSceneBuilder

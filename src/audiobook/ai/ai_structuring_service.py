@@ -4,7 +4,6 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Callable, Dict, List, Optional
 
 from audiobook.ai.character_extractor import CharacterExtractor
-from audiobook.ai.emotion_detector import EmotionDetector
 from audiobook.ai.speaker_tracker import SpeakerTracker
 from audiobook.segmentation.scene_detector import SceneDetector
 from audiobook.segmentation.text_segmenter import TextSegmenter

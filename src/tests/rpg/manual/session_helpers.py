@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import threading
-from copy import deepcopy
 from typing import Any, Dict
 
 from tests.rpg.manual.constants import RPG_SESSION_DIRS

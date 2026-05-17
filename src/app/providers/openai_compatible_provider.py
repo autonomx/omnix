@@ -20,7 +20,6 @@ from .base import (
     ModelInfo,
     ModelNotFoundError,
     ProviderCapability,
-    ProviderConfig,
 )
 from .provider_trace import provider_call_enter, provider_call_exit
 
@@ -290,7 +289,7 @@ class OpenAICompatibleProvider(BaseProvider):
                 )
                 models.append(model_info)
                 
-        except Exception as e:
+        except Exception:
             # If /models endpoint doesn't work, just add the configured model
             # This is common for many OpenAI-compatible APIs
             pass

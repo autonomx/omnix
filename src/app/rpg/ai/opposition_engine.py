@@ -7,11 +7,11 @@ the game state.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Dict, List
 
 if TYPE_CHECKING:
     # Avoid circular imports - use type hints only
-    from ..quest.quest_engine import QuestEngine
+    pass
 
 
 class OppositionEngine:

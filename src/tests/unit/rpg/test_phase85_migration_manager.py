@@ -1,5 +1,4 @@
 """Unit tests for Phase 8.5 migration manager and migrations."""
-import pytest
 
 from app.rpg.persistence.migration_manager import migrate_package_to_current
 from app.rpg.persistence.migrations.v1_to_v2 import migrate_v1_to_v2

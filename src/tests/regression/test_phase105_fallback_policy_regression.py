@@ -3,7 +3,6 @@
 Verifies that finalize_runtime_turn and mark_runtime_turn_interrupted
 do NOT invent text by default, only when explicitly enabled.
 """
-import pytest
 
 from app.rpg.runtime.dialogue_runtime import (
     begin_runtime_turn,

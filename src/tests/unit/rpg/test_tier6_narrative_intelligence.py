@@ -15,8 +15,8 @@ import sys
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', '..', 'app'))
 
 from rpg.core.player_loop import PlayerLoop
-from rpg.player.agency_system import AgencySystem, PlayerChoice
-from rpg.story.plot_engine import PlotEngine, Quest, Setup
+from rpg.player.agency_system import AgencySystem
+from rpg.story.plot_engine import PlotEngine
 
 # =========================================================
 # AgencySystem Tests

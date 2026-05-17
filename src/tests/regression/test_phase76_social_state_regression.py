@@ -10,7 +10,6 @@ Covers:
 from __future__ import annotations
 
 from app.rpg.social_state.core import SocialStateCore
-from app.rpg.social_state.models import SocialState
 
 
 class TestSocialStateUpdatesAreDeterministic:

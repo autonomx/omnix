@@ -12,7 +12,6 @@ into story. It does NOT control NPCs directly. It nudges the system via:
 
 from __future__ import annotations
 
-from typing import Any, Dict
 
 from .arc_manager import ArcManager
 from .event_injector import EventInjector

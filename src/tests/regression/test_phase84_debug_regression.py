@@ -5,7 +5,6 @@ deterministic — derived from stable inputs (tick, choice_id, etc.)
 and never from uuid4() or other random sources.
 """
 
-import pytest
 
 
 class TestPhase84DeterministicDebugIds:

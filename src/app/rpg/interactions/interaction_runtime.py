@@ -4,7 +4,6 @@ from copy import deepcopy
 from typing import Any, Dict
 
 from app.rpg.combat.runtime import (
-    gate_combat_action,
     is_combat_active,
     resolve_combat_attack,
     start_combat_encounter,

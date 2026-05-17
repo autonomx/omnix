@@ -19,7 +19,6 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 
-import pytest
 
 # ---------------------------------------------------------------------------
 # Report data collector (pytest plugin)
@@ -164,7 +163,7 @@ class OmnixReportPlugin:
                 f'<table class="test-table"><tbody>'
                 + "\n".join(rows)
                 + "</tbody></table>"
-                f"</div></div>"
+                "</div></div>"
             )
         return "\n".join(parts)
 

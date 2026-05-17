@@ -12,7 +12,7 @@ Tests for:
 """
 
 import unittest
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 from app.rpg.ai.world_scene_narrator import (
     NarrativeResult,

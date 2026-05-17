@@ -13,8 +13,6 @@ import sys
 # Add app directory to path (same as other test files)
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', '..', 'app'))
 
-import random
-from unittest.mock import MagicMock, patch
 
 import pytest
 from rpg.story.dynamic_quest_generator import DynamicQuestGenerator

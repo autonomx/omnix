@@ -14,8 +14,6 @@ Run with:
 """
 from __future__ import annotations
 
-import asyncio
-import copy
 import importlib
 import importlib.abc
 import importlib.machinery
@@ -23,10 +21,9 @@ import importlib.util
 import os
 import sys
 import types
-from typing import Any, Dict, List
+from typing import Any, Dict
 from unittest.mock import MagicMock
 
-import pytest
 
 # ---------------------------------------------------------------------------
 # Import machinery — stub all app.* dependencies that we don't test.

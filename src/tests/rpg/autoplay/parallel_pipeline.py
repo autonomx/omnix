@@ -46,8 +46,88 @@ def _safe_dict(value: Any) -> Dict[str, Any]:
     return value if isinstance(value, dict) else {}
 
 
+def _safe_list(value: Any) -> List[Any]:
+    return value if isinstance(value, list) else []
+
+
 def _safe_str(value: Any) -> str:
     return value if isinstance(value, str) else ""
+
+
+PRESENTATION_INTENT_ALLOWED_CATEGORIES = {
+    "dialogue",
+    "evidence",
+    "investigation",
+    "travel",
+    "combat",
+    "service",
+    "economy",
+    "stealth",
+    "social",
+    "lore",
+    "quest",
+    "mixed",
+    "general",
+}
+
+
+def _normalize_presentation_category(value: Any) -> str:
+    category = _safe_str(value).strip().lower().replace("-", "_").replace(" ", "_")
+    aliases = {
+        "conversation": "dialogue",
+        "talk": "dialogue",
+        "social": "dialogue",
+        "buying": "economy",
+        "purchase": "economy",
+        "shop": "economy",
+        "lodging": "service",
+        "room": "service",
+        "rest": "service",
+        "clue": "evidence",
+        "proof": "evidence",
+        "search": "investigation",
+        "scouting": "investigation",
+        "move": "travel",
+        "movement": "travel",
+        "fight": "combat",
+        "battle": "combat",
+    }
+    category = aliases.get(category, category)
+    if category not in PRESENTATION_INTENT_ALLOWED_CATEGORIES:
+        return "general"
+    return category
+
+
+def _normalize_presentation_intent(value: Any) -> Dict[str, Any]:
+    raw = _safe_dict(value)
+    primary = _normalize_presentation_category(
+        raw.get("primary_category")
+        or raw.get("category")
+        or raw.get("primary")
+    )
+    secondary: List[str] = []
+    for item in _safe_list(
+        raw.get("secondary_categories")
+        or raw.get("secondary")
+        or raw.get("categories")
+    ):
+        normalized = _normalize_presentation_category(item)
+        if normalized and normalized != primary and normalized not in secondary:
+            secondary.append(normalized)
+
+    try:
+        confidence = float(raw.get("confidence") or 0.0)
+    except Exception:
+        confidence = 0.0
+    confidence = max(0.0, min(1.0, confidence))
+
+    return {
+        "format_version": "presentation_intent_v1",
+        "primary_category": primary,
+        "secondary_categories": secondary[:4],
+        "confidence": round(confidence, 3),
+        "reason": _safe_str(raw.get("reason"))[:240],
+    }
 
 
 def _safe_list(value: Any) -> List[Any]:
@@ -558,6 +638,8 @@ def _has_expected_combined_provider_keys(payload: Dict[str, Any]) -> bool:
     if not isinstance(payload, dict):
         return False
     expected_keys = {
+        "presentation_intent",
+        "intent",
         "narration",
         "action",
         "npc",
@@ -616,6 +698,10 @@ def _extract_nested_combined_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
         normalized["reward"] = payload.get("reward")
     if "followup_hooks" in payload:
         normalized["followup_hooks"] = _normalize_followup_hooks(payload.get("followup_hooks"))
+    if "presentation_intent" in payload or "intent" in payload:
+        normalized["presentation_intent"] = _normalize_presentation_intent(
+            payload.get("presentation_intent") or payload.get("intent")
+        )
 
     narration_payload = _safe_dict(
         payload.get("narration_payload")
@@ -643,6 +729,12 @@ def _extract_nested_combined_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
         normalized["followup_hooks"] = (
             _normalize_followup_hooks(narration_payload.get("followup_hooks"))
             or _normalize_followup_hooks(payload.get("followup_hooks"))
+        )
+        normalized["presentation_intent"] = _normalize_presentation_intent(
+            narration_payload.get("presentation_intent")
+            or narration_payload.get("intent")
+            or payload.get("presentation_intent")
+            or payload.get("intent")
         )
 
     advisory_payload = _safe_dict(
@@ -811,6 +903,7 @@ def _build_combined_background_payload(
     context_json = compact_json_for_prompt(context_packet, max_chars=7000)
     schema_text = (
         "{"
+        '"presentation_intent":{"primary_category":"dialogue|evidence|investigation|travel|combat|service|economy|mixed|general","secondary_categories":[],"confidence":0.0,"reason":"short diagnostic reason"},'
         '"narration":"2-5 sentences describing the resolved scene without repeating player input.",'
         '"action":"Short result of the player action.",'
         '"npc":{"speaker":"","line":""},'
@@ -839,6 +932,10 @@ def _build_combined_background_payload(
                 "You are an RPG background enrichment worker. Return JSON only. "
                 "You must not assert authoritative outcomes that are not in the turn contract. "
                 "Do not grant items, currency, quest completion, damage, travel, or rewards. "
+                "Classify presentation_intent as semantic presentation metadata only; the turn contract remains authoritative. "
+                "Use combat only when compact context shows combat actually started, advanced, or resolved. "
+                "Words like ambush, bandit, scout, road, room, or supplies are not enough by themselves to classify the turn as combat, travel, service, or economy. "
+                "For reporting evidence, questioning NPCs, warning NPCs, or asking about routes, prefer dialogue/evidence/investigation over combat/travel. "
                 "Return one JSON object and no markdown fences, no prose, no commentary. "
                 "Maintain rich 2-5 sentence narration quality. Use only the provided compact context. "
                 "Return compact candidate objects. Prefer at most 1 high-quality candidate per category. "
@@ -862,6 +959,11 @@ def _build_combined_background_payload(
                 "max 1 memory, max 1 world_signal, max 1 future_hook. "
                 "Each candidate summary must be under 160 characters. "
                 "Narration remains high quality and should not be shortened below 2 sentences.\n\n"
+                "presentation_intent examples:\n"
+                "- 'I report the ambush evidence to Bran' => evidence, secondary dialogue/investigation, not combat.\n"
+                "- 'I scout the quarry road for ambush signs' => investigation, secondary evidence, not combat.\n"
+                "- 'I ask Bran if the east road leads to a bridge' => dialogue, secondary travel, not travel.\n"
+                "- 'I rent a room from Bran' => service.\n\n"
                 "Profile grounding rule: when loaded_npc_profiles is non-empty, use it only for NPC continuity. "
                 "For example, a trusting NPC may sound warmer, a guarded NPC may be cautious, "
                 "and a remembered prior topic may be acknowledged. "
@@ -908,6 +1010,11 @@ def _build_combined_background_payload(
                 or _has_expected_combined_provider_keys(parsed)
             ):
                 normalized["ok"] = True
+                normalized["presentation_intent"] = _normalize_presentation_intent(
+                    normalized.get("presentation_intent")
+                    or parsed.get("presentation_intent")
+                    or parsed.get("intent")
+                )
                 normalized.setdefault("raw_provider_shape_keys", sorted(list(parsed.keys()))[:80])
                 normalized.setdefault("prompt_metrics", prompt_metrics)
                 normalized.setdefault("context_packet_keys", sorted(list(context_packet.keys())))

@@ -7,7 +7,6 @@ Tests end-to-end behavior of the scene narration pipeline:
 - Multi-scenario coverage
 """
 
-import json
 import unittest
 
 from app.rpg.ai.world_scene_narrator import (

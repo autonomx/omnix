@@ -17,15 +17,13 @@ Patches tested:
 
 import os
 import sys
-from collections import Counter
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
-import pytest
 
 # Add app directory to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', 'app'))
 
-from rpg.core.npc_state import GoalState, NPCState, Personality
+from rpg.core.npc_state import NPCState, Personality
 from rpg.core.world_loop import MAX_ACTIONS_PER_TICK, WorldSimulationLoop
 from rpg.memory.memory_manager import MemoryManager
 from rpg.narrative.story_arc import MAX_ACTIVE_ARCS, StoryArcManager

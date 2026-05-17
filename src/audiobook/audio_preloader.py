@@ -6,7 +6,7 @@ While playing chunk N, generates chunk N+1 asynchronously in the background.
 
 import logging
 import threading
-from typing import Any, Callable, Dict, Optional
+from typing import Callable, Dict, Optional
 
 logger = logging.getLogger(__name__)
 

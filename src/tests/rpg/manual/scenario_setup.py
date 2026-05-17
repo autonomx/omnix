@@ -22,7 +22,6 @@ from app.rpg.quests.transitions import apply_quest_transition
 from app.rpg.social.leverage import add_social_leverage
 from app.rpg.social.reputation import (
     set_global_reputation,
-    set_relationship_values,
 )
 from app.rpg.social.resolution import (
     resolve_intimidation,

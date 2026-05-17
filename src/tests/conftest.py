@@ -7,15 +7,13 @@ console-error capture, and automatic screenshot-on-failure.
 
 from __future__ import annotations
 
-import json
 import os
 import sys
-import time
 from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
-from playwright.sync_api import APIRequestContext, BrowserContext, Page
+from playwright.sync_api import Page
 
 # Add project roots to path for importing app modules
 SRC_DIR = Path(__file__).resolve().parent.parent

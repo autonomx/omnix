@@ -24,8 +24,6 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 from app.rpg.world_sim.controller import _MAX_RECENT_EFFECTS, WorldSimController
 from app.rpg.world_sim.models import (
     SUPPORTED_WORLD_EFFECT_TYPES,
-    WorldSimState,
-    WorldSimTickResult,
 )
 from app.rpg.world_sim.presenter import WorldSimPresenter
 from app.rpg.world_sim.reducers import (

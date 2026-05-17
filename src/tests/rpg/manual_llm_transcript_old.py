@@ -12057,7 +12057,7 @@ def _seed_session_currency(session_id: str, currency: Dict[str, Any]) -> bool:
 def _clone_or_create_manual_session(session_id: str) -> Dict[str, Any]:
     """Create or load a manual scenario session."""
     try:
-        from app.rpg.session.service import load_session, save_session
+        from app.rpg.session.service import load_session
         session = _safe_dict(load_session(session_id))
         if session:
             return session

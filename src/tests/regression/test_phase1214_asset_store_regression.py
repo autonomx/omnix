@@ -1,5 +1,4 @@
 """Phase 12.14 — Asset store regression tests."""
-import os
 
 from app.rpg.visual import asset_store
 

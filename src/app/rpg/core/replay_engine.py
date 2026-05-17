@@ -29,10 +29,10 @@ DESIGN RULES:
 - Events are sorted deterministically for reproducible replay
 """
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any, Callable, Dict, List, Optional, Protocol, TypeVar
 
-from .event_bus import Event, EventBus
+from .event_bus import Event
 
 T = TypeVar("T")
 

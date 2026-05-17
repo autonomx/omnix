@@ -4,7 +4,6 @@ import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", ".."))
 
-import pytest
 
 from app.rpg.creator.startup_pipeline import add_world_expansion_caps, mark_seed_origins
 from app.rpg.creator.world_expansion import (

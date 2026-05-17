@@ -142,7 +142,6 @@ def test_authoritative_blocking_fallback_subtracts_known_llm_time():
 
 
 def test_final_quality_gate_uses_authoritative_blocking_summary():
-    from tests.rpg.autoplay_llm_campaign import _final_lifecycle_quality_gates
 
     summary = {
         "requested_turns": 100,

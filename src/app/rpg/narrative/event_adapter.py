@@ -41,7 +41,6 @@ Design Rules:
 
 from __future__ import annotations
 
-from copy import deepcopy
 from typing import Any, Dict, List, Optional
 
 # Field name mappings: raw_field -> canonical_field

@@ -7,8 +7,7 @@ This module tests:
 3. Search query handling
 """
 
-import json
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 

@@ -31,7 +31,6 @@ from app.rpg.session.turn_perf_trace import (
     record_elapsed_turn_stage,
     record_turn_perf_trace,
     record_turn_perf_trace_stack,
-    traced_turn_stage,
 )
 
 logger = logging.getLogger(__name__)
@@ -497,7 +496,6 @@ from app.rpg.combat.models import AttackIntent
 from app.rpg.combat.npc_turns import run_npc_turn
 from app.rpg.combat.positioning import (
     can_attack_target,
-    flee_penalty_from_position,
     reposition_participant,
 )
 from app.rpg.combat.recovery import (
@@ -507,7 +505,6 @@ from app.rpg.combat.recovery import (
 from app.rpg.combat.resolver import resolve_attack, resolve_defend, resolve_flee
 from app.rpg.combat.state import (
     build_empty_combat_state,
-    combat_is_active,
     get_current_actor_id,
     normalize_combat_state,
 )
@@ -540,7 +537,6 @@ from app.rpg.economy.provider_catalog import (
     derive_npc_transaction_providers,
     derive_world_transaction_providers,
 )
-from app.rpg.economy.service_effects import apply_service_purchase_result
 from app.rpg.economy.service_resolver import resolve_service_turn
 from app.rpg.economy.transaction_effects import apply_transaction_effects
 from app.rpg.economy.transactions import (
@@ -549,36 +545,19 @@ from app.rpg.economy.transactions import (
 )
 from app.rpg.interactions.interaction_runtime import resolve_general_interaction
 from app.rpg.items.inventory_state import (
-    add_inventory_items,
-    equip_inventory_item,
-    get_inventory_item_for_drop,
     normalize_inventory_state,
-    remove_inventory_item,
-    unequip_inventory_slot,
 )
-from app.rpg.items.item_effects import apply_item_effects, apply_item_use
+from app.rpg.items.item_effects import apply_item_effects
 from app.rpg.items.world_items import (
-    drop_world_item,
-    ensure_world_item_state,
     list_scene_items,
-    pickup_world_item,
 )
 from app.rpg.llm_app_gateway import build_app_llm_gateway
-from app.rpg.memory.actor_memory_state import ensure_actor_memory_state
-from app.rpg.memory.dialogue_context import (
-    build_dialogue_memory_context,
-    build_llm_memory_prompt_block,
-)
-from app.rpg.memory.memory_state import ensure_memory_state
 from app.rpg.memory.social_effects import apply_general_social_effects
-from app.rpg.memory.world_memory_state import ensure_world_memory_state
 from app.rpg.narration.combat_contract import (
     build_combat_narration_contract,
     combat_contract_requires_llm,
 )
-from app.rpg.narration.combat_prompt import build_combat_narration_prompt
 from app.rpg.narration.combat_service import generate_combat_narration_sync
-from app.rpg.narration.combat_validator import validate_combat_narration
 from app.rpg.narration.contradictions import validate_narration_contradictions
 from app.rpg.narration.quality import (
     build_narration_quality_context,
@@ -598,17 +577,14 @@ from app.rpg.party.companion_presence import (
     build_party_aware_turn_context,
     companion_presence_summary,
     project_active_companions_into_presence,
-    sync_active_companions_to_player_location,
 )
 from app.rpg.party.companion_quests import (
     companion_quest_summary,
     maybe_progress_companion_quest_from_player_input,
     seed_companion_quest_from_arc,
-    seed_companion_quests_for_active_companions,
 )
 from app.rpg.party.companion_turns import maybe_build_direct_companion_turn_response
 from app.rpg.party.party_composition import project_party_composition_effects
-from app.rpg.player import ensure_player_party, ensure_player_state
 from app.rpg.player.player_progression_state import (
     award_player_xp,
     award_skill_xp,
@@ -623,10 +599,8 @@ from app.rpg.player.player_xp_rules import (
 )
 from app.rpg.presentation import (
     build_runtime_presentation_payload,
-    build_scene_presentation_payload,
 )
 from app.rpg.presentation.memory_inspector import build_memory_ui_summary
-from app.rpg.presentation.personality_state import ensure_personality_state
 from app.rpg.presentation.speaker_cards import build_nearby_npc_cards
 from app.rpg.presentation.visual_state import ensure_visual_state
 from app.rpg.profiles.character_cards import list_character_cards_for_simulation_state
@@ -658,7 +632,6 @@ from app.rpg.session.conversation_thread_runtime import (
 from app.rpg.session.idle_runtime import (
     advance_simulation_for_idle,
     build_idle_player_context,
-    compute_idle_tick_count,
 )
 from app.rpg.session.inventory_runtime import (
     drop_item_action,
@@ -710,10 +683,7 @@ from app.rpg.session.state_normalization import (
     _safe_list,
     _safe_str,
     _story_policy_record_replay_artifacts,
-    _story_policy_save_load_stable,
-    _story_policy_strict_replay,
 )
-from app.rpg.session.travel_runtime import resolve_travel_turn, travel_resolved_result
 from app.rpg.session.turn_contract import (
     apply_state_delta,
     build_turn_contract,

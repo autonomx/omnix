@@ -8,7 +8,6 @@ from app.rpg.world.location_registry import current_location_id
 from app.rpg.world.npc_biography_registry import get_npc_biography
 from app.rpg.world.npc_goal_state import active_goals_for_npc
 from app.rpg.world.npc_presence_runtime import (
-    present_npcs_at_location,
     update_present_npcs_for_location,
 )
 from app.rpg.world.scene_continuity_state import scene_continuity_for_location

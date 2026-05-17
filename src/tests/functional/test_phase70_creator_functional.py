@@ -1,6 +1,6 @@
 """Functional tests for Phase 7.0 Creator / GM layer."""
 
-from app.rpg.core.event_bus import Event, EventBus
+from app.rpg.core.event_bus import EventBus
 from app.rpg.core.game_loop import GameLoop
 from app.rpg.creator.gm_state import InjectEventDirective
 from app.rpg.narrative.story_director import StoryDirector

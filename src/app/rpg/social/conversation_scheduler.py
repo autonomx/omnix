@@ -16,7 +16,6 @@ from __future__ import annotations
 
 from typing import Any, Dict, List
 
-from .conversation_beats import MODE_BEAT_CAPS, compute_beat_caps
 from .npc_conversations import list_active_conversations
 
 # ── Constants ─────────────────────────────────────────────────────────────

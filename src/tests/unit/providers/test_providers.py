@@ -1,6 +1,5 @@
 """Tests for individual provider implementations."""
 
-from unittest.mock import Mock, patch
 
 import pytest
 

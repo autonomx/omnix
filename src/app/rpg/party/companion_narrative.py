@@ -13,7 +13,7 @@ Key guarantees:
 """
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 _MAX_INTERJECTIONS = 3
 _MAX_DIALOGUE_COMPANIONS = 3

@@ -1,7 +1,6 @@
 """Phase 9.1 — Regression tests for Party System and save compatibility."""
 from __future__ import annotations
 
-import pytest
 
 from app.rpg.party import (
     add_companion,

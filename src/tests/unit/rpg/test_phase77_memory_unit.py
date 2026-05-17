@@ -34,7 +34,6 @@ from app.rpg.memory.presenters import MemoryPresenter
 from app.rpg.memory.recap_builder import RecapBuilder
 from app.rpg.social_state.core import SocialStateCore
 from app.rpg.social_state.models import (
-    AllianceRecord,
     RelationshipStateRecord,
     RumorRecord,
 )

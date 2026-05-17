@@ -9,12 +9,10 @@ from __future__ import annotations
 
 import importlib
 import importlib.util
-import json
 import os
 import sys
 import types
-from typing import Any, Dict
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 

@@ -13,17 +13,13 @@ from __future__ import annotations
 import copy
 import json
 
-import pytest
 
 from app.rpg.migration.models import (
     CURRENT_PACK_FORMAT_VERSION,
     CURRENT_SAVE_FORMAT_VERSION,
-    MigratedPayload,
-    MigrationReport,
 )
 from app.rpg.migration.pack_migrator import PackMigrator
-from app.rpg.migration.registry import MigrationRegistry
-from app.rpg.migration.save_migrator import SaveMigrator, build_default_registry
+from app.rpg.migration.save_migrator import SaveMigrator
 
 # ---------------------------------------------------------------------------
 # Helpers

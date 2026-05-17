@@ -1,7 +1,7 @@
 """Phase 18.3A — Canonical player progression state."""
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict
 
 _MAX_PROGRESSION_LOG = 50
 

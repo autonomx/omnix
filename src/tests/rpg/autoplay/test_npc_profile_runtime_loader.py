@@ -1,5 +1,4 @@
 import json
-import os
 
 from tests.rpg.autoplay.npc_profile_runtime_loader import (
     load_profiles_into_row_runtime,

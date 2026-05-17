@@ -473,7 +473,7 @@ class BehaviorDriver:
                 )
                 
         reasoning = " | ".join(reasoning_parts) if reasoning_parts else (
-            f"Based on general assessment of the situation"
+            "Based on general assessment of the situation"
         )
         
         return {

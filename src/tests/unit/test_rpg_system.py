@@ -6,9 +6,7 @@ Tests do not require external services (LLM providers).
 import json
 import os
 import sys
-import uuid
 
-import pytest
 
 # Add parent directory to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
@@ -1526,7 +1524,6 @@ class TestFactionReputation:
         from app.rpg.models import (
             Faction,
             GameSession,
-            Location,
             NPCCharacter,
             PlayerState,
             WorldState,

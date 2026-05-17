@@ -4,7 +4,6 @@ import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 
-import pytest
 
 from app.rpg.action_resolver import (
     resolve_action,
@@ -15,7 +14,6 @@ from app.rpg.creator.world_expansion import maybe_spawn_dynamic_npc
 from app.rpg.items.generated_item_builder import clamp_generated_item_stats
 from app.rpg.items.inventory_state import normalize_inventory_state
 from app.rpg.items.item_registry import get_item_definition
-from app.rpg.items.item_stats import normalize_item_stats
 from app.rpg.items.world_items import ensure_world_item_state
 from app.rpg.player.player_progression_state import (
     allocate_starting_stats,

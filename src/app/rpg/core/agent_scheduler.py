@@ -28,7 +28,7 @@ Design Compliance:
 
 from __future__ import annotations
 
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 from rpg.memory.memory_manager import MemoryManager
 from rpg.narration.narrator import NarratorAgent

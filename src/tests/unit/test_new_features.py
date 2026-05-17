@@ -9,9 +9,7 @@ import json
 import os
 import sys
 import tempfile
-import threading
 import time
-import uuid
 
 import pytest
 
@@ -1110,7 +1108,7 @@ class TestJobQueueChunkOrdering:
         assert result["chunk_index"] == 3
 
     def test_get_ordered_results(self):
-        from app.job_queue import JobQueue, JobStatus
+        from app.job_queue import JobQueue
         q = JobQueue()
         # Enqueue out of order
         jid2 = q.enqueue("b", chunk_index=2)

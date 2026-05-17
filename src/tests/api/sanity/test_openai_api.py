@@ -4,15 +4,9 @@ Tests for OpenAI Compatible API
 Tests the FastAPI endpoints for OpenAI compatibility
 """
 
-import asyncio
-import json
-import os
-import tempfile
-from pathlib import Path
-from unittest.mock import AsyncMock, Mock, patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
-from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
 # Import the API app

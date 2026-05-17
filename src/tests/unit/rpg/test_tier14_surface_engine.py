@@ -15,7 +15,6 @@ from __future__ import annotations
 import random
 import sys
 
-import pytest
 
 # Tier 14: Narrative Surface Engine
 try:

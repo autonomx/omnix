@@ -10,7 +10,6 @@ import os
 import sys
 from unittest.mock import MagicMock
 
-import pytest
 
 # Add project path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "app"))
@@ -22,7 +21,6 @@ from rpg.ai.opposition_engine import OppositionEngine
 from rpg.ai.planner import Planner
 from rpg.ai.strategy_profiles import (
     STRATEGY_PROFILES,
-    get_strategy_profile,
     list_strategies,
 )
 

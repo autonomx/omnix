@@ -127,7 +127,6 @@ def test_world_events_for_session_missing_session_returns_404(client):
 
 
 def test_session_world_events_route_returns_player_world_view_rows(client, monkeypatch):
-    from app.rpg.analytics.world_events import build_player_world_view_rows
 
     store = {
         "world_events_session": {

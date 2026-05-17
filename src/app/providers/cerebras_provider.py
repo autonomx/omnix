@@ -18,7 +18,6 @@ from .base import (
     ModelInfo,
     ModelNotFoundError,
     ProviderCapability,
-    ProviderConfig,
 )
 
 

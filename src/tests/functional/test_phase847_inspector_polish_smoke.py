@@ -9,10 +9,8 @@ Tests the functional behavior of the inspector polish features:
 - Loading states
 - Persisted open state
 """
-import json
 import os
 
-import pytest
 
 
 def test_inspector_filters_js_exports():

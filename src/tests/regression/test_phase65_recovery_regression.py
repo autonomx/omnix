@@ -8,12 +8,11 @@ import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 
-from app.rpg.core.event_bus import Event, EventBus
+from app.rpg.core.event_bus import EventBus
 from app.rpg.core.game_loop import GameLoop
 from app.rpg.core.snapshot_manager import SnapshotManager
 from app.rpg.narrative.story_director import StoryDirector
 from app.rpg.recovery.manager import RecoveryManager
-from app.rpg.recovery.models import RecoveryState
 
 # ---------------------------------------------------------------------------
 # Stubs

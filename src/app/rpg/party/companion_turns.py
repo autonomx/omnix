@@ -6,7 +6,6 @@ from typing import Any, Dict, List
 from app.rpg.party.companion_memory import companion_loyalty_projection
 from app.rpg.party.companion_presence import (
     build_party_aware_turn_context,
-    player_input_mentions_active_companion,
 )
 from app.rpg.party.companion_quests import companion_quest_summary
 

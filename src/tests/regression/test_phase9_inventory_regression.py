@@ -5,7 +5,6 @@ including stack merging, capacity limits, and save migration compatibility.
 """
 from __future__ import annotations
 
-import pytest
 
 from app.rpg.items.inventory_state import (
     add_inventory_items,
@@ -14,7 +13,6 @@ from app.rpg.items.inventory_state import (
     record_inventory_loot,
     remove_inventory_item,
 )
-from app.rpg.items.item_registry import get_item_definition
 
 
 class TestInventoryRegression:

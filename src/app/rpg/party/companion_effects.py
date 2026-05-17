@@ -16,7 +16,6 @@ from app.rpg.items import (
 )
 
 from .party_state import (
-    _normalize_companion,
     ensure_party_state,
     get_companion_by_id,
     update_companion_hp,

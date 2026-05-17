@@ -306,7 +306,6 @@ def test_idle_tick_reads_persisted_active_interactions(client, monkeypatch):
 def test_until_next_command_mode_keeps_interaction_active():
     """Test that until_next_command mode keeps interaction active for same-type commands."""
     from app.rpg.session.runtime import (
-        _get_interaction_duration_mode,
         _resolve_until_next_command_interactions,
     )
 

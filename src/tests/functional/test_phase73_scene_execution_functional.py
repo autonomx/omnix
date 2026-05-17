@@ -6,9 +6,7 @@ and coherence reducer behavior.
 
 from __future__ import annotations
 
-from typing import Any
 
-import pytest
 
 from app.rpg.coherence.core import CoherenceCore
 from app.rpg.execution.resolver import ActionResolver

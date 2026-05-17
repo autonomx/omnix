@@ -269,7 +269,7 @@ def build_world_event_candidates(
             text = _safe_str(inc.get("description") or f"An explosion rocks the area near {loc}.")
         else:
             event_type = "public_disturbance"
-            text = _safe_str(inc.get("description") or f"A disturbance erupts nearby.")
+            text = _safe_str(inc.get("description") or "A disturbance erupts nearby.")
 
         priority = 0.35 + min(severity, 1.0) * 0.35
         if loc == player_loc:

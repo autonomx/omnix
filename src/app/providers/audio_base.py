@@ -9,13 +9,11 @@ import logging
 import queue
 import subprocess
 import threading
-import time
-from abc import ABC, abstractmethod
+from abc import abstractmethod
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Dict, Iterator, List, Optional, Union
+from typing import Any, Dict, Iterator, List, Optional
 
-import requests
 
 logger = logging.getLogger(__name__)
 
