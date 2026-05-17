@@ -1825,6 +1825,174 @@ def _attach_background_presentation_to_row(
     return row
 
 
+def _extract_legacy_background_result_from_event(event: Any) -> Dict[str, Any]:
+    event = _safe_dict(event)
+
+    for key in (
+        "result",
+        "background_result",
+        "combined_background_result",
+        "presentation_result",
+        "payload",
+        "job_result",
+    ):
+        value = _safe_dict(event.get(key))
+        if value:
+            return dict(value)
+
+    result: Dict[str, Any] = {}
+
+    for key in (
+        "session_id",
+        "turn_id",
+        "turn_index",
+        "source_turn",
+        "canonical_turn_action",
+        "canonical_turn_action_hash",
+        "action_category",
+        "turn_contract_hash",
+        "narration",
+        "display_narration",
+        "selected_narration",
+        "npc",
+        "npc_line",
+        "npc_speaker",
+        "phase",
+        "job_id",
+    ):
+        if event.get(key) not in (None, "", {}, []):
+            result[key] = event.get(key)
+
+    if not result.get("turn_index") and event.get("source_turn"):
+        result["turn_index"] = event.get("source_turn")
+
+    return result
+
+
+def _build_background_result_identity_from_matching_row(
+    *,
+    transcript: List[Dict[str, Any]],
+    result: Dict[str, Any],
+    fallback_session_id: str,
+) -> Dict[str, Any]:
+    result = dict(_safe_dict(result))
+
+    identity = _safe_dict(result.get("turn_presentation_identity"))
+    if identity:
+        result["turn_presentation_identity"] = identity
+        return result
+
+    turn_index = int(
+        result.get("turn_index")
+        or result.get("source_turn")
+        or result.get("turn")
+        or result.get("job_turn_index")
+        or 0
+    )
+
+    turn_id = _safe_str(result.get("turn_id"))
+    matching_row: Dict[str, Any] = {}
+
+    for row_any in _safe_list(transcript):
+        row = _safe_dict(row_any)
+        row_identity = _safe_dict(row.get("turn_presentation_identity"))
+
+        if turn_id and _safe_str(row_identity.get("turn_id") or row.get("turn_id")) == turn_id:
+            matching_row = row
+            break
+
+        if turn_index and int(row.get("turn_index") or row.get("turn") or 0) == turn_index:
+            matching_row = row
+            break
+
+    if matching_row:
+        row_identity = _safe_dict(matching_row.get("turn_presentation_identity"))
+        if row_identity:
+            result["turn_presentation_identity"] = dict(row_identity)
+            result["session_id"] = _safe_str(result.get("session_id") or row_identity.get("session_id"))
+            result["turn_id"] = _safe_str(result.get("turn_id") or row_identity.get("turn_id"))
+            result["turn_index"] = int(result.get("turn_index") or row_identity.get("turn_index") or turn_index)
+            result["canonical_turn_action"] = _safe_str(
+                result.get("canonical_turn_action")
+                or row_identity.get("canonical_turn_action")
+            )
+            result["canonical_turn_action_hash"] = _safe_str(
+                result.get("canonical_turn_action_hash")
+                or row_identity.get("canonical_turn_action_hash")
+            )
+            result["action_category"] = _safe_str(
+                result.get("action_category")
+                or row_identity.get("action_category")
+            )
+            result["turn_contract_hash"] = _safe_str(
+                result.get("turn_contract_hash")
+                or row_identity.get("turn_contract_hash")
+            )
+            return result
+
+    result = _normalize_background_presentation_result(
+        result,
+        fallback_session_id=_safe_str(fallback_session_id),
+    )
+    return result
+
+
+def _attach_legacy_background_timing_events_turn_bound(
+    *,
+    transcript: List[Dict[str, Any]],
+    summary: Dict[str, Any],
+    session_id: str,
+    orphaned_results: List[Dict[str, Any]],
+) -> List[Dict[str, Any]]:
+    timing = _safe_dict(_safe_dict(summary).get("background_result_timing_summary"))
+    events: List[Dict[str, Any]] = []
+
+    for event_any in _safe_list(timing.get("attachment_events")):
+        legacy_event = _safe_dict(event_any)
+
+        result = _extract_legacy_background_result_from_event(legacy_event)
+        if not result:
+            result = {}
+
+        if not result.get("turn_index") and legacy_event.get("source_turn"):
+            result["turn_index"] = legacy_event.get("source_turn")
+
+        if not result.get("session_id"):
+            result["session_id"] = _safe_str(session_id)
+
+        result["phase"] = _safe_str(legacy_event.get("phase") or result.get("phase") or "legacy_timing")
+        result["job_id"] = _safe_str(legacy_event.get("job_id") or result.get("job_id"))
+
+        result = _build_background_result_identity_from_matching_row(
+            transcript=transcript,
+            result=result,
+            fallback_session_id=_safe_str(session_id),
+        )
+
+        attach_event = _attach_background_presentation_result_turn_bound(
+            transcript=transcript,
+            result=result,
+            orphaned_results=orphaned_results,
+        )
+
+        attach_event["phase"] = _safe_str(legacy_event.get("phase") or "legacy_timing_turn_bound")
+        attach_event["job_id"] = _safe_str(legacy_event.get("job_id"))
+        attach_event["source_turn"] = int(legacy_event.get("source_turn") or result.get("turn_index") or 0)
+        attach_event["attach_turn"] = int(legacy_event.get("attach_turn") or 0)
+        attach_event["lag_turns"] = int(
+            legacy_event.get("lag_turns")
+            or max(0, int(legacy_event.get("attach_turn") or 0) - int(legacy_event.get("source_turn") or 0))
+        )
+
+        attach_event["turn_bound_verified"] = bool(attach_event.get("attached"))
+        attach_event["legacy_observed_only"] = False
+        attach_event["converted_from_legacy_timing_event"] = True
+
+        events.append(attach_event)
+
+    return events
+
+
 def _attach_background_presentation_result_turn_bound(
     *,
     transcript: List[Dict[str, Any]],
@@ -1858,6 +2026,8 @@ def _attach_background_presentation_result_turn_bound(
             "reason": "no_matching_turn_row",
             "row_index": -1,
             "turn_id": payload_identity.get("turn_id"),
+            "turn_bound_verified": False,
+            "legacy_observed_only": False,
         }
 
     row = _safe_dict(transcript[row_idx])
@@ -1882,9 +2052,13 @@ def _attach_background_presentation_result_turn_bound(
             "row_index": row_idx,
             "turn_id": payload_identity.get("turn_id"),
             "diagnostic": diag,
+            "turn_bound_verified": False,
+            "legacy_observed_only": False,
         }
 
-    transcript[row_idx] = _attach_background_presentation_to_row(row, result)
+    attached_row = _attach_background_presentation_to_row(row, result)
+    attached_row = _apply_turn_bound_presentation_compatibility_gate(attached_row)
+    transcript[row_idx] = attached_row
 
     return {
         "attached": True,
@@ -1892,6 +2066,8 @@ def _attach_background_presentation_result_turn_bound(
         "row_index": row_idx,
         "turn_id": payload_identity.get("turn_id"),
         "turn_index": payload_identity.get("turn_index"),
+        "turn_bound_verified": True,
+        "legacy_observed_only": False,
     }
 
 
@@ -2061,11 +2237,15 @@ def _assert_turn_bound_attachment_verified(summary: Dict[str, Any]) -> None:
         return
 
     if not bool(attachment.get("turn_bound_attachment_verified")):
-        warnings = list(_safe_list(summary.get("product_quality_warnings")))
-        warning = "background_presentation_legacy_attachment_not_turn_bound_verified"
-        if warning not in warnings:
-            warnings.append(warning)
-        summary["product_quality_warnings"] = warnings
+        raise RuntimeError(
+            "background_presentation_not_turn_bound_verified:"
+            f"expected_count={expected_count}:"
+            f"event_count={attachment.get('event_count')}:"
+            f"turn_bound_verified_count={attachment.get('turn_bound_verified_count')}:"
+            f"legacy_observed_count={attachment.get('legacy_observed_count')}:"
+            f"rejected_count={attachment.get('rejected_count')}:"
+            f"orphaned_count={attachment.get('orphaned_count')}"
+        )
 
 
 def _build_background_presentation_attachment_summary(
@@ -2077,6 +2257,7 @@ def _build_background_presentation_attachment_summary(
     if not events:
         events = _build_background_attachment_events_from_timing_summary(summary)
     orphans = _safe_list(summary.get("orphaned_background_presentation_results"))
+    expected_count = _background_presentation_expected_attachment_count(summary)
 
     attached_count = sum(1 for e in events if _safe_dict(e).get("attached"))
     rejected_count = sum(1 for e in events if not _safe_dict(e).get("attached"))
@@ -2125,8 +2306,17 @@ def _build_background_presentation_attachment_summary(
         "orphan_examples": orphans[:20],
         "turn_bound_verified_count": turn_bound_verified_count,
         "legacy_observed_count": legacy_observed_count,
+        "converted_from_legacy_timing_count": sum(
+            1
+            for event_any in events
+            if bool(_safe_dict(event_any).get("converted_from_legacy_timing_event"))
+        ),
         "turn_bound_attachment_verified": (
-            len(events) > 0 and turn_bound_verified_count == len(events)
+
+            expected_count > 0
+            and turn_bound_verified_count >= expected_count
+            and legacy_observed_count == 0
+            and rejected_count == 0
         ),
     }
 
@@ -2138,14 +2328,21 @@ def _finalize_background_presentation_attachment_tracking(
     summary = dict(_safe_dict(summary))
 
     events = list(_safe_list(summary.get("background_presentation_attachment_events")))
+    orphans = list(_safe_list(summary.get("orphaned_background_presentation_results")))
 
     if not events:
+        events = _attach_legacy_background_timing_events_turn_bound(
+            transcript=transcript,
+            summary=summary,
+            session_id=_safe_str(summary.get("session_id") or ""),
+            orphaned_results=orphans,
+        )
+
+    if not events and _safe_list(_safe_dict(summary.get("background_result_timing_summary")).get("attachment_events")):
         events = _build_background_attachment_events_from_timing_summary(summary)
 
     summary["background_presentation_attachment_events"] = events
-    summary["orphaned_background_presentation_results"] = list(
-        _safe_list(summary.get("orphaned_background_presentation_results"))
-    )
+    summary["orphaned_background_presentation_results"] = orphans
 
     expected_count = _background_presentation_expected_attachment_count(summary)
     summary["background_presentation_completed_result_count"] = max(
@@ -18327,6 +18524,32 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
         session_id=_safe_str(summary.get("session_id") or ""),
     )
 
+    transcript = final_transcript_rows
+    if isinstance(transcript_artifacts, dict):
+        transcript_artifacts["transcript"] = final_transcript_rows
+
+    summary["transcript_artifact_quality_summary"] = (
+        _build_transcript_artifact_quality_summary(final_transcript_rows)
+    )
+
+    _assert_transcript_artifact_consistency(
+        final_transcript_rows=final_transcript_rows,
+        summary=summary,
+    )
+
+    summary["session_id"] = _safe_str(summary.get("session_id") or session_id)
+
+    summary = _finalize_background_presentation_attachment_tracking(
+        summary,
+        final_transcript_rows,
+    )
+
+    _assert_no_cross_turn_background_presentation(final_transcript_rows)
+
+    summary["background_presentation_attachment_summary"] = (
+        _build_background_presentation_attachment_summary(summary, final_transcript_rows)
+    )
+
     bounded_transcript_rows = _build_bounded_transcript_rows(
         final_transcript_rows,
         max_row_bytes=50000,
@@ -18343,30 +18566,8 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
     if any(row is None for row in bounded_transcript_rows):
         raise RuntimeError("bounded_transcript_rows_null_after_build")
 
-    transcript = final_transcript_rows
-    if isinstance(transcript_artifacts, dict):
-        transcript_artifacts["transcript"] = final_transcript_rows
-
-    summary["transcript_artifact_quality_summary"] = (
-        _build_transcript_artifact_quality_summary(final_transcript_rows)
-    )
-
-    _assert_transcript_artifact_consistency(
-        final_transcript_rows=final_transcript_rows,
-        summary=summary,
-    )
-
-    # Final health must be the absolute last writer before artifacts
-    summary["autoplay_health"] = _force_final_autoplay_health(summary)
-
-    summary = _finalize_background_presentation_attachment_tracking(
-        summary,
-        final_transcript_rows,
-    )
-
-    _assert_final_artifact_consistency(summary)
-
     wrote_full_transcript = _should_write_full_transcript(args)
+
     summary["transcript_size_summary"] = _build_transcript_size_summary(
         final_transcript_rows=final_transcript_rows,
         bounded_transcript_rows=bounded_transcript_rows,
@@ -18379,6 +18580,11 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
         slim_transcript_rows=slim_transcript_rows,
         summary=summary,
     )
+
+    # Final health must be the absolute last writer before artifacts
+    summary["autoplay_health"] = _force_final_autoplay_health(summary)
+
+    _assert_final_artifact_consistency(summary)
 
     final_health = _safe_dict(summary.get("autoplay_health"))
     if bool(summary.get("ok")):
