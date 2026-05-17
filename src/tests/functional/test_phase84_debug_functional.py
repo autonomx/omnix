@@ -12,7 +12,6 @@ from __future__ import annotations
 
 import copy
 
-
 from app.rpg.debug.core import DebugCore
 from app.rpg.debug.trace_builder import DebugTraceBuilder
 from app.rpg.ux.models import ActionResultPayload, SceneUXPayload

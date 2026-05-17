@@ -1,42 +1,19 @@
-diff --git a/src/tests/rpg/autoplay/parallel_pipeline.py b/src/tests/rpg/autoplay/parallel_pipeline.py
-index a5f1590..5042442 100644
---- a/src/tests/rpg/autoplay/parallel_pipeline.py
-+++ b/src/tests/rpg/autoplay/parallel_pipeline.py
-@@ -1212,9 +1212,13 @@ def _combined_background_llm_job(
-             source = "combined_background_llm_fallback"
- 
-         if source == "provider_combined_background_llm":
-+            presentation_intent = _normalize_presentation_intent(
-+                provider_payload.get("presentation_intent")
-+            )
-             narration_payload = {
-                 "format_version": "rpg_narration_v2",
-                 "source": "provider_runtime_narration",
-+                "presentation_intent": presentation_intent,
-                 "narration": _safe_str(provider_payload.get("narration")) or "The scene settles after the action.",
-                 "action": _safe_str(provider_payload.get("action")) or "The action has been resolved.",
-                 "npc": _safe_dict(provider_payload.get("npc")),
-@@ -1249,6 +1253,7 @@ def _combined_background_llm_job(
-                 turn_contract=freeze_snapshot(_safe_dict(turn_contract)),
-                 prefer_provider=False,
-             )
-+            narration_payload["presentation_intent"] = _normalize_presentation_intent({})
-             candidates = build_deterministic_advisory_candidates(
-                 session_id=session_id,
-                 turn_index=turn_index,
-@@ -1267,6 +1272,7 @@ def _combined_background_llm_job(
-             "source": source,
-             "narration": _safe_str(narration_payload.get("narration")),
-             "npc": _safe_dict(narration_payload.get("npc")),
-+            "presentation_intent": _safe_dict(narration_payload.get("presentation_intent")),
-             "narration_payload": narration_payload,
-             "candidate_count": len(candidates),
-             "candidates": candidates,
 diff --git a/src/tests/rpg/autoplay_llm_campaign.py b/src/tests/rpg/autoplay_llm_campaign.py
-index 478ea1a..bec591c 100644
+index 95f94fb..f1bcc93 100644
 --- a/src/tests/rpg/autoplay_llm_campaign.py
 +++ b/src/tests/rpg/autoplay_llm_campaign.py
-@@ -166,7 +166,7 @@ def _preferred_visible_player_action(row: Dict[str, Any]) -> str:
+@@ -111,6 +111,10 @@ def _slim_transcript_row(row: Dict[str, Any], max_row_bytes: int = 50000) -> Dic
+         "npc_line",
+         "turn_presentation_identity",
+         "background_presentation_result",
++        "presentation_intent",
++        "llm_presentation_category",
++        "validated_presentation_intent",
++        "validated_presentation_category",
+         "dialogue_presentation_compatibility",
+         "dialogue_action_relevance",
+         "dialogue_action_relevance_repaired",
+@@ -166,7 +170,7 @@ def _preferred_visible_player_action(row: Dict[str, Any]) -> str:
          or _safe_str(row.get("canonical_turn_action"))
          or _safe_str(row.get("player_action"))
      )
@@ -45,7 +22,7 @@ index 478ea1a..bec591c 100644
      if row.get("story_arc_events"):
          slim_row["story_arc_events"] = row.get("story_arc_events")
  
-@@ -1462,7 +1462,7 @@ def _ensure_turn_presentation_identity_on_row(
+@@ -1462,7 +1466,7 @@ def _ensure_turn_presentation_identity_on_row(
              ),
          )
      return row
@@ -54,195 +31,114 @@ index 478ea1a..bec591c 100644
  
  
  def _assert_transcript_artifact_consistency(
-@@ -1678,6 +1678,87 @@ def _build_turn_presentation_identity(
-     }
+@@ -2201,6 +2205,90 @@ def _clear_visible_npc_fields(row: Dict[str, Any]) -> Dict[str, Any]:
+     return row
  
  
-+
-+
-+PRESENTATION_INTENT_ALLOWED_CATEGORIES = {
-+    "dialogue",
-+    "evidence",
-+    "investigation",
-+    "travel",
-+    "combat",
-+    "service",
-+    "economy",
-+    "stealth",
-+    "social",
-+    "lore",
-+    "quest",
-+    "mixed",
-+    "general",
++STALE_DIALOGUE_CATEGORY_MISMATCH_REASONS = {
++    "combat_action_dialogue_mismatch",
++    "commerce_action_dialogue_mismatch",
++    "economy_action_dialogue_mismatch",
++    "service_action_dialogue_mismatch",
++    "travel_action_dialogue_mismatch",
++    "investigation_action_dialogue_mismatch",
++    "evidence_action_dialogue_mismatch",
++    "dialogue_action_dialogue_mismatch",
++    "action_presentation_category_mismatch",
 +}
 +
 +
-+def _normalize_presentation_category(value: Any) -> str:
-+    category = _safe_str(value).strip().lower().replace("-", "_").replace(" ", "_")
-+    aliases = {
-+        "conversation": "dialogue",
-+        "talk": "dialogue",
-+        "speaking": "dialogue",
-+        "social": "dialogue",
-+        "buying": "economy",
-+        "purchase": "economy",
-+        "shop": "economy",
-+        "shopping": "economy",
-+        "lodging": "service",
-+        "room": "service",
-+        "rest": "service",
-+        "clue": "evidence",
-+        "proof": "evidence",
-+        "search": "investigation",
-+        "scouting": "investigation",
-+        "move": "travel",
-+        "movement": "travel",
-+        "fight": "combat",
-+        "battle": "combat",
-+        "buying_supplies": "economy",
-+    }
-+    category = aliases.get(category, category)
-+    if category not in PRESENTATION_INTENT_ALLOWED_CATEGORIES:
-+        return "general"
-+    return category
++def _sync_dialogue_relevance_block_with_validated_category(
++    relevance: Dict[str, Any],
++    *,
++    validated_category: str,
++    validated_intent: Dict[str, Any],
++) -> Dict[str, Any]:
++    relevance = dict(_safe_dict(relevance))
++    validated_category = _normalize_presentation_category(validated_category)
++    if not relevance or not validated_category:
++        return relevance
++
++    previous_action_kind = _safe_str(relevance.get("action_kind"))
++    relevance["action_kind_before_presentation_intent_sync"] = previous_action_kind
++    relevance["action_kind"] = validated_category
++    relevance["validated_presentation_category"] = validated_category
++    relevance["validated_presentation_intent"] = validated_intent
++
++    original_reasons = [_safe_str(reason) for reason in _safe_list(relevance.get("reasons")) if _safe_str(reason)]
++    kept_reasons = [
++        reason
++        for reason in original_reasons
++        if reason not in STALE_DIALOGUE_CATEGORY_MISMATCH_REASONS
++        and not reason.endswith("_action_dialogue_mismatch")
++    ]
++    if kept_reasons:
++        relevance["reasons"] = kept_reasons
++    else:
++        relevance.pop("reasons", None)
++
++    if _safe_str(relevance.get("reason")) in STALE_DIALOGUE_CATEGORY_MISMATCH_REASONS:
++        relevance["reason"] = "validated_presentation_category_synced"
++
++    if original_reasons and not kept_reasons:
++        relevance["ok"] = True
++        relevance["presentation_intent_sync_repaired"] = True
++        relevance["presentation_intent_sync_reason"] = "stale_category_mismatch_reasons_cleared"
++
++    return relevance
 +
 +
-+def _normalize_presentation_intent(value: Any) -> Dict[str, Any]:
-+    raw = _safe_dict(value)
-+    primary = _normalize_presentation_category(
-+        raw.get("primary_category")
-+        or raw.get("category")
-+        or raw.get("primary")
++def _sync_dialogue_action_relevance_with_validated_presentation(row: Dict[str, Any]) -> Dict[str, Any]:
++    row = dict(_safe_dict(row))
++    validated_intent = _safe_dict(row.get("validated_presentation_intent"))
++    validated_category = _normalize_presentation_category(
++        row.get("validated_presentation_category")
++        or validated_intent.get("primary_category")
 +    )
-+    secondary: List[str] = []
-+    for item in _safe_list(
-+        raw.get("secondary_categories")
-+        or raw.get("secondary")
-+        or raw.get("categories")
-+    ):
-+        normalized = _normalize_presentation_category(item)
-+        if normalized and normalized != primary and normalized not in secondary:
-+            secondary.append(normalized)
++    if not validated_category:
++        return row
 +
-+    try:
-+        confidence = float(raw.get("confidence") or 0.0)
-+    except Exception:
-+        confidence = 0.0
-+    confidence = max(0.0, min(1.0, confidence))
++    row["validated_presentation_category"] = validated_category
 +
-+    return {
-+        "format_version": "presentation_intent_v1",
-+        "primary_category": primary,
-+        "secondary_categories": secondary[:4],
-+        "confidence": round(confidence, 3),
-+        "reason": _safe_str(raw.get("reason"))[:240],
-+    }
++    relevance = _safe_dict(row.get("dialogue_action_relevance"))
++    if relevance:
++        row["dialogue_action_relevance"] = _sync_dialogue_relevance_block_with_validated_category(
++            relevance,
++            validated_category=validated_category,
++            validated_intent=validated_intent,
++        )
++
++    after_repair = _safe_dict(row.get("dialogue_action_relevance_after_repair"))
++    if after_repair:
++        row["dialogue_action_relevance_after_repair"] = _sync_dialogue_relevance_block_with_validated_category(
++            after_repair,
++            validated_category=validated_category,
++            validated_intent=validated_intent,
++        )
++
++    return row
 +
 +
- def _presentation_identity_matches_turn(
-     *,
-     payload_identity: Any,
-@@ -1748,14 +1829,24 @@ def _find_transcript_row_index_by_turn_identity(
+ def _apply_turn_bound_presentation_compatibility_gate(row: Dict[str, Any]) -> Dict[str, Any]:
+     row = dict(_safe_dict(row))
  
- def _extract_background_presentation_text(result: Dict[str, Any]) -> Dict[str, Any]:
-     result = _safe_dict(result)
-+    narration_payload = _safe_dict(result.get("narration_payload"))
-+    selected = _safe_dict(result.get("selected"))
-+
-+    presentation_intent = _normalize_presentation_intent(
-+        result.get("presentation_intent")
-+        or narration_payload.get("presentation_intent")
-+        or selected.get("presentation_intent")
-+        or result.get("intent")
-+    )
- 
-     narration = _safe_str(
-         result.get("narration")
-         or result.get("display_narration")
-         or result.get("selected_narration")
-+        or narration_payload.get("narration")
+@@ -2214,6 +2302,7 @@ def _apply_turn_bound_presentation_compatibility_gate(row: Dict[str, Any]) -> Di
+     row["validated_presentation_category"] = _safe_str(
+         _safe_dict(row.get("validated_presentation_intent")).get("primary_category")
      )
++    row = _sync_dialogue_action_relevance_with_validated_presentation(row)
  
--    npc = _safe_dict(result.get("npc"))
-+    npc = _safe_dict(result.get("npc")) or _safe_dict(narration_payload.get("npc"))
-     npc_line = _safe_str(
-         npc.get("line")
-         or result.get("npc_line")
-@@ -1766,7 +1857,6 @@ def _extract_background_presentation_text(result: Dict[str, Any]) -> Dict[str, A
-         or result.get("npc_speaker")
-     )
- 
--    selected = _safe_dict(result.get("selected"))
-     if not narration:
-         narration = _safe_str(
-             selected.get("narration")
-@@ -1782,6 +1872,7 @@ def _extract_background_presentation_text(result: Dict[str, Any]) -> Dict[str, A
- 
-     return {
-         "narration": narration,
-+        "presentation_intent": presentation_intent,
-         "npc": {
-             "speaker": npc_speaker,
-             "line": npc_line,
-@@ -1800,6 +1891,7 @@ def _attach_background_presentation_to_row(
- 
-     narration = _safe_str(presentation.get("narration"))
-     npc = _safe_dict(presentation.get("npc"))
-+    presentation_intent = _normalize_presentation_intent(presentation.get("presentation_intent"))
- 
-     if narration:
-         row["narration"] = narration
-@@ -1811,6 +1903,9 @@ def _attach_background_presentation_to_row(
-         row["npc_speaker"] = _safe_str(npc.get("speaker"))
-         row["npc_line"] = _safe_str(npc.get("line"))
- 
-+    row["presentation_intent"] = presentation_intent
-+    row["llm_presentation_category"] = _safe_str(presentation_intent.get("primary_category"))
-+
-     row["presentation_status"] = "attached"
-     row["presentation_attached_from"] = _safe_str(
-         result.get("source") or result.get("phase") or "background"
-@@ -1820,6 +1915,7 @@ def _attach_background_presentation_to_row(
-         "turn_index": result.get("turn_index"),
-         "canonical_turn_action_hash": result.get("canonical_turn_action_hash"),
-         "action_category": result.get("action_category"),
-+        "presentation_intent": presentation_intent,
-     }
- 
-     return row
-@@ -1857,6 +1953,8 @@ def _extract_legacy_background_result_from_event(event: Any) -> Dict[str, Any]:
-         "npc",
-         "npc_line",
-         "npc_speaker",
-+        "presentation_intent",
-+        "narration_payload",
-         "phase",
-         "job_id",
-     ):
-@@ -2109,6 +2207,14 @@ def _apply_turn_bound_presentation_compatibility_gate(row: Dict[str, Any]) -> Di
-     presentation_text = _visible_presentation_text_for_compatibility(row)
-     action_text = _safe_str(row.get("canonical_turn_action") or row.get("player_action"))
- 
-+    row["validated_presentation_intent"] = _validate_presentation_intent_for_row(
-+        row,
-+        action_text=action_text,
-+    )
-+    row["validated_presentation_category"] = _safe_str(
-+        _safe_dict(row.get("validated_presentation_intent")).get("primary_category")
-+    )
-+
      compat_ok, compat_diag = _dialogue_presentation_is_category_compatible(
          action_text=action_text,
-         presentation_text=presentation_text,
-@@ -2145,6 +2251,7 @@ def _apply_turn_bound_presentation_compatibility_gate(row: Dict[str, Any]) -> Di
-             or "unknown"
-         )
-         relevance["compatibility"] = compat_diag
-+        relevance["validated_presentation_intent"] = row.get("validated_presentation_intent")
-         row["dialogue_action_relevance"] = relevance
+@@ -2256,6 +2345,7 @@ def _apply_turn_bound_presentation_compatibility_gate(row: Dict[str, Any]) -> Di
          row["dialogue_action_relevance_repaired"] = True
          row["presentation_status"] = "attached_repaired"
-@@ -2312,7 +2419,7 @@ def _build_background_presentation_attachment_summary(
+ 
++    row = _sync_dialogue_action_relevance_with_validated_presentation(row)
+     return row
+ 
+ 
+@@ -2419,7 +2509,7 @@ def _build_background_presentation_attachment_summary(
              if bool(_safe_dict(event_any).get("converted_from_legacy_timing_event"))
          ),
          "turn_bound_attachment_verified": (
@@ -251,7 +147,7 @@ index 478ea1a..bec591c 100644
              expected_count > 0
              and turn_bound_verified_count >= expected_count
              and legacy_observed_count == 0
-@@ -2385,7 +2492,7 @@ def _assert_no_cross_turn_background_presentation(transcript: List[Dict[str, Any
+@@ -2492,7 +2582,7 @@ def _assert_no_cross_turn_background_presentation(transcript: List[Dict[str, Any
              )
  
  
@@ -260,426 +156,383 @@ index 478ea1a..bec591c 100644
      value = _safe_dict(value)
  
      candidates = [
-@@ -4881,6 +4988,15 @@ def _classify_visible_action_category(row: Dict[str, Any]) -> str:
-     direct = _safe_dict(row.get("direct_graph_action_completion"))
-     action_id = _safe_str(direct.get("action_id") or row.get("direct_graph_execution_kind"))
+@@ -7302,6 +7392,136 @@ def _authoritative_category_support(row: Dict[str, Any]) -> Dict[str, Any]:
+     return supports
  
-+    validated = _safe_dict(row.get("validated_presentation_intent"))
-+    validated_category = _normalize_presentation_category(validated.get("primary_category"))
-+    if validated_category != "general":
-+        if validated_category in {"dialogue", "social"}:
-+            return "social"
-+        if validated_category == "economy":
-+            return "buying"
-+        return validated_category
+ 
++PRESENTATION_INTENT_SPECIFIC_PRIORITY = (
++    "combat",
++    "economy",
++    "service",
++    "travel",
++    "evidence",
++    "investigation",
++    "dialogue",
++    "quest",
++    "lore",
++    "stealth",
++)
 +
-     social_action_prefixes = (
-         "ask_",
-         "report_",
-@@ -6991,29 +7107,234 @@ def _apply_dialogue_action_relevance_gate(row: Dict[str, Any]) -> Dict[str, Any]
- 
- 
- def _turn_action_category(text: str) -> str:
-+    """Conservative fallback category for missing provider intent.
 +
-+    This must not turn nouns such as ambush, bandit, road, room, scout, or
-+    supplies into authoritative combat/travel/service/economy by themselves.
-+    Prefer the validated provider presentation intent and authoritative row
-+    mechanics where available.
++def _presentation_category_is_specific(category: str) -> bool:
++    return category not in {"", "general", "mixed"}
++
++
++def _specific_supported_presentation_category(
++    *,
++    row: Dict[str, Any],
++    support: Dict[str, Any],
++    fallback_category: str = "",
++    action_text: str = "",
++) -> str:
++    """Choose a specific supported category before falling back to mixed/general.
++
++    The N115.2 fallback safely exposed categories but over-selected ``mixed``
++    because mixed is always supportable. This selector gives concrete
++    authoritative evidence a chance to win first, so rows like ``report ambush
++    evidence`` become evidence and ``scout ambush signs`` becomes
++    investigation instead of mixed/general.
 +    """
-     text_n = _normalize_turn_action_text(text)
- 
--    if any(t in text_n for t in ("buy", "purchase", "ration", "rations", "supplies")):
-+    has_dialogue_verb = any(t in text_n for t in ("ask", "tell", "question", "persuade", "talk", "speak", "report", "warn"))
-+    has_service_term = any(t in text_n for t in ("room", "lodging", "bed", "rest", "sleep"))
-+    has_evidence_term = any(t in text_n for t in ("evidence", "clue", "proof", "coin", "track", "trail", "sign", "ledger", "note"))
-+    has_investigation_verb = any(t in text_n for t in ("inspect", "search", "look", "examine", "scout", "track", "watch"))
-+
-+    if has_dialogue_verb and (has_service_term or has_evidence_term or has_investigation_verb):
-+        return "mixed"
-+
-+    if has_dialogue_verb:
-+        return "dialogue"
-+
-+    if any(t in text_n for t in ("buy", "purchase", "pay for")):
-         return "economy"
- 
--    if any(t in text_n for t in ("rent", "room", "lodging", "rest", "sleep")):
-+    if any(t in text_n for t in ("rent", "book lodging", "take lodging")) or (
-+        has_service_term and any(t in text_n for t in ("pay", "rent", "book"))
-+    ):
-         return "service"
- 
--    if any(t in text_n for t in ("attack", "fight", "ambush", "bandit", "combat", "protect", "scout")):
-+    if any(t in text_n for t in ("attack", "fight", "combat", "strike", "defend")):
-         return "combat"
- 
--    if any(t in text_n for t in ("ask", "tell", "question", "persuade", "talk", "speak")):
--        return "dialogue"
-+    if has_investigation_verb or has_evidence_term:
-+        return "investigation"
- 
--    if any(t in text_n for t in ("travel", "leave", "road", "go to", "move", "enter")):
-+    if any(t in text_n for t in ("travel", "leave", "go to", "move", "enter")):
-         return "travel"
- 
--    if any(t in text_n for t in ("inspect", "search", "look", "examine", "clue", "proof", "coin")):
--        return "investigation"
--
-     return "general"
- 
- 
-+
-+def _row_direct_action_id(row: Dict[str, Any]) -> str:
-+    row = _safe_dict(row)
-+    direct = _safe_dict(row.get("direct_graph_action_completion"))
-+    return _safe_str(
-+        direct.get("action_id")
-+        or row.get("direct_graph_execution_kind")
-+        or row.get("direct_graph_canonical_action_id")
-+        or row.get("direct_graph_xp_execution_action_id")
-+    )
-+
-+
-+def _row_mechanics_set(row: Dict[str, Any]) -> set[str]:
-+    row = _safe_dict(row)
-+    mechanics = {
-+        _safe_str(v)
-+        for v in _safe_list(row.get("mechanics_covered_this_turn"))
-+        if _safe_str(v)
-+    }
-+    direct = _safe_dict(row.get("direct_graph_action_completion"))
-+    mechanics.update(
-+        _safe_str(v)
-+        for v in _safe_list(direct.get("mechanics"))
-+        if _safe_str(v)
-+    )
-+    result = _safe_dict(row.get("result"))
-+    turn_contract = _safe_dict(row.get("turn_contract"))
-+    contract_result = _safe_dict(turn_contract.get("result"))
-+    for value in (
-+        result.get("mechanic"),
-+        row.get("mechanic"),
-+        turn_contract.get("mechanic"),
-+        contract_result.get("mechanic"),
-+    ):
-+        mechanic = _safe_str(value)
-+        if mechanic:
-+            mechanics.add(mechanic)
-+    return mechanics
-+
-+
-+def _extract_row_presentation_intent(row: Dict[str, Any]) -> Dict[str, Any]:
-+    row = _safe_dict(row)
-+    candidates = [
-+        row.get("presentation_intent"),
-+        _safe_dict(row.get("background_presentation_result")).get("presentation_intent"),
-+        _safe_dict(row.get("combined_background_llm_result")).get("presentation_intent"),
-+        _safe_dict(_safe_dict(row.get("combined_background_llm_result")).get("narration_payload")).get("presentation_intent"),
-+        _safe_dict(row.get("deferred_narration_result")).get("presentation_intent"),
-+        _safe_dict(_safe_dict(row.get("deferred_narration_result")).get("narration_payload")).get("presentation_intent"),
-+        _safe_dict(row.get("resolved_narration_payload")).get("presentation_intent"),
-+        _safe_dict(row.get("narration_payload")).get("presentation_intent"),
-+        _safe_dict(row.get("selected_output")).get("presentation_intent"),
-+        _safe_dict(row.get("selected_narration")).get("presentation_intent"),
-+    ]
-+    for candidate in candidates:
-+        normalized = _normalize_presentation_intent(candidate)
-+        if normalized.get("primary_category") != "general" or normalized.get("secondary_categories"):
-+            return normalized
-+    return _normalize_presentation_intent({})
-+
-+
-+def _classify_visible_action_category_without_validated_intent(row: Dict[str, Any]) -> str:
-+    row = _safe_dict(row)
-+    direct = _safe_dict(row.get("direct_graph_action_completion"))
-+    action_id = _safe_str(direct.get("action_id") or row.get("direct_graph_execution_kind"))
-+
-+    if action_id.startswith(("ask_", "report_", "warn_", "tell_", "question_", "confront_", "counter_", "press_", "persuade_", "accuse_", "negotiate_")):
-+        return "dialogue"
-+    if action_id.startswith(("return_", "search_", "inspect_", "decipher_", "read_", "recover_", "deliver_")):
-+        return "evidence"
-+    if action_id == "buy_rations_from_bran":
-+        return "economy"
-+    if action_id in {
-+        "protect_wagon_or_lure_bandits",
-+        "ambush_bandits",
-+        "fight_bandit_scouts",
-+        "fight_bandits",
-+        "defeat_bandit_scouts",
-+        "resolve_bandit_ambush",
-+    }:
-+        return "combat"
-+
-+    return _turn_action_category(
-+        " ".join(
-+            [
-+                _safe_str(row.get("player_action")),
-+                _safe_str(row.get("canonical_turn_action")),
-+                action_id,
-+            ]
-+        )
-+    )
-+
-+
-+def _authoritative_category_support(row: Dict[str, Any]) -> Dict[str, Any]:
 +    row = _safe_dict(row)
 +    action_id = _row_direct_action_id(row)
 +    mechanics = _row_mechanics_set(row)
-+    result = _safe_dict(row.get("result"))
-+    turn_contract = _safe_dict(row.get("turn_contract"))
-+    contract_result = _safe_dict(turn_contract.get("result"))
-+    state_delta = _safe_dict(row.get("state_delta"))
-+    contract_delta = _safe_dict(turn_contract.get("state_delta"))
-+    direct = _safe_dict(row.get("direct_graph_action_completion"))
-+
-+    supports = {
-+        "combat": bool(_turn_has_combat_support(row)),
-+        "economy": bool(
-+            "buying" in mechanics
-+            or "economy" in mechanics
-+            or "purchase" in mechanics
-+            or result.get("purchase_result")
-+            or contract_result.get("purchase_result")
-+            or action_id.startswith("buy_")
-+        ),
-+        "service": bool(
-+            "service" in mechanics
-+            or "lodging" in mechanics
-+            or "rent_room" in action_id
-+            or action_id.startswith("rent_")
-+            or result.get("service_result")
-+            or contract_result.get("service_result")
-+        ),
-+        "travel": bool(
-+            "travel" in mechanics
-+            or "location_changed" in mechanics
-+            or state_delta.get("location_changed")
-+            or contract_delta.get("location_changed")
-+            or result.get("location_changed")
-+            or contract_result.get("location_changed")
-+            or direct.get("location_delta")
-+        ),
-+        "evidence": bool(
-+            "evidence" in mechanics
-+            or "investigation" in mechanics
-+            or action_id.startswith(("report_", "return_", "search_", "inspect_", "recover_", "deliver_", "decipher_", "read_"))
-+        ),
-+        "investigation": bool(
-+            "investigation" in mechanics
-+            or action_id.startswith(("search_", "inspect_", "scout_", "watch_", "track_", "examine_"))
-+        ),
-+        "dialogue": bool(
-+            "dialogue" in mechanics
-+            or "social" in mechanics
-+            or action_id.startswith(("ask_", "tell_", "warn_", "report_", "question_", "persuade_", "confront_", "negotiate_"))
-+        ),
-+        "quest": bool("quest" in mechanics or action_id.startswith(("accept_", "complete_", "advance_quest_"))),
-+        "lore": bool("lore" in mechanics),
-+        "stealth": bool("stealth" in mechanics),
-+    }
-+    supports["social"] = supports["dialogue"]
-+    supports["mixed"] = True
-+    supports["general"] = True
-+    return supports
-+
-+
-+def _validate_presentation_intent_for_row(
-+    row: Dict[str, Any],
-+    *,
-+    action_text: str = "",
-+) -> Dict[str, Any]:
-+    row = _safe_dict(row)
-+    proposed = _extract_row_presentation_intent(row)
-+    proposed_category = _normalize_presentation_category(proposed.get("primary_category"))
-+    support = _authoritative_category_support(row)
-+
-+    fallback_category = _normalize_presentation_category(
-+        _classify_visible_action_category_without_validated_intent(row)
-+        or _turn_action_category(action_text or _safe_str(row.get("canonical_turn_action") or row.get("player_action")))
-+    )
-+
-+    valid = bool(support.get(proposed_category, False))
-+    repaired_category = proposed_category if valid else fallback_category
-+    if not support.get(repaired_category, False) and repaired_category in {"combat", "travel", "service", "economy"}:
-+        repaired_category = "general"
-+
-+    return {
-+        "format_version": "validated_presentation_intent_v1",
-+        "ok": valid,
-+        "primary_category": repaired_category,
-+        "proposed_category": proposed_category,
-+        "secondary_categories": proposed.get("secondary_categories") or [],
-+        "confidence": proposed.get("confidence") or 0.0,
-+        "reason": "provider_intent_supported" if valid else "provider_intent_not_supported_by_authoritative_turn",
-+        "provider_reason": proposed.get("reason") or "",
-+        "support": support,
-+    }
-+
-+
- def _presentation_text_category(text: str) -> str:
-     text_n = _normalize_turn_action_text(text)
- 
-@@ -7044,7 +7365,8 @@ def _dialogue_presentation_is_category_compatible(
-     presentation_text: str,
-     row: Dict[str, Any],
- ) -> Tuple[bool, Dict[str, Any]]:
--    action_category = _turn_action_category(action_text)
-+    validated_intent = _validate_presentation_intent_for_row(row, action_text=action_text)
-+    action_category = _normalize_presentation_category(validated_intent.get("primary_category"))
-     presentation_category = _presentation_text_category(presentation_text)
- 
-     if not presentation_text.strip():
-@@ -7052,6 +7374,7 @@ def _dialogue_presentation_is_category_compatible(
-             "ok": True,
-             "action_category": action_category,
-             "presentation_category": presentation_category,
-+            "validated_presentation_intent": validated_intent,
-             "reason": "empty_presentation",
-         }
- 
-@@ -7060,12 +7383,21 @@ def _dialogue_presentation_is_category_compatible(
-             "ok": True,
-             "action_category": action_category,
-             "presentation_category": presentation_category,
-+            "validated_presentation_intent": validated_intent,
-             "reason": "general_presentation",
-         }
- 
-     compatible_pairs = {
-         ("dialogue", "investigation"),
-         ("investigation", "dialogue"),
-+        ("dialogue", "evidence"),
-+        ("evidence", "dialogue"),
-+        ("evidence", "investigation"),
-+        ("investigation", "evidence"),
-+        ("mixed", "dialogue"),
-+        ("mixed", "service"),
-+        ("mixed", "investigation"),
-+        ("mixed", "evidence"),
-         ("combat", "travel"),
-         ("travel", "combat"),
-     }
-@@ -7075,6 +7407,7 @@ def _dialogue_presentation_is_category_compatible(
-             "ok": True,
-             "action_category": action_category,
-             "presentation_category": presentation_category,
-+            "validated_presentation_intent": validated_intent,
-             "reason": "category_match",
-         }
- 
-@@ -7090,6 +7423,7 @@ def _dialogue_presentation_is_category_compatible(
-             "ok": True,
-             "action_category": action_category,
-             "presentation_category": presentation_category,
-+            "validated_presentation_intent": validated_intent,
-             "reason": "combat_supported_by_mechanics",
-         }
- 
-@@ -7097,6 +7431,7 @@ def _dialogue_presentation_is_category_compatible(
-         "ok": False,
-         "action_category": action_category,
-         "presentation_category": presentation_category,
-+        "validated_presentation_intent": validated_intent,
-         "reason": "action_presentation_category_mismatch",
-     }
- 
-@@ -7104,7 +7439,8 @@ def _dialogue_presentation_is_category_compatible(
- def _build_category_compatible_presentation_fallback(row: Dict[str, Any]) -> str:
-     row = _safe_dict(row)
-     action = _safe_str(row.get("canonical_turn_action") or row.get("player_action"))
--    category = _turn_action_category(action)
-+    validated = _validate_presentation_intent_for_row(row, action_text=action)
-+    category = _normalize_presentation_category(validated.get("primary_category"))
- 
-     if category == "economy":
-         return "You complete the purchase; your supplies and coin totals are updated by the authoritative turn result."
-@@ -7121,34 +7457,56 @@ def _build_category_compatible_presentation_fallback(row: Dict[str, Any]) -> str
-     if category == "investigation":
-         return "You follow the clue trail; only evidence recorded by the authoritative turn result becomes true."
- 
--    if category == "dialogue":
-+    if category in {"dialogue", "social"}:
-         return "The conversation continues; any NPC response is limited to the authoritative social and quest state."
- 
-+    if category == "evidence":
-+        return "You put the evidence forward; only facts recorded by the authoritative turn result become true."
-+
-+    if category == "mixed":
-+        return "The turn resolves across its recorded parts; only authoritative service, social, travel, combat, and evidence results apply."
-+
-     return "The action resolves according to the authoritative turn result."
- 
- 
- def _presentation_has_combat_claim(text: str) -> bool:
-     text_n = _normalize_turn_action_text(text)
--    return any(
--        term in text_n
--        for term in (
--            "combat",
--            "fight",
--            "fighting",
--            "attack",
--            "attacks",
--            "strike",
--            "strikes",
--            "wound",
--            "wounded",
--            "blood",
--            "blade",
--            "bandit",
--            "ambush",
--            "damage",
--            "xp",
-+    active_combat_terms = (
-+        "combat",
-+        "fight",
-+        "fighting",
-+        "attack",
-+        "attacks",
-+        "strike",
-+        "strikes",
-+        "wound",
-+        "wounded",
-+        "draw your blade",
-+        "raise your blade",
-+        "damage",
-+        "xp",
-+    )
-+    if any(term in text_n for term in active_combat_terms):
-+        return True
-+
-+    # Ambush/bandit/blood can be evidence nouns. Treat them as combat only when
-+    # paired with active combat framing.
-+    if any(term in text_n for term in ("ambush", "bandit", "blood", "blade")):
-+        return any(
-+            term in text_n
-+            for term in (
-+                "press the fight",
-+                "press the combat",
-+                "you fight",
-+                "you attack",
-+                "you strike",
-+                "the fight resolves",
-+                "combat result",
-+                "recorded damage",
++    text_n = _normalize_turn_action_text(
++        " ".join(
++            part
++            for part in (
++                action_text,
++                _safe_str(row.get("canonical_turn_action")),
++                _safe_str(row.get("player_action")),
++                action_id,
 +            )
-         )
--    )
++            if part
++        )
++    )
 +
-+    return False
++    specific_fallback = _normalize_presentation_category(fallback_category)
++    if (
++        specific_fallback == "mixed"
++        and support.get("service")
++        and support.get("dialogue")
++        and not support.get("evidence")
++        and not support.get("investigation")
++    ):
++        return "mixed"
++
++    if _presentation_category_is_specific(specific_fallback) and support.get(specific_fallback):
++        # Do not let a broad text fallback override a more precise action id.
++        if specific_fallback == "dialogue" and (
++            "evidence" in mechanics
++            or action_id.startswith(("report_", "return_", "recover_", "deliver_", "decipher_", "read_"))
++            or any(t in text_n for t in ("evidence", "proof", "clue", "ledger", "note", "marked coin"))
++        ) and support.get("evidence"):
++            return "evidence"
++        return specific_fallback
++
++    if support.get("combat") and (
++        "combat_started" in mechanics
++        or "combat_resolved" in mechanics
++        or action_id.startswith(("attack_", "fight_", "defend_", "ambush_", "resolve_bandit_ambush"))
++    ):
++        return "combat"
++
++    if support.get("economy") and (
++        "economy" in mechanics
++        or "buying" in mechanics
++        or "purchase" in mechanics
++        or action_id.startswith(("buy_", "purchase_"))
++    ):
++        return "economy"
++
++    if support.get("service") and (
++        "service" in mechanics
++        or "lodging" in mechanics
++        or "rent_room" in action_id
++        or action_id.startswith(("rent_", "book_lodging"))
++    ):
++        return "service"
++
++    if support.get("travel") and (
++        "travel" in mechanics
++        or "location_changed" in mechanics
++        or action_id.startswith(("travel_", "go_to_", "enter_", "leave_"))
++    ):
++        return "travel"
++
++    if support.get("evidence") and (
++        "evidence" in mechanics
++        or action_id.startswith(("report_", "return_", "recover_", "deliver_", "decipher_", "read_"))
++        or any(t in text_n for t in ("evidence", "proof", "clue", "ledger", "note", "marked coin"))
++    ):
++        return "evidence"
++
++    if support.get("investigation") and (
++        "investigation" in mechanics
++        or action_id.startswith(("search_", "inspect_", "scout_", "watch_", "track_", "examine_"))
++        or any(t in text_n for t in ("scout", "search", "inspect", "track", "examine", "look for", "signs"))
++    ):
++        return "investigation"
++
++    if support.get("dialogue") and (
++        "dialogue" in mechanics
++        or "social" in mechanics
++        or action_id.startswith(("ask_", "tell_", "warn_", "question_", "persuade_", "confront_", "negotiate_"))
++        or any(t in text_n for t in ("ask", "tell", "warn", "question", "speak", "talk"))
++    ):
++        return "dialogue"
++
++    for category in PRESENTATION_INTENT_SPECIFIC_PRIORITY:
++        if support.get(category):
++            return category
++
++    if support.get("mixed"):
++        return "mixed"
++    return "general"
++
++
+ def _validate_presentation_intent_for_row(
+     row: Dict[str, Any],
+     *,
+@@ -7318,18 +7538,39 @@ def _validate_presentation_intent_for_row(
+     )
  
+     valid = bool(support.get(proposed_category, False))
+-    repaired_category = proposed_category if valid else fallback_category
++    if valid and _presentation_category_is_specific(proposed_category):
++        repaired_category = proposed_category
++        reason = "provider_intent_supported"
++    else:
++        repaired_category = _specific_supported_presentation_category(
++            row=row,
++            support=support,
++            fallback_category=fallback_category,
++            action_text=action_text,
++        )
++        reason = (
++            "provider_intent_supported_but_specific_fallback_preferred"
++            if valid
++            else "provider_intent_not_supported_by_authoritative_turn"
++        )
++
+     if not support.get(repaired_category, False) and repaired_category in {"combat", "travel", "service", "economy"}:
+-        repaired_category = "general"
++        repaired_category = _specific_supported_presentation_category(
++            row=row,
++            support=support,
++            fallback_category="",
++            action_text=action_text,
++        )
  
- def _turn_has_combat_support(row: Dict[str, Any]) -> bool:
+     return {
+         "format_version": "validated_presentation_intent_v1",
+-        "ok": valid,
++        "ok": valid and repaired_category == proposed_category,
+         "primary_category": repaired_category,
+         "proposed_category": proposed_category,
++        "fallback_category": fallback_category,
+         "secondary_categories": proposed.get("secondary_categories") or [],
+         "confidence": proposed.get("confidence") or 0.0,
+-        "reason": "provider_intent_supported" if valid else "provider_intent_not_supported_by_authoritative_turn",
++        "reason": reason,
+         "provider_reason": proposed.get("reason") or "",
+         "support": support,
+     }
+@@ -7626,16 +7867,19 @@ def _build_dialogue_action_relevance_summary(
+     examples: List[Dict[str, Any]] = []
+ 
+     for row in rows:
++        row = _sync_dialogue_action_relevance_with_validated_presentation(row)
+         relevance = _safe_dict(row.get("dialogue_action_relevance"))
+         source_gate = _safe_dict(row.get("dialogue_display_source_gate"))
++        after_repair = _safe_dict(row.get("dialogue_action_relevance_after_repair"))
++        effective_relevance = after_repair if row.get("dialogue_action_relevance_repaired") and after_repair else relevance
+ 
+-        if not relevance:
++        if not effective_relevance:
+             continue
+ 
+         checked_count += 1
+ 
+-        action_kind = _safe_str(relevance.get("action_kind") or "unknown")
+-        dialogue_kind = _safe_str(relevance.get("dialogue_kind") or "unknown")
++        action_kind = _safe_str(effective_relevance.get("action_kind") or "unknown")
++        dialogue_kind = _safe_str(effective_relevance.get("dialogue_kind") or "unknown")
+         by_action_kind[action_kind] = by_action_kind.get(action_kind, 0) + 1
+         by_dialogue_kind[dialogue_kind] = by_dialogue_kind.get(dialogue_kind, 0) + 1
+ 
+@@ -7645,17 +7889,17 @@ def _build_dialogue_action_relevance_summary(
+             for reason in _safe_list(source_gate.get("blocked_reasons")):
+                 by_reason[_safe_str(reason)] = by_reason.get(_safe_str(reason), 0) + 1
+ 
+-        if not bool(relevance.get("ok")):
++        if not bool(effective_relevance.get("ok")):
+             mismatch_count += 1
+-            for reason in _safe_list(relevance.get("reasons")):
++            for reason in _safe_list(effective_relevance.get("reasons")):
+                 by_reason[_safe_str(reason)] = by_reason.get(_safe_str(reason), 0) + 1
+ 
+         if row.get("dialogue_action_relevance_repaired"):
+             repaired_count += 1
+-        elif relevance and not bool(relevance.get("ok")):
++        elif effective_relevance and not bool(effective_relevance.get("ok")):
+             unrepaired_count += 1
+ 
+-        if (source_blocked or not bool(relevance.get("ok")) or row.get("dialogue_action_relevance_repaired")) and len(examples) < 20:
++        if (source_blocked or not bool(effective_relevance.get("ok")) or row.get("dialogue_action_relevance_repaired")) and len(examples) < 20:
+             selected_output = _safe_dict(row.get("selected_narration") or row.get("selected_output"))
+             final_npc = _safe_dict(selected_output.get("npc") or row.get("npc"))
+             final_narration = (
+@@ -7670,6 +7914,7 @@ def _build_dialogue_action_relevance_summary(
+                     "player_action": row.get("player_action"),
+                     "dialogue_source": row.get("dialogue_source"),
+                     "relevance": relevance,
++                    "effective_relevance": effective_relevance,
+                     "source_gate": source_gate,
+                     "repaired": bool(row.get("dialogue_action_relevance_repaired")),
+                     "final_narration": final_narration,
+@@ -17336,6 +17581,15 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
+             or row.get("narration")
+         )
+ 
++        row["validated_presentation_intent"] = _validate_presentation_intent_for_row(
++            row,
++            action_text=_safe_str(row.get("canonical_turn_action") or row.get("player_action")),
++        )
++        row["validated_presentation_category"] = _safe_str(
++            _safe_dict(row.get("validated_presentation_intent")).get("primary_category")
++        )
++        row = _sync_dialogue_action_relevance_with_validated_presentation(row)
++
+         compat_ok, compat_diag = _dialogue_presentation_is_category_compatible(
+             action_text=_safe_str(row.get("canonical_turn_action") or row.get("player_action")),
+             presentation_text=presentation_text,
+@@ -17357,6 +17611,7 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
+             relevance["source"] = _safe_str(row.get("selected_narration_source") or row.get("narration_source") or "unknown")
+             relevance["compatibility"] = compat_diag
+             row["dialogue_action_relevance"] = relevance
++            row = _sync_dialogue_action_relevance_with_validated_presentation(row)
+ 
+         # Suppress unsupported combat claims
+         if _presentation_has_combat_claim(presentation_text) and not _turn_has_combat_support(row):
+@@ -17371,6 +17626,7 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
+             relevance["fallback_applied"] = True
+             relevance["reason"] = "unsupported_combat_claim_suppressed"
+             row["dialogue_action_relevance"] = relevance
++            row = _sync_dialogue_action_relevance_with_validated_presentation(row)
+         else:
+             row["unsupported_combat_claim_suppressed"] = False
+ 
 diff --git a/src/tests/rpg/test_autoplay_presentation_intent_finalizer.py b/src/tests/rpg/test_autoplay_presentation_intent_finalizer.py
-new file mode 100644
-index 0000000..2eca84f
---- /dev/null
+index 2eca84f..ea58238 100644
+--- a/src/tests/rpg/test_autoplay_presentation_intent_finalizer.py
 +++ b/src/tests/rpg/test_autoplay_presentation_intent_finalizer.py
-@@ -0,0 +1,102 @@
+@@ -1,102 +1,217 @@
+-from tests.rpg.autoplay_llm_campaign import (
+-    _apply_turn_bound_presentation_compatibility_gate,
+-    _attach_background_presentation_to_row,
+-    _turn_action_category,
+-    _validate_presentation_intent_for_row,
+-)
+-
+-
+-def test_keyword_fallback_no_longer_treats_ambush_report_as_combat():
+-    assert _turn_action_category("I report the ambush evidence to Bran.") in {"dialogue", "mixed"}
+-
+-
+-def test_keyword_fallback_no_longer_treats_scouting_as_combat():
+-    assert _turn_action_category("I scout the quarry road for ambush signs.") == "investigation"
+-
+-
+-def test_keyword_fallback_no_longer_treats_route_question_as_travel():
+-    assert _turn_action_category("I ask Bran if the old east road leads to a bridge.") in {"dialogue", "mixed"}
+-
+-
+-def test_finalizer_persists_presentation_intent_from_background_result():
+-    row = {
+-        "turn_index": 8,
+-        "player_action": "I report the ambush evidence to Bran.",
+-        "canonical_turn_action": "I report the ambush evidence to Bran.",
+-        "direct_graph_action_completion": {
+-            "action_id": "report_findings_to_bran",
+-            "mechanics": ["dialogue", "evidence"],
+-        },
+-        "mechanics_covered_this_turn": ["dialogue", "evidence"],
+-    }
+-    result = {
+-        "turn_index": 8,
+-        "narration": "You lay out the evidence Bran needs to understand the ambush pattern.",
+-        "presentation_intent": {
+-            "primary_category": "evidence",
+-            "secondary_categories": ["dialogue", "investigation"],
+-            "confidence": 0.91,
+-            "reason": "Reporting evidence to an NPC.",
+-        },
+-    }
+-
+-    attached = _attach_background_presentation_to_row(row, result)
+-    repaired = _apply_turn_bound_presentation_compatibility_gate(attached)
+-
+-    assert repaired["presentation_intent"]["primary_category"] == "evidence"
+-    assert repaired["llm_presentation_category"] == "evidence"
+-    assert repaired["validated_presentation_category"] == "evidence"
+-    assert repaired["validated_presentation_intent"]["ok"] is True
+-
+-
+-def test_provider_combat_intent_is_rejected_without_authoritative_combat_support():
+-    row = {
+-        "player_action": "I report the ambush evidence to Bran.",
+-        "canonical_turn_action": "I report the ambush evidence to Bran.",
+-        "presentation_intent": {
+-            "primary_category": "combat",
+-            "secondary_categories": [],
+-            "confidence": 0.91,
+-            "reason": "bad provider over-read ambush keyword",
+-        },
+-        "direct_graph_action_completion": {
+-            "action_id": "report_findings_to_bran",
+-            "mechanics": ["dialogue", "evidence"],
+-        },
+-        "mechanics_covered_this_turn": ["dialogue", "evidence"],
+-    }
+-
+-    validated = _validate_presentation_intent_for_row(row)
+-
+-    assert validated["ok"] is False
+-    assert validated["proposed_category"] == "combat"
+-    assert validated["primary_category"] in {"dialogue", "evidence", "mixed"}
+-    assert validated["support"]["combat"] is False
+-
+-
+-def test_unsupported_combat_presentation_gets_repaired_with_validated_intent():
+-    row = {
+-        "player_action": "I report the ambush evidence to Bran.",
+-        "canonical_turn_action": "I report the ambush evidence to Bran.",
+-        "narration": "You draw your blade and press the combat until the bandit ambush breaks.",
+-        "display_narration": "You draw your blade and press the combat until the bandit ambush breaks.",
+-        "presentation_intent": {
+-            "primary_category": "evidence",
+-            "secondary_categories": ["dialogue"],
+-            "confidence": 0.9,
+-            "reason": "reporting evidence",
+-        },
+-        "direct_graph_action_completion": {
+-            "action_id": "report_findings_to_bran",
+-            "mechanics": ["dialogue", "evidence"],
+-        },
+-        "mechanics_covered_this_turn": ["dialogue", "evidence"],
+-    }
+-
+-    repaired = _apply_turn_bound_presentation_compatibility_gate(row)
+-
+-    assert repaired["presentation_status"] == "attached_repaired"
+-    assert repaired["unsupported_combat_claim_suppressed"] is True
+-    assert repaired["validated_presentation_category"] == "evidence"
+-    assert "draw your blade" not in repaired["narration"].lower()
+-    assert "combat" not in repaired["narration"].lower()
 +from tests.rpg.autoplay_llm_campaign import (
 +    _apply_turn_bound_presentation_compatibility_gate,
 +    _attach_background_presentation_to_row,
++    _slim_transcript_row,
 +    _turn_action_category,
 +    _validate_presentation_intent_for_row,
 +)
@@ -779,3 +632,117 @@ index 0000000..2eca84f
 +    assert repaired["validated_presentation_category"] == "evidence"
 +    assert "draw your blade" not in repaired["narration"].lower()
 +    assert "combat" not in repaired["narration"].lower()
++
++
++
++def test_missing_provider_intent_prefers_evidence_over_mixed_for_ambush_report():
++    row = {
++        "player_action": "I report the ambush evidence to Bran.",
++        "canonical_turn_action": "I report the ambush evidence to Bran.",
++        "presentation_intent": {
++            "primary_category": "general",
++            "secondary_categories": [],
++            "confidence": 0.0,
++            "reason": "provider omitted intent",
++        },
++        "direct_graph_action_completion": {
++            "action_id": "report_findings_to_bran",
++            "mechanics": ["dialogue", "evidence"],
++        },
++        "mechanics_covered_this_turn": ["dialogue", "evidence"],
++    }
++
++    validated = _validate_presentation_intent_for_row(row)
++
++    assert validated["primary_category"] == "evidence"
++    assert validated["primary_category"] != "mixed"
++    assert validated["support"]["combat"] is False
++
++
++def test_missing_provider_intent_prefers_investigation_for_scouting_ambush_signs():
++    row = {
++        "player_action": "I scout the quarry road for ambush signs.",
++        "canonical_turn_action": "I scout the quarry road for ambush signs.",
++        "presentation_intent": {"primary_category": "general"},
++        "direct_graph_action_completion": {
++            "action_id": "scout_quarry_road",
++            "mechanics": ["investigation"],
++        },
++        "mechanics_covered_this_turn": ["investigation"],
++    }
++
++    validated = _validate_presentation_intent_for_row(row)
++
++    assert validated["primary_category"] == "investigation"
++    assert validated["primary_category"] != "combat"
++    assert validated["support"]["combat"] is False
++
++
++def test_mixed_survives_when_service_and_dialogue_are_both_supported():
++    row = {
++        "player_action": "I ask Bran for a room, but I also ask why the tavern feels so tense tonight.",
++        "canonical_turn_action": "I ask Bran for a room, but I also ask why the tavern feels so tense tonight.",
++        "presentation_intent": {"primary_category": "mixed"},
++        "direct_graph_action_completion": {
++            "action_id": "rent_room_and_ask_bran_about_tension",
++            "mechanics": ["service", "dialogue"],
++        },
++        "mechanics_covered_this_turn": ["service", "dialogue"],
++    }
++
++    validated = _validate_presentation_intent_for_row(row)
++
++    assert validated["primary_category"] == "mixed"
++
++
++def test_relevance_sync_clears_stale_combat_mismatch_reason():
++    row = {
++        "player_action": "I report the ambush evidence to Bran.",
++        "canonical_turn_action": "I report the ambush evidence to Bran.",
++        "narration": "You put the evidence forward for Bran.",
++        "display_narration": "You put the evidence forward for Bran.",
++        "presentation_intent": {"primary_category": "general"},
++        "direct_graph_action_completion": {
++            "action_id": "report_findings_to_bran",
++            "mechanics": ["dialogue", "evidence"],
++        },
++        "mechanics_covered_this_turn": ["dialogue", "evidence"],
++        "dialogue_action_relevance": {
++            "ok": False,
++            "action_kind": "combat",
++            "dialogue_kind": "social_investigation",
++            "reasons": ["combat_action_dialogue_mismatch"],
++        },
++    }
++
++    synced = _apply_turn_bound_presentation_compatibility_gate(row)
++    relevance = synced["dialogue_action_relevance"]
++
++    assert synced["validated_presentation_category"] == "evidence"
++    assert relevance["action_kind"] == "evidence"
++    assert relevance["ok"] is True
++    assert "combat_action_dialogue_mismatch" not in relevance.get("reasons", [])
++    assert relevance["presentation_intent_sync_repaired"] is True
++
++
++def test_slim_transcript_preserves_specific_intent_fields():
++    row = {
++        "turn_index": 8,
++        "player_action": "I report the ambush evidence to Bran.",
++        "presentation_intent": {"primary_category": "general"},
++        "llm_presentation_category": "general",
++        "validated_presentation_intent": {
++            "format_version": "validated_presentation_intent_v1",
++            "primary_category": "evidence",
++            "proposed_category": "general",
++            "support": {"evidence": True, "combat": False},
++        },
++        "validated_presentation_category": "evidence",
++    }
++
++    slim = _slim_transcript_row(row)
++
++    assert slim["presentation_intent"]["primary_category"] == "general"
++    assert slim["llm_presentation_category"] == "general"
++    assert slim["validated_presentation_category"] == "evidence"
++    assert slim["validated_presentation_intent"]["primary_category"] == "evidence"

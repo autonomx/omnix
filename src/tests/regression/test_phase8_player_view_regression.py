@@ -6,7 +6,6 @@ with existing simulation pipelines.
 
 from __future__ import annotations
 
-
 from app.rpg.player.player_codex import (
     update_codex_from_state,
 )

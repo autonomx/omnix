@@ -10,8 +10,6 @@ Run with:
 
 from __future__ import annotations
 
-
-
 from app.rpg.migration.models import (
     CURRENT_PACK_FORMAT_VERSION,
     CURRENT_SAVE_FORMAT_VERSION,

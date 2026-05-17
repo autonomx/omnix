@@ -6,7 +6,6 @@ Read-only, presentation-only — no state mutation.
 
 from __future__ import annotations
 
-
 from .models import EncounterResolution, EncounterState
 
 # Journal-worthy encounter event kinds

@@ -10,7 +10,6 @@ Tests for:
 import os
 
 
-
 def test_inspector_filters_exists():
     path = os.path.join(os.path.dirname(__file__), "../../../static/rpg/rpgInspectorFilters.js")
     assert os.path.exists(path)

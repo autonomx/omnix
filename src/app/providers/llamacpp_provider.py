@@ -14,7 +14,6 @@ from typing import Any, Dict, Iterator, List, Optional, Union
 import requests
 
 # Import the installer
-
 from .base import (
     BaseProvider,
     ChatMessage,

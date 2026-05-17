@@ -15,7 +15,6 @@ Test Coverage:
 import os
 import sys
 
-
 # Add app directory to path (same as test_tier6_narrative_intelligence.py)
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', '..', 'app'))
 

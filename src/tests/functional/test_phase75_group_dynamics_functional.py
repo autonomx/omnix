@@ -10,7 +10,6 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
-
 from app.rpg.coherence.reducers import reduce_event
 from app.rpg.creator.presenters import CreatorStatePresenter
 from app.rpg.group_dynamics.group_engine import (

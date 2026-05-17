@@ -3,7 +3,6 @@ from __future__ import annotations
 
 from typing import Any, Dict
 
-
 from app.rpg.world.conversation_director import (
     present_npcs_for_location,
     select_conversation_intent,

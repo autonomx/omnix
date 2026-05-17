@@ -11,7 +11,6 @@ from __future__ import annotations
 
 import copy
 
-
 from app.rpg.packs.loader import PackLoader
 from app.rpg.packs.merger import PackMerger
 from app.rpg.packs.models import (

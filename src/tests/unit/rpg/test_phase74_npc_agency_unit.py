@@ -9,7 +9,6 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
-
 from app.rpg.npc_agency.agency_engine import NPCAgencyEngine
 from app.rpg.npc_agency.decision_policy import NPCDecisionPolicy
 from app.rpg.npc_agency.faction_context import FactionContextBuilder

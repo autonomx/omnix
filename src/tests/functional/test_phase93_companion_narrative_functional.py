@@ -4,7 +4,6 @@ from flask import Flask
 from flask.testing import FlaskClient
 
 
-
 def _make_client() -> FlaskClient:
     """Create test Flask client with RPG player blueprints registered."""
     app = Flask(__name__)

@@ -6,8 +6,6 @@ and coherence reducer behavior.
 
 from __future__ import annotations
 
-
-
 from app.rpg.coherence.core import CoherenceCore
 from app.rpg.execution.resolver import ActionResolver
 

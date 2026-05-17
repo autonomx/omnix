@@ -6,7 +6,6 @@ integration layer: register, list, load, merge, export.
 
 from __future__ import annotations
 
-
 from app.rpg.packs.exporter import PackExporter
 from app.rpg.packs.loader import PackLoader
 from app.rpg.packs.merger import PackMerger

@@ -13,7 +13,6 @@ from __future__ import annotations
 import copy
 import json
 
-
 from app.rpg.migration.models import (
     CURRENT_PACK_FORMAT_VERSION,
     CURRENT_SAVE_FORMAT_VERSION,

@@ -10,7 +10,6 @@ Tests:
 """
 from __future__ import annotations
 
-
 from app.rpg.sandbox import (
     build_world_consequences,
     project_outcomes_from_state,

@@ -19,7 +19,6 @@ import importlib
 import random
 import sys
 
-
 # Module paths
 PLAYER_EXP_MODULE = "app.rpg.player.player_experience"
 COGNITIVE_MODULE = "app.rpg.cognitive"

@@ -6,7 +6,6 @@ event validation, and deterministic behavior.
 
 from __future__ import annotations
 
-
 import pytest
 
 from app.rpg.execution.models import (

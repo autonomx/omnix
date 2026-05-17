@@ -9,7 +9,6 @@ import logging
 from pathlib import Path
 from typing import Optional
 
-
 from app.shared import VOICE_CLONES_DIR
 
 from .types import SynthesisResult

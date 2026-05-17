@@ -9,7 +9,6 @@ from __future__ import annotations
 from unittest.mock import patch
 
 
-
 def _mock_llm_post():
     """Return a context-manager mock for ``requests.post`` used by the chat route."""
     mock = patch("app.requests.post")

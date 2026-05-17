@@ -3,12 +3,12 @@ from __future__ import annotations
 from typing import Any, Dict, List
 
 from app.rpg.campaign_journal_runtime import (
+    _journal_text as _base_journal_text,
+)
+from app.rpg.campaign_journal_runtime import (
     campaign_time_for_turn,
     summarize_campaign_calendar,
     summarize_player_journal,
-)
-from app.rpg.campaign_journal_runtime import (
-    _journal_text as _base_journal_text,
 )
 from app.rpg.quest_progress import (
     normalize_quest_status,

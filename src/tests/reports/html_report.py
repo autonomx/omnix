@@ -19,7 +19,6 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 
-
 # ---------------------------------------------------------------------------
 # Report data collector (pytest plugin)
 # ---------------------------------------------------------------------------
