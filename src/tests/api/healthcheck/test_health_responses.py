@@ -10,10 +10,9 @@ Tests cover:
 - Response schemas and edge cases
 """
 
-import json
 import os
 import sys
-from unittest.mock import MagicMock, PropertyMock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 

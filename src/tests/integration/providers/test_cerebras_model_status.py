@@ -3,12 +3,12 @@
 import json
 import os
 import tempfile
-from unittest.mock import MagicMock, Mock, patch
+from unittest.mock import Mock, patch
 
 import pytest
 
 from app.providers import CerebrasProvider, ModelInfo, ProviderConfig
-from app.providers.base import AuthenticationError, ConnectionError, ModelNotFoundError
+from app.providers.base import AuthenticationError, ConnectionError
 
 
 class TestCerebrasModelStatus:

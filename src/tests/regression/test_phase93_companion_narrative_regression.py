@@ -11,10 +11,8 @@ from app.rpg.party.party_state import (
     add_companion,
     ensure_party_state,
     set_companion_status,
-    update_companion_loyalty,
 )
 from app.rpg.persistence.migration_manager import migrate_package_to_current
-from app.rpg.persistence.migrations.v6_to_v7 import migrate_v6_to_v7
 from app.rpg.persistence.save_schema import CURRENT_RPG_SCHEMA_VERSION, ENGINE_VERSION
 
 

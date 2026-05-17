@@ -7,7 +7,6 @@ from typing import Any, Dict, List
 
 from app.shared import VOICE_CLONES_DIR
 
-from .types import SpeakerRecord
 
 
 def list_available_speakers(model: Any = None) -> List[Dict[str, Any]]:

@@ -25,12 +25,10 @@ USAGE:
 
 from __future__ import annotations
 
-from collections import deque
 from dataclasses import dataclass, field
-from typing import Any, Callable, Dict, List, Optional, Protocol, Tuple
+from typing import Any, Dict, List, Optional, Protocol, Tuple
 
 from .event_bus import Event, EventBus, EventContext
-from .timeline_graph import TimelineGraph
 
 # Re-export EventContext for backwards compatibility with tests
 __all__ = [

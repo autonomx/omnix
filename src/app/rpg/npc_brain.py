@@ -7,7 +7,7 @@ memories, and inter-NPC relationships.  This produces more nuanced and
 emergent NPC behaviour.
 """
 
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List
 
 # All actions an NPC can consider
 ACTIONS = ["attack", "flee", "trade", "help", "scheme", "guard", "idle"]

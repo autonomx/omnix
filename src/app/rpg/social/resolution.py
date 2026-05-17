@@ -7,7 +7,6 @@ from app.rpg.social.reputation import (
     apply_global_reputation_delta,
     apply_social_deltas,
     get_global_reputation,
-    get_relationship,
 )
 from app.rpg.social.state import ensure_profile, ensure_relationship
 

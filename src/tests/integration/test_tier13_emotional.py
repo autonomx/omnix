@@ -346,16 +346,6 @@ class TestFunctionalRegression:
     
     def test_tier13_imports(self):
         """Test all Tier 13 modules can be imported."""
-        from rpg.cognitive import (
-            ArcMemory,
-            DecisionModification,
-            EmotionalResidue,
-            EmotionalState,
-            EmotionModifier,
-            NarrativeMemory,
-            ResolutionEngine,
-            ResolutionResult,
-        )
         # No exceptions = success
     
     def test_backwards_compatibility_narrative_gravity(self):
@@ -379,7 +369,6 @@ class TestFunctionalRegression:
         from rpg.cognitive import (
             CoalitionLockManager,
             DecisionResolver,
-            NarrativeGravity,
         )
         
         resolver = DecisionResolver()

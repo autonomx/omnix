@@ -6,7 +6,6 @@ from typing import Any, Dict, List
 
 from app.rpg.interactions.item_catalog import (
     definition_for_item_like,
-    get_item_definition,
 )
 
 DEFAULT_CARRY_CAPACITY = 50.0

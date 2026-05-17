@@ -78,7 +78,6 @@ def test_ensure_transformers_qwen3_compat_supports_bare_and_parameterized_use(mo
 
 
 def test_validate_qwen3_tts_runtime_returns_structured_failure_on_missing_vendor(monkeypatch):
-    from app.providers.vendor import qwen3_tts as qwen3_tts_pkg
     from app.providers.vendor.qwen3_tts import runtime_status as runtime_status_module
 
     def _boom():

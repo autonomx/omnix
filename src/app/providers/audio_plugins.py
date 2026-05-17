@@ -13,19 +13,15 @@ import subprocess
 import time
 import wave
 from pathlib import Path
-from typing import Any, Dict, Iterator, List, Optional, Union
+from typing import Any, Dict, Iterator, List, Optional
 
 import numpy as np
 import requests
-import soundfile as sf
 
 from .audio_base import (
     AudioProviderCapability,
-    AudioProviderConfig,
     BaseSTTProvider,
     BaseTTSProvider,
-    STTTranscriptionResponse,
-    TTSAudioResponse,
 )
 
 logger = logging.getLogger(__name__)
@@ -106,7 +102,7 @@ class ParakeetSTT(BaseSTTProvider):
                     "duration": data.get("duration")
                 }
             else:
-                print(f"[PARAKEET-PLUGIN] Silence detected or empty text returned.")
+                print("[PARAKEET-PLUGIN] Silence detected or empty text returned.")
                 return {
                     "success": False,
                     "text": "",

@@ -1,6 +1,4 @@
 """Phase 12.13 — Visual queue tests."""
-import json
-import os
 
 from app.rpg.visual.job_queue import (
     claim_next_visual_job,

@@ -5,7 +5,7 @@ import io
 import os
 import traceback
 import wave
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse, Response

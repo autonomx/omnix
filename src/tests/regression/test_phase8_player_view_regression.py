@@ -6,10 +6,8 @@ with existing simulation pipelines.
 
 from __future__ import annotations
 
-import pytest
 
 from app.rpg.player.player_codex import (
-    _MAX_BUCKET,
     update_codex_from_state,
 )
 from app.rpg.player.player_dialogue_state import (

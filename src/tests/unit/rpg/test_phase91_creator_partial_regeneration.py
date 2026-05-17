@@ -79,7 +79,6 @@ class TestRegenerateSetupSection:
     """Tests for the ``regenerate_setup_section`` service function."""
 
     def test_regenerate_factions_replaces_only_factions(self):
-        from app.rpg.services.adventure_builder_service import regenerate_setup_section
 
         payload = _minimal_setup(
             factions=[{
@@ -106,7 +105,6 @@ class TestRegenerateSetupSection:
         assert any(loc["location_id"] == "loc_alpha" for loc in updated["locations"])
 
     def test_regenerate_locations_replaces_only_locations(self):
-        from app.rpg.services.adventure_builder_service import regenerate_setup_section
 
         payload = _minimal_setup(
             locations=[{
@@ -133,7 +131,6 @@ class TestRegenerateSetupSection:
         assert any(f["faction_id"] == "fac_beta" for f in updated["factions"])
 
     def test_regenerate_npc_seeds_replaces_only_npcs(self):
-        from app.rpg.services.adventure_builder_service import regenerate_setup_section
 
         payload = _minimal_setup(
             npc_seeds=[{

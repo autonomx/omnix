@@ -12,8 +12,6 @@ Fixes applied:
 from typing import Any, Dict, List
 
 from .party_state import (
-    _is_companion_downed,
-    _normalize_companion,
     get_active_companions,
 )
 

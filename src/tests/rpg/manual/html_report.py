@@ -12,8 +12,6 @@ from tests.rpg.manual.constants import (
     MANUAL_HTML_SCENARIO_DIR_NAME,
 )
 from tests.rpg.manual.extractors.base import (
-    _extract_simulation_state,
-    _extract_turn_contract,
     _extract_visible_interaction_reason,
     _first_dict,
 )

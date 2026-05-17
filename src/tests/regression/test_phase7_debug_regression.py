@@ -5,14 +5,10 @@ Ensures backward compatibility and deterministic behavior.
 
 from __future__ import annotations
 
-import pytest
 
 from app.rpg.creator.world_debug import (
-    explain_faction,
-    explain_npc,
     summarize_npc_minds,
     summarize_social_state,
-    summarize_tick_changes,
     summarize_world_pressures,
 )
 from app.rpg.creator.world_gm_tools import (
@@ -21,10 +17,8 @@ from app.rpg.creator.world_gm_tools import (
     force_npc_belief,
     inject_event,
     seed_rumor,
-    step_ticks,
 )
 from app.rpg.creator.world_replay import (
-    get_snapshot,
     list_snapshots,
     rollback_to_snapshot,
     summarize_timeline,

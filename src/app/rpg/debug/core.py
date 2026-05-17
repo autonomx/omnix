@@ -8,9 +8,7 @@ This layer consumes traces — it does not create new truth.
 
 from __future__ import annotations
 
-from typing import Any
 
-from .models import GMInspectionBundle
 from .presenter import DebugPresenter
 from .trace_builder import DebugTraceBuilder
 

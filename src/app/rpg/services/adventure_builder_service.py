@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import time
 import uuid
-from typing import Any, Dict
+from typing import Any
 
 from ..creator.defaults import (
     apply_adventure_defaults,
@@ -18,7 +18,6 @@ from ..creator.defaults import (
     list_setup_templates,
 )
 from ..creator.regeneration import (
-    APPLY_STRATEGIES,
     ENTITY_TARGETS,
     REGENERATION_MODES,
     REGENERATION_TARGETS,
@@ -566,7 +565,6 @@ def preview_setup(payload: dict[str, Any]) -> dict[str, Any]:
     then resolves the starting context so the frontend can show "Opening in:
     <location>, Present: <actors>".
     """
-    from ..core.game_loop import GameLoop
     from ..creator.presenters import CreatorStatePresenter
 
     data = apply_adventure_defaults(dict(payload))
@@ -677,7 +675,6 @@ def start_adventure(payload: dict[str, Any]) -> dict[str, Any]:
     ``start_new_adventure()``, then persists the canonical session and adapts
     the result into the session shape expected by the frontend.
     """
-    from ..core.game_loop import GameLoop
 
     data = apply_adventure_defaults(dict(payload))
 
@@ -1509,9 +1506,7 @@ def advance_world_simulation(payload: dict[str, Any]) -> dict[str, Any]:
     from ..creator.world_graph import inspect_world as _inspect
     from ..creator.world_scene_generator import generate_scenes_from_simulation
     from ..creator.world_simulation import (
-        compute_simulation_diff,
         step_simulation_state,
-        summarize_simulation_step,
     )
 
     data = dict(payload or {})
@@ -1605,9 +1600,7 @@ def apply_player_action_endpoint(payload: dict[str, Any]) -> dict[str, Any]:
     from ..creator.world_graph import inspect_world as _inspect
     from ..creator.world_scene_generator import generate_scenes_from_simulation
     from ..creator.world_simulation import (
-        compute_simulation_diff,
         step_simulation_state,
-        summarize_simulation_step,
     )
 
     setup = _safe_dict(payload.get("setup"))

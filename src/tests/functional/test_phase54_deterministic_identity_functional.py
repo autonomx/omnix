@@ -43,7 +43,6 @@ class TestIdentityVersioning(unittest.TestCase):
             parent_id=None, tick=1, seq=0,
         )
         # Compute with explicit version
-        from app.rpg.core.determinism import IDENTITY_VERSION as IV
         eid_explicit_v = compute_deterministic_event_id(
             seed=42, event_type="test", payload={}, source="sys",
             parent_id=None, tick=1, seq=0,

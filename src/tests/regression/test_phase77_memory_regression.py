@@ -21,7 +21,6 @@ from app.rpg.memory.codex_builder import CodexBuilder
 from app.rpg.memory.core import CampaignMemoryCore
 from app.rpg.social_state.core import SocialStateCore
 from app.rpg.social_state.models import (
-    AllianceRecord,
     RelationshipStateRecord,
     RumorRecord,
 )

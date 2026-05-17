@@ -485,15 +485,15 @@ class NarrativeSurfaceEngine:
         # Map emotion to player-facing description
         emotion_descriptions = {
             "anger": f"Anger simmers at {intensity:.0%} intensity.",
-            "fear": f"Undercurrents of fear are palpable.",
+            "fear": "Undercurrents of fear are palpable.",
             "trust": "A sense of trust permeates the situation.",
-            "sadness": f"Melancholy hangs in the air.",
-            "joy": f"Joy radiates from the participants.",
-            "grief": f"Grief weighs heavily on those involved.",
-            "guilt": f"Guilt lingers in the background.",
-            "pride": f"Pride colors perceptions.",
-            "betrayal": f"The sting of treachery is fresh.",
-            "relief": f"A wave of relief washes over the participants.",
+            "sadness": "Melancholy hangs in the air.",
+            "joy": "Joy radiates from the participants.",
+            "grief": "Grief weighs heavily on those involved.",
+            "guilt": "Guilt lingers in the background.",
+            "pride": "Pride colors perceptions.",
+            "betrayal": "The sting of treachery is fresh.",
+            "relief": "A wave of relief washes over the participants.",
         }
         
         return emotion_descriptions.get(emotion_name, "Emotions play their part.")

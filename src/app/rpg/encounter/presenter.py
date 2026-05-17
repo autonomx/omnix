@@ -6,7 +6,6 @@ Read-only, presentation-only — no state mutation.
 
 from __future__ import annotations
 
-from typing import Any
 
 from .models import EncounterResolution, EncounterState
 

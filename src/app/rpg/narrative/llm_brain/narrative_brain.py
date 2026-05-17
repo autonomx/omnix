@@ -2,10 +2,9 @@
 TIER 19: LLM Narrative Brain Integration"""
 from __future__ import annotations
 
-import json
 import logging
 from dataclasses import asdict, dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 from .memory_adapter import NarrativeMemoryAdapter
 from .prompt_builder import PromptBuilder

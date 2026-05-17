@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from typing import Any
 
 from tests.rpg.manual.scenarios.registry import build_service_scenarios
 from tests.rpg.manual.turn_execution import _extract_player_input_from_turn

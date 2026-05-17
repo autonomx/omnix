@@ -1,5 +1,4 @@
 import json
-import logging
 
 from .narrative_brain import NarrativeDecision
 

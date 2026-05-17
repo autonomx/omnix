@@ -3,7 +3,6 @@ import unittest
 from app.rpg.core.determinism import DeterminismConfig
 from app.rpg.core.effects import EffectManager, EffectPolicy
 from app.rpg.core.host_runtime_boundary import HostRuntimeGateway, HostRuntimeRecorder
-from app.rpg.core.snapshot_manager import SnapshotManager
 
 
 class _DummyHostRuntime:

@@ -1,10 +1,8 @@
 """Phase 9.3 — Companion Narrative Integration functional tests."""
-import json
 
 from flask import Flask
 from flask.testing import FlaskClient
 
-from app.rpg.api.rpg_player_routes import rpg_player_bp
 
 
 def _make_client() -> FlaskClient:

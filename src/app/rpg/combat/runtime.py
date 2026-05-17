@@ -4,7 +4,6 @@ import hashlib
 from copy import deepcopy
 from typing import Any, Dict, List
 
-from app.rpg.combat.abilities import resolve_combat_ability
 from app.rpg.combat.conditions import (
     actor_has_condition,
     remove_status_effects_from_participant,

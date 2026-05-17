@@ -1,6 +1,6 @@
 import json
 import re
-from typing import Dict, List, Optional
+from typing import Dict, List
 
 VALID_EMOTIONS = {"neutral", "happy", "sad", "angry", "fear", "panic", "whisper", "excited"}
 

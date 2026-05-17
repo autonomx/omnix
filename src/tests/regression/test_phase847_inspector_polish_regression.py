@@ -8,7 +8,6 @@ Ensures that the UX polish changes don't break existing inspector functionality:
 """
 import os
 
-import pytest
 
 
 def test_player_integration_still_has_inspector():

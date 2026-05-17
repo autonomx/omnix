@@ -1,7 +1,6 @@
 from app.rpg.world.conversation_pivots import detect_conversation_topic_pivot
 from app.rpg.world.conversation_rumors import (
     expire_conversation_rumor_seeds,
-    expire_conversation_world_signals,
     maybe_seed_rumor_from_signal,
 )
 

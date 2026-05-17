@@ -4,7 +4,6 @@ import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", ".."))
 
-import pytest
 
 from app.rpg.economy.action_generator import build_menu_action
 from app.rpg.economy.currency import normalize_currency

@@ -10,14 +10,12 @@ This module tests individual components of the quest system:
 - Full quest engine integration
 """
 
-from typing import Any, Dict
 
 import pytest
 
 from app.rpg.quest.quest_arc_engine import QuestArcBuilder
 from app.rpg.quest.quest_detector import QuestDetector
 from app.rpg.quest.quest_director import QuestDirector
-from app.rpg.quest.quest_engine import QuestEngine
 from app.rpg.quest.quest_models import Quest, QuestObjective, QuestStage
 from app.rpg.quest.quest_state_machine import QuestStateMachine
 from app.rpg.quest.quest_templates import (

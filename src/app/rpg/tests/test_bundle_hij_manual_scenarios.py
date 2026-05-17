@@ -31,10 +31,8 @@ from app.rpg.world.conversation_social_state import (
     record_player_joined_conversation,
 )
 from app.rpg.world.conversation_threads import (
-    handle_pending_player_conversation_response,
     maybe_advance_conversation_thread,
 )
-from app.rpg.world.conversation_topics import detect_topic_pivot_hint
 from app.rpg.world.location_registry import set_current_location
 
 # ── helpers ───────────────────────────────────────────────────────────────────

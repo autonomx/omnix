@@ -1,14 +1,12 @@
 """Phase 9.0 — Unit tests for Inventory / Item System."""
 from __future__ import annotations
 
-import pytest
 
 from app.rpg.items.inventory_state import (
     add_inventory_items,
     build_inventory_summary,
     ensure_inventory_state,
     normalize_inventory_state,
-    record_inventory_loot,
     remove_inventory_item,
 )
 from app.rpg.items.item_effects import apply_item_use

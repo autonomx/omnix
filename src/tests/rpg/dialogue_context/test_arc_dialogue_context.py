@@ -1,8 +1,6 @@
 from app.rpg.dialogue_context.arc_context import build_arc_dialogue_context
 from app.rpg.dialogue_context.rumors import propagate_rumor
 from app.rpg.lore.state import upsert_lore_entry
-from app.rpg.memory.observation import record_told_memory
-from app.rpg.social.reputation import set_relationship_values
 from app.rpg.story_arcs.state import start_story_arc
 
 

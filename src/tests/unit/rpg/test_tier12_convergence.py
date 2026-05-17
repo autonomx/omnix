@@ -16,10 +16,8 @@ from __future__ import annotations
 
 import os
 import sys
-from typing import Any, Dict
 from unittest.mock import MagicMock
 
-import pytest
 
 # Add project path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "..", "app"))
@@ -31,7 +29,6 @@ from rpg.cognitive.narrative_gravity import (
     MAX_ACTIVE_STORYLINES,
     NarrativeGravity,
     StorylineState,
-    StorylineWeight,
 )
 
 # ============================================================================

@@ -1,5 +1,4 @@
 """Phase 10.5 — Regression tests for runtime layer stability."""
-import pytest
 
 from app.rpg.presentation.runtime_bridge import build_runtime_presentation_payload
 from app.rpg.runtime.dialogue_runtime import (

@@ -1,0 +1,31 @@
+diff a/src/tests/rpg/autoplay/parallel_pipeline.py b/src/tests/rpg/autoplay/parallel_pipeline.py	(rejected hunks)
+@@ -1212,9 +1212,13 @@ def _combined_background_llm_job(
+             source = "combined_background_llm_fallback"
+ 
+         if source == "provider_combined_background_llm":
++            presentation_intent = _normalize_presentation_intent(
++                provider_payload.get("presentation_intent")
++            )
+             narration_payload = {
+                 "format_version": "rpg_narration_v2",
+                 "source": "provider_runtime_narration",
++                "presentation_intent": presentation_intent,
+                 "narration": _safe_str(provider_payload.get("narration")) or "The scene settles after the action.",
+                 "action": _safe_str(provider_payload.get("action")) or "The action has been resolved.",
+                 "npc": _safe_dict(provider_payload.get("npc")),
+@@ -1249,6 +1253,7 @@ def _combined_background_llm_job(
+                 turn_contract=freeze_snapshot(_safe_dict(turn_contract)),
+                 prefer_provider=False,
+             )
++            narration_payload["presentation_intent"] = _normalize_presentation_intent({})
+             candidates = build_deterministic_advisory_candidates(
+                 session_id=session_id,
+                 turn_index=turn_index,
+@@ -1267,6 +1272,7 @@ def _combined_background_llm_job(
+             "source": source,
+             "narration": _safe_str(narration_payload.get("narration")),
+             "npc": _safe_dict(narration_payload.get("npc")),
++            "presentation_intent": _safe_dict(narration_payload.get("presentation_intent")),
+             "narration_payload": narration_payload,
+             "candidate_count": len(candidates),
+             "candidates": candidates,

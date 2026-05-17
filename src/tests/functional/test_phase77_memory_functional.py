@@ -8,17 +8,14 @@ from __future__ import annotations
 
 from app.rpg.coherence.core import CoherenceCore
 from app.rpg.coherence.models import (
-    CommitmentRecord,
     ConsequenceRecord,
     FactRecord,
     ThreadRecord,
 )
 from app.rpg.creator.canon import CreatorCanonFact, CreatorCanonState
 from app.rpg.memory.core import CampaignMemoryCore
-from app.rpg.memory.presenters import MemoryPresenter
 from app.rpg.social_state.core import SocialStateCore
 from app.rpg.social_state.models import (
-    AllianceRecord,
     RelationshipStateRecord,
     RumorRecord,
 )

@@ -9,7 +9,7 @@ import sys
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", ".."))
 
 from app.rpg.recovery.manager import RecoveryManager
-from app.rpg.recovery.models import RecoveryResult, RecoveryState
+from app.rpg.recovery.models import RecoveryResult
 
 
 def _coherence_summary(location="market"):

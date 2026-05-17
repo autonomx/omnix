@@ -6,7 +6,6 @@ planner determinism, and presenter output.
 
 from __future__ import annotations
 
-import copy
 import os
 import sys
 

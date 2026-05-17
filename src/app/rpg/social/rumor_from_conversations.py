@@ -54,11 +54,11 @@ def build_rumor_from_conversation(conversation: Dict[str, Any]) -> Dict[str, Any
     if topic_type == "moral_conflict" and len(participants) >= 2:
         rumor_text = f"People say {participants[0]} and {participants[1]} had a heated argument about right and wrong."
     elif topic_type == "plan_reaction":
-        rumor_text = f"Word is spreading that NPCs are reacting to the player's recent plan."
+        rumor_text = "Word is spreading that NPCs are reacting to the player's recent plan."
     elif topic_type == "faction_tension":
-        rumor_text = f"Tensions are rising within the faction. People are talking."
+        rumor_text = "Tensions are rising within the faction. People are talking."
     elif topic_type == "risk_conflict":
-        rumor_text = f"There is disagreement about whether a risky course of action is wise."
+        rumor_text = "There is disagreement about whether a risky course of action is wise."
     elif topic_type == "local_incident":
         rumor_text = summary or "People are worried about a disturbance nearby."
     else:

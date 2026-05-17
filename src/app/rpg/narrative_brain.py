@@ -1,4 +1,3 @@
-from rpg.narrative_context import build_context
 
 
 def narrative_brain(session, player_input, context):

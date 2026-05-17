@@ -17,7 +17,6 @@ from typing import Any
 
 # Phase 8: player-facing state updates
 from app.rpg.player import (
-    ensure_player_state,
     set_current_scene,
     update_codex_from_state,
     update_journal_from_state,

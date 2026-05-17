@@ -7,7 +7,7 @@ IDs are deterministic. LLM flavor is normalized before commit.
 from __future__ import annotations
 
 import hashlib
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
 
 def _safe_dict(v: Any) -> Dict[str, Any]:

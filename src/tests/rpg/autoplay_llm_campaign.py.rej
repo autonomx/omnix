@@ -1,0 +1,37 @@
+diff a/src/tests/rpg/autoplay_llm_campaign.py b/src/tests/rpg/autoplay_llm_campaign.py	(rejected hunks)
+@@ -166,7 +166,7 @@ def _preferred_visible_player_action(row: Dict[str, Any]) -> str:
+         or _safe_str(row.get("canonical_turn_action"))
+         or _safe_str(row.get("player_action"))
+     )
+-
++
+     if row.get("story_arc_events"):
+         slim_row["story_arc_events"] = row.get("story_arc_events")
+ 
+@@ -1462,7 +1462,7 @@ def _ensure_turn_presentation_identity_on_row(
+             ),
+         )
+     return row
+-
++
+ 
+ 
+ def _assert_transcript_artifact_consistency(
+@@ -2312,7 +2419,7 @@ def _build_background_presentation_attachment_summary(
+             if bool(_safe_dict(event_any).get("converted_from_legacy_timing_event"))
+         ),
+         "turn_bound_attachment_verified": (
+-
++
+             expected_count > 0
+             and turn_bound_verified_count >= expected_count
+             and legacy_observed_count == 0
+@@ -2385,7 +2492,7 @@ def _assert_no_cross_turn_background_presentation(transcript: List[Dict[str, Any
+             )
+ 
+ 
+-def _extract_grounding_validation_from_any(value: Any) -> Dict[str, Any]:
++def _extract_grounding_validation_from_any(value: Any) -> Dict[str, Any]:
+     value = _safe_dict(value)
+ 
+     candidates = [

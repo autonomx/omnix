@@ -1,6 +1,5 @@
 """Unit tests for Phase 4 — Scene / Encounter Generator."""
 
-import pytest
 
 from app.rpg.creator.world_scene_generator import (
     SCENE_TYPE_CONFLICT,

@@ -1,6 +1,5 @@
 """Functional tests for semantic action intelligence interpretation."""
 
-from typing import Any, Dict
 
 import pytest
 

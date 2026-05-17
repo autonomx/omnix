@@ -9,7 +9,6 @@ Tests for:
 """
 import os
 
-import pytest
 
 
 def test_inspector_filters_exists():

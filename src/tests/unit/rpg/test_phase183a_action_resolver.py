@@ -4,7 +4,6 @@ import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", ".."))
 
-import pytest
 
 from app.rpg.action_resolver import (
     compute_defense_rating,

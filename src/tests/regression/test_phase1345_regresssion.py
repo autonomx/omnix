@@ -3,7 +3,6 @@
 Ensures new routes do not break existing presentation routes,
 and that all modules stay backward-compatible with prior phases.
 """
-import json
 
 import pytest
 from flask import Flask

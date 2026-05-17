@@ -1,7 +1,6 @@
 """Comprehensive tests for provider implementations."""
 
-import json
-from unittest.mock import MagicMock, Mock, mock_open, patch
+from unittest.mock import Mock, patch
 
 import pytest
 import requests

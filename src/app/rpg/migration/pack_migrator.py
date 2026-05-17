@@ -14,7 +14,6 @@ from .models import (
     CompatibilityReport,
     MigratedPayload,
     MigrationReport,
-    PackCompatibilityResult,
 )
 from .registry import MigrationRegistry
 

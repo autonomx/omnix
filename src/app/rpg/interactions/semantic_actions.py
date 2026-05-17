@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import re
-from copy import deepcopy
 from typing import Any, Dict, List
 
 SUPPORTED_ACTION_KINDS = {

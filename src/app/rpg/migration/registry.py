@@ -9,8 +9,6 @@ from __future__ import annotations
 from typing import Any, Callable
 
 from .models import (
-    CURRENT_PACK_FORMAT_VERSION,
-    CURRENT_SAVE_FORMAT_VERSION,
     SUPPORTED_MIGRATION_SCOPES,
     MigratedPayload,
     MigrationReport,

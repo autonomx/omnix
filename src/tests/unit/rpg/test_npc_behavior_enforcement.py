@@ -22,7 +22,6 @@ import os
 import sys
 from typing import Any, Dict, List
 
-import pytest
 
 SRC_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "..")
 sys.path.insert(0, SRC_DIR)

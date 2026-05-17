@@ -10,7 +10,7 @@ from typing import Any, Optional
 
 from .alliance_logic import AllianceLogic
 from .crowd_state import CrowdStateBuilder
-from .models import CrowdStateView, RumorSeed, SecondaryReaction
+from .models import RumorSeed, SecondaryReaction
 from .participant_finder import ParticipantFinder
 from .reaction_policy import GroupReactionPolicy
 from .rumor_seed_builder import RumorSeedBuilder

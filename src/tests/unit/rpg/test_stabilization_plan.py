@@ -9,22 +9,18 @@ Tests cover:
 
 import math
 import os
-import random
 import sys
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', '..', 'app'))
 
 from rpg.core.action_resolver import (
-    CONFLICT_TYPES,
     ActionResolver,
-    ResolutionStrategy,
     get_conflict_type,
 )
 from rpg.core.npc_state import (
-    PERSONALITY_TEMPLATES,
     GoalState,
     NPCState,
     Personality,
@@ -35,8 +31,6 @@ from rpg.core.world_loop import (
 )
 from rpg.memory.memory_manager import (
     DECAY_HALF_LIFE,
-    EMOTIONAL_AMPLIFIER,
-    GOAL_BOOST,
     MEMORY_TYPES,
     MemoryManager,
 )

@@ -5,7 +5,7 @@ for UI integration.
 """
 from __future__ import annotations
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter
 
 from app.rpg.items import apply_item_use, list_item_definitions
 from app.rpg.party import (

@@ -5,12 +5,9 @@ Tests do not require external services (LLM, TTS, STT).
 All modules are tested with deterministic / keyword-based behaviour.
 """
 
-import json
 import os
 import sys
-import tempfile
 
-import pytest
 
 # Ensure src/ is on the path so the audiobook package is importable
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))

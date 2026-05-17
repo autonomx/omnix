@@ -4,19 +4,16 @@ These tests verify the HostRuntimeGateway works correctly in realistic
 workflows including: recording phase, replay phase, and snapshot integration.
 """
 
-import os
 import unittest
 
 from app.rpg.core.determinism import DeterminismConfig
 from app.rpg.core.effects import EffectManager, EffectPolicy
 from app.rpg.core.host_runtime_boundary import (
-    DeterministicHostRuntimeClient,
     HostCallSpec,
     HostRuntimeGateway,
     HostRuntimeRecord,
     HostRuntimeRecorder,
 )
-from app.rpg.core.snapshot_manager import SnapshotManager
 
 
 class _MockHostRuntime:

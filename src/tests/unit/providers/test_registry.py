@@ -1,6 +1,5 @@
 """Tests for the Provider Registry."""
 
-import pytest
 
 from app.providers import ProviderRegistry, get_registry, list_available_providers
 from app.providers.base import BaseProvider, ProviderConfig

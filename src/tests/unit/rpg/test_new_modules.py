@@ -16,7 +16,6 @@ from rpg.tools.action_registry import (
     ActionRegistryError,
     action_attack,
     action_heal,
-    action_move,
     action_speak,
     register_default_actions,
 )

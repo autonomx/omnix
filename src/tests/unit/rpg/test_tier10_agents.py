@@ -13,9 +13,8 @@ from __future__ import annotations
 import os
 import sys
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
-import pytest
 
 # Add project path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "..", "app"))
@@ -193,7 +192,7 @@ class TestAgentBrain:
         assert "reasoning" in result
     
     def test_beliefs_modulate_priority(self):
-        from rpg.agent.agent_brain import INTENTION_EXPAND_INFLUENCE, AgentBrain
+        from rpg.agent.agent_brain import AgentBrain
         
         brain = AgentBrain()
         

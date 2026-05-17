@@ -7,7 +7,6 @@ This provider manages the llama.cpp binary and model serving.
 
 import os
 import subprocess
-import threading
 import time
 from pathlib import Path
 from typing import Any, Dict, Iterator, List, Optional, Union
@@ -15,10 +14,8 @@ from typing import Any, Dict, Iterator, List, Optional, Union
 import requests
 
 # Import the installer
-from app.llamacpp_installer import get_installer
 
 from .base import (
-    AuthenticationError,
     BaseProvider,
     ChatMessage,
     ChatResponse,
@@ -26,7 +23,6 @@ from .base import (
     ModelInfo,
     ModelNotFoundError,
     ProviderCapability,
-    ProviderConfig,
 )
 
 
@@ -361,7 +357,7 @@ class LlamaCppProvider(BaseProvider):
                     name=gguf_file.name,
                     provider=self.provider_name,
                     context_length=None,  # Unknown without loading the model
-                    description=f"Local GGUF model",
+                    description="Local GGUF model",
                     metadata={
                         'path': str(gguf_file),
                         'size': size,

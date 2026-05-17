@@ -8,7 +8,6 @@ Tests for:
 - A5: Save/Load UX
 - A6: Narrative Recap
 """
-import pytest
 
 from app.rpg.presentation.dialogue_ux import build_dialogue_ux_payload
 from app.rpg.presentation.intro_scene import build_intro_scene_payload
@@ -17,7 +16,6 @@ from app.rpg.presentation.player_inspector import build_player_inspector_overlay
 from app.rpg.presentation.save_load_ux import build_save_load_ux_payload
 from app.rpg.presentation.setup_flow import (
     VALID_GENRES,
-    VALID_TONES,
     build_setup_flow_payload,
 )
 

@@ -5,7 +5,7 @@ TIER 18: Narrative Intelligence - Meta-AI Story Director
 
 from __future__ import annotations
 
-from typing import Any, Dict
+from typing import Dict
 
 CLIMAX_THRESHOLD = 0.8
 FALLING_THRESHOLD = 0.3

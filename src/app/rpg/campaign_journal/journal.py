@@ -13,7 +13,6 @@ from app.rpg.lore.state import get_lore_entry
 from app.rpg.npc_evolution.state import ensure_npc_evolution_state
 from app.rpg.quest_log.runtime import build_objective_tracker_payload
 from app.rpg.story_arcs.milestones import build_story_objective_projection
-from app.rpg.story_arcs.state import get_story_arc
 
 
 def _safe_dict(value: Any) -> Dict[str, Any]:

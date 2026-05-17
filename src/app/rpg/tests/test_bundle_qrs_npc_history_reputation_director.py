@@ -3,10 +3,8 @@ from __future__ import annotations
 
 from typing import Any, Dict
 
-import pytest
 
 from app.rpg.world.conversation_director import (
-    ensure_conversation_director_state,
     present_npcs_for_location,
     select_conversation_intent,
 )
@@ -19,7 +17,6 @@ from app.rpg.world.npc_history_state import (
     recent_npc_history,
 )
 from app.rpg.world.npc_reputation_state import (
-    ensure_npc_reputation_state,
     get_npc_reputation,
     response_style_from_reputation,
     update_npc_reputation,

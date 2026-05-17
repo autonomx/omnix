@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 """Download default GGUF model for Docker build"""
-import os
 
 try:
     from huggingface_hub import hf_hub_download

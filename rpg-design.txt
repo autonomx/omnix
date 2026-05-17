@@ -1,620 +1,781 @@
-N114.2 — Replace Legacy Background Presentation Attach Path With Turn-Bound Attach
-
-Patch only:
-
-src/tests/rpg/autoplay_llm_campaign.py
-
-Do not replace _run_autoplay_campaign(...).
-Do not disable deferred/background narration.
-Do not remove the existing sentinel.
-Do not attach late background presentation to transcript[-1], current row, or latest turn.
-This patch converts the current legacy-observed attachment path into real turn-bound verified attachment.
-
-Current state from the last patch/diff: the sentinel and legacy bridge exist, and the crash proved the old timing summary had jobs_attached_total=100 while the new event list was empty before finalization. The diff also shows the current bridge builds legacy_background_timing_attachment_observed events with turn_bound_verified=False, which is useful diagnostically but not the final architecture.
-
-Goal
-
-Change this:
-
-{
-  "legacy_observed_count": 100,
-  "turn_bound_verified_count": 0,
-  "turn_bound_attachment_verified": false
-}
-
-to this:
-
-{
-  "legacy_observed_count": 0,
-  "turn_bound_verified_count": 100,
-  "turn_bound_attachment_verified": true
-}
-
-Meaning:
-
-Every completed background presentation result attaches to the transcript row with the same turn identity.
-Late results update their original turn.
-No late result may overwrite the current/latest turn.
-1. Add helpers to adapt legacy timing attachment events into real background results
-
-The legacy timing summary only tells us that something attached. It may not contain the actual narration/NPC payload. First add a helper that can normalize whatever the legacy event stores.
-
-Add near the background attachment helpers:
-
-def _extract_legacy_background_result_from_event(event: Any) -> Dict[str, Any]:
-    event = _safe_dict(event)
-
-    # Some legacy events may already include the full result. Prefer that.
-    for key in (
-        "result",
-        "background_result",
-        "combined_background_result",
-        "presentation_result",
-        "payload",
-        "job_result",
-    ):
-        value = _safe_dict(event.get(key))
-        if value:
-            return dict(value)
-
-    # Fallback: build a metadata-only result. This still verifies attachment
-    # identity, but does not overwrite narration/NPC unless text exists.
-    result: Dict[str, Any] = {}
-
-    for key in (
-        "session_id",
-        "turn_id",
-        "turn_index",
-        "source_turn",
-        "canonical_turn_action",
-        "canonical_turn_action_hash",
-        "action_category",
-        "turn_contract_hash",
-        "narration",
-        "display_narration",
-        "selected_narration",
-        "npc",
-        "npc_line",
-        "npc_speaker",
-        "phase",
-        "job_id",
-    ):
-        if event.get(key) not in (None, "", {}, []):
-            result[key] = event.get(key)
-
-    if not result.get("turn_index") and event.get("source_turn"):
-        result["turn_index"] = event.get("source_turn")
-
-    return result
-2. Add row identity fallback by turn index
-
-The real background worker may not yet carry full turn_presentation_identity. Since transcript rows now have identity, we can safely build payload identity from the target row when legacy events only provide source_turn.
-
-Add:
-
-def _build_background_result_identity_from_matching_row(
-    *,
-    transcript: List[Dict[str, Any]],
-    result: Dict[str, Any],
-    fallback_session_id: str,
-) -> Dict[str, Any]:
-    result = dict(_safe_dict(result))
-
-    identity = _safe_dict(result.get("turn_presentation_identity"))
-    if identity:
-        result["turn_presentation_identity"] = identity
-        return result
-
-    turn_index = int(
-        result.get("turn_index")
-        or result.get("source_turn")
-        or result.get("turn")
-        or result.get("job_turn_index")
-        or 0
-    )
-
-    turn_id = _safe_str(result.get("turn_id"))
-    matching_row: Dict[str, Any] = {}
-
-    for row_any in _safe_list(transcript):
-        row = _safe_dict(row_any)
-        row_identity = _safe_dict(row.get("turn_presentation_identity"))
-
-        if turn_id and _safe_str(row_identity.get("turn_id") or row.get("turn_id")) == turn_id:
-            matching_row = row
-            break
-
-        if turn_index and int(row.get("turn_index") or row.get("turn") or 0) == turn_index:
-            matching_row = row
-            break
-
-    if matching_row:
-        row_identity = _safe_dict(matching_row.get("turn_presentation_identity"))
-        if row_identity:
-            result["turn_presentation_identity"] = dict(row_identity)
-            result["session_id"] = _safe_str(result.get("session_id") or row_identity.get("session_id"))
-            result["turn_id"] = _safe_str(result.get("turn_id") or row_identity.get("turn_id"))
-            result["turn_index"] = int(result.get("turn_index") or row_identity.get("turn_index") or turn_index)
-            result["canonical_turn_action"] = _safe_str(
-                result.get("canonical_turn_action")
-                or row_identity.get("canonical_turn_action")
-            )
-            result["canonical_turn_action_hash"] = _safe_str(
-                result.get("canonical_turn_action_hash")
-                or row_identity.get("canonical_turn_action_hash")
-            )
-            result["action_category"] = _safe_str(
-                result.get("action_category")
-                or row_identity.get("action_category")
-            )
-            result["turn_contract_hash"] = _safe_str(
-                result.get("turn_contract_hash")
-                or row_identity.get("turn_contract_hash")
-            )
-            return result
-
-    # Last fallback if row is not found. This should become orphaned later.
-    result = _normalize_background_presentation_result(
-        result,
-        fallback_session_id=_safe_str(fallback_session_id),
-    )
-    return result
-
-This lets legacy events become turn-bound verified only when they can map to an existing transcript row identity.
-
-3. Add helper to attach legacy timing events through the turn-bound helper
-
-Add:
-
-def _attach_legacy_background_timing_events_turn_bound(
-    *,
-    transcript: List[Dict[str, Any]],
-    summary: Dict[str, Any],
-    session_id: str,
-    orphaned_results: List[Dict[str, Any]],
-) -> List[Dict[str, Any]]:
-    timing = _safe_dict(_safe_dict(summary).get("background_result_timing_summary"))
-    events: List[Dict[str, Any]] = []
-
-    for event_any in _safe_list(timing.get("attachment_events")):
-        legacy_event = _safe_dict(event_any)
-
-        result = _extract_legacy_background_result_from_event(legacy_event)
-        if not result:
-            result = {}
-
-        if not result.get("turn_index") and legacy_event.get("source_turn"):
-            result["turn_index"] = legacy_event.get("source_turn")
-
-        if not result.get("session_id"):
-            result["session_id"] = _safe_str(session_id)
-
-        result["phase"] = _safe_str(legacy_event.get("phase") or result.get("phase") or "legacy_timing")
-        result["job_id"] = _safe_str(legacy_event.get("job_id") or result.get("job_id"))
-
-        result = _build_background_result_identity_from_matching_row(
-            transcript=transcript,
-            result=result,
-            fallback_session_id=_safe_str(session_id),
-        )
-
-        attach_event = _attach_background_presentation_result_turn_bound(
-            transcript=transcript,
-            result=result,
-            orphaned_results=orphaned_results,
-        )
-
-        attach_event["phase"] = _safe_str(legacy_event.get("phase") or "legacy_timing_turn_bound")
-        attach_event["job_id"] = _safe_str(legacy_event.get("job_id"))
-        attach_event["source_turn"] = int(legacy_event.get("source_turn") or result.get("turn_index") or 0)
-        attach_event["attach_turn"] = int(legacy_event.get("attach_turn") or 0)
-        attach_event["lag_turns"] = int(
-            legacy_event.get("lag_turns")
-            or max(0, int(legacy_event.get("attach_turn") or 0) - int(legacy_event.get("source_turn") or 0))
-        )
-
-        # This event was verified by matching result identity to a transcript row.
-        attach_event["turn_bound_verified"] = bool(attach_event.get("attached"))
-        attach_event["legacy_observed_only"] = False
-        attach_event["converted_from_legacy_timing_event"] = True
-
-        events.append(attach_event)
-
-    return events
-
-Important: this does not just create synthetic observed events. It calls:
-
-_attach_background_presentation_result_turn_bound(...)
-
-So it updates the matched row only.
-
-4. Make turn-bound attach events record verification
-
-Patch _attach_background_presentation_result_turn_bound(...).
-
-In the success return, add:
-
-"turn_bound_verified": True,
-"legacy_observed_only": False,
-
-Expected success block:
-
-return {
-    "attached": True,
-    "reason": "attached_to_matching_turn",
-    "row_index": row_idx,
-    "turn_id": payload_identity.get("turn_id"),
-    "turn_index": payload_identity.get("turn_index"),
-    "turn_bound_verified": True,
-    "legacy_observed_only": False,
-}
-
-In failure returns, add:
-
-"turn_bound_verified": False,
-"legacy_observed_only": False,
-5. Apply compatibility gate after turn-bound attach
-
-Patch _attach_background_presentation_result_turn_bound(...).
-
-Replace:
-
-transcript[row_idx] = _attach_background_presentation_to_row(row, result)
-
-with:
-
-attached_row = _attach_background_presentation_to_row(row, result)
-attached_row = _apply_turn_bound_presentation_compatibility_gate(attached_row)
-transcript[row_idx] = attached_row
-
-This prevents the exact bad case from surviving even after it attaches to the correct row.
-
-6. Change legacy bridge finalizer to real turn-bound conversion
-
-Find _finalize_background_presentation_attachment_tracking(...).
-
-It likely does:
-
-events = list(_safe_list(summary.get("background_presentation_attachment_events")))
-
-if not events:
-    events = _build_background_attachment_events_from_timing_summary(summary)
-
-Replace that fallback with the real turn-bound conversion:
-
-events = list(_safe_list(summary.get("background_presentation_attachment_events")))
-orphans = list(_safe_list(summary.get("orphaned_background_presentation_results")))
-
-if not events:
-    events = _attach_legacy_background_timing_events_turn_bound(
-        transcript=transcript,
-        summary=summary,
-        session_id=_safe_str(summary.get("session_id") or ""),
-        orphaned_results=orphans,
-    )
-
-summary["background_presentation_attachment_events"] = events
-summary["orphaned_background_presentation_results"] = orphans
-
-Do not use _build_background_attachment_events_from_timing_summary(summary) here anymore, except as an emergency diagnostic when there are timing events but no row mapping.
-
-Optional fallback:
-
-if not events and _safe_list(_safe_dict(summary.get("background_result_timing_summary")).get("attachment_events")):
-    events = _build_background_attachment_events_from_timing_summary(summary)
-
-But ideally this fallback should not run once rows have turn identity.
-
-7. Set session ID before finalizing background attachment
-
-If _finalize_background_presentation_attachment_tracking(...) uses:
-
-summary.get("session_id")
-
-make sure the summary has it before finalization.
-
-Before finalization:
-
-summary["session_id"] = _safe_str(summary.get("session_id") or session_id)
-
-Then:
-
-summary = _finalize_background_presentation_attachment_tracking(
-    summary,
-    final_transcript_rows,
-)
-8. Strengthen attachment summary semantics
-
-Patch _build_background_presentation_attachment_summary(...).
-
-Current:
-
-"turn_bound_attachment_verified": (
-    len(events) > 0 and turn_bound_verified_count == len(events)
-),
-
-Change to require all expected events verified:
-
-expected_count = _background_presentation_expected_attachment_count(summary)
-
-Return:
-
-"expected_attachment_count": expected_count,
-"turn_bound_attachment_verified": (
-    expected_count > 0
-    and turn_bound_verified_count >= expected_count
-    and legacy_observed_count == 0
-    and rejected_count == 0
-),
-
-Also add:
-
-"converted_from_legacy_timing_count": sum(
-    1
-    for event_any in events
-    if bool(_safe_dict(event_any).get("converted_from_legacy_timing_event"))
-),
-9. Make legacy-only events a hard failure after N114.2
-
-Patch _assert_turn_bound_attachment_verified(summary).
-
-Currently it appends a product-quality warning. For N114.2, make it fail if expected background jobs exist and attachment is not turn-bound verified.
-
-Replace function body with:
-
-def _assert_turn_bound_attachment_verified(summary: Dict[str, Any]) -> None:
-    attachment = _safe_dict(summary.get("background_presentation_attachment_summary"))
-    expected_count = _background_presentation_expected_attachment_count(summary)
-
-    if expected_count <= 0:
-        return
-
-    if not bool(attachment.get("turn_bound_attachment_verified")):
-        raise RuntimeError(
-            "background_presentation_not_turn_bound_verified:"
-            f"expected_count={expected_count}:"
-            f"event_count={attachment.get('event_count')}:"
-            f"turn_bound_verified_count={attachment.get('turn_bound_verified_count')}:"
-            f"legacy_observed_count={attachment.get('legacy_observed_count')}:"
-            f"rejected_count={attachment.get('rejected_count')}:"
-            f"orphaned_count={attachment.get('orphaned_count')}"
-        )
-
-This is the key enforcement step. N114.2 should not pass with legacy_observed_count=100.
-
-10. Add postcondition: no row may have mismatched background result
-
-You already have _assert_no_cross_turn_background_presentation(...). Make sure it is called after finalization:
-
-_assert_no_cross_turn_background_presentation(final_transcript_rows)
-
-Call order:
-
-summary["session_id"] = _safe_str(summary.get("session_id") or session_id)
-
-final_transcript_rows = _build_final_transcript_artifact_rows(...)
-transcript = final_transcript_rows
-
-summary = _finalize_background_presentation_attachment_tracking(
-    summary,
-    final_transcript_rows,
-)
-
-_assert_no_cross_turn_background_presentation(final_transcript_rows)
-
-summary["background_presentation_attachment_summary"] = (
-    _build_background_presentation_attachment_summary(summary, final_transcript_rows)
-)
-
-summary["autoplay_health"] = _force_final_autoplay_health(summary)
-_assert_final_artifact_consistency(summary)
-
-If _finalize_background_presentation_attachment_tracking(...) already rebuilds the summary, do not rebuild twice unless necessary. If you rebuild twice, make sure it uses the updated events.
-
-11. Ensure final transcript rows include attached presentation status
-
-After finalization, rebuild bounded/slim rows from the updated final_transcript_rows:
-
-bounded_transcript_rows = _build_bounded_transcript_rows(
-    final_transcript_rows,
-    max_row_bytes=50000,
-)
-
-slim_transcript_rows = [
-    _slim_transcript_row(row, max_row_bytes=25000)
-    for row in final_transcript_rows
-]
-
-Do not build bounded/slim rows before the background attachment finalizer, or they will miss presentation_status, background_presentation_result, and repaired NPC fields.
-
-Correct order:
-
-build final full rows
-finalize turn-bound background attachment into those rows
-then build bounded/slim artifacts
-then write artifacts
-12. Add attachment artifact writes if not already present
-
-Ensure these are written:
-
-_zip_writestr_json(
-    zip_handle,
-    artifact_manifest,
-    "background-presentation-attachment-summary.json",
-    summary.get("background_presentation_attachment_summary", {}),
-)
-
-_zip_writestr_json(
-    zip_handle,
-    artifact_manifest,
-    "background-presentation-attachment-events.json",
-    summary.get("background_presentation_attachment_events", []),
-)
-
-_zip_writestr_json(
-    zip_handle,
-    artifact_manifest,
-    "orphaned-background-presentation-results.json",
-    summary.get("orphaned_background_presentation_results", []),
-)
-13. Add regression tests
-
-Create:
-
-src/tests/rpg/test_autoplay_turn_bound_legacy_conversion.py
-from tests.rpg.autoplay_llm_campaign import (
-    _attach_legacy_background_timing_events_turn_bound,
-    _build_background_presentation_attachment_summary,
-    _build_turn_presentation_identity,
-)
-
-
-def test_legacy_background_timing_event_converts_to_turn_bound_attachment():
-    session_id = "s1"
-
-    id_1 = _build_turn_presentation_identity(
-        session_id=session_id,
-        turn_index=1,
-        canonical_turn_action="I ask Bran about the witness.",
-        turn_contract={"ok": True, "kind": "dialogue"},
-    )
-    id_2 = _build_turn_presentation_identity(
-        session_id=session_id,
-        turn_index=2,
-        canonical_turn_action="I buy two rations from Bran.",
-        turn_contract={"ok": True, "kind": "buy"},
-    )
-
-    transcript = [
-        {
-            "turn_index": 1,
-            "player_action": "I ask Bran about the witness.",
-            "canonical_turn_action": "I ask Bran about the witness.",
-            "turn_presentation_identity": id_1,
-            "turn_id": id_1["turn_id"],
-            "presentation_status": "pending",
-        },
-        {
-            "turn_index": 2,
-            "player_action": "I buy two rations from Bran.",
-            "canonical_turn_action": "I buy two rations from Bran.",
-            "turn_presentation_identity": id_2,
-            "turn_id": id_2["turn_id"],
-            "presentation_status": "pending",
-        },
-    ]
-
-    summary = {
-        "session_id": session_id,
-        "background_result_timing_summary": {
-            "jobs_attached_total": 1,
-            "attachment_events": [
-                {
-                    "source_turn": 1,
-                    "attach_turn": 2,
-                    "lag_turns": 1,
-                    "phase": "pre_turn",
-                    "job_id": "job:1",
-                    "result": {
-                        "turn_index": 1,
-                        "narration": "Bran lowers his voice as the witness is mentioned.",
-                        "npc": {
-                            "speaker": "Bran",
-                            "line": "Ask plainly. Are you looking for the traveler, the road, or the person who frightened them?",
-                        },
-                    },
-                }
-            ],
-        },
-        "background_jobs": {"combined_background_llm_jobs": 1},
-        "deferred_narration_trace_summary": {"ok_jobs": 1},
-    }
-
-    orphans = []
-
-    events = _attach_legacy_background_timing_events_turn_bound(
-        transcript=transcript,
-        summary=summary,
-        session_id=session_id,
-        orphaned_results=orphans,
-    )
-
-    assert len(events) == 1
-    assert events[0]["attached"] is True
-    assert events[0]["turn_bound_verified"] is True
-    assert events[0]["legacy_observed_only"] is False
-    assert events[0]["row_index"] == 0
-
-    assert transcript[0]["presentation_status"] in {"attached", "attached_repaired"}
-    assert "witness" in transcript[0]["narration"].lower()
-    assert transcript[1]["presentation_status"] == "pending"
-    assert transcript[1].get("npc", {}) == {}
-    assert orphans == []
-
-
-def test_background_attachment_summary_requires_turn_bound_verified_events():
-    summary = {
-        "background_result_timing_summary": {"jobs_attached_total": 1},
-        "background_jobs": {"combined_background_llm_jobs": 1},
-        "deferred_narration_trace_summary": {"ok_jobs": 1},
-        "background_presentation_attachment_events": [
-            {
-                "attached": True,
-                "reason": "attached_to_matching_turn",
-                "turn_bound_verified": True,
-                "legacy_observed_only": False,
-                "converted_from_legacy_timing_event": True,
-            }
-        ],
-        "orphaned_background_presentation_results": [],
-    }
-
-    attachment = _build_background_presentation_attachment_summary(
-        summary,
-        [{"turn_index": 1, "presentation_status": "attached"}],
-    )
-
-    assert attachment["expected_attachment_count"] == 1
-    assert attachment["event_count"] == 1
-    assert attachment["turn_bound_verified_count"] == 1
-    assert attachment["legacy_observed_count"] == 0
-    assert attachment["turn_bound_attachment_verified"] is True
-
-Create:
-
-src/tests/rpg/test_autoplay_turn_bound_attach_enforcement.py
-from tests.rpg.autoplay_llm_campaign import _assert_turn_bound_attachment_verified
-
-
-def test_turn_bound_attachment_verified_fails_on_legacy_observed_only():
-    summary = {
-        "background_result_timing_summary": {"jobs_attached_total": 1},
-        "background_jobs": {"combined_background_llm_jobs": 1},
-        "deferred_narration_trace_summary": {"ok_jobs": 1},
-        "background_presentation_attachment_summary": {
-            "event_count": 1,
-            "turn_bound_verified_count": 0,
-            "legacy_observed_count": 1,
-            "rejected_count": 0,
-            "orphaned_count": 0,
-            "turn_bound_attachment_verified": False,
-        },
-    }
-
-    try:
-        _assert_turn_bound_attachment_verified(summary)
-    except RuntimeError as exc:
-        assert "background_presentation_not_turn_bound_verified" in str(exc)
-    else:
-        raise AssertionError("expected turn-bound verification failure")
-14. Run checks
-python -m py_compile `
-  src\tests\rpg\autoplay_llm_campaign.py
-python -m pytest `
-  src\tests\rpg\test_autoplay_turn_bound_legacy_conversion.py `
-  src\tests\rpg\test_autoplay_turn_bound_attach_enforcement.py `
-  src\tests\rpg\test_autoplay_turn_bound_deferred_presentation.py `
-  src\tests\rpg\test_autoplay_npc_line_compatibility_gate.py `
-  src\tests\rpg\test_autoplay_slim_transcript_artifacts.py `
-  src\tests\rpg\test_autoplay_real_runner_present.py `
-  -q
+diff --git a/src/tests/rpg/autoplay/parallel_pipeline.py b/src/tests/rpg/autoplay/parallel_pipeline.py
+index a5f1590..5042442 100644
+--- a/src/tests/rpg/autoplay/parallel_pipeline.py
++++ b/src/tests/rpg/autoplay/parallel_pipeline.py
+@@ -1212,9 +1212,13 @@ def _combined_background_llm_job(
+             source = "combined_background_llm_fallback"
+ 
+         if source == "provider_combined_background_llm":
++            presentation_intent = _normalize_presentation_intent(
++                provider_payload.get("presentation_intent")
++            )
+             narration_payload = {
+                 "format_version": "rpg_narration_v2",
+                 "source": "provider_runtime_narration",
++                "presentation_intent": presentation_intent,
+                 "narration": _safe_str(provider_payload.get("narration")) or "The scene settles after the action.",
+                 "action": _safe_str(provider_payload.get("action")) or "The action has been resolved.",
+                 "npc": _safe_dict(provider_payload.get("npc")),
+@@ -1249,6 +1253,7 @@ def _combined_background_llm_job(
+                 turn_contract=freeze_snapshot(_safe_dict(turn_contract)),
+                 prefer_provider=False,
+             )
++            narration_payload["presentation_intent"] = _normalize_presentation_intent({})
+             candidates = build_deterministic_advisory_candidates(
+                 session_id=session_id,
+                 turn_index=turn_index,
+@@ -1267,6 +1272,7 @@ def _combined_background_llm_job(
+             "source": source,
+             "narration": _safe_str(narration_payload.get("narration")),
+             "npc": _safe_dict(narration_payload.get("npc")),
++            "presentation_intent": _safe_dict(narration_payload.get("presentation_intent")),
+             "narration_payload": narration_payload,
+             "candidate_count": len(candidates),
+             "candidates": candidates,
+diff --git a/src/tests/rpg/autoplay_llm_campaign.py b/src/tests/rpg/autoplay_llm_campaign.py
+index 478ea1a..bec591c 100644
+--- a/src/tests/rpg/autoplay_llm_campaign.py
++++ b/src/tests/rpg/autoplay_llm_campaign.py
+@@ -166,7 +166,7 @@ def _preferred_visible_player_action(row: Dict[str, Any]) -> str:
+         or _safe_str(row.get("canonical_turn_action"))
+         or _safe_str(row.get("player_action"))
+     )
+-
++
+     if row.get("story_arc_events"):
+         slim_row["story_arc_events"] = row.get("story_arc_events")
+ 
+@@ -1462,7 +1462,7 @@ def _ensure_turn_presentation_identity_on_row(
+             ),
+         )
+     return row
+-
++
+ 
+ 
+ def _assert_transcript_artifact_consistency(
+@@ -1678,6 +1678,87 @@ def _build_turn_presentation_identity(
+     }
+ 
+ 
++
++
++PRESENTATION_INTENT_ALLOWED_CATEGORIES = {
++    "dialogue",
++    "evidence",
++    "investigation",
++    "travel",
++    "combat",
++    "service",
++    "economy",
++    "stealth",
++    "social",
++    "lore",
++    "quest",
++    "mixed",
++    "general",
++}
++
++
++def _normalize_presentation_category(value: Any) -> str:
++    category = _safe_str(value).strip().lower().replace("-", "_").replace(" ", "_")
++    aliases = {
++        "conversation": "dialogue",
++        "talk": "dialogue",
++        "speaking": "dialogue",
++        "social": "dialogue",
++        "buying": "economy",
++        "purchase": "economy",
++        "shop": "economy",
++        "shopping": "economy",
++        "lodging": "service",
++        "room": "service",
++        "rest": "service",
++        "clue": "evidence",
++        "proof": "evidence",
++        "search": "investigation",
++        "scouting": "investigation",
++        "move": "travel",
++        "movement": "travel",
++        "fight": "combat",
++        "battle": "combat",
++        "buying_supplies": "economy",
++    }
++    category = aliases.get(category, category)
++    if category not in PRESENTATION_INTENT_ALLOWED_CATEGORIES:
++        return "general"
++    return category
++
++
++def _normalize_presentation_intent(value: Any) -> Dict[str, Any]:
++    raw = _safe_dict(value)
++    primary = _normalize_presentation_category(
++        raw.get("primary_category")
++        or raw.get("category")
++        or raw.get("primary")
++    )
++    secondary: List[str] = []
++    for item in _safe_list(
++        raw.get("secondary_categories")
++        or raw.get("secondary")
++        or raw.get("categories")
++    ):
++        normalized = _normalize_presentation_category(item)
++        if normalized and normalized != primary and normalized not in secondary:
++            secondary.append(normalized)
++
++    try:
++        confidence = float(raw.get("confidence") or 0.0)
++    except Exception:
++        confidence = 0.0
++    confidence = max(0.0, min(1.0, confidence))
++
++    return {
++        "format_version": "presentation_intent_v1",
++        "primary_category": primary,
++        "secondary_categories": secondary[:4],
++        "confidence": round(confidence, 3),
++        "reason": _safe_str(raw.get("reason"))[:240],
++    }
++
++
+ def _presentation_identity_matches_turn(
+     *,
+     payload_identity: Any,
+@@ -1748,14 +1829,24 @@ def _find_transcript_row_index_by_turn_identity(
+ 
+ def _extract_background_presentation_text(result: Dict[str, Any]) -> Dict[str, Any]:
+     result = _safe_dict(result)
++    narration_payload = _safe_dict(result.get("narration_payload"))
++    selected = _safe_dict(result.get("selected"))
++
++    presentation_intent = _normalize_presentation_intent(
++        result.get("presentation_intent")
++        or narration_payload.get("presentation_intent")
++        or selected.get("presentation_intent")
++        or result.get("intent")
++    )
+ 
+     narration = _safe_str(
+         result.get("narration")
+         or result.get("display_narration")
+         or result.get("selected_narration")
++        or narration_payload.get("narration")
+     )
+ 
+-    npc = _safe_dict(result.get("npc"))
++    npc = _safe_dict(result.get("npc")) or _safe_dict(narration_payload.get("npc"))
+     npc_line = _safe_str(
+         npc.get("line")
+         or result.get("npc_line")
+@@ -1766,7 +1857,6 @@ def _extract_background_presentation_text(result: Dict[str, Any]) -> Dict[str, A
+         or result.get("npc_speaker")
+     )
+ 
+-    selected = _safe_dict(result.get("selected"))
+     if not narration:
+         narration = _safe_str(
+             selected.get("narration")
+@@ -1782,6 +1872,7 @@ def _extract_background_presentation_text(result: Dict[str, Any]) -> Dict[str, A
+ 
+     return {
+         "narration": narration,
++        "presentation_intent": presentation_intent,
+         "npc": {
+             "speaker": npc_speaker,
+             "line": npc_line,
+@@ -1800,6 +1891,7 @@ def _attach_background_presentation_to_row(
+ 
+     narration = _safe_str(presentation.get("narration"))
+     npc = _safe_dict(presentation.get("npc"))
++    presentation_intent = _normalize_presentation_intent(presentation.get("presentation_intent"))
+ 
+     if narration:
+         row["narration"] = narration
+@@ -1811,6 +1903,9 @@ def _attach_background_presentation_to_row(
+         row["npc_speaker"] = _safe_str(npc.get("speaker"))
+         row["npc_line"] = _safe_str(npc.get("line"))
+ 
++    row["presentation_intent"] = presentation_intent
++    row["llm_presentation_category"] = _safe_str(presentation_intent.get("primary_category"))
++
+     row["presentation_status"] = "attached"
+     row["presentation_attached_from"] = _safe_str(
+         result.get("source") or result.get("phase") or "background"
+@@ -1820,6 +1915,7 @@ def _attach_background_presentation_to_row(
+         "turn_index": result.get("turn_index"),
+         "canonical_turn_action_hash": result.get("canonical_turn_action_hash"),
+         "action_category": result.get("action_category"),
++        "presentation_intent": presentation_intent,
+     }
+ 
+     return row
+@@ -1857,6 +1953,8 @@ def _extract_legacy_background_result_from_event(event: Any) -> Dict[str, Any]:
+         "npc",
+         "npc_line",
+         "npc_speaker",
++        "presentation_intent",
++        "narration_payload",
+         "phase",
+         "job_id",
+     ):
+@@ -2109,6 +2207,14 @@ def _apply_turn_bound_presentation_compatibility_gate(row: Dict[str, Any]) -> Di
+     presentation_text = _visible_presentation_text_for_compatibility(row)
+     action_text = _safe_str(row.get("canonical_turn_action") or row.get("player_action"))
+ 
++    row["validated_presentation_intent"] = _validate_presentation_intent_for_row(
++        row,
++        action_text=action_text,
++    )
++    row["validated_presentation_category"] = _safe_str(
++        _safe_dict(row.get("validated_presentation_intent")).get("primary_category")
++    )
++
+     compat_ok, compat_diag = _dialogue_presentation_is_category_compatible(
+         action_text=action_text,
+         presentation_text=presentation_text,
+@@ -2145,6 +2251,7 @@ def _apply_turn_bound_presentation_compatibility_gate(row: Dict[str, Any]) -> Di
+             or "unknown"
+         )
+         relevance["compatibility"] = compat_diag
++        relevance["validated_presentation_intent"] = row.get("validated_presentation_intent")
+         row["dialogue_action_relevance"] = relevance
+         row["dialogue_action_relevance_repaired"] = True
+         row["presentation_status"] = "attached_repaired"
+@@ -2312,7 +2419,7 @@ def _build_background_presentation_attachment_summary(
+             if bool(_safe_dict(event_any).get("converted_from_legacy_timing_event"))
+         ),
+         "turn_bound_attachment_verified": (
+-
++
+             expected_count > 0
+             and turn_bound_verified_count >= expected_count
+             and legacy_observed_count == 0
+@@ -2385,7 +2492,7 @@ def _assert_no_cross_turn_background_presentation(transcript: List[Dict[str, Any
+             )
+ 
+ 
+-def _extract_grounding_validation_from_any(value: Any) -> Dict[str, Any]:
++def _extract_grounding_validation_from_any(value: Any) -> Dict[str, Any]:
+     value = _safe_dict(value)
+ 
+     candidates = [
+@@ -4881,6 +4988,15 @@ def _classify_visible_action_category(row: Dict[str, Any]) -> str:
+     direct = _safe_dict(row.get("direct_graph_action_completion"))
+     action_id = _safe_str(direct.get("action_id") or row.get("direct_graph_execution_kind"))
+ 
++    validated = _safe_dict(row.get("validated_presentation_intent"))
++    validated_category = _normalize_presentation_category(validated.get("primary_category"))
++    if validated_category != "general":
++        if validated_category in {"dialogue", "social"}:
++            return "social"
++        if validated_category == "economy":
++            return "buying"
++        return validated_category
++
+     social_action_prefixes = (
+         "ask_",
+         "report_",
+@@ -6991,29 +7107,234 @@ def _apply_dialogue_action_relevance_gate(row: Dict[str, Any]) -> Dict[str, Any]
+ 
+ 
+ def _turn_action_category(text: str) -> str:
++    """Conservative fallback category for missing provider intent.
++
++    This must not turn nouns such as ambush, bandit, road, room, scout, or
++    supplies into authoritative combat/travel/service/economy by themselves.
++    Prefer the validated provider presentation intent and authoritative row
++    mechanics where available.
++    """
+     text_n = _normalize_turn_action_text(text)
+ 
+-    if any(t in text_n for t in ("buy", "purchase", "ration", "rations", "supplies")):
++    has_dialogue_verb = any(t in text_n for t in ("ask", "tell", "question", "persuade", "talk", "speak", "report", "warn"))
++    has_service_term = any(t in text_n for t in ("room", "lodging", "bed", "rest", "sleep"))
++    has_evidence_term = any(t in text_n for t in ("evidence", "clue", "proof", "coin", "track", "trail", "sign", "ledger", "note"))
++    has_investigation_verb = any(t in text_n for t in ("inspect", "search", "look", "examine", "scout", "track", "watch"))
++
++    if has_dialogue_verb and (has_service_term or has_evidence_term or has_investigation_verb):
++        return "mixed"
++
++    if has_dialogue_verb:
++        return "dialogue"
++
++    if any(t in text_n for t in ("buy", "purchase", "pay for")):
+         return "economy"
+ 
+-    if any(t in text_n for t in ("rent", "room", "lodging", "rest", "sleep")):
++    if any(t in text_n for t in ("rent", "book lodging", "take lodging")) or (
++        has_service_term and any(t in text_n for t in ("pay", "rent", "book"))
++    ):
+         return "service"
+ 
+-    if any(t in text_n for t in ("attack", "fight", "ambush", "bandit", "combat", "protect", "scout")):
++    if any(t in text_n for t in ("attack", "fight", "combat", "strike", "defend")):
+         return "combat"
+ 
+-    if any(t in text_n for t in ("ask", "tell", "question", "persuade", "talk", "speak")):
+-        return "dialogue"
++    if has_investigation_verb or has_evidence_term:
++        return "investigation"
+ 
+-    if any(t in text_n for t in ("travel", "leave", "road", "go to", "move", "enter")):
++    if any(t in text_n for t in ("travel", "leave", "go to", "move", "enter")):
+         return "travel"
+ 
+-    if any(t in text_n for t in ("inspect", "search", "look", "examine", "clue", "proof", "coin")):
+-        return "investigation"
+-
+     return "general"
+ 
+ 
++
++def _row_direct_action_id(row: Dict[str, Any]) -> str:
++    row = _safe_dict(row)
++    direct = _safe_dict(row.get("direct_graph_action_completion"))
++    return _safe_str(
++        direct.get("action_id")
++        or row.get("direct_graph_execution_kind")
++        or row.get("direct_graph_canonical_action_id")
++        or row.get("direct_graph_xp_execution_action_id")
++    )
++
++
++def _row_mechanics_set(row: Dict[str, Any]) -> set[str]:
++    row = _safe_dict(row)
++    mechanics = {
++        _safe_str(v)
++        for v in _safe_list(row.get("mechanics_covered_this_turn"))
++        if _safe_str(v)
++    }
++    direct = _safe_dict(row.get("direct_graph_action_completion"))
++    mechanics.update(
++        _safe_str(v)
++        for v in _safe_list(direct.get("mechanics"))
++        if _safe_str(v)
++    )
++    result = _safe_dict(row.get("result"))
++    turn_contract = _safe_dict(row.get("turn_contract"))
++    contract_result = _safe_dict(turn_contract.get("result"))
++    for value in (
++        result.get("mechanic"),
++        row.get("mechanic"),
++        turn_contract.get("mechanic"),
++        contract_result.get("mechanic"),
++    ):
++        mechanic = _safe_str(value)
++        if mechanic:
++            mechanics.add(mechanic)
++    return mechanics
++
++
++def _extract_row_presentation_intent(row: Dict[str, Any]) -> Dict[str, Any]:
++    row = _safe_dict(row)
++    candidates = [
++        row.get("presentation_intent"),
++        _safe_dict(row.get("background_presentation_result")).get("presentation_intent"),
++        _safe_dict(row.get("combined_background_llm_result")).get("presentation_intent"),
++        _safe_dict(_safe_dict(row.get("combined_background_llm_result")).get("narration_payload")).get("presentation_intent"),
++        _safe_dict(row.get("deferred_narration_result")).get("presentation_intent"),
++        _safe_dict(_safe_dict(row.get("deferred_narration_result")).get("narration_payload")).get("presentation_intent"),
++        _safe_dict(row.get("resolved_narration_payload")).get("presentation_intent"),
++        _safe_dict(row.get("narration_payload")).get("presentation_intent"),
++        _safe_dict(row.get("selected_output")).get("presentation_intent"),
++        _safe_dict(row.get("selected_narration")).get("presentation_intent"),
++    ]
++    for candidate in candidates:
++        normalized = _normalize_presentation_intent(candidate)
++        if normalized.get("primary_category") != "general" or normalized.get("secondary_categories"):
++            return normalized
++    return _normalize_presentation_intent({})
++
++
++def _classify_visible_action_category_without_validated_intent(row: Dict[str, Any]) -> str:
++    row = _safe_dict(row)
++    direct = _safe_dict(row.get("direct_graph_action_completion"))
++    action_id = _safe_str(direct.get("action_id") or row.get("direct_graph_execution_kind"))
++
++    if action_id.startswith(("ask_", "report_", "warn_", "tell_", "question_", "confront_", "counter_", "press_", "persuade_", "accuse_", "negotiate_")):
++        return "dialogue"
++    if action_id.startswith(("return_", "search_", "inspect_", "decipher_", "read_", "recover_", "deliver_")):
++        return "evidence"
++    if action_id == "buy_rations_from_bran":
++        return "economy"
++    if action_id in {
++        "protect_wagon_or_lure_bandits",
++        "ambush_bandits",
++        "fight_bandit_scouts",
++        "fight_bandits",
++        "defeat_bandit_scouts",
++        "resolve_bandit_ambush",
++    }:
++        return "combat"
++
++    return _turn_action_category(
++        " ".join(
++            [
++                _safe_str(row.get("player_action")),
++                _safe_str(row.get("canonical_turn_action")),
++                action_id,
++            ]
++        )
++    )
++
++
++def _authoritative_category_support(row: Dict[str, Any]) -> Dict[str, Any]:
++    row = _safe_dict(row)
++    action_id = _row_direct_action_id(row)
++    mechanics = _row_mechanics_set(row)
++    result = _safe_dict(row.get("result"))
++    turn_contract = _safe_dict(row.get("turn_contract"))
++    contract_result = _safe_dict(turn_contract.get("result"))
++    state_delta = _safe_dict(row.get("state_delta"))
++    contract_delta = _safe_dict(turn_contract.get("state_delta"))
++    direct = _safe_dict(row.get("direct_graph_action_completion"))
++
++    supports = {
++        "combat": bool(_turn_has_combat_support(row)),
++        "economy": bool(
++            "buying" in mechanics
++            or "economy" in mechanics
++            or "purchase" in mechanics
++            or result.get("purchase_result")
++            or contract_result.get("purchase_result")
++            or action_id.startswith("buy_")
++        ),
++        "service": bool(
++            "service" in mechanics
++            or "lodging" in mechanics
++            or "rent_room" in action_id
++            or action_id.startswith("rent_")
++            or result.get("service_result")
++            or contract_result.get("service_result")
++        ),
++        "travel": bool(
++            "travel" in mechanics
++            or "location_changed" in mechanics
++            or state_delta.get("location_changed")
++            or contract_delta.get("location_changed")
++            or result.get("location_changed")
++            or contract_result.get("location_changed")
++            or direct.get("location_delta")
++        ),
++        "evidence": bool(
++            "evidence" in mechanics
++            or "investigation" in mechanics
++            or action_id.startswith(("report_", "return_", "search_", "inspect_", "recover_", "deliver_", "decipher_", "read_"))
++        ),
++        "investigation": bool(
++            "investigation" in mechanics
++            or action_id.startswith(("search_", "inspect_", "scout_", "watch_", "track_", "examine_"))
++        ),
++        "dialogue": bool(
++            "dialogue" in mechanics
++            or "social" in mechanics
++            or action_id.startswith(("ask_", "tell_", "warn_", "report_", "question_", "persuade_", "confront_", "negotiate_"))
++        ),
++        "quest": bool("quest" in mechanics or action_id.startswith(("accept_", "complete_", "advance_quest_"))),
++        "lore": bool("lore" in mechanics),
++        "stealth": bool("stealth" in mechanics),
++    }
++    supports["social"] = supports["dialogue"]
++    supports["mixed"] = True
++    supports["general"] = True
++    return supports
++
++
++def _validate_presentation_intent_for_row(
++    row: Dict[str, Any],
++    *,
++    action_text: str = "",
++) -> Dict[str, Any]:
++    row = _safe_dict(row)
++    proposed = _extract_row_presentation_intent(row)
++    proposed_category = _normalize_presentation_category(proposed.get("primary_category"))
++    support = _authoritative_category_support(row)
++
++    fallback_category = _normalize_presentation_category(
++        _classify_visible_action_category_without_validated_intent(row)
++        or _turn_action_category(action_text or _safe_str(row.get("canonical_turn_action") or row.get("player_action")))
++    )
++
++    valid = bool(support.get(proposed_category, False))
++    repaired_category = proposed_category if valid else fallback_category
++    if not support.get(repaired_category, False) and repaired_category in {"combat", "travel", "service", "economy"}:
++        repaired_category = "general"
++
++    return {
++        "format_version": "validated_presentation_intent_v1",
++        "ok": valid,
++        "primary_category": repaired_category,
++        "proposed_category": proposed_category,
++        "secondary_categories": proposed.get("secondary_categories") or [],
++        "confidence": proposed.get("confidence") or 0.0,
++        "reason": "provider_intent_supported" if valid else "provider_intent_not_supported_by_authoritative_turn",
++        "provider_reason": proposed.get("reason") or "",
++        "support": support,
++    }
++
++
+ def _presentation_text_category(text: str) -> str:
+     text_n = _normalize_turn_action_text(text)
+ 
+@@ -7044,7 +7365,8 @@ def _dialogue_presentation_is_category_compatible(
+     presentation_text: str,
+     row: Dict[str, Any],
+ ) -> Tuple[bool, Dict[str, Any]]:
+-    action_category = _turn_action_category(action_text)
++    validated_intent = _validate_presentation_intent_for_row(row, action_text=action_text)
++    action_category = _normalize_presentation_category(validated_intent.get("primary_category"))
+     presentation_category = _presentation_text_category(presentation_text)
+ 
+     if not presentation_text.strip():
+@@ -7052,6 +7374,7 @@ def _dialogue_presentation_is_category_compatible(
+             "ok": True,
+             "action_category": action_category,
+             "presentation_category": presentation_category,
++            "validated_presentation_intent": validated_intent,
+             "reason": "empty_presentation",
+         }
+ 
+@@ -7060,12 +7383,21 @@ def _dialogue_presentation_is_category_compatible(
+             "ok": True,
+             "action_category": action_category,
+             "presentation_category": presentation_category,
++            "validated_presentation_intent": validated_intent,
+             "reason": "general_presentation",
+         }
+ 
+     compatible_pairs = {
+         ("dialogue", "investigation"),
+         ("investigation", "dialogue"),
++        ("dialogue", "evidence"),
++        ("evidence", "dialogue"),
++        ("evidence", "investigation"),
++        ("investigation", "evidence"),
++        ("mixed", "dialogue"),
++        ("mixed", "service"),
++        ("mixed", "investigation"),
++        ("mixed", "evidence"),
+         ("combat", "travel"),
+         ("travel", "combat"),
+     }
+@@ -7075,6 +7407,7 @@ def _dialogue_presentation_is_category_compatible(
+             "ok": True,
+             "action_category": action_category,
+             "presentation_category": presentation_category,
++            "validated_presentation_intent": validated_intent,
+             "reason": "category_match",
+         }
+ 
+@@ -7090,6 +7423,7 @@ def _dialogue_presentation_is_category_compatible(
+             "ok": True,
+             "action_category": action_category,
+             "presentation_category": presentation_category,
++            "validated_presentation_intent": validated_intent,
+             "reason": "combat_supported_by_mechanics",
+         }
+ 
+@@ -7097,6 +7431,7 @@ def _dialogue_presentation_is_category_compatible(
+         "ok": False,
+         "action_category": action_category,
+         "presentation_category": presentation_category,
++        "validated_presentation_intent": validated_intent,
+         "reason": "action_presentation_category_mismatch",
+     }
+ 
+@@ -7104,7 +7439,8 @@ def _dialogue_presentation_is_category_compatible(
+ def _build_category_compatible_presentation_fallback(row: Dict[str, Any]) -> str:
+     row = _safe_dict(row)
+     action = _safe_str(row.get("canonical_turn_action") or row.get("player_action"))
+-    category = _turn_action_category(action)
++    validated = _validate_presentation_intent_for_row(row, action_text=action)
++    category = _normalize_presentation_category(validated.get("primary_category"))
+ 
+     if category == "economy":
+         return "You complete the purchase; your supplies and coin totals are updated by the authoritative turn result."
+@@ -7121,34 +7457,56 @@ def _build_category_compatible_presentation_fallback(row: Dict[str, Any]) -> str
+     if category == "investigation":
+         return "You follow the clue trail; only evidence recorded by the authoritative turn result becomes true."
+ 
+-    if category == "dialogue":
++    if category in {"dialogue", "social"}:
+         return "The conversation continues; any NPC response is limited to the authoritative social and quest state."
+ 
++    if category == "evidence":
++        return "You put the evidence forward; only facts recorded by the authoritative turn result become true."
++
++    if category == "mixed":
++        return "The turn resolves across its recorded parts; only authoritative service, social, travel, combat, and evidence results apply."
++
+     return "The action resolves according to the authoritative turn result."
+ 
+ 
+ def _presentation_has_combat_claim(text: str) -> bool:
+     text_n = _normalize_turn_action_text(text)
+-    return any(
+-        term in text_n
+-        for term in (
+-            "combat",
+-            "fight",
+-            "fighting",
+-            "attack",
+-            "attacks",
+-            "strike",
+-            "strikes",
+-            "wound",
+-            "wounded",
+-            "blood",
+-            "blade",
+-            "bandit",
+-            "ambush",
+-            "damage",
+-            "xp",
++    active_combat_terms = (
++        "combat",
++        "fight",
++        "fighting",
++        "attack",
++        "attacks",
++        "strike",
++        "strikes",
++        "wound",
++        "wounded",
++        "draw your blade",
++        "raise your blade",
++        "damage",
++        "xp",
++    )
++    if any(term in text_n for term in active_combat_terms):
++        return True
++
++    # Ambush/bandit/blood can be evidence nouns. Treat them as combat only when
++    # paired with active combat framing.
++    if any(term in text_n for term in ("ambush", "bandit", "blood", "blade")):
++        return any(
++            term in text_n
++            for term in (
++                "press the fight",
++                "press the combat",
++                "you fight",
++                "you attack",
++                "you strike",
++                "the fight resolves",
++                "combat result",
++                "recorded damage",
++            )
+         )
+-    )
++
++    return False
+ 
+ 
+ def _turn_has_combat_support(row: Dict[str, Any]) -> bool:
+diff --git a/src/tests/rpg/test_autoplay_presentation_intent_finalizer.py b/src/tests/rpg/test_autoplay_presentation_intent_finalizer.py
+new file mode 100644
+index 0000000..2eca84f
+--- /dev/null
++++ b/src/tests/rpg/test_autoplay_presentation_intent_finalizer.py
+@@ -0,0 +1,102 @@
++from tests.rpg.autoplay_llm_campaign import (
++    _apply_turn_bound_presentation_compatibility_gate,
++    _attach_background_presentation_to_row,
++    _turn_action_category,
++    _validate_presentation_intent_for_row,
++)
++
++
++def test_keyword_fallback_no_longer_treats_ambush_report_as_combat():
++    assert _turn_action_category("I report the ambush evidence to Bran.") in {"dialogue", "mixed"}
++
++
++def test_keyword_fallback_no_longer_treats_scouting_as_combat():
++    assert _turn_action_category("I scout the quarry road for ambush signs.") == "investigation"
++
++
++def test_keyword_fallback_no_longer_treats_route_question_as_travel():
++    assert _turn_action_category("I ask Bran if the old east road leads to a bridge.") in {"dialogue", "mixed"}
++
++
++def test_finalizer_persists_presentation_intent_from_background_result():
++    row = {
++        "turn_index": 8,
++        "player_action": "I report the ambush evidence to Bran.",
++        "canonical_turn_action": "I report the ambush evidence to Bran.",
++        "direct_graph_action_completion": {
++            "action_id": "report_findings_to_bran",
++            "mechanics": ["dialogue", "evidence"],
++        },
++        "mechanics_covered_this_turn": ["dialogue", "evidence"],
++    }
++    result = {
++        "turn_index": 8,
++        "narration": "You lay out the evidence Bran needs to understand the ambush pattern.",
++        "presentation_intent": {
++            "primary_category": "evidence",
++            "secondary_categories": ["dialogue", "investigation"],
++            "confidence": 0.91,
++            "reason": "Reporting evidence to an NPC.",
++        },
++    }
++
++    attached = _attach_background_presentation_to_row(row, result)
++    repaired = _apply_turn_bound_presentation_compatibility_gate(attached)
++
++    assert repaired["presentation_intent"]["primary_category"] == "evidence"
++    assert repaired["llm_presentation_category"] == "evidence"
++    assert repaired["validated_presentation_category"] == "evidence"
++    assert repaired["validated_presentation_intent"]["ok"] is True
++
++
++def test_provider_combat_intent_is_rejected_without_authoritative_combat_support():
++    row = {
++        "player_action": "I report the ambush evidence to Bran.",
++        "canonical_turn_action": "I report the ambush evidence to Bran.",
++        "presentation_intent": {
++            "primary_category": "combat",
++            "secondary_categories": [],
++            "confidence": 0.91,
++            "reason": "bad provider over-read ambush keyword",
++        },
++        "direct_graph_action_completion": {
++            "action_id": "report_findings_to_bran",
++            "mechanics": ["dialogue", "evidence"],
++        },
++        "mechanics_covered_this_turn": ["dialogue", "evidence"],
++    }
++
++    validated = _validate_presentation_intent_for_row(row)
++
++    assert validated["ok"] is False
++    assert validated["proposed_category"] == "combat"
++    assert validated["primary_category"] in {"dialogue", "evidence", "mixed"}
++    assert validated["support"]["combat"] is False
++
++
++def test_unsupported_combat_presentation_gets_repaired_with_validated_intent():
++    row = {
++        "player_action": "I report the ambush evidence to Bran.",
++        "canonical_turn_action": "I report the ambush evidence to Bran.",
++        "narration": "You draw your blade and press the combat until the bandit ambush breaks.",
++        "display_narration": "You draw your blade and press the combat until the bandit ambush breaks.",
++        "presentation_intent": {
++            "primary_category": "evidence",
++            "secondary_categories": ["dialogue"],
++            "confidence": 0.9,
++            "reason": "reporting evidence",
++        },
++        "direct_graph_action_completion": {
++            "action_id": "report_findings_to_bran",
++            "mechanics": ["dialogue", "evidence"],
++        },
++        "mechanics_covered_this_turn": ["dialogue", "evidence"],
++    }
++
++    repaired = _apply_turn_bound_presentation_compatibility_gate(row)
++
++    assert repaired["presentation_status"] == "attached_repaired"
++    assert repaired["unsupported_combat_claim_suppressed"] is True
++    assert repaired["validated_presentation_category"] == "evidence"
++    assert "draw your blade" not in repaired["narration"].lower()
++    assert "combat" not in repaired["narration"].lower()

@@ -1,5 +1,4 @@
 """Phase 10.6 — Unit tests for orchestration layer."""
-import pytest
 
 from app.rpg.orchestration.controller import _request_id_counter
 from app.rpg.orchestration.fallback import (
@@ -12,11 +11,6 @@ from app.rpg.orchestration.provider_interface import (
     get_llm_provider_mode,
     set_llm_provider_mode,
 )
-from app.rpg.orchestration.replay import (
-    find_replayable_llm_request,
-    require_replayable_llm_request,
-)
-from app.rpg.orchestration.request_builder import build_llm_request_payload
 from app.rpg.orchestration.state import (
     _dedupe_and_sort_stream_events,
     _normalize_request,

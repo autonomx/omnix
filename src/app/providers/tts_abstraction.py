@@ -5,7 +5,6 @@ Provides a clean interface for swapping TTS providers without touching core logi
 Built on top of the existing BaseTTSProvider/AudioProviderRegistry system.
 """
 
-import base64
 import logging
 from abc import ABC, abstractmethod
 from typing import Any, Dict, Iterator, List, Optional

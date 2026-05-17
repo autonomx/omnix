@@ -13,7 +13,7 @@ import random
 from typing import Any, Dict, List, Optional
 
 from .npc_actor import NPCActor, NPCGoal
-from .strategy_profiles import STRATEGY_PROFILES, get_strategy_bias
+from .strategy_profiles import get_strategy_bias
 
 
 class Planner:

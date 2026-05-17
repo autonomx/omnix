@@ -13,7 +13,6 @@ from __future__ import annotations
 from typing import Any
 
 from .models import (
-    SUPPORTED_ENCOUNTER_MODES,
     EncounterResolution,
     EncounterState,
 )
@@ -426,9 +425,7 @@ class EncounterResolver:
     def resolve_combat_round(self, action: dict, seed: int | None = None) -> dict:
         """Resolve a combat round using the authoritative action resolver."""
         from app.rpg.action_resolver import (
-            resolve_attack_roll,
             resolve_player_action,
-            select_equipped_weapon,
         )
         sim = self._state if hasattr(self, '_state') else {}
         result = resolve_player_action(sim, action, seed)

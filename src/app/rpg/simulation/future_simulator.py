@@ -23,7 +23,7 @@ Example:
 """
 
 from dataclasses import dataclass, field
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from ..core.event_bus import Event
 from .sandbox import SimulationResult, SimulationSandbox

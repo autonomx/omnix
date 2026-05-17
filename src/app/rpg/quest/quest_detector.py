@@ -7,10 +7,9 @@ and world state conditions.
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
 from .quest_models import Quest
-from .quest_templates import QUEST_TYPE_ARC_MAP, get_arc_type_for_quest
 
 
 class QuestDetector:

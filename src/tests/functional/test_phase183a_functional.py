@@ -4,7 +4,6 @@ import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 
-import pytest
 
 from app.rpg.action_resolver import resolve_player_action
 from app.rpg.creator.world_expansion import (
@@ -27,7 +26,6 @@ from app.rpg.player.player_creation import apply_character_creation
 from app.rpg.player.player_progression_state import (
     award_player_xp,
     award_skill_xp,
-    ensure_player_progression_state,
     resolve_level_ups,
 )
 from app.rpg.player.player_xp_rules import (

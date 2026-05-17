@@ -16,9 +16,8 @@ from __future__ import annotations
 import os
 import sys
 from typing import Any, Dict
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
-import pytest
 
 SRC_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "..")
 sys.path.insert(0, SRC_DIR)

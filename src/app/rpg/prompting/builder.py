@@ -1,4 +1,3 @@
-from rpg.models.npc import NPC
 
 
 def build_prompt(npc, scene, memory):

@@ -3,7 +3,6 @@ Unit tests for backend utility functions.
 Tests do not require external services (LLM, TTS, STT).
 """
 
-import json
 import os
 import sys
 
@@ -213,9 +212,8 @@ class TestSessionManagement:
     
     def test_session_structure(self):
         """Test that sessions have correct structure."""
-        import tempfile
 
-        from app import load_sessions, save_sessions
+        from app import load_sessions
         
         # Sessions should be a dict
         sessions = load_sessions()
@@ -241,7 +239,6 @@ class TestWAVGeneration:
     
     def test_wav_header_creation(self):
         """Test that WAV headers are created correctly."""
-        import struct
         
         # Test creating a basic WAV header
         sample_rate = 24000

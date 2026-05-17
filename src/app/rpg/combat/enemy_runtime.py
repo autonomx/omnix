@@ -4,7 +4,7 @@ from copy import deepcopy
 from typing import Any, Dict, List
 
 from app.rpg.combat.abilities import resolve_combat_ability
-from app.rpg.combat.apply import apply_defense_resolution, apply_flee_resolution
+from app.rpg.combat.apply import apply_defense_resolution
 from app.rpg.combat.enemy_ai import (
     choose_enemy_intent,
     mark_enemy_fled,

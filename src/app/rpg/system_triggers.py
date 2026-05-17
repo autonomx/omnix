@@ -8,7 +8,7 @@ where famine causes crime, anger escalates to conflict, and resource
 scarcity drives NPC behaviour changes.
 """
 
-from typing import Any, Dict, List
+from typing import List
 
 from app.rpg.models import GameSession, PendingConsequence
 

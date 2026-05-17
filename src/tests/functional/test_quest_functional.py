@@ -8,10 +8,8 @@ This module tests the complete quest system workflow:
 - End-to-end event processing pipeline
 """
 
-import pytest
 
 from app.rpg.quest.quest_engine import QuestEngine
-from app.rpg.quest.quest_models import Quest, QuestObjective, QuestStage
 
 # ==================== Multi-Stage Quest Progression ====================
 

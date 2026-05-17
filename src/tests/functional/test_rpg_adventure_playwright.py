@@ -13,11 +13,8 @@ Requires: playwright, Python subprocess for server management
 """
 from __future__ import annotations
 
-import json
 import os
-import signal
 import subprocess
-import sys
 import time
 from pathlib import Path
 from typing import List, Optional
@@ -374,13 +371,13 @@ class TestRPGAdventureCreation:
         # Wait for the response (narrative should grow)
         try:
             page.wait_for_function(
-                f"""
-                (initialCount) => {{
+                """
+                (initialCount) => {
                     const feed = document.getElementById('rpgNarrativeFeed');
                     if (!feed) return false;
                     const msgs = feed.querySelectorAll('.rpg-msg');
                     return msgs.length > initialCount;
-                }}
+                }
                 """,
                 initial_count,
                 timeout=TEST_TIMEOUT,
@@ -413,13 +410,13 @@ class TestRPGAdventureCreation:
         # Wait for response
         try:
             page.wait_for_function(
-                f"""
-                (initialCount) => {{
+                """
+                (initialCount) => {
                     const feed = document.getElementById('rpgNarrativeFeed');
                     if (!feed) return false;
                     const msgs = feed.querySelectorAll('.rpg-msg');
                     return msgs.length > initialCount;
-                }}
+                }
                 """,
                 initial_count,
                 timeout=TEST_TIMEOUT,
@@ -450,13 +447,13 @@ class TestRPGAdventureCreation:
         # Wait for response
         try:
             page.wait_for_function(
-                f"""
-                (initialCount) => {{
+                """
+                (initialCount) => {
                     const feed = document.getElementById('rpgNarrativeFeed');
                     if (!feed) return false;
                     const msgs = feed.querySelectorAll('.rpg-msg');
                     return msgs.length > initialCount;
-                }}
+                }
                 """,
                 initial_count,
                 timeout=TEST_TIMEOUT,
@@ -585,10 +582,10 @@ def run_rpg_playwright_test():
                     # Wait for response
                     try:
                         page.wait_for_function(
-                            f"""(cur) => {{
+                            """(cur) => {
                                 const feed = document.getElementById('rpgNarrativeFeed');
                                 return feed && feed.querySelectorAll('.rpg-msg').length > cur;
-                            }}""",
+                            }""",
                             current_count,
                             timeout=TEST_TIMEOUT
                         )

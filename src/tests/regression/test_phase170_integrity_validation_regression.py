@@ -3,7 +3,6 @@
 This module ensures that future changes don't break the integrity
 validation guarantees established in Phase 17.0.
 """
-import pytest
 
 from app.rpg.validation.integrity import (
     validate_memory_state,

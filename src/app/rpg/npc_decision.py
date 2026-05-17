@@ -6,7 +6,7 @@ to determine what action the NPC would take *before* the LLM refines the
 narrative.  This keeps NPC behaviour consistent and emotion-driven.
 """
 
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Tuple
 
 
 def decide_npc_action(

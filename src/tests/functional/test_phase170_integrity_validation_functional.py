@@ -3,7 +3,6 @@ import pytest
 
 from app.rpg.validation.integrity import (
     assert_package_integrity,
-    assert_session_integrity,
     validate_memory_state,
     validate_package_integrity,
     validate_session_integrity,

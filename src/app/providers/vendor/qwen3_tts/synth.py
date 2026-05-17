@@ -7,9 +7,8 @@ to stable internal contracts.
 
 import logging
 from pathlib import Path
-from typing import Any, Dict, Optional, Union
+from typing import Optional
 
-import numpy as np
 
 from app.shared import VOICE_CLONES_DIR
 

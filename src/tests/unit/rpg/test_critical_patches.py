@@ -1,7 +1,6 @@
 """Tests for Critical Patches — ActionResolver, StoryArc, NPCState, Resources, ProbabilisticExecutor."""
 
-import random
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -219,7 +218,6 @@ class TestMemoryRelevance:
         
     def test_select_relevant_no_manager(self):
         """Without memory_manager, select_relevant_memories raises AttributeError."""
-        import pytest
         from rpg.ai.behavior_driver import BehaviorDriver
         driver = BehaviorDriver(memory_manager=None)
         # The current implementation doesn't handle None memory_manager
@@ -335,7 +333,7 @@ class TestSceneConstraints:
     """Test scene-based action constraints."""
     
     def setup_method(self):
-        from rpg.scene.scene_manager import Scene
+        pass
         
     def test_stealth_scene_restrictions(self):
         """Stealth scenes should restrict attack."""
@@ -374,7 +372,7 @@ class TestResourceSystem:
     """Test resource management."""
     
     def setup_method(self):
-        from rpg.world.resource_system import ResourceManager, ResourcePool
+        from rpg.world.resource_system import ResourcePool
         self.pool = ResourcePool("player", initial_stamina=100)
         
     def test_consume_stamina(self):

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Dict, List
+from typing import Any, Dict
 
 from tests.rpg.manual.extractors.base import (
     _extract_nested_dict_by_key,

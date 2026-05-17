@@ -14,12 +14,11 @@ import os
 import sys
 from unittest.mock import MagicMock
 
-import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "..", "app"))
 
 from rpg.ai.goal_generator import GoalGenerator
-from rpg.ai.intent_engine import ACTION_BELIEF_EFFECTS, IntentEngine
+from rpg.ai.intent_engine import IntentEngine
 from rpg.ai.npc_actor import NPCActor, NPCGoal
 from rpg.ai.opposition_engine import OppositionEngine
 from rpg.ai.planner import Planner

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import pytest
 
 from app.rpg.creator.world_debug import (
     explain_faction,

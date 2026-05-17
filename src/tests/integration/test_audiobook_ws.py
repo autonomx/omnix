@@ -6,15 +6,10 @@ Tests for server_fastapi functions use source file inspection since uvicorn
 is not available in the sandboxed test environment (same as Flask).
 """
 
-import json
 import os
 import re
 import sys
-import threading
-import time
 
-import numpy as np
-import pytest
 
 # Ensure src/ is on the path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))

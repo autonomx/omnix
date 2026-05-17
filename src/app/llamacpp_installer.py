@@ -8,12 +8,10 @@ Provides both Python wheel installation and binary download capabilities.
 import json
 import os
 import platform
-import shutil
 import subprocess
 import sys
 import tarfile
 import threading
-import time
 import urllib.error
 import urllib.request
 import zipfile
@@ -281,8 +279,6 @@ class LlamaCppInstaller:
     
     def download_and_extract_server(self, progress_callback=None) -> Dict[str, Any]:
         """Download and extract the llama.cpp server binary."""
-        import io
-        import sys
         
         with self.installation_lock:
             if self.is_server_binary_available():

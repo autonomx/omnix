@@ -11,15 +11,13 @@ All LLM calls are mocked to ensure deterministic, fast tests.
 
 import os
 import sys
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
-import pytest
 
 # Add app directory to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', 'app'))
 
 from rpg.ai.dialogue.dialogue_manager import DialogueManager
-from rpg.player import ensure_player_state
 from rpg.services.adventure_builder_service import (
     build_template_payload,
     get_templates,

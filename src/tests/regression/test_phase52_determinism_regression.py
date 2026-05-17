@@ -14,15 +14,13 @@ import os
 import sys
 import unittest
 from collections import deque
-from typing import Any, Dict, List, Optional
-from unittest.mock import MagicMock, patch
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', '..'))
 
 from app.rpg.core.clock import DeterministicClock
 from app.rpg.core.determinism import DeterminismConfig
 from app.rpg.core.event_bus import Event, EventBus, EventContext
-from app.rpg.core.replay_engine import ReplayConfig, ReplayEngine
+from app.rpg.core.replay_engine import ReplayEngine
 
 # ---------------------------------------------------------------------------
 # Backward Compatibility Tests
@@ -407,7 +405,6 @@ class TestPhase52DeterministicReplayRegression(unittest.TestCase):
 
     def test_replay_mode_flag_resets_after_exception(self):
         """Replay mode flag should be reset even if replay throws."""
-        from app.rpg.core.replay_engine import ReplayEngine
 
         class DummyLoop:
             def __init__(self):
