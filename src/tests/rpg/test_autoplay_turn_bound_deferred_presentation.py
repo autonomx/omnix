@@ -60,7 +60,7 @@ def test_late_background_result_attaches_to_matching_old_turn_not_latest():
 
     assert event["attached"] is True
     assert event["row_index"] == 0
-    assert transcript[0]["presentation_status"] in {"attached", "attached_repaired"}
+    assert transcript[0]["presentation_status"] in {"attached", "attached_repaired", "attached_hard_repaired", "attached_metadata_repaired", "attached_soft_reclassified"}
     assert "traveler" in transcript[0].get("npc", {}).get("line", "")
     assert transcript[1]["presentation_status"] == "pending"
     assert transcript[1].get("npc", {}) == {}

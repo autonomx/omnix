@@ -104,12 +104,15 @@ def _normalize_presentation_intent(value: Any) -> Dict[str, Any]:
         raw.get("primary_category")
         or raw.get("category")
         or raw.get("primary")
+        or raw.get("intent_category")
+        or raw.get("label")
     )
     secondary: List[str] = []
     for item in _safe_list(
         raw.get("secondary_categories")
         or raw.get("secondary")
         or raw.get("categories")
+        or raw.get("secondary_intents")
     ):
         normalized = _normalize_presentation_category(item)
         if normalized and normalized != primary and normalized not in secondary:
@@ -126,8 +129,69 @@ def _normalize_presentation_intent(value: Any) -> Dict[str, Any]:
         "primary_category": primary,
         "secondary_categories": secondary[:4],
         "confidence": round(confidence, 3),
-        "reason": _safe_str(raw.get("reason"))[:240],
+        "reason": _safe_str(raw.get("reason") or raw.get("rationale"))[:240],
     }
+
+
+def _find_presentation_intent_candidate(payload: Any) -> Tuple[Dict[str, Any], str]:
+    """Return provider intent from common local-model JSON shapes.
+
+    N115 runs showed the finalizer was often seeing `general` because useful
+    intent was either omitted or nested under a different key. Keep this
+    extractor liberal, then let deterministic validation clamp unsupported
+    categories later.
+    """
+    payload = _safe_dict(payload)
+    if not payload:
+        return {}, "missing"
+
+    direct_keys = (
+        "presentation_intent",
+        "intent",
+        "presentationIntent",
+        "classification",
+        "category",
+        "intent_category",
+    )
+    for key in direct_keys:
+        value = payload.get(key)
+        if isinstance(value, dict):
+            return value, key
+        if isinstance(value, str) and value.strip():
+            return {"primary_category": value.strip()}, key
+
+    nested_paths = (
+        ("presentation", "intent"),
+        ("presentation", "presentation_intent"),
+        ("narration", "presentation_intent"),
+        ("narration", "intent"),
+        ("narration_payload", "presentation_intent"),
+        ("narration_payload", "intent"),
+        ("structured_narration", "presentation_intent"),
+        ("structured_narration", "intent"),
+        ("result", "presentation_intent"),
+        ("result", "intent"),
+        ("data", "presentation_intent"),
+        ("data", "intent"),
+        ("payload", "presentation_intent"),
+        ("payload", "intent"),
+    )
+    for path in nested_paths:
+        cursor: Any = payload
+        ok = True
+        for key in path:
+            cursor = _safe_dict(cursor).get(key)
+            if cursor is None:
+                ok = False
+                break
+        if not ok:
+            continue
+        if isinstance(cursor, dict):
+            return cursor, ".".join(path)
+        if isinstance(cursor, str) and cursor.strip():
+            return {"primary_category": cursor.strip()}, ".".join(path)
+
+    return {}, "missing"
 
 
 def _safe_list(value: Any) -> List[Any]:
@@ -698,10 +762,10 @@ def _extract_nested_combined_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
         normalized["reward"] = payload.get("reward")
     if "followup_hooks" in payload:
         normalized["followup_hooks"] = _normalize_followup_hooks(payload.get("followup_hooks"))
-    if "presentation_intent" in payload or "intent" in payload:
-        normalized["presentation_intent"] = _normalize_presentation_intent(
-            payload.get("presentation_intent") or payload.get("intent")
-        )
+    provider_intent_candidate, provider_intent_source = _find_presentation_intent_candidate(payload)
+    if provider_intent_candidate:
+        normalized["presentation_intent"] = _normalize_presentation_intent(provider_intent_candidate)
+        normalized["presentation_intent_parse_source"] = provider_intent_source
 
     narration_payload = _safe_dict(
         payload.get("narration_payload")
@@ -730,12 +794,11 @@ def _extract_nested_combined_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
             _normalize_followup_hooks(narration_payload.get("followup_hooks"))
             or _normalize_followup_hooks(payload.get("followup_hooks"))
         )
-        normalized["presentation_intent"] = _normalize_presentation_intent(
-            narration_payload.get("presentation_intent")
-            or narration_payload.get("intent")
-            or payload.get("presentation_intent")
-            or payload.get("intent")
+        provider_intent_candidate, provider_intent_source = _find_presentation_intent_candidate(
+            {**payload, "narration_payload": narration_payload}
         )
+        normalized["presentation_intent"] = _normalize_presentation_intent(provider_intent_candidate)
+        normalized["presentation_intent_parse_source"] = provider_intent_source
 
     advisory_payload = _safe_dict(
         payload.get("advisory")
@@ -932,9 +995,13 @@ def _build_combined_background_payload(
                 "You are an RPG background enrichment worker. Return JSON only. "
                 "You must not assert authoritative outcomes that are not in the turn contract. "
                 "Do not grant items, currency, quest completion, damage, travel, or rewards. "
-                "Classify presentation_intent as semantic presentation metadata only; the turn contract remains authoritative. "
+                "You MUST set presentation_intent.primary_category to the most specific semantic intent. "
+                "Do not use general unless no specific category applies. "
+                "Category labels are presentation metadata only; they do not create facts. "
                 "Use combat only when compact context shows combat actually started, advanced, or resolved. "
-                "Words like ambush, bandit, scout, road, room, or supplies are not enough by themselves to classify the turn as combat, travel, service, or economy. "
+                "Use travel only when the turn is primarily movement or location change; asking about a route is dialogue. "
+                "Use service/economy only when the resolved turn actually rents, rests, buys, sells, or pays. "
+                "Words like ambush, bandit, scout, road, room, supplies, or coin are not enough by themselves to classify the turn as combat, travel, service, or economy. "
                 "For reporting evidence, questioning NPCs, warning NPCs, or asking about routes, prefer dialogue/evidence/investigation over combat/travel. "
                 "Return one JSON object and no markdown fences, no prose, no commentary. "
                 "Maintain rich 2-5 sentence narration quality. Use only the provided compact context. "
@@ -959,10 +1026,14 @@ def _build_combined_background_payload(
                 "max 1 memory, max 1 world_signal, max 1 future_hook. "
                 "Each candidate summary must be under 160 characters. "
                 "Narration remains high quality and should not be shortened below 2 sentences.\n\n"
-                "presentation_intent examples:\n"
+                "presentation_intent rules:\n"
+                "- Choose exactly one primary_category from the schema. Never omit presentation_intent.\n"
+                "- Prefer the most specific true intent over general or mixed.\n"
+                "- Use mixed only for genuinely multi-objective turns where no single category dominates.\n"
                 "- 'I report the ambush evidence to Bran' => evidence, secondary dialogue/investigation, not combat.\n"
                 "- 'I scout the quarry road for ambush signs' => investigation, secondary evidence, not combat.\n"
                 "- 'I ask Bran if the east road leads to a bridge' => dialogue, secondary travel, not travel.\n"
+                "- 'I ask Bran who left through the side door' => dialogue, secondary investigation.\n"
                 "- 'I rent a room from Bran' => service.\n\n"
                 "Profile grounding rule: when loaded_npc_profiles is non-empty, use it only for NPC continuity. "
                 "For example, a trusting NPC may sound warmer, a guarded NPC may be cautious, "
@@ -1010,11 +1081,11 @@ def _build_combined_background_payload(
                 or _has_expected_combined_provider_keys(parsed)
             ):
                 normalized["ok"] = True
-                normalized["presentation_intent"] = _normalize_presentation_intent(
-                    normalized.get("presentation_intent")
-                    or parsed.get("presentation_intent")
-                    or parsed.get("intent")
+                provider_intent_candidate, provider_intent_source = _find_presentation_intent_candidate(
+                    {**parsed, **normalized}
                 )
+                normalized["presentation_intent"] = _normalize_presentation_intent(provider_intent_candidate)
+                normalized["presentation_intent_parse_source"] = provider_intent_source
                 normalized.setdefault("raw_provider_shape_keys", sorted(list(parsed.keys()))[:80])
                 normalized.setdefault("prompt_metrics", prompt_metrics)
                 normalized.setdefault("context_packet_keys", sorted(list(context_packet.keys())))
@@ -1212,9 +1283,16 @@ def _combined_background_llm_job(
             source = "combined_background_llm_fallback"
 
         if source == "provider_combined_background_llm":
+            presentation_intent = _normalize_presentation_intent(provider_payload.get("presentation_intent"))
+            diagnostics["provider_intent_parse_source"] = _safe_str(
+                provider_payload.get("presentation_intent_parse_source")
+            ) or "missing"
+            diagnostics["provider_intent_missing"] = presentation_intent.get("primary_category") == "general" and not presentation_intent.get("secondary_categories")
+            diagnostics["provider_intent_general"] = presentation_intent.get("primary_category") == "general"
             narration_payload = {
                 "format_version": "rpg_narration_v2",
                 "source": "provider_runtime_narration",
+                "presentation_intent": presentation_intent,
                 "narration": _safe_str(provider_payload.get("narration")) or "The scene settles after the action.",
                 "action": _safe_str(provider_payload.get("action")) or "The action has been resolved.",
                 "npc": _safe_dict(provider_payload.get("npc")),
@@ -1249,6 +1327,13 @@ def _combined_background_llm_job(
                 turn_contract=freeze_snapshot(_safe_dict(turn_contract)),
                 prefer_provider=False,
             )
+            narration_payload["presentation_intent"] = {
+                "format_version": "presentation_intent_v1",
+                "primary_category": "general",
+                "secondary_categories": [],
+                "confidence": 0.0,
+                "reason": "deterministic_fallback_no_provider_intent",
+            }
             candidates = build_deterministic_advisory_candidates(
                 session_id=session_id,
                 turn_index=turn_index,
@@ -1273,6 +1358,7 @@ def _combined_background_llm_job(
             "advisory_summary": advisory_candidate_summary(candidates),
             "diagnostics": diagnostics,
             "prompt_metrics": _safe_dict(diagnostics.get("prompt_metrics")),
+            "presentation_intent": _safe_dict(narration_payload.get("presentation_intent")),
             "profile_context_summary": _safe_dict(diagnostics.get("profile_context_summary")),
             "worker_ms": elapsed_ms(started),
             "queue_timing": _queue_timing(

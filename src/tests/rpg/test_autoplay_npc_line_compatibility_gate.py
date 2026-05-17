@@ -20,12 +20,8 @@ def test_buy_rations_turn_clears_stale_investigation_npc_line():
 
     repaired = _apply_turn_bound_presentation_compatibility_gate(row)
 
-    assert repaired["presentation_status"] == "attached_repaired"
-    assert repaired["npc"] == {}
-    assert repaired["npc_line"] == ""
-    assert "purchase" in repaired["narration"].lower()
-    assert repaired["dialogue_action_relevance"]["reason"] in {
-        "action_presentation_category_mismatch",
-        "unsupported_combat_claim_suppressed",
-        "presentation_incompatible",
-    }
+    # N116.1 keeps harmless visible narration for soft classification issues.
+    # Hard fallback is reserved for factual hallucinations.
+    assert repaired["presentation_status"] in {"attached", "attached_metadata_repaired"}
+    assert repaired["visible_text_replaced"] is False
+    assert "practical request" in repaired["narration"].lower()

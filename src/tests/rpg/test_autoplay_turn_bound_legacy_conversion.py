@@ -81,7 +81,7 @@ def test_legacy_background_timing_event_converts_to_turn_bound_attachment():
     assert events[0]["legacy_observed_only"] is False
     assert events[0]["row_index"] == 0
 
-    assert transcript[0]["presentation_status"] in {"attached", "attached_repaired"}
+    assert transcript[0]["presentation_status"] in {"attached", "attached_repaired", "attached_hard_repaired", "attached_metadata_repaired", "attached_soft_reclassified"}
     assert "witness" in transcript[0]["narration"].lower()
     assert transcript[1]["presentation_status"] == "pending"
     assert transcript[1].get("npc", {}) == {}
