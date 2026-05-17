@@ -1,224 +1,540 @@
-N113.14.2 — Make Final Health Computed Lazily at Artifact Write
+N114.1.5 — Slim Transcript Return Fix + Bounded Transcript Artifacts
 
 Patch only:
 
 src/tests/rpg/autoplay_llm_campaign.py
-1. Add helper: force final authoritative health
 
-Add near _build_final_autoplay_health(...):
+Do not replace _run_autoplay_campaign(...).
+Do not remove the background attachment sentinel.
+Do not weaken the legacy/turn-bound diagnostic.
+This patch fixes the artifact problem from run 301:
 
-def _force_final_autoplay_health(summary: Dict[str, Any]) -> Dict[str, Any]:
-    summary = _safe_dict(summary)
+✅ transcript.json is now real but huge
+❌ slim-transcript.json contains null rows
+❌ transcript artifacts are 700MB+
 
-    evaluation = _safe_dict(summary.get("hundred_turn_evaluation"))
-    readiness = _safe_dict(summary.get("hundred_turn_readiness_summary"))
+The current diff already added many attachment/transcript helpers, but the slim transcript still likely fails because _slim_transcript_row(...) does not return slim_row on all paths. The diff also shows _slim_transcript_row(...) adds fields but the shown function segment has no visible return slim_row, which matches the 100-null slim artifact symptom.
 
-    if bool(summary.get("ok")) and bool(evaluation.get("ok")) and bool(readiness.get("ok")):
-        # quality_gate_summary is allowed to be stale/advisory once authoritative
-        # 100-turn evaluation and readiness are green.
-        health = _build_final_autoplay_health(summary)
-        if not bool(health.get("ok")):
-            health = dict(health)
-            health["ok"] = True
-            health["summary_ok"] = True
-            health["hundred_turn_evaluation_ok"] = True
-            health["hundred_turn_readiness_ok"] = True
-            health["failed_gate_count"] = 0
-            health["failed_evaluation_gates"] = []
-            health["failed_readiness_gates"] = []
-            health["quality_gate_summary_advisory"] = True
-            health["warnings"] = [
-                w
-                for w in _safe_list(health.get("warnings"))
-                if _safe_str(w) != "quality_gate_summary_failed"
-            ]
-        return health
+1. Fix _slim_transcript_row(...) to always return a dict
 
-    return _build_final_autoplay_health(summary)
+Find:
 
-This protects the final artifact from stale quality_gate_summary and stale pre-final summary.ok snapshots.
+def _slim_transcript_row(row: Dict[str, Any], max_row_bytes: int = 50000) -> Dict[str, Any]:
 
-2. Use forced health immediately before writing artifacts
+At the end of the function, make sure it has:
 
-Find the final artifact-writing block.
+    return slim_row
 
-Immediately before summary.json is written, add:
+Also guard the function start:
 
-summary["autoplay_health"] = _force_final_autoplay_health(summary)
+def _slim_transcript_row(row: Dict[str, Any], max_row_bytes: int = 50000) -> Dict[str, Any]:
+    row = _safe_dict(row)
+    slim_row: Dict[str, Any] = {}
 
-Then keep consistency check after that:
+If there are early exits, replace them with dict returns:
 
-_assert_final_artifact_consistency(summary)
+if not row:
+    return {
+        "empty_transcript_row_repaired": True,
+        "presentation_status": "missing_row",
+    }
 
-The order must be:
+Do not allow any path to return None.
 
-summary["autoplay_health"] = _force_final_autoplay_health(summary)
-_assert_final_artifact_consistency(summary)
+2. Add bounded JSON helper
 
-_zip_writestr_json(..., "summary.json", summary)
+Add near artifact/transcript helpers:
 
-Not before final evaluation/readiness. Not before summary["ok"] is finalized.
+def _json_size_bytes(value: Any) -> int:
+    try:
+        return len(
+            json.dumps(
+                value,
+                ensure_ascii=False,
+                sort_keys=True,
+                default=str,
+            ).encode("utf-8", errors="replace")
+        )
+    except Exception:
+        return len(repr(value).encode("utf-8", errors="replace"))
 
-3. Make autoplay-health.json payload computed from final summary only
 
-Find the artifact write for:
+def _bounded_transcript_row(
+    row: Dict[str, Any],
+    *,
+    max_row_bytes: int = 50000,
+) -> Dict[str, Any]:
+    row = _safe_dict(row)
+    slim = _slim_transcript_row(row, max_row_bytes=max_row_bytes)
 
-autoplay-health.json
+    if _json_size_bytes(slim) <= max_row_bytes:
+        return slim
 
-Replace the payload with:
+    # Last-resort bounded fallback. Keep identity/action/debug pointers only.
+    bounded = {
+        "turn_index": row.get("turn_index") or row.get("turn"),
+        "turn_id": row.get("turn_id"),
+        "player_action": row.get("player_action"),
+        "canonical_turn_action": row.get("canonical_turn_action"),
+        "actual_sent_action": row.get("actual_sent_action"),
+        "action_category": row.get("action_category"),
+        "presentation_status": row.get("presentation_status"),
+        "narration": _safe_str(
+            row.get("selected_narration")
+            or row.get("display_narration")
+            or row.get("narration")
+        )[:2000],
+        "npc": _safe_dict(row.get("npc")),
+        "dialogue_presentation_compatibility": row.get("dialogue_presentation_compatibility"),
+        "dialogue_action_relevance": row.get("dialogue_action_relevance"),
+        "direct_graph_action_completion": row.get("direct_graph_action_completion"),
+        "mechanics_covered_this_turn": row.get("mechanics_covered_this_turn"),
+        "background_presentation_result": row.get("background_presentation_result"),
+        "turn_presentation_identity": row.get("turn_presentation_identity"),
+        "row_truncated": True,
+        "original_row_bytes_estimate": _json_size_bytes(row),
+    }
 
-final_autoplay_health = _force_final_autoplay_health(summary)
-summary["autoplay_health"] = final_autoplay_health
+    if _json_size_bytes(bounded) <= max_row_bytes:
+        return bounded
+
+    # Extreme fallback.
+    return {
+        "turn_index": row.get("turn_index") or row.get("turn"),
+        "turn_id": row.get("turn_id"),
+        "player_action": _safe_str(row.get("player_action"))[:1000],
+        "canonical_turn_action": _safe_str(row.get("canonical_turn_action"))[:1000],
+        "action_category": row.get("action_category"),
+        "presentation_status": row.get("presentation_status"),
+        "row_truncated": True,
+        "row_extreme_truncated": True,
+        "original_row_bytes_estimate": _json_size_bytes(row),
+    }
+
+
+def _build_bounded_transcript_rows(
+    transcript_rows: List[Dict[str, Any]],
+    *,
+    max_row_bytes: int = 50000,
+) -> List[Dict[str, Any]]:
+    return [
+        _bounded_transcript_row(_safe_dict(row), max_row_bytes=max_row_bytes)
+        for row in _safe_list(transcript_rows)
+    ]
+3. Add full transcript write policy
+
+Add helper:
+
+def _should_write_full_transcript(args: argparse.Namespace) -> bool:
+    artifact_detail = _safe_str(getattr(args, "artifact_detail", ""))
+    return artifact_detail.lower() in {"full", "debug", "maximum", "max"}
+
+The existing command uses --artifact-detail full, so full transcript can still be written for this run. But default behavior should be bounded.
+
+4. Use bounded rows for transcript.json
+
+Find where final_transcript_rows is built.
+
+Immediately after:
+
+final_transcript_rows = _build_final_transcript_artifact_rows(...)
+
+add:
+
+bounded_transcript_rows = _build_bounded_transcript_rows(
+    final_transcript_rows,
+    max_row_bytes=50000,
+)
+
+slim_transcript_rows = [
+    _slim_transcript_row(row, max_row_bytes=25000)
+    for row in final_transcript_rows
+]
+
+Then force no None:
+
+if any(row is None for row in slim_transcript_rows):
+    raise RuntimeError("slim_transcript_rows_null_after_build")
+
+if any(row is None for row in bounded_transcript_rows):
+    raise RuntimeError("bounded_transcript_rows_null_after_build")
+
+Now write:
 
 _zip_writestr_json(
     zip_handle,
     artifact_manifest,
-    "autoplay-health.json",
-    final_autoplay_health,
+    "transcript.json",
+    bounded_transcript_rows,
 )
 
-Do not use:
+Do not write final_transcript_rows to transcript.json.
 
-health
-summary.get("health")
-summary.get("autoplay_health")
-
-unless it has just been assigned from _force_final_autoplay_health(summary).
-
-4. Remove or neutralize stale final-health postcondition
-
-If you currently have this before the final authoritative status is stable:
-
-_assert_final_artifact_consistency(summary)
-
-move it to just before summary.json write, after:
-
-summary["autoplay_health"] = _force_final_autoplay_health(summary)
-
-If the consistency check runs earlier, it can only validate stale values.
-
-5. Patch _assert_final_artifact_consistency(...) to ignore advisory quality gate
-
-Inside _assert_final_artifact_consistency(...), make sure it only compares authoritative values:
-
-def _assert_final_artifact_consistency(summary: Dict[str, Any]) -> None:
-    summary = _safe_dict(summary)
-
-    health = _safe_dict(summary.get("autoplay_health"))
-    evaluation = _safe_dict(summary.get("hundred_turn_evaluation"))
-    readiness = _safe_dict(summary.get("hundred_turn_readiness_summary"))
-
-    authoritative_ok = bool(summary.get("ok")) and bool(evaluation.get("ok")) and bool(readiness.get("ok"))
-
-    if authoritative_ok and not bool(health.get("ok")):
-        raise RuntimeError(
-            "final_artifact_consistency_failed:"
-            f"authoritative_ok=true:health={health}"
-        )
-
-    if bool(summary.get("ok")) != bool(health.get("summary_ok")):
-        raise RuntimeError(
-            "final_artifact_consistency_failed:"
-            f"summary_ok={summary.get('ok')}:health_summary_ok={health.get('summary_ok')}"
-        )
-
-    if bool(evaluation.get("ok")) != bool(health.get("hundred_turn_evaluation_ok")):
-        raise RuntimeError(
-            "final_artifact_consistency_failed:"
-            f"evaluation_ok={evaluation.get('ok')}:"
-            f"health_evaluation_ok={health.get('hundred_turn_evaluation_ok')}"
-        )
-
-    if bool(readiness.get("ok")) != bool(health.get("hundred_turn_readiness_ok")):
-        raise RuntimeError(
-            "final_artifact_consistency_failed:"
-            f"readiness_ok={readiness.get('ok')}:"
-            f"health_readiness_ok={health.get('hundred_turn_readiness_ok')}"
-        )
-
-    failed_eval = _safe_list(evaluation.get("failed_gates"))
-    failed_ready = _safe_list(readiness.get("failed_gates"))
-
-    if authoritative_ok and (failed_eval or failed_ready):
-        raise RuntimeError(
-            "final_artifact_consistency_failed:"
-            f"authoritative_ok_with_failed_gates:"
-            f"evaluation={failed_eval}:readiness={failed_ready}"
-        )
-
-Do not inspect quality_gate_summary here. It is now advisory.
-
-6. Add a hard check immediately before zip close
-
-Right after all artifact writes, before returning summary, add:
-
-final_health = _safe_dict(summary.get("autoplay_health"))
-if bool(summary.get("ok")) and not bool(final_health.get("ok")):
-    raise RuntimeError(
-        "autoplay_health_final_write_failed:"
-        f"summary_ok={summary.get('ok')}:"
-        f"evaluation_ok={_safe_dict(summary.get('hundred_turn_evaluation')).get('ok')}:"
-        f"readiness_ok={_safe_dict(summary.get('hundred_turn_readiness_summary')).get('ok')}:"
-        f"health={final_health}"
-    )
-7. Add regression test for exact stale-health shape
-
-Patch/create:
-
-src/tests/rpg/test_autoplay_final_health_rebuild.py
+5. Write full-transcript.json only in full artifact mode
 
 Add:
 
-from tests.rpg.autoplay_llm_campaign import _force_final_autoplay_health
+if _should_write_full_transcript(args):
+    _zip_writestr_json(
+        zip_handle,
+        artifact_manifest,
+        "full-transcript.json",
+        final_transcript_rows,
+    )
 
+This preserves deep debug capability but prevents the main transcript.json from becoming 700MB.
 
-def test_force_final_autoplay_health_repairs_stale_quality_gate_snapshot():
-    summary = {
-        "ok": True,
-        "turns_executed": 100,
-        "requested_turns": 100,
-        "runtime_errors": [],
-        "warnings": [],
-        "quality_gate_summary": {
-            "ok": False,
-            "failed_gates": ["old_stale_gate"],
-        },
-        "hundred_turn_evaluation": {
-            "ok": True,
-            "failed_gates": [],
-        },
-        "hundred_turn_readiness_summary": {
-            "ok": True,
-            "failed_gates": [],
-        },
-        "autoplay_health": {
-            "ok": False,
-            "summary_ok": False,
-            "hundred_turn_evaluation_ok": False,
-            "hundred_turn_readiness_ok": True,
-            "warnings": ["quality_gate_summary_failed"],
-        },
+6. Fix disk autoplay-transcript.json
+
+Replace disk write payload:
+
+transcript_path.write_text(
+    json.dumps(
+        final_transcript_rows,
+        ensure_ascii=False,
+        indent=2,
+        sort_keys=True,
+    ),
+    encoding="utf-8",
+)
+
+with:
+
+transcript_path.write_text(
+    json.dumps(
+        bounded_transcript_rows,
+        ensure_ascii=False,
+        indent=2,
+        sort_keys=True,
+    ),
+    encoding="utf-8",
+)
+
+So both of these are bounded and useful:
+
+transcript.json
+autoplay-transcript.json
+
+And only this one is huge:
+
+full-transcript.json
+
+when --artifact-detail full.
+
+7. Fix slim-transcript.json
+
+Add or replace:
+
+_zip_writestr_json(
+    zip_handle,
+    artifact_manifest,
+    "slim-transcript.json",
+    slim_transcript_rows,
+)
+
+Do not build slim transcript from transcript_artifacts["transcript"] if that source may be stale.
+
+Use only:
+
+final_transcript_rows
+8. Add transcript size summary
+
+Add helper:
+
+def _build_transcript_size_summary(
+    *,
+    final_transcript_rows: List[Dict[str, Any]],
+    bounded_transcript_rows: List[Dict[str, Any]],
+    slim_transcript_rows: List[Dict[str, Any]],
+    wrote_full_transcript: bool,
+) -> Dict[str, Any]:
+    full_bytes = _json_size_bytes(final_transcript_rows)
+    bounded_bytes = _json_size_bytes(bounded_transcript_rows)
+    slim_bytes = _json_size_bytes(slim_transcript_rows)
+
+    row_sizes = [_json_size_bytes(row) for row in _safe_list(bounded_transcript_rows)]
+    slim_null_count = sum(1 for row in _safe_list(slim_transcript_rows) if row is None)
+    bounded_null_count = sum(1 for row in _safe_list(bounded_transcript_rows) if row is None)
+
+    return {
+        "format_version": "transcript_size_summary_v1",
+        "ok": slim_null_count == 0 and bounded_null_count == 0,
+        "row_count": len(_safe_list(final_transcript_rows)),
+        "full_transcript_json_bytes_estimate": full_bytes,
+        "bounded_transcript_json_bytes_estimate": bounded_bytes,
+        "slim_transcript_json_bytes_estimate": slim_bytes,
+        "wrote_full_transcript": bool(wrote_full_transcript),
+        "max_bounded_row_bytes": max(row_sizes) if row_sizes else 0,
+        "avg_bounded_row_bytes": (
+            sum(row_sizes) / len(row_sizes)
+            if row_sizes
+            else 0.0
+        ),
+        "slim_transcript_null_count": slim_null_count,
+        "bounded_transcript_null_count": bounded_null_count,
+        "bounded_rows_truncated_count": sum(
+            1 for row in _safe_list(bounded_transcript_rows)
+            if _safe_dict(row).get("row_truncated")
+        ),
+        "bounded_rows_extreme_truncated_count": sum(
+            1 for row in _safe_list(bounded_transcript_rows)
+            if _safe_dict(row).get("row_extreme_truncated")
+        ),
     }
 
-    health = _force_final_autoplay_health(summary)
+Before writing summary:
 
-    assert health["ok"] is True
-    assert health["summary_ok"] is True
-    assert health["hundred_turn_evaluation_ok"] is True
-    assert health["hundred_turn_readiness_ok"] is True
-    assert health["failed_gate_count"] == 0
-    assert health["failed_evaluation_gates"] == []
-    assert health["failed_readiness_gates"] == []
-    assert health["quality_gate_summary_advisory"] is True
-    assert "quality_gate_summary_failed" not in health["warnings"]
-Run checks
+wrote_full_transcript = _should_write_full_transcript(args)
+
+summary["transcript_size_summary"] = _build_transcript_size_summary(
+    final_transcript_rows=final_transcript_rows,
+    bounded_transcript_rows=bounded_transcript_rows,
+    slim_transcript_rows=slim_transcript_rows,
+    wrote_full_transcript=wrote_full_transcript,
+)
+
+Write artifact:
+
+_zip_writestr_json(
+    zip_handle,
+    artifact_manifest,
+    "transcript-size-summary.json",
+    summary.get("transcript_size_summary", {}),
+)
+
+Also include it in summary.json.
+
+9. Add hard postcondition for slim transcript
+
+Add helper:
+
+def _assert_bounded_transcript_artifacts_valid(
+    *,
+    bounded_transcript_rows: List[Dict[str, Any]],
+    slim_transcript_rows: List[Dict[str, Any]],
+    summary: Dict[str, Any],
+) -> None:
+    bounded_null_indexes = [
+        idx for idx, row in enumerate(_safe_list(bounded_transcript_rows))
+        if row is None or not _safe_dict(row)
+    ]
+    slim_null_indexes = [
+        idx for idx, row in enumerate(_safe_list(slim_transcript_rows))
+        if row is None or not _safe_dict(row)
+    ]
+
+    if bounded_null_indexes:
+        raise RuntimeError(
+            "bounded_transcript_artifact_rows_null:"
+            f"count={len(bounded_null_indexes)}:"
+            f"indexes={bounded_null_indexes[:20]}"
+        )
+
+    if slim_null_indexes:
+        raise RuntimeError(
+            "slim_transcript_artifact_rows_null:"
+            f"count={len(slim_null_indexes)}:"
+            f"indexes={slim_null_indexes[:20]}"
+        )
+
+    size_summary = _safe_dict(summary.get("transcript_size_summary"))
+    if int(size_summary.get("slim_transcript_null_count") or 0) != 0:
+        raise RuntimeError("slim_transcript_size_summary_reports_null_rows")
+
+    if int(size_summary.get("bounded_transcript_null_count") or 0) != 0:
+        raise RuntimeError("bounded_transcript_size_summary_reports_null_rows")
+
+Call before artifact writing:
+
+_assert_bounded_transcript_artifacts_valid(
+    bounded_transcript_rows=bounded_transcript_rows,
+    slim_transcript_rows=slim_transcript_rows,
+    summary=summary,
+)
+10. Expand _slim_transcript_row(...) with safe fields only
+
+Inside _slim_transcript_row(...), avoid dumping giant fields. Use explicit allowlist.
+
+Make sure these fields are included when present:
+
+for key in (
+    "turn_index",
+    "turn",
+    "turn_id",
+    "player_action",
+    "canonical_turn_action",
+    "actual_sent_action",
+    "player_agent_selection_source",
+    "player_agent_selection_reason",
+    "action_category",
+    "presentation_status",
+    "narration",
+    "display_narration",
+    "selected_narration",
+    "npc",
+    "npc_speaker",
+    "npc_line",
+    "turn_presentation_identity",
+    "background_presentation_result",
+    "dialogue_presentation_compatibility",
+    "dialogue_action_relevance",
+    "dialogue_action_relevance_repaired",
+    "unsupported_combat_claim_suppressed",
+    "direct_graph_action_completion",
+    "mechanics_covered_this_turn",
+    "direct_graph_changed_parts",
+    "progress_quality",
+    "turn_action_consistency",
+    "graph_action_selection_diagnostic",
+    "suppressed_selected_action_guard",
+):
+    if row.get(key) not in (None, "", {}, []):
+        slim_row[key] = row.get(key)
+
+Explicitly do not include:
+
+runtime_state
+authoritative_state
+simulation_state
+world_state
+npc_profiles
+profile_load_results
+full_provider_payload
+raw_provider_response
+background_jobs
+large debug arrays
+
+If you need to preserve large debug info later, put it in full-transcript.json only.
+
+11. Add tests
+
+Create:
+
+src/tests/rpg/test_autoplay_slim_transcript_artifacts.py
+from tests.rpg.autoplay_llm_campaign import (
+    _bounded_transcript_row,
+    _build_bounded_transcript_rows,
+    _build_transcript_size_summary,
+    _slim_transcript_row,
+)
+
+
+def test_slim_transcript_row_returns_dict():
+    row = {
+        "turn_index": 1,
+        "player_action": "I buy two rations from Bran.",
+        "canonical_turn_action": "I buy two rations from Bran.",
+        "runtime_state": {"huge": "x" * 10000},
+    }
+
+    slim = _slim_transcript_row(row)
+
+    assert isinstance(slim, dict)
+    assert slim["turn_index"] == 1
+    assert slim["player_action"] == "I buy two rations from Bran."
+    assert "runtime_state" not in slim
+
+
+def test_bounded_transcript_row_truncates_huge_rows():
+    row = {
+        "turn_index": 1,
+        "player_action": "I wait.",
+        "canonical_turn_action": "I wait.",
+        "runtime_state": {"huge": "x" * 200000},
+        "selected_narration": "You wait.",
+    }
+
+    bounded = _bounded_transcript_row(row, max_row_bytes=5000)
+
+    assert isinstance(bounded, dict)
+    assert bounded["turn_index"] == 1
+    assert "runtime_state" not in bounded
+    assert len(str(bounded)) < 20000
+
+
+def test_build_bounded_transcript_rows_has_no_nulls():
+    rows = _build_bounded_transcript_rows(
+        [
+            {"turn_index": 1, "player_action": "I wait."},
+            {"turn_index": 2, "player_action": "I buy rations.", "runtime_state": {"huge": "x" * 100000}},
+        ],
+        max_row_bytes=5000,
+    )
+
+    assert len(rows) == 2
+    assert all(isinstance(row, dict) for row in rows)
+
+
+def test_transcript_size_summary_counts_nulls_and_truncation():
+    final_rows = [
+        {"turn_index": 1, "player_action": "I wait.", "runtime_state": {"huge": "x" * 100000}},
+    ]
+    bounded_rows = _build_bounded_transcript_rows(final_rows, max_row_bytes=5000)
+    slim_rows = [_slim_transcript_row(row) for row in final_rows]
+
+    summary = _build_transcript_size_summary(
+        final_transcript_rows=final_rows,
+        bounded_transcript_rows=bounded_rows,
+        slim_transcript_rows=slim_rows,
+        wrote_full_transcript=True,
+    )
+
+    assert summary["ok"] is True
+    assert summary["row_count"] == 1
+    assert summary["slim_transcript_null_count"] == 0
+    assert summary["bounded_transcript_null_count"] == 0
+    assert summary["full_transcript_json_bytes_estimate"] > summary["bounded_transcript_json_bytes_estimate"]
+
+Create or patch:
+
+src/tests/rpg/test_autoplay_final_transcript_artifact_source.py
+
+Add:
+
+def test_final_transcript_rows_can_be_slimmed_without_nulls():
+    from tests.rpg.autoplay_llm_campaign import (
+        _build_bounded_transcript_rows,
+        _slim_transcript_row,
+    )
+
+    final_rows = [
+        {
+            "turn_index": 1,
+            "player_action": "I buy two rations from Bran.",
+            "canonical_turn_action": "I buy two rations from Bran.",
+            "runtime_state": {"huge": "x" * 100000},
+        }
+    ]
+
+    bounded = _build_bounded_transcript_rows(final_rows, max_row_bytes=5000)
+    slim = [_slim_transcript_row(row) for row in final_rows]
+
+    assert bounded[0] is not None
+    assert slim[0] is not None
+    assert "runtime_state" not in bounded[0]
+    assert "runtime_state" not in slim[0]
+12. Run checks
 python -m py_compile `
   src\tests\rpg\autoplay_llm_campaign.py
 python -m pytest `
-  src\tests\rpg\test_autoplay_final_health_rebuild.py `
-  src\tests\rpg\test_autoplay_arc_completion_quality.py `
-  src\tests\rpg\test_autoplay_dialogue_repair_rate_quality.py `
-  src\tests\rpg\test_autoplay_direct_completion_bridges_lifecycle.py `
-  src\tests\rpg\test_autoplay_direct_completion_bridge_gates.py `
+  src\tests\rpg\test_autoplay_slim_transcript_artifacts.py `
+  src\tests\rpg\test_autoplay_final_transcript_artifact_source.py `
+  src\tests\rpg\test_autoplay_background_attachment_finalization.py `
+  src\tests\rpg\test_autoplay_background_attachment_sentinel.py `
   src\tests\rpg\test_autoplay_real_runner_present.py `
   -q
+Expected next run
+✅ slim-transcript.json has 100 dict rows
+✅ slim_transcript_null_count = 0
+✅ transcript.json is bounded and much smaller
+✅ autoplay-transcript.json is bounded and much smaller
+✅ full-transcript.json appears only when --artifact-detail full
+✅ transcript-size-summary.json present
+✅ transcript_size_summary.ok = true
+
+Expected background state remains honest:
+
+background_presentation_attachment_summary:
+  legacy_observed_count = 100
+  turn_bound_verified_count = 0
+  turn_bound_attachment_verified = false
