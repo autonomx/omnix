@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Tuple, Tuple
 
 from app.rpg.mechanics.mechanics_opportunities import (
     describe_mechanic_opportunity_state,
@@ -118,6 +118,14 @@ def _slim_transcript_row(row: Dict[str, Any], max_row_bytes: int = 50000) -> Dic
         "dialogue_presentation_compatibility",
         "dialogue_action_relevance",
         "dialogue_action_relevance_repaired",
+        "presentation_repair_tier",
+        "presentation_repair_type",
+        "visible_text_replaced",
+        "hard_grounding_repair",
+        "soft_classification_repair",
+        "presentation_hard_grounding",
+        "presentation_soft_classification",
+        "background_semantic_reviewer",
         "unsupported_combat_claim_suppressed",
         "direct_graph_action_completion",
         "mechanics_covered_this_turn",
@@ -1737,12 +1745,15 @@ def _normalize_presentation_intent(value: Any) -> Dict[str, Any]:
         raw.get("primary_category")
         or raw.get("category")
         or raw.get("primary")
+        or raw.get("intent_category")
+        or raw.get("label")
     )
     secondary: List[str] = []
     for item in _safe_list(
         raw.get("secondary_categories")
         or raw.get("secondary")
         or raw.get("categories")
+        or raw.get("secondary_intents")
     ):
         normalized = _normalize_presentation_category(item)
         if normalized and normalized != primary and normalized not in secondary:
@@ -1759,8 +1770,68 @@ def _normalize_presentation_intent(value: Any) -> Dict[str, Any]:
         "primary_category": primary,
         "secondary_categories": secondary[:4],
         "confidence": round(confidence, 3),
-        "reason": _safe_str(raw.get("reason"))[:240],
+        "reason": _safe_str(raw.get("reason") or raw.get("rationale"))[:240],
     }
+
+
+def _find_presentation_intent_candidate(value: Any) -> Tuple[Dict[str, Any], str]:
+    payload = _safe_dict(value)
+    if not payload:
+        return {}, "missing"
+
+    direct_keys = (
+        "presentation_intent",
+        "intent",
+        "presentationIntent",
+        "classification",
+        "category",
+        "intent_category",
+    )
+    for key in direct_keys:
+        candidate = payload.get(key)
+        if isinstance(candidate, dict):
+            return candidate, key
+        if isinstance(candidate, str) and candidate.strip():
+            return {"primary_category": candidate.strip()}, key
+
+    nested_paths = (
+        ("presentation", "intent"),
+        ("presentation", "presentation_intent"),
+        ("narration", "presentation_intent"),
+        ("narration", "intent"),
+        ("narration_payload", "presentation_intent"),
+        ("narration_payload", "intent"),
+        ("structured_narration", "presentation_intent"),
+        ("structured_narration", "intent"),
+        ("combined_background_llm_result", "presentation_intent"),
+        ("combined_background_llm_result", "narration_payload", "presentation_intent"),
+        ("deferred_narration_result", "presentation_intent"),
+        ("deferred_narration_result", "narration_payload", "presentation_intent"),
+        ("resolved_narration_payload", "presentation_intent"),
+        ("selected_output", "presentation_intent"),
+        ("result", "presentation_intent"),
+        ("result", "intent"),
+        ("data", "presentation_intent"),
+        ("data", "intent"),
+        ("payload", "presentation_intent"),
+        ("payload", "intent"),
+    )
+    for path in nested_paths:
+        cursor: Any = payload
+        ok = True
+        for key in path:
+            cursor = _safe_dict(cursor).get(key)
+            if cursor is None:
+                ok = False
+                break
+        if not ok:
+            continue
+        if isinstance(cursor, dict):
+            return cursor, ".".join(path)
+        if isinstance(cursor, str) and cursor.strip():
+            return {"primary_category": cursor.strip()}, ".".join(path)
+
+    return {}, "missing"
 
 
 def _presentation_identity_matches_turn(
@@ -2311,19 +2382,31 @@ def _apply_turn_bound_presentation_compatibility_gate(row: Dict[str, Any]) -> Di
         row=row,
     )
 
+    hard_diag = _presentation_hard_grounding_check(row, presentation_text)
+    soft_diag = _presentation_soft_classification_check(
+        compat_ok=compat_ok,
+        compat_diag=compat_diag,
+    )
+
+    soft_repair_reason = _soft_metadata_repair_reason_for_row(row=row, soft_diag=soft_diag)
+    if soft_repair_reason:
+        soft_diag = dict(_safe_dict(soft_diag))
+        soft_diag["ok"] = False
+        soft_diag["metadata_repair_required"] = True
+        soft_diag["reason"] = soft_repair_reason
+        soft_diag["requires_visible_text_replacement"] = False
+
     row["dialogue_presentation_compatibility"] = compat_diag
+    row["presentation_hard_grounding"] = hard_diag
+    row["presentation_soft_classification"] = soft_diag
+    row["background_semantic_reviewer"] = _background_semantic_reviewer_diagnostic(
+        row=row,
+        soft_diag=soft_diag,
+        hard_diag=hard_diag,
+    )
+    row["unsupported_combat_claim_suppressed"] = "unsupported_combat_claim" in _safe_list(hard_diag.get("reasons"))
 
-    if _presentation_has_combat_claim(presentation_text) and not _turn_has_combat_support(row):
-        compat_ok = False
-        compat_diag = dict(compat_diag)
-        compat_diag["ok"] = False
-        compat_diag["reason"] = "unsupported_combat_claim_suppressed"
-        row["dialogue_presentation_compatibility"] = compat_diag
-        row["unsupported_combat_claim_suppressed"] = True
-    else:
-        row["unsupported_combat_claim_suppressed"] = False
-
-    if not compat_ok:
+    if not bool(hard_diag.get("ok", True)):
         fallback = _build_category_compatible_presentation_fallback(row)
         row["narration"] = fallback
         row["display_narration"] = fallback
@@ -2333,7 +2416,7 @@ def _apply_turn_bound_presentation_compatibility_gate(row: Dict[str, Any]) -> Di
         relevance = dict(_safe_dict(row.get("dialogue_action_relevance")))
         relevance["repaired"] = True
         relevance["fallback_applied"] = True
-        relevance["reason"] = _safe_str(compat_diag.get("reason")) or "presentation_incompatible"
+        relevance["reason"] = ",".join(_safe_list(hard_diag.get("reasons"))) or "hard_grounding_violation"
         relevance["source"] = _safe_str(
             row.get("selected_narration_source")
             or row.get("narration_source")
@@ -2341,10 +2424,39 @@ def _apply_turn_bound_presentation_compatibility_gate(row: Dict[str, Any]) -> Di
             or "unknown"
         )
         relevance["compatibility"] = compat_diag
+        relevance["hard_grounding"] = hard_diag
         relevance["validated_presentation_intent"] = row.get("validated_presentation_intent")
         row["dialogue_action_relevance"] = relevance
         row["dialogue_action_relevance_repaired"] = True
-        row["presentation_status"] = "attached_repaired"
+        row["presentation_status"] = "attached_hard_repaired"
+        row["presentation_repair_tier"] = "hard_grounding"
+        row["presentation_repair_type"] = "visible_text_replaced"
+        row["visible_text_replaced"] = True
+        row["hard_grounding_repair"] = True
+        row["soft_classification_repair"] = False
+
+    elif bool(soft_diag.get("metadata_repair_required")):
+        relevance = dict(_safe_dict(row.get("dialogue_action_relevance")))
+        relevance["repaired"] = True
+        relevance["fallback_applied"] = False
+        relevance["reason"] = _safe_str(soft_diag.get("reason")) or "soft_classification_metadata_repaired"
+        relevance["compatibility"] = compat_diag
+        relevance["soft_classification"] = soft_diag
+        relevance["validated_presentation_intent"] = row.get("validated_presentation_intent")
+        row["dialogue_action_relevance"] = relevance
+        row["dialogue_action_relevance_repaired"] = True
+        row["presentation_status"] = "attached_metadata_repaired"
+        row["presentation_repair_tier"] = "soft_classification"
+        row["presentation_repair_type"] = "metadata_only"
+        row["visible_text_replaced"] = False
+        row["hard_grounding_repair"] = False
+        row["soft_classification_repair"] = True
+
+    else:
+        row.setdefault("presentation_status", "attached")
+        row["visible_text_replaced"] = False
+        row["hard_grounding_repair"] = False
+        row["soft_classification_repair"] = False
 
     row = _sync_dialogue_action_relevance_with_validated_presentation(row)
     return row
@@ -2468,15 +2580,39 @@ def _build_background_presentation_attachment_summary(
     pending_count = 0
     attached_row_count = 0
     repaired_attached_count = 0
+    hard_repaired_count = 0
+    metadata_repaired_count = 0
+    soft_reclassified_count = 0
+    visible_text_replaced_count = 0
+    category_reclassified_count = 0
 
-    for row in _safe_list(transcript):
-        status = _safe_str(_safe_dict(row).get("presentation_status"))
+    attached_statuses = {
+        "attached",
+        "attached_repaired",
+        "attached_hard_repaired",
+        "attached_metadata_repaired",
+        "attached_soft_reclassified",
+    }
+
+    for row_any in _safe_list(transcript):
+        row = _safe_dict(row_any)
+        status = _safe_str(row.get("presentation_status"))
         if status == "pending":
             pending_count += 1
-        if status in {"attached", "attached_repaired"}:
+        if status in attached_statuses:
             attached_row_count += 1
-        if status == "attached_repaired":
+        if status in {"attached_repaired", "attached_hard_repaired", "attached_metadata_repaired", "attached_soft_reclassified"}:
             repaired_attached_count += 1
+        if status in {"attached_repaired", "attached_hard_repaired"} or bool(row.get("hard_grounding_repair")):
+            hard_repaired_count += 1
+        if status in {"attached_metadata_repaired", "attached_soft_reclassified"} or bool(row.get("soft_classification_repair")):
+            metadata_repaired_count += 1
+        if status == "attached_soft_reclassified":
+            soft_reclassified_count += 1
+        if bool(row.get("visible_text_replaced")):
+            visible_text_replaced_count += 1
+        if bool(_safe_dict(row.get("validated_presentation_intent")).get("provider_intent_repaired")):
+            category_reclassified_count += 1
 
     turn_bound_verified_count = sum(
         1
@@ -2500,6 +2636,16 @@ def _build_background_presentation_attachment_summary(
         "pending_count": pending_count,
         "attached_row_count": attached_row_count,
         "repaired_attached_count": repaired_attached_count,
+        "hard_repaired_count": hard_repaired_count,
+        "metadata_repaired_count": metadata_repaired_count,
+        "soft_reclassified_count": soft_reclassified_count,
+        "visible_text_replaced_count": visible_text_replaced_count,
+        "hard_repair_rate": hard_repaired_count / float(attached_row_count or 1),
+        "metadata_repair_rate": metadata_repaired_count / float(attached_row_count or 1),
+        "visible_text_replacement_rate": visible_text_replaced_count / float(attached_row_count or 1),
+        "category_reclassification_rate": category_reclassified_count / float(attached_row_count or 1),
+        "category_reclassified_count": category_reclassified_count,
+        "expected_attachment_count": expected_count,
         "by_reason": by_reason,
         "orphan_examples": orphans[:20],
         "turn_bound_verified_count": turn_bound_verified_count,
@@ -7283,23 +7429,12 @@ def _row_mechanics_set(row: Dict[str, Any]) -> set[str]:
 
 def _extract_row_presentation_intent(row: Dict[str, Any]) -> Dict[str, Any]:
     row = _safe_dict(row)
-    candidates = [
-        row.get("presentation_intent"),
-        _safe_dict(row.get("background_presentation_result")).get("presentation_intent"),
-        _safe_dict(row.get("combined_background_llm_result")).get("presentation_intent"),
-        _safe_dict(_safe_dict(row.get("combined_background_llm_result")).get("narration_payload")).get("presentation_intent"),
-        _safe_dict(row.get("deferred_narration_result")).get("presentation_intent"),
-        _safe_dict(_safe_dict(row.get("deferred_narration_result")).get("narration_payload")).get("presentation_intent"),
-        _safe_dict(row.get("resolved_narration_payload")).get("presentation_intent"),
-        _safe_dict(row.get("narration_payload")).get("presentation_intent"),
-        _safe_dict(row.get("selected_output")).get("presentation_intent"),
-        _safe_dict(row.get("selected_narration")).get("presentation_intent"),
-    ]
-    for candidate in candidates:
-        normalized = _normalize_presentation_intent(candidate)
-        if normalized.get("primary_category") != "general" or normalized.get("secondary_categories"):
-            return normalized
-    return _normalize_presentation_intent({})
+    candidate, source = _find_presentation_intent_candidate(row)
+    normalized = _normalize_presentation_intent(candidate)
+    normalized["parse_source"] = source
+    if normalized.get("primary_category") != "general" or normalized.get("secondary_categories"):
+        return normalized
+    return normalized
 
 
 def _classify_visible_action_category_without_validated_intent(row: Dict[str, Any]) -> str:
@@ -7624,8 +7759,8 @@ def _validate_presentation_intent_for_row(
         or _turn_action_category(action_text or _safe_str(row.get("canonical_turn_action") or row.get("player_action")))
     )
 
-    valid = bool(support.get(proposed_category, False))
-    if valid and _presentation_category_is_specific(proposed_category):
+    provider_intent_ok = bool(support.get(proposed_category, False)) and _presentation_category_is_specific(proposed_category)
+    if provider_intent_ok:
         repaired_category = proposed_category
         reason = "provider_intent_supported"
     else:
@@ -7637,7 +7772,7 @@ def _validate_presentation_intent_for_row(
         )
         reason = (
             "provider_intent_supported_but_specific_fallback_preferred"
-            if valid
+            if bool(support.get(proposed_category, False))
             else "provider_intent_not_supported_by_authoritative_turn"
         )
 
@@ -7649,9 +7784,15 @@ def _validate_presentation_intent_for_row(
             action_text=action_text,
         )
 
+    validated_intent_ok = bool(support.get(repaired_category, False)) or repaired_category in {"general", "mixed"}
+    provider_intent_repaired = repaired_category != proposed_category
+
     return {
         "format_version": "validated_presentation_intent_v1",
-        "ok": valid and repaired_category == proposed_category,
+        "ok": validated_intent_ok,
+        "provider_intent_ok": provider_intent_ok,
+        "validated_intent_ok": validated_intent_ok,
+        "provider_intent_repaired": provider_intent_repaired,
         "primary_category": repaired_category,
         "proposed_category": proposed_category,
         "fallback_category": fallback_category,
@@ -7659,32 +7800,238 @@ def _validate_presentation_intent_for_row(
         "confidence": proposed.get("confidence") or 0.0,
         "reason": reason,
         "provider_reason": proposed.get("reason") or "",
+        "provider_intent_parse_source": proposed.get("parse_source") or row.get("presentation_intent_parse_source") or "missing",
         "support": support,
     }
 
 
 def _presentation_text_category(text: str) -> str:
+    """Classify only explicit unsupported outcome claims in presentation text.
+
+    This is intentionally NOT a semantic categorizer. Semantic category should
+    come from provider presentation_intent first and authoritative fallback
+    second. Generic scene nouns such as room, road, bandit, ambush, blood,
+    supplies, or coin must not trigger repair by themselves.
+    """
     text_n = _normalize_turn_action_text(text)
 
-    if any(t in text_n for t in ("you buy", "you purchase", "rations", "supplies", "coins", "paid")):
+    economy_phrases = (
+        "you buy",
+        "you purchase",
+        "you pay",
+        "you spend",
+        "you hand over coin",
+        "coin leaves your purse",
+        "the purchase is complete",
+        "the transaction is complete",
+    )
+    if any(t in text_n for t in economy_phrases):
         return "economy"
 
-    if any(t in text_n for t in ("room", "lodging", "bed", "rest")):
+    service_phrases = (
+        "you rent a room",
+        "you rent the room",
+        "you secure a room",
+        "the room is yours",
+        "lodging is secured",
+        "you pay for lodging",
+        "you settle into bed",
+        "you rest for the night",
+        "you sleep for the night",
+    )
+    if any(t in text_n for t in service_phrases):
         return "service"
 
-    if any(t in text_n for t in ("blade", "blood", "strike", "wound", "bandit", "ambush", "fight", "combat")):
+    combat_phrases = (
+        "you draw your blade",
+        "you strike",
+        "you attack",
+        "you wound",
+        "you kill",
+        "you press the fight",
+        "the fight begins",
+        "combat begins",
+        "combat resolves",
+        "damage",
+        "hit points",
+    )
+    if any(t in text_n for t in combat_phrases):
         return "combat"
 
-    if any(t in text_n for t in ("asks", "says", "replies", "answers", "tells you")):
-        return "dialogue"
-
-    if any(t in text_n for t in ("road", "travel", "path", "trail", "leave")):
+    travel_phrases = (
+        "you arrive at",
+        "you arrive in",
+        "you travel to",
+        "you move to",
+        "you leave for",
+        "you set out for",
+        "the location changes",
+    )
+    if any(t in text_n for t in travel_phrases):
         return "travel"
 
-    if any(t in text_n for t in ("clue", "proof", "coin", "evidence", "track", "marked")):
-        return "investigation"
-
     return "general"
+
+
+HARD_PRESENTATION_CLAIM_CATEGORIES = {"combat", "travel", "service", "economy"}
+
+
+def _presentation_has_currency_or_reward_transfer_claim(text: str) -> bool:
+    text_n = _normalize_turn_action_text(text)
+    transfer_verbs = (
+        "gives you",
+        "hands you",
+        "pays you",
+        "rewards you",
+        "grants you",
+        "awards you",
+        "places coins in your hand",
+        "presses coins into your palm",
+    )
+    currency_terms = ("gold", "coin", "coins", "silver", "copper", "reward", "payment")
+    return any(v in text_n for v in transfer_verbs) and any(t in text_n for t in currency_terms)
+
+
+def _presentation_has_metaphorical_arrival_claim(text: str) -> bool:
+    text_n = _normalize_turn_action_text(text)
+    return any(
+        phrase in text_n
+        for phrase in (
+            "arrive at a clearer understanding",
+            "arrive at a conclusion",
+            "arrive at an understanding",
+        )
+    )
+
+
+def _row_has_authoritative_currency_or_reward_support(row: Dict[str, Any]) -> bool:
+    row = _safe_dict(row)
+    mechanics = _row_mechanics_set(row)
+    if any(m in mechanics for m in ("currency_change", "reward", "economy", "buying", "purchase")):
+        return True
+
+    result = _safe_dict(row.get("result"))
+    turn_contract = _safe_dict(row.get("turn_contract"))
+    contract_result = _safe_dict(turn_contract.get("result"))
+    for source in (row, result, turn_contract, contract_result):
+        source_d = _safe_dict(source)
+        if source_d.get("reward") or source_d.get("currency_delta") or source_d.get("currency_change"):
+            return True
+        if _safe_dict(source_d.get("delta")).get("currency"):
+            return True
+    return False
+
+
+def _presentation_hard_grounding_check(row: Dict[str, Any], presentation_text: str) -> Dict[str, Any]:
+    """Tier 1: deterministic hard factual grounding check.
+
+    This check only rejects visible text when it asserts an explicit outcome that
+    is not supported by authoritative turn state. It is intentionally not a
+    semantic category validator. Soft classification disagreement is handled by
+    metadata repair, not by replacing narration.
+    """
+    row = _safe_dict(row)
+    support = _authoritative_category_support(row)
+    claim_category = _presentation_text_category(presentation_text)
+    reasons: List[str] = []
+
+    if not (claim_category == "travel" and _presentation_has_metaphorical_arrival_claim(presentation_text)):
+        if claim_category in HARD_PRESENTATION_CLAIM_CATEGORIES and not bool(support.get(claim_category)):
+            reasons.append(f"unsupported_{claim_category}_claim")
+
+    if _presentation_has_combat_claim(presentation_text) and not _turn_has_combat_support(row):
+        if "unsupported_combat_claim" not in reasons:
+            reasons.append("unsupported_combat_claim")
+
+    if _presentation_has_currency_or_reward_transfer_claim(presentation_text) and not _row_has_authoritative_currency_or_reward_support(row):
+        reasons.append("unsupported_currency_or_reward_claim")
+
+    return {
+        "format_version": "presentation_hard_grounding_v1",
+        "ok": not reasons,
+        "tier": "hard_grounding",
+        "claim_category": claim_category,
+        "reasons": reasons,
+        "support": support,
+        "requires_visible_text_replacement": bool(reasons),
+    }
+
+
+def _presentation_soft_classification_check(
+    *,
+    compat_ok: bool,
+    compat_diag: Dict[str, Any],
+) -> Dict[str, Any]:
+    compat_diag = _safe_dict(compat_diag)
+    reason = _safe_str(compat_diag.get("reason"))
+    soft_repair = not compat_ok and reason == "action_presentation_category_mismatch"
+    return {
+        "format_version": "presentation_soft_classification_v1",
+        "ok": not soft_repair,
+        "tier": "soft_classification",
+        "reason": reason,
+        "compatibility": compat_diag,
+        "metadata_repair_required": soft_repair,
+        "requires_visible_text_replacement": False,
+    }
+
+
+def _soft_metadata_repair_reason_for_row(
+    *,
+    row: Dict[str, Any],
+    soft_diag: Dict[str, Any],
+) -> str:
+    """Return a metadata-only repair reason when visible text can remain.
+
+    Hard grounding is handled separately. This helper activates the soft tier
+    for classification-only changes, including provider-intent fallback repairs
+    and stale relevance category cleanup. These are metadata repairs, not
+    narration rewrites.
+    """
+    row = _safe_dict(row)
+    soft_diag = _safe_dict(soft_diag)
+
+    if bool(soft_diag.get("metadata_repair_required")):
+        return _safe_str(soft_diag.get("reason")) or "soft_classification_metadata_repaired"
+
+    validated = _safe_dict(row.get("validated_presentation_intent"))
+    if bool(validated.get("provider_intent_repaired")):
+        return "provider_intent_reclassified"
+
+    relevance = _safe_dict(row.get("dialogue_action_relevance"))
+    if bool(relevance.get("presentation_intent_sync_repaired")):
+        return _safe_str(relevance.get("presentation_intent_sync_reason")) or "dialogue_relevance_category_synced"
+
+    after_repair = _safe_dict(row.get("dialogue_action_relevance_after_repair"))
+    if bool(after_repair.get("presentation_intent_sync_repaired")):
+        return _safe_str(after_repair.get("presentation_intent_sync_reason")) or "dialogue_relevance_after_repair_category_synced"
+
+    return ""
+
+
+def _background_semantic_reviewer_diagnostic(
+    *,
+    row: Dict[str, Any],
+    soft_diag: Dict[str, Any],
+    hard_diag: Dict[str, Any],
+) -> Dict[str, Any]:
+    """Tier 3 placeholder/diagnostic for optional async semantic review.
+
+    The autoplay harness should not block the turn or call a second LLM here.
+    This diagnostic records that a background semantic reviewer may later refine
+    classification metadata. Immediate safety remains Tier 1 deterministic.
+    """
+    row = _safe_dict(row)
+    return {
+        "format_version": "background_semantic_reviewer_v1",
+        "queued": bool(_safe_dict(soft_diag).get("metadata_repair_required")),
+        "blocking": False,
+        "allowed_to_replace_visible_text": False,
+        "purpose": "classification_metadata_review_only",
+        "validated_presentation_category": _safe_str(row.get("validated_presentation_category")),
+        "soft_reason": _safe_str(_safe_dict(soft_diag).get("reason")),
+        "hard_ok": bool(_safe_dict(hard_diag).get("ok", True)),
+    }
 
 
 def _dialogue_presentation_is_category_compatible(
@@ -7954,6 +8301,7 @@ def _build_dialogue_action_relevance_summary(
     examples: List[Dict[str, Any]] = []
 
     for row in rows:
+        row = _sync_dialogue_action_relevance_with_validated_presentation(row)
         relevance = _safe_dict(row.get("dialogue_action_relevance"))
         source_gate = _safe_dict(row.get("dialogue_display_source_gate"))
 
@@ -19217,6 +19565,10 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
     summary["transcript_artifact_quality_summary"] = (
         _build_transcript_artifact_quality_summary(final_transcript_rows)
     )
+    summary["dialogue_action_relevance_summary"] = _build_dialogue_action_relevance_summary(
+        transcript=final_transcript_rows,
+    )
+    summary["dialogue_repair_quality_summary"] = _build_dialogue_repair_quality_summary(summary)
 
     _assert_transcript_artifact_consistency(
         final_transcript_rows=final_transcript_rows,
