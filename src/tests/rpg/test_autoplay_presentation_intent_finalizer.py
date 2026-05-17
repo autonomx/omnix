@@ -76,12 +76,41 @@ def test_provider_combat_intent_is_rejected_without_authoritative_combat_support
     assert validated["support"]["combat"] is False
 
 
-def test_unsupported_combat_presentation_gets_repaired_with_validated_intent():
+def test_combat_colored_prose_without_state_claim_is_not_hard_repaired():
     row = {
         "player_action": "I report the ambush evidence to Bran.",
         "canonical_turn_action": "I report the ambush evidence to Bran.",
-        "narration": "You draw your blade and press the combat until the bandit ambush breaks.",
-        "display_narration": "You draw your blade and press the combat until the bandit ambush breaks.",
+        "narration": "You draw your blade while describing the ambush evidence, and Bran weighs the threat carefully.",
+        "display_narration": "You draw your blade while describing the ambush evidence, and Bran weighs the threat carefully.",
+        "presentation_intent": {
+            "primary_category": "evidence",
+            "secondary_categories": ["dialogue"],
+            "confidence": 0.9,
+            "reason": "reporting evidence",
+        },
+        "direct_graph_action_completion": {
+            "action_id": "report_findings_to_bran",
+            "mechanics": ["dialogue", "evidence"],
+        },
+        "mechanics_covered_this_turn": ["dialogue", "evidence"],
+    }
+
+    repaired = _apply_turn_bound_presentation_compatibility_gate(row)
+
+    assert repaired["presentation_status"] == "attached"
+    assert repaired.get("presentation_repair_tier") is None
+    assert repaired["visible_text_replaced"] is False
+    assert repaired["unsupported_combat_claim_suppressed"] is False
+    assert repaired["presentation_hard_grounding"]["ok"] is True
+    assert "draw your blade" in repaired["narration"].lower()
+
+
+def test_unsupported_defeat_claim_gets_hard_repaired_without_defeat_state():
+    row = {
+        "player_action": "I report the ambush evidence to Bran.",
+        "canonical_turn_action": "I report the ambush evidence to Bran.",
+        "narration": "You explain the ambush, then the bandit falls dead at your feet.",
+        "display_narration": "You explain the ambush, then the bandit falls dead at your feet.",
         "presentation_intent": {
             "primary_category": "evidence",
             "secondary_categories": ["dialogue"],
@@ -102,9 +131,8 @@ def test_unsupported_combat_presentation_gets_repaired_with_validated_intent():
     assert repaired["visible_text_replaced"] is True
     assert repaired["unsupported_combat_claim_suppressed"] is True
     assert repaired["validated_presentation_category"] == "evidence"
-    assert "draw your blade" not in repaired["narration"].lower()
-    assert "combat" not in repaired["narration"].lower()
-
+    assert "unsupported_defeat_claim" in repaired["presentation_hard_grounding"]["reasons"]
+    assert "falls dead" not in repaired["narration"].lower()
 
 
 def test_missing_provider_intent_uses_specific_evidence_fallback_not_general():

@@ -1,224 +1,442 @@
 diff --git a/src/tests/rpg/autoplay_llm_campaign.py b/src/tests/rpg/autoplay_llm_campaign.py
-index e21e234..51310b2 100644
+index 49ad533..c150fbb 100644
 --- a/src/tests/rpg/autoplay_llm_campaign.py
 +++ b/src/tests/rpg/autoplay_llm_campaign.py
-@@ -107,6 +107,14 @@ def _slim_transcript_row(row: Dict[str, Any], max_row_bytes: int = 50000) -> Dic
-          "validated_presentation_intent",
-          "validated_presentation_category",
-          "presentation_status",
-+         "presentation_repair_tier",
-+         "presentation_repair_type",
-+         "visible_text_replaced",
-+         "hard_grounding_repair",
-+         "soft_classification_repair",
-+         "presentation_hard_grounding",
-+         "presentation_soft_classification",
-+         "background_semantic_reviewer",
-         "narration",
-         "display_narration",
-         "selected_narration",
-@@ -155,6 +163,14 @@ def _slim_transcript_row(row: Dict[str, Any], max_row_bytes: int = 50000) -> Dic
-     for key in (
-         "dialogue_presentation_compatibility",
-         "unsupported_combat_claim_suppressed",
-+        "presentation_repair_tier",
-+        "presentation_repair_type",
-+        "visible_text_replaced",
-+        "hard_grounding_repair",
-+        "soft_classification_repair",
-+        "presentation_hard_grounding",
-+        "presentation_soft_classification",
-+        "background_semantic_reviewer",
-     ):
-         if row.get(key) is not None:
-             slim_row[key] = row.get(key)
-@@ -2379,6 +2395,13 @@ def _apply_turn_bound_presentation_compatibility_gate(row: Dict[str, Any]) -> Di
-         compat_ok=compat_ok,
-         compat_diag=compat_diag,
+@@ -2404,7 +2404,15 @@ def _apply_turn_bound_presentation_compatibility_gate(row: Dict[str, Any]) -> Di
+         soft_diag=soft_diag,
+         hard_diag=hard_diag,
      )
-+    soft_repair_reason = _soft_metadata_repair_reason_for_row(row=row, soft_diag=soft_diag)
-+    if soft_repair_reason:
-+        soft_diag = dict(_safe_dict(soft_diag))
-+        soft_diag["ok"] = False
-+        soft_diag["metadata_repair_required"] = True
-+        soft_diag["reason"] = soft_repair_reason
-+        soft_diag["requires_visible_text_replacement"] = False
- 
-     row["dialogue_presentation_compatibility"] = compat_diag
-     row["presentation_hard_grounding"] = hard_diag
-@@ -2429,7 +2452,12 @@ def _apply_turn_bound_presentation_compatibility_gate(row: Dict[str, Any]) -> Di
-         relevance["validated_presentation_intent"] = row.get("validated_presentation_intent")
-         row["dialogue_action_relevance"] = relevance
-         row["dialogue_action_relevance_repaired"] = True
--        row["presentation_status"] = "attached_metadata_repaired"
-+        soft_reason = _safe_str(soft_diag.get("reason"))
-+        row["presentation_status"] = (
-+            "attached_metadata_repaired"
-+            if soft_reason == "action_presentation_category_mismatch"
-+            else "attached_soft_reclassified"
+-    row["unsupported_combat_claim_suppressed"] = "unsupported_combat_claim" in _safe_list(hard_diag.get("reasons"))
++    row["unsupported_combat_claim_suppressed"] = any(
++        reason in _safe_list(hard_diag.get("reasons"))
++        for reason in (
++            "unsupported_combat_claim",
++            "unsupported_damage_claim",
++            "unsupported_defeat_claim",
++            "unsupported_combat_resolution_claim",
 +        )
-         row["presentation_repair_tier"] = "soft_classification"
-         row["presentation_repair_type"] = "metadata_only"
-         row["visible_text_replaced"] = False
-@@ -2625,6 +2653,10 @@ def _build_background_presentation_attachment_summary(
-         "soft_reclassified_count": soft_reclassified_count,
-         "visible_text_replaced_count": visible_text_replaced_count,
-         "category_reclassified_count": category_reclassified_count,
-+        "hard_repair_rate": hard_repaired_count / float(attached_row_count or 1),
-+        "metadata_repair_rate": metadata_repaired_count / float(attached_row_count or 1),
-+        "visible_text_replacement_rate": visible_text_replaced_count / float(attached_row_count or 1),
-+        "category_reclassification_rate": category_reclassified_count / float(attached_row_count or 1),
-         "expected_attachment_count": expected_count,
-         "by_reason": by_reason,
-         "orphan_examples": orphans[:20],
-@@ -7956,6 +7988,39 @@ def _presentation_soft_classification_check(
-     }
- 
- 
-+def _soft_metadata_repair_reason_for_row(
-+    *,
-+    row: Dict[str, Any],
-+    soft_diag: Dict[str, Any],
-+) -> str:
-+    """Return a metadata-only repair reason when visible text can remain.
-+
-+    Hard grounding is handled separately. This helper activates the soft tier
-+    for classification-only changes, including provider-intent fallback repairs
-+    and stale relevance category cleanup. These are metadata repairs, not
-+    narration rewrites.
-+    """
-+    row = _safe_dict(row)
-+    soft_diag = _safe_dict(soft_diag)
-+
-+    if bool(soft_diag.get("metadata_repair_required")):
-+        return _safe_str(soft_diag.get("reason")) or "soft_classification_metadata_repaired"
-+
-+    validated = _safe_dict(row.get("validated_presentation_intent"))
-+    if bool(validated.get("provider_intent_repaired")):
-+        return "provider_intent_reclassified"
-+
-+    relevance = _safe_dict(row.get("dialogue_action_relevance"))
-+    if bool(relevance.get("presentation_intent_sync_repaired")):
-+        return _safe_str(relevance.get("presentation_intent_sync_reason")) or "dialogue_relevance_category_synced"
-+
-+    after_repair = _safe_dict(row.get("dialogue_action_relevance_after_repair"))
-+    if bool(after_repair.get("presentation_intent_sync_repaired")):
-+        return _safe_str(after_repair.get("presentation_intent_sync_reason")) or "dialogue_relevance_after_repair_category_synced"
-+
-+    return ""
-+
-+
- def _background_semantic_reviewer_diagnostic(
-     *,
-     row: Dict[str, Any],
-@@ -8248,7 +8313,8 @@ def _build_dialogue_action_relevance_summary(
-     examples: List[Dict[str, Any]] = []
- 
-     for row in rows:
--        relevance = _safe_dict(row.get("dialogue_action_relevance"))
-+        row = _sync_dialogue_action_relevance_with_validated_presentation(row)
-+        relevance = _safe_dict(row.get("dialogue_action_relevance_after_repair") or row.get("dialogue_action_relevance"))
-         source_gate = _safe_dict(row.get("dialogue_display_source_gate"))
- 
-         if not relevance:
-@@ -19511,6 +19577,10 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
-     summary["transcript_artifact_quality_summary"] = (
-         _build_transcript_artifact_quality_summary(final_transcript_rows)
-     )
-+    summary["dialogue_action_relevance_summary"] = _build_dialogue_action_relevance_summary(
-+        transcript=final_transcript_rows,
 +    )
-+    summary["dialogue_repair_quality_summary"] = _build_dialogue_repair_quality_summary(summary)
  
-     _assert_transcript_artifact_consistency(
-         final_transcript_rows=final_transcript_rows,
+     if not bool(hard_diag.get("ok", True)):
+         fallback = _build_category_compatible_presentation_fallback(row)
+@@ -7806,12 +7814,17 @@ def _validate_presentation_intent_for_row(
+ 
+ 
+ def _presentation_text_category(text: str) -> str:
+-    """Classify only explicit unsupported outcome claims in presentation text.
++    """Classify explicit non-combat state-change claims in presentation text.
+ 
+     This is intentionally NOT a semantic categorizer. Semantic category should
+     come from provider presentation_intent first and authoritative fallback
+     second. Generic scene nouns such as room, road, bandit, ambush, blood,
+     supplies, or coin must not trigger repair by themselves.
++
++    Combat prose is especially expressive, so this helper deliberately does
++    not classify combat. Combat hard-grounding is handled by the separate
++    state-claim verifiers below, which only flag concrete damage/defeat/
++    resolution claims that can be checked against authoritative JSON.
+     """
+     text_n = _normalize_turn_action_text(text)
+ 
+@@ -7842,22 +7855,6 @@ def _presentation_text_category(text: str) -> str:
+     if any(t in text_n for t in service_phrases):
+         return "service"
+ 
+-    combat_phrases = (
+-        "you draw your blade",
+-        "you strike",
+-        "you attack",
+-        "you wound",
+-        "you kill",
+-        "you press the fight",
+-        "the fight begins",
+-        "combat begins",
+-        "combat resolves",
+-        "damage",
+-        "hit points",
+-    )
+-    if any(t in text_n for t in combat_phrases):
+-        return "combat"
+-
+     travel_phrases = (
+         "you arrive at",
+         "you arrive in",
+@@ -7873,7 +7870,7 @@ def _presentation_text_category(text: str) -> str:
+     return "general"
+ 
+ 
+-HARD_PRESENTATION_CLAIM_CATEGORIES = {"combat", "travel", "service", "economy"}
++HARD_PRESENTATION_CLAIM_CATEGORIES = {"travel", "service", "economy"}
+ 
+ 
+ def _presentation_has_currency_or_reward_transfer_claim(text: str) -> bool:
+@@ -7939,18 +7936,47 @@ def _presentation_hard_grounding_check(row: Dict[str, Any], presentation_text: s
+         if claim_category in HARD_PRESENTATION_CLAIM_CATEGORIES and not bool(support.get(claim_category)):
+             reasons.append(f"unsupported_{claim_category}_claim")
+ 
+-    if _presentation_has_combat_claim(presentation_text) and not _turn_has_combat_support(row):
+-        if "unsupported_combat_claim" not in reasons:
+-            reasons.append("unsupported_combat_claim")
++    hard_claim_details: List[Dict[str, Any]] = []
++
++    if _presentation_has_combat_damage_claim(presentation_text) and not _row_has_authoritative_combat_damage_support(row):
++        reasons.append("unsupported_damage_claim")
++        hard_claim_details.append({
++            "claim_type": "combat_damage",
++            "authoritative_support_key_checked": "damage_delta|hp_delta|combat_damage",
++            "support_found": False,
++        })
++
++    if _presentation_has_combat_defeat_claim(presentation_text) and not _row_has_authoritative_combat_defeat_support(row):
++        reasons.append("unsupported_defeat_claim")
++        hard_claim_details.append({
++            "claim_type": "combat_defeat",
++            "authoritative_support_key_checked": "enemy_defeated|defeated|victory",
++            "support_found": False,
++        })
++
++    if _presentation_has_combat_resolution_claim(presentation_text) and not _row_has_authoritative_combat_resolution_support(row):
++        reasons.append("unsupported_combat_resolution_claim")
++        hard_claim_details.append({
++            "claim_type": "combat_resolution",
++            "authoritative_support_key_checked": "combat_resolved|encounter_resolved|victory|ended",
++            "support_found": False,
++        })
+ 
+     if _presentation_has_currency_or_reward_transfer_claim(presentation_text) and not _row_has_authoritative_currency_or_reward_support(row):
+         reasons.append("unsupported_currency_or_reward_claim")
++        hard_claim_details.append({
++            "claim_type": "currency_or_reward_transfer",
++            "authoritative_support_key_checked": "reward|currency_delta|currency_change",
++            "support_found": False,
++        })
+ 
+     return {
+-        "format_version": "presentation_hard_grounding_v1",
++        "format_version": "presentation_hard_grounding_v2",
+         "ok": not reasons,
+         "tier": "hard_grounding",
+         "claim_category": claim_category,
++        "claim_details": hard_claim_details,
++        "hard_claim_types": [detail.get("claim_type") for detail in hard_claim_details],
+         "reasons": reasons,
+         "support": support,
+         "requires_visible_text_replacement": bool(reasons),
+@@ -8144,46 +8170,225 @@ def _build_category_compatible_presentation_fallback(row: Dict[str, Any]) -> str
+     return "The action resolves according to the authoritative turn result."
+ 
+ 
+-def _presentation_has_combat_claim(text: str) -> bool:
++def _presentation_has_combat_damage_claim(text: str) -> bool:
++    """Return True only for concrete combat damage/HP state claims.
++
++    Combat-colored prose is not enough. This intentionally ignores words such
++    as ambush, bandit, strike, blade, threat, fear, blood, and fight unless the
++    text asserts a checkable damage/HP mutation.
++    """
+     text_n = _normalize_turn_action_text(text)
+-    active_combat_terms = (
+-        "combat",
+-        "fight",
+-        "fighting",
+-        "attack",
+-        "attacks",
+-        "strike",
+-        "strikes",
+-        "wound",
+-        "wounded",
+-        "draw your blade",
+-        "raise your blade",
+-        "damage",
+-        "xp",
++    damage_phrases = (
++        "you take damage",
++        "you suffer damage",
++        "you lose hit points",
++        "you lose hp",
++        "your hp drops",
++        "your hit points drop",
++        "damage is dealt",
++        "deals damage",
++        "takes damage",
++        "enemy takes damage",
++        "the enemy takes damage",
++        "the bandit takes damage",
++        "you deal damage",
++        "you wound him",
++        "you wound her",
++        "you wound them",
++        "you wound the",
++        "your blow wounds",
++    )
++    if any(phrase in text_n for phrase in damage_phrases):
++        return True
++    if "damage" in text_n and any(
++        phrase in text_n
++        for phrase in (
++            "you take",
++            "you suffer",
++            "you deal",
++            "you inflict",
++            "enemy takes",
++            "the enemy takes",
++            "bandit takes",
++            "the bandit takes",
++        )
++    ):
++        return True
++    return False
++
++
++def _presentation_has_combat_defeat_claim(text: str) -> bool:
++    """Return True only for concrete defeat/death claims."""
++    text_n = _normalize_turn_action_text(text)
++    defeat_phrases = (
++        "you defeat",
++        "you kill",
++        "you slay",
++        "falls dead",
++        "falls defeated",
++        "falls lifeless",
++        "collapses dead",
++        "collapses lifeless",
++        "is defeated",
++        "are defeated",
++        "is dead",
++        "are dead",
++        "the enemy falls",
++        "the bandit falls",
++        "the scout falls",
++        "the strike team falls",
++        "the enemy dies",
++        "the bandit dies",
++    )
++    return any(phrase in text_n for phrase in defeat_phrases)
++
++
++def _presentation_has_combat_resolution_claim(text: str) -> bool:
++    """Return True only for concrete combat encounter resolution claims."""
++    text_n = _normalize_turn_action_text(text)
++    resolution_phrases = (
++        "combat resolves",
++        "combat is resolved",
++        "the fight resolves",
++        "the fight is over",
++        "the battle is over",
++        "the combat ends",
++        "the encounter ends",
++        "victory is yours",
++        "you win the fight",
++        "you win the battle",
++        "the enemy surrenders",
++        "the enemies surrender",
++    )
++    return any(phrase in text_n for phrase in resolution_phrases)
++
++
++def _presentation_has_combat_claim(text: str) -> bool:
++    """Legacy compatibility wrapper for concrete combat state claims only."""
++    return (
++        _presentation_has_combat_damage_claim(text)
++        or _presentation_has_combat_defeat_claim(text)
++        or _presentation_has_combat_resolution_claim(text)
+     )
+-    if any(term in text_n for term in active_combat_terms):
++
++
++def _source_has_any_key(source: Any, keys: Tuple[str, ...]) -> bool:
++    source_d = _safe_dict(source)
++    for key in keys:
++        if source_d.get(key) not in (None, False, "", [], {}):
++            return True
++    return False
++
++
++def _row_authoritative_state_sources(row: Dict[str, Any]) -> List[Dict[str, Any]]:
++    row = _safe_dict(row)
++    result = _safe_dict(row.get("result"))
++    turn_contract = _safe_dict(row.get("turn_contract"))
++    contract_result = _safe_dict(turn_contract.get("result"))
++    direct = _safe_dict(row.get("direct_graph_action_completion"))
++    return [
++        row,
++        result,
++        turn_contract,
++        contract_result,
++        _safe_dict(row.get("state_delta")),
++        _safe_dict(turn_contract.get("state_delta")),
++        _safe_dict(row.get("combat_result")),
++        _safe_dict(result.get("combat_result")),
++        _safe_dict(contract_result.get("combat_result")),
++        _safe_dict(row.get("combat_state_delta")),
++        _safe_dict(result.get("combat_state_delta")),
++        _safe_dict(contract_result.get("combat_state_delta")),
++        direct,
++    ]
++
++
++def _row_has_authoritative_combat_damage_support(row: Dict[str, Any]) -> bool:
++    mechanics = _row_mechanics_set(row)
++    if any(
++        mechanic in mechanics
++        for mechanic in (
++            "damage",
++            "damage_dealt",
++            "damage_taken",
++            "combat_damage",
++            "hp_delta",
++            "health_delta",
++        )
++    ):
+         return True
+ 
+-    # Ambush/bandit/blood can be evidence nouns. Treat them as combat only when
+-    # paired with active combat framing.
+-    if any(term in text_n for term in ("ambush", "bandit", "blood", "blade")):
+-        return any(
+-            term in text_n
+-            for term in (
+-                "press the fight",
+-                "press the combat",
+-                "you fight",
+-                "you attack",
+-                "you strike",
+-                "the fight resolves",
+-                "combat result",
+-                "recorded damage",
+-            )
++    damage_keys = (
++        "damage",
++        "damage_delta",
++        "damage_dealt",
++        "damage_taken",
++        "hp_delta",
++        "health_delta",
++        "enemy_hp_delta",
++        "player_hp_delta",
++        "hit_points_delta",
++    )
++    return any(_source_has_any_key(source, damage_keys) for source in _row_authoritative_state_sources(row))
++
++
++def _row_has_authoritative_combat_defeat_support(row: Dict[str, Any]) -> bool:
++    mechanics = _row_mechanics_set(row)
++    if any(
++        mechanic in mechanics
++        for mechanic in (
++            "enemy_defeated",
++            "enemy_defeat",
++            "defeat",
++            "defeated",
++            "combat_resolved",
+         )
++    ):
++        return True
+ 
++    defeat_keys = (
++        "enemy_defeated",
++        "defeated_enemy",
++        "defeated_enemies",
++        "defeated",
++        "defeat",
++        "victory",
++        "enemy_status",
++    )
++    for source in _row_authoritative_state_sources(row):
++        source_d = _safe_dict(source)
++        if _source_has_any_key(source_d, defeat_keys):
++            return True
++        status = _safe_str(source_d.get("status")).lower()
++        if status in {"defeated", "dead", "resolved", "victory"}:
++            return True
+     return False
+ 
+ 
++def _row_has_authoritative_combat_resolution_support(row: Dict[str, Any]) -> bool:
++    mechanics = _row_mechanics_set(row)
++    if any(
++        mechanic in mechanics
++        for mechanic in (
++            "combat_resolved",
++            "encounter_resolved",
++            "combat_victory",
++            "combat_ended",
++        )
++    ):
++        return True
++
++    resolution_keys = (
++        "combat_resolved",
++        "encounter_resolved",
++        "resolved",
++        "victory",
++        "ended",
++        "combat_ended",
++    )
++    return any(_source_has_any_key(source, resolution_keys) for source in _row_authoritative_state_sources(row))
++
++
+ def _turn_has_combat_support(row: Dict[str, Any]) -> bool:
+     row = _safe_dict(row)
+     mechanics = {
 diff --git a/src/tests/rpg/test_autoplay_presentation_intent_finalizer.py b/src/tests/rpg/test_autoplay_presentation_intent_finalizer.py
-index 01db64e..21150af 100644
+index be18f35..d57b3fd 100644
 --- a/src/tests/rpg/test_autoplay_presentation_intent_finalizer.py
 +++ b/src/tests/rpg/test_autoplay_presentation_intent_finalizer.py
-@@ -364,3 +364,85 @@ def test_background_attachment_summary_splits_hard_and_metadata_repairs():
-     assert attachment["hard_repaired_count"] == 1
-     assert attachment["metadata_repaired_count"] == 1
+@@ -76,12 +76,41 @@ def test_provider_combat_intent_is_rejected_without_authoritative_combat_support
+     assert validated["support"]["combat"] is False
  
-+
-+
-+def test_provider_general_reclassification_is_metadata_only_soft_repair():
-+    row = {
-+        "player_action": "I scout the quarry road for ambush signs.",
-+        "canonical_turn_action": "I scout the quarry road for ambush signs.",
-+        "narration": "You study the road dust and brush for signs of where the ambush was prepared.",
-+        "display_narration": "You study the road dust and brush for signs of where the ambush was prepared.",
-+        "presentation_intent": {"primary_category": "general", "confidence": 0.0},
-+        "background_presentation_result": {"action_category": "investigation"},
-+        "direct_graph_action_completion": {
-+            "action_id": "scout_quarry_road",
-+            "mechanics": ["investigation", "evidence"],
+ 
+-def test_unsupported_combat_presentation_gets_repaired_with_validated_intent():
++def test_combat_colored_prose_without_state_claim_is_not_hard_repaired():
+     row = {
+         "player_action": "I report the ambush evidence to Bran.",
+         "canonical_turn_action": "I report the ambush evidence to Bran.",
+-        "narration": "You draw your blade and press the combat until the bandit ambush breaks.",
+-        "display_narration": "You draw your blade and press the combat until the bandit ambush breaks.",
++        "narration": "You draw your blade while describing the ambush evidence, and Bran weighs the threat carefully.",
++        "display_narration": "You draw your blade while describing the ambush evidence, and Bran weighs the threat carefully.",
++        "presentation_intent": {
++            "primary_category": "evidence",
++            "secondary_categories": ["dialogue"],
++            "confidence": 0.9,
++            "reason": "reporting evidence",
 +        },
-+        "mechanics_covered_this_turn": ["investigation", "evidence"],
++        "direct_graph_action_completion": {
++            "action_id": "report_findings_to_bran",
++            "mechanics": ["dialogue", "evidence"],
++        },
++        "mechanics_covered_this_turn": ["dialogue", "evidence"],
 +    }
 +
 +    repaired = _apply_turn_bound_presentation_compatibility_gate(row)
 +
-+    assert repaired["validated_presentation_category"] == "investigation"
-+    assert repaired["presentation_status"] == "attached_soft_reclassified"
-+    assert repaired["presentation_repair_tier"] == "soft_classification"
-+    assert repaired["presentation_repair_type"] == "metadata_only"
++    assert repaired["presentation_status"] == "attached"
++    assert repaired.get("presentation_repair_tier") is None
 +    assert repaired["visible_text_replaced"] is False
-+    assert repaired["hard_grounding_repair"] is False
-+    assert repaired["soft_classification_repair"] is True
-+    assert repaired["background_semantic_reviewer"]["queued"] is True
-+    assert "road dust" in repaired["narration"]
++    assert repaired["unsupported_combat_claim_suppressed"] is False
++    assert repaired["presentation_hard_grounding"]["ok"] is True
++    assert "draw your blade" in repaired["narration"].lower()
 +
 +
-+def test_slim_transcript_exposes_repair_diagnostics():
-+    from tests.rpg.autoplay_llm_campaign import _slim_transcript_row
-+
++def test_unsupported_defeat_claim_gets_hard_repaired_without_defeat_state():
 +    row = {
-+        "turn_index": 16,
-+        "player_action": "I scout the quarry road for ambush signs.",
-+        "presentation_status": "attached_soft_reclassified",
-+        "presentation_repair_tier": "soft_classification",
-+        "presentation_repair_type": "metadata_only",
-+        "visible_text_replaced": False,
-+        "hard_grounding_repair": False,
-+        "soft_classification_repair": True,
-+        "presentation_hard_grounding": {"ok": True},
-+        "presentation_soft_classification": {"metadata_repair_required": True},
-+        "background_semantic_reviewer": {"queued": True, "blocking": False},
-+    }
-+
-+    slim = _slim_transcript_row(row)
-+
-+    assert slim["presentation_repair_tier"] == "soft_classification"
-+    assert slim["presentation_repair_type"] == "metadata_only"
-+    assert slim["visible_text_replaced"] is False
-+    assert slim["hard_grounding_repair"] is False
-+    assert slim["soft_classification_repair"] is True
-+    assert slim["presentation_hard_grounding"]["ok"] is True
-+    assert slim["presentation_soft_classification"]["metadata_repair_required"] is True
-+    assert slim["background_semantic_reviewer"]["queued"] is True
-+
-+
-+def test_dialogue_relevance_summary_uses_synced_validated_category():
-+    from tests.rpg.autoplay_llm_campaign import _build_dialogue_action_relevance_summary
-+
-+    transcript = [
-+        {
-+            "turn_index": 8,
-+            "player_action": "I report the ambush evidence to Bran.",
-+            "validated_presentation_category": "evidence",
-+            "validated_presentation_intent": {"primary_category": "evidence"},
-+            "dialogue_action_relevance": {
-+                "ok": False,
-+                "action_kind": "combat",
-+                "dialogue_kind": "social_investigation",
-+                "reasons": ["combat_action_dialogue_mismatch"],
-+            },
-+        }
-+    ]
-+
-+    summary = _build_dialogue_action_relevance_summary(transcript=transcript)
-+
-+    assert summary["by_action_kind"] == {"evidence": 1}
-+    assert summary["mismatch_count"] == 0
-+    assert summary["by_reason"] == {}
++        "player_action": "I report the ambush evidence to Bran.",
++        "canonical_turn_action": "I report the ambush evidence to Bran.",
++        "narration": "You explain the ambush, then the bandit falls dead at your feet.",
++        "display_narration": "You explain the ambush, then the bandit falls dead at your feet.",
+         "presentation_intent": {
+             "primary_category": "evidence",
+             "secondary_categories": ["dialogue"],
+@@ -102,9 +131,8 @@ def test_unsupported_combat_presentation_gets_repaired_with_validated_intent():
+     assert repaired["visible_text_replaced"] is True
+     assert repaired["unsupported_combat_claim_suppressed"] is True
+     assert repaired["validated_presentation_category"] == "evidence"
+-    assert "draw your blade" not in repaired["narration"].lower()
+-    assert "combat" not in repaired["narration"].lower()
+-
++    assert "unsupported_defeat_claim" in repaired["presentation_hard_grounding"]["reasons"]
++    assert "falls dead" not in repaired["narration"].lower()
+ 
+ 
+ def test_missing_provider_intent_uses_specific_evidence_fallback_not_general():
