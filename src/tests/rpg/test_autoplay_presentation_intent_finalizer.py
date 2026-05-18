@@ -451,9 +451,6 @@ def test_hard_currency_hallucination_replaces_visible_text():
 
 
 def test_background_attachment_summary_splits_hard_and_metadata_repairs():
-    from tests.rpg.autoplay_llm_campaign import (
-        _build_background_presentation_attachment_summary,
-    )
 
     summary = {
         "background_presentation_attachment_events": [
@@ -731,4 +728,90 @@ def test_final_transcript_rows_sync_public_intent_fields_from_validated_provider
     assert final_rows[0]["presentation_intent"]["primary_category"] == "dialogue"
     assert final_rows[0]["presentation_intent_parse_source"] == "combined_background_llm_result.presentation_intent"
     assert final_rows[0]["llm_presentation_category"] == "dialogue"
+
+
+def test_final_artifact_rows_rewrite_public_intent_from_validated_provider_intent():
+    from tests.rpg.autoplay_llm_campaign import _build_final_transcript_artifact_rows
+
+    rows = [
+        {
+            "turn_index": 2,
+            "player_action": "I ask Bran who left through the side door and why they were afraid.",
+            "canonical_turn_action": "I ask Bran who left through the side door and why they were afraid.",
+            "presentation_intent": {"primary_category": "general", "confidence": 0.0},
+            "presentation_intent_parse_source": "missing",
+            "llm_presentation_category": "general",
+            "combined_background_llm_result": {
+                "presentation_intent": {
+                    "primary_category": "dialogue",
+                    "secondary_categories": ["investigation"],
+                    "confidence": 0.95,
+                    "reason": "The player is asking Bran a direct question.",
+                }
+            },
+            "direct_graph_action_completion": {
+                "action_id": "ask_bran_who_left_side_door",
+                "mechanics": ["dialogue"],
+            },
+            "mechanics_covered_this_turn": ["dialogue"],
+            "dialogue_action_relevance": {"ok": True, "action_kind": "general", "reasons": []},
+        }
+    ]
+
+    final_rows = _build_final_transcript_artifact_rows(
+        transcript=rows,
+        transcript_artifacts={},
+        summary={"turns_executed": 1},
+        session_id="test-session",
+    )
+
+    row = final_rows[0]
+    assert row["llm_presentation_category"] == "dialogue"
+    assert row["presentation_intent"]["primary_category"] == "dialogue"
+    assert row["presentation_intent"]["secondary_categories"] == ["investigation"]
+    assert row["presentation_intent_parse_source"] == "combined_background_llm_result.presentation_intent"
+    assert row["presentation_intent"]["parse_source"] == "combined_background_llm_result.presentation_intent"
+    assert row["validated_presentation_category"] == "dialogue"
+    assert row["dialogue_action_relevance"]["action_kind"] == "social"
+
+
+def test_final_artifact_rows_rewrite_public_intent_even_when_validated_category_is_clamped():
+    from tests.rpg.autoplay_llm_campaign import _build_final_transcript_artifact_rows
+
+    rows = [
+        {
+            "turn_index": 8,
+            "player_action": "I report the ambush evidence to Bran.",
+            "canonical_turn_action": "I report the ambush evidence to Bran.",
+            "presentation_intent": {"primary_category": "general", "confidence": 0.0},
+            "llm_presentation_category": "general",
+            "combined_background_llm_result": {
+                "presentation_intent": {
+                    "primary_category": "combat",
+                    "secondary_categories": [],
+                    "confidence": 0.7,
+                    "reason": "Bad provider over-read ambush wording.",
+                }
+            },
+            "direct_graph_action_completion": {
+                "action_id": "report_findings_to_bran",
+                "mechanics": ["dialogue", "evidence"],
+            },
+            "mechanics_covered_this_turn": ["dialogue", "evidence"],
+        }
+    ]
+
+    row = _build_final_transcript_artifact_rows(
+        transcript=rows,
+        transcript_artifacts={},
+        summary={"turns_executed": 1},
+        session_id="test-session",
+    )[0]
+
+    # Public LLM fields show the provider proposal for diagnostics...
+    assert row["llm_presentation_category"] == "combat"
+    assert row["presentation_intent"]["primary_category"] == "combat"
+    # ...while validated category remains the deterministic/clamped category.
+    assert row["validated_presentation_category"] in {"evidence", "dialogue", "mixed"}
+    assert row["validated_presentation_category"] != "combat"
 

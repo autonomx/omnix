@@ -1455,6 +1455,24 @@ def _build_final_transcript_artifact_rows(
         row_d["transcript_artifact_source"] = _safe_str(
             row_d.get("transcript_artifact_source") or source
         )
+
+        # N116.8: final artifact-time public intent rewrite.  Earlier
+        # attachment/gating steps may leave public row fields at the default
+        # ``general`` value even though ``validated_presentation_intent`` has
+        # already recovered the provider proposal from nested background
+        # results.  The full/slim transcripts are user-facing artifacts, so
+        # force their public LLM-intent fields to mirror the provider proposal
+        # that validation actually used immediately before serialization.
+        row_d["validated_presentation_intent"] = _validate_presentation_intent_for_row(
+            row_d,
+            action_text=_safe_str(row_d.get("canonical_turn_action") or row_d.get("player_action")),
+        )
+        row_d["validated_presentation_category"] = _safe_str(
+            _safe_dict(row_d.get("validated_presentation_intent")).get("primary_category")
+        )
+        row_d = _rewrite_public_presentation_intent_fields_from_validated(row_d)
+        row_d = _sync_dialogue_action_relevance_with_validated_presentation(row_d)
+        row_d = _apply_validated_presentation_category_to_relevance(row_d)
         final_rows.append(row_d)
 
     _assert_transcript_artifact_rows_not_null(final_rows)
@@ -7786,6 +7804,66 @@ def _apply_validated_presentation_category_to_relevance(row: Dict[str, Any]) -> 
     relevance["validated_presentation_category"] = category
     relevance["validated_presentation_intent"] = validated
     row["dialogue_action_relevance"] = relevance
+    return row
+
+
+def _rewrite_public_presentation_intent_fields_from_validated(row: Dict[str, Any]) -> Dict[str, Any]:
+    """Force public transcript LLM-intent fields to mirror validated provider intent.
+
+    ``validated_presentation_intent.primary_category`` is the authoritative,
+    clamped presentation category.  ``validated_presentation_intent.proposed_category``
+    is the category proposed by the provider/LLM before clamping.  Public fields
+    named ``presentation_intent`` and ``llm_presentation_category`` are intended
+    to report that provider proposal, not the deterministic fallback/default.
+
+    This helper is intentionally artifact-time and unconditional when a proposed
+    category exists, because run artifacts showed validated intent was correct
+    while public row fields still serialized as ``general``/``missing``.
+    """
+    row = dict(_safe_dict(row))
+    validated = _safe_dict(row.get("validated_presentation_intent"))
+    if not validated:
+        return row
+
+    proposed_category = _normalize_presentation_category(
+        validated.get("proposed_category")
+        or validated.get("provider_category")
+        or validated.get("llm_category")
+        or "general"
+    )
+    if not proposed_category:
+        proposed_category = "general"
+
+    parse_source = _safe_str(
+        validated.get("provider_intent_parse_source")
+        or row.get("presentation_intent_parse_source")
+        or "missing"
+    )
+
+    secondary_categories: List[str] = []
+    for item in _safe_list(validated.get("secondary_categories")):
+        normalized = _normalize_presentation_category(item)
+        if normalized and normalized != proposed_category and normalized not in secondary_categories:
+            secondary_categories.append(normalized)
+
+    try:
+        confidence = float(validated.get("confidence") or 0.0)
+    except Exception:
+        confidence = 0.0
+    confidence = max(0.0, min(1.0, confidence))
+
+    public_intent = {
+        "format_version": "presentation_intent_v1",
+        "primary_category": proposed_category,
+        "secondary_categories": secondary_categories[:4],
+        "confidence": round(confidence, 3),
+        "reason": _safe_str(validated.get("provider_reason") or "")[:240],
+        "parse_source": parse_source,
+    }
+
+    row["presentation_intent"] = public_intent
+    row["presentation_intent_parse_source"] = parse_source
+    row["llm_presentation_category"] = proposed_category
     return row
 
 

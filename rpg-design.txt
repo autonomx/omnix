@@ -1,791 +1,186 @@
-diff --git a/src/tests/rpg/autoplay_llm_campaign.py b/src/tests/rpg/autoplay_llm_campaign.py
-index 338c835..93dfe39 100644
---- a/src/tests/rpg/autoplay_llm_campaign.py
-+++ b/src/tests/rpg/autoplay_llm_campaign.py
-@@ -20069,424 +20069,424 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
-                     f"{gate_name} failed despite direct graph lifecycle evidence"
-                 )
- 
--        summary["autoplay_health"] = _force_final_autoplay_health(summary)
--        if bool(summary.get("ok")) and not bool(_safe_dict(summary.get("autoplay_health")).get("ok")):
--            raise RuntimeError(
--                "summary_json_health_stale_before_write:"
--                f"summary_ok={summary.get('ok')}:"
--                f"evaluation_ok={_safe_dict(summary.get('hundred_turn_evaluation')).get('ok')}:"
--                f"readiness_ok={_safe_dict(summary.get('hundred_turn_readiness_summary')).get('ok')}:"
--                f"autoplay_health={summary.get('autoplay_health')}"
--            )
-+    summary["autoplay_health"] = _force_final_autoplay_health(summary)
-+    if bool(summary.get("ok")) and not bool(_safe_dict(summary.get("autoplay_health")).get("ok")):
-+        raise RuntimeError(
-+            "summary_json_health_stale_before_write:"
-+            f"summary_ok={summary.get('ok')}:"
-+            f"evaluation_ok={_safe_dict(summary.get('hundred_turn_evaluation')).get('ok')}:"
-+            f"readiness_ok={_safe_dict(summary.get('hundred_turn_readiness_summary')).get('ok')}:"
-+            f"autoplay_health={summary.get('autoplay_health')}"
-+        )
- 
--        _assert_final_artifact_consistency(summary)
-+    _assert_final_artifact_consistency(summary)
- 
--        with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as zip_handle:
--            # Write summary.json first
--            summary_path = output_dir_path / "autoplay-summary.json"
--            summary_path.write_text(json.dumps(summary, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
--            zip_handle.write(summary_path, "summary.json")
--            artifact_manifest["generated_files"].append("summary.json")
-+    with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as zip_handle:
-+        # Write summary.json first
-+        summary_path = output_dir_path / "autoplay-summary.json"
-+        summary_path.write_text(json.dumps(summary, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
-+        zip_handle.write(summary_path, "summary.json")
-+        artifact_manifest["generated_files"].append("summary.json")
- 
--            # Write N79/N81 split artifacts
--            _zip_writestr_json(
--                zip_handle,
--                artifact_manifest,
--                "hundred-turn-evaluation.json",
--                summary.get("hundred_turn_evaluation", {}),
--            )
-+        # Write N79/N81 split artifacts
-+        _zip_writestr_json(
-+            zip_handle,
-+            artifact_manifest,
-+            "hundred-turn-evaluation.json",
-+            summary.get("hundred_turn_evaluation", {}),
-+        )
- 
--            _zip_writestr_json(
--                zip_handle,
--                artifact_manifest,
--                "arc-completion-quality-summary.json",
--                summary.get("arc_completion_quality_summary", {}),
--            )
-+        _zip_writestr_json(
-+            zip_handle,
-+            artifact_manifest,
-+            "arc-completion-quality-summary.json",
-+            summary.get("arc_completion_quality_summary", {}),
-+        )
- 
--            _zip_writestr_json(
--                zip_handle,
--                artifact_manifest,
--                "dialogue-repair-quality-summary.json",
--                summary.get("dialogue_repair_quality_summary", {}),
--            )
-+        _zip_writestr_json(
-+            zip_handle,
-+            artifact_manifest,
-+            "dialogue-repair-quality-summary.json",
-+            summary.get("dialogue_repair_quality_summary", {}),
-+        )
- 
--            _zip_writestr_json(
--                zip_handle,
--                artifact_manifest,
--                "dialogue-stale-source-summary.json",
--                summary.get("dialogue_stale_source_summary", {}),
--            )
-+        _zip_writestr_json(
-+            zip_handle,
-+            artifact_manifest,
-+            "dialogue-stale-source-summary.json",
-+            summary.get("dialogue_stale_source_summary", {}),
-+        )
- 
--            _zip_writestr_json(
--                zip_handle,
--                artifact_manifest,
--                "narration-grounding-summary.json",
--                summary.get("narration_grounding_summary", {}),
--            )
-+        _zip_writestr_json(
-+            zip_handle,
-+            artifact_manifest,
-+            "narration-grounding-summary.json",
-+            summary.get("narration_grounding_summary", {}),
-+        )
- 
--            _zip_writestr_json(
--                zip_handle,
--                artifact_manifest,
--                "suppressed-selection-guard-summary.json",
--                summary.get("suppressed_selection_guard_summary", {}),
--            )
-+        _zip_writestr_json(
-+            zip_handle,
-+            artifact_manifest,
-+            "suppressed-selection-guard-summary.json",
-+            summary.get("suppressed_selection_guard_summary", {}),
-+        )
- 
--            _zip_writestr_json(
--                zip_handle,
--                artifact_manifest,
--                "selected-output-grounding-health.json",
--                summary.get("selected_output_grounding_health", {}),
--            )
-+        _zip_writestr_json(
-+            zip_handle,
-+            artifact_manifest,
-+            "selected-output-grounding-health.json",
-+            summary.get("selected_output_grounding_health", {}),
-+        )
- 
--            _zip_writestr_json(
--                zip_handle,
--                artifact_manifest,
--                "location-progression-summary.json",
--                summary.get("location_progression_summary", {}),
--            )
-+        _zip_writestr_json(
-+            zip_handle,
-+            artifact_manifest,
-+            "location-progression-summary.json",
-+            summary.get("location_progression_summary", {}),
-+        )
- 
--            _zip_writestr_json(
--                zip_handle,
--                artifact_manifest,
--                "canonical-progress-quality.json",
--                summary.get("canonical_progress_quality", {}),
--            )
-+        _zip_writestr_json(
-+            zip_handle,
-+            artifact_manifest,
-+            "canonical-progress-quality.json",
-+            summary.get("canonical_progress_quality", {}),
-+        )
- 
--            _zip_writestr_json(
--                zip_handle,
--                artifact_manifest,
--                "turn-action-consistency-summary.json",
--                summary.get("turn_action_consistency_summary", {}),
--            )
-+        _zip_writestr_json(
-+            zip_handle,
-+            artifact_manifest,
-+            "turn-action-consistency-summary.json",
-+            summary.get("turn_action_consistency_summary", {}),
-+        )
- 
--            _zip_writestr_json(
--                zip_handle,
--                artifact_manifest,
--                "performance-seconds-summary.json",
--                summary.get("performance_seconds_summary", {}),
--            )
-+        _zip_writestr_json(
-+            zip_handle,
-+            artifact_manifest,
-+            "performance-seconds-summary.json",
-+            summary.get("performance_seconds_summary", {}),
-+        )
- 
--            _zip_writestr_json(
--                zip_handle,
--                artifact_manifest,
--                "character-inventory-progression.json",
--                summary.get("character_inventory_progression", {}),
--            )
--            _zip_writestr_json(
--                zip_handle,
--                artifact_manifest,
--                "mechanics-coverage-summary.json",
--                summary.get("mechanics_coverage_summary", {}),
--            )
-+        _zip_writestr_json(
-+            zip_handle,
-+            artifact_manifest,
-+            "character-inventory-progression.json",
-+            summary.get("character_inventory_progression", {}),
-+        )
-+        _zip_writestr_json(
-+            zip_handle,
-+            artifact_manifest,
-+            "mechanics-coverage-summary.json",
-+            summary.get("mechanics_coverage_summary", {}),
-+        )
- 
--            _zip_writestr_json(
--                zip_handle,
--                artifact_manifest,
--                "dialogue-action-relevance-summary.json",
--                summary.get("dialogue_action_relevance_summary", {}),
--            )
-+        _zip_writestr_json(
-+            zip_handle,
-+            artifact_manifest,
-+            "dialogue-action-relevance-summary.json",
-+            summary.get("dialogue_action_relevance_summary", {}),
-+        )
+--- a/src/tests/rpg/autoplay_llm_campaign.py	2026-05-18 06:12:31.778970626 +0000
++++ b/src/tests/rpg/autoplay_llm_campaign.py	2026-05-18 06:12:31.780736784 +0000
+@@ -1455,6 +1455,24 @@
+         row_d["transcript_artifact_source"] = _safe_str(
+             row_d.get("transcript_artifact_source") or source
+         )
 +
-+        _zip_writestr_json(
-+            zip_handle,
-+            artifact_manifest,
-+            "transcript.json",
-+            bounded_transcript_rows,
++        # N116.8: final artifact-time public intent rewrite.  Earlier
++        # attachment/gating steps may leave public row fields at the default
++        # ``general`` value even though ``validated_presentation_intent`` has
++        # already recovered the provider proposal from nested background
++        # results.  The full/slim transcripts are user-facing artifacts, so
++        # force their public LLM-intent fields to mirror the provider proposal
++        # that validation actually used immediately before serialization.
++        row_d["validated_presentation_intent"] = _validate_presentation_intent_for_row(
++            row_d,
++            action_text=_safe_str(row_d.get("canonical_turn_action") or row_d.get("player_action")),
 +        )
++        row_d["validated_presentation_category"] = _safe_str(
++            _safe_dict(row_d.get("validated_presentation_intent")).get("primary_category")
++        )
++        row_d = _rewrite_public_presentation_intent_fields_from_validated(row_d)
++        row_d = _sync_dialogue_action_relevance_with_validated_presentation(row_d)
++        row_d = _apply_validated_presentation_category_to_relevance(row_d)
+         final_rows.append(row_d)
  
-+        if _should_write_full_transcript(args):
-             _zip_writestr_json(
-                 zip_handle,
-                 artifact_manifest,
--                "transcript.json",
--                bounded_transcript_rows,
-+                "full-transcript.json",
-+                final_transcript_rows,
-             )
+     _assert_transcript_artifact_rows_not_null(final_rows)
+@@ -7786,6 +7804,66 @@
+     return row
  
--            if _should_write_full_transcript(args):
--                _zip_writestr_json(
--                    zip_handle,
--                    artifact_manifest,
--                    "full-transcript.json",
--                    final_transcript_rows,
--                )
-+        _zip_writestr_json(
-+            zip_handle,
-+            artifact_manifest,
-+            "slim-transcript.json",
-+            slim_transcript_rows,
-+        )
-+        _zip_writestr_json(
-+            zip_handle,
-+            artifact_manifest,
-+            "transcript-size-summary.json",
-+            summary.get("transcript_size_summary", {}),
-+        )
-+        _zip_writestr_json(
-+            zip_handle,
-+            artifact_manifest,
-+            "slim-transcript.json",
-+            slim_transcript_rows,
-+        )
  
--            _zip_writestr_json(
--                zip_handle,
--                artifact_manifest,
--                "slim-transcript.json",
--                slim_transcript_rows,
--            )
--            _zip_writestr_json(
--                zip_handle,
--                artifact_manifest,
--                "transcript-size-summary.json",
--                summary.get("transcript_size_summary", {}),
--            )
--            _zip_writestr_json(
--                zip_handle,
--                artifact_manifest,
--                "slim-transcript.json",
--                slim_transcript_rows,
--            )
-+        _zip_writestr_json(
-+            zip_handle,
-+            artifact_manifest,
-+            "background-presentation-attachment-summary.json",
-+            summary.get("background_presentation_attachment_summary", {}),
-+        )
-+        _zip_writestr_json(
-+            zip_handle,
-+            artifact_manifest,
-+            "background-presentation-attachment-events.json",
-+            summary.get("background_presentation_attachment_events", []),
-+        )
-+        _zip_writestr_json(
-+            zip_handle,
-+            artifact_manifest,
-+            "orphaned-background-presentation-results.json",
-+            summary.get("orphaned_background_presentation_results", []),
-+        )
- 
--            _zip_writestr_json(
--                zip_handle,
--                artifact_manifest,
--                "background-presentation-attachment-summary.json",
--                summary.get("background_presentation_attachment_summary", {}),
--            )
--            _zip_writestr_json(
--                zip_handle,
--                artifact_manifest,
--                "background-presentation-attachment-events.json",
--                summary.get("background_presentation_attachment_events", []),
--            )
--            _zip_writestr_json(
--                zip_handle,
--                artifact_manifest,
--                "orphaned-background-presentation-results.json",
--                summary.get("orphaned_background_presentation_results", []),
--            )
-+        _zip_writestr_json(
-+            zip_handle,
-+            artifact_manifest,
-+            "story-arc-lifecycle-summary.json",
-+            summary.get("story_arc_lifecycle_summary", {}),
-+        )
- 
--            _zip_writestr_json(
--                zip_handle,
--                artifact_manifest,
--                "story-arc-lifecycle-summary.json",
--                summary.get("story_arc_lifecycle_summary", {}),
--            )
-+        _zip_writestr_json(
-+            zip_handle,
-+            artifact_manifest,
-+            "story-arc-aftermath-summary.json",
-+            summary.get("story_arc_aftermath_summary", {}),
-+        )
- 
--            _zip_writestr_json(
--                zip_handle,
--                artifact_manifest,
--                "story-arc-aftermath-summary.json",
--                summary.get("story_arc_aftermath_summary", {}),
--            )
-+        _zip_writestr_json(
-+            zip_handle,
-+            artifact_manifest,
-+            "direct-graph-lifecycle-evidence.json",
-+            summary.get("direct_graph_lifecycle_evidence", {}),
-+        )
- 
--            _zip_writestr_json(
--                zip_handle,
--                artifact_manifest,
--                "direct-graph-lifecycle-evidence.json",
--                summary.get("direct_graph_lifecycle_evidence", {}),
--            )
-+        _zip_writestr_json(
-+            zip_handle,
-+            artifact_manifest,
-+            "successful-arc-completion-evidence.json",
-+            summary.get("successful_arc_completion_evidence", {}),
-+        )
- 
--            _zip_writestr_json(
--                zip_handle,
--                artifact_manifest,
--                "successful-arc-completion-evidence.json",
--                summary.get("successful_arc_completion_evidence", {}),
--            )
-+        _zip_writestr_json(
-+            zip_handle,
-+            artifact_manifest,
-+            "faction-reputation-summary.json",
-+            summary.get("faction_reputation_summary", {}),
-+        )
- 
--            _zip_writestr_json(
--                zip_handle,
--                artifact_manifest,
--                "faction-reputation-summary.json",
--                summary.get("faction_reputation_summary", {}),
--            )
-+        _zip_writestr_json(
-+            zip_handle,
-+            artifact_manifest,
-+            "followup-arc-progression-summary.json",
-+            summary.get("followup_arc_progression_summary", {}),
-+        )
- 
--            _zip_writestr_json(
--                zip_handle,
--                artifact_manifest,
--                "followup-arc-progression-summary.json",
--                summary.get("followup_arc_progression_summary", {}),
--            )
-+        _zip_writestr_json(
-+            zip_handle,
-+            artifact_manifest,
-+            "transcript-artifact-quality-summary.json",
-+            summary.get("transcript_artifact_quality_summary", {}),
-+        )
- 
--            _zip_writestr_json(
--                zip_handle,
--                artifact_manifest,
--                "transcript-artifact-quality-summary.json",
--                summary.get("transcript_artifact_quality_summary", {}),
--            )
-+        _zip_writestr_json(
-+            zip_handle,
-+            artifact_manifest,
-+            "faction-pressure-summary.json",
-+            summary.get("faction_pressure_summary", {}),
-+        )
- 
--            _zip_writestr_json(
--                zip_handle,
--                artifact_manifest,
--                "faction-pressure-summary.json",
--                summary.get("faction_pressure_summary", {}),
--            )
-+        _zip_writestr_json(
-+            zip_handle,
-+            artifact_manifest,
-+            "hundred-turn-readiness-summary.json",
-+            summary.get("hundred_turn_readiness_summary", {}),
-+        )
- 
--            _zip_writestr_json(
--                zip_handle,
--                artifact_manifest,
--                "hundred-turn-readiness-summary.json",
--                summary.get("hundred_turn_readiness_summary", {}),
--            )
-+        _zip_writestr_json(
-+            zip_handle,
-+            artifact_manifest,
-+            "world-signal-summary.json",
-+            summary.get("world_signal_summary", {}),
-+        )
- 
--            _zip_writestr_json(
--                zip_handle,
--                artifact_manifest,
--                "world-signal-summary.json",
--                summary.get("world_signal_summary", {}),
--            )
-+        _zip_writestr_json(
-+            zip_handle,
-+            artifact_manifest,
-+            "followup-arc-resolution-summary.json",
-+            summary.get("followup_arc_resolution_summary", {}),
-+        )
- 
--            _zip_writestr_json(
--                zip_handle,
--                artifact_manifest,
--                "followup-arc-resolution-summary.json",
--                summary.get("followup_arc_resolution_summary", {}),
--            )
-+        _zip_writestr_json(
-+            zip_handle,
-+            artifact_manifest,
-+            "pressure-pacing-summary.json",
-+            summary.get("pressure_pacing_summary", {}),
-+        )
- 
--            _zip_writestr_json(
--                zip_handle,
--                artifact_manifest,
--                "pressure-pacing-summary.json",
--                summary.get("pressure_pacing_summary", {}),
--            )
-+        _zip_writestr_json(
-+            zip_handle,
-+            artifact_manifest,
-+            "escalation-arc-progression-summary.json",
-+            summary.get("escalation_arc_progression_summary", {}),
-+        )
- 
--            _zip_writestr_json(
--                zip_handle,
--                artifact_manifest,
--                "escalation-arc-progression-summary.json",
--                summary.get("escalation_arc_progression_summary", {}),
--            )
-+        _zip_writestr_json(
-+            zip_handle,
-+            artifact_manifest,
-+            "world-state-compression-summary.json",
-+            summary.get("world_state_compression_summary", {}),
-+        )
- 
--            _zip_writestr_json(
--                zip_handle,
--                artifact_manifest,
--                "world-state-compression-summary.json",
--                summary.get("world_state_compression_summary", {}),
--            )
-+        _zip_writestr_json(
-+            zip_handle,
-+            artifact_manifest,
-+            "npc-agency-summary.json",
-+            summary.get("npc_agency_summary", {}),
-+        )
- 
--            _zip_writestr_json(
--                zip_handle,
--                artifact_manifest,
--                "npc-agency-summary.json",
--                summary.get("npc_agency_summary", {}),
--            )
-+        _zip_writestr_json(
-+            zip_handle,
-+            artifact_manifest,
-+            "economy-pressure-summary.json",
-+            summary.get("economy_pressure_summary", {}),
-+        )
- 
--            _zip_writestr_json(
--                zip_handle,
--                artifact_manifest,
--                "economy-pressure-summary.json",
--                summary.get("economy_pressure_summary", {}),
--            )
-+        _zip_writestr_json(
-+            zip_handle,
-+            artifact_manifest,
-+            "combat-lifecycle-summary.json",
-+            summary.get("combat_lifecycle_summary", {}),
-+        )
- 
--            _zip_writestr_json(
--                zip_handle,
--                artifact_manifest,
--                "combat-lifecycle-summary.json",
--                summary.get("combat_lifecycle_summary", {}),
--            )
-+        _zip_writestr_json(
-+            zip_handle,
-+            artifact_manifest,
-+            "faction-consequence-summary.json",
-+            summary.get("faction_consequence_summary", {}),
-+        )
- 
--            _zip_writestr_json(
--                zip_handle,
--                artifact_manifest,
--                "faction-consequence-summary.json",
--                summary.get("faction_consequence_summary", {}),
--            )
-+        _zip_writestr_json(
-+            zip_handle,
-+            artifact_manifest,
-+            "npc-reaction-summary.json",
-+            summary.get("npc_reaction_summary", {}),
-+        )
- 
--            _zip_writestr_json(
--                zip_handle,
--                artifact_manifest,
--                "npc-reaction-summary.json",
--                summary.get("npc_reaction_summary", {}),
--            )
-+        _zip_writestr_json(
-+            zip_handle,
-+            artifact_manifest,
-+            "scenario-progression-action-repeat-summary.json",
-+            summary.get("scenario_progression_action_repeat_summary", {}),
-+        )
- 
--            _zip_writestr_json(
--                zip_handle,
--                artifact_manifest,
--                "scenario-progression-action-repeat-summary.json",
--                summary.get("scenario_progression_action_repeat_summary", {}),
--            )
-+        # Write HTML report
-+        _zip_writestr_once(
-+            zip_handle,
-+            artifact_manifest,
-+            "autoplay-campaign-report.html",
-+            html_report,
-+        )
++def _rewrite_public_presentation_intent_fields_from_validated(row: Dict[str, Any]) -> Dict[str, Any]:
++    """Force public transcript LLM-intent fields to mirror validated provider intent.
 +
-+        # Write legacy artifacts if full detail
-+        if args.artifact_detail == "full":
-+            # Write transcript file to disk first
-+            transcript_path = output_dir_path / "autoplay-transcript.json"
-+            if final_transcript_rows:
-+                transcript_path.write_text(
-+                    json.dumps(
-+                        bounded_transcript_rows,
-+                        ensure_ascii=False,
-+                        indent=2,
-+                        sort_keys=True,
-+                    ),
-+                    encoding="utf-8",
-+                )
-+                zip_handle.write(transcript_path, transcript_path.name)
++    ``validated_presentation_intent.primary_category`` is the authoritative,
++    clamped presentation category.  ``validated_presentation_intent.proposed_category``
++    is the category proposed by the provider/LLM before clamping.  Public fields
++    named ``presentation_intent`` and ``llm_presentation_category`` are intended
++    to report that provider proposal, not the deterministic fallback/default.
 +
-+            # Write metrics files
-+            metrics_path = output_dir_path / "autoplay-progress-metrics.json"
-+            metrics_path.write_text(json.dumps(metrics, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
-+            zip_handle.write(metrics_path, metrics_path.name)
++    This helper is intentionally artifact-time and unconditional when a proposed
++    category exists, because run artifacts showed validated intent was correct
++    while public row fields still serialized as ``general``/``missing``.
++    """
++    row = dict(_safe_dict(row))
++    validated = _safe_dict(row.get("validated_presentation_intent"))
++    if not validated:
++        return row
 +
-+            performance_path = output_dir_path / "autoplay-performance.json"
-+            performance_path.write_text(json.dumps(metrics.get("performance", {}), ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
-+            zip_handle.write(performance_path, performance_path.name)
++    proposed_category = _normalize_presentation_category(
++        validated.get("proposed_category")
++        or validated.get("provider_category")
++        or validated.get("llm_category")
++        or "general"
++    )
++    if not proposed_category:
++        proposed_category = "general"
 +
-+            story_variety_path = output_dir_path / "autoplay-story-variety.json"
-+            story_variety_path.write_text(json.dumps(metrics.get("story_variety", {}), ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
-+            zip_handle.write(story_variety_path, story_variety_path.name)
- 
--            # Write HTML report
--            _zip_writestr_once(
-+            final_autoplay_health = _safe_dict(summary.get("autoplay_health"))
++    parse_source = _safe_str(
++        validated.get("provider_intent_parse_source")
++        or row.get("presentation_intent_parse_source")
++        or "missing"
++    )
 +
-+            _zip_writestr_json(
-                 zip_handle,
-                 artifact_manifest,
--                "autoplay-campaign-report.html",
--                html_report,
-+                "autoplay-health.json",
-+                final_autoplay_health,
-             )
++    secondary_categories: List[str] = []
++    for item in _safe_list(validated.get("secondary_categories")):
++        normalized = _normalize_presentation_category(item)
++        if normalized and normalized != proposed_category and normalized not in secondary_categories:
++            secondary_categories.append(normalized)
++
++    try:
++        confidence = float(validated.get("confidence") or 0.0)
++    except Exception:
++        confidence = 0.0
++    confidence = max(0.0, min(1.0, confidence))
++
++    public_intent = {
++        "format_version": "presentation_intent_v1",
++        "primary_category": proposed_category,
++        "secondary_categories": secondary_categories[:4],
++        "confidence": round(confidence, 3),
++        "reason": _safe_str(validated.get("provider_reason") or "")[:240],
++        "parse_source": parse_source,
++    }
++
++    row["presentation_intent"] = public_intent
++    row["presentation_intent_parse_source"] = parse_source
++    row["llm_presentation_category"] = proposed_category
++    return row
++
++
+ def _validate_presentation_intent_for_row(
+     row: Dict[str, Any],
+     *,
+--- a/src/tests/rpg/test_autoplay_presentation_intent_finalizer.py	2026-05-18 06:12:31.779396017 +0000
++++ b/src/tests/rpg/test_autoplay_presentation_intent_finalizer.py	2026-05-18 06:12:31.781009196 +0000
+@@ -579,3 +579,89 @@
+     assert summary["by_action_kind"] == {"investigation": 1}
+     assert summary["mismatch_count"] == 0
  
--            # Write legacy artifacts if full detail
--            if args.artifact_detail == "full":
--                # Write transcript file to disk first
--                transcript_path = output_dir_path / "autoplay-transcript.json"
--                if final_transcript_rows:
--                    transcript_path.write_text(
--                        json.dumps(
--                            bounded_transcript_rows,
--                            ensure_ascii=False,
--                            indent=2,
--                            sort_keys=True,
--                        ),
--                        encoding="utf-8",
--                    )
--                    zip_handle.write(transcript_path, transcript_path.name)
-+            # Write campaign report files if they exist
-+            campaign_report_html = output_dir_path / "autoplay-campaign-report.html"
-+            campaign_report_json = output_dir_path / "autoplay-campaign-report.json"
- 
--                # Write metrics files
--                metrics_path = output_dir_path / "autoplay-progress-metrics.json"
--                metrics_path.write_text(json.dumps(metrics, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
--                zip_handle.write(metrics_path, metrics_path.name)
-+            # Do not write autoplay-campaign-report.html again here; the canonical HTML
-+            # report was already written through _zip_writestr_once above. Writing this
-+            # legacy file under the same name creates duplicate ZIP entries and can make
-+            # viewers open the stale report.
-+            if campaign_report_html.exists():
-+                zip_handle.write(campaign_report_html, "autoplay-campaign-report-legacy.html")
- 
--                performance_path = output_dir_path / "autoplay-performance.json"
--                performance_path.write_text(json.dumps(metrics.get("performance", {}), ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
--                zip_handle.write(performance_path, performance_path.name)
-+            if campaign_report_json.exists():
-+                zip_handle.write(campaign_report_json, campaign_report_json.name)
- 
--                story_variety_path = output_dir_path / "autoplay-story-variety.json"
--                story_variety_path.write_text(json.dumps(metrics.get("story_variety", {}), ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
--                zip_handle.write(story_variety_path, story_variety_path.name)
-+            # Write other files
-+            code_diff_path = output_dir_path / "code-diff.txt"
-+            if code_diff_path.exists():
-+                zip_handle.write(code_diff_path, code_diff_path.name)
- 
--                final_autoplay_health = _safe_dict(summary.get("autoplay_health"))
-+            console_log_path = output_dir_path / "console-log.txt"
-+            if console_log_path.exists():
-+                zip_handle.write(console_log_path, arcname="console-log.txt")
- 
--                _zip_writestr_json(
--                    zip_handle,
--                    artifact_manifest,
--                    "autoplay-health.json",
--                    final_autoplay_health,
--                )
-+            # Write checkpoints
-+            checkpoint_dir = output_dir_path / "checkpoints"
-+            if checkpoint_dir.exists():
-+                session_id = str(summary.get("session_id") or "")
-+                pattern = f"{session_id}_turn_*.json" if session_id else "*.json"
-+                for checkpoint_path in sorted(checkpoint_dir.glob(pattern)):
-+                    zip_handle.write(checkpoint_path, f"checkpoints/{checkpoint_path.name}")
- 
--                # Write campaign report files if they exist
--                campaign_report_html = output_dir_path / "autoplay-campaign-report.html"
--                campaign_report_json = output_dir_path / "autoplay-campaign-report.json"
--
--                # Do not write autoplay-campaign-report.html again here; the canonical HTML
--                # report was already written through _zip_writestr_once above. Writing this
--                # legacy file under the same name creates duplicate ZIP entries and can make
--                # viewers open the stale report.
--                if campaign_report_html.exists():
--                    zip_handle.write(campaign_report_html, "autoplay-campaign-report-legacy.html")
--
--                if campaign_report_json.exists():
--                    zip_handle.write(campaign_report_json, campaign_report_json.name)
--
--                # Write other files
--                code_diff_path = output_dir_path / "code-diff.txt"
--                if code_diff_path.exists():
--                    zip_handle.write(code_diff_path, code_diff_path.name)
--
--                console_log_path = output_dir_path / "console-log.txt"
--                if console_log_path.exists():
--                    zip_handle.write(console_log_path, arcname="console-log.txt")
--
--                # Write checkpoints
--                checkpoint_dir = output_dir_path / "checkpoints"
--                if checkpoint_dir.exists():
--                    session_id = str(summary.get("session_id") or "")
--                    pattern = f"{session_id}_turn_*.json" if session_id else "*.json"
--                    for checkpoint_path in sorted(checkpoint_dir.glob(pattern)):
--                        zip_handle.write(checkpoint_path, f"checkpoints/{checkpoint_path.name}")
--
--            # Write manifest last
--            zip_handle.writestr(
--                "artifact-manifest.json",
--                json.dumps(artifact_manifest, ensure_ascii=False, indent=2, default=str),
--            )
-+        # Write manifest last
-+        zip_handle.writestr(
-+            "artifact-manifest.json",
-+            json.dumps(artifact_manifest, ensure_ascii=False, indent=2, default=str),
-+        )
- 
--            artifact_paths_base.update(
--                {
--                    "summary": _safe_str(output_dir_path / "autoplay-summary.json"),
--                    "metrics": _safe_str(output_dir_path / "autoplay-progress-metrics.json")
--                    if getattr(args, "artifact_detail", None) == "full"
--                    else "",
--                    "performance": _safe_str(output_dir_path / "autoplay-performance.json")
--                    if getattr(args, "artifact_detail", None) == "full"
--                    else "",
--                    "story_variety": _safe_str(output_dir_path / "autoplay-story-variety.json")
--                    if getattr(args, "artifact_detail", None) == "full"
--                    else "",
--                    "health": _safe_str(output_dir_path / "autoplay-health.json")
--                    if getattr(args, "artifact_detail", None) == "full"
--                    else "",
--                    "transcript": _safe_str(output_dir_path / "autoplay-transcript.json")
--                    if getattr(args, "artifact_detail", None) == "full"
--                    else "",
--                    "html": _safe_str(output_dir_path / "autoplay-campaign-report.html"),
--                    "zip": _safe_str(zip_path),
--                }
--            )
-+        artifact_paths_base.update(
-+            {
-+                "summary": _safe_str(output_dir_path / "autoplay-summary.json"),
-+                "metrics": _safe_str(output_dir_path / "autoplay-progress-metrics.json")
-+                if getattr(args, "artifact_detail", None) == "full"
-+                else "",
-+                "performance": _safe_str(output_dir_path / "autoplay-performance.json")
-+                if getattr(args, "artifact_detail", None) == "full"
-+                else "",
-+                "story_variety": _safe_str(output_dir_path / "autoplay-story-variety.json")
-+                if getattr(args, "artifact_detail", None) == "full"
-+                else "",
-+                "health": _safe_str(output_dir_path / "autoplay-health.json")
-+                if getattr(args, "artifact_detail", None) == "full"
-+                else "",
-+                "transcript": _safe_str(output_dir_path / "autoplay-transcript.json")
-+                if getattr(args, "artifact_detail", None) == "full"
-+                else "",
-+                "html": _safe_str(output_dir_path / "autoplay-campaign-report.html"),
-+                "zip": _safe_str(zip_path),
-+            }
-+        )
- 
--        paths = _merge_artifact_paths(artifact_paths_base, extra_paths)
--        summary["artifact_paths"] = paths  # artifact_paths
-+    paths = _merge_artifact_paths(artifact_paths_base, extra_paths)
-+    summary["artifact_paths"] = paths  # artifact_paths
- 
-     _force_exit_if_background_threads_remain(
-         args=args,
++
++
++def test_final_artifact_rows_rewrite_public_intent_from_validated_provider_intent():
++    from tests.rpg.autoplay_llm_campaign import _build_final_transcript_artifact_rows
++
++    rows = [
++        {
++            "turn_index": 2,
++            "player_action": "I ask Bran who left through the side door and why they were afraid.",
++            "canonical_turn_action": "I ask Bran who left through the side door and why they were afraid.",
++            "presentation_intent": {"primary_category": "general", "confidence": 0.0},
++            "presentation_intent_parse_source": "missing",
++            "llm_presentation_category": "general",
++            "combined_background_llm_result": {
++                "presentation_intent": {
++                    "primary_category": "dialogue",
++                    "secondary_categories": ["investigation"],
++                    "confidence": 0.95,
++                    "reason": "The player is asking Bran a direct question.",
++                }
++            },
++            "direct_graph_action_completion": {
++                "action_id": "ask_bran_who_left_side_door",
++                "mechanics": ["dialogue"],
++            },
++            "mechanics_covered_this_turn": ["dialogue"],
++            "dialogue_action_relevance": {"ok": True, "action_kind": "general", "reasons": []},
++        }
++    ]
++
++    final_rows = _build_final_transcript_artifact_rows(
++        transcript=rows,
++        transcript_artifacts={},
++        summary={"turns_executed": 1},
++        session_id="test-session",
++    )
++
++    row = final_rows[0]
++    assert row["llm_presentation_category"] == "dialogue"
++    assert row["presentation_intent"]["primary_category"] == "dialogue"
++    assert row["presentation_intent"]["secondary_categories"] == ["investigation"]
++    assert row["presentation_intent_parse_source"] == "combined_background_llm_result.presentation_intent"
++    assert row["presentation_intent"]["parse_source"] == "combined_background_llm_result.presentation_intent"
++    assert row["validated_presentation_category"] == "dialogue"
++    assert row["dialogue_action_relevance"]["action_kind"] == "social"
++
++
++def test_final_artifact_rows_rewrite_public_intent_even_when_validated_category_is_clamped():
++    from tests.rpg.autoplay_llm_campaign import _build_final_transcript_artifact_rows
++
++    rows = [
++        {
++            "turn_index": 8,
++            "player_action": "I report the ambush evidence to Bran.",
++            "canonical_turn_action": "I report the ambush evidence to Bran.",
++            "presentation_intent": {"primary_category": "general", "confidence": 0.0},
++            "llm_presentation_category": "general",
++            "combined_background_llm_result": {
++                "presentation_intent": {
++                    "primary_category": "combat",
++                    "secondary_categories": [],
++                    "confidence": 0.7,
++                    "reason": "Bad provider over-read ambush wording.",
++                }
++            },
++            "direct_graph_action_completion": {
++                "action_id": "report_findings_to_bran",
++                "mechanics": ["dialogue", "evidence"],
++            },
++            "mechanics_covered_this_turn": ["dialogue", "evidence"],
++        }
++    ]
++
++    row = _build_final_transcript_artifact_rows(
++        transcript=rows,
++        transcript_artifacts={},
++        summary={"turns_executed": 1},
++        session_id="test-session",
++    )[0]
++
++    # Public LLM fields show the provider proposal for diagnostics...
++    assert row["llm_presentation_category"] == "combat"
++    assert row["presentation_intent"]["primary_category"] == "combat"
++    # ...while validated category remains the deterministic/clamped category.
++    assert row["validated_presentation_category"] in {"evidence", "dialogue", "mixed"}
++    assert row["validated_presentation_category"] != "combat"
