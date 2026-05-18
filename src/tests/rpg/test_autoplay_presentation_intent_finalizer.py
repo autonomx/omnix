@@ -2,6 +2,8 @@ from tests.rpg.autoplay_llm_campaign import (
     _apply_turn_bound_presentation_compatibility_gate,
     _attach_background_presentation_to_row,
     _build_background_presentation_attachment_summary,
+    _find_presentation_intent_candidate,
+    _normalize_final_transcript_presentation_intents,
     _turn_action_category,
     _validate_presentation_intent_for_row,
 )
@@ -206,6 +208,86 @@ def test_slim_transcript_exposes_presentation_intent_fields():
     assert slim["validated_presentation_category"] == "evidence"
 
 
+def test_specific_nested_provider_intent_beats_default_row_general():
+    row = {
+        "turn_index": 2,
+        "player_action": "I ask Bran who left through the side door and why they were afraid.",
+        "canonical_turn_action": "I ask Bran who left through the side door and why they were afraid.",
+        "presentation_intent": {
+            "primary_category": "general",
+            "secondary_categories": [],
+            "confidence": 0.0,
+            "reason": "",
+        },
+        "combined_background_llm_result": {
+            "presentation_intent": {
+                "primary_category": "dialogue",
+                "secondary_categories": ["investigation"],
+                "confidence": 0.95,
+                "reason": "The player is asking an NPC a direct question.",
+            },
+            "narration_payload": {
+                "presentation_intent": {
+                    "primary_category": "dialogue",
+                    "secondary_categories": ["investigation"],
+                    "confidence": 0.95,
+                    "reason": "The player is asking an NPC a direct question.",
+                }
+            },
+        },
+        "direct_graph_action_completion": {
+            "action_id": "ask_bran_about_side_door",
+            "mechanics": ["dialogue"],
+        },
+        "mechanics_covered_this_turn": ["dialogue"],
+    }
+
+    candidate, source = _find_presentation_intent_candidate(row)
+    validated = _validate_presentation_intent_for_row(row)
+
+    assert candidate["primary_category"] == "dialogue"
+    assert source == "combined_background_llm_result.presentation_intent"
+    assert validated["proposed_category"] == "dialogue"
+    assert validated["provider_intent_ok"] is True
+    assert validated["provider_intent_repaired"] is False
+    assert validated["provider_intent_parse_source"] == "combined_background_llm_result.presentation_intent"
+
+
+def test_extract_background_presentation_prefers_nested_specific_intent_over_direct_general():
+    row = {
+        "turn_index": 2,
+        "player_action": "I ask Bran who left through the side door and why they were afraid.",
+        "canonical_turn_action": "I ask Bran who left through the side door and why they were afraid.",
+        "direct_graph_action_completion": {
+            "action_id": "ask_bran_about_side_door",
+            "mechanics": ["dialogue"],
+        },
+        "mechanics_covered_this_turn": ["dialogue"],
+    }
+    result = {
+        "turn_index": 2,
+        "presentation_intent": {"primary_category": "general", "confidence": 0.0, "reason": ""},
+        "narration_payload": {
+            "presentation_intent": {
+                "primary_category": "dialogue",
+                "secondary_categories": ["investigation"],
+                "confidence": 0.91,
+                "reason": "The provider classified the turn as dialogue.",
+            },
+            "narration": "Bran studies the room before answering your question.",
+        },
+    }
+
+    attached = _attach_background_presentation_to_row(row, result)
+    repaired = _apply_turn_bound_presentation_compatibility_gate(attached)
+
+    assert attached["presentation_intent"]["primary_category"] == "dialogue"
+    assert attached["presentation_intent_parse_source"] == "narration_payload.presentation_intent"
+    assert repaired["llm_presentation_category"] == "dialogue"
+    assert repaired["validated_presentation_intent"]["provider_intent_ok"] is True
+    assert repaired["validated_presentation_intent"]["provider_intent_repaired"] is False
+
+
 def test_nested_provider_intent_is_extracted_from_narration_payload():
     row = {
         "turn_index": 2,
@@ -369,7 +451,9 @@ def test_hard_currency_hallucination_replaces_visible_text():
 
 
 def test_background_attachment_summary_splits_hard_and_metadata_repairs():
-    from tests.rpg.autoplay_llm_campaign import _build_background_presentation_attachment_summary
+    from tests.rpg.autoplay_llm_campaign import (
+        _build_background_presentation_attachment_summary,
+    )
 
     summary = {
         "background_presentation_attachment_events": [
@@ -473,4 +557,178 @@ def test_dialogue_relevance_summary_uses_synced_validated_category():
     assert summary["by_action_kind"] == {"evidence": 1}
     assert summary["mismatch_count"] == 0
     assert summary["by_reason"] == {}
+
+
+def test_dialogue_relevance_summary_counts_final_validated_category_over_general_relevance():
+    from tests.rpg.autoplay_llm_campaign import _build_dialogue_action_relevance_summary
+
+    transcript = [
+        {
+            "turn_index": 16,
+            "player_action": "I scout the quarry road for ambush signs.",
+            "validated_presentation_category": "investigation",
+            "validated_presentation_intent": {"primary_category": "investigation"},
+            "dialogue_action_relevance": {
+                "ok": True,
+                "action_kind": "general",
+                "dialogue_kind": "none",
+                "reasons": [],
+            },
+        }
+    ]
+
+    summary = _build_dialogue_action_relevance_summary(transcript=transcript)
+
+    assert summary["by_action_kind"] == {"investigation": 1}
+    assert summary["mismatch_count"] == 0
+
+
+def test_final_transcript_normalization_recovers_nested_provider_intent():
+    rows = [
+        {
+            "turn_index": 2,
+            "player_action": "I ask Bran who left through the side door.",
+            "canonical_turn_action": "I ask Bran who left through the side door.",
+            "presentation_intent": {"primary_category": "general", "confidence": 0.0},
+            "llm_presentation_category": "general",
+            "combined_background_llm_result": {
+                "presentation_intent": {
+                    "primary_category": "dialogue",
+                    "secondary_categories": ["investigation"],
+                    "confidence": 0.95,
+                    "reason": "Asking Bran a direct question.",
+                },
+                "narration_payload": {
+                    "presentation_intent": {
+                        "primary_category": "dialogue",
+                        "secondary_categories": ["investigation"],
+                        "confidence": 0.95,
+                        "reason": "Asking Bran a direct question.",
+                    }
+                },
+            },
+            "direct_graph_action_completion": {
+                "action_id": "ask_bran_about_side_door",
+                "mechanics": ["dialogue", "investigation"],
+            },
+            "mechanics_covered_this_turn": ["dialogue", "investigation"],
+            "dialogue_action_relevance": {
+                "ok": True,
+                "action_kind": "general",
+                "dialogue_kind": "social_investigation",
+                "reasons": [],
+            },
+        }
+    ]
+
+    normalized = _normalize_final_transcript_presentation_intents(rows)
+    row = normalized[0]
+
+    assert row["presentation_intent"]["primary_category"] == "dialogue"
+    assert row["presentation_intent_parse_source"] == "combined_background_llm_result.presentation_intent"
+    assert row["llm_presentation_category"] == "dialogue"
+    assert row["validated_presentation_intent"]["proposed_category"] == "dialogue"
+    assert row["validated_presentation_intent"]["provider_intent_parse_source"] == "combined_background_llm_result.presentation_intent"
+    assert row["validated_presentation_category"] == "dialogue"
+    assert row["dialogue_action_relevance"]["action_kind"] == "social"
+    assert row["final_transcript_intent_normalized"] is True
+
+
+def test_final_transcript_normalization_keeps_specific_row_intent_when_no_nested_provider():
+    rows = [
+        {
+            "turn_index": 8,
+            "player_action": "I report the ambush evidence to Bran.",
+            "canonical_turn_action": "I report the ambush evidence to Bran.",
+            "presentation_intent": {
+                "primary_category": "evidence",
+                "secondary_categories": ["dialogue"],
+                "confidence": 0.8,
+                "reason": "Reporting evidence.",
+                "parse_source": "presentation_intent",
+            },
+            "direct_graph_action_completion": {
+                "action_id": "report_findings_to_bran",
+                "mechanics": ["dialogue", "evidence"],
+            },
+            "mechanics_covered_this_turn": ["dialogue", "evidence"],
+        }
+    ]
+
+    row = _normalize_final_transcript_presentation_intents(rows)[0]
+
+    assert row["presentation_intent"]["primary_category"] == "evidence"
+    assert row["llm_presentation_category"] == "evidence"
+    assert row["validated_presentation_category"] == "evidence"
+
+
+def test_public_row_intent_fields_sync_from_validated_provider_intent():
+    row = {
+        "turn_index": 2,
+        "player_action": "I ask Bran who left through the side door and why they were afraid.",
+        "canonical_turn_action": "I ask Bran who left through the side door and why they were afraid.",
+        "narration": "Bran studies the room before answering your question.",
+        "display_narration": "Bran studies the room before answering your question.",
+        "presentation_intent": {"primary_category": "general", "confidence": 0.0},
+        "combined_background_llm_result": {
+            "presentation_intent": {
+                "primary_category": "dialogue",
+                "secondary_categories": ["investigation"],
+                "confidence": 0.95,
+                "reason": "The provider classified the turn as dialogue.",
+            }
+        },
+        "direct_graph_action_completion": {
+            "action_id": "ask_bran_about_side_door",
+            "mechanics": ["dialogue"],
+        },
+        "mechanics_covered_this_turn": ["dialogue"],
+    }
+
+    repaired = _apply_turn_bound_presentation_compatibility_gate(row)
+
+    assert repaired["validated_presentation_intent"]["proposed_category"] == "dialogue"
+    assert repaired["validated_presentation_intent"]["provider_intent_ok"] is True
+    assert repaired["presentation_intent"]["primary_category"] == "dialogue"
+    assert repaired["presentation_intent"]["parse_source"] == "combined_background_llm_result.presentation_intent"
+    assert repaired["presentation_intent_parse_source"] == "combined_background_llm_result.presentation_intent"
+    assert repaired["llm_presentation_category"] == "dialogue"
+
+
+def test_final_transcript_rows_sync_public_intent_fields_from_validated_provider_intent():
+    from tests.rpg.autoplay_llm_campaign import _build_final_transcript_artifact_rows
+
+    rows = [
+        {
+            "turn_index": 2,
+            "player_action": "I ask Bran who left through the side door and why they were afraid.",
+            "canonical_turn_action": "I ask Bran who left through the side door and why they were afraid.",
+            "presentation_intent": {"primary_category": "general", "confidence": 0.0},
+            "combined_background_llm_result": {
+                "presentation_intent": {
+                    "primary_category": "dialogue",
+                    "secondary_categories": ["investigation"],
+                    "confidence": 0.95,
+                    "reason": "The provider classified the turn as dialogue.",
+                }
+            },
+            "direct_graph_action_completion": {
+                "action_id": "ask_bran_about_side_door",
+                "mechanics": ["dialogue"],
+            },
+            "mechanics_covered_this_turn": ["dialogue"],
+        }
+    ]
+
+    final_rows = _build_final_transcript_artifact_rows(
+        transcript=rows,
+        transcript_artifacts={"transcript": rows},
+        summary={"turns_executed": 1},
+        session_id="test-session",
+    )
+
+    assert final_rows[0]["validated_presentation_intent"]["proposed_category"] == "dialogue"
+    assert final_rows[0]["presentation_intent"]["primary_category"] == "dialogue"
+    assert final_rows[0]["presentation_intent_parse_source"] == "combined_background_llm_result.presentation_intent"
+    assert final_rows[0]["llm_presentation_category"] == "dialogue"
 

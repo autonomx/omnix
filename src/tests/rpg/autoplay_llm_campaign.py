@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from typing import Any, Dict, List, Tuple, Tuple
+from typing import Any, Dict, List, Tuple
 
 from app.rpg.mechanics.mechanics_opportunities import (
     describe_mechanic_opportunity_state,
@@ -1966,7 +1966,12 @@ def _attach_background_presentation_to_row(
 
     narration = _safe_str(presentation.get("narration"))
     npc = _safe_dict(presentation.get("npc"))
-    presentation_intent = _normalize_presentation_intent(presentation.get("presentation_intent"))
+    presentation_intent_candidate, presentation_intent_parse_source = _find_presentation_intent_candidate(
+        presentation
+    )
+    presentation_intent = _normalize_presentation_intent(presentation_intent_candidate)
+    presentation_intent["parse_source"] = presentation_intent_parse_source
+    row["presentation_intent_parse_source"] = presentation_intent_parse_source
 
     if narration:
         row["narration"] = narration
@@ -7448,6 +7453,34 @@ def _extract_row_presentation_intent(row: Dict[str, Any]) -> Dict[str, Any]:
     if normalized.get("primary_category") != "general" or normalized.get("secondary_categories"):
         return normalized
     return normalized
+
+
+def _normalize_final_transcript_presentation_intents(rows: Any) -> List[Dict[str, Any]]:
+    normalized_rows: List[Dict[str, Any]] = []
+    for row_any in _safe_list(rows):
+        row = dict(_safe_dict(row_any))
+
+        if not row.get("presentation_intent"):
+            row["presentation_intent"] = _extract_row_presentation_intent(row)
+        else:
+            row["presentation_intent"] = _normalize_presentation_intent(row.get("presentation_intent"))
+            row["presentation_intent"]["parse_source"] = (
+                _safe_str(row.get("presentation_intent_parse_source"))
+                or _find_presentation_intent_candidate(row)[1]
+            )
+
+        row["presentation_intent_parse_source"] = _safe_str(
+            row.get("presentation_intent_parse_source")
+            or _safe_str(row["presentation_intent"].get("parse_source"))
+        )
+        row["llm_presentation_category"] = _safe_str(
+            _safe_dict(row.get("presentation_intent")).get("primary_category")
+        )
+        row = _apply_turn_bound_presentation_compatibility_gate(row)
+        row["final_transcript_intent_normalized"] = True
+        normalized_rows.append(row)
+
+    return normalized_rows
 
 
 def _classify_visible_action_category_without_validated_intent(row: Dict[str, Any]) -> str:
@@ -19931,6 +19964,12 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
             f"{guard_summary.get('no_replacement_count')} suppressed selections had no replacement"
         )
 
+    # Rebuild final health again after direct-graph bridges and final evaluation
+    # have run. Earlier health normalization happens before those late passes,
+    # so it can keep summary_ok/evaluation_ok as false even when the final
+    # authoritative summary is green.
+    summary["autoplay_health"] = _force_final_autoplay_health(summary)
+
     with _ProbeTimer(
         bool(getattr(args, "debug_autoplay_stage_timing", False)),
         "write_results_zip",
@@ -19955,13 +19994,14 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
             name: str,
             value: Any,
         ) -> None:
+            generated_files = artifact_manifest.setdefault("generated_files", [])
+            if name in generated_files:
+                return
             zip_handle.writestr(
                 name,
                 json.dumps(value, ensure_ascii=False, indent=2, default=str),
             )
-            generated_files = artifact_manifest.setdefault("generated_files", [])
-            if name not in generated_files:
-                generated_files.append(name)
+            generated_files.append(name)
 
         def _zip_writestr_once(
             zip_handle: Any,
@@ -20176,12 +20216,6 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
                 artifact_manifest,
                 "transcript-size-summary.json",
                 summary.get("transcript_size_summary", {}),
-            )
-            _zip_writestr_json(
-                zip_handle,
-                artifact_manifest,
-                "slim-transcript.json",
-                slim_transcript_rows,
             )
 
             _zip_writestr_json(
@@ -20458,6 +20492,9 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
         exit_code=0 if bool(_safe_dict(summary.get("quality_gate_summary")).get("ok", True)) else 1,
     )
 
+    # Final assertion must read health rebuilt from the final summary, not an
+    # artifact-time snapshot captured before late evaluation normalization.
+    summary["autoplay_health"] = _force_final_autoplay_health(summary)
     final_health = _safe_dict(summary.get("autoplay_health"))
     if bool(summary.get("ok")) and not bool(final_health.get("ok")):
         raise RuntimeError(
