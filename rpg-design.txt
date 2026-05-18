@@ -1,20 +1,26 @@
---- a/src/tests/rpg/autoplay_llm_campaign.py	2026-05-18 06:12:31.778970626 +0000
-+++ b/src/tests/rpg/autoplay_llm_campaign.py	2026-05-18 06:12:31.780736784 +0000
-@@ -1455,6 +1455,24 @@
+--- a/src/tests/rpg/autoplay_llm_campaign.py
++++ b/src/tests/rpg/autoplay_llm_campaign.py
+@@ -110,6 +110,10 @@
+           "npc_line_current_action_relevance",
+           "npc_line_repaired",
+           "npc_line_repair_reason",
++          "presentation_meta_leakage_repaired",
++          "presentation_meta_leakage_repair",
++          "narration_before_meta_repair",
++          "npc_line_before_meta_repair",
+           "presentation_status",
+         "narration",
+         "display_narration",
+@@ -1459,8 +1463,20 @@
          row_d["transcript_artifact_source"] = _safe_str(
              row_d.get("transcript_artifact_source") or source
          )
-+
-+        # N116.8: final artifact-time public intent rewrite.  Earlier
-+        # attachment/gating steps may leave public row fields at the default
-+        # ``general`` value even though ``validated_presentation_intent`` has
-+        # already recovered the provider proposal from nested background
-+        # results.  The full/slim transcripts are user-facing artifacts, so
-+        # force their public LLM-intent fields to mirror the provider proposal
-+        # that validation actually used immediately before serialization.
+-        if row_d.get("validated_presentation_intent"):
+-            row_d = _apply_npc_line_current_action_relevance_gate(row_d)
++        action_text = _safe_str(row_d.get("canonical_turn_action") or row_d.get("player_action"))
 +        row_d["validated_presentation_intent"] = _validate_presentation_intent_for_row(
 +            row_d,
-+            action_text=_safe_str(row_d.get("canonical_turn_action") or row_d.get("player_action")),
++            action_text=action_text,
 +        )
 +        row_d["validated_presentation_category"] = _safe_str(
 +            _safe_dict(row_d.get("validated_presentation_intent")).get("primary_category")
@@ -22,165 +28,177 @@
 +        row_d = _rewrite_public_presentation_intent_fields_from_validated(row_d)
 +        row_d = _sync_dialogue_action_relevance_with_validated_presentation(row_d)
 +        row_d = _apply_validated_presentation_category_to_relevance(row_d)
++        row_d = _apply_npc_line_current_action_relevance_gate(row_d)
++        row_d = _apply_presentation_meta_leakage_gate(row_d)
++        row_d = _rewrite_public_presentation_intent_fields_from_validated(row_d)
          final_rows.append(row_d)
  
      _assert_transcript_artifact_rows_not_null(final_rows)
-@@ -7786,6 +7804,66 @@
+@@ -2548,6 +2564,8 @@
+         row["soft_classification_repair"] = False
+ 
+     row = _sync_dialogue_action_relevance_with_validated_presentation(row)
++    row = _rewrite_public_presentation_intent_fields_from_validated(row)
++    row = _apply_presentation_meta_leakage_gate(row)
      return row
  
  
-+def _rewrite_public_presentation_intent_fields_from_validated(row: Dict[str, Any]) -> Dict[str, Any]:
-+    """Force public transcript LLM-intent fields to mirror validated provider intent.
-+
-+    ``validated_presentation_intent.primary_category`` is the authoritative,
-+    clamped presentation category.  ``validated_presentation_intent.proposed_category``
-+    is the category proposed by the provider/LLM before clamping.  Public fields
-+    named ``presentation_intent`` and ``llm_presentation_category`` are intended
-+    to report that provider proposal, not the deterministic fallback/default.
-+
-+    This helper is intentionally artifact-time and unconditional when a proposed
-+    category exists, because run artifacts showed validated intent was correct
-+    while public row fields still serialized as ``general``/``missing``.
-+    """
-+    row = dict(_safe_dict(row))
-+    validated = _safe_dict(row.get("validated_presentation_intent"))
-+    if not validated:
-+        return row
-+
-+    proposed_category = _normalize_presentation_category(
-+        validated.get("proposed_category")
-+        or validated.get("provider_category")
-+        or validated.get("llm_category")
-+        or "general"
-+    )
-+    if not proposed_category:
-+        proposed_category = "general"
-+
-+    parse_source = _safe_str(
-+        validated.get("provider_intent_parse_source")
-+        or row.get("presentation_intent_parse_source")
-+        or "missing"
-+    )
-+
-+    secondary_categories: List[str] = []
-+    for item in _safe_list(validated.get("secondary_categories")):
-+        normalized = _normalize_presentation_category(item)
-+        if normalized and normalized != proposed_category and normalized not in secondary_categories:
-+            secondary_categories.append(normalized)
-+
-+    try:
-+        confidence = float(validated.get("confidence") or 0.0)
-+    except Exception:
-+        confidence = 0.0
-+    confidence = max(0.0, min(1.0, confidence))
-+
-+    public_intent = {
-+        "format_version": "presentation_intent_v1",
-+        "primary_category": proposed_category,
-+        "secondary_categories": secondary_categories[:4],
-+        "confidence": round(confidence, 3),
-+        "reason": _safe_str(validated.get("provider_reason") or "")[:240],
-+        "parse_source": parse_source,
-+    }
-+
-+    row["presentation_intent"] = public_intent
-+    row["presentation_intent_parse_source"] = parse_source
-+    row["llm_presentation_category"] = proposed_category
-+    return row
-+
-+
- def _validate_presentation_intent_for_row(
-     row: Dict[str, Any],
-     *,
---- a/src/tests/rpg/test_autoplay_presentation_intent_finalizer.py	2026-05-18 06:12:31.779396017 +0000
-+++ b/src/tests/rpg/test_autoplay_presentation_intent_finalizer.py	2026-05-18 06:12:31.781009196 +0000
-@@ -579,3 +579,89 @@
-     assert summary["by_action_kind"] == {"investigation": 1}
-     assert summary["mismatch_count"] == 0
+@@ -2691,6 +2709,114 @@
+     return ""
+ 
  
 +
 +
-+def test_final_artifact_rows_rewrite_public_intent_from_validated_provider_intent():
-+    from tests.rpg.autoplay_llm_campaign import _build_final_transcript_artifact_rows
-+
-+    rows = [
-+        {
-+            "turn_index": 2,
-+            "player_action": "I ask Bran who left through the side door and why they were afraid.",
-+            "canonical_turn_action": "I ask Bran who left through the side door and why they were afraid.",
-+            "presentation_intent": {"primary_category": "general", "confidence": 0.0},
-+            "presentation_intent_parse_source": "missing",
-+            "llm_presentation_category": "general",
-+            "combined_background_llm_result": {
-+                "presentation_intent": {
-+                    "primary_category": "dialogue",
-+                    "secondary_categories": ["investigation"],
-+                    "confidence": 0.95,
-+                    "reason": "The player is asking Bran a direct question.",
-+                }
-+            },
-+            "direct_graph_action_completion": {
-+                "action_id": "ask_bran_who_left_side_door",
-+                "mechanics": ["dialogue"],
-+            },
-+            "mechanics_covered_this_turn": ["dialogue"],
-+            "dialogue_action_relevance": {"ok": True, "action_kind": "general", "reasons": []},
-+        }
-+    ]
-+
-+    final_rows = _build_final_transcript_artifact_rows(
-+        transcript=rows,
-+        transcript_artifacts={},
-+        summary={"turns_executed": 1},
-+        session_id="test-session",
-+    )
-+
-+    row = final_rows[0]
-+    assert row["llm_presentation_category"] == "dialogue"
-+    assert row["presentation_intent"]["primary_category"] == "dialogue"
-+    assert row["presentation_intent"]["secondary_categories"] == ["investigation"]
-+    assert row["presentation_intent_parse_source"] == "combined_background_llm_result.presentation_intent"
-+    assert row["presentation_intent"]["parse_source"] == "combined_background_llm_result.presentation_intent"
-+    assert row["validated_presentation_category"] == "dialogue"
-+    assert row["dialogue_action_relevance"]["action_kind"] == "social"
++PRESENTATION_META_LEAKAGE_TERMS = (
++    "system flag",
++    "system flags",
++    "system flagged",
++    "system flagging",
++    "offer not found",
++    "no specific offer was found",
++    "no specific offer",
++    "no specific price was listed",
++    "transactional hiccup",
++    "inventory display",
++    "validator",
++    "schema",
++    "prompt",
++    "turn contract",
++    "authoritative turn contract",
++    "json payload",
++    "classification gate",
++    "compatibility gate",
++    "repair layer",
++)
 +
 +
-+def test_final_artifact_rows_rewrite_public_intent_even_when_validated_category_is_clamped():
-+    from tests.rpg.autoplay_llm_campaign import _build_final_transcript_artifact_rows
++def _presentation_meta_leakage_terms(text: str) -> List[str]:
++    text_n = _normalize_turn_action_text(text)
++    if not text_n:
++        return []
++    return [term for term in PRESENTATION_META_LEAKAGE_TERMS if term in text_n]
 +
-+    rows = [
-+        {
-+            "turn_index": 8,
-+            "player_action": "I report the ambush evidence to Bran.",
-+            "canonical_turn_action": "I report the ambush evidence to Bran.",
-+            "presentation_intent": {"primary_category": "general", "confidence": 0.0},
-+            "llm_presentation_category": "general",
-+            "combined_background_llm_result": {
-+                "presentation_intent": {
-+                    "primary_category": "combat",
-+                    "secondary_categories": [],
-+                    "confidence": 0.7,
-+                    "reason": "Bad provider over-read ambush wording.",
-+                }
-+            },
-+            "direct_graph_action_completion": {
-+                "action_id": "report_findings_to_bran",
-+                "mechanics": ["dialogue", "evidence"],
-+            },
-+            "mechanics_covered_this_turn": ["dialogue", "evidence"],
-+        }
-+    ]
 +
-+    row = _build_final_transcript_artifact_rows(
-+        transcript=rows,
-+        transcript_artifacts={},
-+        summary={"turns_executed": 1},
-+        session_id="test-session",
-+    )[0]
++def _fallback_narration_for_current_action(row: Dict[str, Any]) -> str:
++    row = _safe_dict(row)
++    category = _safe_str(row.get("validated_presentation_category") or row.get("action_category"))
++    action = _normalize_turn_action_text(_safe_str(row.get("canonical_turn_action") or row.get("player_action")))
++    if category == "economy" or any(term in action for term in ("buy", "purchase", "rations", "supplies")):
++        if "ration" in action:
++            return "The practical request cuts through the tavern’s unease, keeping the exchange focused on the rations."
++        return "The practical request keeps the exchange focused on supplies and payment."
++    if category == "service" or any(term in action for term in ("room", "lodging", "rest")):
++        return "The service request stays focused on what the house can actually offer."
++    if category in {"dialogue", "evidence", "investigation"}:
++        return "The exchange stays focused on the immediate question and the facts already in play."
++    if category == "travel":
++        return "The moment stays focused on the route and the next step forward."
++    return "The moment stays grounded in the immediate exchange."
 +
-+    # Public LLM fields show the provider proposal for diagnostics...
-+    assert row["llm_presentation_category"] == "combat"
-+    assert row["presentation_intent"]["primary_category"] == "combat"
-+    # ...while validated category remains the deterministic/clamped category.
-+    assert row["validated_presentation_category"] in {"evidence", "dialogue", "mixed"}
-+    assert row["validated_presentation_category"] != "combat"
++
++def _apply_presentation_meta_leakage_gate(row: Dict[str, Any]) -> Dict[str, Any]:
++    """Repair internal/system wording without replacing the whole presentation.
++
++    This is a presentation hygiene gate, not a hard grounding repair.  It only
++    rewrites the leaked field (narration and/or NPC line) and keeps all valid
++    metadata, categories, and turn-bound attachment state intact.
++    """
++    row = dict(_safe_dict(row))
++    narration = _safe_str(row.get("display_narration") or row.get("narration") or row.get("selected_narration"))
++    npc = _safe_dict(row.get("npc"))
++    npc_line = _safe_str(row.get("npc_line") or npc.get("line"))
++
++    narration_terms = _presentation_meta_leakage_terms(narration)
++    npc_terms = _presentation_meta_leakage_terms(npc_line)
++
++    if not narration_terms and not npc_terms:
++        row.setdefault("presentation_meta_leakage_repaired", False)
++        return row
++
++    repairs: Dict[str, Any] = {
++        "format_version": "presentation_meta_leakage_repair_v1",
++        "narration_terms": narration_terms,
++        "npc_line_terms": npc_terms,
++        "repaired_fields": [],
++    }
++
++    if narration_terms:
++        repaired_narration = _fallback_narration_for_current_action(row)
++        row["narration_before_meta_repair"] = narration
++        row["narration"] = repaired_narration
++        row["display_narration"] = repaired_narration
++        row["selected_narration"] = repaired_narration
++        repairs["repaired_fields"].append("narration")
++
++    if npc_terms:
++        repaired_line = _fallback_npc_line_for_current_action(row)
++        speaker = _safe_str(row.get("npc_speaker") or npc.get("speaker") or "Bran")
++        row["npc_line_before_meta_repair"] = npc_line
++        if repaired_line:
++            row["npc"] = {"speaker": speaker, "line": repaired_line}
++            row["npc_speaker"] = speaker
++            row["npc_line"] = repaired_line
++        else:
++            row = _clear_visible_npc_fields(row)
++        row["npc_line_repaired"] = True
++        row["npc_line_repair_reason"] = "presentation_meta_leakage"
++        repairs["repaired_fields"].append("npc_line")
++
++    row["presentation_meta_leakage_repaired"] = True
++    row["presentation_meta_leakage_repair"] = repairs
++    row["presentation_status"] = _safe_str(row.get("presentation_status") or "attached_metadata_repaired")
++    if row["presentation_status"] == "attached":
++        row["presentation_status"] = "attached_metadata_repaired"
++    row["presentation_repair_tier"] = _safe_str(row.get("presentation_repair_tier") or "soft_classification")
++    row["presentation_repair_type"] = _safe_str(row.get("presentation_repair_type") or "field_meta_leakage_repair")
++    row["visible_text_replaced"] = bool(row.get("visible_text_replaced", False))
++    row["soft_classification_repair"] = True
++    return row
++
+ def _apply_npc_line_current_action_relevance_gate(row: Dict[str, Any]) -> Dict[str, Any]:
+     row = dict(_safe_dict(row))
+     relevance = _npc_line_current_action_relevance_check(row)
+@@ -20133,6 +20259,23 @@
+         _build_background_presentation_attachment_summary(summary, final_transcript_rows)
+     )
+ 
++    # N116.11: rebuild the rich human report from final normalized rows, not
++    # the pre-normalization transcript.  The report previously showed stale NPC
++    # lines even when slim/full transcript JSON had already been repaired.
++    if args.artifact_detail == "full":
++        try:
++            extra_paths.update(
++                write_campaign_report(
++                    output_dir=Path(args.output_dir),
++                    transcript=final_transcript_rows,
++                    summary=summary,
++                    metrics=metrics,
++                    health=_safe_dict(summary.get("autoplay_health") or health),
++                )
++            )
++        except Exception as exc:
++            _timestamped_print(f"Warning: Could not rewrite final normalized campaign report: {exc}")
++
+     bounded_transcript_rows = _build_bounded_transcript_rows(
+         final_transcript_rows,
+         max_row_bytes=50000,
+@@ -20181,7 +20324,19 @@
+                 f"summary_ok={summary.get('ok')}:"
+                 f"health={final_health}"
+             )
++    html_report_source = dict(summary)
++    html_report_source.update(_safe_dict(report_payload))
++    html_report_source["final_transcript_rows"] = final_transcript_rows
+     html_report = _build_minimal_autoplay_html_report(final_summary=html_report_source)
++    final_report_html_path = output_dir_path / "autoplay-campaign-report.html"
++    if final_report_html_path.exists():
++        try:
++            # Prefer the rich report file rebuilt from final normalized rows.
++            # This also makes the canonical ZIP entry match the report the user
++            # opens from disk.
++            html_report = final_report_html_path.read_text(encoding="utf-8")
++        except Exception as exc:
++            _timestamped_print(f"Warning: Could not read final normalized report HTML: {exc}")
+ 
+     summary = _apply_direct_graph_lifecycle_bridges(summary)
+ 

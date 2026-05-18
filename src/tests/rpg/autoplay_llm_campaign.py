@@ -104,9 +104,23 @@ def _slim_transcript_row(row: Dict[str, Any], max_row_bytes: int = 50000) -> Dic
          "action_category",
          "presentation_intent",
          "llm_presentation_category",
-         "validated_presentation_intent",
-         "validated_presentation_category",
-         "presentation_status",
+          "validated_presentation_intent",
+            "validated_presentation_category",
+            "current_action_response",
+            "npc_line_current_action_relevance",
+            "npc_line_addresses_current_action",
+             "npc_line_repaired",
+             "npc_line_repair_reason",
+             "npc_line_before_repair",
+             "presentation_meta_leakage_repaired",
+             "presentation_meta_leakage_repair",
+             "narration_before_meta_repair",
+             "npc_line_before_meta_repair",
+             "presentation_meta_leakage",
+             "narration_meta_repaired",
+             "narration_before_meta_repair",
+             "meta_language_repair",
+             "presentation_status",
         "narration",
         "display_narration",
         "selected_narration",
@@ -1455,14 +1469,6 @@ def _build_final_transcript_artifact_rows(
         row_d["transcript_artifact_source"] = _safe_str(
             row_d.get("transcript_artifact_source") or source
         )
-
-        # N116.8: final artifact-time public intent rewrite.  Earlier
-        # attachment/gating steps may leave public row fields at the default
-        # ``general`` value even though ``validated_presentation_intent`` has
-        # already recovered the provider proposal from nested background
-        # results.  The full/slim transcripts are user-facing artifacts, so
-        # force their public LLM-intent fields to mirror the provider proposal
-        # that validation actually used immediately before serialization.
         row_d["validated_presentation_intent"] = _validate_presentation_intent_for_row(
             row_d,
             action_text=_safe_str(row_d.get("canonical_turn_action") or row_d.get("player_action")),
@@ -1470,9 +1476,15 @@ def _build_final_transcript_artifact_rows(
         row_d["validated_presentation_category"] = _safe_str(
             _safe_dict(row_d.get("validated_presentation_intent")).get("primary_category")
         )
-        row_d = _rewrite_public_presentation_intent_fields_from_validated(row_d)
+        row_d = _sync_public_presentation_intent_from_validated(row_d)
         row_d = _sync_dialogue_action_relevance_with_validated_presentation(row_d)
         row_d = _apply_validated_presentation_category_to_relevance(row_d)
+        row_d["current_action_response"] = _row_current_action_response_focus(row_d)
+        row_d["npc_line_addresses_current_action"] = bool(
+            _safe_dict(row_d.get("current_action_response")).get("npc_line_addresses_current_action")
+        )
+        row_d = _apply_npc_line_current_action_relevance_gate(row_d)
+        row_d = _apply_presentation_meta_leakage_gate(row_d)
         final_rows.append(row_d)
 
     _assert_transcript_artifact_rows_not_null(final_rows)
@@ -1666,6 +1678,160 @@ def _assert_transcript_artifact_rows_not_null(transcript: Any) -> None:
         )
 
 
+PRESENTATION_META_LEAKAGE_TERMS = (
+    "system flag",
+    "system flags",
+    "system flagged",
+    "system flagging",
+    "offer not found",
+    "no specific offer was found",
+    "no specific offer",
+    "no specific price was listed",
+    "transactional hiccup",
+    "inventory display",
+    "validator",
+    "schema",
+    "prompt",
+    "turn contract",
+    "authoritative turn contract",
+    "json payload",
+    "classification gate",
+    "compatibility gate",
+    "repair layer",
+)
+
+
+def _presentation_meta_leakage_terms(text: str) -> List[str]:
+    text_n = _normalize_turn_action_text(text)
+    if not text_n:
+        return []
+    return [term for term in PRESENTATION_META_LEAKAGE_TERMS if term in text_n]
+
+
+def _fallback_narration_for_current_action(row: Dict[str, Any]) -> str:
+    row = _safe_dict(row)
+    category = _safe_str(row.get("validated_presentation_category") or row.get("action_category"))
+    action = _normalize_turn_action_text(_safe_str(row.get("canonical_turn_action") or row.get("player_action")))
+    if category == "economy" or any(term in action for term in ("buy", "purchase", "ration", "supplies")):
+        if "ration" in action:
+            return "The purchase stays practical: Bran handles the rations while the tavern's unease remains in the background."
+        return "The transaction stays grounded in the goods, coin, and availability recorded for this turn."
+    if category == "service" or any(term in action for term in ("room", "lodging", "rest")):
+        return "The service request is handled according to what the tavern can actually provide this turn."
+    if category in {"dialogue", "evidence", "investigation"}:
+        return "The exchange stays focused on the question at hand and the facts recorded this turn."
+    if category == "travel":
+        return "The movement follows only the route and location change recorded by the turn result."
+    return "The moment resolves according to the current action and the authoritative turn result."
+
+
+def _apply_presentation_meta_leakage_gate(row: Dict[str, Any]) -> Dict[str, Any]:
+    """Repair internal/system wording without replacing the whole presentation.
+
+    This is a presentation hygiene gate, not a hard grounding repair.  It only
+    rewrites the leaked field (narration and/or NPC line) and keeps all valid
+    metadata, categories, and turn-bound attachment state intact.
+    """
+    row = dict(_safe_dict(row))
+    narration = _safe_str(row.get("display_narration") or row.get("narration") or row.get("selected_narration"))
+    npc = _safe_dict(row.get("npc"))
+    npc_line = _safe_str(row.get("npc_line") or npc.get("line"))
+
+    narration_terms = _presentation_meta_leakage_terms(narration)
+    npc_terms = _presentation_meta_leakage_terms(npc_line)
+
+    if not narration_terms and not npc_terms:
+        row.setdefault("presentation_meta_leakage_repaired", False)
+        return row
+
+    repairs: Dict[str, Any] = {
+        "format_version": "presentation_meta_leakage_repair_v1",
+        "narration_terms": narration_terms,
+        "npc_line_terms": npc_terms,
+        "repaired_fields": [],
+    }
+
+    if narration_terms:
+        repaired_narration = _fallback_narration_for_current_action(row)
+        row["narration_before_meta_repair"] = narration
+        row["narration"] = repaired_narration
+        row["display_narration"] = repaired_narration
+        row["selected_narration"] = repaired_narration
+        repairs["repaired_fields"].append("narration")
+
+    if npc_terms:
+        repaired_line = _fallback_npc_line_for_current_action(row)
+        speaker = _safe_str(row.get("npc_speaker") or npc.get("speaker") or "Bran")
+        row["npc_line_before_meta_repair"] = npc_line
+        if repaired_line:
+            row["npc"] = {"speaker": speaker, "line": repaired_line}
+            row["npc_speaker"] = speaker
+            row["npc_line"] = repaired_line
+        else:
+            row = _clear_visible_npc_fields(row)
+        row["npc_line_repaired"] = True
+        row["npc_line_repair_reason"] = "presentation_meta_leakage"
+        repairs["repaired_fields"].append("npc_line")
+
+    row["presentation_meta_leakage_repaired"] = True
+    row["presentation_meta_leakage_repair"] = repairs
+    row["presentation_status"] = _safe_str(row.get("presentation_status") or "attached_metadata_repaired")
+    if row["presentation_status"] == "attached":
+        row["presentation_status"] = "attached_metadata_repaired"
+    row["presentation_repair_tier"] = _safe_str(row.get("presentation_repair_tier") or "soft_classification")
+    row["presentation_repair_type"] = _safe_str(row.get("presentation_repair_type") or "field_meta_leakage_repair")
+    row["visible_text_replaced"] = bool(row.get("visible_text_replaced", False))
+    row["soft_classification_repair"] = True
+    return row
+
+
+def _sync_public_presentation_intent_from_validated(row: Dict[str, Any]) -> Dict[str, Any]:
+    row = dict(_safe_dict(row))
+    validated = _safe_dict(row.get("validated_presentation_intent"))
+    if not validated:
+        return row
+
+    proposed = _normalize_presentation_category(
+        validated.get("proposed_category")
+        or validated.get("provider_category")
+        or validated.get("llm_category")
+        or validated.get("primary_category")
+        or "general"
+    )
+    if not proposed:
+        proposed = "general"
+
+    secondary: List[str] = []
+    for item in _safe_list(validated.get("secondary_categories")):
+        normalized = _normalize_presentation_category(item)
+        if normalized and normalized != proposed and normalized not in secondary:
+            secondary.append(normalized)
+
+    try:
+        confidence = float(validated.get("confidence") or 0.0)
+    except Exception:
+        confidence = 0.0
+    confidence = max(0.0, min(1.0, confidence))
+
+    parse_source = _safe_str(
+        validated.get("provider_intent_parse_source")
+        or row.get("presentation_intent_parse_source")
+        or "missing"
+    )
+
+    row["presentation_intent"] = {
+        "format_version": "presentation_intent_v1",
+        "primary_category": proposed,
+        "secondary_categories": secondary[:4],
+        "confidence": round(confidence, 3),
+        "reason": _safe_str(validated.get("provider_reason") or validated.get("reason"))[:240],
+        "parse_source": parse_source,
+    }
+    row["presentation_intent_parse_source"] = parse_source
+    row["llm_presentation_category"] = proposed
+    return row
+
+
 def _stable_json_hash(value: Any) -> str:
     try:
         payload = json.dumps(value, sort_keys=True, ensure_ascii=False, default=str)
@@ -1792,6 +1958,71 @@ def _normalize_presentation_intent(value: Any) -> Dict[str, Any]:
     }
 
 
+def _normalize_current_action_response(value: Any) -> Dict[str, Any]:
+    raw = _safe_dict(value)
+    required_focus: List[str] = []
+    for item in _safe_list(
+        raw.get("required_focus")
+        or raw.get("required_response_focus")
+        or raw.get("focus")
+        or raw.get("must_address")
+    ):
+        text = _safe_str(item).strip().lower().replace(" ", "_").replace("-", "_")
+        if text and text not in required_focus:
+            required_focus.append(text[:64])
+    addresses_raw = raw.get("npc_line_addresses_current_action")
+    if addresses_raw is None:
+        addresses_raw = raw.get("addresses_current_action")
+    addresses = bool(addresses_raw) if addresses_raw is not None else False
+    return {
+        "format_version": "current_action_response_v1",
+        "required_focus": required_focus[:6],
+        "npc_line_addresses_current_action": addresses,
+        "reason": _safe_str(raw.get("reason") or raw.get("rationale"))[:240],
+    }
+
+
+def _find_current_action_response_candidate(value: Any) -> Tuple[Dict[str, Any], str]:
+    value = _safe_dict(value)
+    if not value:
+        return {}, "missing"
+    direct_keys = (
+        "current_action_response",
+        "response_focus",
+        "required_response_focus",
+        "current_action_focus",
+        "npc_line_relevance",
+    )
+    for key in direct_keys:
+        candidate = value.get(key)
+        if isinstance(candidate, dict):
+            return candidate, key
+    nested_paths = (
+        ("combined_background_llm_result", "current_action_response"),
+        ("combined_background_llm_result", "narration_payload", "current_action_response"),
+        ("resolved_narration_payload", "current_action_response"),
+        ("narration_payload", "current_action_response"),
+        ("background_presentation_result", "current_action_response"),
+        ("presentation", "current_action_response"),
+        ("narration", "current_action_response"),
+        ("structured_narration", "current_action_response"),
+        ("result", "current_action_response"),
+        ("data", "current_action_response"),
+        ("payload", "current_action_response"),
+    )
+    for path in nested_paths:
+        cursor: Any = value
+        ok = True
+        for key in path:
+            cursor = _safe_dict(cursor).get(key)
+            if cursor is None:
+                ok = False
+                break
+        if ok and isinstance(cursor, dict):
+            return cursor, ".".join(path)
+    return {}, "missing"
+
+
 def _find_presentation_intent_candidate(value: Any) -> Tuple[Dict[str, Any], str]:
     payload = _safe_dict(value)
     if not payload:
@@ -1805,10 +2036,17 @@ def _find_presentation_intent_candidate(value: Any) -> Tuple[Dict[str, Any], str
         "category",
         "intent_category",
     )
+    fallback_candidate: Dict[str, Any] = {}
+    fallback_source = "missing"
     for key in direct_keys:
         candidate = payload.get(key)
         if isinstance(candidate, dict):
-            return candidate, key
+            normalized = _normalize_presentation_intent(candidate)
+            if normalized.get("primary_category") != "general" or normalized.get("secondary_categories"):
+                return candidate, key
+            if not fallback_candidate:
+                fallback_candidate = candidate
+                fallback_source = key
         if isinstance(candidate, str) and candidate.strip():
             return {"primary_category": candidate.strip()}, key
 
@@ -1845,11 +2083,16 @@ def _find_presentation_intent_candidate(value: Any) -> Tuple[Dict[str, Any], str
         if not ok:
             continue
         if isinstance(cursor, dict):
-            return cursor, ".".join(path)
+            normalized = _normalize_presentation_intent(cursor)
+            if normalized.get("primary_category") != "general" or normalized.get("secondary_categories"):
+                return cursor, ".".join(path)
+            if not fallback_candidate:
+                fallback_candidate = cursor
+                fallback_source = ".".join(path)
         if isinstance(cursor, str) and cursor.strip():
             return {"primary_category": cursor.strip()}, ".".join(path)
 
-    return {}, "missing"
+    return fallback_candidate or {}, fallback_source or "missing"
 
 
 def _presentation_identity_matches_turn(
@@ -1925,12 +2168,9 @@ def _extract_background_presentation_text(result: Dict[str, Any]) -> Dict[str, A
     narration_payload = _safe_dict(result.get("narration_payload"))
     selected = _safe_dict(result.get("selected"))
 
-    presentation_intent = _normalize_presentation_intent(
-        result.get("presentation_intent")
-        or narration_payload.get("presentation_intent")
-        or selected.get("presentation_intent")
-        or result.get("intent")
-    )
+    presentation_intent_candidate, presentation_intent_parse_source = _find_presentation_intent_candidate(result)
+    presentation_intent = _normalize_presentation_intent(presentation_intent_candidate)
+    presentation_intent["parse_source"] = presentation_intent_parse_source
 
     narration = _safe_str(
         result.get("narration")
@@ -1950,6 +2190,12 @@ def _extract_background_presentation_text(result: Dict[str, Any]) -> Dict[str, A
         or result.get("npc_speaker")
     )
 
+    current_action_response = _normalize_current_action_response(
+        result.get("current_action_response")
+        or narration_payload.get("current_action_response")
+        or selected.get("current_action_response")
+    )
+
     if not narration:
         narration = _safe_str(
             selected.get("narration")
@@ -1966,6 +2212,8 @@ def _extract_background_presentation_text(result: Dict[str, Any]) -> Dict[str, A
     return {
         "narration": narration,
         "presentation_intent": presentation_intent,
+        "presentation_intent_parse_source": presentation_intent_parse_source,
+        "current_action_response": current_action_response,
         "npc": {
             "speaker": npc_speaker,
             "line": npc_line,
@@ -1984,10 +2232,8 @@ def _attach_background_presentation_to_row(
 
     narration = _safe_str(presentation.get("narration"))
     npc = _safe_dict(presentation.get("npc"))
-    presentation_intent_candidate, presentation_intent_parse_source = _find_presentation_intent_candidate(
-        presentation
-    )
-    presentation_intent = _normalize_presentation_intent(presentation_intent_candidate)
+    presentation_intent = _safe_dict(presentation.get("presentation_intent"))
+    presentation_intent_parse_source = _safe_str(presentation.get("presentation_intent_parse_source"))
     presentation_intent["parse_source"] = presentation_intent_parse_source
     row["presentation_intent_parse_source"] = presentation_intent_parse_source
 
@@ -2002,6 +2248,12 @@ def _attach_background_presentation_to_row(
         row["npc_line"] = _safe_str(npc.get("line"))
 
     row["presentation_intent"] = presentation_intent
+    current_action_response = _safe_dict(presentation.get("current_action_response"))
+    if current_action_response:
+        row["current_action_response"] = current_action_response
+        row["npc_line_addresses_current_action"] = bool(
+            current_action_response.get("npc_line_addresses_current_action")
+        )
     row["llm_presentation_category"] = _safe_str(presentation_intent.get("primary_category"))
 
     row["presentation_status"] = "attached"
@@ -2396,6 +2648,7 @@ def _apply_turn_bound_presentation_compatibility_gate(row: Dict[str, Any]) -> Di
     row["validated_presentation_category"] = _safe_str(
         _safe_dict(row.get("validated_presentation_intent")).get("primary_category")
     )
+    row = _sync_public_presentation_intent_from_validated(row)
     row = _sync_dialogue_action_relevance_with_validated_presentation(row)
     row = _apply_validated_presentation_category_to_relevance(row)
 
@@ -2495,6 +2748,180 @@ def _apply_turn_bound_presentation_compatibility_gate(row: Dict[str, Any]) -> Di
         row["soft_classification_repair"] = False
 
     row = _sync_dialogue_action_relevance_with_validated_presentation(row)
+    row = _rewrite_public_presentation_intent_fields_from_validated(row)
+    row = _apply_presentation_meta_leakage_gate(row)
+    return row
+
+
+STALE_INVESTIGATION_TOPIC_TERMS = (
+    "traveler",
+    "witness",
+    "side door",
+    "frightened",
+    "afraid",
+    "bridge story",
+    "cloaked",
+    "person who frightened",
+)
+
+ECONOMY_SERVICE_RESPONSE_TERMS = (
+    "ration",
+    "rations",
+    "supply",
+    "supplies",
+    "coin",
+    "coins",
+    "gold",
+    "silver",
+    "copper",
+    "price",
+    "cost",
+    "pay",
+    "paid",
+    "sale",
+    "sell",
+    "buy",
+    "bought",
+    "take them",
+    "here you are",
+    "can spare",
+    "in stock",
+    "room",
+    "lodging",
+    "bed",
+    "rest",
+)
+
+
+def _row_current_action_response_focus(row: Dict[str, Any]) -> Dict[str, Any]:
+    row = _safe_dict(row)
+    candidate, source = _find_current_action_response_candidate(row)
+    normalized = _normalize_current_action_response(candidate)
+    normalized["parse_source"] = source
+    if not normalized.get("required_focus"):
+        category = _safe_str(row.get("validated_presentation_category")) or _safe_str(row.get("action_category"))
+        action = _normalize_turn_action_text(
+            _safe_str(row.get("canonical_turn_action") or row.get("player_action"))
+        )
+        focus: List[str] = []
+        if category == "economy" or any(term in action for term in ("buy", "purchase", "rations", "supplies")):
+            focus.extend(["purchase_acknowledgement", "item_quantity_or_availability", "price_or_payment"])
+        elif category == "service" or any(term in action for term in ("rent", "room", "lodging", "rest")):
+            focus.extend(["service_request_acknowledgement", "lodging_or_rest_terms"])
+        elif category in {"dialogue", "evidence", "investigation"}:
+            focus.append("current_question_or_evidence")
+        elif category == "travel":
+            focus.append("current_travel_or_route_action")
+        if focus:
+            normalized["required_focus"] = focus[:6]
+            normalized["reason"] = normalized.get("reason") or "deterministic_focus_from_validated_category"
+    return normalized
+
+
+def _npc_line_addresses_focus_terms(npc_line: str, focus: List[str]) -> bool:
+    line = _normalize_turn_action_text(npc_line)
+    if not line:
+        return False
+    focus_set = {_safe_str(item) for item in focus}
+    if focus_set.intersection({"purchase_acknowledgement", "item_quantity_or_availability", "price_or_payment"}):
+        return any(term in line for term in ECONOMY_SERVICE_RESPONSE_TERMS)
+    if focus_set.intersection({"service_request_acknowledgement", "lodging_or_rest_terms"}):
+        return any(term in line for term in ECONOMY_SERVICE_RESPONSE_TERMS)
+    return True
+
+
+def _npc_line_current_action_relevance_check(row: Dict[str, Any]) -> Dict[str, Any]:
+    row = _safe_dict(row)
+    npc_line = _safe_str(row.get("npc_line") or _safe_dict(row.get("npc")).get("line"))
+    focus = _row_current_action_response_focus(row)
+    required_focus = [_safe_str(item) for item in _safe_list(focus.get("required_focus")) if _safe_str(item)]
+    category = _safe_str(row.get("validated_presentation_category")) or _safe_str(row.get("action_category"))
+    line_norm = _normalize_turn_action_text(npc_line)
+    stale_terms = [term for term in STALE_INVESTIGATION_TOPIC_TERMS if term in line_norm]
+    requires_transaction_response = bool(
+        set(required_focus).intersection(
+            {
+                "purchase_acknowledgement",
+                "item_quantity_or_availability",
+                "price_or_payment",
+                "service_request_acknowledgement",
+                "lodging_or_rest_terms",
+            }
+        )
+        or category in {"economy", "service"}
+    )
+    addresses_focus = _npc_line_addresses_focus_terms(npc_line, required_focus)
+    provider_addresses = bool(focus.get("npc_line_addresses_current_action"))
+
+    ok = True
+    reason = "ok"
+    if npc_line and requires_transaction_response:
+        if stale_terms and not addresses_focus:
+            ok = False
+            reason = "npc_line_answers_stale_investigation_thread_instead_of_current_transaction"
+        elif not addresses_focus and not provider_addresses:
+            ok = False
+            reason = "npc_line_does_not_acknowledge_current_transaction_or_service"
+
+    return {
+        "format_version": "npc_line_current_action_relevance_v1",
+        "ok": ok,
+        "reason": reason,
+        "current_action_category": category,
+        "required_focus": required_focus,
+        "provider_addresses_current_action": provider_addresses,
+        "stale_topic_terms": stale_terms,
+        "requires_transaction_response": requires_transaction_response,
+        "visible_text_replacement_required": False,
+        "npc_line_repair_required": bool(not ok and npc_line),
+    }
+
+
+def _fallback_npc_line_for_current_action(row: Dict[str, Any]) -> str:
+    row = _safe_dict(row)
+    category = _safe_str(row.get("validated_presentation_category")) or _safe_str(row.get("action_category"))
+    action = _normalize_turn_action_text(_safe_str(row.get("canonical_turn_action") or row.get("player_action")))
+    speaker = _safe_str(row.get("npc_speaker") or _safe_dict(row.get("npc")).get("speaker") or "Bran")
+    if category == "economy" or any(term in action for term in ("buy", "purchase", "rations", "supplies")):
+        if "ration" in action:
+            return "Two rations. I can spare them, but keep them dry if you're headed out."
+        return "I can sell what you need, if the stock and coin are there."
+    if category == "service" or any(term in action for term in ("room", "lodging", "rest")):
+        return "I can talk terms for the room, but only what the house can actually offer."
+    if speaker:
+        return "Ask it plainly, and I'll answer what I can."
+    return ""
+
+
+def _apply_npc_line_current_action_relevance_gate(row: Dict[str, Any]) -> Dict[str, Any]:
+    row = dict(_safe_dict(row))
+    relevance = _npc_line_current_action_relevance_check(row)
+    row["npc_line_current_action_relevance"] = relevance
+    row["current_action_response"] = _row_current_action_response_focus(row)
+    if not bool(relevance.get("npc_line_repair_required")):
+        row.setdefault("npc_line_repaired", False)
+        return row
+
+    original_npc = _safe_dict(row.get("npc"))
+    original_line = _safe_str(row.get("npc_line") or original_npc.get("line"))
+    repaired_line = _fallback_npc_line_for_current_action(row)
+    speaker = _safe_str(row.get("npc_speaker") or original_npc.get("speaker") or "Bran")
+    if repaired_line:
+        row["npc"] = {"speaker": speaker, "line": repaired_line}
+        row["npc_speaker"] = speaker
+        row["npc_line"] = repaired_line
+    else:
+        row = _clear_visible_npc_fields(row)
+    row["npc_line_repaired"] = True
+    row["npc_line_repair_reason"] = _safe_str(relevance.get("reason"))
+    row["npc_line_before_repair"] = original_line
+    row["presentation_status"] = _safe_str(row.get("presentation_status") or "attached_metadata_repaired")
+    if row["presentation_status"] == "attached":
+        row["presentation_status"] = "attached_metadata_repaired"
+    row["presentation_repair_tier"] = _safe_str(row.get("presentation_repair_tier") or "soft_classification")
+    row["presentation_repair_type"] = _safe_str(row.get("presentation_repair_type") or "npc_line_metadata_only")
+    row["visible_text_replaced"] = bool(row.get("visible_text_replaced", False))
+    row["soft_classification_repair"] = True
     return row
 
 
@@ -8630,7 +9057,7 @@ def _build_dialogue_action_relevance_summary(
 
         checked_count += 1
 
-        action_kind = _safe_str(relevance.get("action_kind") or "unknown")
+        action_kind = _safe_str(row.get("validated_presentation_category") or relevance.get("action_kind") or "unknown")
         dialogue_kind = _safe_str(relevance.get("dialogue_kind") or "unknown")
         by_action_kind[action_kind] = by_action_kind.get(action_kind, 0) + 1
         by_dialogue_kind[dialogue_kind] = by_dialogue_kind.get(dialogue_kind, 0) + 1

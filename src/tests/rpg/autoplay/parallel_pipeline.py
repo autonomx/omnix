@@ -133,6 +133,79 @@ def _normalize_presentation_intent(value: Any) -> Dict[str, Any]:
     }
 
 
+def _normalize_current_action_response(value: Any) -> Dict[str, Any]:
+    """Normalize provider self-check that the NPC line answers this turn.
+
+    This is not authoritative simulation. It is presentation metadata used to
+    keep the provider focused on the current player action before older quest
+    context, memories, or recent investigation threads.
+    """
+    raw = _safe_dict(value)
+    required_focus: List[str] = []
+    for item in _safe_list(
+        raw.get("required_focus")
+        or raw.get("required_response_focus")
+        or raw.get("focus")
+        or raw.get("must_address")
+    ):
+        text = _safe_str(item).strip().lower().replace(" ", "_").replace("-", "_")
+        if text and text not in required_focus:
+            required_focus.append(text[:64])
+
+    addresses_raw = raw.get("npc_line_addresses_current_action")
+    if addresses_raw is None:
+        addresses_raw = raw.get("addresses_current_action")
+    addresses_current_action = bool(addresses_raw) if addresses_raw is not None else False
+
+    return {
+        "format_version": "current_action_response_v1",
+        "required_focus": required_focus[:6],
+        "npc_line_addresses_current_action": addresses_current_action,
+        "reason": _safe_str(raw.get("reason") or raw.get("rationale"))[:240],
+    }
+
+
+def _find_current_action_response_candidate(payload: Any) -> Tuple[Dict[str, Any], str]:
+    payload = _safe_dict(payload)
+    if not payload:
+        return {}, "missing"
+
+    direct_keys = (
+        "current_action_response",
+        "response_focus",
+        "required_response_focus",
+        "current_action_focus",
+        "npc_line_relevance",
+    )
+    for key in direct_keys:
+        value = payload.get(key)
+        if isinstance(value, dict):
+            return value, key
+
+    nested_paths = (
+        ("presentation", "current_action_response"),
+        ("presentation", "response_focus"),
+        ("narration_payload", "current_action_response"),
+        ("narration_payload", "response_focus"),
+        ("structured_narration", "current_action_response"),
+        ("structured_narration", "response_focus"),
+        ("result", "current_action_response"),
+        ("data", "current_action_response"),
+        ("payload", "current_action_response"),
+    )
+    for path in nested_paths:
+        cursor: Any = payload
+        ok = True
+        for key in path:
+            cursor = _safe_dict(cursor).get(key)
+            if cursor is None:
+                ok = False
+                break
+        if ok and isinstance(cursor, dict):
+            return cursor, ".".join(path)
+    return {}, "missing"
+
+
 def _find_presentation_intent_candidate(payload: Any) -> Tuple[Dict[str, Any], str]:
     """Return provider intent from common local-model JSON shapes.
 
@@ -147,6 +220,8 @@ def _find_presentation_intent_candidate(payload: Any) -> Tuple[Dict[str, Any], s
 
     direct_keys = (
         "presentation_intent",
+        "current_action_response",
+        "response_focus",
         "intent",
         "presentationIntent",
         "classification",
@@ -703,6 +778,8 @@ def _has_expected_combined_provider_keys(payload: Dict[str, Any]) -> bool:
         return False
     expected_keys = {
         "presentation_intent",
+        "current_action_response",
+        "response_focus",
         "intent",
         "narration",
         "action",
@@ -766,6 +843,10 @@ def _extract_nested_combined_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
     if provider_intent_candidate:
         normalized["presentation_intent"] = _normalize_presentation_intent(provider_intent_candidate)
         normalized["presentation_intent_parse_source"] = provider_intent_source
+    response_candidate, response_source = _find_current_action_response_candidate(payload)
+    if response_candidate:
+        normalized["current_action_response"] = _normalize_current_action_response(response_candidate)
+        normalized["current_action_response_parse_source"] = response_source
 
     narration_payload = _safe_dict(
         payload.get("narration_payload")
@@ -799,6 +880,12 @@ def _extract_nested_combined_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
         )
         normalized["presentation_intent"] = _normalize_presentation_intent(provider_intent_candidate)
         normalized["presentation_intent_parse_source"] = provider_intent_source
+        response_candidate, response_source = _find_current_action_response_candidate(
+            {**payload, "narration_payload": narration_payload}
+        )
+        if response_candidate:
+            normalized["current_action_response"] = _normalize_current_action_response(response_candidate)
+            normalized["current_action_response_parse_source"] = response_source
 
     advisory_payload = _safe_dict(
         payload.get("advisory")
@@ -967,6 +1054,7 @@ def _build_combined_background_payload(
     schema_text = (
         "{"
         '"presentation_intent":{"primary_category":"dialogue|evidence|investigation|travel|combat|service|economy|mixed|general","secondary_categories":[],"confidence":0.0,"reason":"short diagnostic reason"},'
+        '"current_action_response":{"required_focus":[],"npc_line_addresses_current_action":true,"reason":"how the NPC line answers the current player action first"},'
         '"narration":"2-5 sentences describing the resolved scene without repeating player input.",'
         '"action":"Short result of the player action.",'
         '"npc":{"speaker":"","line":""},'
@@ -993,6 +1081,7 @@ def _build_combined_background_payload(
             "role": "system",
             "content": (
                 "You are an RPG background enrichment worker. Return JSON only. "
+                "The CURRENT PLAYER ACTION is the highest-priority input. Narration and NPC dialogue must answer that action first before older quest, memory, or investigation context. "
                 "You must not assert authoritative outcomes that are not in the turn contract. "
                 "Do not grant items, currency, quest completion, damage, travel, or rewards. "
                 "You MUST set presentation_intent.primary_category to the most specific semantic intent. "
@@ -1011,7 +1100,9 @@ def _build_combined_background_payload(
                 "You may use loaded_npc_profiles to shape NPC tone, dialogue, memory continuity, and future-hook suggestions. "
                 "You must not treat profile memories or hooks as newly resolved actions. "
                 "You must not invent profile memories that are absent from loaded_npc_profiles or current turn facts. "
-                "If an NPC has arc_stage, axes, memories, or future_hooks, reflect them subtly in the NPC line or candidate summaries when relevant."
+                "If an NPC has arc_stage, axes, memories, or future_hooks, reflect them subtly in the NPC line or candidate summaries when relevant. "
+                "For economy/service turns, the NPC line must acknowledge the transaction/request (item, quantity, price, sale, lodging, rest, or refusal) before optional story flavor. "
+                "Do not answer an older investigation topic unless the current player action asks about that topic."
             ),
         },
         {
@@ -1284,8 +1375,14 @@ def _combined_background_llm_job(
 
         if source == "provider_combined_background_llm":
             presentation_intent = _normalize_presentation_intent(provider_payload.get("presentation_intent"))
+            current_action_response = _normalize_current_action_response(
+                provider_payload.get("current_action_response")
+            )
             diagnostics["provider_intent_parse_source"] = _safe_str(
                 provider_payload.get("presentation_intent_parse_source")
+            ) or "missing"
+            diagnostics["current_action_response_parse_source"] = _safe_str(
+                provider_payload.get("current_action_response_parse_source")
             ) or "missing"
             diagnostics["provider_intent_missing"] = presentation_intent.get("primary_category") == "general" and not presentation_intent.get("secondary_categories")
             diagnostics["provider_intent_general"] = presentation_intent.get("primary_category") == "general"
@@ -1293,6 +1390,7 @@ def _combined_background_llm_job(
                 "format_version": "rpg_narration_v2",
                 "source": "provider_runtime_narration",
                 "presentation_intent": presentation_intent,
+                "current_action_response": current_action_response,
                 "narration": _safe_str(provider_payload.get("narration")) or "The scene settles after the action.",
                 "action": _safe_str(provider_payload.get("action")) or "The action has been resolved.",
                 "npc": _safe_dict(provider_payload.get("npc")),
@@ -1334,6 +1432,12 @@ def _combined_background_llm_job(
                 "confidence": 0.0,
                 "reason": "deterministic_fallback_no_provider_intent",
             }
+            narration_payload["current_action_response"] = {
+                "format_version": "current_action_response_v1",
+                "required_focus": [],
+                "npc_line_addresses_current_action": False,
+                "reason": "deterministic_fallback_no_provider_response_focus",
+            }
             candidates = build_deterministic_advisory_candidates(
                 session_id=session_id,
                 turn_index=turn_index,
@@ -1359,6 +1463,7 @@ def _combined_background_llm_job(
             "diagnostics": diagnostics,
             "prompt_metrics": _safe_dict(diagnostics.get("prompt_metrics")),
             "presentation_intent": _safe_dict(narration_payload.get("presentation_intent")),
+            "current_action_response": _safe_dict(narration_payload.get("current_action_response")),
             "profile_context_summary": _safe_dict(diagnostics.get("profile_context_summary")),
             "worker_ms": elapsed_ms(started),
             "queue_timing": _queue_timing(
