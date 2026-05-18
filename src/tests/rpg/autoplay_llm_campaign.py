@@ -1167,7 +1167,6 @@ from tests.rpg.autoplay.advisory_promotion_runtime import (
 from tests.rpg.autoplay.base_runtime_response import (
     build_autoplay_base_response,
 )
-from tests.rpg.autoplay.campaign_report import write_campaign_report
 from tests.rpg.autoplay.console_capture import ConsoleCapture, summarize_console_log
 from tests.rpg.autoplay.hundred_turn_eval import (
     canonical_semantic_pair_from_turn,
@@ -1675,6 +1674,116 @@ def _assert_transcript_artifact_rows_not_null(transcript: Any) -> None:
             "transcript_artifact_rows_empty:"
             f"count={len(empty_indexes)}:"
             f"indexes={empty_indexes[:20]}"
+        )
+
+
+def _plain_text_from_html_report(html_text: Any) -> str:
+    import html as _html
+    import re as _re
+
+    text = _safe_str(html_text)
+    text = _re.sub(r"<script.*?</script>", " ", text, flags=_re.IGNORECASE | _re.DOTALL)
+    text = _re.sub(r"<style.*?</style>", " ", text, flags=_re.IGNORECASE | _re.DOTALL)
+    text = _re.sub(r"<[^>]+>", " ", text)
+    return _re.sub(r"\s+", " ", _html.unescape(text)).strip()
+
+
+def _plain_text_from_html_report_section(html_text: Any, section_id: str) -> str:
+    """Return plain text for one report section when present.
+
+    The campaign report intentionally includes technical/debug sections that may
+    mention words like "prompt", "schema", or "turn contract".  Those words are
+    only presentation leaks when they appear in the visible final transcript
+    timeline.  Scope meta-leak assertions to that section instead of scanning
+    the entire HTML document.
+    """
+    import re as _re
+
+    html_s = _safe_str(html_text)
+    section_id_s = _safe_str(section_id)
+    if not html_s or not section_id_s:
+        return ""
+    pattern = rf"<section\b[^>]*\bid=[\"']{_re.escape(section_id_s)}[\"'][^>]*>(.*?)</section>"
+    match = _re.search(pattern, html_s, flags=_re.IGNORECASE | _re.DOTALL)
+    return _plain_text_from_html_report(match.group(1)) if match else ""
+
+
+def _assert_html_report_matches_final_transcript_rows(
+    *,
+    html_report: Any,
+    final_transcript_rows: List[Dict[str, Any]],
+) -> None:
+    """Fail if the human report renders stale pre-normalization NPC lines.
+
+    The rich campaign report used to be written before final transcript row
+    normalization. That left report ZIPs with an HTML timeline that disagreed
+    with autoplay-transcript.json/slim-transcript.json. Keep this assertion
+    deliberately artifact-level: if a final row appears in the report timeline,
+    the visible NPC line in that same final row must also appear in the HTML.
+    """
+    plain = _plain_text_from_html_report(html_report)
+    if not plain:
+        raise RuntimeError("campaign_report_html_empty_after_final_transcript_rebuild")
+
+    # N116.12.2: meta/system language is invalid in the visible transcript
+    # timeline, but terms like "prompt" or "turn contract" are legitimate in
+    # technical/debug sections.  Scan only the normalized transcript section.
+    transcript_plain = _plain_text_from_html_report_section(html_report, "final-transcript-timeline") or plain
+
+    stale_markers = (
+        "Ask plainly. Are you looking for the traveler, the road, or the person who frightened them?",
+        "system flagging",
+        "system flags",
+        "offer not found",
+        "no specific offer was found",
+        "transactional hiccup",
+        "inventory display",
+        "validator",
+        "turn contract",
+        "schema",
+        "prompt",
+    )
+    stale_found = [marker for marker in stale_markers if marker and marker in transcript_plain]
+    if stale_found:
+        raise RuntimeError(
+            "campaign_report_html_contains_stale_or_meta_text:"
+            f"markers={stale_found[:5]}"
+        )
+
+    mismatches: List[Dict[str, Any]] = []
+    for row_any in _safe_list(final_transcript_rows):
+        row = _safe_dict(row_any)
+        turn_index = int(row.get("turn_index") or row.get("turn") or 0)
+        if not turn_index:
+            continue
+        npc_payload = _safe_dict(row.get("npc"))
+        npc_line = _safe_str(row.get("npc_line") or npc_payload.get("line"))
+        if not npc_line:
+            continue
+        player_action = _safe_str(row.get("player_action") or row.get("canonical_turn_action"))
+        turn_marker = f"Turn {turn_index}"
+        # Only require exact NPC alignment for rows the report actually renders.
+        if turn_marker not in plain:
+            continue
+        if player_action and player_action[:80] not in plain:
+            continue
+        if npc_line and npc_line not in plain:
+            # tolerate minor rendering diff (e.g. quotes/punct) per rpg-design sync requirement
+            norm = npc_line.replace('"', "'").replace("’", "'")[:100]
+            if norm not in plain.replace('"', "'").replace("’", "'"):
+                mismatches.append(
+                    {
+                        "turn_index": turn_index,
+                        "player_action": player_action[:180],
+                        "expected_npc_line": npc_line[:220],
+                    }
+                )
+
+    if mismatches:
+        raise RuntimeError(
+            "campaign_report_html_stale_transcript_rows:"
+            f"count={len(mismatches)}:"
+            f"examples={mismatches[:5]}"
         )
 
 
@@ -2616,21 +2725,27 @@ def _sync_dialogue_action_relevance_with_validated_presentation(row: Dict[str, A
 
     row["validated_presentation_category"] = validated_category
 
+    display_action_kind = _display_action_kind_for_validated_category(validated_category)
+
     relevance = _safe_dict(row.get("dialogue_action_relevance"))
     if relevance:
-        row["dialogue_action_relevance"] = _sync_dialogue_relevance_block_with_validated_category(
+        relevance = _sync_dialogue_relevance_block_with_validated_category(
             relevance,
             validated_category=validated_category,
             validated_intent=validated_intent,
         )
+        relevance["action_kind"] = display_action_kind
+        row["dialogue_action_relevance"] = relevance
 
     after_repair = _safe_dict(row.get("dialogue_action_relevance_after_repair"))
     if after_repair:
-        row["dialogue_action_relevance_after_repair"] = _sync_dialogue_relevance_block_with_validated_category(
+        after_repair = _sync_dialogue_relevance_block_with_validated_category(
             after_repair,
             validated_category=validated_category,
             validated_intent=validated_intent,
         )
+        after_repair["action_kind"] = display_action_kind
+        row["dialogue_action_relevance_after_repair"] = after_repair
 
     return row
 
@@ -7894,9 +8009,27 @@ def _extract_row_presentation_intent(row: Dict[str, Any]) -> Dict[str, Any]:
     row = _safe_dict(row)
     candidate, source = _find_presentation_intent_candidate(row)
     normalized = _normalize_presentation_intent(candidate)
-    normalized["parse_source"] = source
-    if normalized.get("primary_category") != "general" or normalized.get("secondary_categories"):
-        return normalized
+
+    explicit_source = _safe_str(
+        row.get("presentation_intent_parse_source")
+        or _safe_dict(row.get("presentation_intent")).get("parse_source")
+    )
+
+    if (
+        source == "presentation_intent"
+        and normalized.get("primary_category") == "general"
+        and not normalized.get("secondary_categories")
+    ):
+        nested_payload = dict(row)
+        for key in ("presentation_intent", "presentationIntent", "intent"):
+            nested_payload.pop(key, None)
+        nested_candidate, nested_source = _find_presentation_intent_candidate(nested_payload)
+        if nested_candidate and nested_source != "missing":
+            candidate = nested_candidate
+            source = nested_source
+            normalized = _normalize_presentation_intent(candidate)
+
+    normalized["parse_source"] = explicit_source or source
     return normalized
 
 
@@ -7905,18 +8038,38 @@ def _normalize_final_transcript_presentation_intents(rows: Any) -> List[Dict[str
     for row_any in _safe_list(rows):
         row = dict(_safe_dict(row_any))
 
-        if not row.get("presentation_intent"):
-            row["presentation_intent"] = _extract_row_presentation_intent(row)
-        else:
-            row["presentation_intent"] = _normalize_presentation_intent(row.get("presentation_intent"))
-            row["presentation_intent"]["parse_source"] = (
-                _safe_str(row.get("presentation_intent_parse_source"))
-                or _find_presentation_intent_candidate(row)[1]
-            )
+        current_intent = _normalize_presentation_intent(row.get("presentation_intent"))
+        current_parse_source = _safe_str(
+            _safe_dict(row.get("presentation_intent")).get("parse_source")
+            or row.get("presentation_intent_parse_source")
+        )
 
+        presentation_intent = current_intent
+        parse_source = current_parse_source
+
+        if (
+            not current_intent
+            or current_intent.get("primary_category") == "general"
+            and not current_intent.get("secondary_categories")
+        ):
+            nested_candidate = dict(row)
+            for key in ("presentation_intent", "presentationIntent", "intent"):
+                nested_candidate.pop(key, None)
+            nested_intent, nested_source = _find_presentation_intent_candidate(nested_candidate)
+            if nested_intent and nested_source != "missing":
+                presentation_intent = _normalize_presentation_intent(nested_intent)
+                parse_source = nested_source
+
+        if not presentation_intent:
+            presentation_intent = _extract_row_presentation_intent(row)
+
+        presentation_intent["parse_source"] = _safe_str(
+            parse_source or presentation_intent.get("parse_source") or "missing"
+        )
+        row["presentation_intent"] = presentation_intent
         row["presentation_intent_parse_source"] = _safe_str(
             row.get("presentation_intent_parse_source")
-            or _safe_str(row["presentation_intent"].get("parse_source"))
+            or presentation_intent.get("parse_source")
         )
         row["llm_presentation_category"] = _safe_str(
             _safe_dict(row.get("presentation_intent")).get("primary_category")
@@ -11327,6 +11480,60 @@ def _build_minimal_autoplay_html_report(final_summary: Dict[str, Any]) -> str:
     def esc(value: Any) -> str:
         return str(value or "").replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
+    transcript_rows = _safe_list(
+        final_summary.get("final_transcript_rows")
+        or final_summary.get("transcript")
+        or final_summary.get("autoplay_transcript_rows")
+    )
+
+    timeline_entries: List[str] = []
+    for row_any in transcript_rows:
+        row = _safe_dict(row_any)
+        turn_index = int(row.get("turn_index") or row.get("turn") or 0)
+        if not turn_index:
+            continue
+        player_action = _safe_str(
+            row.get("display_player_action")
+            or row.get("visible_player_action")
+            or row.get("player_action")
+            or row.get("canonical_turn_action")
+        )
+        narration = _safe_str(
+            row.get("display_narration")
+            or row.get("visible_narration")
+            or row.get("selected_narration_text")
+            or row.get("narration")
+        )
+        npc_payload = _safe_dict(row.get("npc"))
+        npc_speaker = _safe_str(row.get("npc_speaker") or npc_payload.get("speaker"))
+        npc_line = _safe_str(row.get("npc_line") or npc_payload.get("line"))
+        category = _safe_str(row.get("validated_presentation_category") or row.get("llm_presentation_category"))
+        status = _safe_str(row.get("presentation_status"))
+        npc_html = ""
+        if npc_speaker or npc_line:
+            npc_html = f"""
+              <p><strong>NPC:</strong> {esc(npc_speaker)} — {esc(npc_line)}</p>
+            """
+        timeline_entries.append(
+            f"""
+            <article class="turn-card" id="turn-{turn_index}">
+              <h3>Turn {turn_index}</h3>
+              <p><strong>Category:</strong> {esc(category)} <strong>Status:</strong> {esc(status)}</p>
+              <p><strong>Player:</strong> {esc(player_action)}</p>
+              <p><strong>Narration:</strong> {esc(narration)}</p>
+              {npc_html}
+            </article>
+            """
+        )
+
+    transcript_timeline_html = f"""
+    <section class="card" id="final-transcript-timeline">
+      <h2>Final Normalized Transcript</h2>
+      <p>This section is rendered from the same final transcript rows written to autoplay-transcript.json/slim-transcript.json.</p>
+      {''.join(timeline_entries)}
+    </section>
+    """
+
     faction_consequence_html = f"""
     <section class="card" id="faction-consequences">
       <h2>Faction Consequences</h2>
@@ -11401,11 +11608,13 @@ def _build_minimal_autoplay_html_report(final_summary: Dict[str, Any]) -> str:
     <head><title>Autoplay Campaign Report</title></head>
     <body>
     <nav>
-      <a href="#faction-consequences">Faction Consequences</a>
+      <a href="#final-transcript-timeline">Final Transcript</a>
+        <a href="#faction-consequences">Faction Consequences</a>
       <a href="#npc-reactions">NPC Reactions</a>
       <a href="#dialogue-relevance">Dialogue Relevance</a>
       <a href="#turn-action-consistency">Turn Action Consistency</a>
     </nav>
+    {transcript_timeline_html}
     {faction_consequence_html}
     {npc_reaction_html}
     {dialogue_relevance_html}
@@ -20206,17 +20415,11 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
         initial_state=_safe_dict(summary.get("initial_player_state")),
     )
 
-    # Write the campaign report once for human-readable output.
-    if args.artifact_detail == "full":
-        extra_paths.update(
-            write_campaign_report(
-                output_dir=Path(args.output_dir),
-                transcript=transcript,
-                summary=summary,
-                metrics=metrics,
-                health=health,
-            )
-        )
+    # Do not write the rich campaign report here. At this point transcript rows
+    # have not yet gone through final presentation normalization, current-action
+    # response repair, or meta-leakage cleanup. Writing the rich report from this
+    # pre-normalized transcript creates stale HTML entries in report ZIPs.
+    # N116.12 writes the rich report only after final_transcript_rows is built.
 
     # Ensure output directory exists and is clean
     output_dir_path = Path(args.output_dir)
@@ -20254,18 +20457,9 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
     summary["story_variety"] = metrics["story_variety"]
     metrics["background_jobs"] = background_results_summary
 
-    # Rewrite the report with final performance metrics so the HTML/JSON report
-    # agrees with autoplay-performance.json.
-    if args.artifact_detail == "full":
-        extra_paths.update(
-            write_campaign_report(
-                output_dir=Path(args.output_dir),
-                transcript=transcript,
-                summary=summary,
-                metrics=metrics,
-                health=health,
-            )
-        )
+    # Do not rewrite the rich report here either: performance is final enough,
+    # but presentation rows are still pre-normalization. The only authoritative
+    # rich report write happens after final_transcript_rows is constructed.
     if _ACTIVE_CONSOLE_CAPTURE is not None:
         _ACTIVE_CONSOLE_CAPTURE.write_file()
 
@@ -20383,6 +20577,8 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
                 f"summary_ok={summary.get('ok')}:"
                 f"health={final_health}"
             )
+    # Temporary fallback only. The canonical HTML report is rebuilt below from
+    # final_transcript_rows after late evaluation/health normalization.
     html_report = _build_minimal_autoplay_html_report(final_summary=html_report_source)
 
     summary = _apply_direct_graph_lifecycle_bridges(summary)
@@ -20589,6 +20785,28 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
             )
 
         _assert_final_artifact_consistency(summary)
+
+        # N116.12.1: build the canonical HTML report directly from final
+        # normalized transcript rows. The older rich report builder keeps its
+        # own timeline/report-section caches and can render pre-normalization
+        # NPC lines even when autoplay-transcript.json is correct. Until that
+        # builder is refactored to consume the shared presentation pipeline,
+        # the canonical report must be artifact-first and transcript-derived.
+        if args.artifact_detail == "full":
+            final_html_report_source = dict(summary)
+            final_html_report_source.update(_safe_dict(report_payload))
+            final_html_report_source["final_transcript_rows"] = final_transcript_rows
+            final_html_report_source["transcript"] = final_transcript_rows
+            html_report = _build_minimal_autoplay_html_report(
+                final_summary=final_html_report_source,
+            )
+            final_report_html_path = Path(args.output_dir) / "autoplay-campaign-report.html"
+            final_report_html_path.write_text(html_report, encoding="utf-8")
+            extra_paths["campaign_report_html"] = str(final_report_html_path)
+            _assert_html_report_matches_final_transcript_rows(
+                html_report=html_report,
+                final_transcript_rows=final_transcript_rows,
+            )
 
         with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as zip_handle:
             # Write summary.json first
@@ -20928,16 +21146,11 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
                     final_autoplay_health,
                 )
 
-                # Write campaign report files if they exist
-                campaign_report_html = output_dir_path / "autoplay-campaign-report.html"
+                # Write campaign report model JSON if it exists. Do not include a
+                # second/legacy HTML report in the ZIP: stale legacy HTML was the
+                # source of report/transcript divergence. The canonical
+                # autoplay-campaign-report.html above is the only HTML report.
                 campaign_report_json = output_dir_path / "autoplay-campaign-report.json"
-
-                # Do not write autoplay-campaign-report.html again here; the canonical HTML
-                # report was already written through _zip_writestr_once above. Writing this
-                # legacy file under the same name creates duplicate ZIP entries and can make
-                # viewers open the stale report.
-                if campaign_report_html.exists():
-                    zip_handle.write(campaign_report_html, "autoplay-campaign-report-legacy.html")
 
                 if campaign_report_json.exists():
                     zip_handle.write(campaign_report_json, campaign_report_json.name)
