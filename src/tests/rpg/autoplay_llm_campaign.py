@@ -1495,11 +1495,17 @@ def _build_final_transcript_artifact_rows(
         row_d["current_action_response"] = _row_current_action_response_focus(row_d)
         row_d["npc_response_architecture"] = _build_npc_response_architecture_for_row(row_d)
         row_d["npc_response_architecture_persisted"] = True
+        row_d = _sync_current_action_response_from_npc_response_architecture(row_d)
         row_d["npc_line_addresses_current_action"] = bool(
             _safe_dict(row_d.get("current_action_response")).get("npc_line_addresses_current_action")
         )
         row_d = _apply_npc_line_current_action_relevance_gate(row_d)
         row_d = _apply_presentation_meta_leakage_gate(row_d)
+        # N116.9.3: the meta-leakage gate can rebuild the architecture packet
+        # without re-syncing current_action_response.  Final transcript rows are
+        # the artifact truth source, so force the sync as the last row-level
+        # diagnostic step before persistence.
+        row_d = _sync_current_action_response_from_npc_response_architecture(row_d)
         final_rows.append(row_d)
 
     _assert_transcript_artifact_rows_not_null(final_rows)
@@ -2393,6 +2399,8 @@ def _apply_presentation_meta_leakage_gate(row: Dict[str, Any]) -> Dict[str, Any]
     row["visible_text_replaced"] = bool(row.get("visible_text_replaced", False))
     row["soft_classification_repair"] = True
     row["npc_response_architecture"] = _build_npc_response_architecture_for_row(row)
+    row["npc_response_architecture_persisted"] = True
+    row = _sync_current_action_response_from_npc_response_architecture(row)
     return row
 
 
@@ -2867,6 +2875,8 @@ def _attach_background_presentation_to_row(
         )
     row["llm_presentation_category"] = _safe_str(presentation_intent.get("primary_category"))
     row["npc_response_architecture"] = _build_npc_response_architecture_for_row(row)
+    row["npc_response_architecture_persisted"] = True
+    row = _sync_current_action_response_from_npc_response_architecture(row)
 
     row["presentation_status"] = "attached"
     row["presentation_attached_from"] = _safe_str(
@@ -3502,6 +3512,148 @@ def _row_current_action_response_focus(row: Dict[str, Any]) -> Dict[str, Any]:
     return normalized
 
 
+def _sync_current_action_response_from_npc_response_architecture(
+    row: Dict[str, Any],
+) -> Dict[str, Any]:
+    """Make current_action_response reflect npc_response_architecture.
+
+    N116.9.1 persisted the architecture packet, but some rows could still carry
+    an older provider-shaped ``current_action_response`` with an empty
+    ``required_focus`` list.  The architecture packet is the deterministic
+    current-action-first contract, so diagnostics and report gates must mirror
+    its focus terms instead of letting stale provider metadata win.
+    """
+    row = dict(_safe_dict(row))
+    architecture = _safe_dict(row.get("npc_response_architecture"))
+    if not architecture:
+        architecture = _build_npc_response_architecture_for_row(row)
+        row["npc_response_architecture"] = architecture
+
+    current = _safe_dict(row.get("current_action_response"))
+    if not current:
+        current = _row_current_action_response_focus(row)
+
+    current_focus: List[str] = [
+        _safe_str(item)
+        for item in _safe_list(current.get("required_focus"))
+        if _safe_str(item)
+    ]
+    architecture_focus: List[str] = [
+        _safe_str(item)
+        for item in _safe_list(architecture.get("required_focus"))
+        if _safe_str(item)
+    ]
+
+    copied_focus: List[str] = []
+    for item in architecture_focus:
+        if item and item not in current_focus:
+            current_focus.append(item)
+            copied_focus.append(item)
+
+    if current_focus:
+        current["required_focus"] = current_focus[:8]
+
+    npc_line = _safe_str(row.get("npc_line") or _safe_dict(row.get("npc")).get("line"))
+    heuristic_addresses = _npc_line_addresses_focus_terms(npc_line, current_focus) if current_focus else False
+    provider_addresses = bool(current.get("provider_addresses_current_action")) or bool(
+        current.get("npc_line_addresses_current_action")
+    )
+    current["npc_line_addresses_current_action"] = bool(provider_addresses or heuristic_addresses)
+    current["provider_addresses_current_action"] = bool(provider_addresses)
+    current["heuristic_addresses_current_action"] = bool(heuristic_addresses)
+    current["architecture_required_focus"] = architecture_focus[:8]
+    current["architecture_focus_sync_applied"] = bool(copied_focus)
+    if copied_focus:
+        current["architecture_focus_sync_copied"] = copied_focus[:8]
+        if not current.get("reason"):
+            current["reason"] = "required_focus_synced_from_npc_response_architecture"
+
+    row["current_action_response"] = current
+    row["npc_line_addresses_current_action"] = bool(
+        current.get("npc_line_addresses_current_action")
+    )
+    return row
+
+
+def _sync_current_action_response_artifact_rows(
+    transcript_rows: List[Dict[str, Any]],
+) -> List[Dict[str, Any]]:
+    """Return artifact rows with current_action_response synced from architecture.
+
+    N116.9.3 fixed summary-time counting, but that allowed the summary to
+    report healthy rows while transcript.json/full-transcript.json/slim-
+    transcript.json still contained the stale unsynced dictionaries.  This
+    helper is the single final-artifact boundary: every JSON transcript artifact
+    must pass through it before bounding/slimming/writing.
+    """
+    synced_rows: List[Dict[str, Any]] = []
+    for row_any in _safe_list(transcript_rows):
+        row = _safe_dict(row_any)
+        if not row:
+            synced_rows.append(row)
+            continue
+        synced_rows.append(
+            _sync_current_action_response_from_npc_response_architecture(row)
+        )
+    return synced_rows
+
+
+def _current_action_response_architecture_sync_mismatches(
+    transcript_rows: List[Dict[str, Any]],
+) -> List[int]:
+    """Return turns where architecture focus is not reflected in current response."""
+    mismatches: List[int] = []
+    for row_any in _safe_list(transcript_rows):
+        row = _safe_dict(row_any)
+        architecture_focus = {
+            _safe_str(item)
+            for item in _safe_list(
+                _safe_dict(row.get("npc_response_architecture")).get("required_focus")
+            )
+            if _safe_str(item)
+        }
+        if not architecture_focus:
+            continue
+        current_focus = {
+            _safe_str(item)
+            for item in _safe_list(
+                _safe_dict(row.get("current_action_response")).get("required_focus")
+            )
+            if _safe_str(item)
+        }
+        if not architecture_focus.issubset(current_focus):
+            mismatches.append(int(row.get("turn_index") or row.get("turn") or 0))
+    return mismatches
+
+
+def _assert_current_action_response_artifact_rows_synced(
+    transcript_rows: List[Dict[str, Any]],
+    *,
+    artifact_name: str,
+) -> None:
+    """Fail if persisted transcript rows would disagree with architecture focus.
+
+    N116.9.5 makes this assertion a final safety net, not just a detector.
+    Some late artifact paths can rebuild or slim rows after the normal sync
+    step.  When a mutable list is supplied, sync it in place first so the same
+    objects that are later written to JSON are repaired before the gate checks
+    them.
+    """
+    synced_rows = _sync_current_action_response_artifact_rows(transcript_rows)
+    if isinstance(transcript_rows, list):
+        transcript_rows[:] = synced_rows
+    else:
+        transcript_rows = synced_rows
+    mismatches = _current_action_response_architecture_sync_mismatches(synced_rows)
+    if mismatches:
+        raise RuntimeError(
+            "current_action_response_artifact_focus_not_synced:"
+            f"artifact={artifact_name}:"
+            f"count={len(mismatches)}:"
+            f"turns={mismatches[:20]}"
+        )
+
+
 def _npc_line_addresses_focus_terms(npc_line: str, focus: List[str]) -> bool:
     line = _normalize_turn_action_text(npc_line)
     if not line:
@@ -3771,11 +3923,12 @@ def _fallback_npc_line_for_current_action(row: Dict[str, Any]) -> str:
 
 def _apply_npc_line_current_action_relevance_gate(row: Dict[str, Any]) -> Dict[str, Any]:
     row = dict(_safe_dict(row))
-    relevance = _npc_line_current_action_relevance_check(row)
-    row["npc_line_current_action_relevance"] = relevance
     row["current_action_response"] = _row_current_action_response_focus(row)
     row["npc_response_architecture"] = _build_npc_response_architecture_for_row(row)
     row["npc_response_architecture_persisted"] = True
+    row = _sync_current_action_response_from_npc_response_architecture(row)
+    relevance = _npc_line_current_action_relevance_check(row)
+    row["npc_line_current_action_relevance"] = relevance
     row["npc_line_addresses_current_action"] = bool(
         _safe_dict(row.get("current_action_response")).get("npc_line_addresses_current_action")
     )
@@ -3805,11 +3958,13 @@ def _apply_npc_line_current_action_relevance_gate(row: Dict[str, Any]) -> Dict[s
     row["soft_classification_repair"] = True
     # Recompute after repair so artifacts reflect the final visible NPC line.
     row["current_action_response"] = _row_current_action_response_focus(row)
+    row["npc_response_architecture"] = _build_npc_response_architecture_for_row(row)
+    row["npc_response_architecture_persisted"] = True
+    row = _sync_current_action_response_from_npc_response_architecture(row)
+    row["npc_line_current_action_relevance"] = _npc_line_current_action_relevance_check(row)
     row["npc_line_addresses_current_action"] = bool(
         _safe_dict(row.get("current_action_response")).get("npc_line_addresses_current_action")
     )
-    row["npc_response_architecture"] = _build_npc_response_architecture_for_row(row)
-    row["npc_response_architecture_persisted"] = True
     return row
 
 
@@ -3817,7 +3972,10 @@ def _build_npc_response_architecture_persistence_summary(
     transcript_rows: List[Dict[str, Any]],
 ) -> Dict[str, Any]:
     """Summarize whether N116.9 response architecture survived into artifacts."""
-    rows = [_safe_dict(row) for row in _safe_list(transcript_rows)]
+    rows = [
+        _sync_current_action_response_from_npc_response_architecture(_safe_dict(row))
+        for row in _safe_list(transcript_rows)
+    ]
     row_count = len(rows)
     architecture_rows = [row for row in rows if _safe_dict(row.get("npc_response_architecture"))]
     current_action_rows = [row for row in rows if _safe_dict(row.get("current_action_response"))]
@@ -3833,6 +3991,9 @@ def _build_npc_response_architecture_persistence_summary(
     ]
     transaction_focus_rows = []
     transaction_addressed_rows = []
+    architecture_focus_rows = []
+    architecture_focus_missing_from_current_rows = []
+    architecture_sync_rows = []
     transaction_focus = {
         "purchase_acknowledgement",
         "item_quantity_or_availability",
@@ -3841,13 +4002,26 @@ def _build_npc_response_architecture_persistence_summary(
         "lodging_or_rest_terms",
     }
     for row in rows:
+        current_response = _safe_dict(row.get("current_action_response"))
         focus = {
             _safe_str(item)
-            for item in _safe_list(_safe_dict(row.get("current_action_response")).get("required_focus"))
+            for item in _safe_list(current_response.get("required_focus"))
+            if _safe_str(item)
         }
+        architecture_focus = {
+            _safe_str(item)
+            for item in _safe_list(_safe_dict(row.get("npc_response_architecture")).get("required_focus"))
+            if _safe_str(item)
+        }
+        if architecture_focus:
+            architecture_focus_rows.append(row)
+            if not architecture_focus.issubset(focus):
+                architecture_focus_missing_from_current_rows.append(row)
+        if bool(current_response.get("architecture_focus_sync_applied")):
+            architecture_sync_rows.append(row)
         if focus.intersection(transaction_focus):
             transaction_focus_rows.append(row)
-            if bool(_safe_dict(row.get("current_action_response")).get("npc_line_addresses_current_action")):
+            if bool(current_response.get("npc_line_addresses_current_action")):
                 transaction_addressed_rows.append(row)
 
     missing_architecture_turns = [
@@ -3855,9 +4029,20 @@ def _build_npc_response_architecture_persistence_summary(
         for row in rows
         if not _safe_dict(row.get("npc_response_architecture"))
     ][:20]
+    architecture_focus_missing_turns = [
+        int(row.get("turn_index") or row.get("turn") or 0)
+        for row in architecture_focus_missing_from_current_rows
+    ][:20]
+    ok = (
+        row_count == 0
+        or (
+            len(architecture_rows) == row_count
+            and not architecture_focus_missing_from_current_rows
+        )
+    )
     return {
-        "format_version": "npc_response_architecture_persistence_v1",
-        "ok": row_count == 0 or len(architecture_rows) == row_count,
+        "format_version": "npc_response_architecture_persistence_v2",
+        "ok": ok,
         "row_count": row_count,
         "architecture_row_count": len(architecture_rows),
         "missing_architecture_row_count": max(0, row_count - len(architecture_rows)),
@@ -3867,6 +4052,14 @@ def _build_npc_response_architecture_persistence_summary(
         "addresses_current_action_row_count": len(addressed_rows),
         "transaction_focus_row_count": len(transaction_focus_rows),
         "transaction_addressed_row_count": len(transaction_addressed_rows),
+        "architecture_required_focus_row_count": len(architecture_focus_rows),
+        "current_action_response_architecture_sync_count": len(architecture_sync_rows),
+        "architecture_focus_missing_from_current_action_response_count": len(
+            architecture_focus_missing_from_current_rows
+        ),
+        "architecture_focus_missing_from_current_action_response_turns": (
+            architecture_focus_missing_turns
+        ),
     }
 
 
@@ -3881,6 +4074,12 @@ def _assert_npc_response_architecture_persisted(summary: Dict[str, Any]) -> None
             "npc_response_architecture_missing_rows:"
             f"count={diag.get('missing_architecture_row_count')}:"
             f"turns={diag.get('missing_architecture_turns')}"
+        )
+    if int(diag.get("architecture_focus_missing_from_current_action_response_count") or 0) > 0:
+        raise RuntimeError(
+            "npc_response_architecture_focus_not_synced_to_current_action_response:"
+            f"count={diag.get('architecture_focus_missing_from_current_action_response_count')}:"
+            f"turns={diag.get('architecture_focus_missing_from_current_action_response_turns')}"
         )
 
 
@@ -21550,6 +21749,11 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
         summary=summary,
         session_id=_safe_str(summary.get("session_id") or ""),
     )
+    # N116.9.3: normalize architecture/current-action diagnostics at the final
+    # artifact boundary.  This catches any late writer or repair path that
+    # leaves architecture.required_focus populated but current_action_response
+    # empty before JSON/HTML artifacts are built.
+    final_transcript_rows = _sync_current_action_response_artifact_rows(final_transcript_rows)
 
     transcript = final_transcript_rows
     if isinstance(transcript_artifacts, dict):
@@ -21562,8 +21766,22 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
         transcript=final_transcript_rows,
     )
     summary["dialogue_repair_quality_summary"] = _build_dialogue_repair_quality_summary(summary)
+
+    # N116.9.4: force the synced row objects into the actual artifact source
+    # before summary counting and before bounded/slim transcript derivation.
+    # Summary-time self-healing is not enough; the persisted JSON rows must
+    # carry the same current_action_response.required_focus diagnostics.
+    final_transcript_rows = _sync_current_action_response_artifact_rows(final_transcript_rows)
+    transcript = final_transcript_rows
+    if isinstance(transcript_artifacts, dict):
+        transcript_artifacts["transcript"] = final_transcript_rows
+
     summary["npc_response_architecture_persistence_summary"] = (
         _build_npc_response_architecture_persistence_summary(final_transcript_rows)
+    )
+    _assert_current_action_response_artifact_rows_synced(
+        final_transcript_rows,
+        artifact_name="final_transcript_rows",
     )
     _assert_npc_response_architecture_persisted(summary)
 
@@ -21585,21 +21803,50 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
         _build_background_presentation_attachment_summary(summary, final_transcript_rows)
     )
 
+    # N116.9.5: one final sync after background attachment accounting and
+    # before every JSON transcript artifact is derived.  The previous patch
+    # synced before this phase, but the final artifact gate still caught rows
+    # whose architecture.required_focus was not reflected in
+    # current_action_response.required_focus.
+    final_transcript_rows = _sync_current_action_response_artifact_rows(final_transcript_rows)
+    transcript = final_transcript_rows
+    if isinstance(transcript_artifacts, dict):
+        transcript_artifacts["transcript"] = final_transcript_rows
+
     bounded_transcript_rows = _build_bounded_transcript_rows(
         final_transcript_rows,
         max_row_bytes=50000,
+    )
+    bounded_transcript_rows = _sync_current_action_response_artifact_rows(
+        bounded_transcript_rows
     )
 
     slim_transcript_rows = [
         _slim_transcript_row(row, max_row_bytes=25000)
         for row in final_transcript_rows
     ]
+    slim_transcript_rows = _sync_current_action_response_artifact_rows(
+        slim_transcript_rows
+    )
 
     if any(row is None for row in slim_transcript_rows):
         raise RuntimeError("slim_transcript_rows_null_after_build")
 
     if any(row is None for row in bounded_transcript_rows):
         raise RuntimeError("bounded_transcript_rows_null_after_build")
+
+    _assert_current_action_response_artifact_rows_synced(
+        final_transcript_rows,
+        artifact_name="full-transcript.json",
+    )
+    _assert_current_action_response_artifact_rows_synced(
+        bounded_transcript_rows,
+        artifact_name="transcript.json",
+    )
+    _assert_current_action_response_artifact_rows_synced(
+        slim_transcript_rows,
+        artifact_name="slim-transcript.json",
+    )
 
     wrote_full_transcript = _should_write_full_transcript(args)
 
