@@ -485,6 +485,136 @@ def _loaded_profile_context_summary(runtime_state: Dict[str, Any]) -> Dict[str, 
     }
 
 
+
+def _current_action_required_focus(
+    *,
+    player_action: str,
+    turn_contract: Dict[str, Any],
+    semantic_action_record: Dict[str, Any],
+) -> List[str]:
+    """Deterministically identify what NPC dialogue must answer first."""
+    action = _norm(player_action)
+    contract = _safe_dict(turn_contract)
+    semantic = _safe_dict(semantic_action_record)
+    focus: List[str] = []
+
+    def add(item: str) -> None:
+        if item and item not in focus:
+            focus.append(item)
+
+    resolved = _norm(contract.get("resolved_action") or contract.get("resolved_result"))
+    semantic_kind = _norm(
+        semantic.get("kind")
+        or semantic.get("intent")
+        or semantic.get("semantic_action")
+        or _safe_dict(contract.get("semantic_action")).get("kind")
+    )
+    service_result = _safe_dict(contract.get("service_result"))
+    if any(term in action for term in ("buy", "purchase", "ration", "supplies", "coin", "pay")) or service_result.get("purchase"):
+        add("purchase_acknowledgement")
+        add("item_quantity_or_availability")
+        add("price_or_payment")
+    if any(term in action for term in ("room", "lodging", "rent", "rest", "sleep")) or service_result.get("service"):
+        add("service_request_acknowledgement")
+        add("lodging_or_rest_terms")
+    if any(term in action for term in ("ask", "question", "tell", "report", "warn", "explain")) or semantic_kind in {"social", "dialogue"}:
+        add("answer_current_question")
+    if any(term in action for term in ("look", "inspect", "search", "scout", "examine", "listen")):
+        add("observed_evidence_or_limits")
+    if any(term in action for term in ("travel", "follow", "leave", "go to", "road", "route")) or "travel" in resolved:
+        add("current_travel_or_route_action")
+    return focus[:8]
+
+
+def _target_npc_name_from_action(player_action: str, simulation_state: Dict[str, Any]) -> str:
+    action = _norm(player_action)
+    present = _compact_present_npcs(simulation_state, limit=8)
+    for npc in present:
+        name = _safe_str(_safe_dict(npc).get("name"))
+        if name and _norm(name) in action:
+            return name
+    if "bran" in action or "innkeeper" in action:
+        return "Bran"
+    if "mira" in action:
+        return "Mira"
+    if "patron" in action:
+        return "Local Patron"
+    return _safe_str(_safe_dict(present[0]).get("name")) if present else ""
+
+
+def _loaded_profile_for_target(
+    *,
+    runtime_state: Dict[str, Any],
+    target_npc_name: str,
+) -> Tuple[str, Dict[str, Any]]:
+    loaded = _compact_loaded_npc_profiles(runtime_state, limit=12)
+    target_n = _norm(target_npc_name)
+    if not loaded:
+        return "", {}
+    for npc_id, profile in loaded.items():
+        candidates = [
+            npc_id,
+            _safe_str(_safe_dict(profile).get("name")),
+            _safe_str(_safe_dict(profile).get("display_name")),
+        ]
+        for candidate in candidates:
+            candidate_n = _norm(candidate)
+            if candidate_n and target_n and (candidate_n == target_n or candidate_n in target_n or target_n in candidate_n):
+                return npc_id, _safe_dict(profile)
+    if target_n and len(loaded) == 1:
+        npc_id, profile = next(iter(loaded.items()))
+        return npc_id, _safe_dict(profile)
+    return "", {}
+
+
+def _build_npc_response_architecture_packet(
+    *,
+    player_action: str,
+    simulation_state: Dict[str, Any],
+    runtime_state: Dict[str, Any],
+    turn_contract: Dict[str, Any],
+    semantic_action_record: Dict[str, Any],
+) -> Dict[str, Any]:
+    """Compact prompt packet that prioritizes current action over old context.
+
+    Loaded profiles and memories are file-backed characterization context only.
+    They can shape voice and continuity but cannot create outcomes.
+    """
+    target_name = _target_npc_name_from_action(player_action, simulation_state)
+    npc_id, profile = _loaded_profile_for_target(
+        runtime_state=runtime_state,
+        target_npc_name=target_name,
+    )
+    memories = _safe_list(profile.get("memories"))[-3:]
+    future_hooks = _safe_list(profile.get("future_hooks"))[-2:]
+    return {
+        "format_version": "npc_response_architecture_v1",
+        "current_action_first": True,
+        "current_action": _short_text(player_action, 500),
+        "required_focus": _current_action_required_focus(
+            player_action=player_action,
+            turn_contract=turn_contract,
+            semantic_action_record=semantic_action_record,
+        ),
+        "target_npc": {
+            "npc_id": npc_id,
+            "name": target_name,
+            "profile_available": bool(profile),
+            "arc_stage": _safe_str(profile.get("arc_stage")) or "stable",
+            "axes": _safe_dict(profile.get("axes")),
+            "file_backed_memory_snippets": memories,
+            "future_hooks": future_hooks,
+        },
+        "persona_usage": "tone_only_no_new_outcomes",
+        "memory_usage": "file_backed_tone_or_continuity_only",
+        "forbidden": [
+            "do_not_answer_stale_investigation_topic_unless_current_action_asks",
+            "do_not_invent_profile_memory",
+            "do_not_create_authoritative_outcomes",
+        ],
+    }
+
+
 def _compact_turn_contract(turn_contract: Dict[str, Any]) -> Dict[str, Any]:
     contract = _safe_dict(turn_contract)
     semantic_action = _safe_dict(contract.get("semantic_action"))
@@ -531,6 +661,13 @@ def build_combined_background_context_packet(
         "recent_events": _compact_recent_events(simulation_state, limit=5),
         "loaded_npc_profiles": _compact_loaded_npc_profiles(runtime_state, limit=6),
         "profile_context_summary": _loaded_profile_context_summary(runtime_state),
+        "npc_response_architecture": _build_npc_response_architecture_packet(
+            player_action=player_action,
+            simulation_state=simulation_state,
+            runtime_state=runtime_state,
+            turn_contract=turn_contract,
+            semantic_action_record=semantic_action_record,
+        ),
         "turn_contract": _compact_turn_contract(turn_contract),
         "fast_semantic_action": semantic_action_record,
     }
@@ -847,6 +984,8 @@ def _extract_nested_combined_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
     if response_candidate:
         normalized["current_action_response"] = _normalize_current_action_response(response_candidate)
         normalized["current_action_response_parse_source"] = response_source
+    if isinstance(payload.get("npc_response_architecture_ack"), dict):
+        normalized["npc_response_architecture_ack"] = _safe_dict(payload.get("npc_response_architecture_ack"))
 
     narration_payload = _safe_dict(
         payload.get("narration_payload")
@@ -886,6 +1025,10 @@ def _extract_nested_combined_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
         if response_candidate:
             normalized["current_action_response"] = _normalize_current_action_response(response_candidate)
             normalized["current_action_response_parse_source"] = response_source
+        if isinstance(payload.get("npc_response_architecture_ack"), dict):
+            normalized["npc_response_architecture_ack"] = _safe_dict(payload.get("npc_response_architecture_ack"))
+        elif isinstance(narration_payload.get("npc_response_architecture_ack"), dict):
+            normalized["npc_response_architecture_ack"] = _safe_dict(narration_payload.get("npc_response_architecture_ack"))
 
     advisory_payload = _safe_dict(
         payload.get("advisory")
@@ -1055,6 +1198,7 @@ def _build_combined_background_payload(
         "{"
         '"presentation_intent":{"primary_category":"dialogue|evidence|investigation|travel|combat|service|economy|mixed|general","secondary_categories":[],"confidence":0.0,"reason":"short diagnostic reason"},'
         '"current_action_response":{"required_focus":[],"npc_line_addresses_current_action":true,"reason":"how the NPC line answers the current player action first"},'
+        '"npc_response_architecture_ack":{"used_current_action_first":true,"used_file_backed_persona":false,"used_file_backed_memory":false,"reason":"short diagnostic reason"},'
         '"narration":"2-5 sentences describing the resolved scene without repeating player input.",'
         '"action":"Short result of the player action.",'
         '"npc":{"speaker":"","line":""},'
@@ -1098,11 +1242,14 @@ def _build_combined_background_payload(
                 "Do not include long explanations inside candidates. "
                 "Loaded NPC profiles are characterization context only. "
                 "You may use loaded_npc_profiles to shape NPC tone, dialogue, memory continuity, and future-hook suggestions. "
+                "You must follow npc_response_architecture.required_focus before any older quest, rumor, memory, or investigation topic. "
+                "If npc_response_architecture.target_npc.profile_available is true, use it only for tone/persona and continuity. "
                 "You must not treat profile memories or hooks as newly resolved actions. "
-                "You must not invent profile memories that are absent from loaded_npc_profiles or current turn facts. "
+                "You must not invent profile memories that are absent from loaded_npc_profiles, npc_response_architecture, or current turn facts. "
                 "If an NPC has arc_stage, axes, memories, or future_hooks, reflect them subtly in the NPC line or candidate summaries when relevant. "
                 "For economy/service turns, the NPC line must acknowledge the transaction/request (item, quantity, price, sale, lodging, rest, or refusal) before optional story flavor. "
-                "Do not answer an older investigation topic unless the current player action asks about that topic."
+                "Do not answer an older investigation topic unless the current player action asks about that topic. "
+                "Set npc_response_architecture_ack to explain whether current-action-first and file-backed persona/memory were used."
             ),
         },
         {
@@ -1126,9 +1273,11 @@ def _build_combined_background_payload(
                 "- 'I ask Bran if the east road leads to a bridge' => dialogue, secondary travel, not travel.\n"
                 "- 'I ask Bran who left through the side door' => dialogue, secondary investigation.\n"
                 "- 'I rent a room from Bran' => service.\n\n"
+                "NPC response architecture rule: obey COMPACT_CONTEXT_JSON.npc_response_architecture. "
+                "The NPC line must satisfy required_focus for the current action before using memories. "
                 "Profile grounding rule: when loaded_npc_profiles is non-empty, use it only for NPC continuity. "
                 "For example, a trusting NPC may sound warmer, a guarded NPC may be cautious, "
-                "and a remembered prior topic may be acknowledged. "
+                "and a remembered prior topic may be acknowledged only when it does not displace the current action. "
                 "Do not create authoritative outcomes from profile context."
             ),
         },
@@ -1181,6 +1330,7 @@ def _build_combined_background_payload(
                 normalized.setdefault("prompt_metrics", prompt_metrics)
                 normalized.setdefault("context_packet_keys", sorted(list(context_packet.keys())))
                 normalized.setdefault("profile_context_summary", profile_context_summary)
+                normalized.setdefault("npc_response_architecture", _safe_dict(context_packet.get("npc_response_architecture")))
                 return normalized
             return {
                 "ok": False,

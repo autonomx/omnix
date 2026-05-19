@@ -67,6 +67,10 @@ TRANSCRIPT_KEEP_KEYS = (
     "top_scenario_progression_action_id",
     "top_scenario_progression_command",
     "scenario_arc_complete",
+    "current_action_response",
+    "npc_response_architecture",
+    "npc_line_current_action_relevance",
+    "npc_line_addresses_current_action",
 )
 
 
@@ -107,6 +111,9 @@ def _slim_transcript_row(row: Dict[str, Any], max_row_bytes: int = 50000) -> Dic
           "validated_presentation_intent",
             "validated_presentation_category",
             "current_action_response",
+            "npc_response_architecture",
+            "npc_response_architecture_ack",
+            "npc_response_architecture_persisted",
             "npc_line_current_action_relevance",
             "npc_line_addresses_current_action",
              "npc_line_repaired",
@@ -1486,6 +1493,8 @@ def _build_final_transcript_artifact_rows(
         row_d = _sync_dialogue_action_relevance_with_validated_presentation(row_d)
         row_d = _apply_validated_presentation_category_to_relevance(row_d)
         row_d["current_action_response"] = _row_current_action_response_focus(row_d)
+        row_d["npc_response_architecture"] = _build_npc_response_architecture_for_row(row_d)
+        row_d["npc_response_architecture_persisted"] = True
         row_d["npc_line_addresses_current_action"] = bool(
             _safe_dict(row_d.get("current_action_response")).get("npc_line_addresses_current_action")
         )
@@ -2383,6 +2392,7 @@ def _apply_presentation_meta_leakage_gate(row: Dict[str, Any]) -> Dict[str, Any]
     row["presentation_repair_type"] = _safe_str(row.get("presentation_repair_type") or "field_meta_leakage_repair")
     row["visible_text_replaced"] = bool(row.get("visible_text_replaced", False))
     row["soft_classification_repair"] = True
+    row["npc_response_architecture"] = _build_npc_response_architecture_for_row(row)
     return row
 
 
@@ -2856,6 +2866,7 @@ def _attach_background_presentation_to_row(
             current_action_response.get("npc_line_addresses_current_action")
         )
     row["llm_presentation_category"] = _safe_str(presentation_intent.get("primary_category"))
+    row["npc_response_architecture"] = _build_npc_response_architecture_for_row(row)
 
     row["presentation_status"] = "attached"
     row["presentation_attached_from"] = _safe_str(
@@ -3400,28 +3411,94 @@ ECONOMY_SERVICE_RESPONSE_TERMS = (
 )
 
 
+def _deterministic_current_action_required_focus(row: Dict[str, Any]) -> List[str]:
+    """Derive current-action obligations without trusting provider metadata.
+
+    N116.9.1 keeps this small and deterministic so transcript artifacts can
+    prove why an NPC line is considered responsive to the player's latest
+    action.  Provider ``current_action_response`` may be missing or stale; this
+    fallback makes economy/service actions such as buying rations visible in
+    every row's diagnostics.
+    """
+    row = _safe_dict(row)
+    category = _safe_str(row.get("validated_presentation_category")) or _safe_str(row.get("action_category"))
+    action = _normalize_turn_action_text(
+        _safe_str(
+            row.get("display_player_action")
+            or row.get("visible_player_action")
+            or row.get("canonical_turn_action")
+            or row.get("player_action")
+        )
+    )
+    focus: List[str] = []
+
+    def add(item: str) -> None:
+        if item and item not in focus:
+            focus.append(item)
+
+    purchase_terms = (
+        "buy",
+        "bought",
+        "purchase",
+        "purchased",
+        "ration",
+        "rations",
+        "supply",
+        "supplies",
+        "coin",
+        "coins",
+        "pay",
+        "paid",
+        "sell",
+    )
+    service_terms = ("rent", "room", "lodging", "bed", "rest", "sleep", "service")
+    question_terms = ("ask", "question", "tell", "report", "warn", "explain", "who", "what", "where", "why")
+    observe_terms = ("look", "inspect", "search", "scout", "examine", "watch", "listen")
+    travel_terms = ("travel", "follow", "leave", "go", "road", "route", "walk", "move")
+
+    if category == "economy" or any(term in action for term in purchase_terms):
+        add("purchase_acknowledgement")
+        add("item_quantity_or_availability")
+        add("price_or_payment")
+    if category == "service" or any(term in action for term in service_terms):
+        add("service_request_acknowledgement")
+        add("lodging_or_rest_terms")
+    if category in {"dialogue", "evidence", "investigation"} or any(term in action for term in question_terms):
+        add("current_question_or_evidence")
+    if category in {"observe", "investigation", "evidence"} or any(term in action for term in observe_terms):
+        add("observed_evidence_or_limits")
+    if category == "travel" or any(term in action for term in travel_terms):
+        add("current_travel_or_route_action")
+    return focus[:8]
+
+
 def _row_current_action_response_focus(row: Dict[str, Any]) -> Dict[str, Any]:
     row = _safe_dict(row)
     candidate, source = _find_current_action_response_candidate(row)
     normalized = _normalize_current_action_response(candidate)
     normalized["parse_source"] = source
-    if not normalized.get("required_focus"):
-        category = _safe_str(row.get("validated_presentation_category")) or _safe_str(row.get("action_category"))
-        action = _normalize_turn_action_text(
-            _safe_str(row.get("canonical_turn_action") or row.get("player_action"))
-        )
-        focus: List[str] = []
-        if category == "economy" or any(term in action for term in ("buy", "purchase", "rations", "supplies")):
-            focus.extend(["purchase_acknowledgement", "item_quantity_or_availability", "price_or_payment"])
-        elif category == "service" or any(term in action for term in ("rent", "room", "lodging", "rest")):
-            focus.extend(["service_request_acknowledgement", "lodging_or_rest_terms"])
-        elif category in {"dialogue", "evidence", "investigation"}:
-            focus.append("current_question_or_evidence")
-        elif category == "travel":
-            focus.append("current_travel_or_route_action")
-        if focus:
-            normalized["required_focus"] = focus[:6]
-            normalized["reason"] = normalized.get("reason") or "deterministic_focus_from_validated_category"
+
+    required_focus: List[str] = [
+        _safe_str(item)
+        for item in _safe_list(normalized.get("required_focus"))
+        if _safe_str(item)
+    ]
+    deterministic_focus = _deterministic_current_action_required_focus(row)
+    for item in deterministic_focus:
+        if item not in required_focus:
+            required_focus.append(item)
+    if required_focus:
+        normalized["required_focus"] = required_focus[:8]
+        if not normalized.get("reason"):
+            normalized["reason"] = "deterministic_focus_from_current_action"
+
+    npc_line = _safe_str(row.get("npc_line") or _safe_dict(row.get("npc")).get("line"))
+    heuristic_addresses = _npc_line_addresses_focus_terms(npc_line, required_focus) if required_focus else False
+    provider_addresses = bool(normalized.get("npc_line_addresses_current_action"))
+    normalized["npc_line_addresses_current_action"] = bool(provider_addresses or heuristic_addresses)
+    normalized["provider_addresses_current_action"] = provider_addresses
+    normalized["heuristic_addresses_current_action"] = bool(heuristic_addresses)
+    normalized["deterministic_required_focus"] = deterministic_focus
     return normalized
 
 
@@ -3477,6 +3554,8 @@ def _npc_line_current_action_relevance_check(row: Dict[str, Any]) -> Dict[str, A
         "current_action_category": category,
         "required_focus": required_focus,
         "provider_addresses_current_action": provider_addresses,
+        "heuristic_addresses_current_action": addresses_focus,
+        "npc_line_addresses_current_action": bool(provider_addresses or addresses_focus),
         "stale_topic_terms": stale_terms,
         "requires_transaction_response": requires_transaction_response,
         "visible_text_replacement_required": False,
@@ -3484,14 +3563,205 @@ def _npc_line_current_action_relevance_check(row: Dict[str, Any]) -> Dict[str, A
     }
 
 
+
+
+def _loaded_npc_profile_rows_from_runtime_state(runtime_state: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
+    """Return file-backed loaded NPC profile rows from runtime_state.
+
+    This intentionally only reads loaded profile snapshots.  It does not create
+    or mutate NPC memory; it gives the presentation layer bounded persona/memory
+    context for current-action responses.
+    """
+    runtime_state = _safe_dict(runtime_state)
+    npc_evolution = _safe_dict(runtime_state.get("npc_evolution"))
+    loaded = _safe_dict(npc_evolution.get("loaded_profiles"))
+    if loaded:
+        return {str(npc_id): _safe_dict(row) for npc_id, row in loaded.items()}
+
+    # Defensive fallback for older profile loader shapes.
+    profile_state = _safe_dict(runtime_state.get("npc_profile_state"))
+    loaded = _safe_dict(profile_state.get("loaded_profiles") or profile_state.get("profiles"))
+    return {str(npc_id): _safe_dict(row) for npc_id, row in loaded.items()}
+
+
+def _npc_profile_matches_speaker(npc_id: str, profile_row: Dict[str, Any], speaker: str) -> bool:
+    speaker_n = _normalize_turn_action_text(speaker)
+    if not speaker_n:
+        return False
+    profile_row = _safe_dict(profile_row)
+    profile = _safe_dict(profile_row.get("profile") or profile_row)
+    candidates = [
+        npc_id,
+        profile.get("id"),
+        profile.get("npc_id"),
+        profile.get("name"),
+        profile.get("display_name"),
+        profile.get("title"),
+    ]
+    for candidate in candidates:
+        candidate_n = _normalize_turn_action_text(_safe_str(candidate))
+        if candidate_n and (candidate_n == speaker_n or candidate_n in speaker_n or speaker_n in candidate_n):
+            return True
+    return False
+
+
+def _matching_loaded_npc_profile_for_row(row: Dict[str, Any]) -> Tuple[str, Dict[str, Any]]:
+    row = _safe_dict(row)
+    speaker = _safe_str(row.get("npc_speaker") or _safe_dict(row.get("npc")).get("speaker"))
+    runtime_state = _safe_dict(row.get("runtime_state"))
+    loaded = _loaded_npc_profile_rows_from_runtime_state(runtime_state)
+    if not loaded:
+        return "", {}
+
+    for npc_id, profile_row in loaded.items():
+        if _npc_profile_matches_speaker(npc_id, profile_row, speaker):
+            return npc_id, profile_row
+
+    # If exactly one profile is loaded and the row is clearly addressed to an NPC,
+    # use it as bounded persona context.  This matches the common autoplay
+    # pattern where Bran is the only present/profile-loaded NPC for tavern turns.
+    if speaker and len(loaded) == 1:
+        npc_id, profile_row = next(iter(loaded.items()))
+        return npc_id, profile_row
+
+    return "", {}
+
+
+def _short_profile_text(value: Any, limit: int = 180) -> str:
+    text = _safe_str(value).strip()
+    if not text and isinstance(value, dict):
+        text = _safe_str(
+            value.get("summary")
+            or value.get("text")
+            or value.get("description")
+            or value.get("memory")
+            or value.get("event")
+        ).strip()
+    if not text:
+        return ""
+    return text[:limit]
+
+
+def _profile_memory_snippets(profile: Dict[str, Any], limit: int = 3) -> List[str]:
+    profile = _safe_dict(profile)
+    snippets: List[str] = []
+    for key in ("memories", "memory", "memory_log", "milestones", "future_hooks", "world_signals"):
+        values = _safe_list(profile.get(key))
+        for item in values[-limit:]:
+            snippet = _short_profile_text(item)
+            if snippet and snippet not in snippets:
+                snippets.append(snippet)
+            if len(snippets) >= limit:
+                return snippets
+    return snippets
+
+
+def _current_action_focus_terms_for_row(row: Dict[str, Any]) -> List[str]:
+    row = _safe_dict(row)
+    focus = _safe_dict(row.get("current_action_response") or _row_current_action_response_focus(row))
+    required = [_safe_str(item) for item in _safe_list(focus.get("required_focus")) if _safe_str(item)]
+    for item in _deterministic_current_action_required_focus(row):
+        if item not in required:
+            required.append(item)
+    if "current_question_or_evidence" in required and "answer_current_question" not in required:
+        required.append("answer_current_question")
+    return required[:8]
+
+
+def _build_npc_response_architecture_for_row(row: Dict[str, Any]) -> Dict[str, Any]:
+    """Bounded presentation contract for NPC line selection/repair.
+
+    The deterministic turn remains authoritative.  This packet tells the
+    presentation layer which current-action obligation comes first, and which
+    loaded file-backed NPC profile/memory facts may be used as tone only.
+    """
+    row = _safe_dict(row)
+    speaker = _safe_str(row.get("npc_speaker") or _safe_dict(row.get("npc")).get("speaker"))
+    npc_id, profile_row = _matching_loaded_npc_profile_for_row(row)
+    profile = _safe_dict(_safe_dict(profile_row).get("profile") or profile_row)
+    action = _safe_str(row.get("canonical_turn_action") or row.get("player_action"))
+    category = _safe_str(row.get("validated_presentation_category") or row.get("action_category"))
+    memory_snippets = _profile_memory_snippets(profile, limit=3)
+    persona = {
+        "npc_id": npc_id,
+        "speaker": speaker or _safe_str(profile.get("name")),
+        "name": _safe_str(profile.get("name") or profile.get("display_name")),
+        "role": _safe_str(profile.get("role") or profile.get("occupation")),
+        "arc_stage": _safe_str(profile.get("arc_stage")) or "stable",
+        "axes": _safe_dict(profile.get("axes")),
+        "file_backed_memory_snippets": memory_snippets,
+        "file_backed_memory_available": bool(memory_snippets),
+        "profile_available": bool(profile),
+    }
+    return {
+        "format_version": "npc_response_architecture_v1",
+        "current_action_first": True,
+        "current_action": action,
+        "current_action_category": category,
+        "required_focus": _current_action_focus_terms_for_row(row),
+        "target_npc": persona,
+        "persona_usage": "tone_only_no_new_outcomes",
+        "memory_usage": "file_backed_tone_or_continuity_only",
+        "forbidden": [
+            "do_not_answer_stale_investigation_topic_unless_current_action_asks",
+            "do_not_invent_profile_memory",
+            "do_not_create_authoritative_outcomes",
+        ],
+    }
+
+
+def _fallback_npc_line_from_architecture(row: Dict[str, Any]) -> str:
+    row = _safe_dict(row)
+    architecture = _build_npc_response_architecture_for_row(row)
+    target = _safe_dict(architecture.get("target_npc"))
+    speaker = _safe_str(target.get("speaker") or row.get("npc_speaker") or _safe_dict(row.get("npc")).get("speaker") or "Bran")
+    role = _safe_str(target.get("role")).lower()
+    action = _normalize_turn_action_text(_safe_str(row.get("canonical_turn_action") or row.get("player_action")))
+    focus = set(_safe_list(architecture.get("required_focus")))
+
+    is_bran = "bran" in _normalize_turn_action_text(speaker) or "innkeeper" in role
+    if {"purchase_acknowledgement", "item_quantity_or_availability"}.intersection(focus):
+        if "ration" in action:
+            if is_bran:
+                return "Two rations. That should keep you moving if the road turns bad."
+            return "Two rations. Keep them dry, and they should carry you a little farther."
+        if is_bran:
+            return "I can sell what is actually on hand, if your coin covers it."
+        return "I can handle the sale if the stock and coin are there."
+
+    if {"service_request_acknowledgement", "lodging_or_rest_terms"}.intersection(focus):
+        if is_bran:
+            return "A room can be arranged if the house has one free and your coin is good."
+        return "I can discuss the service, but only what is actually available."
+
+    if "answer_current_question" in focus:
+        if is_bran:
+            return "Ask the question plainly, and I'll answer what I actually know."
+        return "Ask plainly, and I'll answer only what I know."
+
+    if "observed_evidence_or_limits" in focus:
+        return "Look closely at what is actually here; the useful detail is the one you can verify."
+
+    if "current_travel_or_route_action" in focus:
+        if is_bran:
+            return "If you are taking the road, keep your eyes open and trust what the trail shows you."
+        return "The route is yours to choose, but follow what the signs actually show."
+
+    return ""
+
 def _fallback_npc_line_for_current_action(row: Dict[str, Any]) -> str:
     row = _safe_dict(row)
+
+    architecture_line = _fallback_npc_line_from_architecture(row)
+    if architecture_line:
+        return architecture_line
+
     category = _safe_str(row.get("validated_presentation_category")) or _safe_str(row.get("action_category"))
     action = _normalize_turn_action_text(_safe_str(row.get("canonical_turn_action") or row.get("player_action")))
     speaker = _safe_str(row.get("npc_speaker") or _safe_dict(row.get("npc")).get("speaker") or "Bran")
     if category == "economy" or any(term in action for term in ("buy", "purchase", "rations", "supplies")):
         if "ration" in action:
-            return "Two rations. I can spare them, but keep them dry if you're headed out."
+            return "Two rations. That should keep you moving if the road turns bad."
         return "I can sell what you need, if the stock and coin are there."
     if category == "service" or any(term in action for term in ("room", "lodging", "rest")):
         return "I can talk terms for the room, but only what the house can actually offer."
@@ -3499,12 +3769,16 @@ def _fallback_npc_line_for_current_action(row: Dict[str, Any]) -> str:
         return "Ask it plainly, and I'll answer what I can."
     return ""
 
-
 def _apply_npc_line_current_action_relevance_gate(row: Dict[str, Any]) -> Dict[str, Any]:
     row = dict(_safe_dict(row))
     relevance = _npc_line_current_action_relevance_check(row)
     row["npc_line_current_action_relevance"] = relevance
     row["current_action_response"] = _row_current_action_response_focus(row)
+    row["npc_response_architecture"] = _build_npc_response_architecture_for_row(row)
+    row["npc_response_architecture_persisted"] = True
+    row["npc_line_addresses_current_action"] = bool(
+        _safe_dict(row.get("current_action_response")).get("npc_line_addresses_current_action")
+    )
     if not bool(relevance.get("npc_line_repair_required")):
         row.setdefault("npc_line_repaired", False)
         return row
@@ -3529,7 +3803,85 @@ def _apply_npc_line_current_action_relevance_gate(row: Dict[str, Any]) -> Dict[s
     row["presentation_repair_type"] = _safe_str(row.get("presentation_repair_type") or "npc_line_metadata_only")
     row["visible_text_replaced"] = bool(row.get("visible_text_replaced", False))
     row["soft_classification_repair"] = True
+    # Recompute after repair so artifacts reflect the final visible NPC line.
+    row["current_action_response"] = _row_current_action_response_focus(row)
+    row["npc_line_addresses_current_action"] = bool(
+        _safe_dict(row.get("current_action_response")).get("npc_line_addresses_current_action")
+    )
+    row["npc_response_architecture"] = _build_npc_response_architecture_for_row(row)
+    row["npc_response_architecture_persisted"] = True
     return row
+
+
+def _build_npc_response_architecture_persistence_summary(
+    transcript_rows: List[Dict[str, Any]],
+) -> Dict[str, Any]:
+    """Summarize whether N116.9 response architecture survived into artifacts."""
+    rows = [_safe_dict(row) for row in _safe_list(transcript_rows)]
+    row_count = len(rows)
+    architecture_rows = [row for row in rows if _safe_dict(row.get("npc_response_architecture"))]
+    current_action_rows = [row for row in rows if _safe_dict(row.get("current_action_response"))]
+    focus_rows = [
+        row
+        for row in rows
+        if _safe_list(_safe_dict(row.get("current_action_response")).get("required_focus"))
+    ]
+    addressed_rows = [
+        row
+        for row in rows
+        if bool(_safe_dict(row.get("current_action_response")).get("npc_line_addresses_current_action"))
+    ]
+    transaction_focus_rows = []
+    transaction_addressed_rows = []
+    transaction_focus = {
+        "purchase_acknowledgement",
+        "item_quantity_or_availability",
+        "price_or_payment",
+        "service_request_acknowledgement",
+        "lodging_or_rest_terms",
+    }
+    for row in rows:
+        focus = {
+            _safe_str(item)
+            for item in _safe_list(_safe_dict(row.get("current_action_response")).get("required_focus"))
+        }
+        if focus.intersection(transaction_focus):
+            transaction_focus_rows.append(row)
+            if bool(_safe_dict(row.get("current_action_response")).get("npc_line_addresses_current_action")):
+                transaction_addressed_rows.append(row)
+
+    missing_architecture_turns = [
+        int(row.get("turn_index") or row.get("turn") or 0)
+        for row in rows
+        if not _safe_dict(row.get("npc_response_architecture"))
+    ][:20]
+    return {
+        "format_version": "npc_response_architecture_persistence_v1",
+        "ok": row_count == 0 or len(architecture_rows) == row_count,
+        "row_count": row_count,
+        "architecture_row_count": len(architecture_rows),
+        "missing_architecture_row_count": max(0, row_count - len(architecture_rows)),
+        "missing_architecture_turns": missing_architecture_turns,
+        "current_action_response_row_count": len(current_action_rows),
+        "required_focus_row_count": len(focus_rows),
+        "addresses_current_action_row_count": len(addressed_rows),
+        "transaction_focus_row_count": len(transaction_focus_rows),
+        "transaction_addressed_row_count": len(transaction_addressed_rows),
+    }
+
+
+def _assert_npc_response_architecture_persisted(summary: Dict[str, Any]) -> None:
+    diag = _safe_dict(_safe_dict(summary).get("npc_response_architecture_persistence_summary"))
+    if not diag:
+        raise RuntimeError("npc_response_architecture_persistence_summary_missing")
+    if int(diag.get("row_count") or 0) > 0 and int(diag.get("architecture_row_count") or 0) == 0:
+        raise RuntimeError("npc_response_architecture_not_persisted:any_rows=0")
+    if int(diag.get("missing_architecture_row_count") or 0) > 0:
+        raise RuntimeError(
+            "npc_response_architecture_missing_rows:"
+            f"count={diag.get('missing_architecture_row_count')}:"
+            f"turns={diag.get('missing_architecture_turns')}"
+        )
 
 
 def _background_presentation_expected_attachment_count(summary: Dict[str, Any]) -> int:
@@ -21210,6 +21562,10 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
         transcript=final_transcript_rows,
     )
     summary["dialogue_repair_quality_summary"] = _build_dialogue_repair_quality_summary(summary)
+    summary["npc_response_architecture_persistence_summary"] = (
+        _build_npc_response_architecture_persistence_summary(final_transcript_rows)
+    )
+    _assert_npc_response_architecture_persisted(summary)
 
     _assert_transcript_artifact_consistency(
         final_transcript_rows=final_transcript_rows,
