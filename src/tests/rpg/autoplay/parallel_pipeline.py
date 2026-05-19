@@ -54,6 +54,23 @@ def _safe_str(value: Any) -> str:
     return value if isinstance(value, str) else ""
 
 
+def _norm(value: Any) -> str:
+    """Normalize lightweight action/NPC text for deterministic packet checks.
+
+    N116.9 added current-action/NPC-response architecture helpers to this
+    module, but those helpers called ``_norm`` without defining it here. That
+    only surfaced inside background LLM jobs, so turns kept running while every
+    combined background job failed with ``name '_norm' is not defined``. Keep
+    the helper local to avoid importing heavier normalization utilities into the
+    background worker path.
+    """
+    import re
+
+    text = _safe_str(value).lower().strip()
+    text = re.sub(r"[^a-z0-9_]+", " ", text)
+    return re.sub(r"\s+", " ", text).strip()
+
+
 PRESENTATION_INTENT_ALLOWED_CATEGORIES = {
     "dialogue",
     "evidence",

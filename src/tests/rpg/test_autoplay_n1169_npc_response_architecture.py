@@ -3,7 +3,10 @@ from tests.rpg.autoplay_llm_campaign import (
     _apply_npc_line_current_action_relevance_gate,
     _build_npc_response_architecture_for_row,
     _build_npc_response_architecture_persistence_summary,
+    _assert_npc_response_architecture_persisted,
+    _build_final_transcript_artifact_rows,
     _slim_transcript_row,
+    _sync_current_action_response_from_npc_response_architecture,
 )
 
 
@@ -126,3 +129,204 @@ def test_n1169_1_architecture_persistence_summary_counts_transaction_rows():
     assert summary["current_action_response_row_count"] == 1
     assert summary["transaction_focus_row_count"] == 1
     assert summary["transaction_addressed_row_count"] == 1
+
+
+def test_n1169_2_syncs_current_action_response_from_architecture_focus():
+    row = {
+        "turn_index": 13,
+        "player_action": "I buy two rations from Bran.",
+        "canonical_turn_action": "I buy two rations from Bran.",
+        "validated_presentation_category": "economy",
+        "runtime_state": _runtime_state_with_bran_profile(),
+        "npc": {"speaker": "Bran", "line": "Two rations. That should keep you moving if the road turns bad."},
+        "npc_speaker": "Bran",
+        "npc_line": "Two rations. That should keep you moving if the road turns bad.",
+        "current_action_response": {
+            "format_version": "current_action_response_v1",
+            "required_focus": [],
+            "npc_line_addresses_current_action": False,
+        },
+        "npc_response_architecture": {
+            "format_version": "npc_response_architecture_v1",
+            "current_action_first": True,
+            "current_action": "I buy two rations from Bran.",
+            "current_action_category": "economy",
+            "required_focus": [
+                "purchase_acknowledgement",
+                "item_quantity_or_availability",
+                "price_or_payment",
+            ],
+        },
+    }
+
+    synced = _sync_current_action_response_from_npc_response_architecture(row)
+
+    response = synced["current_action_response"]
+    assert "purchase_acknowledgement" in response["required_focus"]
+    assert "item_quantity_or_availability" in response["required_focus"]
+    assert response["npc_line_addresses_current_action"] is True
+    assert response["architecture_focus_sync_applied"] is True
+    assert synced["npc_line_addresses_current_action"] is True
+
+
+def test_n1169_2_persistence_summary_fails_when_architecture_focus_not_synced():
+    bad_row = {
+        "turn_index": 13,
+        "current_action_response": {"required_focus": []},
+        "npc_response_architecture": {
+            "current_action_first": True,
+            "required_focus": ["purchase_acknowledgement"],
+        },
+    }
+
+    summary = _build_npc_response_architecture_persistence_summary([bad_row])
+
+    assert summary["ok"] is False
+    assert summary["architecture_required_focus_row_count"] == 1
+    assert summary["architecture_focus_missing_from_current_action_response_count"] == 1
+    try:
+        _assert_npc_response_architecture_persisted(
+            {"npc_response_architecture_persistence_summary": summary}
+        )
+    except RuntimeError as exc:
+        assert "focus_not_synced" in str(exc)
+    else:
+        raise AssertionError("expected architecture focus sync assertion failure")
+
+
+def test_n1169_3_final_transcript_builder_forces_architecture_sync_after_meta_gate():
+    rows = _build_final_transcript_artifact_rows(
+        transcript=[
+            {
+                "turn_index": 13,
+                "player_action": "I buy two rations from Bran.",
+                "canonical_turn_action": "I buy two rations from Bran.",
+                "validated_presentation_category": "economy",
+                "runtime_state": _runtime_state_with_bran_profile(),
+                "npc": {
+                    "speaker": "Bran",
+                    "line": "Two rations. That should keep you moving if the road turns bad.",
+                },
+                "npc_speaker": "Bran",
+                "npc_line": "Two rations. That should keep you moving if the road turns bad.",
+                "current_action_response": {
+                    "format_version": "current_action_response_v1",
+                    "required_focus": [],
+                    "npc_line_addresses_current_action": False,
+                },
+            }
+        ],
+        transcript_artifacts={},
+        summary={"turns_executed": 1},
+        session_id="test-session",
+    )
+
+    row = rows[0]
+    response = row["current_action_response"]
+    assert row["npc_response_architecture"]["required_focus"]
+    assert "purchase_acknowledgement" in response["required_focus"]
+    assert response["npc_line_addresses_current_action"] is True
+    assert row["npc_line_addresses_current_action"] is True
+
+
+def test_n1169_3_summary_self_heals_rows_before_counting_focus_sync():
+    bad_row = {
+        "turn_index": 13,
+        "player_action": "I buy two rations from Bran.",
+        "canonical_turn_action": "I buy two rations from Bran.",
+        "validated_presentation_category": "economy",
+        "npc": {
+            "speaker": "Bran",
+            "line": "Two rations. That should keep you moving if the road turns bad.",
+        },
+        "npc_speaker": "Bran",
+        "npc_line": "Two rations. That should keep you moving if the road turns bad.",
+        "current_action_response": {
+            "format_version": "current_action_response_v1",
+            "required_focus": [],
+            "npc_line_addresses_current_action": False,
+        },
+        "npc_response_architecture": {
+            "format_version": "npc_response_architecture_v1",
+            "current_action_first": True,
+            "current_action": "I buy two rations from Bran.",
+            "current_action_category": "economy",
+            "required_focus": [
+                "purchase_acknowledgement",
+                "item_quantity_or_availability",
+                "price_or_payment",
+            ],
+        },
+    }
+
+    summary = _build_npc_response_architecture_persistence_summary([bad_row])
+
+    assert summary["ok"] is True
+    assert summary["architecture_required_focus_row_count"] == 1
+    assert summary["architecture_focus_missing_from_current_action_response_count"] == 0
+    assert summary["current_action_response_architecture_sync_count"] == 1
+
+
+def test_n1169_4_artifact_row_sync_helper_writes_required_focus_into_rows():
+    stale_row = {
+        "turn_index": 13,
+        "player_action": "I buy two rations from Bran.",
+        "canonical_turn_action": "I buy two rations from Bran.",
+        "validated_presentation_category": "economy",
+        "npc": {
+            "speaker": "Bran",
+            "line": "Two rations. That should keep you moving if the road turns bad.",
+        },
+        "npc_speaker": "Bran",
+        "npc_line": "Two rations. That should keep you moving if the road turns bad.",
+        "current_action_response": {
+            "format_version": "current_action_response_v1",
+            "required_focus": [],
+            "npc_line_addresses_current_action": False,
+        },
+        "npc_response_architecture": {
+            "format_version": "npc_response_architecture_v1",
+            "current_action_first": True,
+            "current_action": "I buy two rations from Bran.",
+            "current_action_category": "economy",
+            "required_focus": [
+                "purchase_acknowledgement",
+                "item_quantity_or_availability",
+                "price_or_payment",
+            ],
+        },
+    }
+
+    synced_rows = _sync_current_action_response_artifact_rows([stale_row])
+    synced = synced_rows[0]
+    response = synced["current_action_response"]
+
+    assert "purchase_acknowledgement" in response["required_focus"]
+    assert "item_quantity_or_availability" in response["required_focus"]
+    assert response["npc_line_addresses_current_action"] is True
+    assert synced["npc_line_addresses_current_action"] is True
+    _assert_current_action_response_artifact_rows_synced(
+        synced_rows,
+        artifact_name="unit-test",
+    )
+
+
+def test_n1169_4_artifact_row_assertion_catches_unsynced_json_rows():
+    stale_row = {
+        "turn_index": 13,
+        "current_action_response": {"required_focus": []},
+        "npc_response_architecture": {
+            "required_focus": ["purchase_acknowledgement"],
+        },
+    }
+
+    try:
+        _assert_current_action_response_artifact_rows_synced(
+            [stale_row],
+            artifact_name="transcript.json",
+        )
+    except RuntimeError as exc:
+        assert "current_action_response_artifact_focus_not_synced" in str(exc)
+        assert "transcript.json" in str(exc)
+    else:
+        raise AssertionError("expected artifact sync assertion failure")
