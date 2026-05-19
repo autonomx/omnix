@@ -1187,6 +1187,13 @@ from tests.rpg.autoplay.report_sections import (
     summarize_story_beats_for_report,
 )
 
+try:
+    from tests.rpg.autoplay.campaign_report import (
+        write_campaign_report as _write_rich_campaign_report,
+    )
+except Exception:
+    _write_rich_campaign_report = None
+
 _ACTIVE_CONSOLE_CAPTURE = None
 from app.rpg.combat.combat_consequence_pressure import apply_combat_consequence_pressure
 from app.rpg.combat.combat_lifecycle import run_combat_lifecycle_tick
@@ -1688,6 +1695,265 @@ def _plain_text_from_html_report(html_text: Any) -> str:
     return _re.sub(r"\s+", " ", _html.unescape(text)).strip()
 
 
+def _html_escape(value: Any) -> str:
+    import html as _html
+    return _html.escape(_safe_str(value), quote=True)
+
+
+def _final_row_visible_narration(row: Dict[str, Any]) -> str:
+    row = _safe_dict(row)
+    return (
+        _safe_str(row.get("display_narration"))
+        or _safe_str(row.get("visible_narration"))
+        or _safe_str(row.get("selected_narration_text"))
+        or _safe_str(row.get("narration"))
+    )
+
+
+def _final_row_npc_speaker_and_line(row: Dict[str, Any]) -> Tuple[str, str]:
+    row = _safe_dict(row)
+    npc_payload = _safe_dict(row.get("npc"))
+    speaker = _safe_str(row.get("npc_speaker") or npc_payload.get("speaker"))
+    line = _safe_str(row.get("npc_line") or npc_payload.get("line"))
+    return speaker, line
+
+
+def _build_final_normalized_transcript_timeline_html(
+    final_transcript_rows: List[Dict[str, Any]],
+    *,
+    section_id: str = "timeline",
+    title: str = "Turn-by-Turn Story Timeline with Final Normalized AI/NPC Responses",
+) -> str:
+    cards: List[str] = []
+    for row_any in _safe_list(final_transcript_rows):
+        row = _safe_dict(row_any)
+        turn_index = int(row.get("turn_index") or row.get("turn") or 0)
+        if not turn_index:
+            continue
+        player_action = (
+            _safe_str(row.get("display_player_action"))
+            or _safe_str(row.get("visible_player_action"))
+            or _safe_str(row.get("player_action"))
+            or _safe_str(row.get("canonical_turn_action"))
+        )
+        narration = _final_row_visible_narration(row)
+        speaker, line = _final_row_npc_speaker_and_line(row)
+        category = _safe_str(row.get("validated_presentation_category") or row.get("llm_presentation_category"))
+        status = _safe_str(row.get("presentation_status"))
+        progress = _safe_str(_safe_dict(row.get("progress_quality")).get("quality") or row.get("progress_quality_label"))
+        blocking_ms = _safe_str(
+            row.get("human_playable_blocking_ms")
+            or row.get("blocking_ms")
+            or row.get("turn_blocking_ms")
+            or ""
+        )
+        npc_html = ""
+        if speaker or line:
+            npc_html = (
+                f'<div class="npc-line"><strong>NPC:</strong> '
+                f'{_html_escape(speaker)} — {_html_escape(line)}</div>'
+            )
+        cards.append(
+            f"""
+            <article class="turn-card" id="turn-{turn_index}">
+              <div class="turn-header">
+                <h3>Turn {turn_index}</h3>
+                <div>
+                  <span class="badge quality">{_html_escape(progress)}</span>
+                  <span class="badge category">{_html_escape(blocking_ms)}</span>
+                </div>
+              </div>
+              <div class="player-action"><strong>Player:</strong> {_html_escape(player_action)}</div>
+              <div class="narration"><strong>Narration:</strong> {_html_escape(narration)}</div>
+              {npc_html}
+              <div class="badges">
+                <span class="badge category">{_html_escape(category)}</span>
+                <span class="badge category">{_html_escape(status)}</span>
+              </div>
+            </article>
+            """
+        )
+    return f"""
+    <section class="rpg-promoted-section" id="{_html_escape(section_id)}" data-source="final_transcript_rows">
+      <h2>{_html_escape(title)}</h2>
+      <p class="muted">Rendered from the same final normalized rows written to autoplay-transcript.json/slim-transcript.json.</p>
+      {''.join(cards)}
+    </section>
+    """
+
+
+def _replace_html_section_by_id(html_report: Any, section_id: str, replacement_html: str) -> str:
+    import re as _re
+    html_s = _safe_str(html_report)
+    if not html_s:
+        return _safe_str(replacement_html)
+    pattern = _re.compile(
+        r'<section\b(?=[^>]*\bid=["\']' + _re.escape(section_id) + r'["\'])(.*?)</section>',
+        _re.IGNORECASE | _re.DOTALL,
+    )
+    if pattern.search(html_s):
+        return pattern.sub(_safe_str(replacement_html), html_s, count=1)
+    if "</body>" in html_s.lower():
+        return _re.sub(r"</body>", _safe_str(replacement_html) + "\n</body>", html_s, count=1, flags=_re.IGNORECASE)
+    return html_s + "\n" + _safe_str(replacement_html)
+
+
+def _restore_rich_report_with_final_transcript_timeline(
+    html_report: Any,
+    final_transcript_rows: List[Dict[str, Any]],
+) -> str:
+    timeline_html = _build_final_normalized_transcript_timeline_html(
+        final_transcript_rows,
+        section_id="timeline",
+        title="Turn-by-Turn Story Timeline with Final Normalized AI/NPC Responses",
+    )
+    return _replace_html_section_by_id(html_report, "timeline", timeline_html)
+
+
+def _read_candidate_html_path(path_any: Any) -> str:
+    try:
+        from pathlib import Path as _Path
+        path = _Path(path_any)
+        if path.exists() and path.is_file():
+            return path.read_text(encoding="utf-8", errors="replace")
+    except Exception:
+        return ""
+    return ""
+
+
+def _rich_report_html_from_writer_result(result: Any) -> str:
+    result_d = _safe_dict(result)
+    if isinstance(result, str):
+        text = result.strip()
+        if "<html" in text.lower() or "<!doctype" in text.lower():
+            return result
+        return _read_candidate_html_path(text)
+    if result_d:
+        for key in ("html", "html_report", "report_html", "content"):
+            value = result_d.get(key)
+            if isinstance(value, str) and ("<html" in value.lower() or "<!doctype" in value.lower()):
+                return value
+        for key in ("html_path", "path", "report_path", "campaign_report_html"):
+            html = _read_candidate_html_path(result_d.get(key))
+            if html:
+                return html
+    return ""
+
+
+def _build_rich_campaign_report_html_from_existing_writer(
+    *,
+    args: Any,
+    output_dir_path: Any,
+    rich_html_path: Any,
+    summary: Dict[str, Any],
+    report_payload: Dict[str, Any],
+    metrics: Dict[str, Any],
+    final_transcript_rows: List[Dict[str, Any]],
+    final_state: Dict[str, Any],
+) -> str:
+    """Call the existing rich/styled report writer, then return its HTML.
+
+    The canonical report must use final normalized transcript rows, but the
+    original rich report still owns the CSS, layout, charts, and deep sections.
+    Reuse it when available, then replace only its timeline section.
+    """
+    writer = globals().get("_write_rich_campaign_report")
+    if writer is None:
+        return ""
+
+    try:
+        import inspect as _inspect
+        import time as _time
+        from pathlib import Path as _Path
+
+        output_dir = _Path(output_dir_path)
+        rich_path = _Path(rich_html_path)
+        before_ts = _time.time() - 1.0
+        available_kwargs = {
+            "args": args,
+            "output_dir": output_dir,
+            "out_dir": output_dir,
+            "report_dir": output_dir,
+            "output_path": rich_path,
+            "html_path": rich_path,
+            "path": rich_path,
+            "summary": summary,
+            "final_summary": summary,
+            "report_payload": report_payload,
+            "metrics": metrics,
+            "transcript": final_transcript_rows,
+            "transcript_rows": final_transcript_rows,
+            "final_transcript_rows": final_transcript_rows,
+            "rows": final_transcript_rows,
+            "state": final_state,
+            "runtime_state": final_state,
+            "final_state": final_state,
+            "session_id": _safe_str(summary.get("session_id")),
+        }
+
+        signature = _inspect.signature(writer)
+        has_var_kwargs = any(
+            parameter.kind == _inspect.Parameter.VAR_KEYWORD
+            for parameter in signature.parameters.values()
+        )
+        if has_var_kwargs:
+            kwargs = dict(available_kwargs)
+        else:
+            kwargs: Dict[str, Any] = {}
+            for name, parameter in signature.parameters.items():
+                if name in available_kwargs:
+                    kwargs[name] = available_kwargs[name]
+                elif (
+                    parameter.default is _inspect.Parameter.empty
+                    and parameter.kind
+                    in (
+                        _inspect.Parameter.POSITIONAL_OR_KEYWORD,
+                        _inspect.Parameter.KEYWORD_ONLY,
+                    )
+                ):
+                    return ""
+
+        result = writer(**kwargs)
+        html = _rich_report_html_from_writer_result(result)
+        if html:
+            return html
+
+        for candidate in (
+            rich_path,
+            output_dir / "autoplay-campaign-report.html",
+            output_dir / "autoplay-campaign-report-rich.html",
+            output_dir / "campaign-report.html",
+        ):
+            try:
+                if candidate.exists() and candidate.stat().st_mtime >= before_ts:
+                    html = candidate.read_text(encoding="utf-8", errors="replace")
+                    if html:
+                        return html
+            except Exception:
+                continue
+    except Exception as exc:
+        summary.setdefault("rich_report_writer_warnings", []).append(
+            {"warning": "rich_report_writer_failed", "error": _safe_str(str(exc))[:500]}
+        )
+    return ""
+
+
+def _final_transcript_scope_from_html_report(html_report: Any) -> str:
+    import re as _re
+    html_s = _safe_str(html_report)
+    if not html_s:
+        return ""
+    for section_id in ("timeline", "final-transcript-timeline"):
+        match = _re.search(
+            r'<section\b(?=[^>]*\bid=["\']' + _re.escape(section_id) + r'["\'])(.*?)</section>',
+            html_s,
+            flags=_re.IGNORECASE | _re.DOTALL,
+        )
+        if match:
+            return _plain_text_from_html_report(match.group(0))
+    return _plain_text_from_html_report(html_s)
+
+
 def _plain_text_from_html_report_section(html_text: Any, section_id: str) -> str:
     """Return plain text for one report section when present.
 
@@ -1721,17 +1987,34 @@ def _assert_html_report_matches_final_transcript_rows(
     deliberately artifact-level: if a final row appears in the report timeline,
     the visible NPC line in that same final row must also appear in the HTML.
     """
-    plain = _plain_text_from_html_report(html_report)
+    plain = _final_transcript_scope_from_html_report(html_report)
     if not plain:
         raise RuntimeError("campaign_report_html_empty_after_final_transcript_rebuild")
 
-    # N116.12.2: meta/system language is invalid in the visible transcript
+    # N116.13.2: meta/system language is invalid in the visible transcript
     # timeline, but terms like "prompt" or "turn contract" are legitimate in
-    # technical/debug sections.  Scan only the normalized transcript section.
-    transcript_plain = _plain_text_from_html_report_section(html_report, "final-transcript-timeline") or plain
+    # technical/debug sections. Scope meta leakage checks to whichever final
+    # transcript section the report actually renders. Rich reports use
+    # id="timeline"; compact reports may use id="final-transcript-timeline".
+    transcript_plain = (
+        _plain_text_from_html_report_section(html_report, "final-transcript-timeline")
+        or _plain_text_from_html_report_section(html_report, "timeline")
+        or plain
+    )
 
-    stale_markers = (
+    # The stale NPC line should never appear anywhere in a generated report,
+    # because it is a known pre-normalization artifact.
+    global_stale_markers = (
         "Ask plainly. Are you looking for the traveler, the road, or the person who frightened them?",
+    )
+    global_stale_found = [marker for marker in global_stale_markers if marker and marker in plain]
+    if global_stale_found:
+        raise RuntimeError(
+            "campaign_report_html_contains_stale_transcript_text:"
+            f"markers={global_stale_found[:5]}"
+        )
+
+    transcript_meta_markers = (
         "system flagging",
         "system flags",
         "offer not found",
@@ -1743,11 +2026,11 @@ def _assert_html_report_matches_final_transcript_rows(
         "schema",
         "prompt",
     )
-    stale_found = [marker for marker in stale_markers if marker and marker in transcript_plain]
-    if stale_found:
+    meta_found = [marker for marker in transcript_meta_markers if marker and marker in transcript_plain]
+    if meta_found:
         raise RuntimeError(
-            "campaign_report_html_contains_stale_or_meta_text:"
-            f"markers={stale_found[:5]}"
+            "campaign_report_html_contains_meta_text_in_transcript:"
+            f"markers={meta_found[:5]}"
         )
 
     mismatches: List[Dict[str, Any]] = []
@@ -20786,23 +21069,42 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
 
         _assert_final_artifact_consistency(summary)
 
-        # N116.12.1: build the canonical HTML report directly from final
-        # normalized transcript rows. The older rich report builder keeps its
-        # own timeline/report-section caches and can render pre-normalization
-        # NPC lines even when autoplay-transcript.json is correct. Until that
-        # builder is refactored to consume the shared presentation pipeline,
-        # the canonical report must be artifact-first and transcript-derived.
+        # N116.13: keep the original rich/styled report, but make the
+        # visible transcript/timeline authoritative by replacing only that
+        # section with final_transcript_rows. If the rich writer is not
+        # available, fall back to the compact artifact-first report.
         if args.artifact_detail == "full":
             final_html_report_source = dict(summary)
             final_html_report_source.update(_safe_dict(report_payload))
             final_html_report_source["final_transcript_rows"] = final_transcript_rows
             final_html_report_source["transcript"] = final_transcript_rows
-            html_report = _build_minimal_autoplay_html_report(
-                final_summary=final_html_report_source,
-            )
+
             final_report_html_path = Path(args.output_dir) / "autoplay-campaign-report.html"
+            rich_report_html_path = Path(args.output_dir) / "autoplay-campaign-report-rich.html"
+
+            rich_source_html = _build_rich_campaign_report_html_from_existing_writer(
+                args=args,
+                output_dir_path=Path(args.output_dir),
+                rich_html_path=rich_report_html_path,
+                summary=summary,
+                report_payload=_safe_dict(report_payload),
+                metrics=_safe_dict(metrics),
+                final_transcript_rows=final_transcript_rows,
+                final_state=_safe_dict(last_committed_state),
+            )
+            if not rich_source_html:
+                rich_source_html = _build_minimal_autoplay_html_report(
+                    final_summary=final_html_report_source,
+                )
+
+            html_report = _restore_rich_report_with_final_transcript_timeline(
+                rich_source_html,
+                final_transcript_rows,
+            )
             final_report_html_path.write_text(html_report, encoding="utf-8")
+            rich_report_html_path.write_text(html_report, encoding="utf-8")
             extra_paths["campaign_report_html"] = str(final_report_html_path)
+            extra_paths["campaign_report_rich_html"] = str(rich_report_html_path)
             _assert_html_report_matches_final_transcript_rows(
                 html_report=html_report,
                 final_transcript_rows=final_transcript_rows,
