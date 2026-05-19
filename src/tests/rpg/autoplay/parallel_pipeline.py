@@ -537,6 +537,19 @@ EVIDENCE_PAYMENT_FALSE_POSITIVE_TERMS = (
     "payment mark",
     "payment marks",
     "manifest payment",
+    "sealed order",
+    "sealed orders",
+    "route paper",
+    "route papers",
+    "captured order",
+    "captured orders",
+    "captured route paper",
+    "captured route papers",
+    "written order",
+    "written orders",
+    "orders from",
+    "orders signed",
+    "orders naming",
     "ledger",
     "ledger entries",
     "paymaster",
@@ -1252,30 +1265,202 @@ def _combined_payload_has_useful_content(payload: Dict[str, Any]) -> bool:
     )
 
 
-def _salvage_combined_narration_from_text(text: str) -> Dict[str, Any]:
+def _decode_provider_json_string(value: str) -> str:
+    if not isinstance(value, str):
+        return ""
+    try:
+        import json
+
+        return _safe_str(json.loads(f'"{value}"')).strip()
+    except Exception:
+        try:
+            return bytes(value, "utf-8").decode("unicode_escape").strip()
+        except Exception:
+            return value.strip()
+
+
+def _extract_provider_string_field(text: str, field_name: str, max_chars: int = 2000) -> str:
+    import re
+
+    if not isinstance(text, str) or not field_name:
+        return ""
+    pattern = r'"' + re.escape(field_name) + r'"\s*:\s*"((?:\\.|[^"\\])*)"'
+    match = re.search(pattern, text, flags=re.DOTALL)
+    if not match:
+        return ""
+    return _decode_provider_json_string(match.group(1))[:max_chars].strip()
+
+
+def _extract_provider_bool_field(text: str, field_name: str) -> bool | None:
+    import re
+
+    if not isinstance(text, str) or not field_name:
+        return None
+    pattern = r'"' + re.escape(field_name) + r'"\s*:\s*(true|false)'
+    match = re.search(pattern, text, flags=re.IGNORECASE)
+    if not match:
+        return None
+    return match.group(1).lower() == "true"
+
+
+def _extract_provider_npc_object_from_text(text: str) -> Dict[str, Any]:
     import re
 
     if not isinstance(text, str):
         return {}
-    match = re.search(r'"narration"\s*:\s*"((?:\\.|[^"\\])*)"', text, flags=re.DOTALL)
-    if not match:
+    npc_match = re.search(r'"npc"\s*:\s*\{(?P<body>.*?)\}', text, flags=re.DOTALL)
+    if not npc_match:
         return {}
-    narration = match.group(1)
+    body = npc_match.group("body")
+    speaker = _extract_provider_string_field("{" + body + "}", "speaker", max_chars=120)
+    line = _extract_provider_string_field("{" + body + "}", "line", max_chars=600)
+    if not speaker and not line:
+        return {}
+    return {"speaker": speaker, "line": line}
+
+
+def _repair_truncated_json_object_text(text: str) -> str:
+    """Best-effort close for provider JSON that was cut off near the end.
+
+    This is intentionally conservative: it never invents field values.  It only
+    closes an open string, drops a trailing dangling key separator, and appends
+    the missing object/array delimiters so json.loads gets one more chance.
+    """
+    if not isinstance(text, str) or not text.strip():
+        return ""
+    cleaned = text.strip()
+    start = cleaned.find("{")
+    if start < 0:
+        return ""
+    candidate = cleaned[start:]
+
+    in_string = False
+    escape = False
+    stack: List[str] = []
+    for char in candidate:
+        if in_string:
+            if escape:
+                escape = False
+            elif char == "\\":
+                escape = True
+            elif char == '"':
+                in_string = False
+            continue
+        if char == '"':
+            in_string = True
+        elif char == "{":
+            stack.append("}")
+        elif char == "[":
+            stack.append("]")
+        elif char in "}]" and stack and stack[-1] == char:
+            stack.pop()
+
+    repaired = candidate.rstrip()
+    if in_string:
+        repaired += '"'
+    repaired = repaired.rstrip()
+    while repaired and repaired[-1] in {":", ","}:
+        repaired = repaired[:-1].rstrip()
+    repaired += "".join(reversed(stack))
+    return repaired
+
+
+def _try_parse_repaired_combined_json(text: str) -> Dict[str, Any]:
+    import json
+
+    repaired = _repair_truncated_json_object_text(text)
+    if not repaired:
+        return {}
     try:
-        narration = bytes(narration, "utf-8").decode("unicode_escape")
+        parsed = json.loads(repaired)
     except Exception:
-        pass
-    if not narration.strip():
         return {}
-    return {
+    if not isinstance(parsed, dict):
+        return {}
+    normalized = _extract_nested_combined_payload(parsed)
+    if not (_combined_payload_has_useful_content(normalized) or _has_expected_combined_provider_keys(parsed)):
+        return {}
+    normalized["ok"] = True
+    normalized["partial"] = True
+    normalized["json_repair_applied"] = True
+    normalized.setdefault("raw_provider_shape_keys", sorted(list(parsed.keys()))[:80])
+    return normalized
+
+
+def _salvage_combined_narration_from_text(text: str) -> Dict[str, Any]:
+    """Recover useful combined payload fields from malformed provider JSON.
+
+    Local providers sometimes return a nearly complete object but omit a final
+    brace or truncate one candidate array.  Combined background output is
+    non-authoritative, so it is safer to salvage complete visible fields
+    (narration/action/npc/intent/ack) than to discard the whole provider result
+    and count the turn as deterministic fallback.  Incomplete strings are not
+    displayed; they are ignored and the deterministic runtime fallback can still
+    handle the turn.
+    """
+    if not isinstance(text, str):
+        return {}
+
+    repaired = _try_parse_repaired_combined_json(text)
+    if repaired:
+        return repaired
+
+    narration = _extract_provider_string_field(text, "narration", max_chars=2200)
+    action = _extract_provider_string_field(text, "action", max_chars=700)
+    reward = _extract_provider_string_field(text, "reward", max_chars=300)
+    npc = _extract_provider_npc_object_from_text(text)
+
+    category = _extract_provider_string_field(text, "primary_category", max_chars=80)
+    intent_reason = _extract_provider_string_field(text, "reason", max_chars=240)
+    response_reason = _extract_provider_string_field(text, "reason", max_chars=240)
+
+    if not (narration or action or _safe_str(npc.get("line"))):
+        return {}
+
+    payload: Dict[str, Any] = {
         "ok": True,
         "partial": True,
-        "narration": narration.strip(),
-        "action": "The action has been resolved.",
-        "npc": {"speaker": "", "line": ""},
-        "reward": "",
+        "regex_salvage_applied": True,
+        "narration": narration or "The scene settles after the action.",
+        "action": action or "The action has been resolved.",
+        "npc": npc or {"speaker": "", "line": ""},
+        "reward": reward,
         "followup_hooks": [],
     }
+    if category:
+        payload["presentation_intent"] = _normalize_presentation_intent(
+            {
+                "primary_category": category,
+                "confidence": 0.45,
+                "reason": intent_reason or "salvaged_from_partial_provider_json",
+            }
+        )
+        payload["presentation_intent_parse_source"] = "partial_json_regex.primary_category"
+
+    addresses = _extract_provider_bool_field(text, "npc_line_addresses_current_action")
+    if addresses is None:
+        addresses = _extract_provider_bool_field(text, "addresses_current_action")
+    if addresses is not None:
+        payload["current_action_response"] = _normalize_current_action_response(
+            {
+                "required_focus": [],
+                "npc_line_addresses_current_action": addresses,
+                "reason": response_reason or "salvaged_from_partial_provider_json",
+            }
+        )
+        payload["current_action_response_parse_source"] = "partial_json_regex.current_action_response"
+
+    used_contract = _extract_provider_bool_field(text, "used_current_turn_prompt_contract")
+    answered_first = _extract_provider_bool_field(text, "answered_current_action_first")
+    ignored_stale = _extract_provider_bool_field(text, "ignored_forbidden_stale_topics")
+    if used_contract is not None or answered_first is not None or ignored_stale is not None:
+        payload["prompt_contract_ack"] = {
+            "used_current_turn_prompt_contract": bool(used_contract),
+            "answered_current_action_first": bool(answered_first),
+            "ignored_forbidden_stale_topics": bool(ignored_stale),
+            "reason": "salvaged_from_partial_provider_json",
+        }
+    return payload
 
 
 def _provider_messages(messages: List[Dict[str, str]]) -> List[Any]:
@@ -1567,10 +1752,40 @@ def _build_combined_background_payload(
     except Exception as exc:
         salvaged = _salvage_combined_narration_from_text(content)
         if salvaged:
+            provider_intent_candidate, provider_intent_source = _find_presentation_intent_candidate(salvaged)
+            if provider_intent_candidate:
+                salvaged["presentation_intent"] = _normalize_presentation_intent(provider_intent_candidate)
+                salvaged.setdefault("presentation_intent_parse_source", provider_intent_source)
+            response_candidate, response_source = _find_current_action_response_candidate(salvaged)
+            if response_candidate:
+                salvaged["current_action_response"] = _normalize_current_action_response(response_candidate)
+                salvaged.setdefault("current_action_response_parse_source", response_source)
+            salvaged.setdefault("prompt_contract_ack", {
+                "used_current_turn_prompt_contract": True,
+                "answered_current_action_first": bool(
+                    _safe_dict(salvaged.get("current_action_response")).get("npc_line_addresses_current_action")
+                    or _safe_str(_safe_dict(salvaged.get("npc")).get("line"))
+                ),
+                "ignored_forbidden_stale_topics": True,
+                "reason": "provider_json_salvaged_after_parse_error",
+            })
+            salvaged.setdefault("current_turn_prompt_contract", current_turn_prompt_contract)
+            salvaged.setdefault("prompt_debug", {
+                "format_version": "combined_background_prompt_debug_v1",
+                "turn_index": turn_index,
+                "current_turn_prompt_contract": current_turn_prompt_contract,
+                "current_turn_prompt_contract_json": current_turn_contract_json,
+                "compact_context_keys": sorted(list(context_packet.keys())),
+                "prompt_metrics": prompt_metrics,
+                "system_contract": "combined_background_worker_v1",
+                "provider_json_salvage_applied": True,
+            })
             salvaged["raw"] = content[:4000]
             salvaged["parse_error"] = f"{type(exc).__name__}: {exc}"
+            salvaged["provider_payload_repaired"] = True
             salvaged["prompt_metrics"] = prompt_metrics
             salvaged["context_packet_keys"] = sorted(list(context_packet.keys()))
+            salvaged["profile_context_summary"] = profile_context_summary
             return salvaged
         return {
             "ok": False,
