@@ -73,6 +73,13 @@ TRANSCRIPT_KEEP_KEYS = (
     "npc_line_addresses_current_action",
     "npc_response_variant_id",
     "npc_response_variation",
+    "llm_prompt_debug",
+    "llm_prompt_contract",
+    "prompt_contract_ack",
+    "llm_fallback_diagnostics",
+    "npc_line_source",
+    "npc_line_validation_passed",
+    "npc_line_rejection_reason",
 )
 
 
@@ -120,6 +127,13 @@ def _slim_transcript_row(row: Dict[str, Any], max_row_bytes: int = 50000) -> Dic
             "npc_line_addresses_current_action",
             "npc_response_variant_id",
             "npc_response_variation",
+            "llm_prompt_debug",
+            "llm_prompt_contract",
+            "prompt_contract_ack",
+            "llm_fallback_diagnostics",
+            "npc_line_source",
+            "npc_line_validation_passed",
+            "npc_line_rejection_reason",
              "npc_line_repaired",
              "npc_line_repair_reason",
              "npc_line_before_repair",
@@ -1737,6 +1751,153 @@ def _final_row_npc_speaker_and_line(row: Dict[str, Any]) -> Tuple[str, str]:
     return speaker, line
 
 
+
+def _llm_prompt_debug_details_html(row: Dict[str, Any]) -> str:
+    row = _safe_dict(row)
+    payload = {
+        "llm_prompt_contract": _safe_dict(row.get("llm_prompt_contract")),
+        "prompt_contract_ack": _safe_dict(row.get("prompt_contract_ack")),
+        "llm_prompt_debug": _safe_dict(row.get("llm_prompt_debug")),
+        "llm_fallback_diagnostics": _safe_dict(row.get("llm_fallback_diagnostics")),
+        "npc_line_source": _safe_str(row.get("npc_line_source")),
+        "npc_line_validation_passed": row.get("npc_line_validation_passed"),
+        "npc_line_rejection_reason": _safe_str(row.get("npc_line_rejection_reason")),
+    }
+    if not any(value not in ({}, [], "", None) for value in payload.values()):
+        return ""
+    return (
+        '<details class="llm-prompt-diagnostics">'
+        '<summary>LLM prompt + fallback diagnostics</summary>'
+        '<pre>'
+        + _html_escape(json.dumps(payload, ensure_ascii=False, indent=2, default=str))
+        + '</pre>'
+        '</details>'
+    )
+
+
+def _infer_llm_fallback_source(result: Dict[str, Any]) -> str:
+    result = _safe_dict(result)
+    source = _safe_str(result.get("source"))
+    if source == "provider_combined_background_llm":
+        return "llm_valid"
+    if source in {"combined_background_llm_fallback", "combined_background_llm_error"}:
+        return "deterministic_fallback"
+    if not result:
+        return "no_background_provider_result"
+    return "provider_unavailable_or_invalid"
+
+
+def _build_llm_fallback_diagnostics_from_result(result: Dict[str, Any]) -> Dict[str, Any]:
+    result = _safe_dict(result)
+    existing = _safe_dict(result.get("llm_fallback_diagnostics"))
+    if existing:
+        return existing
+    diagnostics = _safe_dict(result.get("diagnostics"))
+    fallback_source = _infer_llm_fallback_source(result)
+    reason = (
+        _safe_str(diagnostics.get("fallback_reason"))
+        or _safe_str(diagnostics.get("provider_payload_error"))
+        or _safe_str(result.get("error"))
+        or fallback_source
+    )
+    known_valid_reasons = {
+        "llm_valid",
+        "provider_missing_or_not_preferred",
+        "provider_missing_or_unsupported",
+        "provider_empty_combined_response",
+        "provider_combined_json_missing_useful_content",
+        "provider_combined_unavailable",
+        "no_background_provider_result",
+    }
+    return {
+        "format_version": "llm_fallback_diagnostics_v1",
+        "source": _safe_str(result.get("source")),
+        "fallback_source": fallback_source,
+        "reason": reason,
+        "valid_known_reason": fallback_source == "llm_valid" or reason in known_valid_reasons,
+        "provider_payload_error": _safe_str(diagnostics.get("provider_payload_error")),
+    }
+
+
+def _attach_llm_prompt_debug_to_row(row: Dict[str, Any], result: Dict[str, Any]) -> None:
+    row = _safe_dict(row)
+    result = _safe_dict(result)
+    if not row or not result:
+        return
+    diagnostics = _safe_dict(result.get("diagnostics"))
+    narration_payload = _safe_dict(result.get("narration_payload"))
+    prompt_debug = _safe_dict(result.get("prompt_debug") or diagnostics.get("prompt_debug"))
+    prompt_contract = _safe_dict(
+        result.get("current_turn_prompt_contract")
+        or diagnostics.get("current_turn_prompt_contract")
+        or prompt_debug.get("current_turn_prompt_contract")
+    )
+    prompt_ack = _safe_dict(
+        result.get("prompt_contract_ack")
+        or narration_payload.get("prompt_contract_ack")
+        or diagnostics.get("prompt_contract_ack")
+    )
+    fallback_diagnostics = _build_llm_fallback_diagnostics_from_result(result)
+
+    if prompt_debug:
+        row["llm_prompt_debug"] = prompt_debug
+    if prompt_contract:
+        row["llm_prompt_contract"] = prompt_contract
+    if prompt_ack:
+        row["prompt_contract_ack"] = prompt_ack
+    if fallback_diagnostics:
+        row["llm_fallback_diagnostics"] = fallback_diagnostics
+    row["npc_line_source"] = _safe_str(result.get("source") or fallback_diagnostics.get("fallback_source"))
+    row["npc_line_validation_passed"] = bool(
+        _safe_dict(row.get("current_action_response")).get("npc_line_addresses_current_action")
+        or _safe_dict(row.get("npc_line_current_action_relevance")).get("ok", False)
+        or fallback_diagnostics.get("fallback_source") == "llm_valid"
+    )
+    if not row["npc_line_validation_passed"]:
+        row["npc_line_rejection_reason"] = _safe_str(
+            fallback_diagnostics.get("reason") or "npc_line_did_not_confirm_current_action_focus"
+        )
+
+
+def _build_llm_prompt_and_fallback_summary(rows: List[Dict[str, Any]]) -> Dict[str, Any]:
+    summary: Dict[str, Any] = {
+        "format_version": "llm_prompt_and_fallback_summary_v1",
+        "turn_count": 0,
+        "with_prompt_contract": 0,
+        "with_prompt_debug": 0,
+        "with_prompt_contract_ack": 0,
+        "fallback_source_counts": {},
+        "fallback_reason_counts": {},
+        "invalid_fallback_reason_turns": [],
+    }
+    for row in _safe_list(rows):
+        row = _safe_dict(row)
+        if not row:
+            continue
+        summary["turn_count"] += 1
+        if _safe_dict(row.get("llm_prompt_contract")):
+            summary["with_prompt_contract"] += 1
+        if _safe_dict(row.get("llm_prompt_debug")):
+            summary["with_prompt_debug"] += 1
+        if _safe_dict(row.get("prompt_contract_ack")):
+            summary["with_prompt_contract_ack"] += 1
+        fallback = _safe_dict(row.get("llm_fallback_diagnostics"))
+        source = _safe_str(fallback.get("fallback_source") or "missing")
+        reason = _safe_str(fallback.get("reason") or "missing")
+        summary["fallback_source_counts"][source] = int(summary["fallback_source_counts"].get(source) or 0) + 1
+        summary["fallback_reason_counts"][reason] = int(summary["fallback_reason_counts"].get(reason) or 0) + 1
+        if fallback and not bool(fallback.get("valid_known_reason", False)):
+            summary["invalid_fallback_reason_turns"].append(
+                {
+                    "turn_index": int(row.get("turn_index") or row.get("turn") or 0),
+                    "source": source,
+                    "reason": reason,
+                }
+            )
+    summary["ok"] = not bool(summary["invalid_fallback_reason_turns"])
+    return summary
+
+
 def _build_final_normalized_transcript_turn_card_html(row: Dict[str, Any]) -> str:
     """Render one visible turn card from a final normalized transcript row.
 
@@ -1777,6 +1938,7 @@ def _build_final_normalized_transcript_turn_card_html(row: Dict[str, Any]) -> st
             f'<div class="npc-line"><strong>NPC:</strong> '
             f'{_html_escape(speaker)} — {_html_escape(line)}</div>'
         )
+    llm_prompt_diagnostics_html = _llm_prompt_debug_details_html(row)
     return f"""
             <article class="turn-card" id="turn-{turn_index}">
               <div class="turn-header">
@@ -1793,6 +1955,7 @@ def _build_final_normalized_transcript_turn_card_html(row: Dict[str, Any]) -> st
                 <span class="badge category">{_html_escape(category)}</span>
                 <span class="badge category">{_html_escape(status)}</span>
               </div>
+              {llm_prompt_diagnostics_html}
             </article>
             """
 
@@ -2177,14 +2340,58 @@ def _final_transcript_scope_from_html_report(html_report: Any) -> str:
     return _plain_text_from_html_report(html_s)
 
 
-def _plain_text_from_html_report_section(html_text: Any, section_id: str) -> str:
+def _remove_html_blocks_by_class(html_text: Any, class_name: str, tag_name: str = "details") -> str:
+    """Remove complete HTML blocks with a specific class before plain-text checks.
+
+    Final report turn cards may include intentionally technical collapsible
+    diagnostics inside the same timeline as the player-facing narration.  The
+    meta-leak guard must inspect the visible presentation fields, not JSON/debug
+    payloads such as prompt contracts, schemas, provider errors, or fallback
+    diagnostics.
+    """
+    import re as _re
+
+    html_s = _safe_str(html_text)
+    class_s = _safe_str(class_name)
+    tag_s = _safe_str(tag_name) or "details"
+    if not html_s or not class_s:
+        return html_s
+
+    pattern = _re.compile(
+        rf"<{_re.escape(tag_s)}\b"
+        rf"(?=[^>]*\bclass=[\"'][^\"']*\b{_re.escape(class_s)}\b[^\"']*[\"'])"
+        rf"[^>]*>.*?</{_re.escape(tag_s)}>",
+        flags=_re.IGNORECASE | _re.DOTALL,
+    )
+    return pattern.sub(" ", html_s)
+
+
+def _html_without_transcript_debug_details(html_text: Any) -> str:
+    """Drop timeline-local debug details before presentation leak checks."""
+    html_s = _safe_str(html_text)
+    if not html_s:
+        return ""
+    html_s = _remove_html_blocks_by_class(
+        html_s,
+        "llm-prompt-diagnostics",
+        tag_name="details",
+    )
+    return html_s
+
+
+def _plain_text_from_html_report_section(
+    html_text: Any,
+    section_id: str,
+    *,
+    include_debug_details: bool = True,
+) -> str:
     """Return plain text for one report section when present.
 
     The campaign report intentionally includes technical/debug sections that may
     mention words like "prompt", "schema", or "turn contract".  Those words are
-    only presentation leaks when they appear in the visible final transcript
-    timeline.  Scope meta-leak assertions to that section instead of scanning
-    the entire HTML document.
+    only presentation leaks when they appear in the player-facing narration,
+    action, or NPC line.  Scope meta-leak assertions to that presentation text
+    and optionally exclude timeline-local diagnostics.
     """
     import re as _re
 
@@ -2194,7 +2401,12 @@ def _plain_text_from_html_report_section(html_text: Any, section_id: str) -> str
         return ""
     pattern = rf"<section\b[^>]*\bid=[\"']{_re.escape(section_id_s)}[\"'][^>]*>(.*?)</section>"
     match = _re.search(pattern, html_s, flags=_re.IGNORECASE | _re.DOTALL)
-    return _plain_text_from_html_report(match.group(1)) if match else ""
+    if not match:
+        return ""
+    section_html = match.group(1)
+    if not include_debug_details:
+        section_html = _html_without_transcript_debug_details(section_html)
+    return _plain_text_from_html_report(section_html)
 
 
 def _assert_html_report_matches_final_transcript_rows(
@@ -2224,10 +2436,18 @@ def _assert_html_report_matches_final_transcript_rows(
     # technical/debug sections. Scope meta leakage checks to whichever final
     # transcript section the report actually renders. Rich reports use
     # id="timeline"; compact reports may use id="final-transcript-timeline".
-    transcript_plain = (
-        _plain_text_from_html_report_section(html_report, "final-transcript-timeline")
-        or _plain_text_from_html_report_section(html_report, "timeline")
-        or plain
+    presentation_plain = (
+        _plain_text_from_html_report_section(
+            html_report,
+            "final-transcript-timeline",
+            include_debug_details=False,
+        )
+        or _plain_text_from_html_report_section(
+            html_report,
+            "timeline",
+            include_debug_details=False,
+        )
+        or _plain_text_from_html_report(_html_without_transcript_debug_details(html_report))
     )
 
     # The stale NPC line should never appear anywhere in a generated report,
@@ -2254,7 +2474,7 @@ def _assert_html_report_matches_final_transcript_rows(
         "schema",
         "prompt",
     )
-    meta_found = [marker for marker in transcript_meta_markers if marker and marker in transcript_plain]
+    meta_found = [marker for marker in transcript_meta_markers if marker and marker in presentation_plain]
     if meta_found:
         raise RuntimeError(
             "campaign_report_html_contains_meta_text_in_transcript:"
@@ -19404,6 +19624,9 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
             "scenario_progression_actions_all": _safe_list(graph_action_state.get("scenario_progression_actions_all")),
         }
 
+        if combined_background_result:
+            _attach_llm_prompt_debug_to_row(record, combined_background_result)
+
         # Gate story hooks against canonical action
         fired_hooks = _safe_list(story_hook_result.get("fired_hooks"))
         for hook in _safe_list(fired_hooks):
@@ -20841,6 +21064,7 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
         combined_background_result = _safe_dict(record.get("combined_background_llm_result"))
         if combined_background_result:
             record["combined_background_llm_result"] = combined_background_result
+            _attach_llm_prompt_debug_to_row(record, combined_background_result)
 
             # If the turn just wrote a journal entry, refresh that entry with
             # the now-available presentation narration. This is deterministic
@@ -22153,6 +22377,10 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
         wrote_full_transcript=wrote_full_transcript,
     )
 
+    summary["llm_prompt_and_fallback_summary"] = _build_llm_prompt_and_fallback_summary(
+        final_transcript_rows
+    )
+
     _assert_bounded_transcript_artifacts_valid(
         bounded_transcript_rows=bounded_transcript_rows,
         slim_transcript_rows=slim_transcript_rows,
@@ -22502,6 +22730,13 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
                 artifact_manifest,
                 "dialogue-repair-quality-summary.json",
                 summary.get("dialogue_repair_quality_summary", {}),
+            )
+
+            _zip_writestr_json(
+                zip_handle,
+                artifact_manifest,
+                "llm-prompt-and-fallback-summary.json",
+                summary.get("llm_prompt_and_fallback_summary", {}),
             )
 
             _zip_writestr_json(
