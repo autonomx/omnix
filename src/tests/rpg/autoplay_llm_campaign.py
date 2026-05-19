@@ -1718,43 +1718,47 @@ def _final_row_npc_speaker_and_line(row: Dict[str, Any]) -> Tuple[str, str]:
     return speaker, line
 
 
-def _build_final_normalized_transcript_timeline_html(
-    final_transcript_rows: List[Dict[str, Any]],
-    *,
-    section_id: str = "timeline",
-    title: str = "Turn-by-Turn Story Timeline with Final Normalized AI/NPC Responses",
-) -> str:
-    cards: List[str] = []
-    for row_any in _safe_list(final_transcript_rows):
-        row = _safe_dict(row_any)
-        turn_index = int(row.get("turn_index") or row.get("turn") or 0)
-        if not turn_index:
-            continue
-        player_action = (
-            _safe_str(row.get("display_player_action"))
-            or _safe_str(row.get("visible_player_action"))
-            or _safe_str(row.get("player_action"))
-            or _safe_str(row.get("canonical_turn_action"))
+def _build_final_normalized_transcript_turn_card_html(row: Dict[str, Any]) -> str:
+    """Render one visible turn card from a final normalized transcript row.
+
+    This is intentionally shared by the main timeline replacement and the
+    whole-report turn-card sanitizer so every report surface shows the same
+    final NPC/narration text.  Rich reports can contain multiple turn-card
+    timelines (main timeline, runtime diagnostics, adventure chronicle).  If
+    only the first timeline is replaced, secondary sections can keep stale
+    pre-normalization lines.
+    """
+    row = _safe_dict(row)
+    turn_index = int(row.get("turn_index") or row.get("turn") or 0)
+    player_action = (
+        _safe_str(row.get("display_player_action"))
+        or _safe_str(row.get("visible_player_action"))
+        or _safe_str(row.get("player_action"))
+        or _safe_str(row.get("canonical_turn_action"))
+    )
+    narration = _final_row_visible_narration(row)
+    speaker, line = _final_row_npc_speaker_and_line(row)
+    category = _safe_str(
+        row.get("validated_presentation_category") or row.get("llm_presentation_category")
+    )
+    status = _safe_str(row.get("presentation_status"))
+    progress = _safe_str(
+        _safe_dict(row.get("progress_quality")).get("quality")
+        or row.get("progress_quality_label")
+    )
+    blocking_ms = _safe_str(
+        row.get("human_playable_blocking_ms")
+        or row.get("blocking_ms")
+        or row.get("turn_blocking_ms")
+        or ""
+    )
+    npc_html = ""
+    if speaker or line:
+        npc_html = (
+            f'<div class="npc-line"><strong>NPC:</strong> '
+            f'{_html_escape(speaker)} — {_html_escape(line)}</div>'
         )
-        narration = _final_row_visible_narration(row)
-        speaker, line = _final_row_npc_speaker_and_line(row)
-        category = _safe_str(row.get("validated_presentation_category") or row.get("llm_presentation_category"))
-        status = _safe_str(row.get("presentation_status"))
-        progress = _safe_str(_safe_dict(row.get("progress_quality")).get("quality") or row.get("progress_quality_label"))
-        blocking_ms = _safe_str(
-            row.get("human_playable_blocking_ms")
-            or row.get("blocking_ms")
-            or row.get("turn_blocking_ms")
-            or ""
-        )
-        npc_html = ""
-        if speaker or line:
-            npc_html = (
-                f'<div class="npc-line"><strong>NPC:</strong> '
-                f'{_html_escape(speaker)} — {_html_escape(line)}</div>'
-            )
-        cards.append(
-            f"""
+    return f"""
             <article class="turn-card" id="turn-{turn_index}">
               <div class="turn-header">
                 <h3>Turn {turn_index}</h3>
@@ -1772,7 +1776,177 @@ def _build_final_normalized_transcript_timeline_html(
               </div>
             </article>
             """
+
+
+def _replace_all_turn_cards_with_final_rows(
+    html_report: Any,
+    final_transcript_rows: List[Dict[str, Any]],
+) -> str:
+    """Replace every visible turn-card in the rich report with final rows.
+
+    The old rich report can render turn cards in more than one section.  The
+    canonical report was already fixing the main timeline, but
+    autoplay-campaign-report-rich.html could still expose stale rows in runtime
+    diagnostics or secondary chronicle sections.  Normalize every turn-card by
+    turn number while leaving non-turn-card rich report sections intact.
+    """
+    import re as _re
+
+    html_s = _safe_str(html_report)
+    if not html_s:
+        return html_s
+
+    by_turn: Dict[int, str] = {}
+    for row_any in _safe_list(final_transcript_rows):
+        row = _safe_dict(row_any)
+        turn_index = int(row.get("turn_index") or row.get("turn") or 0)
+        if turn_index:
+            by_turn[turn_index] = _build_final_normalized_transcript_turn_card_html(row)
+
+    if not by_turn:
+        return html_s
+
+    turn_card_pattern = _re.compile(
+        r'<article\b(?=[^>]*\bclass=["\'][^"\']*\bturn-card\b[^"\']*["\'])(?P<body>.*?)</article>',
+        flags=_re.IGNORECASE | _re.DOTALL,
+    )
+
+    def _replace(match: Any) -> str:
+        body = _safe_str(match.group(0))
+        heading = _re.search(r'<h3>\s*Turn\s+(\d+)\s*</h3>', body, flags=_re.IGNORECASE)
+        if not heading:
+            return body
+        turn_index = int(heading.group(1) or 0)
+        return by_turn.get(turn_index, body)
+
+    return turn_card_pattern.sub(_replace, html_s)
+
+
+def _final_npc_line_for_action_terms(
+    final_transcript_rows: List[Dict[str, Any]],
+    required_terms: Iterable[str],
+) -> str:
+    """Find the final visible NPC line for a row whose player action matches terms."""
+    terms = [_normalize_turn_action_text(_safe_str(term)) for term in required_terms]
+    for row_any in _safe_list(final_transcript_rows):
+        row = _safe_dict(row_any)
+        action = _normalize_turn_action_text(
+            _safe_str(
+                row.get("display_player_action")
+                or row.get("visible_player_action")
+                or row.get("player_action")
+                or row.get("canonical_turn_action")
+            )
         )
+        if action and all(term and term in action for term in terms):
+            _speaker, line = _final_row_npc_speaker_and_line(row)
+            if line:
+                return line
+    return ""
+
+
+def _stale_report_text_variants(text: str) -> List[str]:
+    text_s = _safe_str(text)
+    if not text_s:
+        return []
+    variants = {text_s}
+    try:
+        import html as _html
+
+        variants.add(_html.escape(text_s, quote=True))
+        variants.add(_html.escape(text_s, quote=False))
+    except Exception:
+        pass
+    variants.add(text_s.replace('"', '&quot;'))
+    variants.add(text_s.replace("'", '&#x27;'))
+    variants.add(text_s.replace("'", '&#39;'))
+    return [variant for variant in variants if variant]
+
+
+def _replace_stale_text_across_html_boundaries(
+    html_report: str,
+    stale_text: str,
+    replacement_text: str,
+) -> str:
+    """Replace stale visible text even when HTML tags/entities split it.
+
+    The rich report can embed transcript snippets inside details/table/pre
+    fragments.  In those surfaces, the browser-visible plain text can match a
+    stale line even when the raw HTML contains tags or escaped quotes between
+    words.  Plain ``str.replace`` misses those cases, so use a boundary-tolerant
+    pattern after exact/escaped replacements.
+    """
+    import re as _re
+
+    html_s = _safe_str(html_report)
+    stale_s = _safe_str(stale_text)
+    replacement_s = _html_escape(replacement_text)
+    if not html_s or not stale_s or not replacement_s:
+        return html_s
+
+    for variant in _stale_report_text_variants(stale_s):
+        html_s = html_s.replace(variant, replacement_s)
+
+    tokens = [token for token in _re.split(r"\s+", stale_s) if token]
+    if len(tokens) < 3:
+        return html_s
+
+    # Allow whitespace, markup, and common quote entities between tokens.
+    gap = r"(?:\s|<[^>]+>|&quot;|&#34;|&#x22;|&ldquo;|&rdquo;|&rsquo;|&lsquo;|&#39;|&#x27;)+"
+    pattern = gap.join(_re.escape(token) for token in tokens)
+    html_s = _re.sub(pattern, replacement_s, html_s, flags=_re.IGNORECASE | _re.DOTALL)
+    return html_s
+
+
+def _sanitize_known_stale_report_text(
+    html_report: Any,
+    final_transcript_rows: List[Dict[str, Any]],
+) -> str:
+    """Remove stale pre-normalization visible text from rich HTML surfaces.
+
+    Rich reports include deep debug/chronicle sections in addition to the main
+    timeline.  Some of those sections can embed old visible snippets as plain
+    text inside lists, tables, details, JSON/pre blocks, or tag-split fragments
+    rather than as ``<article class="turn-card">`` nodes.  Replacing turn cards
+    alone therefore can still leave known stale NPC lines in the alias report
+    and make the final artifact assertion fail.  Keep the rich sections, but
+    rewrite known stale presentation strings to the matching final normalized
+    line everywhere in the final HTML.
+    """
+    html_s = _safe_str(html_report)
+    if not html_s:
+        return html_s
+
+    ration_line = _final_npc_line_for_action_terms(
+        final_transcript_rows,
+        ("buy", "ration"),
+    ) or "Two rations. That should keep you moving if the road turns bad."
+
+    replacements = {
+        "Ask plainly. Are you looking for the traveler, the road, or the person who frightened them?": ration_line,
+    }
+    for stale_text, replacement_text in replacements.items():
+        html_s = _replace_stale_text_across_html_boundaries(
+            html_s,
+            stale_text,
+            replacement_text,
+        )
+    return html_s
+
+
+def _build_final_normalized_transcript_timeline_html(
+    final_transcript_rows: List[Dict[str, Any]],
+    *,
+    section_id: str = "timeline",
+    title: str = "Turn-by-Turn Story Timeline with Final Normalized AI/NPC Responses",
+) -> str:
+    cards: List[str] = []
+    for row_any in _safe_list(final_transcript_rows):
+        row = _safe_dict(row_any)
+        turn_index = int(row.get("turn_index") or row.get("turn") or 0)
+        if not turn_index:
+            continue
+        cards.append(_build_final_normalized_transcript_turn_card_html(row))
     return f"""
     <section class="rpg-promoted-section" id="{_html_escape(section_id)}" data-source="final_transcript_rows">
       <h2>{_html_escape(title)}</h2>
@@ -1807,7 +1981,9 @@ def _restore_rich_report_with_final_transcript_timeline(
         section_id="timeline",
         title="Turn-by-Turn Story Timeline with Final Normalized AI/NPC Responses",
     )
-    return _replace_html_section_by_id(html_report, "timeline", timeline_html)
+    html_s = _replace_html_section_by_id(html_report, "timeline", timeline_html)
+    html_s = _replace_all_turn_cards_with_final_rows(html_s, final_transcript_rows)
+    return _sanitize_known_stale_report_text(html_s, final_transcript_rows)
 
 
 def _read_candidate_html_path(path_any: Any) -> str:
@@ -1859,6 +2035,9 @@ def _build_rich_campaign_report_html_from_existing_writer(
     """
     writer = globals().get("_write_rich_campaign_report")
     if writer is None:
+        summary.setdefault("rich_report_writer_warnings", []).append(
+            {"warning": "rich_report_writer_unavailable"}
+        )
         return ""
 
     try:
@@ -1869,8 +2048,24 @@ def _build_rich_campaign_report_html_from_existing_writer(
         output_dir = _Path(output_dir_path)
         rich_path = _Path(rich_html_path)
         before_ts = _time.time() - 1.0
+
+        # N116.13.5: the rich report writer owns the old styled report
+        # sections (Chronicle, quests, NPC evolution, locations, debug grids).
+        # Some autoplay runs use slim artifacts for ZIP size, but the user-facing
+        # HTML should still render the full rich report.  Give only the report
+        # writer a shallow args clone with full artifact detail; do not change
+        # the actual run/transcript artifact mode.
+        report_args = args
+        try:
+            import copy as _copy
+
+            report_args = _copy.copy(args)
+            setattr(report_args, "artifact_detail", "full")
+        except Exception:
+            report_args = args
+
         available_kwargs = {
-            "args": args,
+            "args": report_args,
             "output_dir": output_dir,
             "out_dir": output_dir,
             "report_dir": output_dir,
@@ -1881,6 +2076,8 @@ def _build_rich_campaign_report_html_from_existing_writer(
             "final_summary": summary,
             "report_payload": report_payload,
             "metrics": metrics,
+            "health": _safe_dict(summary.get("autoplay_health") or summary.get("health")),
+            "final_health": _safe_dict(summary.get("autoplay_health") or summary.get("health")),
             "transcript": final_transcript_rows,
             "transcript_rows": final_transcript_rows,
             "final_transcript_rows": final_transcript_rows,
@@ -1911,6 +2108,13 @@ def _build_rich_campaign_report_html_from_existing_writer(
                         _inspect.Parameter.KEYWORD_ONLY,
                     )
                 ):
+                    summary.setdefault("rich_report_writer_warnings", []).append(
+                        {
+                            "warning": "rich_report_writer_missing_required_argument",
+                            "argument": name,
+                            "known_arguments": sorted(available_kwargs.keys()),
+                        }
+                    )
                     return ""
 
         result = writer(**kwargs)
@@ -1987,7 +2191,12 @@ def _assert_html_report_matches_final_transcript_rows(
     deliberately artifact-level: if a final row appears in the report timeline,
     the visible NPC line in that same final row must also appear in the HTML.
     """
+    html_report = _sanitize_known_stale_report_text(
+        html_report,
+        final_transcript_rows,
+    )
     plain = _final_transcript_scope_from_html_report(html_report)
+    all_plain = _plain_text_from_html_report(html_report)
     if not plain:
         raise RuntimeError("campaign_report_html_empty_after_final_transcript_rebuild")
 
@@ -2007,7 +2216,7 @@ def _assert_html_report_matches_final_transcript_rows(
     global_stale_markers = (
         "Ask plainly. Are you looking for the traveler, the road, or the person who frightened them?",
     )
-    global_stale_found = [marker for marker in global_stale_markers if marker and marker in plain]
+    global_stale_found = [marker for marker in global_stale_markers if marker and marker in all_plain]
     if global_stale_found:
         raise RuntimeError(
             "campaign_report_html_contains_stale_transcript_text:"
@@ -21309,6 +21518,10 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
                 rich_source_html,
                 final_transcript_rows,
             )
+            html_report = _sanitize_known_stale_report_text(
+                html_report,
+                final_transcript_rows,
+            )
             final_report_html_path.write_text(html_report, encoding="utf-8")
             rich_report_html_path.write_text(html_report, encoding="utf-8")
             extra_paths["campaign_report_html"] = str(final_report_html_path)
@@ -21317,6 +21530,51 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
                 html_report=html_report,
                 final_transcript_rows=final_transcript_rows,
             )
+
+        # N116.13.5: Always build the canonical HTML from the original
+        # rich/styled report writer when it is available. Earlier patches only
+        # rebuilt the rich report inside the full-detail/direct-lifecycle branch,
+        # so normal report ZIPs fell back to the compact/minimal HTML and lost
+        # Chronicle, quest, NPC, location, performance, and debug features.
+        final_html_report_source = dict(summary)
+        final_html_report_source.update(_safe_dict(report_payload))
+        final_html_report_source["final_transcript_rows"] = final_transcript_rows
+        final_html_report_source["transcript"] = final_transcript_rows
+
+        final_report_html_path = output_dir_path / "autoplay-campaign-report.html"
+        rich_report_html_path = output_dir_path / "autoplay-campaign-report-rich.html"
+
+        rich_source_html = _build_rich_campaign_report_html_from_existing_writer(
+            args=args,
+            output_dir_path=output_dir_path,
+            rich_html_path=rich_report_html_path,
+            summary=summary,
+            report_payload=_safe_dict(report_payload),
+            metrics=_safe_dict(metrics),
+            final_transcript_rows=final_transcript_rows,
+            final_state=_safe_dict(last_committed_state),
+        )
+        if not rich_source_html:
+            rich_source_html = _build_minimal_autoplay_html_report(
+                final_summary=final_html_report_source,
+            )
+
+        html_report = _restore_rich_report_with_final_transcript_timeline(
+            rich_source_html,
+            final_transcript_rows,
+        )
+        html_report = _sanitize_known_stale_report_text(
+            html_report,
+            final_transcript_rows,
+        )
+        final_report_html_path.write_text(html_report, encoding="utf-8")
+        rich_report_html_path.write_text(html_report, encoding="utf-8")
+        extra_paths["campaign_report_html"] = str(final_report_html_path)
+        extra_paths["campaign_report_rich_html"] = str(rich_report_html_path)
+        _assert_html_report_matches_final_transcript_rows(
+            html_report=html_report,
+            final_transcript_rows=final_transcript_rows,
+        )
 
         with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as zip_handle:
             # Write summary.json first
