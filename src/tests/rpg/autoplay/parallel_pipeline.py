@@ -503,13 +503,90 @@ def _loaded_profile_context_summary(runtime_state: Dict[str, Any]) -> Dict[str, 
 
 
 
+COMMERCE_ACTION_VERBS = (
+    "buy",
+    "bought",
+    "purchase",
+    "purchased",
+    "pay for",
+    "pay bran for",
+    "pay the innkeeper for",
+    "order",
+    "sell",
+    "trade",
+    "hire",
+)
+
+COMMERCE_OBJECT_TERMS = (
+    "ration",
+    "rations",
+    "supply",
+    "supplies",
+    "meal",
+    "ale",
+    "room",
+    "lodging",
+    "bed",
+    "service",
+)
+
+EVIDENCE_PAYMENT_FALSE_POSITIVE_TERMS = (
+    "marked coin",
+    "coin proof",
+    "coin lead",
+    "payment mark",
+    "payment marks",
+    "manifest payment",
+    "ledger",
+    "ledger entries",
+    "paymaster",
+    "funded",
+    "backer",
+    "proof",
+    "evidence",
+)
+
+
+def _action_is_evidence_payment_phrase(action: str) -> bool:
+    return any(term in action for term in EVIDENCE_PAYMENT_FALSE_POSITIVE_TERMS)
+
+
+def _action_is_commerce_request(action: str, service_result: Dict[str, Any]) -> bool:
+    service_result = _safe_dict(service_result)
+    if service_result.get("purchase") or service_result.get("sale"):
+        return True
+    if _action_is_evidence_payment_phrase(action) and not any(
+        verb in action for verb in COMMERCE_ACTION_VERBS
+    ):
+        return False
+    has_commerce_verb = any(verb in action for verb in COMMERCE_ACTION_VERBS)
+    has_commerce_object = any(term in action for term in COMMERCE_OBJECT_TERMS)
+    return bool(has_commerce_verb and (has_commerce_object or "coin" in action or "price" in action))
+
+
+def _action_is_service_request(action: str, service_result: Dict[str, Any]) -> bool:
+    service_result = _safe_dict(service_result)
+    if service_result.get("service"):
+        return True
+    if _action_is_evidence_payment_phrase(action) and not any(
+        verb in action for verb in ("rent", "sleep", "rest", "book", "pay for")
+    ):
+        return False
+    return any(term in action for term in ("rent room", "rent a room", "lodging", "book room", "sleep", "rest here", "pay for room"))
+
+
 def _current_action_required_focus(
     *,
     player_action: str,
     turn_contract: Dict[str, Any],
     semantic_action_record: Dict[str, Any],
 ) -> List[str]:
-    """Deterministically identify what NPC dialogue must answer first."""
+    """Deterministically identify what NPC dialogue must answer first.
+
+    Keep commerce/service detection narrow.  Long investigation arcs often use
+    words like "marked coin", "payment marks", "ledger", and
+    "paymaster" as evidence, not as purchase requests.
+    """
     action = _norm(player_action)
     contract = _safe_dict(turn_contract)
     semantic = _safe_dict(semantic_action_record)
@@ -527,16 +604,16 @@ def _current_action_required_focus(
         or _safe_dict(contract.get("semantic_action")).get("kind")
     )
     service_result = _safe_dict(contract.get("service_result"))
-    if any(term in action for term in ("buy", "purchase", "ration", "supplies", "coin", "pay")) or service_result.get("purchase"):
+    if _action_is_commerce_request(action, service_result):
         add("purchase_acknowledgement")
         add("item_quantity_or_availability")
         add("price_or_payment")
-    if any(term in action for term in ("room", "lodging", "rent", "rest", "sleep")) or service_result.get("service"):
+    if _action_is_service_request(action, service_result):
         add("service_request_acknowledgement")
         add("lodging_or_rest_terms")
     if any(term in action for term in ("ask", "question", "tell", "report", "warn", "explain")) or semantic_kind in {"social", "dialogue"}:
         add("answer_current_question")
-    if any(term in action for term in ("look", "inspect", "search", "scout", "examine", "listen")):
+    if any(term in action for term in ("look", "inspect", "search", "scout", "examine", "listen", "study", "decode")):
         add("observed_evidence_or_limits")
     if any(term in action for term in ("travel", "follow", "leave", "go to", "road", "route")) or "travel" in resolved:
         add("current_travel_or_route_action")
@@ -692,7 +769,8 @@ def build_current_turn_prompt_contract(
         "do_not_answer_profile_memory_instead_of_current_action",
     ]
 
-    if service_result or any(token in action_lower for token in ("rent", "room", "lodging", "rest", "buy", "sell", "purchase", "ration", "coin", "price", "service")):
+    commerce_or_service_request = _action_is_commerce_request(action_lower, service_result) or _action_is_service_request(action_lower, service_result)
+    if commerce_or_service_request:
         required_focus.insert(0, "acknowledge_the_service_or_economy_request_first")
         required_focus.append("mention_item_quantity_price_or_refusal_only_if_present_in_contract")
         forbidden_stale_topics.extend(

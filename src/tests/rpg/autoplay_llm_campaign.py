@@ -1839,6 +1839,10 @@ def _attach_llm_prompt_debug_to_row(row: Dict[str, Any], result: Dict[str, Any])
     )
     fallback_diagnostics = _build_llm_fallback_diagnostics_from_result(result)
 
+    if not prompt_contract:
+        prompt_contract = _build_transcript_row_prompt_contract(row)
+    if not prompt_debug:
+        prompt_debug = _build_transcript_row_prompt_debug(row, result)
     if prompt_debug:
         row["llm_prompt_debug"] = prompt_debug
     if prompt_contract:
@@ -1894,7 +1898,21 @@ def _build_llm_prompt_and_fallback_summary(rows: List[Dict[str, Any]]) -> Dict[s
                     "reason": reason,
                 }
             )
-    summary["ok"] = not bool(summary["invalid_fallback_reason_turns"])
+    summary["missing_prompt_contract_turns"] = [
+        int(_safe_dict(row).get("turn_index") or _safe_dict(row).get("turn") or 0)
+        for row in _safe_list(rows)
+        if _safe_dict(row) and not _safe_dict(_safe_dict(row).get("llm_prompt_contract"))
+    ]
+    summary["missing_prompt_debug_turns"] = [
+        int(_safe_dict(row).get("turn_index") or _safe_dict(row).get("turn") or 0)
+        for row in _safe_list(rows)
+        if _safe_dict(row) and not _safe_dict(_safe_dict(row).get("llm_prompt_debug"))
+    ]
+    summary["ok"] = (
+        not bool(summary["invalid_fallback_reason_turns"])
+        and not bool(summary["missing_prompt_contract_turns"])
+        and not bool(summary["missing_prompt_debug_turns"])
+    )
     return summary
 
 
@@ -2556,7 +2574,7 @@ def _fallback_narration_for_current_action(row: Dict[str, Any]) -> str:
         if "ration" in action:
             return "The purchase stays practical: Bran handles the rations while the tavern's unease remains in the background."
         return "The transaction stays grounded in the goods, coin, and availability recorded for this turn."
-    if category == "service" or any(term in action for term in ("room", "lodging", "rest")):
+    if category == "service" or _action_is_service_request(action, _safe_dict(_safe_dict(row.get("turn_contract")).get("service_result"))):
         return "The service request is handled according to what the tavern can actually provide this turn."
     if category in {"dialogue", "evidence", "investigation"}:
         return "The exchange stays focused on the question at hand and the facts recorded this turn."
@@ -3656,6 +3674,175 @@ ECONOMY_SERVICE_RESPONSE_TERMS = (
 )
 
 
+COMMERCE_ACTION_VERBS = (
+    "buy",
+    "bought",
+    "purchase",
+    "purchased",
+    "pay for",
+    "pay bran for",
+    "pay the innkeeper for",
+    "order",
+    "sell",
+    "trade",
+    "hire",
+)
+
+COMMERCE_OBJECT_TERMS = (
+    "ration",
+    "rations",
+    "supply",
+    "supplies",
+    "meal",
+    "ale",
+    "room",
+    "lodging",
+    "bed",
+    "service",
+)
+
+EVIDENCE_PAYMENT_FALSE_POSITIVE_TERMS = (
+    "marked coin",
+    "coin proof",
+    "coin lead",
+    "payment mark",
+    "payment marks",
+    "manifest payment",
+    "ledger",
+    "ledger entries",
+    "paymaster",
+    "funded",
+    "backer",
+    "proof",
+    "evidence",
+)
+
+
+def _action_is_evidence_payment_phrase(action: str) -> bool:
+    action = _normalize_turn_action_text(action)
+    return any(term in action for term in EVIDENCE_PAYMENT_FALSE_POSITIVE_TERMS)
+
+
+def _action_is_commerce_request(action: str, service_result: Dict[str, Any] | None = None) -> bool:
+    action = _normalize_turn_action_text(action)
+    service_result = _safe_dict(service_result)
+    if service_result.get("purchase") or service_result.get("sale"):
+        return True
+    if _action_is_evidence_payment_phrase(action) and not any(
+        verb in action for verb in COMMERCE_ACTION_VERBS
+    ):
+        return False
+    has_commerce_verb = any(verb in action for verb in COMMERCE_ACTION_VERBS)
+    has_commerce_object = any(term in action for term in COMMERCE_OBJECT_TERMS)
+    return bool(has_commerce_verb and (has_commerce_object or "coin" in action or "price" in action))
+
+
+def _action_is_service_request(action: str, service_result: Dict[str, Any] | None = None) -> bool:
+    action = _normalize_turn_action_text(action)
+    service_result = _safe_dict(service_result)
+    if service_result.get("service"):
+        return True
+    if _action_is_evidence_payment_phrase(action) and not any(
+        verb in action for verb in ("rent", "sleep", "rest", "book", "pay for")
+    ):
+        return False
+    return any(term in action for term in ("rent room", "rent a room", "lodging", "book room", "sleep", "rest here", "pay for room"))
+
+
+def _build_transcript_row_prompt_contract(row: Dict[str, Any]) -> Dict[str, Any]:
+    """Reconstruct a current-turn prompt contract from final row facts.
+
+    Some local-model partial JSON repairs preserve a valid NPC/narration but lose
+    the original prompt_debug/current_turn_prompt_contract fields before final
+    artifact persistence.  The transcript row still has authoritative action,
+    turn_contract, and focus metadata, so keep the diagnostics complete without
+    trusting provider output.
+    """
+    row = _safe_dict(row)
+    action = _safe_str(
+        row.get("display_player_action")
+        or row.get("visible_player_action")
+        or row.get("canonical_turn_action")
+        or row.get("player_action")
+    )
+    turn_contract = _safe_dict(row.get("turn_contract"))
+    semantic_action = _safe_dict(turn_contract.get("semantic_action")) or _safe_dict(row.get("semantic_action_record"))
+    required_focus = [
+        _safe_str(item)
+        for item in _safe_list(_safe_dict(row.get("current_action_response")).get("required_focus"))
+        if _safe_str(item)
+    ]
+    for item in _deterministic_current_action_required_focus(row):
+        if item not in required_focus:
+            required_focus.append(item)
+    if not required_focus:
+        required_focus = ["answer_the_current_player_action_before_old_context"]
+    forbidden_stale_topics = [
+        "do_not_continue_previous_quest_investigation_unless_current_action_asks",
+        "do_not_answer_profile_memory_instead_of_current_action",
+    ]
+    if set(required_focus).intersection(
+        {
+            "purchase_acknowledgement",
+            "item_quantity_or_availability",
+            "price_or_payment",
+            "service_request_acknowledgement",
+            "lodging_or_rest_terms",
+        }
+    ):
+        forbidden_stale_topics.extend(
+            [
+                "ambush_investigation",
+                "bandit_road_investigation",
+                "traveler_or_road_question",
+                "who_frightened_them_followup",
+            ]
+        )
+    return {
+        "format_version": "current_turn_prompt_contract_v1",
+        "priority": "highest",
+        "turn_index_scope": "current_turn_only",
+        "reconstructed_from_transcript_row": True,
+        "current_player_action": action[:800],
+        "resolved_action": _safe_str(turn_contract.get("resolved_action")),
+        "resolved_result": _safe_str(turn_contract.get("resolved_result")),
+        "semantic_action": semantic_action,
+        "service_result": _safe_dict(turn_contract.get("service_result")),
+        "required_focus": required_focus[:8],
+        "forbidden_stale_topics": sorted(set(forbidden_stale_topics)),
+        "background_only_sections": [
+            "recent_events",
+            "loaded_npc_profiles",
+            "profile_context_summary",
+            "advisory_context",
+            "old_quest_or_rumor_context",
+        ],
+        "npc_line_rules": [
+            "must_answer_current_action_first",
+            "may_use_profile_for_tone_only",
+            "must_not_use_memory_as_new_authoritative_fact",
+            "must_not_introduce_rewards_or_outcomes_absent_from_turn_contract",
+        ],
+    }
+
+
+def _build_transcript_row_prompt_debug(row: Dict[str, Any], result: Dict[str, Any]) -> Dict[str, Any]:
+    row = _safe_dict(row)
+    result = _safe_dict(result)
+    diagnostics = _safe_dict(result.get("diagnostics"))
+    return {
+        "format_version": "llm_prompt_debug_v1",
+        "reconstructed_from_transcript_row": True,
+        "turn_index": int(row.get("turn_index") or row.get("turn") or result.get("turn_index") or 0),
+        "source": _safe_str(result.get("source")),
+        "context_packet_keys": _safe_list(diagnostics.get("context_packet_keys")),
+        "provider_payload_error": _safe_str(diagnostics.get("provider_payload_error")),
+        "provider_payload_keys": _safe_list(diagnostics.get("provider_payload_keys")),
+        "prompt_metrics": _safe_dict(result.get("prompt_metrics") or diagnostics.get("prompt_metrics")),
+        "current_turn_prompt_contract": _build_transcript_row_prompt_contract(row),
+    }
+
+
 def _deterministic_current_action_required_focus(row: Dict[str, Any]) -> List[str]:
     """Derive current-action obligations without trusting provider metadata.
 
@@ -3681,31 +3868,16 @@ def _deterministic_current_action_required_focus(row: Dict[str, Any]) -> List[st
         if item and item not in focus:
             focus.append(item)
 
-    purchase_terms = (
-        "buy",
-        "bought",
-        "purchase",
-        "purchased",
-        "ration",
-        "rations",
-        "supply",
-        "supplies",
-        "coin",
-        "coins",
-        "pay",
-        "paid",
-        "sell",
-    )
-    service_terms = ("rent", "room", "lodging", "bed", "rest", "sleep", "service")
+    service_result = _safe_dict(_safe_dict(row.get("turn_contract")).get("service_result"))
     question_terms = ("ask", "question", "tell", "report", "warn", "explain", "who", "what", "where", "why")
-    observe_terms = ("look", "inspect", "search", "scout", "examine", "watch", "listen")
+    observe_terms = ("look", "inspect", "search", "scout", "examine", "watch", "listen", "study", "decode")
     travel_terms = ("travel", "follow", "leave", "go", "road", "route", "walk", "move")
 
-    if category == "economy" or any(term in action for term in purchase_terms):
+    if category == "economy" or _action_is_commerce_request(action, service_result):
         add("purchase_acknowledgement")
         add("item_quantity_or_availability")
         add("price_or_payment")
-    if category == "service" or any(term in action for term in service_terms):
+    if category == "service" or _action_is_service_request(action, service_result):
         add("service_request_acknowledgement")
         add("lodging_or_rest_terms")
     if category in {"dialogue", "evidence", "investigation"} or any(term in action for term in question_terms):
@@ -4396,7 +4568,7 @@ def _fallback_npc_line_for_current_action(row: Dict[str, Any]) -> str:
     category = _safe_str(row.get("validated_presentation_category")) or _safe_str(row.get("action_category"))
     action = _normalize_turn_action_text(_safe_str(row.get("canonical_turn_action") or row.get("player_action")))
     speaker = _safe_str(row.get("npc_speaker") or _safe_dict(row.get("npc")).get("speaker") or "Bran")
-    if category == "economy" or any(term in action for term in ("buy", "purchase", "rations", "supplies")):
+    if category == "economy" or _action_is_commerce_request(action, _safe_dict(_safe_dict(row.get("turn_contract")).get("service_result"))):
         if "ration" in action:
             templates = [
                 "Two rations, wrapped and ready. Keep them dry, and they will do their job on the road.",
@@ -4421,7 +4593,7 @@ def _fallback_npc_line_for_current_action(row: Dict[str, Any]) -> str:
             facts={"transaction": "purchase"},
         )
         return _store_npc_response_variant(row, line, meta)
-    if category == "service" or any(term in action for term in ("room", "lodging", "rest")):
+    if category == "service" or _action_is_service_request(action, _safe_dict(_safe_dict(row.get("turn_contract")).get("service_result"))):
         templates = [
             "I can talk terms for the room, but only what the house can actually offer.",
             "If there is a room free and you can pay, we can settle the terms.",
@@ -7609,6 +7781,26 @@ def _infer_social_target_npc(row: Dict[str, Any]) -> str:
     return ""
 
 
+def _bounded_social_npc_line(
+    row: Dict[str, Any],
+    *,
+    speaker: str,
+    variant_family: str,
+    templates: List[str],
+    facts: Dict[str, Any] | None = None,
+) -> Dict[str, str]:
+    line, meta = _select_bounded_response_variant(
+        row,
+        variant_family=variant_family,
+        templates=templates,
+        facts=facts or {},
+    )
+    if not line:
+        return {}
+    _store_npc_response_variant(row, line, meta)
+    return {"speaker": speaker, "line": line}
+
+
 def _deterministic_social_npc_line(row: Dict[str, Any]) -> Dict[str, str]:
     row = _safe_dict(row)
     speaker = _infer_social_target_npc(row)
@@ -7631,112 +7823,232 @@ def _deterministic_social_npc_line(row: Dict[str, Any]) -> Dict[str, str]:
     if not speaker:
         return {}
 
-    if "buy" in text and "ration" in text:
-        return {
-            "speaker": speaker,
-            "line": "Two rations. That should keep you moving if the road turns bad.",
-        }
+    if _action_is_commerce_request(text, _safe_dict(_safe_dict(row.get("turn_contract")).get("service_result"))) and "ration" in text:
+        return _bounded_social_npc_line(
+            row,
+            speaker=speaker,
+            variant_family="social.economy.rations",
+            templates=[
+                "Two rations. That should keep you moving if the road turns bad.",
+                "Two wrapped rations. Keep them dry until the road gives you a reason not to.",
+                "That is two rations counted out. They are road food, not comfort, but they will hold.",
+            ],
+            facts={"item": "rations", "quantity": 2},
+        )
 
     if speaker == "Local Patron":
-        return {
-            "speaker": speaker,
-            "line": "If you mean the old bridge, folk avoid it before dawn. Too many quiet wagons, too few honest reasons.",
-        }
+        return _bounded_social_npc_line(
+            row,
+            speaker=speaker,
+            variant_family="social.local_patron.bridge",
+            templates=[
+                "If you mean the old bridge, folk avoid it before dawn. Too many quiet wagons, too few honest reasons.",
+                "The old bridge draws the wrong kind of traffic before sunrise; I would not call those wagons honest.",
+                "Ask around the old bridge and you will hear the same thing: wagons move there when decent folk stay indoors.",
+            ],
+            facts={"topic": "old_bridge"},
+        )
 
     if action_id.startswith("ask_") and speaker == "Bran":
-        return {
-            "speaker": speaker,
-            "line": "Ask plainly. If it touches the road, the side door, or that traveler, I will tell you what I know.",
-        }
+        return _bounded_social_npc_line(
+            row,
+            speaker=speaker,
+            variant_family="social.ask.bran",
+            templates=[
+                "Ask plainly. If it touches the road, the side door, or that traveler, I will tell you what I know.",
+                "Put the question straight, and I will separate what I know from what I only suspect.",
+                "Ask it cleanly, and I will answer from facts, not tavern smoke.",
+                "Name the point you need, and I will tell you what I can stand behind.",
+            ],
+            facts={"dialogue": "ask_bran"},
+        )
 
     if action_id.startswith("ask_") and speaker == "Garran":
-        return {
-            "speaker": speaker,
-            "line": "If this is about the road, say it straight. I would rather know the danger before the wheels hit it.",
-        }
+        return _bounded_social_npc_line(
+            row,
+            speaker=speaker,
+            variant_family="social.ask.garran",
+            templates=[
+                "If this is about the road, say it straight. I would rather know the danger before the wheels hit it.",
+                "Give me the plain question. Wagons survive on clear warnings, not hints.",
+                "If the road is part of it, I need the sharp version, not the polite one.",
+            ],
+            facts={"dialogue": "ask_garran"},
+        )
 
     if action_id.startswith("warn_") and speaker == "Garran":
-        return {
-            "speaker": speaker,
-            "line": "Then we move carefully. I will not drive blind into a trap.",
-        }
+        return _bounded_social_npc_line(
+            row,
+            speaker=speaker,
+            variant_family="social.warn.garran",
+            templates=[
+                "Then we move carefully. I will not drive blind into a trap.",
+                "Then the wagon waits until we know where the danger sits.",
+                "I will treat the warning as real until the road proves otherwise.",
+            ],
+            facts={"warning": "road_danger"},
+        )
 
-    if action_id.startswith("warn_"):
-        return {
-            "speaker": speaker,
-            "line": "Then we treat it as real trouble and warn anyone still exposed.",
-        }
+    if action_id.startswith("warn_") or "warn" in text:
+        return _bounded_social_npc_line(
+            row,
+            speaker=speaker,
+            variant_family="social.warn.generic",
+            templates=[
+                "Then we treat it as real trouble and warn anyone still exposed.",
+                "Then this stops being gossip. We move like someone could get hurt.",
+                "If the warning is sound, we act before the vulnerable are left alone with it.",
+            ],
+            facts={"warning": "current_action"},
+        )
 
     if action_id.startswith("report_") and speaker == "Bran":
-        return {
-            "speaker": speaker,
-            "line": "That is enough to stop guessing. Show me where the proof points next.",
-        }
+        return _bounded_social_npc_line(
+            row,
+            speaker=speaker,
+            variant_family="social.report.bran",
+            templates=[
+                "That is enough to stop guessing. Show me where the proof points next.",
+                "That moves us from suspicion to proof. Now tell me where it leads.",
+                "Good. If the proof holds, we follow it before someone buries it.",
+                "That gives us a firm edge. Point it at the next name.",
+            ],
+            facts={"evidence": "reported_to_bran"},
+        )
 
     if action_id.startswith("return_") and "proof" in action_id:
-        return {
-            "speaker": speaker,
-            "line": "That proof gives us a name to push on. Now we make sure it cannot disappear.",
-        }
+        return _bounded_social_npc_line(
+            row,
+            speaker=speaker,
+            variant_family="social.return.proof",
+            templates=[
+                "That proof gives us a name to push on. Now we make sure it cannot disappear.",
+                "If that proof is solid, we copy it, guard it, and press the name it gives us.",
+                "Then the proof needs daylight and witnesses before anyone can make it vanish.",
+            ],
+            facts={"evidence": "returned_proof"},
+        )
 
     if action_id.startswith("question_") and speaker == "Captured Bandit":
-        return {
-            "speaker": speaker,
-            "line": "I only carried what I was paid to carry. The mark on it is the part you should fear.",
-        }
+        return _bounded_social_npc_line(
+            row,
+            speaker=speaker,
+            variant_family="social.question.captured_bandit",
+            templates=[
+                "I only carried what I was paid to carry. The mark on it is the part you should fear.",
+                "I did not choose the mark. I was paid to move it, and that should worry you more.",
+                "The coin was not mine. Whoever stamped it wanted the trail seen by the right eyes.",
+            ],
+            facts={"dialogue": "captured_bandit"},
+        )
 
     if action_id.startswith("confront_") or action_id.startswith("counter_"):
-        return {
-            "speaker": speaker,
-            "line": "Careful. If you are going to press this, make sure the proof is already in other hands.",
-        }
+        return _bounded_social_npc_line(
+            row,
+            speaker=speaker,
+            variant_family="social.confront",
+            templates=[
+                "Careful. If you are going to press this, make sure the proof is already in other hands.",
+                "Press them, but do it with proof secured somewhere they cannot reach.",
+                "A confrontation only works if the evidence survives the first denial.",
+            ],
+            facts={"dialogue": "confrontation"},
+        )
 
     if "magistrate" in speaker.lower() or "arrest" in text:
-        return {
-            "speaker": speaker,
-            "line": "Bring me proof that holds under daylight, and I will act on it.",
-        }
+        return _bounded_social_npc_line(
+            row,
+            speaker=speaker,
+            variant_family="social.magistrate.proof",
+            templates=[
+                "Bring me proof that holds under daylight, and I will act on it.",
+                "Give me evidence that survives public scrutiny, and I can move openly.",
+                "I need proof that cannot be dismissed as tavern panic before I put law behind it.",
+            ],
+            facts={"authority": "magistrate"},
+        )
 
     if "teamster" in speaker.lower():
-        return {
-            "speaker": speaker,
-            "line": "If the east road is being watched, the wagons need to move in pairs or not at all.",
-        }
-
-    if "warn" in text:
-        return {
-            "speaker": speaker,
-            "line": "Then we treat it as real trouble, not tavern gossip.",
-        }
+        return _bounded_social_npc_line(
+            row,
+            speaker=speaker,
+            variant_family="social.teamster.road",
+            templates=[
+                "If the east road is being watched, the wagons need to move in pairs or not at all.",
+                "A watched road means paired wagons, extra eyes, or no run at all.",
+                "If watchers are on the east road, one wagon alone is an invitation.",
+            ],
+            facts={"road": "teamster_warning"},
+        )
 
     if "report" in text or "proof" in text or "evidence" in text:
-        return {
-            "speaker": speaker,
-            "line": "That is something we can act on. Tell me exactly where it points next.",
-        }
+        return _bounded_social_npc_line(
+            row,
+            speaker=speaker,
+            variant_family="social.report.evidence",
+            templates=[
+                "That is something we can act on. Tell me exactly where it points next.",
+                "That gives us more than rumor. Now we follow the part that names someone.",
+                "Good. Proof narrows the road; show me which direction it leaves open.",
+                "Then we stop circling guesses and follow the strongest mark.",
+                "That is useful because it can be tested. Tell me the next verifiable step.",
+            ],
+            facts={"dialogue": "evidence_report"},
+        )
 
     if "ask" in text or "question" in text:
-        return {
-            "speaker": speaker,
-            "line": "Ask it plainly, and I will answer what I know.",
-        }
+        return _bounded_social_npc_line(
+            row,
+            speaker=speaker,
+            variant_family="social.ask.generic",
+            templates=[
+                "Ask it plainly, and I will answer what I know.",
+                "Put the question plainly, and I will keep to what I know.",
+                "Ask straight, and I will not dress the answer up.",
+                "Name what you need answered, and I will stay with the facts.",
+                "Ask the point directly; I will not chase rumors around it.",
+            ],
+            facts={"dialogue": "generic_question"},
+        )
 
     if "confront" in text:
-        return {
-            "speaker": speaker,
-            "line": "Careful. Accusations like that need proof, not just nerve.",
-        }
+        return _bounded_social_npc_line(
+            row,
+            speaker=speaker,
+            variant_family="social.confront.accusation",
+            templates=[
+                "Careful. Accusations like that need proof, not just nerve.",
+                "If you confront them, carry proof strong enough to outlast denial.",
+                "Nerve opens the door, but proof keeps it from slamming shut.",
+            ],
+            facts={"dialogue": "accusation"},
+        )
 
     if "tell" in text:
-        return {
-            "speaker": speaker,
-            "line": "Then we should move before someone else decides the next step for us.",
-        }
+        return _bounded_social_npc_line(
+            row,
+            speaker=speaker,
+            variant_family="social.tell.generic",
+            templates=[
+                "Then we should move before someone else decides the next step for us.",
+                "Then say it clearly and we decide what changes because of it.",
+                "If that is the truth of it, we need to act before it cools.",
+            ],
+            facts={"dialogue": "tell"},
+        )
 
-    return {
-        "speaker": speaker,
-        "line": "That gives us a direction. Now we need the next solid piece of proof.",
-    }
+    return _bounded_social_npc_line(
+        row,
+        speaker=speaker,
+        variant_family="social.direction.generic",
+        templates=[
+            "That gives us a direction. Now we need the next solid piece of proof.",
+            "That points somewhere useful. The next step is finding what confirms it.",
+            "It is a direction, not an answer yet. We need the next hard piece.",
+            "Then we follow the part that can be checked, not the part that merely sounds right.",
+        ],
+        facts={"dialogue": "direction"},
+    )
 
 
 def _sync_selected_narration_npc_to_top_level(row: Dict[str, Any]) -> Dict[str, Any]:
@@ -16142,6 +16454,47 @@ def _journal_contains_internal_code_token(text: str, token: str) -> bool:
     return token in lower
 
 
+def _sanitize_player_journal_text(text: Any) -> str:
+    """Remove JSON/code-shaped residue from player-facing journal prose."""
+    import re as _re
+
+    value = _safe_str(text)
+    if not value:
+        return ""
+    value = _re.sub(
+        r'\bNPC\s*\{[^{}]*"speaker"\s*:\s*"([^"]+)"[^{}]*"line"\s*:\s*"([^"]*)"[^{}]*\}\s*,?',
+        r'NPC \1 says: "\2"',
+        value,
+        flags=_re.IGNORECASE | _re.DOTALL,
+    )
+    value = _re.sub(r"\{[^{}]*\}", " ", value)
+    value = value.replace("{", "").replace("}", "")
+    value = _re.sub(r"\b(?:raw_ai_payload|provider_payload|provider_raw|traceback|runtime_error|canonical_semantic_pair)\b:?", "", value, flags=_re.IGNORECASE)
+    value = _re.sub(r"\n{3,}", "\n\n", value)
+    value = _re.sub(r"[ \t]{2,}", " ", value)
+    value = _re.sub(r" *, *$", "", value, flags=_re.MULTILINE)
+    return value.strip()
+
+
+def _sanitize_player_journal_summary(journal: Dict[str, Any]) -> Dict[str, Any]:
+    journal = dict(_safe_dict(journal))
+    entries = []
+    repaired_count = 0
+    for entry_any in _safe_list(journal.get("entries")):
+        entry = dict(_safe_dict(entry_any))
+        original = _safe_str(entry.get("text"))
+        cleaned = _sanitize_player_journal_text(original)
+        if cleaned != original:
+            entry["text"] = cleaned
+            entry["journal_text_sanitized"] = True
+            repaired_count += 1
+        entries.append(entry)
+    journal["entries"] = entries
+    if repaired_count:
+        journal["journal_text_sanitized_count"] = repaired_count
+    return journal
+
+
 PLAYER_JOURNAL_ALLOWED_PROSE_TERMS = (
     "i ",
     "you ",
@@ -21513,7 +21866,7 @@ def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
         journal_every_turns=int(args.journal_every_turns),
     )
     summary["campaign_calendar_summary"] = calendar_and_journal["calendar"]
-    summary["player_journal_summary"] = calendar_and_journal["journal"]
+    summary["player_journal_summary"] = _sanitize_player_journal_summary(calendar_and_journal["journal"])
     summary["player_journal_quality_summary"] = _summarize_player_journal_quality(summary)
     metrics["npc_evolution_summary"] = summary["npc_evolution_summary"]
     metrics["npc_evolution_profile_persistence_summary"] = summary["npc_evolution_profile_persistence_summary"]
