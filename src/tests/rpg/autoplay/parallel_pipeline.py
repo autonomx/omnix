@@ -652,6 +652,92 @@ def _compact_turn_contract(turn_contract: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
+
+def build_current_turn_prompt_contract(
+    *,
+    player_action: str,
+    turn_contract: Dict[str, Any],
+    semantic_action_record: Dict[str, Any],
+) -> Dict[str, Any]:
+    """Build the highest-priority provider prompt contract for one turn.
+
+    Older compact context is still useful for tone and continuity, but this
+    packet is intentionally current-turn-first so NPC lines do not answer stale
+    memories, rumors, or investigation topics when the player just bought,
+    rented, rested, attacked, travelled, or asked a direct question.
+    """
+    turn_contract = _safe_dict(turn_contract)
+    semantic_action_record = _safe_dict(semantic_action_record)
+    semantic_action = _safe_dict(turn_contract.get("semantic_action")) or semantic_action_record
+    resolved_action = _safe_str(turn_contract.get("resolved_action"))
+    resolved_result = _safe_str(turn_contract.get("resolved_result"))
+    service_result = _safe_dict(turn_contract.get("service_result"))
+    action_lower = " ".join(
+        [
+            _safe_str(player_action),
+            resolved_action,
+            resolved_result,
+            _safe_str(semantic_action.get("intent")),
+            _safe_str(semantic_action.get("action_type")),
+            _safe_str(service_result.get("service_type")),
+        ]
+    ).lower()
+
+    required_focus: List[str] = [
+        "answer_the_current_player_action_before_old_context",
+        "state_only_the_resolved_result_from_turn_contract",
+    ]
+    forbidden_stale_topics: List[str] = [
+        "do_not_continue_previous_quest_investigation_unless_current_action_asks",
+        "do_not_answer_profile_memory_instead_of_current_action",
+    ]
+
+    if service_result or any(token in action_lower for token in ("rent", "room", "lodging", "rest", "buy", "sell", "purchase", "ration", "coin", "price", "service")):
+        required_focus.insert(0, "acknowledge_the_service_or_economy_request_first")
+        required_focus.append("mention_item_quantity_price_or_refusal_only_if_present_in_contract")
+        forbidden_stale_topics.extend(
+            [
+                "ambush_investigation",
+                "bandit_road_investigation",
+                "traveler_or_road_question",
+                "who_frightened_them_followup",
+            ]
+        )
+    elif any(token in action_lower for token in ("ask", "tell", "warn", "report", "say", "question")):
+        required_focus.insert(0, "answer_the_direct_dialogue_or_reported_evidence_first")
+        required_focus.append("npc_line_must_be_a_response_not_a_new_unprompted_topic")
+    elif any(token in action_lower for token in ("attack", "strike", "punch", "fight", "defend")):
+        required_focus.insert(0, "reflect_the_combat_or_hostile_result_first")
+    elif any(token in action_lower for token in ("travel", "go to", "move", "leave", "road", "bridge")):
+        required_focus.insert(0, "reflect_the_route_or_movement_result_first")
+
+    return {
+        "format_version": "current_turn_prompt_contract_v1",
+        "priority": "highest",
+        "turn_index_scope": "current_turn_only",
+        "current_player_action": _short_text(player_action, 800),
+        "resolved_action": resolved_action,
+        "resolved_result": resolved_result,
+        "semantic_action": semantic_action,
+        "service_result": service_result,
+        "required_focus": required_focus,
+        "forbidden_stale_topics": sorted(set(forbidden_stale_topics)),
+        "background_only_sections": [
+            "recent_events",
+            "loaded_npc_profiles",
+            "profile_context_summary",
+            "advisory_context",
+            "old_quest_or_rumor_context",
+        ],
+        "npc_line_rules": [
+            "must_answer_current_action_first",
+            "may_use_profile_for_tone_only",
+            "must_not_use_memory_as_new_authoritative_fact",
+            "must_not_introduce_rewards_or_outcomes_absent_from_turn_contract",
+        ],
+    }
+
+
 def build_combined_background_context_packet(
     *,
     player_action: str,
@@ -670,8 +756,15 @@ def build_combined_background_context_packet(
     turn_contract = _safe_dict(turn_contract)
     semantic_action_record = _safe_dict(semantic_action_record)
 
+    current_turn_prompt_contract = build_current_turn_prompt_contract(
+        player_action=player_action,
+        turn_contract=turn_contract,
+        semantic_action_record=semantic_action_record,
+    )
+
     return {
         "player_action": _short_text(player_action, 800),
+        "current_turn_prompt_contract": current_turn_prompt_contract,
         "scene": _compact_scene_context(simulation_state),
         "present_npcs": _compact_present_npcs(simulation_state, limit=6),
         "player_visible_state": _compact_player_visible_state(simulation_state),
@@ -1210,11 +1303,17 @@ def _build_combined_background_payload(
         turn_contract=turn_contract,
         semantic_action_record=semantic_action_record,
     )
+    current_turn_prompt_contract = _safe_dict(context_packet.get("current_turn_prompt_contract"))
+    current_turn_contract_json = compact_json_for_prompt(
+        current_turn_prompt_contract,
+        max_chars=4500,
+    )
     context_json = compact_json_for_prompt(context_packet, max_chars=7000)
     schema_text = (
         "{"
         '"presentation_intent":{"primary_category":"dialogue|evidence|investigation|travel|combat|service|economy|mixed|general","secondary_categories":[],"confidence":0.0,"reason":"short diagnostic reason"},'
         '"current_action_response":{"required_focus":[],"npc_line_addresses_current_action":true,"reason":"how the NPC line answers the current player action first"},'
+        '"prompt_contract_ack":{"used_current_turn_prompt_contract":true,"answered_current_action_first":true,"ignored_forbidden_stale_topics":true,"reason":"short diagnostic reason"},'
         '"npc_response_architecture_ack":{"used_current_action_first":true,"used_file_backed_persona":false,"used_file_backed_memory":false,"reason":"short diagnostic reason"},'
         '"narration":"2-5 sentences describing the resolved scene without repeating player input.",'
         '"action":"Short result of the player action.",'
@@ -1231,6 +1330,7 @@ def _build_combined_background_payload(
     prompt_metrics = prompt_section_metrics(
         {
             "system_contract": "combined_background_worker_v1",
+            "current_turn_prompt_contract": current_turn_contract_json,
             "context_packet": context_json,
             "output_schema": schema_text,
         }
@@ -1242,7 +1342,9 @@ def _build_combined_background_payload(
             "role": "system",
             "content": (
                 "You are an RPG background enrichment worker. Return JSON only. "
-                "The CURRENT PLAYER ACTION is the highest-priority input. Narration and NPC dialogue must answer that action first before older quest, memory, or investigation context. "
+                "The CURRENT_TURN_PROMPT_CONTRACT_JSON is the highest-priority input. Narration and NPC dialogue must answer that current action first before older quest, memory, or investigation context. "
+                "You must obey required_focus and forbidden_stale_topics from that contract. "
+                "You must set prompt_contract_ack with whether the contract was followed. "
                 "You must not assert authoritative outcomes that are not in the turn contract. "
                 "Do not grant items, currency, quest completion, damage, travel, or rewards. "
                 "You MUST set presentation_intent.primary_category to the most specific semantic intent. "
@@ -1273,7 +1375,9 @@ def _build_combined_background_payload(
             "role": "user",
             "content": (
                 "Create background narration and advisory candidates for this resolved RPG turn.\n\n"
-                "COMPACT_CONTEXT_JSON:\n"
+                "CURRENT_TURN_PROMPT_CONTRACT_JSON (highest priority; obey before all background context):\n"
+                f"{current_turn_contract_json}\n\n"
+                "COMPACT_CONTEXT_JSON (background/tone/continuity only unless consistent with current turn):\n"
                 f"{context_json}\n\n"
                 "Return exactly this JSON shape:\n"
                 f"{schema_text}\n\n"
@@ -1290,6 +1394,8 @@ def _build_combined_background_payload(
                 "- 'I ask Bran if the east road leads to a bridge' => dialogue, secondary travel, not travel.\n"
                 "- 'I ask Bran who left through the side door' => dialogue, secondary investigation.\n"
                 "- 'I rent a room from Bran' => service.\n\n"
+                "Current-turn prompt contract rule: obey CURRENT_TURN_PROMPT_CONTRACT_JSON.required_focus and avoid forbidden_stale_topics. "
+                "Recent events, profile memory, and old advisory context are background/tone-only unless the current player action explicitly asks about them. "
                 "NPC response architecture rule: obey COMPACT_CONTEXT_JSON.npc_response_architecture. "
                 "The NPC line must satisfy required_focus for the current action before using memories. "
                 "Profile grounding rule: when loaded_npc_profiles is non-empty, use it only for NPC continuity. "
@@ -1343,6 +1449,17 @@ def _build_combined_background_payload(
                 )
                 normalized["presentation_intent"] = _normalize_presentation_intent(provider_intent_candidate)
                 normalized["presentation_intent_parse_source"] = provider_intent_source
+                normalized.setdefault("prompt_contract_ack", _safe_dict(parsed.get("prompt_contract_ack")))
+                normalized.setdefault("current_turn_prompt_contract", current_turn_prompt_contract)
+                normalized.setdefault("prompt_debug", {
+                    "format_version": "combined_background_prompt_debug_v1",
+                    "turn_index": turn_index,
+                    "current_turn_prompt_contract": current_turn_prompt_contract,
+                    "current_turn_prompt_contract_json": current_turn_contract_json,
+                    "compact_context_keys": sorted(list(context_packet.keys())),
+                    "prompt_metrics": prompt_metrics,
+                    "system_contract": "combined_background_worker_v1",
+                })
                 normalized.setdefault("raw_provider_shape_keys", sorted(list(parsed.keys()))[:80])
                 normalized.setdefault("prompt_metrics", prompt_metrics)
                 normalized.setdefault("context_packet_keys", sorted(list(context_packet.keys())))
@@ -1357,6 +1474,16 @@ def _build_combined_background_payload(
                 "prompt_metrics": prompt_metrics,
                 "context_packet_keys": sorted(list(context_packet.keys())),
                 "profile_context_summary": profile_context_summary,
+                "current_turn_prompt_contract": current_turn_prompt_contract,
+                "prompt_debug": {
+                    "format_version": "combined_background_prompt_debug_v1",
+                    "turn_index": turn_index,
+                    "current_turn_prompt_contract": current_turn_prompt_contract,
+                    "current_turn_prompt_contract_json": current_turn_contract_json,
+                    "compact_context_keys": sorted(list(context_packet.keys())),
+                    "prompt_metrics": prompt_metrics,
+                    "system_contract": "combined_background_worker_v1",
+                },
             }
         return {"ok": False, "error": "provider_combined_json_not_object", "raw": content[:4000]}
     except Exception as exc:
@@ -1514,6 +1641,11 @@ def _combined_background_llm_job(
                 else []
             )
             diagnostics["prompt_metrics"] = _safe_dict(provider_payload.get("prompt_metrics"))
+            diagnostics["prompt_debug"] = _safe_dict(provider_payload.get("prompt_debug"))
+            diagnostics["current_turn_prompt_contract"] = _safe_dict(
+                provider_payload.get("current_turn_prompt_contract")
+            )
+            diagnostics["prompt_contract_ack"] = _safe_dict(provider_payload.get("prompt_contract_ack"))
             diagnostics["context_packet_keys"] = (
                 provider_payload.get("context_packet_keys")
                 if isinstance(provider_payload.get("context_packet_keys"), list)
@@ -1558,6 +1690,7 @@ def _combined_background_llm_job(
                 "source": "provider_runtime_narration",
                 "presentation_intent": presentation_intent,
                 "current_action_response": current_action_response,
+                "prompt_contract_ack": _safe_dict(provider_payload.get("prompt_contract_ack")),
                 "narration": _safe_str(provider_payload.get("narration")) or "The scene settles after the action.",
                 "action": _safe_str(provider_payload.get("action")) or "The action has been resolved.",
                 "npc": _safe_dict(provider_payload.get("npc")),
@@ -1599,11 +1732,23 @@ def _combined_background_llm_job(
                 "confidence": 0.0,
                 "reason": "deterministic_fallback_no_provider_intent",
             }
+            fallback_contract = build_current_turn_prompt_contract(
+                player_action=player_action,
+                turn_contract=_safe_dict(turn_contract),
+                semantic_action_record=_safe_dict(semantic_action_record),
+            )
+            diagnostics["current_turn_prompt_contract"] = fallback_contract
             narration_payload["current_action_response"] = {
                 "format_version": "current_action_response_v1",
-                "required_focus": [],
+                "required_focus": _safe_list(fallback_contract.get("required_focus")),
                 "npc_line_addresses_current_action": False,
                 "reason": "deterministic_fallback_no_provider_response_focus",
+            }
+            narration_payload["prompt_contract_ack"] = {
+                "used_current_turn_prompt_contract": False,
+                "answered_current_action_first": False,
+                "ignored_forbidden_stale_topics": False,
+                "reason": "deterministic_fallback_no_provider_response",
             }
             candidates = build_deterministic_advisory_candidates(
                 session_id=session_id,
@@ -1631,6 +1776,20 @@ def _combined_background_llm_job(
             "prompt_metrics": _safe_dict(diagnostics.get("prompt_metrics")),
             "presentation_intent": _safe_dict(narration_payload.get("presentation_intent")),
             "current_action_response": _safe_dict(narration_payload.get("current_action_response")),
+            "prompt_contract_ack": _safe_dict(narration_payload.get("prompt_contract_ack") or diagnostics.get("prompt_contract_ack")),
+            "current_turn_prompt_contract": _safe_dict(diagnostics.get("current_turn_prompt_contract")),
+            "prompt_debug": _safe_dict(diagnostics.get("prompt_debug")),
+            "llm_fallback_diagnostics": {
+                "format_version": "llm_fallback_diagnostics_v1",
+                "source": source,
+                "fallback_source": "llm_valid" if source == "provider_combined_background_llm" else "deterministic_fallback",
+                "reason": _safe_str(diagnostics.get("fallback_reason") or diagnostics.get("provider_payload_error") or "llm_valid"),
+                "valid_known_reason": bool(
+                    source == "provider_combined_background_llm"
+                    or _safe_str(diagnostics.get("fallback_reason") or diagnostics.get("provider_payload_error"))
+                    in {"provider_missing_or_not_preferred", "provider_missing_or_unsupported", "provider_empty_combined_response", "provider_combined_unavailable"}
+                ),
+            },
             "profile_context_summary": _safe_dict(diagnostics.get("profile_context_summary")),
             "worker_ms": elapsed_ms(started),
             "queue_timing": _queue_timing(
