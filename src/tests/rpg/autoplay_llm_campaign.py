@@ -11885,23 +11885,231 @@ def _build_minimal_autoplay_html_report(final_summary: Dict[str, Any]) -> str:
     </section>
     """
 
-    # For now, just include the new sections. A full HTML report would need more structure.
+    # N116.13.3: keep the canonical report artifact-first, but restore the
+    # rich report presentation layer.  Earlier N116.12/N116.13 fixes made the
+    # HTML safe by rendering from final normalized transcript rows, but the
+    # report lost the styled Chronicle layout.  Keep this builder self-contained
+    # so both autoplay-campaign-report.html and autoplay-campaign-report-rich.html
+    # are visually rich while still using final_transcript_rows as the source of
+    # truth for the visible turn timeline.
+    turns_executed = esc(final_summary.get("turns_executed") or len(transcript_rows))
+    requested_turns = esc(final_summary.get("requested_turns") or final_summary.get("turns_requested") or "")
+    session_id = esc(final_summary.get("session_id") or "")
+    health = _safe_dict(final_summary.get("autoplay_health"))
+    health_ok = "OK" if bool(health.get("ok", final_summary.get("ok", True))) else "Needs Review"
+    quality = _safe_dict(final_summary.get("quality_gate_summary"))
+    quality_ok = "OK" if bool(quality.get("ok", True)) else "Needs Review"
+    performance = _safe_dict(
+        final_summary.get("performance_seconds_summary")
+        or final_summary.get("performance")
+        or final_summary.get("performance_budget_summary")
+    )
+
+    summary_cards_html = f"""
+    <section class="hero">
+      <div>
+        <p class="eyebrow">Autoplay Campaign Report</p>
+        <h1>Campaign Chronicle</h1>
+        <p class="subtitle">Rich report rendered from final normalized transcript rows, with diagnostic sections preserved.</p>
+      </div>
+      <div class="hero-grid">
+        <div class="stat"><span>Turns</span><strong>{turns_executed}{"/" + requested_turns if requested_turns else ""}</strong></div>
+        <div class="stat"><span>Health</span><strong>{health_ok}</strong></div>
+        <div class="stat"><span>Quality</span><strong>{quality_ok}</strong></div>
+        <div class="stat"><span>Session</span><strong>{session_id}</strong></div>
+      </div>
+    </section>
+    <section class="card" id="summary">
+      <h2>Run Summary</h2>
+      <div class="grid metrics-grid">
+        <div class="metric"><strong>Turns Executed</strong><span>{turns_executed}</span></div>
+        <div class="metric"><strong>Requested Turns</strong><span>{requested_turns}</span></div>
+        <div class="metric"><strong>Health</strong><span>{health_ok}</span></div>
+        <div class="metric"><strong>Quality Gates</strong><span>{quality_ok}</span></div>
+      </div>
+      <details>
+        <summary>Performance / Health Details</summary>
+        <pre>{esc(json.dumps({"autoplay_health": health, "performance": performance, "quality_gate_summary": quality}, ensure_ascii=False, indent=2, default=str))}</pre>
+      </details>
+    </section>
+    """
+
+    css = """
+    <style>
+      :root {
+        --bg: #11100f;
+        --panel: #1b1815;
+        --panel-2: #241f1a;
+        --ink: #f2e8d5;
+        --muted: #b9aa91;
+        --line: rgba(242, 232, 213, 0.16);
+        --accent: #d8a64c;
+        --accent-2: #9ec6ad;
+        --danger: #e18b78;
+        --shadow: 0 18px 45px rgba(0, 0, 0, 0.35);
+      }
+      * { box-sizing: border-box; }
+      html { scroll-behavior: smooth; }
+      body {
+        margin: 0;
+        background:
+          radial-gradient(circle at 20% 0%, rgba(216,166,76,0.16), transparent 34rem),
+          radial-gradient(circle at 85% 10%, rgba(158,198,173,0.12), transparent 28rem),
+          var(--bg);
+        color: var(--ink);
+        font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        line-height: 1.55;
+      }
+      a { color: var(--accent); text-decoration: none; }
+      a:hover { text-decoration: underline; }
+      .layout { width: min(1320px, calc(100vw - 40px)); margin: 0 auto; padding: 28px 0 64px; }
+      nav {
+        position: sticky;
+        top: 0;
+        z-index: 20;
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+        align-items: center;
+        padding: 12px 20px;
+        margin: 0 -20px 24px;
+        background: rgba(17, 16, 15, 0.86);
+        border-bottom: 1px solid var(--line);
+        backdrop-filter: blur(12px);
+      }
+      nav a {
+        display: inline-flex;
+        padding: 8px 11px;
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        background: rgba(255,255,255,0.035);
+        color: var(--ink);
+        font-size: 0.9rem;
+      }
+      .hero {
+        display: grid;
+        grid-template-columns: minmax(0, 1.35fr) minmax(280px, 0.9fr);
+        gap: 22px;
+        align-items: stretch;
+        margin-bottom: 24px;
+        padding: 30px;
+        border: 1px solid rgba(216,166,76,0.24);
+        border-radius: 28px;
+        background: linear-gradient(135deg, rgba(36,31,26,0.96), rgba(27,24,21,0.92));
+        box-shadow: var(--shadow);
+      }
+      .eyebrow { margin: 0 0 8px; color: var(--accent); letter-spacing: 0.12em; text-transform: uppercase; font-size: 0.78rem; }
+      h1 { margin: 0; font-size: clamp(2.1rem, 4vw, 4rem); line-height: 1; }
+      h2 { margin: 0 0 14px; font-size: 1.45rem; }
+      h3 { margin: 0 0 8px; }
+      .subtitle { max-width: 760px; color: var(--muted); font-size: 1.05rem; }
+      .hero-grid, .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }
+      .stat, .metric {
+        padding: 14px 16px;
+        border: 1px solid var(--line);
+        border-radius: 18px;
+        background: rgba(255,255,255,0.045);
+      }
+      .stat span, .metric strong { display: block; color: var(--muted); font-size: 0.82rem; text-transform: uppercase; letter-spacing: 0.06em; }
+      .stat strong, .metric span { display: block; margin-top: 4px; color: var(--ink); font-size: 1.15rem; font-weight: 760; overflow-wrap: anywhere; }
+      .card, .rpg-promoted-section {
+        margin: 22px 0;
+        padding: 22px;
+        border: 1px solid var(--line);
+        border-radius: 24px;
+        background: linear-gradient(180deg, rgba(36,31,26,0.96), rgba(27,24,21,0.96));
+        box-shadow: var(--shadow);
+      }
+      .muted { color: var(--muted); }
+      .turn-card {
+        margin: 14px 0;
+        padding: 18px;
+        border: 1px solid rgba(242,232,213,0.13);
+        border-left: 4px solid var(--accent);
+        border-radius: 18px;
+        background: rgba(255,255,255,0.035);
+      }
+      .turn-header {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        align-items: flex-start;
+        margin-bottom: 10px;
+      }
+      .player-action, .narration, .npc-line {
+        margin: 10px 0;
+        padding: 11px 13px;
+        border-radius: 14px;
+        background: rgba(0,0,0,0.16);
+        border: 1px solid rgba(242,232,213,0.08);
+      }
+      .npc-line { border-left: 3px solid var(--accent-2); }
+      .badges { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+      .badge {
+        display: inline-flex;
+        align-items: center;
+        min-height: 24px;
+        padding: 3px 9px;
+        border-radius: 999px;
+        border: 1px solid rgba(242,232,213,0.16);
+        background: rgba(216,166,76,0.11);
+        color: var(--ink);
+        font-size: 0.78rem;
+      }
+      .quality { background: rgba(158,198,173,0.12); }
+      pre {
+        white-space: pre-wrap;
+        word-break: break-word;
+        max-height: 620px;
+        overflow: auto;
+        padding: 14px;
+        border-radius: 16px;
+        border: 1px solid rgba(242,232,213,0.12);
+        background: rgba(0,0,0,0.28);
+        color: #eadfc8;
+      }
+      details {
+        margin-top: 12px;
+        padding: 12px;
+        border: 1px solid rgba(242,232,213,0.12);
+        border-radius: 16px;
+        background: rgba(255,255,255,0.025);
+      }
+      summary { cursor: pointer; color: var(--accent); font-weight: 700; }
+      @media (max-width: 820px) {
+        .layout { width: min(100vw - 24px, 1320px); padding-top: 18px; }
+        .hero { grid-template-columns: 1fr; padding: 22px; }
+        nav { margin-left: -12px; margin-right: -12px; }
+      }
+    </style>
+    """
+
     return f"""
+    <!doctype html>
     <html>
-    <head><title>Autoplay Campaign Report</title></head>
+    <head>
+      <meta charset="utf-8" />
+      <meta name="viewport" content="width=device-width, initial-scale=1" />
+      <title>Autoplay Campaign Report</title>
+      {css}
+    </head>
     <body>
-    <nav>
-      <a href="#final-transcript-timeline">Final Transcript</a>
+    <div class="layout">
+      <nav>
+        <a href="#summary">Summary</a>
+        <a href="#final-transcript-timeline">Final Transcript</a>
         <a href="#faction-consequences">Faction Consequences</a>
-      <a href="#npc-reactions">NPC Reactions</a>
-      <a href="#dialogue-relevance">Dialogue Relevance</a>
-      <a href="#turn-action-consistency">Turn Action Consistency</a>
-    </nav>
-    {transcript_timeline_html}
-    {faction_consequence_html}
-    {npc_reaction_html}
-    {dialogue_relevance_html}
-    {turn_action_consistency_html}
+        <a href="#npc-reactions">NPC Reactions</a>
+        <a href="#dialogue-relevance">Dialogue Relevance</a>
+        <a href="#turn-action-consistency">Turn Action Consistency</a>
+      </nav>
+      {summary_cards_html}
+      {transcript_timeline_html}
+      {faction_consequence_html}
+      {npc_reaction_html}
+      {dialogue_relevance_html}
+      {turn_action_consistency_html}
+    </div>
     </body>
     </html>
     """
