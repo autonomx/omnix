@@ -71,6 +71,8 @@ TRANSCRIPT_KEEP_KEYS = (
     "npc_response_architecture",
     "npc_line_current_action_relevance",
     "npc_line_addresses_current_action",
+    "npc_response_variant_id",
+    "npc_response_variation",
 )
 
 
@@ -116,6 +118,8 @@ def _slim_transcript_row(row: Dict[str, Any], max_row_bytes: int = 50000) -> Dic
             "npc_response_architecture_persisted",
             "npc_line_current_action_relevance",
             "npc_line_addresses_current_action",
+            "npc_response_variant_id",
+            "npc_response_variation",
              "npc_line_repaired",
              "npc_line_repair_reason",
              "npc_line_before_repair",
@@ -3411,6 +3415,17 @@ ECONOMY_SERVICE_RESPONSE_TERMS = (
     "buy",
     "bought",
     "take them",
+    "keep them",
+    "keep it",
+    "wrapped",
+    "bundle",
+    "bundled",
+    "road food",
+    "trail food",
+    "dry",
+    "hungry",
+    "counted",
+    "plain road food",
     "here you are",
     "can spare",
     "in stock",
@@ -3552,6 +3567,12 @@ def _sync_current_action_response_from_npc_response_architecture(
 
     if current_focus:
         current["required_focus"] = current_focus[:8]
+
+    row = _apply_bounded_response_variation_to_static_npc_line(
+        row,
+        current_focus=current_focus,
+        architecture=architecture,
+    )
 
     npc_line = _safe_str(row.get("npc_line") or _safe_dict(row.get("npc")).get("line"))
     heuristic_addresses = _npc_line_addresses_focus_terms(npc_line, current_focus) if current_focus else False
@@ -3862,42 +3883,286 @@ def _build_npc_response_architecture_for_row(row: Dict[str, Any]) -> Dict[str, A
     }
 
 
+def _response_variation_seed(row: Dict[str, Any], *, variant_family: str) -> str:
+    """Stable seed for bounded fallback response variation.
+
+    Authoritative simulation facts remain deterministic.  This seed only
+    selects among vetted surface phrasings so repaired/fallback NPC lines do not
+    read identically in every autoplay run while replay stays inspectable.
+    """
+    row = _safe_dict(row)
+    identity = _safe_dict(row.get("turn_presentation_identity"))
+    seed_parts = [
+        variant_family,
+        _safe_str(row.get("session_id") or identity.get("session_id")),
+        _safe_str(row.get("turn_id") or identity.get("turn_id")),
+        _safe_str(row.get("turn_index") or row.get("turn")),
+        _safe_str(row.get("canonical_turn_action") or row.get("player_action")),
+        _safe_str(row.get("npc_speaker") or _safe_dict(row.get("npc")).get("speaker")),
+    ]
+    return "|".join(seed_parts)
+
+
+def _select_bounded_response_variant(
+    row: Dict[str, Any],
+    *,
+    variant_family: str,
+    templates: List[str],
+    facts: Dict[str, Any] | None = None,
+) -> Tuple[str, Dict[str, Any]]:
+    templates = [template for template in templates if _safe_str(template)]
+    if not templates:
+        return "", {}
+
+    seed = _response_variation_seed(row, variant_family=variant_family)
+    digest = hashlib.sha256(seed.encode("utf-8", errors="replace")).hexdigest()
+    index = int(digest[:12], 16) % len(templates)
+    variant_id = f"{variant_family}:{digest[:12]}:{index}"
+    metadata = {
+        "format_version": "npc_response_variation_v1",
+        "bounded": True,
+        "facts_locked": True,
+        "variant_family": variant_family,
+        "variant_index": index,
+        "variant_count": len(templates),
+        "variant_id": variant_id,
+        "seed_hash": digest[:12],
+        "facts": _safe_dict(facts),
+    }
+    return templates[index], metadata
+
+
+def _store_npc_response_variant(
+    row: Dict[str, Any],
+    line: str,
+    metadata: Dict[str, Any],
+) -> str:
+    """Persist bounded variation metadata on the same mutable transcript row."""
+    if not line or not metadata:
+        return line
+    row["npc_response_variant_id"] = _safe_str(metadata.get("variant_id"))
+    row["npc_response_variation"] = metadata
+    return line
+
+
+STATIC_BOUNDED_RESPONSE_FALLBACK_LINES = {
+    # Values must match _normalize_turn_action_text(...), which strips one
+    # trailing period.  N116.10.1 used dotted strings here, so the exact
+    # static fallback "Two rations. That should keep you moving if the road
+    # turns bad." never matched and never received variation metadata.
+    "two rations. that should keep you moving if the road turns bad",
+    "two rations. keep them dry, and they should carry you a little farther",
+    "i can sell what is actually on hand, if your coin covers it",
+    "i can handle the sale if the stock and coin are there",
+    "a room can be arranged if the house has one free and your coin is good",
+    "i can discuss the service, but only what is actually available",
+    "ask the question plainly, and i'll answer what i actually know",
+    "ask plainly, and i'll answer only what i know",
+    "look closely at what is actually here; the useful detail is the one you can verify",
+    "if you are taking the road, keep your eyes open and trust what the trail shows you",
+    "the route is yours to choose, but follow what the signs actually show",
+}
+
+
+def _apply_bounded_response_variation_to_static_npc_line(
+    row: Dict[str, Any],
+    *,
+    current_focus: List[str] | None = None,
+    architecture: Dict[str, Any] | None = None,
+) -> Dict[str, Any]:
+    """Replace old deterministic fallback lines with bounded seeded variants.
+
+    N116.10 originally varied only when the repair fallback function generated a
+    new NPC line. If a previous pass had already inserted the old deterministic
+    safe line, later artifact rows could remain valid but static and carry no
+    variation metadata. This final-boundary hook treats those known safe
+    fallback strings as replaceable presentation text while preserving the
+    authoritative transaction/question/travel facts.
+    """
+    row = dict(_safe_dict(row))
+    if _safe_dict(row.get("npc_response_variation")):
+        return row
+
+    line = _safe_str(row.get("npc_line") or _safe_dict(row.get("npc")).get("line"))
+    if not line:
+        return row
+
+    normalized_line = _normalize_turn_action_text(line)
+    if normalized_line not in STATIC_BOUNDED_RESPONSE_FALLBACK_LINES:
+        return row
+
+    architecture = _safe_dict(architecture) or _safe_dict(row.get("npc_response_architecture"))
+    focus_terms = {
+        _safe_str(item)
+        for item in _safe_list(current_focus) + _safe_list(architecture.get("required_focus"))
+        if _safe_str(item)
+    }
+    if not focus_terms:
+        return row
+
+    replacement = _fallback_npc_line_from_architecture(row)
+    if not replacement:
+        return row
+
+    # _fallback_npc_line_from_architecture stores variation metadata on this
+    # same mutable row.  Keep the write explicit here so future refactors cannot
+    # reintroduce a valid-but-unmarked static fallback artifact.
+    if not _safe_dict(row.get("npc_response_variation")):
+        row["npc_response_variation"] = {
+            "format_version": "npc_response_variation_v1",
+            "bounded": True,
+            "facts_locked": True,
+            "variant_family": "static_fallback.boundary",
+            "variant_id": "static_fallback.boundary:metadata_recovered",
+            "metadata_recovered": True,
+            "facts": {"source": "static_safe_fallback"},
+        }
+        row["npc_response_variant_id"] = "static_fallback.boundary:metadata_recovered"
+
+    row["npc_line"] = replacement
+    npc_payload = dict(_safe_dict(row.get("npc")))
+    if npc_payload or row.get("npc_speaker"):
+        npc_payload["speaker"] = _safe_str(
+            npc_payload.get("speaker") or row.get("npc_speaker")
+        )
+        npc_payload["line"] = replacement
+        row["npc"] = npc_payload
+    row["npc_response_variation_applied_to_existing_static_fallback"] = True
+    row.setdefault("npc_line_before_response_variation", line)
+    return row
+
 def _fallback_npc_line_from_architecture(row: Dict[str, Any]) -> str:
     row = _safe_dict(row)
     architecture = _build_npc_response_architecture_for_row(row)
     target = _safe_dict(architecture.get("target_npc"))
-    speaker = _safe_str(target.get("speaker") or row.get("npc_speaker") or _safe_dict(row.get("npc")).get("speaker") or "Bran")
+    speaker = _safe_str(
+        target.get("speaker")
+        or row.get("npc_speaker")
+        or _safe_dict(row.get("npc")).get("speaker")
+        or "Bran"
+    )
     role = _safe_str(target.get("role")).lower()
-    action = _normalize_turn_action_text(_safe_str(row.get("canonical_turn_action") or row.get("player_action")))
+    action = _normalize_turn_action_text(
+        _safe_str(row.get("canonical_turn_action") or row.get("player_action"))
+    )
     focus = set(_safe_list(architecture.get("required_focus")))
 
     is_bran = "bran" in _normalize_turn_action_text(speaker) or "innkeeper" in role
     if {"purchase_acknowledgement", "item_quantity_or_availability"}.intersection(focus):
         if "ration" in action:
             if is_bran:
-                return "Two rations. That should keep you moving if the road turns bad."
-            return "Two rations. Keep them dry, and they should carry you a little farther."
+                templates = [
+                    "Two rations, wrapped and ready. Keep them dry, and they will do their job on the road.",
+                    "Two rations. Keep them dry, and they will do their job on the road.",
+                    "That is two rations. Plain road food, but it will carry you farther.",
+                    "Two wrapped rations. Not fancy, but better than walking hungry.",
+                    "Two rations, paid for and counted. Do not waste them before the road turns rough.",
+                ]
+            else:
+                templates = [
+                    "Two rations. Keep them dry, and they should carry you a little farther.",
+                    "That is two rations. They are yours now.",
+                    "Two bundled rations. They should serve for the next stretch of road.",
+                ]
+            line, meta = _select_bounded_response_variant(
+                row,
+                variant_family="economy.purchase.rations",
+                templates=templates,
+                facts={"item": "rations", "quantity": 2, "transaction": "purchase"},
+            )
+            return _store_npc_response_variant(row, line, meta)
         if is_bran:
-            return "I can sell what is actually on hand, if your coin covers it."
-        return "I can handle the sale if the stock and coin are there."
+            templates = [
+                "I can sell what is actually on hand, if your coin covers it.",
+                "If I have it and your coin is good, we can make the sale.",
+                "Stock and coin decide the matter, not wishful thinking.",
+            ]
+        else:
+            templates = [
+                "I can handle the sale if the stock and coin are there.",
+                "If the stock is here and the payment is real, the sale can happen.",
+            ]
+        line, meta = _select_bounded_response_variant(
+            row,
+            variant_family="economy.purchase.generic",
+            templates=templates,
+            facts={"transaction": "purchase"},
+        )
+        return _store_npc_response_variant(row, line, meta)
 
     if {"service_request_acknowledgement", "lodging_or_rest_terms"}.intersection(focus):
         if is_bran:
-            return "A room can be arranged if the house has one free and your coin is good."
-        return "I can discuss the service, but only what is actually available."
+            templates = [
+                "A room can be arranged if the house has one free and your coin is good.",
+                "If there is a bed open and you can pay, we can talk lodging.",
+                "I can give you terms for a room, but only for what the house actually has.",
+            ]
+        else:
+            templates = [
+                "I can discuss the service, but only what is actually available.",
+                "We can talk terms, provided the service is truly available.",
+            ]
+        line, meta = _select_bounded_response_variant(
+            row,
+            variant_family="service.lodging.generic",
+            templates=templates,
+            facts={"transaction": "service"},
+        )
+        return _store_npc_response_variant(row, line, meta)
 
     if "answer_current_question" in focus:
         if is_bran:
-            return "Ask the question plainly, and I'll answer what I actually know."
-        return "Ask plainly, and I'll answer only what I know."
+            templates = [
+                "Ask the question plainly, and I'll answer what I actually know.",
+                "Put it plainly, and I will tell you what I know, no more.",
+                "Ask straight, and I will keep my answer to what I have seen or heard.",
+            ]
+        else:
+            templates = [
+                "Ask plainly, and I'll answer only what I know.",
+                "Put the question plainly, and I will not dress the answer up.",
+            ]
+        line, meta = _select_bounded_response_variant(
+            row,
+            variant_family="dialogue.answer_current_question",
+            templates=templates,
+            facts={"dialogue": "answer_current_question"},
+        )
+        return _store_npc_response_variant(row, line, meta)
 
     if "observed_evidence_or_limits" in focus:
-        return "Look closely at what is actually here; the useful detail is the one you can verify."
+        templates = [
+            "Look closely at what is actually here; the useful detail is the one you can verify.",
+            "Trust the detail you can point to, not the one you wish were there.",
+            "The clue that matters is the one the scene actually gives you.",
+        ]
+        line, meta = _select_bounded_response_variant(
+            row,
+            variant_family="evidence.observed_limits",
+            templates=templates,
+            facts={"evidence": "observed_only"},
+        )
+        return _store_npc_response_variant(row, line, meta)
 
     if "current_travel_or_route_action" in focus:
         if is_bran:
-            return "If you are taking the road, keep your eyes open and trust what the trail shows you."
-        return "The route is yours to choose, but follow what the signs actually show."
+            templates = [
+                "If you are taking the road, keep your eyes open and trust what the trail shows you.",
+                "The road will tell you more than tavern talk if you watch it closely.",
+                "Take the road carefully. The signs out there matter more than guesses in here.",
+            ]
+        else:
+            templates = [
+                "The route is yours to choose, but follow what the signs actually show.",
+                "Move by the route you can verify, not by rumor alone.",
+            ]
+        line, meta = _select_bounded_response_variant(
+            row,
+            variant_family="travel.route.current_action",
+            templates=templates,
+            facts={"travel": "route_action"},
+        )
+        return _store_npc_response_variant(row, line, meta)
 
     return ""
 
@@ -3913,10 +4178,41 @@ def _fallback_npc_line_for_current_action(row: Dict[str, Any]) -> str:
     speaker = _safe_str(row.get("npc_speaker") or _safe_dict(row.get("npc")).get("speaker") or "Bran")
     if category == "economy" or any(term in action for term in ("buy", "purchase", "rations", "supplies")):
         if "ration" in action:
-            return "Two rations. That should keep you moving if the road turns bad."
-        return "I can sell what you need, if the stock and coin are there."
+            templates = [
+                "Two rations, wrapped and ready. Keep them dry, and they will do their job on the road.",
+                "Two rations. Keep them dry, and they will do their job on the road.",
+                "Two wrapped rations. Not fancy, but better than walking hungry.",
+            ]
+            line, meta = _select_bounded_response_variant(
+                row,
+                variant_family="economy.purchase.rations",
+                templates=templates,
+                facts={"item": "rations", "quantity": 2, "transaction": "purchase"},
+            )
+            return _store_npc_response_variant(row, line, meta)
+        templates = [
+            "I can sell what you need, if the stock and coin are there.",
+            "If the stock is here and the coin is real, we can make the sale.",
+        ]
+        line, meta = _select_bounded_response_variant(
+            row,
+            variant_family="economy.purchase.generic",
+            templates=templates,
+            facts={"transaction": "purchase"},
+        )
+        return _store_npc_response_variant(row, line, meta)
     if category == "service" or any(term in action for term in ("room", "lodging", "rest")):
-        return "I can talk terms for the room, but only what the house can actually offer."
+        templates = [
+            "I can talk terms for the room, but only what the house can actually offer.",
+            "If there is a room free and you can pay, we can settle the terms.",
+        ]
+        line, meta = _select_bounded_response_variant(
+            row,
+            variant_family="service.lodging.generic",
+            templates=templates,
+            facts={"transaction": "service"},
+        )
+        return _store_npc_response_variant(row, line, meta)
     if speaker:
         return "Ask it plainly, and I'll answer what I can."
     return ""
