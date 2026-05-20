@@ -25687,6 +25687,62 @@ def _n11620_text_has_combat_claim(value: Any) -> bool:
     return any(term in text for term in _N11620_COMBAT_CLAIM_TERMS)
 
 
+def _n11621_turn_contract_supports_combat(container: Any) -> bool:
+    """Conservative local fallback when the N116.20 combat-support helper is absent."""
+    data = _safe_dict(container)
+    if not data:
+        return False
+
+    direct_keys = (
+        "combat_result",
+        "combat_state",
+        "combat_state_delta",
+        "combat_delta",
+        "damage",
+        "damage_result",
+        "attack_result",
+        "hit_result",
+        "initiative",
+        "encounter_result",
+        "encounter_state",
+    )
+    if any(data.get(key) for key in direct_keys):
+        return True
+
+    mechanics = {
+        _safe_str(item).strip().lower()
+        for item in _safe_list(data.get("mechanics_covered_this_turn") or data.get("mechanics"))
+        if _safe_str(item).strip()
+    }
+    if any(
+        mechanic in mechanics
+        for mechanic in (
+            "combat_started",
+            "combat_resolved",
+            "combat_victory",
+            "combat_ended",
+            "attack_resolved",
+            "damage_applied",
+            "enemy_defeated",
+        )
+    ):
+        return True
+
+    result = _safe_dict(data.get("result") or data.get("turn_result") or data.get("resolution"))
+    if result and result is not data and _n11621_turn_contract_supports_combat(result):
+        return True
+
+    status = _safe_str(data.get("status") or data.get("combat_status") or data.get("encounter_status")).lower()
+    return status in {"combat", "in_combat", "combat_started", "combat_resolved", "victory", "defeated"}
+
+
+def _n11621_text_has_combat_claim(value: Any) -> bool:
+    helper = globals().get("_n11620_text_has_combat_claim")
+    if callable(helper):
+        return bool(helper(value))
+    return _presentation_has_combat_claim(_safe_str(value))
+
+
 def _n11620_row_has_unsupported_combat_claim_suppressed(row: Dict[str, Any]) -> bool:
     row = _safe_dict(row)
     if row.get("unsupported_combat_claim_suppressed"):
@@ -25888,9 +25944,12 @@ def _n11621_turn_has_authoritative_combat_support(row: Dict[str, Any]) -> bool:
     row = _safe_dict(row)
     if _turn_has_combat_support(row):
         return True
+    contract_helper = globals().get("_n11620_turn_contract_supports_combat")
+    if not callable(contract_helper):
+        contract_helper = _n11621_turn_contract_supports_combat
     for key in ("turn_contract", "result", "turn_result", "background_presentation_result"):
         container = _safe_dict(row.get(key))
-        if _n11620_turn_contract_supports_combat(container):
+        if contract_helper(container):
             return True
     return False
 
@@ -25923,7 +25982,7 @@ def _n11621_safe_provider_derived_text(row: Dict[str, Any]) -> tuple[str, Dict[s
     kept: List[str] = []
     dropped: List[str] = []
     for sentence in _n11621_sentence_split(original_text):
-        if _n11620_text_has_combat_claim(sentence) or _presentation_has_combat_claim(sentence):
+        if _n11621_text_has_combat_claim(sentence) or _presentation_has_combat_claim(sentence):
             dropped.append(sentence)
             continue
         if sentence not in kept:
