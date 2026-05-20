@@ -25639,6 +25639,214 @@ def _force_final_autoplay_health(summary: Dict[str, Any]) -> Dict[str, Any]:
         health["service_resolver_veto_count"] = vetoed
         health["service_resolver_veto_threshold"] = threshold
     return health
+
+
+# N116.20 — Provider Metadata Repair Reduction + Unsupported Combat Claim Cleanup
+# Add reporting around where provider/repair pressure comes from.  This does not
+# change simulation outcomes and does not replace LLM presentation classification;
+# it only summarizes repair pressure and keeps existing N116.19 service precision
+# advisories visible.
+
+_N11620_PREVIOUS_BUILD_LLM_PROMPT_AND_FALLBACK_SUMMARY = _build_llm_prompt_and_fallback_summary
+_N11620_PREVIOUS_FORCE_FINAL_AUTOPLAY_HEALTH = _force_final_autoplay_health
+
+_N11620_COMBAT_CLAIM_TERMS = (
+    " hit ", " hits ", " struck ", " wound", " wounded", " injur", " damage",
+    " blood", " bleeding", " kill", " killed", " slain", " dead", " defeat",
+    " defeated", " victory", " wins ", " win the fight", " drops ", " falls dead",
+)
+
+
+def _n11620_row_category(row: Dict[str, Any]) -> str:
+    row = _safe_dict(row)
+    for source in (
+        _safe_dict(row.get("validated_presentation_intent")),
+        _safe_dict(row.get("presentation_intent")),
+        _safe_dict(row.get("llm_presentation_intent")),
+        _safe_dict(_safe_dict(row.get("background_presentation_result")).get("presentation_intent")),
+    ):
+        category = _safe_str(source.get("primary_category") or source.get("category")).strip().lower()
+        if category:
+            return category
+    action = _safe_str(row.get("canonical_turn_action") or row.get("player_action")).lower()
+    if any(term in action for term in ("ask", "tell", "warn", "report", "question")):
+        return "dialogue"
+    if any(term in action for term in ("inspect", "search", "study", "review", "evidence", "proof", "ledger", "orders")):
+        return "evidence"
+    if any(term in action for term in ("travel", "follow", "road", "route", "go to", "leave")):
+        return "travel"
+    if any(term in action for term in ("attack", "fight", "strike", "defend", "combat")):
+        return "combat"
+    return _safe_str(row.get("action_category")) or "general"
+
+
+def _n11620_text_has_combat_claim(value: Any) -> bool:
+    text = f" {_safe_str(value).lower()} "
+    if not text.strip():
+        return False
+    return any(term in text for term in _N11620_COMBAT_CLAIM_TERMS)
+
+
+def _n11620_row_has_unsupported_combat_claim_suppressed(row: Dict[str, Any]) -> bool:
+    row = _safe_dict(row)
+    if row.get("unsupported_combat_claim_suppressed"):
+        return True
+    selected = _safe_dict(row.get("selected_output"))
+    if selected.get("unsupported_combat_claim_suppressed"):
+        return True
+    background = _safe_dict(row.get("background_presentation_result"))
+    if background.get("unsupported_combat_claim_suppressed"):
+        return True
+    diagnostics = _safe_dict(background.get("diagnostics"))
+    if diagnostics.get("unsupported_combat_claim_suppressed"):
+        return True
+    hard = _safe_dict(row.get("presentation_hard_grounding"))
+    violations = _safe_list(hard.get("violations") or hard.get("violation_types"))
+    if "unsupported_combat_claim" in violations:
+        return True
+    if _safe_str(row.get("presentation_repair_type")) == "unsupported_combat_claim":
+        return True
+    return False
+
+
+def _n11620_category_reclassified(row: Dict[str, Any]) -> bool:
+    row = _safe_dict(row)
+    if row.get("category_reclassified") or row.get("soft_classification_repair"):
+        return True
+    validated = _safe_str(row.get("validated_presentation_category")).lower()
+    llm_category = (
+        _safe_str(row.get("llm_presentation_category")).lower()
+        or _safe_str(_safe_dict(row.get("presentation_intent")).get("primary_category")).lower()
+        or _safe_str(_safe_dict(_safe_dict(row.get("background_presentation_result")).get("presentation_intent")).get("primary_category")).lower()
+    )
+    return bool(validated and llm_category and validated != llm_category)
+
+
+def _n11620_metadata_repaired(row: Dict[str, Any]) -> bool:
+    row = _safe_dict(row)
+    if row.get("provider_metadata_normalized_pre_attach") or row.get("metadata_repaired"):
+        return True
+    background = _safe_dict(row.get("background_presentation_result"))
+    if background.get("provider_metadata_normalized_pre_attach") or background.get("metadata_repaired"):
+        return True
+    diagnostics = _safe_dict(background.get("diagnostics"))
+    return bool(diagnostics.get("provider_metadata_normalized_pre_attach") or diagnostics.get("metadata_repaired"))
+
+
+def _n11620_repair_pressure_by_category(rows: List[Dict[str, Any]]) -> Dict[str, Any]:
+    by_category: Dict[str, Dict[str, Any]] = {}
+    for row_any in _safe_list(rows):
+        row = _safe_dict(row_any)
+        if not row:
+            continue
+        category = _n11620_row_category(row)
+        bucket = by_category.setdefault(
+            category,
+            {
+                "turn_count": 0,
+                "metadata_repaired_count": 0,
+                "category_reclassified_count": 0,
+                "dialogue_relevance_repaired_count": 0,
+                "unsupported_combat_claim_suppressed_count": 0,
+                "service_resolver_veto_count": 0,
+                "example_turns": [],
+            },
+        )
+        bucket["turn_count"] += 1
+        repaired = False
+        if _n11620_metadata_repaired(row):
+            bucket["metadata_repaired_count"] += 1
+            repaired = True
+        if _n11620_category_reclassified(row):
+            bucket["category_reclassified_count"] += 1
+            repaired = True
+        if row.get("dialogue_action_relevance_repaired"):
+            bucket["dialogue_relevance_repaired_count"] += 1
+            repaired = True
+        if _n11620_row_has_unsupported_combat_claim_suppressed(row):
+            bucket["unsupported_combat_claim_suppressed_count"] += 1
+            repaired = True
+        if row.get("service_false_positive_vetoed") or _safe_dict(row.get("service_resolver_veto")).get("service_false_positive_vetoed"):
+            bucket["service_resolver_veto_count"] += 1
+            repaired = True
+        if repaired and len(bucket["example_turns"]) < 8:
+            bucket["example_turns"].append(
+                {
+                    "turn_index": int(row.get("turn_index") or row.get("turn") or 0),
+                    "player_action": _safe_str(row.get("player_action"))[:220],
+                }
+            )
+
+    for bucket in by_category.values():
+        turns = max(1, int(bucket.get("turn_count") or 0))
+        bucket["metadata_repaired_rate"] = round(bucket["metadata_repaired_count"] / turns, 4)
+        bucket["category_reclassified_rate"] = round(bucket["category_reclassified_count"] / turns, 4)
+        bucket["dialogue_relevance_repaired_rate"] = round(bucket["dialogue_relevance_repaired_count"] / turns, 4)
+        bucket["unsupported_combat_claim_suppressed_rate"] = round(bucket["unsupported_combat_claim_suppressed_count"] / turns, 4)
+        bucket["service_resolver_veto_rate"] = round(bucket["service_resolver_veto_count"] / turns, 4)
+
+    return {
+        "format_version": "n11620_repair_pressure_by_category_v1",
+        "categories": by_category,
+        "category_count": len(by_category),
+    }
+
+
+def _n11620_update_repair_pressure_breakdown(rows: List[Dict[str, Any]], summary: Dict[str, Any]) -> None:
+    summary = _safe_dict(summary)
+    llm_summary = _safe_dict(summary.get("llm_prompt_and_fallback_summary"))
+    if not llm_summary:
+        return
+    breakdown = dict(_safe_dict(llm_summary.get("repair_pressure_breakdown")))
+    breakdown["repair_pressure_by_category"] = _n11620_repair_pressure_by_category(rows)
+    unsupported_count = sum(
+        1
+        for row in _safe_list(rows)
+        if _n11620_row_has_unsupported_combat_claim_suppressed(_safe_dict(row))
+    )
+    breakdown["unsupported_combat_claim_suppressed_count"] = unsupported_count
+    dominant = dict(_safe_dict(breakdown.get("dominant_sources")))
+    dominant["unsupported_combat_claim_suppressed"] = unsupported_count
+    breakdown["dominant_sources"] = dominant
+    breakdown["format_version"] = "n11620_repair_pressure_breakdown_v4"
+    llm_summary["repair_pressure_breakdown"] = breakdown
+    summary["llm_prompt_and_fallback_summary"] = llm_summary
+
+
+def _build_llm_prompt_and_fallback_summary(rows: List[Dict[str, Any]]) -> Dict[str, Any]:
+    summary = _N11620_PREVIOUS_BUILD_LLM_PROMPT_AND_FALLBACK_SUMMARY(rows)
+    breakdown = dict(_safe_dict(summary.get("repair_pressure_breakdown")))
+    breakdown["repair_pressure_by_category"] = _n11620_repair_pressure_by_category(rows)
+    unsupported_count = sum(
+        1
+        for row in _safe_list(rows)
+        if _n11620_row_has_unsupported_combat_claim_suppressed(_safe_dict(row))
+    )
+    breakdown["unsupported_combat_claim_suppressed_count"] = unsupported_count
+    dominant = dict(_safe_dict(breakdown.get("dominant_sources")))
+    dominant["unsupported_combat_claim_suppressed"] = unsupported_count
+    breakdown["dominant_sources"] = dominant
+    breakdown["format_version"] = "n11620_repair_pressure_breakdown_v4"
+    summary["repair_pressure_breakdown"] = breakdown
+    summary["unsupported_combat_claim_cleanup"] = {
+        "format_version": "unsupported_combat_claim_cleanup_v1",
+        "suppressed_count": unsupported_count,
+        "ok": unsupported_count <= max(10, int(summary.get("turn_count") or 0) // 10),
+    }
+    return summary
+
+
+def _force_final_autoplay_health(summary: Dict[str, Any]) -> Dict[str, Any]:
+    health = _N11620_PREVIOUS_FORCE_FINAL_AUTOPLAY_HEALTH(summary)
+    rows = _safe_list(_safe_dict(summary).get("final_transcript_rows") or _safe_dict(summary).get("transcript_rows") or [])
+    _n11620_update_repair_pressure_breakdown(rows, summary)
+    llm_summary = _safe_dict(_safe_dict(summary).get("llm_prompt_and_fallback_summary"))
+    cleanup = _safe_dict(llm_summary.get("unsupported_combat_claim_cleanup"))
+    health = dict(_safe_dict(health))
+    health["unsupported_combat_claim_suppressed_count"] = int(cleanup.get("suppressed_count") or 0)
+    return health
+
+
 def main(argv: List[str] | None = None) -> int:
     parser = build_arg_parser()
     args = parser.parse_args(argv)
