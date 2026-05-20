@@ -1,0 +1,925 @@
+        marker = id(node)
+        if marker in seen:
+            continue
+        seen.add(marker)
+        visited_count += 1
+        if depth > _max_depth:
+            continue
+
+        if isinstance(node, dict):
+            changed = _n116182_apply_local_veto(node, action_text=action_text) or changed
+            for key in _N116182_CONTAINER_CHILD_KEYS:
+                if key in _N116182_SKIP_KEYS:
+                    continue
+                child = node.get(key)
+                if isinstance(child, (dict, list)):
+                    stack.append((child, depth + 1))
+            # Some provider payloads wrap useful fields under a small payload or
+            # diagnostics dict.  Traverse those only when they are prompt-shaped,
+            # never runtime/session/result graphs.
+            for key in ("prompt_debug", "diagnostics", "payload", "narration_payload", "presentation"):
+                child = node.get(key)
+                if not isinstance(child, dict):
+                    continue
+                if any(k in child for k in _N116182_CONTAINER_CHILD_KEYS) or any(
+                    "prompt_contract" in _safe_str(k) for k in child.keys()
+                ):
+                    stack.append((child, depth + 1))
+        elif isinstance(node, list):
+            # Prompt focus lists are short.  Avoid walking long histories.
+            for child in node[:25]:
+                if isinstance(child, (dict, list)):
+                    stack.append((child, depth + 1))
+
+    return changed
+
+
+def _n11618_prompt_sync_targets(row: Dict[str, Any]) -> List[tuple[tuple[str, ...], Any]]:
+    """Return only prompt-facing objects; never return the whole row/result graph."""
+    row = _safe_dict(row)
+    target_paths = (
+        ("llm_prompt_contract",),
+        ("current_turn_prompt_contract",),
+        ("current_action_response",),
+        ("npc_response_architecture",),
+        ("llm_prompt_debug", "current_turn_prompt_contract"),
+        ("llm_prompt_debug", "prompt_contract"),
+        ("prompt_debug", "current_turn_prompt_contract"),
+        ("prompt_debug", "prompt_contract"),
+        ("background_presentation_result", "current_turn_prompt_contract"),
+        ("background_presentation_result", "prompt_debug", "current_turn_prompt_contract"),
+        ("background_presentation_result", "prompt_contract"),
+        ("background_presentation_result", "current_action_response"),
+        ("background_presentation_result", "npc_response_architecture"),
+        ("semantic_action",),
+        ("semantic_action_v2",),
+        ("service_result",),
+    )
+    targets: List[tuple[tuple[str, ...], Any]] = []
+    seen: set[int] = set()
+    for path in target_paths:
+        value = _n116182_get_path(row, path)
+        if not isinstance(value, (dict, list)):
+            continue
+        marker = id(value)
+        if marker in seen:
+            continue
+        seen.add(marker)
+        targets.append((path, value))
+    return targets
+
+
+def _n11618_sync_prompt_contract_veto_to_row(row: Dict[str, Any]) -> Dict[str, Any]:
+    row = _safe_dict(row)
+    action_text = _n11617_row_action_text(row)
+    if not _n11617_is_document_evidence_without_explicit_service(action_text):
+        return row
+
+    changed = False
+    for target_path, target in _n11618_prompt_sync_targets(row):
+        changed = _n11618_deep_prompt_veto(
+            target,
+            action_text=action_text,
+            path=("row",) + target_path,
+        ) or changed
+
+    # Also apply local top-level row markers without traversing the row.
+    changed = _n116182_apply_local_veto(row, action_text=action_text) or changed
+
+    if changed:
+        row["service_false_positive_vetoed"] = True
+        row["prompt_contract_service_veto_synced"] = True
+        row["service_resolver_veto"] = {
+            **_safe_dict(row.get("service_resolver_veto")),
+            "format_version": "n11618_prompt_contract_veto_sync_v1",
+            "service_false_positive_vetoed": True,
+            "reason": "document_evidence_without_explicit_service_request",
+            "veto_only": True,
+            "forced_positive_classification": False,
+            "llm_classifies_presentation_intent": True,
+            "prompt_contract_veto_synced": True,
+            "recursion_safe_targeted_sync": True,
+            "action_text": action_text[:500],
+        }
+    return row
+
+
+def _n11618_walk_prompt_offenders(
+    value: Any,
+    *,
+    path: tuple[str, ...] = (),
+    _seen: set[int] | None = None,
+    _depth: int = 0,
+    _max_depth: int = 6,
+) -> List[str]:
+    """Strictly bounded offender scan for prompt-facing objects only."""
+    offenders: List[str] = []
+    if not isinstance(value, (dict, list)):
+        return offenders
+
+    seen: set[int] = set()
+    stack: List[tuple[Any, tuple[str, ...], int]] = [(value, path, 0)]
+    visited_count = 0
+    max_nodes = 250
+
+    while stack and visited_count < max_nodes:
+        node, node_path, depth = stack.pop()
+        if not isinstance(node, (dict, list)):
+            continue
+        marker = id(node)
+        if marker in seen:
+            continue
+        seen.add(marker)
+        visited_count += 1
+        if depth > _max_depth:
+            continue
+
+        if isinstance(node, dict):
+            service_result = _safe_dict(node.get("service_result"))
+            status = _safe_str(service_result.get("status") or service_result.get("service_status")).lower()
+            if (
+                service_result
+                and _n11617_service_result_looks_false_positive(service_result)
+                and status != "service_false_positive_vetoed"
+            ):
+                offenders.append(".".join(node_path + ("service_result",)))
+            for key in ("semantic_action", "semantic_action_v2"):
+                semantic = _safe_dict(node.get(key))
+                if semantic and _n11617_semantic_action_looks_service(semantic):
+                    offenders.append(".".join(node_path + (key,)))
+            for focus_key in (
+                "required_focus",
+                "required_response_focus",
+                "focus",
+                "must_address",
+                "required_response_focuses",
+            ):
+                focus = node.get(focus_key)
+                if isinstance(focus, list):
+                    bad_focus = [item for item in focus if _n11618_focus_is_service_or_economy(item)]
+                    if bad_focus:
+                        offenders.append(
+                            ".".join(node_path + (focus_key,))
+                            + ":"
+                            + ",".join(_safe_str(item) for item in bad_focus[:6])
+                        )
+            for key in _N116182_CONTAINER_CHILD_KEYS:
+                if key in _N116182_SKIP_KEYS:
+                    continue
+                child = node.get(key)
+                if isinstance(child, (dict, list)):
+                    stack.append((child, node_path + (str(key),), depth + 1))
+            for key in ("prompt_debug", "diagnostics", "payload", "narration_payload", "presentation"):
+                child = node.get(key)
+                if isinstance(child, dict) and (
+                    any(k in child for k in _N116182_CONTAINER_CHILD_KEYS)
+                    or any("prompt_contract" in _safe_str(k) for k in child.keys())
+                ):
+                    stack.append((child, node_path + (str(key),), depth + 1))
+        elif isinstance(node, list):
+            for idx, item in enumerate(node[:25]):
+                if isinstance(item, (dict, list)):
+                    stack.append((item, node_path + (str(idx),), depth + 1))
+
+    if stack:
+        offenders.append(".".join(path) + ":scan_truncated_by_n11618_2_bounds")
+    return offenders
+
+
+def _n11618_prompt_contract_veto_regression_summary(rows: List[Dict[str, Any]]) -> Dict[str, Any]:
+    rows = [_safe_dict(row) for row in rows if isinstance(row, dict)]
+    violations: List[Dict[str, Any]] = []
+    synced: List[Dict[str, Any]] = []
+    for row in rows:
+        turn_index = int(row.get("turn_index") or row.get("turn") or 0)
+        action_text = _n11617_row_action_text(row)
+        if not _n11617_is_document_evidence_without_explicit_service(action_text):
+            continue
+        if row.get("prompt_contract_service_veto_synced"):
+            synced.append({"turn_index": turn_index, "player_action": row.get("player_action")})
+        offenders: List[str] = []
+        for target_path, target in _n11618_prompt_sync_targets(row):
+            offenders.extend(
+                _n11618_walk_prompt_offenders(target, path=("row",) + target_path)
+            )
+        # Top-level only, no row traversal.
+        offenders.extend(_n11618_walk_prompt_offenders(row.get("semantic_action"), path=("row", "semantic_action")))
+        offenders.extend(_n11618_walk_prompt_offenders(row.get("semantic_action_v2"), path=("row", "semantic_action_v2")))
+        offenders.extend(_n11618_walk_prompt_offenders(row.get("service_result"), path=("row", "service_result")))
+        offenders = [item for item in offenders if item]
+        if offenders:
+            violations.append(
+                {
+                    "turn_index": turn_index,
+                    "player_action": row.get("player_action"),
+                    "offenders": offenders[:25],
+                }
+            )
+    return {
+        "format_version": "n11618_prompt_contract_veto_regression_summary_v2",
+        "ok": not violations,
+        "synced_count": len(synced),
+        "remaining_violation_count": len(violations),
+        "synced_turns": synced[:50],
+        "remaining_violations": violations[:50],
+        "policy": "veto_only_no_forced_investigation_classification_llm_keeps_intent_classification",
+        "scan_mode": "strictly_bounded_prompt_targets_only",
+    }
+
+
+
+# N116.18.3 — Architecture Focus Resync After Prompt Veto Hotfix
+# N116.18.2 made the prompt-contract veto memory-safe, but the final
+# architecture invariant still expects npc_response_architecture.required_focus
+# to be a subset of current_action_response.required_focus.  The veto can remove
+# service/economy focus terms from one packet while leaving the other packet with
+# a different bounded list.  Re-sync both packets after veto, keeping the policy
+# veto-only and bounded.
+
+_N116183_PREVIOUS_SYNC_CURRENT_ACTION_RESPONSE_ARTIFACT_ROWS = _sync_current_action_response_artifact_rows
+_N116183_MAX_REQUIRED_FOCUS = 8
+
+
+def _n116183_normalize_focus_for_contract(value: Any) -> str:
+    return _safe_str(value).strip().lower().replace("-", "_").replace(" ", "_")
+
+
+def _n116183_bounded_veto_synced_focus(*focus_lists: Any) -> List[str]:
+    """Return one bounded focus list shared by current_response and architecture."""
+    non_service: List[str] = []
+    for focus_any in focus_lists:
+        for item in _safe_list(focus_any):
+            text = _n116183_normalize_focus_for_contract(item)
+            if not text or _n11618_focus_is_service_or_economy(text):
+                continue
+            if text in _N11618_VETO_GUIDANCE_ITEMS:
+                continue
+            if text not in non_service:
+                non_service.append(text)
+
+    out: List[str] = []
+    # Preserve a small amount of actual current-action focus first.
+    for item in non_service[: max(0, _N116183_MAX_REQUIRED_FOCUS - len(_N11618_VETO_GUIDANCE_ITEMS))]:
+        if item not in out:
+            out.append(item)
+
+    # The N116.18 guidance must survive the bound, so append it before filling
+    # any remaining non-service extras.
+    for item in _N11618_VETO_GUIDANCE_ITEMS:
+        text = _n116183_normalize_focus_for_contract(item)
+        if text and text not in out:
+            out.append(text)
+
+    for item in non_service:
+        if len(out) >= _N116183_MAX_REQUIRED_FOCUS:
+            break
+        if item not in out:
+            out.append(item)
+
+    return out[:_N116183_MAX_REQUIRED_FOCUS]
+
+
+def _n116183_sync_architecture_focus_after_veto(row: Dict[str, Any]) -> Dict[str, Any]:
+    row = _safe_dict(row)
+    action_text = _n11617_row_action_text(row)
+    if not _n11617_is_document_evidence_without_explicit_service(action_text):
+        return row
+
+    current = _safe_dict(row.get("current_action_response"))
+    architecture = _safe_dict(row.get("npc_response_architecture"))
+    if not current and not architecture:
+        return row
+
+    synced_focus = _n116183_bounded_veto_synced_focus(
+        current.get("required_focus"),
+        current.get("required_response_focus"),
+        current.get("focus"),
+        architecture.get("required_focus"),
+        architecture.get("required_response_focus"),
+        architecture.get("focus"),
+    )
+    if not synced_focus:
+        return row
+
+    if current:
+        current["required_focus"] = list(synced_focus)
+        current["architecture_required_focus"] = list(synced_focus)
+        current["architecture_focus_sync_applied"] = True
+        current["n11618_veto_focus_resynced"] = True
+        current["classification_policy"] = {
+            **_safe_dict(current.get("classification_policy")),
+            "llm_classifies_presentation_intent": True,
+            "deterministic_code_only_vetoes_impossible_service_or_economy": True,
+            "veto_only_no_forced_positive_classification": True,
+        }
+        row["current_action_response"] = current
+
+    if architecture:
+        architecture["required_focus"] = list(synced_focus)
+        architecture["current_action_response_required_focus"] = list(synced_focus)
+        architecture["current_action_response_focus_sync_applied"] = True
+        architecture["n11618_veto_focus_resynced"] = True
+        architecture["classification_policy"] = {
+            **_safe_dict(architecture.get("classification_policy")),
+            "llm_classifies_presentation_intent": True,
+            "deterministic_code_only_vetoes_impossible_service_or_economy": True,
+            "veto_only_no_forced_positive_classification": True,
+        }
+        row["npc_response_architecture"] = architecture
+
+    row["prompt_contract_service_veto_focus_resynced"] = True
+    return row
+
+
+def _sync_current_action_response_artifact_rows(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    synced = _N116183_PREVIOUS_SYNC_CURRENT_ACTION_RESPONSE_ARTIFACT_ROWS(rows)
+    if not isinstance(synced, list):
+        return synced
+    final_rows: List[Dict[str, Any]] = []
+    for row in synced:
+        row = _n116183_sync_architecture_focus_after_veto(_safe_dict(row))
+        # Do not call the older architecture sync after this point: it copies
+        # architecture focus into current_response with an 8-item bound and can
+        # recreate the mismatch.  This helper makes both packets identical.
+        final_rows.append(row)
+    return final_rows
+
+
+# N116.18.4 — Veto Guidance Is Not A Service-Focus Offender
+# N116.18.3 correctly re-synced current_action_response and
+# npc_response_architecture focus lists, but the regression scanner still treated
+# the new veto guidance strings themselves as service/economy offenders because
+# two guidance ids intentionally contain words like "drink" and
+# "service_or_economy".  Keep those guidance ids in the prompt, but never count
+# them as stale service focus.  This preserves the veto-only policy and lets the
+# summary health reflect actual remaining service-result/semantic/focus leaks.
+
+
+def _n116184_is_veto_guidance_focus(value: Any) -> bool:
+    text = _n11618_normalized_focus_item(value)
+    return bool(
+        text
+        and text in {
+            _n11618_normalized_focus_item(item)
+            for item in _N11618_VETO_GUIDANCE_ITEMS
+        }
+    )
+
+
+def _n11618_focus_is_service_or_economy(value: Any) -> bool:
+    text = _n11618_normalized_focus_item(value)
+    if not text:
+        return False
+    if _n116184_is_veto_guidance_focus(text):
+        return False
+    return bool(
+        text in _N11618_SERVICE_FOCUS_ITEMS
+        or text.startswith("purchase_")
+        or text.endswith("_purchase")
+        or text in {"purchase", "price", "payment", "lodging", "drink"}
+        or text.startswith("price_")
+        or text.endswith("_price")
+        or text.startswith("payment_")
+        or text.endswith("_payment")
+        or text.startswith("lodging_")
+        or text.endswith("_lodging")
+        or text.startswith("drink_")
+        or text.endswith("_drink")
+        or text in {"service_or_economy_request", "commerce_or_service_terms"}
+    )
+
+
+def _n11618_repair_focus_list(value: Any) -> tuple[List[Any], bool]:
+    values = value if isinstance(value, list) else []
+    repaired: List[Any] = []
+    changed = False
+    for item in values:
+        if _n11618_focus_is_service_or_economy(item):
+            changed = True
+            continue
+        if item not in repaired:
+            repaired.append(item)
+    for item in _N11618_VETO_GUIDANCE_ITEMS:
+        if item not in repaired:
+            repaired.append(item)
+            changed = True
+    return repaired[:12], changed
+
+
+def _n11618_prompt_contract_veto_regression_summary(rows: List[Dict[str, Any]]) -> Dict[str, Any]:
+    rows = [_safe_dict(row) for row in rows if isinstance(row, dict)]
+    violations: List[Dict[str, Any]] = []
+    synced: List[Dict[str, Any]] = []
+    guidance_only_count = 0
+    for row in rows:
+        turn_index = int(row.get("turn_index") or row.get("turn") or 0)
+        action_text = _n11617_row_action_text(row)
+        if not _n11617_is_document_evidence_without_explicit_service(action_text):
+            continue
+        if row.get("prompt_contract_service_veto_synced"):
+            synced.append({"turn_index": turn_index, "player_action": row.get("player_action")})
+        offenders: List[str] = []
+        for target_path, target in _n11618_prompt_sync_targets(row):
+            offenders.extend(
+                _n11618_walk_prompt_offenders(target, path=("row",) + target_path)
+            )
+        offenders.extend(_n11618_walk_prompt_offenders(row.get("semantic_action"), path=("row", "semantic_action")))
+        offenders.extend(_n11618_walk_prompt_offenders(row.get("semantic_action_v2"), path=("row", "semantic_action_v2")))
+        offenders.extend(_n11618_walk_prompt_offenders(row.get("service_result"), path=("row", "service_result")))
+        filtered: List[str] = []
+        for offender in offenders:
+            offender_text = _safe_str(offender)
+            # Defensive compatibility for rows produced by the pre-18.4 scanner:
+            # do not fail the run when the only "offender" is one of the
+            # explicit N116.18 veto guidance ids.
+            if any(_n11618_normalized_focus_item(item) in _n11618_normalized_focus_item(offender_text) for item in _N11618_VETO_GUIDANCE_ITEMS):
+                guidance_only_count += 1
+                continue
+            if offender_text:
+                filtered.append(offender_text)
+        if filtered:
+            violations.append(
+                {
+                    "turn_index": turn_index,
+                    "player_action": row.get("player_action"),
+                    "offenders": filtered[:25],
+                }
+            )
+    return {
+        "format_version": "n11618_prompt_contract_veto_regression_summary_v4",
+        "ok": not violations,
+        "synced_count": len(synced),
+        "remaining_violation_count": len(violations),
+        "guidance_only_offender_count_suppressed": guidance_only_count,
+        "synced_turns": synced[:50],
+        "remaining_violations": violations[:50],
+        "policy": "veto_only_no_forced_investigation_classification_llm_keeps_intent_classification",
+        "scan_mode": "strictly_bounded_prompt_targets_only_guidance_aware",
+    }
+
+# N116.19 — Root Service Resolver Precision + Repair Breakdown Accuracy
+# Keep N116.18 as a safety net, but make the root service/document test more
+# precise so generic evidence/proof language does not create a broad service
+# veto.  This remains a negative guard only: it never forces an
+# investigation/evidence presentation category.
+
+_N11619_PREVIOUS_SYNC_CURRENT_ACTION_RESPONSE_ARTIFACT_ROWS = _sync_current_action_response_artifact_rows
+_N11619_PREVIOUS_BUILD_LLM_PROMPT_AND_FALLBACK_SUMMARY = _build_llm_prompt_and_fallback_summary
+_N11619_PREVIOUS_FORCE_FINAL_AUTOPLAY_HEALTH = _force_final_autoplay_health
+
+_N11619_STRONG_DOCUMENT_SERVICE_FALSE_POSITIVE_TERMS = (
+    "sealed order", "sealed orders", "countermove order", "countermove orders",
+    "strike order", "strike orders", "captured order", "captured orders",
+    "written order", "written orders", "orders from", "orders signed",
+    "orders naming", "route paper", "route papers", "captured route paper",
+    "captured route papers", "ledger", "ledger entry", "ledger entries",
+    "manifest", "manifest mark", "manifest marks", "payment mark",
+    "payment marks", "manifest payment", "marked coin", "coin proof",
+    "coin lead", "route cipher", "coded message", "coded messages",
+    "toll marker", "toll markers", "courier route", "paymaster",
+)
+_N11619_DOCUMENT_CONTEXT_TERMS = (
+    "document", "documents", "paper", "papers", "letter", "letters",
+    "note", "notes", "record", "records", "file", "files", "cipher",
+    "code", "marks", "markings", "seal", "sealed", "ledger", "manifest",
+)
+_N11619_EVIDENCE_VERBS = (
+    "inspect", "study", "review", "decode", "trace", "capture", "recover",
+    "report", "compare", "analyze", "analyse", "examine", "read", "copy",
+    "secure", "protect", "warn", "follow", "bring", "show", "present",
+    "search", "find", "identify", "check",
+)
+_N11619_EXPLICIT_SERVICE_COMMERCE_TERMS = (
+    "buy", "purchase", "pay for", "pay bran for", "pay the innkeeper for",
+    "rent a room", "rent room", "book a room", "book room", "order ale",
+    "order a drink", "order food", "order a meal", "order stew",
+    "order supper", "buy ale", "buy food", "buy meal", "buy stew",
+    "sell", "trade", "hire", "lodging", "sleep here", "rest here",
+    "stay the night",
+)
+
+
+def _n11619_is_root_service_false_positive_action(action_text: Any) -> bool:
+    action = _n11617_norm_text(action_text)
+    if not action:
+        return False
+    if any(term in action for term in _N11619_EXPLICIT_SERVICE_COMMERCE_TERMS):
+        return False
+    if any(term in action for term in _N11619_STRONG_DOCUMENT_SERVICE_FALSE_POSITIVE_TERMS):
+        return True
+    has_context = any(term in action for term in _N11619_DOCUMENT_CONTEXT_TERMS)
+    has_verb = any(verb in action for verb in _N11619_EVIDENCE_VERBS)
+    return bool(has_context and has_verb)
+
+
+def _n11617_is_document_evidence_without_explicit_service(action_text: str) -> bool:
+    """N116.19 precision override for the existing veto predicate.
+
+    Older N116.17/N116.18 logic included generic terms like ``proof`` and
+    ``evidence``.  That was safe but too broad, producing a high veto rate.  The
+    root service guard now only triggers when the current action contains
+    service-confusable document/order/payment nouns, or a document noun with an
+    evidence verb, and no explicit service/commerce request.
+    """
+    return _n11619_is_root_service_false_positive_action(action_text)
+
+
+def _n11619_row_has_actual_service_false_positive(row: Dict[str, Any]) -> bool:
+    row = _safe_dict(row)
+    action_text = _n11617_row_action_text(row)
+    if not _n11619_is_root_service_false_positive_action(action_text):
+        return False
+    for container_name in ("row", "turn_contract", "turn_result", "result", "raw_result", "manual_turn_summary"):
+        container = row if container_name == "row" else _safe_dict(row.get(container_name))
+        if not container:
+            continue
+        service_result = _safe_dict(container.get("service_result"))
+        status = _safe_str(service_result.get("status") or service_result.get("service_status")).lower()
+        if service_result and _n11617_service_result_looks_false_positive(service_result) and status != "service_false_positive_vetoed":
+            return True
+        semantic = _safe_dict(container.get("semantic_action")) or _safe_dict(container.get("semantic_action_v2"))
+        if _n11617_semantic_action_looks_service(semantic):
+            return True
+    return False
+
+
+def _n11619_service_veto_regression_summary(rows: List[Dict[str, Any]]) -> Dict[str, Any]:
+    rows = [_safe_dict(row) for row in _safe_list(rows) if isinstance(row, dict)]
+    vetoed: List[Dict[str, Any]] = []
+    remaining: List[Dict[str, Any]] = []
+    candidates = 0
+    prompt_only_blocks = 0
+    for row in rows:
+        turn_index = int(row.get("turn_index") or row.get("turn") or 0)
+        action_text = _n11617_row_action_text(row)
+        if not _n11619_is_root_service_false_positive_action(action_text):
+            continue
+        candidates += 1
+        row_veto = _safe_dict(row.get("service_resolver_veto"))
+        root_vetoed = bool(row_veto.get("service_false_positive_vetoed") or row.get("service_false_positive_vetoed"))
+        if root_vetoed:
+            has_original = False
+            for container_name in ("row", "turn_contract", "turn_result", "result", "raw_result", "manual_turn_summary"):
+                container = row if container_name == "row" else _safe_dict(row.get(container_name))
+                service_result = _safe_dict(container.get("service_result"))
+                semantic = _safe_dict(container.get("semantic_action")) or _safe_dict(container.get("semantic_action_v2"))
+                if service_result.get("original_service_result") or semantic.get("original_semantic_action"):
+                    has_original = True
+                    break
+            if has_original:
+                vetoed.append({
+                    "turn_index": turn_index,
+                    "player_action": row.get("player_action"),
+                    "reason": "service_false_positive_vetoed",
+                })
+            else:
+                prompt_only_blocks += 1
+
+        offenders: List[str] = []
+        for container_name in ("row", "turn_contract", "turn_result", "result", "raw_result", "manual_turn_summary"):
+            container = row if container_name == "row" else _safe_dict(row.get(container_name))
+            if not container:
+                continue
+            service_result = _safe_dict(container.get("service_result"))
+            semantic = _safe_dict(container.get("semantic_action")) or _safe_dict(container.get("semantic_action_v2"))
+            status = _safe_str(service_result.get("status") or service_result.get("service_status")).lower()
+            if service_result and _n11617_service_result_looks_false_positive(service_result) and status != "service_false_positive_vetoed":
+                offenders.append(f"{container_name}.service_result")
+            if _n11617_semantic_action_looks_service(semantic):
+                offenders.append(f"{container_name}.semantic_action")
+        if offenders:
+            remaining.append({
+                "turn_index": turn_index,
+                "player_action": row.get("player_action"),
+                "offenders": offenders[:20],
+            })
+    total = len(rows)
+    veto_rate = (len(vetoed) / total) if total else 0.0
+    return {
+        "format_version": "n11619_service_veto_regression_summary_v1",
+        "ok": not remaining,
+        "candidate_document_service_false_positive_action_count": candidates,
+        "vetoed_count": len(vetoed),
+        "remaining_violation_count": len(remaining),
+        "prompt_only_service_category_block_count": prompt_only_blocks,
+        "vetoed_rate": round(veto_rate, 4),
+        "vetoed_turns": vetoed[:50],
+        "remaining_violations": remaining[:50],
+        "policy": "veto_only_no_forced_investigation_classification",
+    }
+
+
+def _n11617_service_veto_regression_summary(rows: List[Dict[str, Any]]) -> Dict[str, Any]:
+    return _n11619_service_veto_regression_summary(rows)
+
+
+def _n11619_dialogue_relevance_repaired_count(rows: List[Dict[str, Any]], summary: Dict[str, Any]) -> tuple[int, str]:
+    summary = _safe_dict(summary)
+    for key in ("dialogue_action_relevance_summary", "dialogue-action-relevance-summary", "dialogue_relevance_summary"):
+        packet = _safe_dict(summary.get(key))
+        if packet:
+            for count_key in ("repaired_count", "dialogue_relevance_repaired_count", "repair_count"):
+                if packet.get(count_key) is not None:
+                    return int(packet.get(count_key) or 0), key
+    rows = [_safe_dict(row) for row in _safe_list(rows) if isinstance(row, dict)]
+    return sum(1 for row in rows if row.get("dialogue_action_relevance_repaired")), "row_flags"
+
+
+def _n11619_update_repair_pressure_breakdown(rows: List[Dict[str, Any]], summary: Dict[str, Any]) -> None:
+    summary = _safe_dict(summary)
+    llm_summary = _safe_dict(summary.get("llm_prompt_and_fallback_summary"))
+    if not llm_summary:
+        return
+    breakdown = dict(_safe_dict(llm_summary.get("repair_pressure_breakdown")))
+    dialogue_count, dialogue_source = _n11619_dialogue_relevance_repaired_count(rows, summary)
+    breakdown["dialogue_relevance_repaired_count"] = dialogue_count
+    breakdown["dialogue_relevance_repair_count_source"] = dialogue_source
+    service_summary = _safe_dict(llm_summary.get("service_resolver_veto_summary") or summary.get("service_resolver_veto_summary"))
+    if service_summary:
+        breakdown["service_resolver_veto_count"] = int(service_summary.get("vetoed_count") or 0)
+        breakdown["service_resolver_veto_rate"] = service_summary.get("vetoed_rate")
+    dominant = dict(_safe_dict(breakdown.get("dominant_sources")))
+    dominant["dialogue_action_relevance_repair"] = dialogue_count
+    if service_summary:
+        dominant["service_resolver_veto"] = int(service_summary.get("vetoed_count") or 0)
+    breakdown["dominant_sources"] = dominant
+    breakdown["format_version"] = "n11619_repair_pressure_breakdown_v3"
+    llm_summary["repair_pressure_breakdown"] = breakdown
+    summary["llm_prompt_and_fallback_summary"] = llm_summary
+
+
+def _build_llm_prompt_and_fallback_summary(rows: List[Dict[str, Any]]) -> Dict[str, Any]:
+    summary = _N11619_PREVIOUS_BUILD_LLM_PROMPT_AND_FALLBACK_SUMMARY(rows)
+    service_summary = _n11619_service_veto_regression_summary(rows)
+    summary["service_resolver_veto_summary"] = service_summary
+    summary["ok"] = bool(summary.get("ok", True)) and bool(service_summary.get("ok", True))
+    if not service_summary.get("ok", True):
+        failures = _safe_list(summary.get("failed_gates"))
+        if "service_resolver_veto_regression_ok" not in failures:
+            failures.append("service_resolver_veto_regression_ok")
+        summary["failed_gates"] = failures
+    breakdown = dict(_safe_dict(summary.get("repair_pressure_breakdown")))
+    dialogue_count, dialogue_source = _n11619_dialogue_relevance_repaired_count(rows, {})
+    breakdown["dialogue_relevance_repaired_count"] = dialogue_count
+    breakdown["dialogue_relevance_repair_count_source"] = dialogue_source
+    breakdown["service_resolver_veto_count"] = int(service_summary.get("vetoed_count") or 0)
+    breakdown["service_resolver_veto_rate"] = service_summary.get("vetoed_rate")
+    dominant = dict(_safe_dict(breakdown.get("dominant_sources")))
+    dominant["dialogue_action_relevance_repair"] = dialogue_count
+    dominant["service_resolver_veto"] = int(service_summary.get("vetoed_count") or 0)
+    breakdown["dominant_sources"] = dominant
+    breakdown["format_version"] = "n11619_repair_pressure_breakdown_v3"
+    summary["repair_pressure_breakdown"] = breakdown
+    return summary
+
+
+def _force_final_autoplay_health(summary: Dict[str, Any]) -> Dict[str, Any]:
+    health = _N11619_PREVIOUS_FORCE_FINAL_AUTOPLAY_HEALTH(summary)
+    summary = _safe_dict(summary)
+    rows = _safe_list(summary.get("final_transcript_rows") or summary.get("transcript_rows") or [])
+    _n11619_update_repair_pressure_breakdown(rows, summary)
+    llm_summary = _safe_dict(summary.get("llm_prompt_and_fallback_summary"))
+    service_summary = _safe_dict(llm_summary.get("service_resolver_veto_summary") or summary.get("service_resolver_veto_summary"))
+    total = int(service_summary.get("turn_count") or summary.get("turns_executed") or summary.get("requested_turns") or 100)
+    vetoed = int(service_summary.get("vetoed_count") or 0)
+    threshold = 10 if total >= 100 else max(1, total // 10)
+    if vetoed > threshold:
+        health = dict(_safe_dict(health))
+        warnings = _safe_list(health.get("warnings"))
+        if "service_resolver_veto_rate_high" not in warnings:
+            warnings.append("service_resolver_veto_rate_high")
+        health["warnings"] = warnings
+        health["service_resolver_veto_rate_high"] = True
+        health["service_resolver_veto_count"] = vetoed
+        health["service_resolver_veto_threshold"] = threshold
+    else:
+        health = dict(_safe_dict(health))
+        health["service_resolver_veto_rate_high"] = False
+        health["service_resolver_veto_count"] = vetoed
+        health["service_resolver_veto_threshold"] = threshold
+    return health
+
+
+# N116.20 — Provider Metadata Repair Reduction + Unsupported Combat Claim Cleanup
+# Add reporting around where provider/repair pressure comes from.  This does not
+# change simulation outcomes and does not replace LLM presentation classification;
+# it only summarizes repair pressure and keeps existing N116.19 service precision
+# advisories visible.
+
+_N11620_PREVIOUS_BUILD_LLM_PROMPT_AND_FALLBACK_SUMMARY = _build_llm_prompt_and_fallback_summary
+_N11620_PREVIOUS_FORCE_FINAL_AUTOPLAY_HEALTH = _force_final_autoplay_health
+
+_N11620_COMBAT_CLAIM_TERMS = (
+    " hit ", " hits ", " struck ", " wound", " wounded", " injur", " damage",
+    " blood", " bleeding", " kill", " killed", " slain", " dead", " defeat",
+    " defeated", " victory", " wins ", " win the fight", " drops ", " falls dead",
+)
+
+
+def _n11620_row_category(row: Dict[str, Any]) -> str:
+    row = _safe_dict(row)
+    for source in (
+        _safe_dict(row.get("validated_presentation_intent")),
+        _safe_dict(row.get("presentation_intent")),
+        _safe_dict(row.get("llm_presentation_intent")),
+        _safe_dict(_safe_dict(row.get("background_presentation_result")).get("presentation_intent")),
+    ):
+        category = _safe_str(source.get("primary_category") or source.get("category")).strip().lower()
+        if category:
+            return category
+    action = _safe_str(row.get("canonical_turn_action") or row.get("player_action")).lower()
+    if any(term in action for term in ("ask", "tell", "warn", "report", "question")):
+        return "dialogue"
+    if any(term in action for term in ("inspect", "search", "study", "review", "evidence", "proof", "ledger", "orders")):
+        return "evidence"
+    if any(term in action for term in ("travel", "follow", "road", "route", "go to", "leave")):
+        return "travel"
+    if any(term in action for term in ("attack", "fight", "strike", "defend", "combat")):
+        return "combat"
+    return _safe_str(row.get("action_category")) or "general"
+
+
+def _n11620_text_has_combat_claim(value: Any) -> bool:
+    text = f" {_safe_str(value).lower()} "
+    if not text.strip():
+        return False
+    return any(term in text for term in _N11620_COMBAT_CLAIM_TERMS)
+
+
+def _n11621_turn_contract_supports_combat(container: Any) -> bool:
+    """Conservative local fallback when the N116.20 combat-support helper is absent."""
+    data = _safe_dict(container)
+    if not data:
+        return False
+
+    direct_keys = (
+        "combat_result",
+        "combat_state",
+        "combat_state_delta",
+        "combat_delta",
+        "damage",
+        "damage_result",
+        "attack_result",
+        "hit_result",
+        "initiative",
+        "encounter_result",
+        "encounter_state",
+    )
+    if any(data.get(key) for key in direct_keys):
+        return True
+
+    mechanics = {
+        _safe_str(item).strip().lower()
+        for item in _safe_list(data.get("mechanics_covered_this_turn") or data.get("mechanics"))
+        if _safe_str(item).strip()
+    }
+    if any(
+        mechanic in mechanics
+        for mechanic in (
+            "combat_started",
+            "combat_resolved",
+            "combat_victory",
+            "combat_ended",
+            "attack_resolved",
+            "damage_applied",
+            "enemy_defeated",
+        )
+    ):
+        return True
+
+    result = _safe_dict(data.get("result") or data.get("turn_result") or data.get("resolution"))
+    if result and result is not data and _n11621_turn_contract_supports_combat(result):
+        return True
+
+    status = _safe_str(data.get("status") or data.get("combat_status") or data.get("encounter_status")).lower()
+    return status in {"combat", "in_combat", "combat_started", "combat_resolved", "victory", "defeated"}
+
+
+def _n11621_text_has_combat_claim(value: Any) -> bool:
+    helper = globals().get("_n11620_text_has_combat_claim")
+    if callable(helper):
+        return bool(helper(value))
+    return _presentation_has_combat_claim(_safe_str(value))
+
+
+def _n11620_row_has_unsupported_combat_claim_suppressed(row: Dict[str, Any]) -> bool:
+    row = _safe_dict(row)
+    if row.get("unsupported_combat_claim_suppressed"):
+        return True
+    selected = _safe_dict(row.get("selected_output"))
+    if selected.get("unsupported_combat_claim_suppressed"):
+        return True
+    background = _safe_dict(row.get("background_presentation_result"))
+    if background.get("unsupported_combat_claim_suppressed"):
+        return True
+    diagnostics = _safe_dict(background.get("diagnostics"))
+    if diagnostics.get("unsupported_combat_claim_suppressed"):
+        return True
+    hard = _safe_dict(row.get("presentation_hard_grounding"))
+    violations = _safe_list(hard.get("violations") or hard.get("violation_types"))
+    if "unsupported_combat_claim" in violations:
+        return True
+    if _safe_str(row.get("presentation_repair_type")) == "unsupported_combat_claim":
+        return True
+    return False
+
+
+def _n11620_category_reclassified(row: Dict[str, Any]) -> bool:
+    row = _safe_dict(row)
+    if row.get("category_reclassified") or row.get("soft_classification_repair"):
+        return True
+    validated = _safe_str(row.get("validated_presentation_category")).lower()
+    llm_category = (
+        _safe_str(row.get("llm_presentation_category")).lower()
+        or _safe_str(_safe_dict(row.get("presentation_intent")).get("primary_category")).lower()
+        or _safe_str(_safe_dict(_safe_dict(row.get("background_presentation_result")).get("presentation_intent")).get("primary_category")).lower()
+    )
+    return bool(validated and llm_category and validated != llm_category)
+
+
+def _n11620_metadata_repaired(row: Dict[str, Any]) -> bool:
+    row = _safe_dict(row)
+    if row.get("provider_metadata_normalized_pre_attach") or row.get("metadata_repaired"):
+        return True
+    background = _safe_dict(row.get("background_presentation_result"))
+    if background.get("provider_metadata_normalized_pre_attach") or background.get("metadata_repaired"):
+        return True
+    diagnostics = _safe_dict(background.get("diagnostics"))
+    return bool(diagnostics.get("provider_metadata_normalized_pre_attach") or diagnostics.get("metadata_repaired"))
+
+
+def _n11620_repair_pressure_by_category(rows: List[Dict[str, Any]]) -> Dict[str, Any]:
+    by_category: Dict[str, Dict[str, Any]] = {}
+    for row_any in _safe_list(rows):
+        row = _safe_dict(row_any)
+        if not row:
+            continue
+        category = _n11620_row_category(row)
+        bucket = by_category.setdefault(
+            category,
+            {
+                "turn_count": 0,
+                "metadata_repaired_count": 0,
+                "category_reclassified_count": 0,
+                "dialogue_relevance_repaired_count": 0,
+                "unsupported_combat_claim_suppressed_count": 0,
+                "service_resolver_veto_count": 0,
+                "example_turns": [],
+            },
+        )
+        bucket["turn_count"] += 1
+        repaired = False
+        if _n11620_metadata_repaired(row):
+            bucket["metadata_repaired_count"] += 1
+            repaired = True
+        if _n11620_category_reclassified(row):
+            bucket["category_reclassified_count"] += 1
+            repaired = True
+        if row.get("dialogue_action_relevance_repaired"):
+            bucket["dialogue_relevance_repaired_count"] += 1
+            repaired = True
+        if _n11620_row_has_unsupported_combat_claim_suppressed(row):
+            bucket["unsupported_combat_claim_suppressed_count"] += 1
+            repaired = True
+        if row.get("service_false_positive_vetoed") or _safe_dict(row.get("service_resolver_veto")).get("service_false_positive_vetoed"):
+            bucket["service_resolver_veto_count"] += 1
+            repaired = True
+        if repaired and len(bucket["example_turns"]) < 8:
+            bucket["example_turns"].append(
+                {
+                    "turn_index": int(row.get("turn_index") or row.get("turn") or 0),
+                    "player_action": _safe_str(row.get("player_action"))[:220],
+                }
+            )
+
+    for bucket in by_category.values():
+        turns = max(1, int(bucket.get("turn_count") or 0))
+        bucket["metadata_repaired_rate"] = round(bucket["metadata_repaired_count"] / turns, 4)
+        bucket["category_reclassified_rate"] = round(bucket["category_reclassified_count"] / turns, 4)
+        bucket["dialogue_relevance_repaired_rate"] = round(bucket["dialogue_relevance_repaired_count"] / turns, 4)
+        bucket["unsupported_combat_claim_suppressed_rate"] = round(bucket["unsupported_combat_claim_suppressed_count"] / turns, 4)
+        bucket["service_resolver_veto_rate"] = round(bucket["service_resolver_veto_count"] / turns, 4)
+
+    return {
+        "format_version": "n11620_repair_pressure_by_category_v1",
+        "categories": by_category,
+        "category_count": len(by_category),
+    }
+
+
+def _n11620_update_repair_pressure_breakdown(rows: List[Dict[str, Any]], summary: Dict[str, Any]) -> None:
+    summary = _safe_dict(summary)
+    llm_summary = _safe_dict(summary.get("llm_prompt_and_fallback_summary"))
+    if not llm_summary:
+        return
+    breakdown = dict(_safe_dict(llm_summary.get("repair_pressure_breakdown")))
+    breakdown["repair_pressure_by_category"] = _n11620_repair_pressure_by_category(rows)
+    unsupported_count = sum(
+        1
+        for row in _safe_list(rows)
+        if _n11620_row_has_unsupported_combat_claim_suppressed(_safe_dict(row))
+    )
+    breakdown["unsupported_combat_claim_suppressed_count"] = unsupported_count
+    dominant = dict(_safe_dict(breakdown.get("dominant_sources")))
+    dominant["unsupported_combat_claim_suppressed"] = unsupported_count
+    breakdown["dominant_sources"] = dominant

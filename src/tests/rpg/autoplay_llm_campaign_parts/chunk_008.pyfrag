@@ -1,0 +1,925 @@
+        "ok": True,
+        "outcome": "direct_graph_resolved",
+        "xp_delta": 5,
+        "summary": "The combat beat resolves through the scenario graph.",
+    }
+
+    row["result"] = {
+        **_safe_dict(row.get("result")),
+        "combat_result": combat_result,
+        "xp_delta": 5,
+        "mechanic": "combat_resolved",
+        "meaningful_progress": True,
+        "progress_category": "direct_graph_execution",
+    }
+
+    turn_contract = dict(_safe_dict(row.get("turn_contract")))
+    turn_contract["mechanic"] = "combat_resolved"
+
+    tc_state_delta = dict(_safe_dict(turn_contract.get("state_delta")))
+    if not already_applied:
+        tc_state_delta["xp_delta"] = int(tc_state_delta.get("xp_delta") or 0) + 5
+    else:
+        tc_state_delta.setdefault("xp_delta", 5)
+    tc_state_delta["combat_started"] = True
+    tc_state_delta["combat_resolved"] = True
+    turn_contract["state_delta"] = tc_state_delta
+
+    turn_contract["result"] = {
+        **_safe_dict(turn_contract.get("result")),
+        "combat_result": combat_result,
+    }
+    row["turn_contract"] = turn_contract
+
+    narration_payload = {
+        "format_version": "rpg_narration_v2",
+        "source": "direct_graph_explicit_combat_xp_execution",
+        "dialogue_source": "direct_graph_execution",
+        "narration": (
+            "The fight resolves in your favor, leaving the road briefly safer. "
+            "You gain 5 XP from surviving the clash."
+        ),
+        "action": "Resolved the combat beat.",
+        "npc": {},
+        "reward": {
+            "xp_delta": 5,
+        },
+        "followup_hooks": [],
+    }
+
+    narration_text = _safe_str(narration_payload.get("narration"))
+
+    row["selected_narration"] = narration_payload
+    row["selected_output"] = narration_payload
+    row["resolved_narration_payload"] = narration_payload
+    row["narration_payload"] = narration_payload
+    row["structured_narration"] = narration_payload
+
+    row["narration"] = narration_text
+    row["display_narration"] = narration_text
+    row["visible_narration"] = narration_text
+    row["selected_narration_text"] = narration_text
+
+    row["display_source"] = "direct_graph_execution"
+    row["dialogue_source"] = "direct_graph_execution"
+    row["direct_graph_display_override"] = True
+
+    row["direct_graph_xp_execution_applied"] = True
+    row["direct_graph_xp_execution_action_id"] = action_id_s
+    row["direct_graph_execution_applied"] = True
+    row["direct_graph_execution_kind"] = action_id_s
+
+    row["mechanic"] = "combat_resolved"
+    row["meaningful_progress"] = True
+    row["progress_category"] = "direct_graph_execution"
+
+    return row
+
+
+_DIRECT_GRAPH_CANONICAL_ACTION_TEXT = {
+    "buy_rations_from_bran": "I buy two rations from Bran.",
+    "protect_wagon_or_lure_bandits": "I protect the wagon and fight the bandits.",
+    "ask_garran_to_join": "I ask Garran to join me on the mill road.",
+    "rent_room_from_bran": "I rent a common room from Bran.",
+    "report_findings_to_bran": "I report the ambush evidence to Bran.",
+    "warn_garran": "I warn Garran about the ambush signs on the road.",
+    "tell_garran_about_ambush": "I tell Garran about the ambush signs on the road.",
+    "scout_quarry_road": "I scout the quarry road for ambush signs.",
+    "spot_bridge_watchers": "I watch the bridge for hidden watchers.",
+    "choose_ambush_response": "I choose how to respond to the ambush signs.",
+    "question_captured_bandit": "I question the captured bandit.",
+    "search_bandit_satchel": "I search the bandit's satchel for proof.",
+    "return_to_bran_with_proof": "I return to Bran with the marked coin proof.",
+    "return_marked_coin_proof": "I return to Bran with the marked coin proof.",
+}
+
+
+def _canonical_direct_graph_action_text(action_id: str, fallback: str = "") -> str:
+    action_id_s = _safe_str(action_id)
+    return _safe_str(_DIRECT_GRAPH_CANONICAL_ACTION_TEXT.get(action_id_s) or fallback)
+
+
+def _sync_direct_graph_canonical_action_display(row: Dict[str, Any]) -> Dict[str, Any]:
+    row = dict(_safe_dict(row))
+    direct = _safe_dict(row.get("direct_graph_action_completion"))
+    action_id = _safe_str(
+        direct.get("action_id")
+        or row.get("direct_graph_execution_kind")
+        or row.get("direct_graph_xp_execution_action_id")
+    )
+    canonical = _canonical_direct_graph_action_text(
+        action_id,
+        _safe_str(row.get("canonical_turn_action") or row.get("player_action")),
+    )
+
+    if not action_id or not canonical:
+        return row
+
+    row["player_action"] = canonical
+    row["visible_player_action"] = canonical
+    row["display_player_action"] = canonical
+    row["canonical_turn_action"] = canonical
+
+    turn_contract = dict(_safe_dict(row.get("turn_contract")))
+    action_payload = dict(_safe_dict(turn_contract.get("action")))
+    action_payload["text"] = canonical
+    action_payload["display_text"] = canonical
+    action_payload["canonical_text"] = canonical
+    action_payload["source"] = _safe_str(action_payload.get("source") or "direct_graph_execution")
+    turn_contract["action"] = action_payload
+    row["turn_contract"] = turn_contract
+
+    selected = dict(_safe_dict(row.get("selected_narration") or row.get("selected_output")))
+    if selected:
+        selected["action"] = _safe_str(selected.get("action") or canonical)
+        row["selected_narration"] = selected
+        row["selected_output"] = selected
+        row["resolved_narration_payload"] = selected
+        row["narration_payload"] = selected
+        row["structured_narration"] = selected
+
+    row["direct_graph_canonical_action_synced"] = True
+    row["direct_graph_canonical_action_id"] = action_id
+    return row
+
+
+def _classify_visible_action_category(row: Dict[str, Any]) -> str:
+    row = _safe_dict(row)
+    direct = _safe_dict(row.get("direct_graph_action_completion"))
+    action_id = _safe_str(direct.get("action_id") or row.get("direct_graph_execution_kind"))
+
+    validated = _safe_dict(row.get("validated_presentation_intent"))
+    validated_category = _normalize_presentation_category(validated.get("primary_category"))
+    if validated_category != "general":
+        if validated_category in {"dialogue", "social"}:
+            return "social"
+        if validated_category == "economy":
+            return "buying"
+        return validated_category
+
+    social_action_prefixes = (
+        "ask_",
+        "report_",
+        "warn_",
+        "tell_",
+        "question_",
+        "confront_",
+        "counter_",
+        "press_",
+        "persuade_",
+        "accuse_",
+        "negotiate_",
+    )
+
+    evidence_action_prefixes = (
+        "return_",
+        "search_",
+        "inspect_",
+        "decipher_",
+        "read_",
+        "recover_",
+        "deliver_",
+    )
+
+    if any(action_id.startswith(prefix) for prefix in social_action_prefixes):
+        return "social"
+
+    if any(action_id.startswith(prefix) for prefix in evidence_action_prefixes):
+        return "evidence"
+
+    text = _normalize_turn_action_text(
+        " ".join(
+            [
+                _safe_str(row.get("player_action")),
+                _safe_str(row.get("canonical_turn_action")),
+                action_id,
+            ]
+        )
+    )
+
+    if action_id == "buy_rations_from_bran" or ("buy" in text and "ration" in text):
+        return "buying"
+
+    if action_id in {
+        "protect_wagon_or_lure_bandits",
+        "ambush_bandits",
+        "fight_bandit_scouts",
+        "fight_bandits",
+        "defeat_bandit_scouts",
+        "resolve_bandit_ambush",
+    }:
+        return "combat"
+
+    if any(
+        term in text
+        for term in (
+            "ask",
+            "tell",
+            "warn",
+            "report",
+            "question",
+            "confront",
+            "persuade",
+            "accuse",
+            "counter",
+            "pressure",
+            "negotiate",
+            "arrest",
+            "testify",
+            "witness",
+        )
+    ):
+        return "social"
+
+    if any(term in text for term in ("read", "decipher", "ledger", "note", "coin", "proof")):
+        return "evidence"
+
+    if any(term in text for term in ("search", "inspect", "scout", "watch", "look", "track", "examine")):
+        return "investigation"
+
+    if any(term in text for term in ("travel", "road", "wagon yard", "old mill", "quarry")):
+        return "travel"
+
+    return "general"
+
+
+_BAD_GENERIC_FALLBACK_SNIPPETS = (
+    "practical transaction",
+    "movement resolves",
+    "combat moment resolves",
+    "exchange is handled",
+    "current route",
+)
+
+
+def _fallback_narration_for_action_category(row: Dict[str, Any]) -> str:
+    category = _classify_visible_action_category(row)
+
+    if category == "buying":
+        return "The purchase resolves cleanly, with coin changing hands and supplies added to your pack."
+
+    if category == "combat":
+        return "The fight resolves through the current objective, leaving clear consequences behind."
+
+    if category == "travel":
+        return "You move along the route with purpose, carrying the investigation toward the next location."
+
+    if category == "investigation":
+        return "You examine the scene for concrete signs, narrowing the search to details that can be acted on."
+
+    if category == "social":
+        return "The conversation focuses on the immediate lead, pressing for names, places, and evidence that can move the investigation forward."
+
+    if category == "evidence":
+        return "The evidence gives the investigation a firmer shape, connecting the current lead to the next step."
+
+    return "The action advances the current objective without adding unsupported consequences."
+
+
+def _cleanup_bad_generic_fallback_narration(row: Dict[str, Any]) -> Dict[str, Any]:
+    row = dict(_safe_dict(row))
+
+    if row.get("direct_graph_display_override"):
+        return row
+
+    narration = (
+        _safe_str(row.get("display_narration"))
+        or _safe_str(row.get("visible_narration"))
+        or _safe_str(row.get("selected_narration_text"))
+        or _safe_str(row.get("narration"))
+    )
+    narration_l = narration.lower()
+
+    if not narration:
+        return row
+
+    if not any(snippet in narration_l for snippet in _BAD_GENERIC_FALLBACK_SNIPPETS):
+        return row
+
+    cleaned = _fallback_narration_for_action_category(row)
+
+    row["narration"] = cleaned
+    row["display_narration"] = cleaned
+    row["visible_narration"] = cleaned
+    row["selected_narration_text"] = cleaned
+    row["fallback_narration_cleanup_applied"] = True
+    row["fallback_narration_category"] = _classify_visible_action_category(row)
+
+    selected = dict(_safe_dict(row.get("selected_narration") or row.get("selected_output")))
+    if selected:
+        selected["narration"] = cleaned
+        selected["source"] = _safe_str(selected.get("source") or "deterministic_category_fallback")
+        row["selected_narration"] = selected
+        row["selected_output"] = selected
+        row["resolved_narration_payload"] = selected
+        row["narration_payload"] = selected
+        row["structured_narration"] = selected
+
+    return row
+
+
+def _infer_social_target_npc(row: Dict[str, Any]) -> str:
+    row = _safe_dict(row)
+    text = _normalize_turn_action_text(
+        " ".join(
+            [
+                _safe_str(row.get("player_action")),
+                _safe_str(row.get("canonical_turn_action")),
+                _safe_str(_safe_dict(row.get("direct_graph_action_completion")).get("action_id")),
+            ]
+        )
+    )
+
+    direct = _safe_dict(row.get("direct_graph_action_completion"))
+    action_id = _safe_str(
+        direct.get("action_id")
+        or row.get("direct_graph_execution_kind")
+        or row.get("direct_graph_canonical_action_id")
+    )
+
+    if "bran" in action_id:
+        return "Bran"
+    if "garran" in action_id:
+        return "Garran"
+    if "mira" in action_id:
+        return "Mira"
+    if "marlowe" in action_id:
+        return "Agent Marlowe"
+    if "magistrate" in action_id:
+        return "Magistrate"
+    if "voss" in action_id:
+        return "Captain Voss"
+    if "veska" in action_id:
+        return "Handler Veska"
+    if "teamster" in action_id:
+        return "Old Teamster"
+    if "bandit" in action_id:
+        return "Captured Bandit"
+    if "ally" in action_id or "allies" in action_id:
+        return "Garran"
+    if "magistrate" in action_id:
+        return "Magistrate"
+    if "patron" in action_id:
+        return "Local Patron"
+    if "local" in action_id and "patron" in action_id:
+        return "Local Patron"
+
+    if "bran" in text:
+        return "Bran"
+    if "garran" in text:
+        return "Garran"
+    if "mira" in text:
+        return "Mira"
+    if "sera" in text:
+        return "Sera"
+    if "marlowe" in text:
+        return "Agent Marlowe"
+    if "voss" in text:
+        return "Captain Voss"
+    if "veska" in text:
+        return "Handler Veska"
+    if "bandit" in text:
+        return "Captured Bandit"
+
+    if "magistrate" in text:
+        return "Magistrate"
+    if "teamster" in text:
+        return "Old Teamster"
+    if "agent" in text or "route pressure agent" in text:
+        return "Route Agent"
+    if "ally" in text or "allies" in text:
+        return "Garran"
+    if "local patron" in text or "patron" in text:
+        return "Local Patron"
+
+    return ""
+
+
+def _bounded_social_npc_line(
+    row: Dict[str, Any],
+    *,
+    speaker: str,
+    variant_family: str,
+    templates: List[str],
+    facts: Dict[str, Any] | None = None,
+) -> Dict[str, str]:
+    line, meta = _select_bounded_response_variant(
+        row,
+        variant_family=variant_family,
+        templates=templates,
+        facts=facts or {},
+    )
+    if not line:
+        return {}
+    _store_npc_response_variant(row, line, meta)
+    return {"speaker": speaker, "line": line}
+
+
+def _deterministic_social_npc_line(row: Dict[str, Any]) -> Dict[str, str]:
+    row = _safe_dict(row)
+    speaker = _infer_social_target_npc(row)
+    text = _normalize_turn_action_text(
+        " ".join(
+            [
+                _safe_str(row.get("player_action")),
+                _safe_str(row.get("canonical_turn_action")),
+                _safe_str(_safe_dict(row.get("direct_graph_action_completion")).get("action_id")),
+            ]
+        )
+    )
+
+    action_id = _safe_str(
+        _safe_dict(row.get("direct_graph_action_completion")).get("action_id")
+        or row.get("direct_graph_execution_kind")
+        or row.get("direct_graph_canonical_action_id")
+    )
+
+    if not speaker:
+        return {}
+
+    if _action_is_commerce_request(text, _safe_dict(_safe_dict(row.get("turn_contract")).get("service_result"))) and "ration" in text:
+        return _bounded_social_npc_line(
+            row,
+            speaker=speaker,
+            variant_family="social.economy.rations",
+            templates=[
+                "Two rations. That should keep you moving if the road turns bad.",
+                "Two wrapped rations. Keep them dry until the road gives you a reason not to.",
+                "That is two rations counted out. They are road food, not comfort, but they will hold.",
+            ],
+            facts={"item": "rations", "quantity": 2},
+        )
+
+    if speaker == "Local Patron":
+        return _bounded_social_npc_line(
+            row,
+            speaker=speaker,
+            variant_family="social.local_patron.bridge",
+            templates=[
+                "If you mean the old bridge, folk avoid it before dawn. Too many quiet wagons, too few honest reasons.",
+                "The old bridge draws the wrong kind of traffic before sunrise; I would not call those wagons honest.",
+                "Ask around the old bridge and you will hear the same thing: wagons move there when decent folk stay indoors.",
+            ],
+            facts={"topic": "old_bridge"},
+        )
+
+    if action_id.startswith("ask_") and speaker == "Bran":
+        return _bounded_social_npc_line(
+            row,
+            speaker=speaker,
+            variant_family="social.ask.bran",
+            templates=[
+                "Ask plainly. If it touches the road, the side door, or that traveler, I will tell you what I know.",
+                "Put the question straight, and I will separate what I know from what I only suspect.",
+                "Ask it cleanly, and I will answer from facts, not tavern smoke.",
+                "Name the point you need, and I will tell you what I can stand behind.",
+            ],
+            facts={"dialogue": "ask_bran"},
+        )
+
+    if action_id.startswith("ask_") and speaker == "Garran":
+        return _bounded_social_npc_line(
+            row,
+            speaker=speaker,
+            variant_family="social.ask.garran",
+            templates=[
+                "If this is about the road, say it straight. I would rather know the danger before the wheels hit it.",
+                "Give me the plain question. Wagons survive on clear warnings, not hints.",
+                "If the road is part of it, I need the sharp version, not the polite one.",
+            ],
+            facts={"dialogue": "ask_garran"},
+        )
+
+    if action_id.startswith("warn_") and speaker == "Garran":
+        return _bounded_social_npc_line(
+            row,
+            speaker=speaker,
+            variant_family="social.warn.garran",
+            templates=[
+                "Then we move carefully. I will not drive blind into a trap.",
+                "Then the wagon waits until we know where the danger sits.",
+                "I will treat the warning as real until the road proves otherwise.",
+            ],
+            facts={"warning": "road_danger"},
+        )
+
+    if action_id.startswith("warn_") or "warn" in text:
+        return _bounded_social_npc_line(
+            row,
+            speaker=speaker,
+            variant_family="social.warn.generic",
+            templates=[
+                "Then we treat it as real trouble and warn anyone still exposed.",
+                "Then this stops being gossip. We move like someone could get hurt.",
+                "If the warning is sound, we act before the vulnerable are left alone with it.",
+            ],
+            facts={"warning": "current_action"},
+        )
+
+    if action_id.startswith("report_") and speaker == "Bran":
+        return _bounded_social_npc_line(
+            row,
+            speaker=speaker,
+            variant_family="social.report.bran",
+            templates=[
+                "That is enough to stop guessing. Show me where the proof points next.",
+                "That moves us from suspicion to proof. Now tell me where it leads.",
+                "Good. If the proof holds, we follow it before someone buries it.",
+                "That gives us a firm edge. Point it at the next name.",
+            ],
+            facts={"evidence": "reported_to_bran"},
+        )
+
+    if action_id.startswith("return_") and "proof" in action_id:
+        return _bounded_social_npc_line(
+            row,
+            speaker=speaker,
+            variant_family="social.return.proof",
+            templates=[
+                "That proof gives us a name to push on. Now we make sure it cannot disappear.",
+                "If that proof is solid, we copy it, guard it, and press the name it gives us.",
+                "Then the proof needs daylight and witnesses before anyone can make it vanish.",
+            ],
+            facts={"evidence": "returned_proof"},
+        )
+
+    if action_id.startswith("question_") and speaker == "Captured Bandit":
+        return _bounded_social_npc_line(
+            row,
+            speaker=speaker,
+            variant_family="social.question.captured_bandit",
+            templates=[
+                "I only carried what I was paid to carry. The mark on it is the part you should fear.",
+                "I did not choose the mark. I was paid to move it, and that should worry you more.",
+                "The coin was not mine. Whoever stamped it wanted the trail seen by the right eyes.",
+            ],
+            facts={"dialogue": "captured_bandit"},
+        )
+
+    if action_id.startswith("confront_") or action_id.startswith("counter_"):
+        return _bounded_social_npc_line(
+            row,
+            speaker=speaker,
+            variant_family="social.confront",
+            templates=[
+                "Careful. If you are going to press this, make sure the proof is already in other hands.",
+                "Press them, but do it with proof secured somewhere they cannot reach.",
+                "A confrontation only works if the evidence survives the first denial.",
+            ],
+            facts={"dialogue": "confrontation"},
+        )
+
+    if "magistrate" in speaker.lower() or "arrest" in text:
+        return _bounded_social_npc_line(
+            row,
+            speaker=speaker,
+            variant_family="social.magistrate.proof",
+            templates=[
+                "Bring me proof that holds under daylight, and I will act on it.",
+                "Give me evidence that survives public scrutiny, and I can move openly.",
+                "I need proof that cannot be dismissed as tavern panic before I put law behind it.",
+            ],
+            facts={"authority": "magistrate"},
+        )
+
+    if "teamster" in speaker.lower():
+        return _bounded_social_npc_line(
+            row,
+            speaker=speaker,
+            variant_family="social.teamster.road",
+            templates=[
+                "If the east road is being watched, the wagons need to move in pairs or not at all.",
+                "A watched road means paired wagons, extra eyes, or no run at all.",
+                "If watchers are on the east road, one wagon alone is an invitation.",
+            ],
+            facts={"road": "teamster_warning"},
+        )
+
+    if "report" in text or "proof" in text or "evidence" in text:
+        return _bounded_social_npc_line(
+            row,
+            speaker=speaker,
+            variant_family="social.report.evidence",
+            templates=[
+                "That is something we can act on. Tell me exactly where it points next.",
+                "That gives us more than rumor. Now we follow the part that names someone.",
+                "Good. Proof narrows the road; show me which direction it leaves open.",
+                "Then we stop circling guesses and follow the strongest mark.",
+                "That is useful because it can be tested. Tell me the next verifiable step.",
+            ],
+            facts={"dialogue": "evidence_report"},
+        )
+
+    if "ask" in text or "question" in text:
+        return _bounded_social_npc_line(
+            row,
+            speaker=speaker,
+            variant_family="social.ask.generic",
+            templates=[
+                "Ask it plainly, and I will answer what I know.",
+                "Put the question plainly, and I will keep to what I know.",
+                "Ask straight, and I will not dress the answer up.",
+                "Name what you need answered, and I will stay with the facts.",
+                "Ask the point directly; I will not chase rumors around it.",
+            ],
+            facts={"dialogue": "generic_question"},
+        )
+
+    if "confront" in text:
+        return _bounded_social_npc_line(
+            row,
+            speaker=speaker,
+            variant_family="social.confront.accusation",
+            templates=[
+                "Careful. Accusations like that need proof, not just nerve.",
+                "If you confront them, carry proof strong enough to outlast denial.",
+                "Nerve opens the door, but proof keeps it from slamming shut.",
+            ],
+            facts={"dialogue": "accusation"},
+        )
+
+    if "tell" in text:
+        return _bounded_social_npc_line(
+            row,
+            speaker=speaker,
+            variant_family="social.tell.generic",
+            templates=[
+                "Then we should move before someone else decides the next step for us.",
+                "Then say it clearly and we decide what changes because of it.",
+                "If that is the truth of it, we need to act before it cools.",
+            ],
+            facts={"dialogue": "tell"},
+        )
+
+    return _bounded_social_npc_line(
+        row,
+        speaker=speaker,
+        variant_family="social.direction.generic",
+        templates=[
+            "That gives us a direction. Now we need the next solid piece of proof.",
+            "That points somewhere useful. The next step is finding what confirms it.",
+            "It is a direction, not an answer yet. We need the next hard piece.",
+            "Then we follow the part that can be checked, not the part that merely sounds right.",
+        ],
+        facts={"dialogue": "direction"},
+    )
+
+
+def _sync_selected_narration_npc_to_top_level(row: Dict[str, Any]) -> Dict[str, Any]:
+    row = dict(_safe_dict(row))
+
+    existing_npc = _safe_dict(row.get("npc"))
+    existing_speaker = _safe_str(row.get("npc_speaker") or existing_npc.get("speaker"))
+    existing_line = _safe_str(row.get("npc_line") or existing_npc.get("line"))
+
+    if existing_speaker and existing_line:
+        row["npc"] = {
+            "speaker": existing_speaker,
+            "line": existing_line,
+        }
+        row["npc_speaker"] = existing_speaker
+        row["npc_line"] = existing_line
+        return row
+
+    selected = _safe_dict(
+        row.get("selected_narration")
+        or row.get("selected_output")
+        or row.get("resolved_narration_payload")
+        or row.get("narration_payload")
+        or row.get("structured_narration")
+    )
+    selected_npc = _safe_dict(selected.get("npc"))
+
+    selected_speaker = _safe_str(selected_npc.get("speaker"))
+    selected_line = _safe_str(selected_npc.get("line"))
+
+    if not selected_speaker or not selected_line:
+        return row
+
+    npc = {
+        "speaker": selected_speaker,
+        "line": selected_line,
+    }
+
+    row["npc"] = npc
+    row["npc_speaker"] = selected_speaker
+    row["npc_line"] = selected_line
+    row["top_level_npc_sync_applied"] = True
+    row["top_level_npc_sync_source"] = "selected_narration.npc"
+
+    # Keep all narration payload aliases consistent.
+    selected["npc"] = npc
+    row["selected_narration"] = selected
+    row["selected_output"] = selected
+    row["resolved_narration_payload"] = selected
+    row["narration_payload"] = selected
+    row["structured_narration"] = selected
+
+    return row
+
+
+def _ensure_social_npc_line_coverage(row: Dict[str, Any]) -> Dict[str, Any]:
+    row = dict(_safe_dict(row))
+
+    if row.get("direct_graph_display_override"):
+        return row
+
+    category = _classify_visible_action_category(row)
+    direct = _safe_dict(row.get("direct_graph_action_completion"))
+    action_id = _safe_str(
+        direct.get("action_id")
+        or row.get("direct_graph_execution_kind")
+        or row.get("direct_graph_canonical_action_id")
+    )
+
+    socialish_action = (
+        action_id.startswith("ask_")
+        or action_id.startswith("report_")
+        or action_id.startswith("warn_")
+        or action_id.startswith("tell_")
+        or action_id.startswith("question_")
+        or action_id.startswith("confront_")
+        or action_id.startswith("counter_")
+        or action_id.startswith("return_")
+        or action_id.startswith("choose_")
+    )
+
+    if category not in {"social", "evidence"} and not socialish_action:
+        return row
+
+    existing_line = _safe_str(row.get("npc_line") or _safe_dict(row.get("npc")).get("line"))
+    if existing_line:
+        return row
+
+    npc = _deterministic_social_npc_line(row)
+    if not npc:
+        return row
+
+    row["npc"] = npc
+    row["npc_speaker"] = _safe_str(npc.get("speaker"))
+    row["npc_line"] = _safe_str(npc.get("line"))
+    row["npc_line_fallback_applied"] = True
+    row["npc_line_fallback_source"] = "deterministic_social_graph_line"
+
+    selected = dict(_safe_dict(row.get("selected_narration") or row.get("selected_output")))
+    selected["npc"] = npc
+    selected["dialogue_source"] = "deterministic_social_graph_line"
+    row["selected_narration"] = selected
+    row["selected_output"] = selected
+    row["resolved_narration_payload"] = selected
+    row["narration_payload"] = selected
+    row["structured_narration"] = selected
+
+    return row
+
+
+_DIRECT_GRAPH_COMBAT_MECHANICS = {
+    "combat_started",
+    "combat_resolved",
+    "xp_gain",
+}
+
+
+_DIRECT_GRAPH_EXPLICIT_COMBAT_ACTION_IDS = {
+    "protect_wagon_or_lure_bandits",
+    "ambush_bandits",
+    "fight_bandit_scouts",
+    "fight_bandits",
+    "defeat_bandit_scouts",
+    "resolve_bandit_ambush",
+}
+
+
+_DIRECT_GRAPH_NONCOMBAT_ACTION_IDS = {
+    "report_findings_to_bran",
+    "warn_garran",
+    "tell_garran_about_ambush",
+    "scout_quarry_road",
+    "spot_bridge_watchers",
+    "choose_ambush_response",
+    "question_captured_bandit",
+    "search_bandit_satchel",
+    "return_to_bran_with_proof",
+    "return_marked_coin_proof",
+    "ask_bran_about_witness",
+    "ask_bran_who_saw_witness",
+    "question_bran_about_traveler",
+    "search_for_witness",
+    "return_to_allies_with_voss_proof",
+    "counter_voss_intimidation",
+    "detect_safehouse_watchers",
+    "prepare_safehouse_defense",
+    "scout_east_road_pressure_points",
+    "scout_ridge_hideout",
+    "intercept_veska_courier",
+    "question_veska_courier",
+    "recover_veska_route_map",
+    "confront_route_pressure_agents",
+    "warn_east_road_teamsters",
+    "return_with_veska_name",
+    "plan_veska_pursuit",
+}
+
+
+def _is_direct_graph_explicit_combat_action_id(action_id: str) -> bool:
+    return _safe_str(action_id) in _DIRECT_GRAPH_EXPLICIT_COMBAT_ACTION_IDS
+
+
+def _is_direct_graph_known_noncombat_action_id(action_id: str) -> bool:
+    action_id_s = _safe_str(action_id)
+    if action_id_s in _DIRECT_GRAPH_NONCOMBAT_ACTION_IDS:
+        return True
+
+    noncombat_prefixes = (
+        "ask_",
+        "report_",
+        "warn_",
+        "tell_",
+        "question_",
+        "search_",
+        "scout_",
+        "spot_",
+        "detect_",
+        "prepare_",
+        "return_",
+        "recover_",
+        "confront_",
+        "counter_",
+        "plan_",
+        "choose_",
+        "read_",
+        "decipher_",
+        "inspect_",
+    )
+
+    return any(action_id_s.startswith(prefix) for prefix in noncombat_prefixes)
+
+
+def _strip_combat_mechanics_from_noncombat_direct_graph_row(row: Dict[str, Any]) -> Dict[str, Any]:
+    row = dict(_safe_dict(row))
+    direct = dict(_safe_dict(row.get("direct_graph_action_completion")))
+    action_id = _safe_str(direct.get("action_id") or row.get("direct_graph_execution_kind"))
+
+    if not action_id:
+        return row
+
+    if _is_direct_graph_explicit_combat_action_id(action_id):
+        return row
+
+    if not _is_direct_graph_known_noncombat_action_id(action_id):
+        return row
+
+    def _clean_list(values: Any) -> List[Any]:
+        return [
+            value
+            for value in _safe_list(values)
+            if _safe_str(value) not in _DIRECT_GRAPH_COMBAT_MECHANICS
+        ]
+
+    direct["mechanics"] = _clean_list(direct.get("mechanics"))
+    direct["changed_parts"] = _clean_list(direct.get("changed_parts"))
+    row["direct_graph_action_completion"] = direct
+
+    row["mechanics_covered_this_turn"] = _clean_list(row.get("mechanics_covered_this_turn"))
+    row["direct_graph_changed_parts"] = _clean_list(row.get("direct_graph_changed_parts"))
+
+    cleaned_hooks = []
+    changed = False
+    for hook in _safe_list(row.get("fired_hooks")):
+        hook = dict(_safe_dict(hook))
+        if _safe_str(hook.get("kind")) == "graph_direct_completion":
+            hook["mechanics"] = _clean_list(hook.get("mechanics"))
+            hook["changed_parts"] = _clean_list(hook.get("changed_parts"))
+            effects = dict(_safe_dict(hook.get("effects")))
+            flags = dict(_safe_dict(effects.get("flags")))
+            for mechanic_name in _DIRECT_GRAPH_COMBAT_MECHANICS:
+                flags.pop(f"mechanic:{mechanic_name}", None)
+            effects["flags"] = flags
+            hook["effects"] = effects
+            changed = True
+        cleaned_hooks.append(hook)
+
+    if changed:
+        row["fired_hooks"] = cleaned_hooks
+        row["direct_graph_noncombat_mechanics_cleanup_applied"] = True
+        row["direct_graph_noncombat_mechanics_cleanup_action_id"] = action_id
+
+    return row
+
+
+def _apply_direct_graph_display_quality_pass(row: Dict[str, Any]) -> Dict[str, Any]:
+    row = dict(_safe_dict(row))
+
+    row = _sync_direct_graph_canonical_action_display(row)
+    row = _cleanup_bad_generic_fallback_narration(row)
+    row = _ensure_social_npc_line_coverage(row)
+    row = _sync_selected_narration_npc_to_top_level(row)
+    row = _strip_combat_mechanics_from_noncombat_direct_graph_row(row)
+
+    return row
+
+
+def _direct_complete_graph_action_from_command(
+    *,
+    command: str,
+    row: Dict[str, Any],

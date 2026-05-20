@@ -1,0 +1,925 @@
+    breakdown["format_version"] = "n11620_repair_pressure_breakdown_v4"
+    llm_summary["repair_pressure_breakdown"] = breakdown
+    summary["llm_prompt_and_fallback_summary"] = llm_summary
+
+
+def _build_llm_prompt_and_fallback_summary(rows: List[Dict[str, Any]]) -> Dict[str, Any]:
+    summary = _N11620_PREVIOUS_BUILD_LLM_PROMPT_AND_FALLBACK_SUMMARY(rows)
+    breakdown = dict(_safe_dict(summary.get("repair_pressure_breakdown")))
+    breakdown["repair_pressure_by_category"] = _n11620_repair_pressure_by_category(rows)
+    unsupported_count = sum(
+        1
+        for row in _safe_list(rows)
+        if _n11620_row_has_unsupported_combat_claim_suppressed(_safe_dict(row))
+    )
+    breakdown["unsupported_combat_claim_suppressed_count"] = unsupported_count
+    dominant = dict(_safe_dict(breakdown.get("dominant_sources")))
+    dominant["unsupported_combat_claim_suppressed"] = unsupported_count
+    breakdown["dominant_sources"] = dominant
+    breakdown["format_version"] = "n11620_repair_pressure_breakdown_v4"
+    summary["repair_pressure_breakdown"] = breakdown
+    summary["unsupported_combat_claim_cleanup"] = {
+        "format_version": "unsupported_combat_claim_cleanup_v1",
+        "suppressed_count": unsupported_count,
+        "ok": unsupported_count <= max(10, int(summary.get("turn_count") or 0) // 10),
+    }
+    return summary
+
+
+def _force_final_autoplay_health(summary: Dict[str, Any]) -> Dict[str, Any]:
+    health = _N11620_PREVIOUS_FORCE_FINAL_AUTOPLAY_HEALTH(summary)
+    rows = _safe_list(_safe_dict(summary).get("final_transcript_rows") or _safe_dict(summary).get("transcript_rows") or [])
+    _n11620_update_repair_pressure_breakdown(rows, summary)
+    llm_summary = _safe_dict(_safe_dict(summary).get("llm_prompt_and_fallback_summary"))
+    cleanup = _safe_dict(llm_summary.get("unsupported_combat_claim_cleanup"))
+    health = dict(_safe_dict(health))
+    health["unsupported_combat_claim_suppressed_count"] = int(cleanup.get("suppressed_count") or 0)
+    return health
+
+
+
+# N116.21 — Pre-Selection Unsupported Combat Sanitizer + Repair Category Attribution
+# N116.20 added provider prompt/schema guidance, but selected-output grounding
+# could still see an unsupported-combat primary candidate and choose a hard
+# deterministic fallback.  This layer sanitizes unsupported combat claims before
+# grounding summaries are built, preserving safe provider-derived text when any
+# non-combat sentence remains.  It also ensures repair-pressure-by-category is
+# populated even when final transcript rows are not embedded in summary.json.
+
+_N11621_PREVIOUS_BUILD_NARRATION_GROUNDING_SUMMARY = _build_narration_grounding_summary
+_N11621_PREVIOUS_BUILD_SELECTED_OUTPUT_GROUNDING_HEALTH = _build_selected_output_grounding_health
+_N11621_PREVIOUS_BUILD_LLM_PROMPT_AND_FALLBACK_SUMMARY = _build_llm_prompt_and_fallback_summary
+_N11621_PREVIOUS_FORCE_FINAL_AUTOPLAY_HEALTH = _force_final_autoplay_health
+
+_N11621_UNSUPPORTED_COMBAT_CODES = {
+    "unsupported_combat_claim",
+    "unsupported_damage_claim",
+    "unsupported_defeat_claim",
+    "unsupported_combat_resolution_claim",
+}
+
+
+def _n11621_violation_codes(validation: Dict[str, Any]) -> List[str]:
+    validation = _safe_dict(validation)
+    codes: List[str] = []
+    for key in ("violations", "primary_violations"):
+        for item in _safe_list(validation.get(key)):
+            code = _safe_str(_safe_dict(item).get("code") or item)
+            if code and code not in codes:
+                codes.append(code)
+    return codes
+
+
+def _n11621_validation_has_unsupported_combat(validation: Dict[str, Any]) -> bool:
+    return any(code in _N11621_UNSUPPORTED_COMBAT_CODES for code in _n11621_violation_codes(validation))
+
+
+def _n11621_turn_has_authoritative_combat_support(row: Dict[str, Any]) -> bool:
+    row = _safe_dict(row)
+    if _turn_has_combat_support(row):
+        return True
+    contract_helper = globals().get("_n11620_turn_contract_supports_combat")
+    if not callable(contract_helper):
+        contract_helper = _n11621_turn_contract_supports_combat
+    for key in ("turn_contract", "result", "turn_result", "background_presentation_result"):
+        container = _safe_dict(row.get(key))
+        if contract_helper(container):
+            return True
+    return False
+
+
+def _n11621_sentence_split(text: str) -> List[str]:
+    import re
+    parts = re.split(r"(?<=[.!?])\s+", _safe_str(text).strip())
+    return [part.strip() for part in parts if part and part.strip()]
+
+
+def _n11621_safe_provider_derived_text(row: Dict[str, Any]) -> tuple[str, Dict[str, Any]]:
+    row = _safe_dict(row)
+    background = _safe_dict(row.get("background_presentation_result"))
+    selected = _safe_dict(row.get("selected_output") or row.get("selected_narration"))
+    npc = _safe_dict(row.get("npc"))
+    candidates = [
+        row.get("display_narration"),
+        row.get("visible_narration"),
+        row.get("selected_narration_text"),
+        row.get("narration"),
+        selected.get("narration"),
+        background.get("narration"),
+        npc.get("line"),
+        selected.get("line"),
+        _safe_dict(selected.get("npc")).get("line"),
+        _safe_dict(background.get("npc")).get("line"),
+    ]
+    original_parts = [_safe_str(item).strip() for item in candidates if _safe_str(item).strip()]
+    original_text = " ".join(original_parts)
+    kept: List[str] = []
+    dropped: List[str] = []
+    for sentence in _n11621_sentence_split(original_text):
+        if _n11621_text_has_combat_claim(sentence) or _presentation_has_combat_claim(sentence):
+            dropped.append(sentence)
+            continue
+        if sentence not in kept:
+            kept.append(sentence)
+    if kept:
+        text = " ".join(kept)[:1000]
+        return text, {
+            "source": "provider_text_combat_sentence_sanitized",
+            "provider_text_reused": True,
+            "dropped_sentence_count": len(dropped),
+            "dropped_sentence_preview": dropped[:3],
+        }
+    fallback = _build_category_compatible_presentation_fallback(row)
+    return fallback, {
+        "source": "provider_text_unusable_safe_category_fallback",
+        "provider_text_reused": False,
+        "dropped_sentence_count": len(dropped),
+        "dropped_sentence_preview": dropped[:3],
+    }
+
+
+def _n11621_mark_grounding_as_llm_safe_fallback(
+    row: Dict[str, Any],
+    *,
+    validation: Dict[str, Any],
+    safe_text: str,
+    diagnostic: Dict[str, Any],
+) -> Dict[str, Any]:
+    row = dict(_safe_dict(row))
+    validation = dict(_safe_dict(validation))
+    raw_codes = _n11621_violation_codes(validation)
+    primary_violations = _safe_list(validation.get("primary_violations")) or _safe_list(validation.get("violations"))
+    validation["ok"] = True
+    validation["fallback_used"] = True
+    validation["selected_candidate"] = "llm_safe_fallback"
+    validation["fallback_source"] = "llm_safe_fallback"
+    validation["violations"] = []
+    validation["preselection_suppressed_violations"] = [
+        code for code in raw_codes if code in _N11621_UNSUPPORTED_COMBAT_CODES
+    ]
+    validation["primary_violations"] = primary_violations
+    validation["unsupported_combat_claim_preselection_suppressed"] = True
+    validation["unsupported_combat_claim_sanitizer"] = diagnostic
+
+    row["narration_grounding_validation"] = validation
+    row["narration_grounding_ok"] = True
+    row["narration_grounding_fallback_used"] = True
+    row["narration_grounding_selected_candidate"] = "llm_safe_fallback"
+    row["narration_grounding_fallback_source"] = "llm_safe_fallback"
+    row["narration_grounding_violation_codes"] = []
+    row["narration_grounding_primary_violation_codes"] = validation["preselection_suppressed_violations"]
+
+    row["unsupported_combat_claim_preselection_suppressed"] = True
+    row["unsupported_combat_claim_raw_violation_codes"] = validation["preselection_suppressed_violations"]
+    row["unsupported_combat_claim_sanitizer"] = diagnostic
+
+    row["narration"] = safe_text
+    row["display_narration"] = safe_text
+    row["visible_narration"] = safe_text
+    row["selected_narration_text"] = safe_text
+
+    selected = dict(_safe_dict(row.get("selected_output") or row.get("selected_narration")))
+    selected["narration"] = safe_text
+    selected["source"] = "llm_safe_fallback"
+    selected["fallback_source"] = "llm_safe_fallback"
+    selected["unsupported_combat_claim_preselection_suppressed"] = True
+    selected["unsupported_combat_claim_sanitizer"] = diagnostic
+    row["selected_output"] = selected
+    row["selected_narration"] = selected
+    row["resolved_narration_payload"] = selected
+    row["narration_payload"] = selected
+    row["structured_narration"] = selected
+
+    relevance = dict(_safe_dict(row.get("dialogue_action_relevance")))
+    if relevance:
+        relevance["repaired"] = True
+        relevance["fallback_applied"] = True
+        relevance["fallback_source"] = "llm_safe_fallback"
+        relevance["reason"] = "unsupported_combat_claim_preselection_suppressed"
+        row["dialogue_action_relevance"] = relevance
+        row["dialogue_action_relevance_repaired"] = True
+
+    row["presentation_repair_tier"] = "hard_grounding"
+    row["presentation_repair_type"] = "unsupported_combat_claim_preselection_suppressed"
+    row["visible_text_replaced"] = False
+    row["hard_grounding_repair"] = False
+    row["soft_classification_repair"] = bool(row.get("soft_classification_repair", False))
+    row["presentation_status"] = "attached_llm_safe_fallback_preselection_sanitized"
+    return row
+
+
+def _n11621_sanitize_unsupported_combat_row(row: Dict[str, Any]) -> Dict[str, Any]:
+    row = dict(_safe_dict(row))
+    validation = _safe_dict(row.get("narration_grounding_validation"))
+    if not validation:
+        validation = _extract_grounding_validation_from_any(row)
+    if not validation:
+        return row
+    if not _n11621_validation_has_unsupported_combat(validation):
+        return row
+    if _n11621_turn_has_authoritative_combat_support(row):
+        return row
+    safe_text, diagnostic = _n11621_safe_provider_derived_text(row)
+    diagnostic = {
+        **diagnostic,
+        "format_version": "n11621_unsupported_combat_preselection_sanitizer_v1",
+        "reason": "provider_claimed_combat_outcome_without_authoritative_turn_contract",
+    }
+    return _n11621_mark_grounding_as_llm_safe_fallback(
+        row,
+        validation=validation,
+        safe_text=safe_text,
+        diagnostic=diagnostic,
+    )
+
+
+def _n11621_sanitize_rows_before_grounding_summary(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    sanitized: List[Dict[str, Any]] = []
+    for row_any in _safe_list(rows):
+        row = _safe_dict(row_any)
+        sanitized.append(_n11621_sanitize_unsupported_combat_row(row) if row else row)
+    return sanitized
+
+
+def _build_narration_grounding_summary(transcript: List[Dict[str, Any]]) -> Dict[str, Any]:
+    sanitized_rows = _n11621_sanitize_rows_before_grounding_summary(transcript)
+    if isinstance(transcript, list):
+        transcript[:] = sanitized_rows
+    summary = _N11621_PREVIOUS_BUILD_NARRATION_GROUNDING_SUMMARY(sanitized_rows)
+    suppressed_count = sum(
+        1 for row in _safe_list(sanitized_rows)
+        if _safe_dict(row).get("unsupported_combat_claim_preselection_suppressed")
+    )
+    raw_count = suppressed_count + int(_safe_dict(summary.get("violation_counts")).get("unsupported_combat_claim") or 0)
+    fallback_counts = dict(_safe_dict(summary.get("fallback_source_counts")))
+    selected_counts = dict(_safe_dict(summary.get("selected_candidate_counts")))
+    if suppressed_count:
+        fallback_counts["llm_safe_fallback"] = int(fallback_counts.get("llm_safe_fallback") or 0) + suppressed_count
+        fallback_counts["deterministic_fallback"] = max(0, int(fallback_counts.get("deterministic_fallback") or 0) - suppressed_count)
+        selected_counts["llm_safe_fallback"] = int(selected_counts.get("llm_safe_fallback") or 0) + suppressed_count
+        selected_counts["deterministic_fallback"] = max(0, int(selected_counts.get("deterministic_fallback") or 0) - suppressed_count)
+        violation_counts = dict(_safe_dict(summary.get("violation_counts")))
+        violation_counts.pop("unsupported_combat_claim", None)
+        summary["violation_counts"] = dict(sorted(violation_counts.items()))
+        summary["invalid_count"] = max(0, int(summary.get("invalid_count") or 0) - suppressed_count)
+        summary["ok"] = int(summary.get("invalid_count") or 0) == 0
+    summary["fallback_source_counts"] = dict(sorted(fallback_counts.items()))
+    summary["selected_candidate_counts"] = dict(sorted(selected_counts.items()))
+    summary["unsupported_combat_claim_preselection_suppressed_count"] = suppressed_count
+    summary["raw_unsupported_combat_claim_count"] = raw_count
+    summary["unsupported_combat_claim_preselection_suppression_match_ok"] = (suppressed_count == raw_count)
+    summary["format_version"] = "narration_grounding_summary_v2_n11621"
+    return summary
+
+
+def _build_selected_output_grounding_health(
+    narration_grounding_summary: Dict[str, Any],
+    *,
+    requested_turns: int,
+) -> Dict[str, Any]:
+    health = _N11621_PREVIOUS_BUILD_SELECTED_OUTPUT_GROUNDING_HEALTH(
+        narration_grounding_summary,
+        requested_turns=requested_turns,
+    )
+    summary = _safe_dict(narration_grounding_summary)
+    suppressed = int(summary.get("unsupported_combat_claim_preselection_suppressed_count") or 0)
+    raw_unsupported = int(summary.get("raw_unsupported_combat_claim_count") or 0)
+    health = dict(_safe_dict(health))
+    health["unsupported_combat_claim_preselection_suppressed_count"] = suppressed
+    health["raw_unsupported_combat_claim_count"] = raw_unsupported
+    health["unsupported_combat_claim_preselection_suppression_match_ok"] = (suppressed == raw_unsupported)
+    if suppressed:
+        fallback_counts = dict(_safe_dict(health.get("fallback_source_counts")))
+        selected_counts = dict(_safe_dict(health.get("selected_candidate_counts")))
+        fallback_counts["llm_safe_fallback"] = int(fallback_counts.get("llm_safe_fallback") or 0) + suppressed
+        fallback_counts["deterministic_fallback"] = max(0, int(fallback_counts.get("deterministic_fallback") or 0) - suppressed)
+        selected_counts["llm_safe_fallback"] = int(selected_counts.get("llm_safe_fallback") or 0) + suppressed
+        selected_counts["deterministic_fallback"] = max(0, int(selected_counts.get("deterministic_fallback") or 0) - suppressed)
+        health["fallback_source_counts"] = dict(sorted(fallback_counts.items()))
+        health["selected_candidate_counts"] = dict(sorted(selected_counts.items()))
+        health["deterministic_fallback_count"] = int(fallback_counts.get("deterministic_fallback") or 0)
+        denominator = max(1, int(health.get("checked_count") or requested_turns or 1))
+        health["deterministic_fallback_rate"] = health["deterministic_fallback_count"] / denominator
+        health["llm_safe_fallback_count"] = int(fallback_counts.get("llm_safe_fallback") or 0)
+        violation_counts = dict(_safe_dict(health.get("violation_counts")))
+        violation_counts.pop("unsupported_combat_claim", None)
+        health["violation_counts"] = dict(sorted(violation_counts.items()))
+        health["raw_invalid_count"] = max(0, int(health.get("raw_invalid_count") or 0) - suppressed)
+        health["ok"] = bool(health.get("ok", True)) and (suppressed == raw_unsupported)
+    return health
+
+
+def _n11621_category_bucket_for_action(action_text: Any) -> str:
+    text = _safe_str(action_text).lower()
+    if any(term in text for term in ("attack", "fight", "strike", "defend", "combat", "ambush")):
+        return "combat"
+    if any(term in text for term in ("travel", "follow", "road", "route", "warehouse", "gate", "leave", "go to")):
+        return "travel"
+    if any(term in text for term in ("inspect", "search", "study", "review", "decode", "evidence", "proof", "ledger", "orders", "manifest", "marks")):
+        return "evidence"
+    if any(term in text for term in ("ask", "tell", "warn", "report", "question", "confront", "present")):
+        return "dialogue"
+    return "general"
+
+
+def _n11621_repair_pressure_by_category_from_summary(summary: Dict[str, Any], rows: List[Dict[str, Any]] | None = None) -> Dict[str, Any]:
+    rows = _safe_list(rows)
+    if rows:
+        base = _n11620_repair_pressure_by_category(rows)
+        if _safe_dict(base.get("categories")):
+            base["format_version"] = "n11621_repair_pressure_by_category_v2"
+            base["source"] = "final_transcript_rows"
+            return base
+
+    categories: Dict[str, Dict[str, Any]] = {}
+    dialogue_summary = _safe_dict(summary.get("dialogue_action_relevance_summary"))
+    for category, count in _safe_dict(dialogue_summary.get("by_action_kind")).items():
+        bucket = categories.setdefault(
+            _safe_str(category) or "unknown",
+            {
+                "turn_count": int(count or 0),
+                "metadata_repaired_count": 0,
+                "category_reclassified_count": 0,
+                "dialogue_relevance_repaired_count": 0,
+                "unsupported_combat_claim_suppressed_count": 0,
+                "service_resolver_veto_count": 0,
+                "example_turns": [],
+            },
+        )
+        bucket["turn_count"] = max(bucket["turn_count"], int(count or 0))
+
+    for example in _safe_list(dialogue_summary.get("examples")):
+        example = _safe_dict(example)
+        relevance = _safe_dict(example.get("relevance"))
+        action = _safe_str(example.get("player_action"))
+        category = _safe_str(relevance.get("validated_presentation_category")) or _n11621_category_bucket_for_action(action)
+        bucket = categories.setdefault(
+            category,
+            {
+                "turn_count": 0,
+                "metadata_repaired_count": 0,
+                "category_reclassified_count": 0,
+                "dialogue_relevance_repaired_count": 0,
+                "unsupported_combat_claim_suppressed_count": 0,
+                "service_resolver_veto_count": 0,
+                "example_turns": [],
+            },
+        )
+        if example.get("repaired") or relevance.get("presentation_intent_sync_repaired"):
+            bucket["dialogue_relevance_repaired_count"] += 1
+        if len(bucket["example_turns"]) < 8:
+            bucket["example_turns"].append({
+                "turn_index": int(example.get("turn_index") or 0),
+                "player_action": action[:220],
+            })
+
+    attachment = _safe_dict(summary.get("background_presentation_attachment_summary"))
+    attachment_events = _safe_list(summary.get("background_presentation_attachment_events"))
+    if attachment or attachment_events:
+        bucket = categories.setdefault(
+            "provider_attachment_all",
+            {
+                "turn_count": int(attachment.get("attached_row_count") or len(attachment_events) or 0),
+                "metadata_repaired_count": 0,
+                "category_reclassified_count": 0,
+                "dialogue_relevance_repaired_count": 0,
+                "unsupported_combat_claim_suppressed_count": 0,
+                "service_resolver_veto_count": 0,
+                "example_turns": [],
+            },
+        )
+        bucket["turn_count"] = max(bucket["turn_count"], int(attachment.get("attached_row_count") or len(attachment_events) or 0))
+        bucket["metadata_repaired_count"] = int(attachment.get("metadata_repaired_count") or 0)
+        bucket["category_reclassified_count"] = int(attachment.get("category_reclassified_count") or 0)
+        for event in attachment_events[:8]:
+            event = _safe_dict(event)
+            bucket["example_turns"].append({
+                "turn_index": int(event.get("turn_index") or event.get("source_turn") or 0),
+                "player_action": "background attachment event",
+            })
+
+    selected_health = _safe_dict(summary.get("selected_output_grounding_health"))
+    unsupported = int(selected_health.get("unsupported_combat_claim_preselection_suppressed_count") or 0)
+    if unsupported:
+        bucket = categories.setdefault(
+            "combat",
+            {
+                "turn_count": int(_safe_dict(dialogue_summary.get("by_action_kind")).get("combat") or 0),
+                "metadata_repaired_count": 0,
+                "category_reclassified_count": 0,
+                "dialogue_relevance_repaired_count": 0,
+                "unsupported_combat_claim_suppressed_count": 0,
+                "service_resolver_veto_count": 0,
+                "example_turns": [],
+            },
+        )
+        bucket["unsupported_combat_claim_suppressed_count"] = unsupported
+
+    for bucket in categories.values():
+        turns = max(1, int(bucket.get("turn_count") or 0))
+        bucket["metadata_repaired_rate"] = round(int(bucket.get("metadata_repaired_count") or 0) / turns, 4)
+        bucket["category_reclassified_rate"] = round(int(bucket.get("category_reclassified_count") or 0) / turns, 4)
+        bucket["dialogue_relevance_repaired_rate"] = round(int(bucket.get("dialogue_relevance_repaired_count") or 0) / turns, 4)
+        bucket["unsupported_combat_claim_suppressed_rate"] = round(int(bucket.get("unsupported_combat_claim_suppressed_count") or 0) / turns, 4)
+        bucket["service_resolver_veto_rate"] = round(int(bucket.get("service_resolver_veto_count") or 0) / turns, 4)
+
+    return {
+        "format_version": "n11621_repair_pressure_by_category_v2",
+        "source": "summary_artifacts_and_attachment_events",
+        "categories": categories,
+        "category_count": len(categories),
+    }
+
+
+def _n11621_update_repair_pressure_breakdown(summary: Dict[str, Any], rows: List[Dict[str, Any]] | None = None) -> None:
+    summary = _safe_dict(summary)
+    llm_summary = _safe_dict(summary.get("llm_prompt_and_fallback_summary"))
+    if not llm_summary:
+        return
+    breakdown = dict(_safe_dict(llm_summary.get("repair_pressure_breakdown")))
+    by_category = _n11621_repair_pressure_by_category_from_summary(summary, rows)
+    breakdown["repair_pressure_by_category"] = by_category
+    selected_health = _safe_dict(summary.get("selected_output_grounding_health"))
+    suppressed = int(selected_health.get("unsupported_combat_claim_preselection_suppressed_count") or 0)
+    raw_unsupported = int(selected_health.get("raw_unsupported_combat_claim_count") or 0)
+    breakdown["unsupported_combat_claim_preselection_suppressed_count"] = suppressed
+    breakdown["raw_unsupported_combat_claim_count"] = raw_unsupported
+    breakdown["unsupported_combat_claim_preselection_suppression_match_ok"] = (suppressed == raw_unsupported)
+    dominant = dict(_safe_dict(breakdown.get("dominant_sources")))
+    dominant["unsupported_combat_claim_preselection_suppressed"] = suppressed
+    breakdown["dominant_sources"] = dominant
+    breakdown["format_version"] = "n11621_repair_pressure_breakdown_v5"
+    llm_summary["repair_pressure_breakdown"] = breakdown
+    llm_summary["unsupported_combat_claim_cleanup"] = {
+        "format_version": "unsupported_combat_claim_cleanup_v2_n11621",
+        "preselection_suppressed_count": suppressed,
+        "raw_unsupported_combat_claim_count": raw_unsupported,
+        "suppression_match_ok": suppressed == raw_unsupported,
+        "ok": suppressed == raw_unsupported,
+        "policy": "unsupported combat claims are sanitized into llm_safe_fallback before deterministic fallback selection",
+    }
+    summary["llm_prompt_and_fallback_summary"] = llm_summary
+
+
+def _build_llm_prompt_and_fallback_summary(rows: List[Dict[str, Any]]) -> Dict[str, Any]:
+    sanitized_rows = _n11621_sanitize_rows_before_grounding_summary(rows)
+    if isinstance(rows, list):
+        rows[:] = sanitized_rows
+    summary = _N11621_PREVIOUS_BUILD_LLM_PROMPT_AND_FALLBACK_SUMMARY(sanitized_rows)
+    pseudo_summary = {"llm_prompt_and_fallback_summary": summary}
+    _n11621_update_repair_pressure_breakdown(pseudo_summary, sanitized_rows)
+    return _safe_dict(pseudo_summary.get("llm_prompt_and_fallback_summary"))
+
+
+def _force_final_autoplay_health(summary: Dict[str, Any]) -> Dict[str, Any]:
+    summary = _safe_dict(summary)
+    rows = _safe_list(summary.get("final_transcript_rows") or summary.get("transcript_rows") or summary.get("transcript") or [])
+    if rows:
+        sanitized_rows = _n11621_sanitize_rows_before_grounding_summary(rows)
+        if isinstance(summary.get("final_transcript_rows"), list):
+            summary["final_transcript_rows"] = sanitized_rows
+        elif isinstance(summary.get("transcript_rows"), list):
+            summary["transcript_rows"] = sanitized_rows
+        elif isinstance(summary.get("transcript"), list):
+            summary["transcript"] = sanitized_rows
+    if summary.get("narration_grounding_summary"):
+        summary["selected_output_grounding_health"] = _build_selected_output_grounding_health(
+            _safe_dict(summary.get("narration_grounding_summary")),
+            requested_turns=int(summary.get("requested_turns") or summary.get("turns_executed") or 100),
+        )
+    _n11621_update_repair_pressure_breakdown(summary, rows)
+    health = _N11621_PREVIOUS_FORCE_FINAL_AUTOPLAY_HEALTH(summary)
+    selected_health = _safe_dict(summary.get("selected_output_grounding_health"))
+    cleanup = _safe_dict(_safe_dict(summary.get("llm_prompt_and_fallback_summary")).get("unsupported_combat_claim_cleanup"))
+    health = dict(_safe_dict(health))
+    health["unsupported_combat_claim_preselection_suppressed_count"] = int(selected_health.get("unsupported_combat_claim_preselection_suppressed_count") or 0)
+    health["raw_unsupported_combat_claim_count"] = int(selected_health.get("raw_unsupported_combat_claim_count") or 0)
+    health["unsupported_combat_claim_preselection_suppression_match_ok"] = bool(
+        selected_health.get("unsupported_combat_claim_preselection_suppression_match_ok", True)
+    )
+    if cleanup and not bool(cleanup.get("ok", True)):
+        health["ok"] = False
+        warnings = _safe_list(health.get("warnings"))
+        if "unsupported_combat_claim_preselection_suppression_mismatch" not in warnings:
+            warnings.append("unsupported_combat_claim_preselection_suppression_mismatch")
+        health["warnings"] = warnings
+        health["failed_gate_count"] = int(health.get("failed_gate_count") or 0) + 1
+    return health
+
+# =============================================================================
+# N117.2 — 1000-Turn Readiness Gap Hardening Report
+# =============================================================================
+# Keep the existing 100-turn readiness gates authoritative, but add a separate
+# 1000-turn candidate/gap report so scaffold coverage is not mistaken for real
+# endurance readiness.
+_N1172_PREVIOUS_BUILD_100_TURN_READINESS_SUMMARY = _build_100_turn_readiness_summary
+
+
+def _n1172_count_any(mapping: Dict[str, Any], *keys: str) -> int:
+    mapping = _safe_dict(mapping)
+    total = 0
+    for key in keys:
+        value = mapping.get(key)
+        if isinstance(value, bool):
+            total += 1 if value else 0
+            continue
+        try:
+            total += int(value or 0)
+        except Exception:
+            if isinstance(value, (list, tuple, set, dict)):
+                total += len(value)
+    return total
+
+
+def _n1172_float_any(mapping: Dict[str, Any], *keys: str) -> float:
+    mapping = _safe_dict(mapping)
+    for key in keys:
+        try:
+            value = mapping.get(key)
+            if value is not None:
+                return float(value or 0.0)
+        except Exception:
+            continue
+    return 0.0
+
+
+def _n1172_summary_from_args(summary: Dict[str, Any], explicit: Optional[Dict[str, Any]], key: str) -> Dict[str, Any]:
+    explicit_dict = _safe_dict(explicit)
+    if explicit_dict:
+        return explicit_dict
+    return _safe_dict(_safe_dict(summary).get(key))
+
+
+def _n1172_gate(ok: bool, *, value: Any, expected: str, message: str, severity: str = "advisory") -> Dict[str, Any]:
+    return {
+        "ok": bool(ok),
+        "severity": severity,
+        "value": value,
+        "expected": expected,
+        "message": message,
+    }
+
+
+def _n1172_transcript_growth_summary(summary: Dict[str, Any], transcript: List[Dict[str, Any]], requested_turns: int) -> Dict[str, Any]:
+    summary = _safe_dict(summary)
+    turns = max(1, int(summary.get("turns_executed") or len(_safe_list(transcript)) or requested_turns or 1))
+    explicit_bytes = int(
+        summary.get("full_transcript_json_bytes_estimate")
+        or summary.get("transcript_json_bytes_estimate")
+        or _safe_dict(summary.get("transcript_artifact_quality_summary")).get("full_transcript_json_bytes_estimate")
+        or 0
+    )
+    if explicit_bytes <= 0:
+        try:
+            explicit_bytes = len(json.dumps(_safe_list(transcript), ensure_ascii=False, default=str).encode("utf-8"))
+        except Exception:
+            explicit_bytes = 0
+    bytes_per_turn = float(explicit_bytes) / float(turns) if turns else 0.0
+    projected_1000 = int(bytes_per_turn * 1000.0) if bytes_per_turn else 0
+    # Advisory budget: keep full transcript artifacts under 750 MB for 1000-turn runs.
+    budget_1000 = 750 * 1024 * 1024
+    return {
+        "turns_sampled": turns,
+        "bytes_sampled": explicit_bytes,
+        "bytes_per_turn": round(bytes_per_turn, 2),
+        "projected_1000_turn_bytes": projected_1000,
+        "budget_1000_turn_bytes": budget_1000,
+        "ok": bool(projected_1000 <= budget_1000) if projected_1000 else True,
+    }
+
+
+def _n1172_build_1000_turn_readiness_gap_report(
+    *,
+    summary: Dict[str, Any],
+    transcript: List[Dict[str, Any]],
+    requested_turns: int,
+    hundred_turn_readiness: Dict[str, Any],
+    world_state_compression_summary: Optional[Dict[str, Any]] = None,
+    npc_agency_summary: Optional[Dict[str, Any]] = None,
+    economy_pressure_summary: Optional[Dict[str, Any]] = None,
+    combat_lifecycle_summary: Optional[Dict[str, Any]] = None,
+    faction_consequence_summary: Optional[Dict[str, Any]] = None,
+    dialogue_action_relevance_summary: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    summary = _safe_dict(summary)
+    transcript = _safe_list(transcript)
+    hundred_turn_readiness = _safe_dict(hundred_turn_readiness)
+    world_compression = _n1172_summary_from_args(summary, world_state_compression_summary, "world_state_compression_summary")
+    npc_agency = _n1172_summary_from_args(summary, npc_agency_summary, "npc_agency_summary")
+    economy_pressure = _n1172_summary_from_args(summary, economy_pressure_summary, "economy_pressure_summary")
+    combat_lifecycle = _n1172_summary_from_args(summary, combat_lifecycle_summary, "combat_lifecycle_summary")
+    faction_consequence = _n1172_summary_from_args(summary, faction_consequence_summary, "faction_consequence_summary")
+    dialogue_relevance = _n1172_summary_from_args(summary, dialogue_action_relevance_summary, "dialogue_action_relevance_summary")
+
+    compression_event_count = _n1172_count_any(world_compression, "compression_event_count", "event_count")
+    latest_state_budget = _safe_dict(world_compression.get("latest_state_budget"))
+    state_budget_ok = bool(latest_state_budget.get("ok", True))
+    memory_aging_count = _n1172_count_any(
+        world_compression,
+        "npc_memory_dropped_count",
+        "npc_memory_summarized_count",
+        "memory_dropped_count",
+        "memory_summarized_count",
+        "aged_memory_count",
+        "expired_memory_count",
+    )
+    compaction_count = _n1172_count_any(
+        world_compression,
+        "compacted_arc_count",
+        "compacted_faction_count",
+        "arc_history_compacted_count",
+        "faction_history_compacted_count",
+        "pressure_event_summarized_count",
+        "old_pressure_event_summarized_count",
+    )
+
+    schedule_event_count = _n1172_count_any(npc_agency, "schedule_event_count")
+    agency_event_count = _n1172_count_any(npc_agency, "agency_event_count", "autonomous_goal_event_count")
+    goal_count = _n1172_count_any(npc_agency, "autonomous_goal_count", "goal_count", "active_goal_count")
+    movement_count = _n1172_count_any(npc_agency, "movement_event_count", "location_movement_count", "schedule_event_count")
+
+    economy_event_count = _n1172_count_any(economy_pressure, "event_count")
+    recurring_expense_count = _n1172_count_any(economy_pressure, "recurring_expense_count", "upkeep_event_count", "paid_count")
+    stock_refresh_count = _n1172_count_any(economy_pressure, "stock_refresh_count", "merchant_stock_refresh_count")
+    scarcity_count = _n1172_count_any(economy_pressure, "scarcity_event_count", "price_variation_count", "location_price_modifier_count")
+
+    encounter_count = _n1172_count_any(combat_lifecycle, "encounter_count")
+    combat_event_count = _n1172_count_any(combat_lifecycle, "event_count")
+    round_event_count = _n1172_count_any(combat_lifecycle, "total_round_events", "round_event_count", "initiative_event_count")
+    resolved_encounter_count = _n1172_count_any(combat_lifecycle, "resolved_encounter_count")
+    injury_count = _n1172_count_any(combat_lifecycle, "injury_count")
+    direct_graph_combat_count = _n1172_count_any(combat_lifecycle, "direct_graph_combat_count")
+
+    faction_event_count = _n1172_count_any(faction_consequence, "event_count", "world_signal_count")
+    faction_compaction_count = _n1172_count_any(world_compression, "compacted_faction_count", "faction_history_compacted_count")
+    dialogue_repair_rate = _n1172_float_any(dialogue_relevance, "repair_rate", "mismatch_rate")
+    dialogue_repaired_count = _n1172_count_any(dialogue_relevance, "repaired_count")
+
+    growth = _n1172_transcript_growth_summary(summary, transcript, requested_turns)
+
+    gates = {
+        "compression_loop_present": _n1172_gate(
+            compression_event_count >= 1 and state_budget_ok,
+            value={
+                "compression_event_count": compression_event_count,
+                "latest_state_budget": latest_state_budget,
+            },
+            expected="compression events occur and state budget remains OK",
+            message="The long-run compression loop must be active before 1000-turn runs.",
+        ),
+        "memory_aging_real": _n1172_gate(
+            memory_aging_count >= 1,
+            value={
+                "memory_aging_count": memory_aging_count,
+                "npc_memory_dropped_count": world_compression.get("npc_memory_dropped_count"),
+                "npc_memory_summarized_count": world_compression.get("npc_memory_summarized_count"),
+            },
+            expected="old NPC memories are dropped or summarized by deterministic budget policy",
+            message="Memory aging is not yet proven; 1000-turn state may grow without bound.",
+        ),
+        "arc_faction_compaction_real": _n1172_gate(
+            compaction_count >= 1,
+            value={
+                "compaction_count": compaction_count,
+                "compacted_arc_count": world_compression.get("compacted_arc_count"),
+                "compacted_faction_count": world_compression.get("compacted_faction_count"),
+                "pressure_event_summarized_count": world_compression.get("pressure_event_summarized_count"),
+            },
+            expected="old arc/faction/pressure history is compacted or summarized",
+            message="Arc/faction compaction is not yet proven for endurance runs.",
+        ),
+        "npc_schedule_present": _n1172_gate(
+            schedule_event_count >= 1 and movement_count >= 1,
+            value={
+                "schedule_event_count": schedule_event_count,
+                "movement_count": movement_count,
+                "npc_count": npc_agency.get("npc_count"),
+            },
+            expected="NPC schedules/movement exist",
+            message="Schedule-driven NPC presence should be visible before endurance runs.",
+        ),
+        "npc_goal_agency_real": _n1172_gate(
+            agency_event_count >= 1 and goal_count >= 1,
+            value={
+                "agency_event_count": agency_event_count,
+                "autonomous_goal_count": goal_count,
+                "schedule_event_count": schedule_event_count,
+                "memory_event_count": npc_agency.get("memory_event_count"),
+            },
+            expected="NPCs pursue autonomous goals, not only schedule/memory events",
+            message="NPC agency is still mostly schedule/memory scaffolding.",
+        ),
+        "economy_pressure_foundation": _n1172_gate(
+            economy_event_count >= 1 and recurring_expense_count >= 1,
+            value={
+                "event_count": economy_event_count,
+                "recurring_expense_count": recurring_expense_count,
+                "paid_count": economy_pressure.get("paid_count"),
+                "warning_count": economy_pressure.get("warning_count"),
+            },
+            expected="recurring upkeep/resource pressure exists",
+            message="Economy pressure should include recurring costs before endurance tests.",
+        ),
+        "economy_long_term_sinks_real": _n1172_gate(
+            stock_refresh_count >= 1 and scarcity_count >= 1,
+            value={
+                "stock_refresh_count": stock_refresh_count,
+                "scarcity_or_price_variation_count": scarcity_count,
+            },
+            expected="merchant stock refresh and scarcity/price variation are exercised",
+            message="Long-term economy is missing stock refresh/scarcity pressure.",
+        ),
+        "combat_coverage_present": _n1172_gate(
+            encounter_count >= 1 and combat_event_count >= 1,
+            value={
+                "encounter_count": encounter_count,
+                "event_count": combat_event_count,
+                "direct_graph_combat_count": direct_graph_combat_count,
+            },
+            expected="some deterministic combat/consequence coverage exists",
+            message="Combat must at least appear in the deterministic run.",
+        ),
+        "combat_rounds_real": _n1172_gate(
+            round_event_count >= 1 and (resolved_encounter_count >= 1 or injury_count >= 1),
+            value={
+                "round_event_count": round_event_count,
+                "resolved_encounter_count": resolved_encounter_count,
+                "injury_count": injury_count,
+                "direct_graph_combat_count": direct_graph_combat_count,
+            },
+            expected="initiative/rounds plus injury/resolution lifecycle are exercised",
+            message="Combat is still direct-graph/scaffold coverage, not a real lifecycle.",
+        ),
+        "faction_consequence_present": _n1172_gate(
+            faction_event_count >= 1,
+            value={
+                "event_count": faction_consequence.get("event_count"),
+                "world_signal_count": faction_consequence.get("world_signal_count"),
+                "faction_compaction_count": faction_compaction_count,
+            },
+            expected="faction consequences exist",
+            message="Faction consequences should remain visible in endurance reports.",
+        ),
+        "dialogue_repair_pressure_bounded": _n1172_gate(
+            dialogue_repair_rate <= 0.35,
+            value={
+                "repaired_count": dialogue_repaired_count,
+                "repair_or_mismatch_rate": dialogue_repair_rate,
+            },
+            expected="dialogue/action relevance repairs stay below 35%",
+            message="High repair pressure can hide provider drift in long runs.",
+        ),
+        "transcript_growth_budget_projected_1000": _n1172_gate(
+            bool(growth.get("ok", True)),
+            value=growth,
+            expected="projected 1000-turn transcript artifact stays below budget",
+            message="Full transcript artifacts may become too large for 1000-turn endurance runs.",
+        ),
+    }
+
+    blocked_reasons = [name for name, gate in gates.items() if not bool(_safe_dict(gate).get("ok"))]
+    hard_blockers = [
+        name
+        for name, gate in gates.items()
+        if not bool(_safe_dict(gate).get("ok")) and _safe_str(_safe_dict(gate).get("severity") or "advisory") == "hard"
+    ]
+    # For now these are hardening/advisory diagnostics: a 100-turn run can pass
+    # while still clearly reporting why a 1000-turn run is blocked.
+    readiness = {
+        "format_version": "n1172_1000_turn_readiness_gap_report_v1",
+        "ok": True,
+        "requested_turns": requested_turns,
+        "profile": "1000_turn_gap_hardening",
+        "hundred_turn_ready": bool(hundred_turn_readiness.get("ok")),
+        "one_thousand_turn_candidate": not blocked_reasons,
+        "one_thousand_turn_blocked_reasons": blocked_reasons,
+        "one_thousand_turn_hard_blockers": hard_blockers,
+        "gates": gates,
+        "rollup": {
+            "compression_loop_present": bool(_safe_dict(gates.get("compression_loop_present")).get("ok")),
+            "memory_compaction_real": bool(_safe_dict(gates.get("memory_aging_real")).get("ok"))
+            and bool(_safe_dict(gates.get("arc_faction_compaction_real")).get("ok")),
+            "npc_schedule_present": bool(_safe_dict(gates.get("npc_schedule_present")).get("ok")),
+            "npc_goal_agency_real": bool(_safe_dict(gates.get("npc_goal_agency_real")).get("ok")),
+            "economy_pressure_foundation": bool(_safe_dict(gates.get("economy_pressure_foundation")).get("ok")),
+            "economy_long_term_sinks_real": bool(_safe_dict(gates.get("economy_long_term_sinks_real")).get("ok")),
+            "combat_coverage_present": bool(_safe_dict(gates.get("combat_coverage_present")).get("ok")),
+            "combat_rounds_real": bool(_safe_dict(gates.get("combat_rounds_real")).get("ok")),
+            "transcript_growth_budget_ok": bool(_safe_dict(gates.get("transcript_growth_budget_projected_1000")).get("ok")),
+        },
+        "notes": [
+            "This report is advisory for 100-turn runs and does not flip hundred_turn_readiness_summary.ok.",
+            "It separates scaffold/direct-graph coverage from real endurance lifecycle readiness.",
+            "Run 1000-turn tests only after one_thousand_turn_candidate is true or after accepting listed risks.",
+        ],
+    }
+    return readiness
+
+
+def _build_100_turn_readiness_summary(*args: Any, **kwargs: Any) -> Dict[str, Any]:
+    readiness = _N1172_PREVIOUS_BUILD_100_TURN_READINESS_SUMMARY(*args, **kwargs)
+    try:
+        gap_report = _n1172_build_1000_turn_readiness_gap_report(
+            summary=_safe_dict(kwargs.get("summary")),
+            transcript=_safe_list(kwargs.get("transcript")),
+            requested_turns=int(kwargs.get("requested_turns") or 0),
+            hundred_turn_readiness=_safe_dict(readiness),
+            world_state_compression_summary=kwargs.get("world_state_compression_summary"),
+            npc_agency_summary=kwargs.get("npc_agency_summary"),
+            economy_pressure_summary=kwargs.get("economy_pressure_summary"),
+            combat_lifecycle_summary=kwargs.get("combat_lifecycle_summary"),
+            faction_consequence_summary=kwargs.get("faction_consequence_summary"),
+            dialogue_action_relevance_summary=kwargs.get("dialogue_action_relevance_summary"),
+        )
+        readiness = dict(_safe_dict(readiness))
+        readiness["one_thousand_turn_readiness_gap_report"] = gap_report
+        readiness["one_thousand_turn_candidate"] = bool(gap_report.get("one_thousand_turn_candidate"))
+        readiness["one_thousand_turn_blocked_reasons"] = _safe_list(gap_report.get("one_thousand_turn_blocked_reasons"))
+        readiness["readiness_grades"] = {
+            "hundred_turn_ready": bool(readiness.get("ok")),
+            "one_thousand_turn_candidate": bool(gap_report.get("one_thousand_turn_candidate")),
+            "one_thousand_turn_blocked_reasons": _safe_list(gap_report.get("one_thousand_turn_blocked_reasons")),
+        }
+    except Exception as exc:
+        readiness = dict(_safe_dict(readiness))
+        readiness["one_thousand_turn_readiness_gap_report"] = {
+            "format_version": "n1172_1000_turn_readiness_gap_report_v1",
+            "ok": False,
+            "error": f"{type(exc).__name__}: {exc}",
+            "one_thousand_turn_candidate": False,
+            "one_thousand_turn_blocked_reasons": ["gap_report_builder_exception"],
+        }
+        readiness["one_thousand_turn_candidate"] = False
+        readiness["one_thousand_turn_blocked_reasons"] = ["gap_report_builder_exception"]
+    return readiness
+
+
+def _n1172_html_escape(value: Any) -> str:
+    return _safe_str(value).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+
+def _n1172_render_1000_turn_gap_section(final_summary: Dict[str, Any]) -> str:
+    final_summary = _safe_dict(final_summary)
+    readiness = _safe_dict(final_summary.get("hundred_turn_readiness_summary"))
+    gap = _safe_dict(
+        final_summary.get("one_thousand_turn_readiness_gap_report")
+        or readiness.get("one_thousand_turn_readiness_gap_report")
+    )
+    if not gap:
+        return ""
+    esc = _n1172_html_escape
+    blocked = _safe_list(gap.get("one_thousand_turn_blocked_reasons"))
+    rollup = _safe_dict(gap.get("rollup"))
+    rows = []
+    for key, gate_any in _safe_dict(gap.get("gates")).items():
+        gate = _safe_dict(gate_any)
+        status = "OK" if bool(gate.get("ok")) else "Gap"
+        css = "quality" if bool(gate.get("ok")) else "danger"
+        rows.append(
+            f"""
+            <tr>
+              <td>{esc(key)}</td>
+              <td><span class=\"badge {css}\">{esc(status)}</span></td>
+              <td>{esc(gate.get('expected'))}</td>
+              <td>{esc(gate.get('message'))}</td>
+            </tr>
+            """
+        )
+    return f"""
+    <section class=\"card\" id=\"one-thousand-turn-readiness-gaps\">
+      <h2>1000-Turn Readiness Gaps</h2>
+      <p class=\"muted\">Separates 100-turn scaffold coverage from true endurance readiness. This section is advisory for 100-turn runs.</p>
+      <div class=\"grid metrics-grid\">
+        <div class=\"metric\"><strong>100-Turn Ready</strong><span>{esc(gap.get('hundred_turn_ready'))}</span></div>
+        <div class=\"metric\"><strong>1000-Turn Candidate</strong><span>{esc(gap.get('one_thousand_turn_candidate'))}</span></div>
+        <div class=\"metric\"><strong>Blocked Reasons</strong><span>{esc(len(blocked))}</span></div>
+      </div>
+      <h3>Blocked Reasons</h3>
+      <pre>{esc(json.dumps(blocked, ensure_ascii=False, indent=2, default=str))}</pre>
+      <h3>Rollup</h3>
+      <pre>{esc(json.dumps(rollup, ensure_ascii=False, indent=2, default=str))}</pre>
+      <h3>Gate Details</h3>
+      <table class=\"readiness-table\">
+        <thead><tr><th>Gate</th><th>Status</th><th>Expected</th><th>Message</th></tr></thead>
+        <tbody>{''.join(rows)}</tbody>
+      </table>
+      <details>
+        <summary>Raw 1000-turn readiness gap report</summary>
+        <pre>{esc(json.dumps(gap, ensure_ascii=False, indent=2, default=str))}</pre>
+      </details>
+    </section>
+    """
+
+
+
+# =============================================================================
+# N117.2.1 — Readiness Gap Report Source Consistency
+# =============================================================================
+# The N117.2 1000-turn gap report can be first embedded while the 100-turn
+# readiness summary is being built.  Later artifact summaries can be refined
+# (notably dialogue-action-relevance-summary.json).  Refresh the gap report
+# before HTML/ZIP persistence so report values and artifact values agree.
+
+_N11721_GATE_SOURCES: Dict[str, str] = {
+    "compression_loop_present": "world-state-compression-summary.json",
+    "memory_aging_real": "world-state-compression-summary.json",

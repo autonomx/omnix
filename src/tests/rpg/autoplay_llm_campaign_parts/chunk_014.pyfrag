@@ -1,0 +1,925 @@
+        if any(token in action for token in ("travel to", "go to", "return to", "follow", "leave the tavern", "head to")):
+            travel_intent_turns.append(
+                {
+                    "turn": int(row.get("turn_index") or index),
+                    "player_action": row.get("player_action"),
+                    "source": "player_action_text",
+                }
+            )
+
+    return {
+        "visited_location_count": len(visited),
+        "visited_locations": visited,
+        "travel_turn_count": len(travel_turns),
+        "blocked_travel_turn_count": len(blocked_travel_turns),
+        "travel_intent_turn_count": len(travel_intent_turns),
+        "travel_turns": travel_turns[:100],
+        "blocked_travel_turns": blocked_travel_turns[:50],
+        "travel_intent_turns": travel_intent_turns[:50],
+        "ok": len(travel_turns) > 0 or len(visited) >= 2,
+        "notes": [
+            "travel_turn_count counts confirmed travel_result/state_delta/progress_timeline location changes.",
+            "travel_intent_turn_count counts action text that attempted travel but may not have resolved deterministically.",
+        ],
+    }
+
+
+def _infer_location_from_action_text(player_action: Any) -> str:
+    text = _safe_str(player_action).lower()
+
+    mappings = [
+        ("old mill", "location:old_mill"),
+        ("mill ruins", "location:old_mill"),
+        ("north road shrine", "location:north_road_shrine"),
+        ("magistrate hall", "location:magistrate_hall"),
+        ("abandoned cooperage", "location:abandoned_cooperage"),
+        ("river gate", "location:river_gate"),
+        ("warehouse", "location:river_gate_warehouse"),
+        ("black ford", "location:black_ford"),
+        ("north watchpost", "location:old_north_watchpost"),
+        ("ridge hideout", "location:ridge_hideout"),
+        ("rusty flagon", "scene:rusty_flagon"),
+        ("tavern", "scene:rusty_flagon"),
+        ("wagon yard", "location:wagon_yard"),
+        ("mill bridge", "location:mill_bridge_road"),
+    ]
+
+    if not any(token in text for token in ("travel to", "go to", "return to", "follow", "head to", "leave")):
+        return ""
+
+    for needle, location_id in mappings:
+        if needle in text:
+            return location_id
+
+    return ""
+
+
+def _apply_scenario_progression_location_bridge(row: Dict[str, Any]) -> None:
+    row = _safe_dict(row)
+    inferred = _infer_location_from_action_text(row.get("player_action"))
+    if not inferred:
+        return
+
+    previous = _safe_str(row.get("current_location") or row.get("location") or "")
+    row["location_changed"] = True
+    row["current_location"] = inferred
+    row["location"] = inferred
+    row["progress_category"] = "location_progression"
+    row["meaningful_progress"] = True
+    row["travel_result"] = {
+        "ok": True,
+        "source": "scenario_progression_location_bridge",
+        "from_location": previous,
+        "to_location": inferred,
+        "to_location_name": inferred.replace("location:", "").replace("scene:", "").replace("_", " ").title(),
+    }
+
+
+def _build_canonical_progress_quality_summary(
+    *,
+    transcript: List[Dict[str, Any]],
+    existing_progress: Dict[str, Any],
+    strict_progress: Dict[str, Any],
+    final_summary: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    final_summary = _safe_dict(final_summary)
+    progress_timeline = _safe_dict(final_summary.get("progress_timeline_summary"))
+    if not progress_timeline:
+        progress_timeline = _safe_dict(
+            _safe_dict(final_summary.get("hundred_turn_eval_summary")).get("progress_timeline_summary")
+        )
+
+    health_progress = _extract_health_progress_quality(final_summary)
+
+    # Prefer progress_timeline_summary when present because it is built from
+    # actual per-turn timeline classification and includes location/journal/story
+    # progression. health.metrics.progress_quality can be stale or stricter.
+    selected: Dict[str, Any] = {}
+    source = ""
+
+    if progress_timeline and int(progress_timeline.get("turns") or 0) > 0:
+        turns = int(progress_timeline.get("turns") or len(transcript))
+        meaningful_turns = int(progress_timeline.get("meaningful_progress_turns") or 0)
+        no_change_turns = max(0, turns - meaningful_turns)
+        selected = {
+            "turn_count": turns,
+            "meaningful_turns": meaningful_turns,
+            "meaningful_progress_rate": float(
+                progress_timeline.get("meaningful_progress_rate")
+                or (meaningful_turns / turns if turns else 0.0)
+            ),
+            "no_change_turns": no_change_turns,
+            "quality_counts": {
+                "meaningful_progress": meaningful_turns,
+                "no_change": no_change_turns,
+            },
+            "meaningful_category_counts": {
+                "story_beat": int(progress_timeline.get("story_beat_turns") or 0),
+                "npc_signal": int(progress_timeline.get("npc_signal_turns") or 0),
+                "quest_progress": int(progress_timeline.get("quest_progress_turns") or 0),
+                "journal_progress": int(progress_timeline.get("journal_entry_turns") or 0),
+                "location_progression": int(progress_timeline.get("location_changes") or 0),
+            },
+            "progress_timeline_summary": progress_timeline,
+        }
+        source = "progress_timeline_summary"
+    else:
+        selected = health_progress or _safe_dict(strict_progress) or _safe_dict(existing_progress)
+        source = "health.metrics.progress_quality" if health_progress else "strict_or_existing_progress_quality"
+
+    location_summary = _safe_dict(final_summary.get("location_progression_summary"))
+    location_travel_turns = int(location_summary.get("travel_turn_count") or 0)
+
+    if location_travel_turns > 0 and selected:
+        meaningful_category_counts = _safe_dict(selected.get("meaningful_category_counts"))
+        meaningful_category_counts["location_progression"] = max(
+            int(meaningful_category_counts.get("location_progression") or 0),
+            location_travel_turns,
+        )
+        selected["meaningful_category_counts"] = meaningful_category_counts
+
+    if selected:
+        turn_count = int(selected.get("turn_count") or len(transcript))
+        meaningful_turns = int(
+            selected.get("meaningful_turns")
+            or selected.get("meaningful_progress_count")
+            or 0
+        )
+        no_change_turns = int(selected.get("no_change_turns") or 0)
+        fallback_player_action_rate = float(
+            final_summary.get("fallback_player_action_rate")
+            or _safe_dict(_safe_dict(final_summary.get("health")).get("metrics")).get("fallback_player_action_rate")
+            or selected.get("fallback_player_action_rate")
+            or 0.0
+        )
+        meaningful_progress_rate = float(
+            selected.get("meaningful_progress_rate")
+            or (meaningful_turns / turn_count if turn_count else 0.0)
+        )
+
+        return {
+            "ok": meaningful_progress_rate >= 0.10 and fallback_player_action_rate <= 0.25,
+            "source": source,
+            "turn_count": turn_count,
+            "meaningful_progress_count": meaningful_turns,
+            "meaningful_progress_rate": meaningful_progress_rate,
+            "fallback_player_action_rate": fallback_player_action_rate,
+            "no_change_turns": no_change_turns,
+            "quality_counts": _safe_dict(selected.get("quality_counts")),
+            "meaningful_category_counts": _safe_dict(selected.get("meaningful_category_counts")),
+            "churn_category_counts": _safe_dict(selected.get("churn_category_counts")),
+            "legacy_progress_quality": _safe_dict(existing_progress),
+            "strict_progress_quality": _safe_dict(strict_progress),
+            "notes": [
+                "Canonical progress uses runtime progress classifications when available.",
+                "Row-level keyword scanning is intentionally avoided for event counts because debug payloads are noisy.",
+            ],
+        }
+
+    # Last-resort fallback: only count explicit row flags, not raw keyword scans.
+    turn_count = len(transcript)
+    meaningful_count = 0
+    fallback_actions = 0
+    no_change_turns = 0
+    action_type_counts: Dict[str, int] = {}
+    locations_seen: List[str] = []
+
+    for row in transcript:
+        row = _safe_dict(row)
+        action_type = _safe_str(
+            row.get("action_type")
+            or row.get("semantic_action_type")
+            or _safe_dict(row.get("resolved_action")).get("action_type")
+        )
+        if action_type:
+            action_type_counts[action_type] = int(action_type_counts.get(action_type, 0)) + 1
+
+        if bool(row.get("fallback_player_action")) or action_type in {"fallback", "unknown"}:
+            fallback_actions += 1
+
+        location = _safe_str(row.get("location") or row.get("current_location") or row.get("location_id"))
+        if location:
+            locations_seen.append(location)
+
+        meaningful = bool(
+            row.get("meaningful_progress")
+            or row.get("strict_meaningful_progress")
+            or _safe_dict(row.get("progress")).get("meaningful")
+        )
+        if _row_has_location_progression(row):
+            meaningful = True
+        if meaningful:
+            meaningful_count += 1
+        else:
+            no_change_turns += 1
+
+    fallback_rate = fallback_actions / turn_count if turn_count else 0.0
+    meaningful_rate = meaningful_count / turn_count if turn_count else 0.0
+
+    return {
+        "ok": meaningful_rate >= 0.10 and fallback_rate <= 0.25,
+        "source": "row_explicit_flags_only",
+        "turn_count": turn_count,
+        "meaningful_progress_count": meaningful_count,
+        "meaningful_progress_rate": meaningful_rate,
+        "fallback_player_action_count": fallback_actions,
+        "fallback_player_action_rate": fallback_rate,
+        "no_change_turns": no_change_turns,
+        "action_type_counts": dict(sorted(action_type_counts.items())),
+        "unique_location_count": len(set(locations_seen)),
+        "locations_seen": sorted(set(locations_seen))[:30],
+        "legacy_progress_quality": _safe_dict(existing_progress),
+        "strict_progress_quality": _safe_dict(strict_progress),
+    }
+
+
+def _build_selected_output_grounding_health(
+    narration_grounding_summary: Dict[str, Any],
+    *,
+    requested_turns: int,
+) -> Dict[str, Any]:
+    summary = _safe_dict(narration_grounding_summary)
+
+    checked_count = int(summary.get("checked_count") or 0)
+    fallback_used_count = int(summary.get("fallback_used_count") or 0)
+    provider_json_parse_failed_count = int(summary.get("provider_json_parse_failed_count") or 0)
+    provider_invalid_count = int(summary.get("provider_invalid_count") or 0)
+
+    fallback_source_counts = _safe_dict(summary.get("fallback_source_counts"))
+    selected_candidate_counts = _safe_dict(summary.get("selected_candidate_counts"))
+    violation_counts = _safe_dict(summary.get("violation_counts"))
+
+    deterministic_fallback_count = int(fallback_source_counts.get("deterministic_fallback") or 0)
+    llm_safe_fallback_count = int(fallback_source_counts.get("llm_safe_fallback") or 0)
+
+    denominator = max(1, checked_count or requested_turns or 1)
+    deterministic_fallback_rate = deterministic_fallback_count / denominator
+    fallback_used_rate = fallback_used_count / denominator
+
+    # The raw grounding summary may count rejected-primary violations as "invalid".
+    # For N79+, deterministic fallback is considered safe if it was selected and bounded.
+    raw_invalid_count = int(summary.get("invalid_count") or 0)
+    selected_output_invalid_count = int(summary.get("selected_output_invalid_count") or 0)
+
+    ok = (
+        checked_count > 0
+        and provider_json_parse_failed_count == 0
+        and provider_invalid_count == 0
+        and selected_output_invalid_count == 0
+        and deterministic_fallback_rate <= 0.10
+    )
+
+    return {
+        "ok": ok,
+        "checked_count": checked_count,
+        "raw_invalid_count": raw_invalid_count,
+        "selected_output_invalid_count": selected_output_invalid_count,
+        "provider_json_parse_failed_count": provider_json_parse_failed_count,
+        "provider_invalid_count": provider_invalid_count,
+        "fallback_used_count": fallback_used_count,
+        "fallback_used_rate": fallback_used_rate,
+        "deterministic_fallback_count": deterministic_fallback_count,
+        "deterministic_fallback_rate": deterministic_fallback_rate,
+        "llm_safe_fallback_count": llm_safe_fallback_count,
+        "fallback_source_counts": fallback_source_counts,
+        "selected_candidate_counts": selected_candidate_counts,
+        "violation_counts": violation_counts,
+        "notes": [
+            "raw_invalid_count may include rejected primary candidates.",
+            "selected output is considered safe if deterministic fallback or safe_fallback was selected and no selected_output_invalid_count is reported.",
+            "deterministic fallback is allowed up to 10% for 100-turn smoke evaluation.",
+        ],
+    }
+
+
+def _ms_to_seconds(value: Any) -> float:
+    try:
+        return float(value) / 1000.0
+    except Exception:
+        return 0.0
+
+
+def _build_performance_seconds_summary(
+    transcript: List[Dict[str, Any]],
+    performance: Optional[Dict[str, Any]] = None,
+    performance_budget_summary: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    performance = _safe_dict(performance)
+    budget = _safe_dict(performance_budget_summary)
+
+    # Prefer authoritative aggregate performance metrics when present.
+    if performance:
+        turn_count = len(transcript)
+        return {
+            "source": "performance_seconds_v2_from_summary",
+            "turn": {
+                "count": turn_count,
+                "avg_seconds": _ms_to_seconds(performance.get("avg_turn_ms")),
+                "p50_seconds": _ms_to_seconds(performance.get("median_turn_ms")),
+                "p90_seconds": _ms_to_seconds(performance.get("p90_turn_ms")),
+                "p95_seconds": _ms_to_seconds(performance.get("p95_turn_ms")),
+                "max_seconds": _ms_to_seconds(performance.get("max_turn_ms")),
+            },
+            "blocking": {
+                "count": turn_count,
+                "avg_seconds": _ms_to_seconds(performance.get("avg_human_playable_blocking_ms")),
+                "p95_seconds": _ms_to_seconds(performance.get("p95_human_playable_blocking_ms")),
+                "max_seconds": _ms_to_seconds(performance.get("max_human_playable_blocking_ms")),
+            },
+            "playable_blocking": {
+                "count": turn_count,
+                "avg_seconds": _ms_to_seconds(performance.get("avg_playable_blocking_ms")),
+                "p95_seconds": _ms_to_seconds(performance.get("p95_playable_blocking_ms")),
+                "max_seconds": _ms_to_seconds(performance.get("max_playable_blocking_ms")),
+            },
+            "campaign_wall_seconds": float(performance.get("campaign_wall_seconds") or _ms_to_seconds(performance.get("campaign_wall_ms"))),
+            "artifact_write_seconds": _ms_to_seconds(performance.get("artifact_write_ms")),
+            "avg_turn_seconds": _ms_to_seconds(performance.get("avg_turn_ms")),
+            "p95_turn_seconds": _ms_to_seconds(performance.get("p95_turn_ms")),
+            "max_turn_seconds": _ms_to_seconds(performance.get("max_turn_ms")),
+            "slowest_turns": _safe_list(performance.get("slowest_turns"))[:10],
+            "performance_budget_summary": budget,
+        }
+
+    # Fallback: row-level extraction.
+    durations: List[float] = []
+    blocking_durations: List[float] = []
+    narration_durations: List[float] = []
+
+    for row in transcript:
+        row = _safe_dict(row)
+
+        for key in ("turn_seconds", "duration_seconds", "elapsed_seconds", "latency_seconds"):
+            value = row.get(key)
+            if isinstance(value, (int, float)):
+                durations.append(float(value))
+                break
+
+        for key in ("blocking_seconds", "blocking_duration_seconds", "request_seconds"):
+            value = row.get(key)
+            if isinstance(value, (int, float)):
+                blocking_durations.append(float(value))
+                break
+
+        for key in ("narration_seconds", "narration_duration_seconds", "background_narration_seconds"):
+            value = row.get(key)
+            if isinstance(value, (int, float)):
+                narration_durations.append(float(value))
+                break
+
+    def _percentile(values: List[float], percentile: float) -> float:
+        if not values:
+            return 0.0
+        values = sorted(values)
+        index = min(len(values) - 1, max(0, int(round((len(values) - 1) * percentile))))
+        return float(values[index])
+
+    def _summary(values: List[float]) -> Dict[str, Any]:
+        if not values:
+            return {
+                "count": 0,
+                "avg_seconds": 0.0,
+                "p50_seconds": 0.0,
+                "p95_seconds": 0.0,
+                "max_seconds": 0.0,
+            }
+        return {
+            "count": len(values),
+            "avg_seconds": sum(values) / len(values),
+            "p50_seconds": _percentile(values, 0.50),
+            "p95_seconds": _percentile(values, 0.95),
+            "max_seconds": max(values),
+        }
+
+    turn_summary = _summary(durations)
+    return {
+        "source": "performance_seconds_v2_from_rows",
+        "turn": turn_summary,
+        "blocking": _summary(blocking_durations),
+        "narration": _summary(narration_durations),
+        "avg_turn_seconds": turn_summary.get("avg_seconds", 0.0),
+        "p95_turn_seconds": turn_summary.get("p95_seconds", 0.0),
+        "max_turn_seconds": turn_summary.get("max_seconds", 0.0),
+    }
+
+
+def _build_minimal_autoplay_html_report(final_summary: Dict[str, Any]) -> str:
+    final_summary = _safe_dict(final_summary)
+
+    faction_consequence = _safe_dict(final_summary.get("faction_consequence_summary"))
+    npc_reaction = _safe_dict(final_summary.get("npc_reaction_summary"))
+    dialogue_relevance = _safe_dict(final_summary.get("dialogue_action_relevance_summary"))
+    turn_action_consistency = _safe_dict(final_summary.get("turn_action_consistency_summary"))
+
+    # Simple HTML escaping
+    def esc(value: Any) -> str:
+        return str(value or "").replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+    transcript_rows = _safe_list(
+        final_summary.get("final_transcript_rows")
+        or final_summary.get("transcript")
+        or final_summary.get("autoplay_transcript_rows")
+    )
+
+    timeline_entries: List[str] = []
+    for row_any in transcript_rows:
+        row = _safe_dict(row_any)
+        turn_index = int(row.get("turn_index") or row.get("turn") or 0)
+        if not turn_index:
+            continue
+        player_action = _safe_str(
+            row.get("display_player_action")
+            or row.get("visible_player_action")
+            or row.get("player_action")
+            or row.get("canonical_turn_action")
+        )
+        narration = _safe_str(
+            row.get("display_narration")
+            or row.get("visible_narration")
+            or row.get("selected_narration_text")
+            or row.get("narration")
+        )
+        npc_payload = _safe_dict(row.get("npc"))
+        npc_speaker = _safe_str(row.get("npc_speaker") or npc_payload.get("speaker"))
+        npc_line = _safe_str(row.get("npc_line") or npc_payload.get("line"))
+        category = _safe_str(row.get("validated_presentation_category") or row.get("llm_presentation_category"))
+        status = _safe_str(row.get("presentation_status"))
+        npc_html = ""
+        if npc_speaker or npc_line:
+            npc_html = f"""
+              <p><strong>NPC:</strong> {esc(npc_speaker)} — {esc(npc_line)}</p>
+            """
+        timeline_entries.append(
+            f"""
+            <article class="turn-card" id="turn-{turn_index}">
+              <h3>Turn {turn_index}</h3>
+              <p><strong>Category:</strong> {esc(category)} <strong>Status:</strong> {esc(status)}</p>
+              <p><strong>Player:</strong> {esc(player_action)}</p>
+              <p><strong>Narration:</strong> {esc(narration)}</p>
+              {npc_html}
+            </article>
+            """
+        )
+
+    transcript_timeline_html = f"""
+    <section class="card" id="final-transcript-timeline">
+      <h2>Final Normalized Transcript</h2>
+      <p>This section is rendered from the same final transcript rows written to autoplay-transcript.json/slim-transcript.json.</p>
+      {''.join(timeline_entries)}
+    </section>
+    """
+
+    faction_consequence_html = f"""
+    <section class="card" id="faction-consequences">
+      <h2>Faction Consequences</h2>
+      <div class="grid">
+        <div class="metric"><strong>Events</strong><span>{esc(faction_consequence.get("event_count"))}</span></div>
+        <div class="metric"><strong>World Signals</strong><span>{esc(faction_consequence.get("world_signal_count"))}</span></div>
+      </div>
+      <h3>By Faction</h3>
+      <pre>{esc(json.dumps(faction_consequence.get("by_faction", {}), ensure_ascii=False, indent=2, default=str))}</pre>
+      <h3>By Kind</h3>
+      <pre>{esc(json.dumps(faction_consequence.get("by_kind", {}), ensure_ascii=False, indent=2, default=str))}</pre>
+      <h3>Events</h3>
+      <pre>{esc(json.dumps(faction_consequence.get("events", []), ensure_ascii=False, indent=2, default=str))}</pre>
+    </section>
+    """
+
+    npc_reaction_html = f"""
+    <section class="card" id="npc-reactions">
+      <h2>NPC Reactions</h2>
+      <div class="grid">
+        <div class="metric"><strong>Events</strong><span>{esc(npc_reaction.get("event_count"))}</span></div>
+        <div class="metric"><strong>Memory Events</strong><span>{esc(npc_reaction.get("memory_event_count"))}</span></div>
+        <div class="metric"><strong>World Signals</strong><span>{esc(npc_reaction.get("world_signal_count"))}</span></div>
+      </div>
+      <h3>By NPC</h3>
+      <pre>{esc(json.dumps(npc_reaction.get("by_npc", {}), ensure_ascii=False, indent=2, default=str))}</pre>
+      <h3>By Kind</h3>
+      <pre>{esc(json.dumps(npc_reaction.get("by_kind", {}), ensure_ascii=False, indent=2, default=str))}</pre>
+      <h3>Events</h3>
+      <pre>{esc(json.dumps(npc_reaction.get("events", []), ensure_ascii=False, indent=2, default=str))}</pre>
+    </section>
+    """
+
+    dialogue_relevance_html = f"""
+    <section class="card" id="dialogue-relevance">
+      <h2>Dialogue Action-Relevance</h2>
+      <div class="grid">
+        <div class="metric"><strong>Checked</strong><span>{esc(dialogue_relevance.get("checked_count"))}</span></div>
+        <div class="metric"><strong>Mismatches</strong><span>{esc(dialogue_relevance.get("mismatch_count"))}</span></div>
+        <div class="metric"><strong>Mismatch Rate</strong><span>{esc(dialogue_relevance.get("mismatch_rate"))}</span></div>
+        <div class="metric"><strong>Repaired</strong><span>{esc(dialogue_relevance.get("repaired_count"))}</span></div>
+        <div class="metric"><strong>Unrepaired</strong><span>{esc(dialogue_relevance.get("unrepaired_count"))}</span></div>
+        <div class="metric"><strong>Source Blocks</strong><span>{esc(dialogue_relevance.get("source_gate_block_count"))}</span></div>
+      </div>
+      <h3>Reasons</h3>
+      <pre>{esc(json.dumps(dialogue_relevance.get("by_reason", {}), ensure_ascii=False, indent=2, default=str))}</pre>
+      <h3>Examples</h3>
+      <pre>{esc(json.dumps(dialogue_relevance.get("examples", []), ensure_ascii=False, indent=2, default=str))}</pre>
+    </section>
+    """
+
+    turn_action_consistency_html = f"""
+    <section class="card" id="turn-action-consistency">
+      <h2>Turn Action Consistency</h2>
+      <div class="grid">
+        <div class="metric"><strong>Checked</strong><span>{esc(turn_action_consistency.get("checked_count"))}</span></div>
+        <div class="metric"><strong>Mismatches</strong><span>{esc(turn_action_consistency.get("mismatch_count"))}</span></div>
+        <div class="metric"><strong>Mismatch Rate</strong><span>{esc(turn_action_consistency.get("mismatch_rate"))}</span></div>
+        <div class="metric"><strong>Repaired</strong><span>{esc(turn_action_consistency.get("repaired_count"))}</span></div>
+        <div class="metric"><strong>Unrepaired</strong><span>{esc(turn_action_consistency.get("unrepaired_count"))}</span></div>
+      </div>
+      <h3>Fields</h3>
+      <pre>{esc(json.dumps(turn_action_consistency.get("by_field", {}), ensure_ascii=False, indent=2, default=str))}</pre>
+      <h3>Examples</h3>
+      <pre>{esc(json.dumps(turn_action_consistency.get("examples", []), ensure_ascii=False, indent=2, default=str))}</pre>
+    </section>
+    """
+
+    # N116.13.3: keep the canonical report artifact-first, but restore the
+    # rich report presentation layer.  Earlier N116.12/N116.13 fixes made the
+    # HTML safe by rendering from final normalized transcript rows, but the
+    # report lost the styled Chronicle layout.  Keep this builder self-contained
+    # so both autoplay-campaign-report.html and autoplay-campaign-report-rich.html
+    # are visually rich while still using final_transcript_rows as the source of
+    # truth for the visible turn timeline.
+    turns_executed = esc(final_summary.get("turns_executed") or len(transcript_rows))
+    requested_turns = esc(final_summary.get("requested_turns") or final_summary.get("turns_requested") or "")
+    session_id = esc(final_summary.get("session_id") or "")
+    health = _safe_dict(final_summary.get("autoplay_health"))
+    health_ok = "OK" if bool(health.get("ok", final_summary.get("ok", True))) else "Needs Review"
+    quality = _safe_dict(final_summary.get("quality_gate_summary"))
+    quality_ok = "OK" if bool(quality.get("ok", True)) else "Needs Review"
+    performance = _safe_dict(
+        final_summary.get("performance_seconds_summary")
+        or final_summary.get("performance")
+        or final_summary.get("performance_budget_summary")
+    )
+
+    summary_cards_html = f"""
+    <section class="hero">
+      <div>
+        <p class="eyebrow">Autoplay Campaign Report</p>
+        <h1>Campaign Chronicle</h1>
+        <p class="subtitle">Rich report rendered from final normalized transcript rows, with diagnostic sections preserved.</p>
+      </div>
+      <div class="hero-grid">
+        <div class="stat"><span>Turns</span><strong>{turns_executed}{"/" + requested_turns if requested_turns else ""}</strong></div>
+        <div class="stat"><span>Health</span><strong>{health_ok}</strong></div>
+        <div class="stat"><span>Quality</span><strong>{quality_ok}</strong></div>
+        <div class="stat"><span>Session</span><strong>{session_id}</strong></div>
+      </div>
+    </section>
+    <section class="card" id="summary">
+      <h2>Run Summary</h2>
+      <div class="grid metrics-grid">
+        <div class="metric"><strong>Turns Executed</strong><span>{turns_executed}</span></div>
+        <div class="metric"><strong>Requested Turns</strong><span>{requested_turns}</span></div>
+        <div class="metric"><strong>Health</strong><span>{health_ok}</span></div>
+        <div class="metric"><strong>Quality Gates</strong><span>{quality_ok}</span></div>
+      </div>
+      <details>
+        <summary>Performance / Health Details</summary>
+        <pre>{esc(json.dumps({"autoplay_health": health, "performance": performance, "quality_gate_summary": quality}, ensure_ascii=False, indent=2, default=str))}</pre>
+      </details>
+    </section>
+    """
+
+    css = """
+    <style>
+      :root {
+        --bg: #11100f;
+        --panel: #1b1815;
+        --panel-2: #241f1a;
+        --ink: #f2e8d5;
+        --muted: #b9aa91;
+        --line: rgba(242, 232, 213, 0.16);
+        --accent: #d8a64c;
+        --accent-2: #9ec6ad;
+        --danger: #e18b78;
+        --shadow: 0 18px 45px rgba(0, 0, 0, 0.35);
+      }
+      * { box-sizing: border-box; }
+      html { scroll-behavior: smooth; }
+      body {
+        margin: 0;
+        background:
+          radial-gradient(circle at 20% 0%, rgba(216,166,76,0.16), transparent 34rem),
+          radial-gradient(circle at 85% 10%, rgba(158,198,173,0.12), transparent 28rem),
+          var(--bg);
+        color: var(--ink);
+        font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        line-height: 1.55;
+      }
+      a { color: var(--accent); text-decoration: none; }
+      a:hover { text-decoration: underline; }
+      .layout { width: min(1320px, calc(100vw - 40px)); margin: 0 auto; padding: 28px 0 64px; }
+      nav {
+        position: sticky;
+        top: 0;
+        z-index: 20;
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+        align-items: center;
+        padding: 12px 20px;
+        margin: 0 -20px 24px;
+        background: rgba(17, 16, 15, 0.86);
+        border-bottom: 1px solid var(--line);
+        backdrop-filter: blur(12px);
+      }
+      nav a {
+        display: inline-flex;
+        padding: 8px 11px;
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        background: rgba(255,255,255,0.035);
+        color: var(--ink);
+        font-size: 0.9rem;
+      }
+      .hero {
+        display: grid;
+        grid-template-columns: minmax(0, 1.35fr) minmax(280px, 0.9fr);
+        gap: 22px;
+        align-items: stretch;
+        margin-bottom: 24px;
+        padding: 30px;
+        border: 1px solid rgba(216,166,76,0.24);
+        border-radius: 28px;
+        background: linear-gradient(135deg, rgba(36,31,26,0.96), rgba(27,24,21,0.92));
+        box-shadow: var(--shadow);
+      }
+      .eyebrow { margin: 0 0 8px; color: var(--accent); letter-spacing: 0.12em; text-transform: uppercase; font-size: 0.78rem; }
+      h1 { margin: 0; font-size: clamp(2.1rem, 4vw, 4rem); line-height: 1; }
+      h2 { margin: 0 0 14px; font-size: 1.45rem; }
+      h3 { margin: 0 0 8px; }
+      .subtitle { max-width: 760px; color: var(--muted); font-size: 1.05rem; }
+      .hero-grid, .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }
+      .stat, .metric {
+        padding: 14px 16px;
+        border: 1px solid var(--line);
+        border-radius: 18px;
+        background: rgba(255,255,255,0.045);
+      }
+      .stat span, .metric strong { display: block; color: var(--muted); font-size: 0.82rem; text-transform: uppercase; letter-spacing: 0.06em; }
+      .stat strong, .metric span { display: block; margin-top: 4px; color: var(--ink); font-size: 1.15rem; font-weight: 760; overflow-wrap: anywhere; }
+      .card, .rpg-promoted-section {
+        margin: 22px 0;
+        padding: 22px;
+        border: 1px solid var(--line);
+        border-radius: 24px;
+        background: linear-gradient(180deg, rgba(36,31,26,0.96), rgba(27,24,21,0.96));
+        box-shadow: var(--shadow);
+      }
+      .muted { color: var(--muted); }
+      .turn-card {
+        margin: 14px 0;
+        padding: 18px;
+        border: 1px solid rgba(242,232,213,0.13);
+        border-left: 4px solid var(--accent);
+        border-radius: 18px;
+        background: rgba(255,255,255,0.035);
+      }
+      .turn-header {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        align-items: flex-start;
+        margin-bottom: 10px;
+      }
+      .player-action, .narration, .npc-line {
+        margin: 10px 0;
+        padding: 11px 13px;
+        border-radius: 14px;
+        background: rgba(0,0,0,0.16);
+        border: 1px solid rgba(242,232,213,0.08);
+      }
+      .npc-line { border-left: 3px solid var(--accent-2); }
+      .badges { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+      .badge {
+        display: inline-flex;
+        align-items: center;
+        min-height: 24px;
+        padding: 3px 9px;
+        border-radius: 999px;
+        border: 1px solid rgba(242,232,213,0.16);
+        background: rgba(216,166,76,0.11);
+        color: var(--ink);
+        font-size: 0.78rem;
+      }
+      .quality { background: rgba(158,198,173,0.12); }
+      pre {
+        white-space: pre-wrap;
+        word-break: break-word;
+        max-height: 620px;
+        overflow: auto;
+        padding: 14px;
+        border-radius: 16px;
+        border: 1px solid rgba(242,232,213,0.12);
+        background: rgba(0,0,0,0.28);
+        color: #eadfc8;
+      }
+      details {
+        margin-top: 12px;
+        padding: 12px;
+        border: 1px solid rgba(242,232,213,0.12);
+        border-radius: 16px;
+        background: rgba(255,255,255,0.025);
+      }
+      summary { cursor: pointer; color: var(--accent); font-weight: 700; }
+      @media (max-width: 820px) {
+        .layout { width: min(100vw - 24px, 1320px); padding-top: 18px; }
+        .hero { grid-template-columns: 1fr; padding: 22px; }
+        nav { margin-left: -12px; margin-right: -12px; }
+      }
+    </style>
+    """
+
+    return f"""
+    <!doctype html>
+    <html>
+    <head>
+      <meta charset="utf-8" />
+      <meta name="viewport" content="width=device-width, initial-scale=1" />
+      <title>Autoplay Campaign Report</title>
+      {css}
+    </head>
+    <body>
+    <div class="layout">
+      <nav>
+        <a href="#summary">Summary</a>
+        <a href="#final-transcript-timeline">Final Transcript</a>
+        <a href="#faction-consequences">Faction Consequences</a>
+        <a href="#npc-reactions">NPC Reactions</a>
+        <a href="#dialogue-relevance">Dialogue Relevance</a>
+        <a href="#turn-action-consistency">Turn Action Consistency</a>
+      </nav>
+      {summary_cards_html}
+      {transcript_timeline_html}
+      {faction_consequence_html}
+      {npc_reaction_html}
+      {dialogue_relevance_html}
+      {turn_action_consistency_html}
+    </div>
+    </body>
+    </html>
+    """
+
+
+def _safe_lower_text(value: Any) -> str:
+    return _safe_str(value).lower()
+
+
+def _profile_reference_terms(profile: Dict[str, Any]) -> List[str]:
+    profile = _safe_dict(profile)
+    terms: List[str] = []
+    arc_stage = _safe_str(profile.get("arc_stage"))
+    if arc_stage and arc_stage != "stable":
+        terms.append(arc_stage.replace("_", " "))
+    axes = _safe_dict(profile.get("axes"))
+    for axis, value in axes.items():
+        try:
+            if abs(int(value or 0)) >= 2:
+                terms.append(str(axis).replace("_", " "))
+        except Exception:
+            continue
+    for key in ("memories", "future_hooks", "world_signals", "semantic_intents", "milestones"):
+        for item in _safe_list(profile.get(key))[-4:]:
+            item = _safe_dict(item)
+            summary = _safe_str(item.get("summary"))
+            if summary:
+                # Keep short keyword-ish fragments. This is only a diagnostic,
+                # not a hard correctness validator.
+                for token in summary.replace(".", " ").replace(",", " ").split():
+                    token = token.strip().lower()
+                    if len(token) >= 5 and token not in {"player", "about", "later", "would", "could"}:
+                        terms.append(token)
+                break
+    deduped: List[str] = []
+    seen = set()
+    for term in terms:
+        marker = term.lower()
+        if marker in seen:
+            continue
+        seen.add(marker)
+        deduped.append(term)
+    return deduped[:12]
+
+
+def _summarize_profile_grounded_output(transcript: List[Dict[str, Any]]) -> Dict[str, Any]:
+    rows: List[Dict[str, Any]] = []
+    available_turns = 0
+    referenced_turns = 0
+    npc_ids = set()
+    by_npc: Dict[str, Dict[str, Any]] = {}
+
+    for row in transcript if isinstance(transcript, list) else []:
+        row = _safe_dict(row)
+        combined = _safe_dict(row.get("combined_background_llm_result"))
+        diagnostics = _safe_dict(combined.get("diagnostics"))
+        profile_summary = (
+            _safe_dict(combined.get("profile_context_summary"))
+            or _safe_dict(diagnostics.get("profile_context_summary"))
+        )
+        if not profile_summary.get("available"):
+            continue
+
+        available_turns += 1
+        for npc_id in _safe_list(profile_summary.get("npc_ids")):
+            if _safe_str(npc_id):
+                npc_ids.add(_safe_str(npc_id))
+
+        runtime_state = _safe_dict(row.get("runtime_state"))
+        loaded = _safe_dict(_safe_dict(runtime_state.get("npc_evolution")).get("loaded_profiles"))
+
+        narration_payload = (
+            _safe_dict(combined.get("narration_payload"))
+            or _safe_dict(row.get("deferred_narration_result")).get("narration_payload")
+            or _safe_dict(_safe_dict(row.get("turn_result")).get("narration_payload"))
+        )
+        if not isinstance(narration_payload, dict):
+            narration_payload = {}
+
+        narration = _safe_str(combined.get("narration")) or _safe_str(narration_payload.get("narration"))
+        npc_line = _safe_str(_safe_dict(narration_payload.get("npc")).get("line"))
+        text = _safe_lower_text(f"{narration}\n{npc_line}")
+
+        row_matches: Dict[str, List[str]] = {}
+        for npc_id, loaded_row_any in loaded.items():
+            loaded_row = _safe_dict(loaded_row_any)
+            profile = _safe_dict(loaded_row.get("profile"))
+            terms = _profile_reference_terms(profile)
+            matches = [term for term in terms if term and term.lower() in text]
+            if matches:
+                row_matches[str(npc_id)] = matches[:6]
+                npc_bucket = by_npc.setdefault(str(npc_id), {"referenced_turns": 0, "matches": {}})
+                npc_bucket["referenced_turns"] += 1
+                for match in matches[:6]:
+                    npc_bucket["matches"][match] = int(npc_bucket["matches"].get(match) or 0) + 1
+
+        if row_matches:
+            referenced_turns += 1
+
+        rows.append(
+            {
+                "turn_index": row.get("turn_index"),
+                "profile_npcs": profile_summary.get("npc_ids") or [],
+                "referenced": bool(row_matches),
+                "matches": row_matches,
+                "arc_stages": profile_summary.get("arc_stages") or {},
+            }
+        )
+
+    return {
+        "available_turns": available_turns,
+        "referenced_turns": referenced_turns,
+        "reference_rate": round(referenced_turns / available_turns, 4) if available_turns else 0.0,
+        "loaded_npc_ids": sorted(npc_ids),
+        "by_npc": by_npc,
+        "examples": rows[:8],
+        "note": (
+            "This is a soft diagnostic. It checks whether provider output appears "
+            "to reference loaded profile context; it is not a hard requirement every turn."
+        ),
+    }
+
+
+def _summarize_npc_arc_progression(transcript: List[Dict[str, Any]]) -> Dict[str, Any]:
+    stage_changes: List[Dict[str, Any]] = []
+    latest_summary: Dict[str, Any] = {}
+    duplicate_milestone_ids = set()
+    out_of_bounds_axes: List[Dict[str, Any]] = []
+    by_npc: Dict[str, Dict[str, Any]] = {}
+
+    for row in transcript if isinstance(transcript, list) else []:
+        row = _safe_dict(row)
+        turn_index = row.get("turn_index")
+        evo_result = _safe_dict(row.get("npc_evolution_consumption_result"))
+        latest = _safe_dict(row.get("npc_evolution_summary"))
+        if latest:
+            latest_summary = latest
+            for dup in _safe_list(latest.get("duplicate_milestone_ids")):
+                if _safe_str(dup):
+                    duplicate_milestone_ids.add(_safe_str(dup))
+            out_of_bounds_axes.extend(_safe_list(latest.get("out_of_bounds_axes")))
+
+        for decision in _safe_list(evo_result.get("consume_decisions")):
+            decision = _safe_dict(decision)
+            if not decision.get("ok"):
+                continue
+            npc_id = _safe_str(decision.get("npc_id")) or "unknown"
+            bucket = by_npc.setdefault(
+                npc_id,
+                {
+                    "signals_consumed": 0,
+                    "stage_changes": 0,
+                    "latest_stage": "",
+                    "milestones": [],
+                },
+            )
+            bucket["signals_consumed"] += 1
+            bucket["latest_stage"] = _safe_str(decision.get("arc_stage_after"))
+            if decision.get("stage_changed"):
+                milestone = _safe_dict(decision.get("milestone"))
+                bucket["stage_changes"] += 1

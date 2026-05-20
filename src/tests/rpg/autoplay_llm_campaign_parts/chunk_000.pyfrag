@@ -1,0 +1,925 @@
+
+from __future__ import annotations
+
+import hashlib
+import json
+from typing import Any, Dict, List, Tuple
+
+from app.rpg.mechanics.mechanics_opportunities import (
+    describe_mechanic_opportunity_state,
+    list_available_mechanic_opportunities,
+)
+from app.rpg.mechanics.mechanics_resolver import resolve_mechanic_opportunity
+
+PROGRESSION_STATE_PRESERVE_KEYS = (
+    "progression_state_revision",
+    "progression_completed_node_count",
+    "progression_fact_count",
+    "progression_lead_count",
+    "progression_authority_summary",
+    "progression_completed_nodes",
+    "progression_facts",
+    "progression_leads",
+    "progression_unlocked_npcs",
+    "progression_unlocked_locations",
+    "scenario_progression_log",
+    "scenario_progression_summary",
+    "scenario_progression_actions",
+    "scenario_progression_current_turn_summary",
+    "scenario_progression_last_no_match",
+    "scenario_progression_action_debug",
+    "scenario_progression_quest_state",
+    "scenario_progression_quest_ids",
+    "scenario_progression_active_graph_id",
+    "scenario_progression_active_graph_title",
+    "scenario_progression_completed_graph_ids",
+    "scenario_progression_last_completed_graph_id",
+    "scenario_progression_waiting_for_next_graph_pack",
+)
+
+TRANSCRIPT_KEEP_KEYS = (
+    "turn",
+    "turn_index",
+    "turn_start_timestamp",
+    "turn_end_timestamp",
+    "player_action",
+    "player_agent_selection_source",
+    "player_agent_selection_reason",
+    "scenario_progression_summary",
+    "scenario_progression_actions",
+    "scenario_progression_action_debug",
+    "player_action_source",
+    "player_action_timing",
+    "player_action_quality",
+    "player_agent_trace",
+    "deferred_narration_trace",
+    "deferred_advisory_trace",
+    "background_prompt_budget",
+    "combined_quality_shape",
+    "promotion_target_grounding",
+    "profile_grounded_output",
+    "npc_arc_progression",
+    "manual_turn_errors",
+    "campaign_state_summary",
+    "repeated_affordance_loop",
+    "scenario_progression_waiting_for_next_graph_pack",
+    "graph_action_state_has_actions",
+    "top_scenario_progression_action_id",
+    "top_scenario_progression_command",
+    "scenario_arc_complete",
+    "current_action_response",
+    "npc_response_architecture",
+    "npc_line_current_action_relevance",
+    "npc_line_addresses_current_action",
+    "npc_response_variant_id",
+    "npc_response_variation",
+    "llm_prompt_debug",
+    "llm_prompt_contract",
+    "prompt_contract_ack",
+    "llm_fallback_diagnostics",
+    "npc_line_source",
+    "npc_line_validation_passed",
+    "npc_line_rejection_reason",
+)
+
+
+def _effective_transcript_detail(args: Any) -> str:
+    turns = int(getattr(args, "turns", 0) or 0)
+    profile = _safe_str(getattr(args, "autoplay_profile", "") or "")
+    if turns >= 30 or profile == "smoke_100":
+        return "slim"
+    return "full"
+
+
+def _should_write_full_transcript(args: argparse.Namespace) -> bool:
+    artifact_detail = _safe_str(getattr(args, "artifact_detail", ""))
+    return artifact_detail.lower() in {"full", "debug", "maximum", "max"}
+
+
+def _slim_transcript_row(row: Dict[str, Any], max_row_bytes: int = 50000) -> Dict[str, Any]:
+    row = _safe_dict(row)
+    slim_row: Dict[str, Any] = {}
+    if not row:
+        return {
+            "empty_transcript_row_repaired": True,
+            "presentation_status": "missing_row",
+        }
+
+    for key in (
+        "turn_index",
+        "turn",
+        "turn_id",
+        "player_action",
+        "canonical_turn_action",
+        "actual_sent_action",
+        "player_agent_selection_source",
+        "player_agent_selection_reason",
+         "action_category",
+         "presentation_intent",
+         "llm_presentation_category",
+          "validated_presentation_intent",
+            "validated_presentation_category",
+            "current_action_response",
+            "npc_response_architecture",
+            "npc_response_architecture_ack",
+            "npc_response_architecture_persisted",
+            "npc_line_current_action_relevance",
+            "npc_line_addresses_current_action",
+            "npc_response_variant_id",
+            "npc_response_variation",
+            "llm_prompt_debug",
+            "llm_prompt_contract",
+            "prompt_contract_ack",
+            "llm_fallback_diagnostics",
+            "npc_line_source",
+            "npc_line_validation_passed",
+            "npc_line_rejection_reason",
+             "npc_line_repaired",
+             "npc_line_repair_reason",
+             "npc_line_before_repair",
+             "presentation_meta_leakage_repaired",
+             "presentation_meta_leakage_repair",
+             "narration_before_meta_repair",
+             "npc_line_before_meta_repair",
+             "presentation_meta_leakage",
+             "narration_meta_repaired",
+             "narration_before_meta_repair",
+             "meta_language_repair",
+             "presentation_status",
+        "narration",
+        "display_narration",
+        "selected_narration",
+        "npc",
+        "npc_speaker",
+        "npc_line",
+        "turn_presentation_identity",
+        "background_presentation_result",
+        "dialogue_presentation_compatibility",
+        "dialogue_action_relevance",
+        "dialogue_action_relevance_repaired",
+        "presentation_repair_tier",
+        "presentation_repair_type",
+        "visible_text_replaced",
+        "hard_grounding_repair",
+        "soft_classification_repair",
+        "presentation_hard_grounding",
+        "presentation_soft_classification",
+        "background_semantic_reviewer",
+        "unsupported_combat_claim_suppressed",
+        "direct_graph_action_completion",
+        "mechanics_covered_this_turn",
+        "direct_graph_changed_parts",
+        "progress_quality",
+        "turn_action_consistency",
+        "graph_action_selection_diagnostic",
+        "suppressed_selected_action_guard",
+    ):
+        if row.get(key) not in (None, "", {}, []):
+            slim_row[key] = row.get(key)
+
+    visible_player_action = (
+        _safe_str(row.get("display_player_action"))
+        or _safe_str(row.get("visible_player_action"))
+        or _safe_str(row.get("player_action"))
+    )
+    if visible_player_action:
+        slim_row["player_action"] = visible_player_action
+        slim_row["display_player_action"] = visible_player_action
+        slim_row["visible_player_action"] = visible_player_action
+
+    for key in (
+        "mechanic",
+        "mechanics_evidence_source",
+        "mechanics_forced_action",
+        "mechanic_resolution_input",
+        "player_action_original",
+        "mechanic_resolution_failed_opportunity_id",
+        "mechanic_resolution_failed_reason",
+    ):
+        if row.get(key) not in (None, "", {}, []):
+            slim_row[key] = row.get(key)
+
+    for key in (
+        "dialogue_presentation_compatibility",
+        "unsupported_combat_claim_suppressed",
+    ):
+        if row.get(key) is not None:
+            slim_row[key] = row.get(key)
+
+    return slim_row
+
+
+def _preferred_visible_player_action(row: Dict[str, Any]) -> str:
+    row = _safe_dict(row)
+    return (
+        _safe_str(row.get("display_player_action"))
+        or _safe_str(row.get("visible_player_action"))
+        or _safe_str(row.get("canonical_turn_action"))
+        or _safe_str(row.get("player_action"))
+    )
+
+    if row.get("story_arc_events"):
+        slim_row["story_arc_events"] = row.get("story_arc_events")
+
+    if row.get("story_arc_lifecycle"):
+        slim_row["story_arc_lifecycle"] = {
+            "ok": _safe_dict(row.get("story_arc_lifecycle")).get("ok"),
+            "resolved_count": _safe_dict(row.get("story_arc_lifecycle")).get("resolved_count"),
+            "failed_count": _safe_dict(row.get("story_arc_lifecycle")).get("failed_count"),
+            "story_arc_events": _safe_dict(row.get("story_arc_lifecycle")).get("story_arc_events"),
+        }
+
+    for key in (
+        "story_arc_aftermath_events",
+        "world_signals",
+        "npc_memory_events",
+        "followup_hooks",
+    ):
+        if row.get(key):
+            slim_row[key] = row.get(key)
+
+    if row.get("npc_presence"):
+        slim_row["npc_presence"] = row.get("npc_presence")
+
+    if row.get("npc_schedule_events"):
+        slim_row["npc_schedule_events"] = row.get("npc_schedule_events")
+
+    if row.get("npc_agency_events"):
+        slim_row["npc_agency_events"] = row.get("npc_agency_events")
+
+    if row.get("story_arc_aftermath"):
+        aftermath = _safe_dict(row.get("story_arc_aftermath"))
+        slim_row["story_arc_aftermath"] = {
+            "ok": aftermath.get("ok"),
+            "newly_applied_keys": aftermath.get("newly_applied_keys"),
+            "aftermath_events": aftermath.get("aftermath_events"),
+            "world_signals": aftermath.get("world_signals"),
+            "faction_deltas": aftermath.get("faction_deltas"),
+            "followup_hooks": aftermath.get("followup_hooks"),
+        }
+
+    if row.get("faction_reputation_events"):
+        slim_row["faction_reputation_events"] = row.get("faction_reputation_events")
+
+    if row.get("followup_arc_seed_events"):
+        slim_row["followup_arc_seed_events"] = row.get("followup_arc_seed_events")
+
+    if row.get("followup_arc_progression_events"):
+        slim_row["followup_arc_progression_events"] = row.get("followup_arc_progression_events")
+
+    if row.get("followup_arc_progression"):
+        progression = _safe_dict(row.get("followup_arc_progression"))
+        slim_row["followup_arc_progression"] = {
+            "ok": progression.get("ok"),
+            "progressed_count": progression.get("progressed_count"),
+            "newly_applied_keys": progression.get("newly_applied_keys"),
+            "events": progression.get("events"),
+            "world_signals": progression.get("world_signals"),
+        }
+
+    if row.get("followup_arc_resolution_events"):
+        slim_row["followup_arc_resolution_events"] = row.get("followup_arc_resolution_events")
+
+    if row.get("followup_arc_resolution"):
+        resolution = _safe_dict(row.get("followup_arc_resolution"))
+        slim_row["followup_arc_resolution"] = {
+            "ok": resolution.get("ok"),
+            "resolved_count": resolution.get("resolved_count"),
+            "newly_applied_keys": resolution.get("newly_applied_keys"),
+            "events": resolution.get("events"),
+            "world_signals": resolution.get("world_signals"),
+            "escalation_hooks": resolution.get("escalation_hooks"),
+        }
+
+    if row.get("escalation_arc_seed_events"):
+        slim_row["escalation_arc_seed_events"] = row.get("escalation_arc_seed_events")
+
+    if row.get("faction_pressure_events"):
+        slim_row["faction_pressure_events"] = row.get("faction_pressure_events")
+
+    if row.get("faction_pressure_pacing"):
+        pacing = _safe_dict(row.get("faction_pressure_pacing"))
+        slim_row["faction_pressure_pacing"] = {
+            "accepted_count": pacing.get("accepted_count"),
+            "rejected_count": pacing.get("rejected_count"),
+            "rejected_events": pacing.get("rejected_events"),
+        }
+
+    if row.get("followup_progression_probe"):
+        slim_row["followup_progression_probe"] = row.get("followup_progression_probe")
+
+    if row.get("economy_pressure_events"):
+        slim_row["economy_pressure_events"] = row.get("economy_pressure_events")
+
+    if row.get("economy_pressure_warnings"):
+        slim_row["economy_pressure_warnings"] = row.get("economy_pressure_warnings")
+
+    if row.get("economy_pressure_currency_deltas"):
+        slim_row["economy_pressure_currency_deltas"] = row.get("economy_pressure_currency_deltas")
+
+    if row.get("combat_lifecycle_events"):
+        slim_row["combat_lifecycle_events"] = row.get("combat_lifecycle_events")
+
+    if row.get("combat_lifecycle_encounters"):
+        slim_row["combat_lifecycle_encounters"] = row.get("combat_lifecycle_encounters")
+
+    if row.get("combat_lifecycle_injuries"):
+        slim_row["combat_lifecycle_injuries"] = row.get("combat_lifecycle_injuries")
+
+    if row.get("combat_consequence_events"):
+        slim_row["combat_consequence_events"] = row.get("combat_consequence_events")
+
+    if row.get("faction_consequence_events"):
+        slim_row["faction_consequence_events"] = row.get("faction_consequence_events")
+
+    if row.get("npc_reaction_events"):
+        slim_row["npc_reaction_events"] = row.get("npc_reaction_events")
+
+    if row.get("dialogue_action_relevance"):
+        slim_row["dialogue_action_relevance"] = row.get("dialogue_action_relevance")
+
+    if row.get("dialogue_display_source_gate"):
+        slim_row["dialogue_display_source_gate"] = row.get("dialogue_display_source_gate")
+
+    if row.get("dialogue_action_relevance_repaired"):
+        slim_row["dialogue_action_relevance_repaired"] = row.get("dialogue_action_relevance_repaired")
+        slim_row["dialogue_action_relevance_repair_reason"] = row.get(
+            "dialogue_action_relevance_repair_reason"
+        )
+
+    if row.get("dialogue_action_relevance_after_repair"):
+        slim_row["dialogue_action_relevance_after_repair"] = row.get(
+            "dialogue_action_relevance_after_repair"
+        )
+
+    if row.get("selected_narration"):
+        slim_row["selected_narration"] = row.get("selected_narration")
+
+    if row.get("selected_output"):
+        slim_row["selected_output"] = row.get("selected_output")
+
+    visible_narration = (
+        _safe_str(row.get("display_narration"))
+        or _safe_str(row.get("visible_narration"))
+        or _safe_str(row.get("selected_narration_text"))
+        or _safe_str(row.get("narration"))
+    )
+    if visible_narration:
+        slim_row["narration"] = visible_narration
+        slim_row["display_narration"] = visible_narration
+        slim_row["visible_narration"] = visible_narration
+
+    if row.get("display_narration"):
+        slim_row["display_narration"] = row.get("display_narration")
+
+    if row.get("selected_narration_text"):
+        slim_row["selected_narration_text"] = row.get("selected_narration_text")
+
+    if row.get("dialogue_source"):
+        slim_row["dialogue_source"] = row.get("dialogue_source")
+
+    if row.get("display_source"):
+        slim_row["display_source"] = row.get("display_source")
+
+    if row.get("npc") is not None:
+        slim_row["npc"] = row.get("npc")
+
+    if row.get("npc_line") is not None:
+        slim_row["npc_line"] = row.get("npc_line")
+
+    if row.get("npc_speaker") is not None:
+        slim_row["npc_speaker"] = row.get("npc_speaker")
+
+    if row.get("canonical_turn_action"):
+        slim_row["canonical_turn_action"] = row.get("canonical_turn_action")
+
+    if row.get("turn_action_consistency"):
+        slim_row["turn_action_consistency"] = row.get("turn_action_consistency")
+
+    if row.get("turn_action_consistency_repaired"):
+        slim_row["turn_action_consistency_repaired"] = row.get("turn_action_consistency_repaired")
+        slim_row["turn_action_consistency_before_repair"] = row.get(
+            "turn_action_consistency_before_repair"
+        )
+
+    if row.get("story_hook_action_consistency"):
+        slim_row["story_hook_action_consistency"] = row.get("story_hook_action_consistency")
+
+    if row.get("blocked_story_hook_displays"):
+        slim_row["blocked_story_hook_displays"] = row.get("blocked_story_hook_displays")
+
+    for key in (
+        "actual_sent_action",
+        "resolver_input_action",
+        "selected_player_action",
+        "original_player_action",
+        "visible_player_action",
+        "canonical_turn_action",
+    ):
+        if row.get(key):
+            slim_row[key] = row.get(key)
+
+    if row.get("turn_action_source_check"):
+        slim_row["turn_action_source_check"] = row.get("turn_action_source_check")
+
+    for key in (
+        "state_delta",
+        "result",
+        "turn_contract",
+        "direct_graph_execution_applied",
+        "direct_graph_execution_kind",
+        "direct_graph_display_override",
+        "reward",
+    ):
+        if row.get(key) is not None:
+            slim_row[key] = row.get(key)
+
+    npc_payload = _safe_dict(row.get("npc"))
+    npc_speaker = _safe_str(row.get("npc_speaker") or npc_payload.get("speaker"))
+    npc_line = _safe_str(row.get("npc_line") or npc_payload.get("line"))
+
+    if npc_speaker or npc_line:
+        slim_row["npc"] = {
+            "speaker": npc_speaker,
+            "line": npc_line,
+        }
+        slim_row["npc_speaker"] = npc_speaker
+        slim_row["npc_line"] = npc_line
+
+    for key in (
+        "top_level_npc_sync_applied",
+        "top_level_npc_sync_source",
+    ):
+        if row.get(key) is not None:
+            slim_row[key] = row.get(key)
+
+    slim_row["_artifact_slimmed"] = True
+    return slim_row
+
+
+def _prepare_transcript_artifacts(transcript: List[Dict[str, Any]], args: Any) -> Dict[str, Any]:
+    import json
+    detail = _effective_transcript_detail(args)
+    if detail == "slim":
+        slim_transcript = []
+        for row in transcript:
+            slim_row = _slim_transcript_row(row)
+            slim_transcript.append(slim_row)
+        full_bytes = len(json.dumps(transcript).encode('utf-8'))
+        slim_bytes = len(json.dumps(slim_transcript).encode('utf-8'))
+        summary = {
+            "used_slim_transcript": True,
+            "row_count": len(transcript),
+            "full_mb": full_bytes / (1024 * 1024),
+            "slim_mb": slim_bytes / (1024 * 1024),
+            "kept_keys": list(TRANSCRIPT_KEEP_KEYS),
+            "detail": detail,
+        }
+        debug_tail = transcript[-3:] if len(transcript) > 3 else None
+        return {
+            "transcript": slim_transcript,
+            "summary": summary,
+            "debug_tail": debug_tail,
+        }
+    else:
+        return {
+            "transcript": transcript,
+            "summary": {"detail": detail, "used_slim_transcript": False},
+            "debug_tail": None,
+        }
+
+
+def _progression_node_count(state: Dict[str, Any]) -> int:
+    """Count completed progression nodes, handling None safely."""
+    return len(_safe_dict(_safe_dict(state).get("progression_completed_nodes")))
+
+
+def _sidecar_progression_overlay(base: Dict[str, Any], overlay: Dict[str, Any]) -> Dict[str, Any]:
+    """Overlay progression state, refusing stale overlays and logging overlays."""
+    base = _safe_dict(base)
+    overlay = _safe_dict(overlay)
+    base_nodes = _progression_node_count(base)
+    overlay_nodes = _progression_node_count(overlay)
+    base_rev = _progression_revision(base)
+    overlay_rev = _progression_revision(overlay)
+    if overlay_nodes < base_nodes or overlay_rev < base_rev:
+        # Refuse stale overlays, log the refusal.
+        log = base.setdefault("progression_overlay_log", [])
+        log.append({
+            "refused_overlay": True,
+            "base_nodes": base_nodes,
+            "overlay_nodes": overlay_nodes,
+            "base_rev": base_rev,
+            "overlay_rev": overlay_rev,
+        })
+        del log[:-50]
+        return base
+    # Accept overlay, log the merge.
+    log = base.setdefault("progression_overlay_log", [])
+    log.append({
+        "refused_overlay": False,
+        "base_nodes": base_nodes,
+        "overlay_nodes": overlay_nodes,
+        "base_rev": base_rev,
+        "overlay_rev": overlay_rev,
+    })
+    del log[:-50]
+    merged = dict(base)
+    merged.update(overlay)
+    return merged
+
+
+def _progression_fact_count(state: Dict[str, Any]) -> int:
+    return len(_safe_dict(_safe_dict(state).get("progression_facts")))
+
+
+def _progression_lead_count(state: Dict[str, Any]) -> int:
+    return len(_safe_dict(_safe_dict(state).get("progression_leads")))
+
+
+def _progression_revision(state: Dict[str, Any]) -> int:
+    state = _safe_dict(state)
+    explicit = int(state.get("progression_state_revision") or 0)
+    derived = (
+        _progression_node_count(state) * 10000
+        + _progression_fact_count(state) * 100
+        + _progression_lead_count(state)
+    )
+    return max(explicit, derived)
+
+
+def _scenario_progression_active(runtime_state: Dict[str, Any]) -> bool:
+    runtime_state = _safe_dict(runtime_state)
+    return bool(
+        _safe_list(runtime_state.get("scenario_progression_actions"))
+        or _safe_dict(runtime_state.get("progression_completed_nodes"))
+        or _safe_dict(runtime_state.get("progression_facts"))
+    )
+
+
+def _stamp_progression_authority(
+    state: Dict[str, Any],
+    *,
+    reason: str,
+    turn_index: int = 0,
+) -> Dict[str, Any]:
+    state = _safe_dict(state)
+    node_count = _progression_node_count(state)
+    fact_count = _progression_fact_count(state)
+    lead_count = _progression_lead_count(state)
+    prior_revision = int(state.get("progression_state_revision") or 0)
+    derived_revision = node_count * 10000 + fact_count * 100 + lead_count
+    revision = max(prior_revision, derived_revision)
+    if reason in {"progression_applied", "progression_actions_recomputed"}:
+        revision = max(revision, prior_revision + 1)
+
+    state["progression_state_revision"] = revision
+    state["progression_completed_node_count"] = node_count
+    state["progression_fact_count"] = fact_count
+    state["progression_lead_count"] = lead_count
+    state["progression_authority_summary"] = {
+        "revision": revision,
+        "completed_node_count": node_count,
+        "fact_count": fact_count,
+        "lead_count": lead_count,
+        "reason": reason,
+        "turn_index": turn_index,
+    }
+    return state
+
+
+def _preserve_progression_state_fields(
+    base_state: Dict[str, Any],
+    candidate_state: Dict[str, Any],
+) -> Dict[str, Any]:
+    base_state = _safe_dict(base_state)
+    candidate_state = _safe_dict(candidate_state)
+    out = dict(candidate_state)
+
+    base_revision = _progression_revision(base_state)
+    candidate_revision = _progression_revision(candidate_state)
+    base_nodes = _progression_node_count(base_state)
+    candidate_nodes = _progression_node_count(candidate_state)
+    base_facts = _progression_fact_count(base_state)
+    candidate_facts = _progression_fact_count(candidate_state)
+
+    candidate_is_stale = (
+        candidate_revision < base_revision
+        or candidate_nodes < base_nodes
+        or candidate_facts < base_facts
+    )
+
+    if candidate_is_stale:
+        for key in PROGRESSION_STATE_PRESERVE_KEYS:
+            if key in base_state:
+                out[key] = base_state[key]
+        out = _stamp_progression_authority(
+            out,
+            reason="stale_progression_merge_refused",
+            turn_index=int(out.get("turn_index") or 0),
+        )
+        stale_log = out.setdefault("progression_stale_merge_log", [])
+        if isinstance(stale_log, list):
+            stale_log.append(
+                {
+                    "base_revision": base_revision,
+                    "candidate_revision": candidate_revision,
+                    "base_nodes": base_nodes,
+                    "candidate_nodes": candidate_nodes,
+                    "base_facts": base_facts,
+                    "candidate_facts": candidate_facts,
+                }
+            )
+            del stale_log[:-50]
+        return out
+
+    for key in PROGRESSION_STATE_PRESERVE_KEYS:
+        base_value = base_state.get(key)
+        candidate_value = out.get(key)
+        if key not in out or candidate_value in (None, {}, []):
+            if base_value not in (None, {}, []):
+                out[key] = base_value
+            continue
+
+        if isinstance(base_value, dict) and isinstance(candidate_value, dict):
+            merged = dict(base_value)
+            merged.update(candidate_value)
+            out[key] = merged
+        elif isinstance(base_value, list) and isinstance(candidate_value, list):
+            # Preserve earlier progression logs while accepting new rows.
+            if key == "scenario_progression_log":
+                combined = list(base_value)
+                def _marker(row: Any) -> tuple:
+                    row = _safe_dict(row)
+                    node_ids = tuple(
+                        _safe_str(node_id)
+                        for node_id in _safe_list(row.get("matched_node_ids"))
+                    )
+                    if not node_ids:
+                        node_ids = tuple(
+                            _safe_str(_safe_dict(node).get("node_id"))
+                            for node in _safe_list(row.get("matched_nodes"))
+                        )
+                    return (
+                        _safe_str(row.get("graph_id")),
+                        int(row.get("turn_index") or 0),
+                        node_ids,
+                    )
+
+                seen = {_marker(row) for row in combined}
+                for row in candidate_value:
+                    marker = _marker(row)
+                    if marker not in seen:
+                        combined.append(row)
+                        seen.add(marker)
+                out[key] = combined[-100:]
+            else:
+                out[key] = candidate_value or base_value
+    return _stamp_progression_authority(
+        out,
+        reason="progression_merge_preserved",
+        turn_index=int(out.get("turn_index") or 0),
+    )
+
+
+def _authoritative_progression_state(
+    runtime_state: Dict[str, Any],
+    candidate_state: Dict[str, Any] | None = None,
+    *,
+    reason: str,
+    turn_index: int = 0,
+) -> Dict[str, Any]:
+    runtime_state = _safe_dict(runtime_state)
+    candidate_state = _safe_dict(candidate_state) if candidate_state is not None else runtime_state
+    merged = _preserve_progression_state_fields(runtime_state, candidate_state)
+    return _stamp_progression_authority(
+        merged,
+        reason=reason,
+        turn_index=turn_index,
+    )
+
+
+def _assert_progression_monotonic(
+    runtime_state: Dict[str, Any],
+    *,
+    turn_index: int,
+    previous_node_count: int,
+    previous_revision: int,
+) -> None:
+    """Assert that progression node count and revision do not decrease."""
+    current_node_count = _progression_node_count(runtime_state)
+    current_revision = _progression_revision(runtime_state)
+    if current_node_count < previous_node_count:
+        raise RuntimeError(
+            "progression_completed_node_count_decreased:"
+            f"turn={turn_index}:"
+            f"previous={previous_node_count}:"
+            f"current={current_node_count}"
+        )
+    if current_revision < previous_revision:
+        raise RuntimeError(
+            "progression_state_revision_decreased:"
+            f"turn={turn_index}:"
+            f"previous={previous_revision}:"
+            f"current={current_revision}"
+        )
+
+
+def _extract_progression_authority_sidecar(runtime_state: Dict[str, Any]) -> Dict[str, Any]:
+    runtime_state = _safe_dict(runtime_state)
+    sidecar: Dict[str, Any] = {}
+    for key in PROGRESSION_STATE_PRESERVE_KEYS:
+        if key in runtime_state:
+            sidecar[key] = deepcopy(runtime_state.get(key))
+    for key in ("progression_stale_merge_log", "progression_overlay_log"):
+        if key in runtime_state:
+            sidecar[key] = deepcopy(runtime_state.get(key))
+    graph_quest_state = _extract_scenario_progression_quest_state(runtime_state)
+    if graph_quest_state:
+        sidecar["scenario_progression_quest_state"] = graph_quest_state
+        sidecar["scenario_progression_quest_ids"] = sorted(graph_quest_state.keys())
+    return _stamp_progression_authority(
+        sidecar,
+        reason="progression_sidecar_extracted",
+        turn_index=int(runtime_state.get("turn_index") or 0),
+    )
+
+
+def _overlay_progression_authority_sidecar(
+    runtime_state: Dict[str, Any],
+    progression_authority_state: Dict[str, Any],
+    *,
+    reason: str,
+    turn_index: int,
+) -> Dict[str, Any]:
+    runtime_state = _safe_dict(runtime_state)
+    progression_authority_state = _extract_progression_authority_sidecar(
+        progression_authority_state
+    )
+    runtime_nodes = _progression_node_count(runtime_state)
+    sidecar_nodes = _progression_node_count(progression_authority_state)
+    runtime_revision = _progression_revision(runtime_state)
+    sidecar_revision = _progression_revision(progression_authority_state)
+    merged = _sidecar_progression_overlay(runtime_state, progression_authority_state)
+    if sidecar_nodes > runtime_nodes or sidecar_revision > runtime_revision:
+        stale_log = merged.setdefault("progression_stale_merge_log", [])
+        if isinstance(stale_log, list):
+            stale_log.append(
+                {
+                    "base_revision": runtime_revision,
+                    "candidate_revision": sidecar_revision,
+                    "base_nodes": runtime_nodes,
+                    "candidate_nodes": sidecar_nodes,
+                    "reason": reason,
+                    "turn_index": turn_index,
+                }
+            )
+            del stale_log[:-50]
+    merged = _overlay_scenario_progression_quests(
+        merged,
+        _safe_dict(progression_authority_state.get("scenario_progression_quest_state")),
+    )
+    return _stamp_progression_authority(
+        merged,
+        reason=reason,
+        turn_index=turn_index,
+    )
+
+
+def _update_progression_authority_sidecar(
+    progression_authority_state: Dict[str, Any],
+    runtime_state: Dict[str, Any],
+    *,
+    reason: str,
+    turn_index: int,
+) -> Dict[str, Any]:
+    existing_sidecar = _extract_progression_authority_sidecar(progression_authority_state)
+    runtime_sidecar = _extract_progression_authority_sidecar(runtime_state)
+    merged = _sidecar_progression_overlay(existing_sidecar, runtime_sidecar)
+
+    current_graph_quests = _safe_dict(existing_sidecar.get("scenario_progression_quest_state"))
+    candidate_graph_quests = _safe_dict(runtime_sidecar.get("scenario_progression_quest_state"))
+    graph_quests = dict(current_graph_quests)
+    for quest_id, quest in candidate_graph_quests.items():
+        existing = _safe_dict(graph_quests.get(quest_id))
+        quest = _safe_dict(quest)
+        existing_completed = bool(existing.get("completed")) or _safe_str(existing.get("status")) == "completed"
+        quest_completed = bool(quest.get("completed")) or _safe_str(quest.get("status")) == "completed"
+        if existing_completed and not quest_completed:
+            continue
+        merged_quest = dict(existing)
+        merged_quest.update(quest)
+        merged_quest.setdefault("source", "scenario_progression_graph")
+        graph_quests[quest_id] = merged_quest
+
+    if graph_quests:
+        merged["scenario_progression_quest_state"] = graph_quests
+        merged["scenario_progression_quest_ids"] = sorted(graph_quests.keys())
+
+    return _stamp_progression_authority(
+        merged,
+        reason=reason,
+        turn_index=turn_index,
+    )
+
+
+def _assert_progression_sidecar_monotonic(
+    progression_authority_state: Dict[str, Any],
+    *,
+    turn_index: int,
+    previous_node_count: int,
+    previous_revision: int,
+) -> None:
+    current_node_count = _progression_node_count(progression_authority_state)
+    current_revision = _progression_revision(progression_authority_state)
+    if current_node_count < previous_node_count:
+        raise RuntimeError(
+            "progression_sidecar_completed_node_count_decreased:"
+            f"turn={turn_index}:"
+            f"previous={previous_node_count}:"
+            f"current={current_node_count}"
+        )
+    if current_revision < previous_revision:
+        raise RuntimeError(
+            "progression_sidecar_revision_decreased:"
+            f"turn={turn_index}:"
+            f"previous={previous_revision}:"
+            f"current={current_revision}"
+        )
+
+
+def _require_progression_sidecar_present(
+    progression_authority_state: Dict[str, Any],
+    *,
+    turn_index: int,
+    stage: str,
+) -> None:
+    if not isinstance(progression_authority_state, dict):
+        raise RuntimeError(
+            f"progression_sidecar_missing:turn={turn_index}:stage={stage}:not_dict"
+        )
+    if turn_index > 1 and not progression_authority_state:
+        raise RuntimeError(
+            f"progression_sidecar_missing:turn={turn_index}:stage={stage}:empty"
+        )
+
+
+def _assert_runtime_not_below_sidecar(
+    runtime_state: Dict[str, Any],
+    progression_authority_state: Dict[str, Any],
+    *,
+    turn_index: int,
+    stage: str,
+) -> None:
+    runtime_nodes = _progression_node_count(runtime_state)
+    sidecar_nodes = _progression_node_count(progression_authority_state)
+    runtime_revision = _progression_revision(runtime_state)
+    sidecar_revision = _progression_revision(progression_authority_state)
+
+    if runtime_nodes < sidecar_nodes:
+        raise RuntimeError(
+            "progression_runtime_below_sidecar_nodes:"
+            f"turn={turn_index}:stage={stage}:"
+            f"runtime_nodes={runtime_nodes}:sidecar_nodes={sidecar_nodes}:"
+            f"runtime_revision={runtime_revision}:sidecar_revision={sidecar_revision}"
+        )
+
+    if runtime_revision < sidecar_revision:
+        raise RuntimeError(
+            "progression_runtime_below_sidecar_revision:"
+            f"turn={turn_index}:stage={stage}:"
+            f"runtime_nodes={runtime_nodes}:sidecar_nodes={sidecar_nodes}:"
+            f"runtime_revision={runtime_revision}:sidecar_revision={sidecar_revision}"
+        )
+
+
+def _overlay_and_assert_progression_sidecar(
+    runtime_state: Dict[str, Any],
+    progression_authority_state: Dict[str, Any],
+    *,
+    reason: str,
+    turn_index: int,
+) -> Dict[str, Any]:
+    _require_progression_sidecar_present(
+        progression_authority_state,
+        turn_index=turn_index,
+        stage=reason,
+    )
+    overlaid = _overlay_progression_authority_sidecar(
+        runtime_state,
+        progression_authority_state,
+        reason=reason,
+        turn_index=turn_index,
+    )
+    _assert_runtime_not_below_sidecar(
+        overlaid,
+        progression_authority_state,
+        turn_index=turn_index,
+        stage=reason,
+    )
+    _assert_graph_second_quest_invariant(
+        overlaid,
+        turn_index=turn_index,
+        stage=reason,
+    )
+    _assert_graph_actions_available_for_active_objectives(
