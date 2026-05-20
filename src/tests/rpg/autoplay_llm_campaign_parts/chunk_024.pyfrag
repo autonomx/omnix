@@ -1,0 +1,925 @@
+        turn_action_consistency_summary=_safe_dict(summary.get("turn_action_consistency_summary")),
+        scenario_progression_action_repeat_summary=_safe_dict(
+            summary.get("scenario_progression_action_repeat_summary")
+        ),
+        escalation_branch_summary=_safe_dict(summary.get("escalation_branch_summary")),
+        direct_graph_lifecycle_evidence=_safe_dict(summary.get("direct_graph_lifecycle_evidence")),
+    )
+
+    # Update the evaluation with new summaries
+    evaluation = _safe_dict(summary.get("hundred_turn_evaluation"))
+    if evaluation:
+        evaluation["gates"]["faction_consequence_present"] = {
+            "ok": int(_safe_dict(summary.get("faction_consequence_summary")).get("event_count") or 0) >= 1,
+            "value": {
+                "event_count": _safe_dict(summary.get("faction_consequence_summary")).get("event_count"),
+                "world_signal_count": _safe_dict(summary.get("faction_consequence_summary")).get("world_signal_count"),
+                "by_faction": _safe_dict(summary.get("faction_consequence_summary")).get("by_faction"),
+                "by_kind": _safe_dict(summary.get("faction_consequence_summary")).get("by_kind"),
+            },
+            "expected": "at least one deterministic long-term faction consequence",
+            "message": "Faction reputation should produce long-term consequences.",
+        }
+        evaluation["gates"]["npc_reaction_present"] = {
+            "ok": int(_safe_dict(summary.get("npc_reaction_summary")).get("event_count") or 0) >= 1,
+            "value": {
+                "event_count": _safe_dict(summary.get("npc_reaction_summary")).get("event_count"),
+                "memory_event_count": _safe_dict(summary.get("npc_reaction_summary")).get("memory_event_count"),
+                "world_signal_count": _safe_dict(summary.get("npc_reaction_summary")).get("world_signal_count"),
+                "by_npc": _safe_dict(summary.get("npc_reaction_summary")).get("by_npc"),
+                "by_kind": _safe_dict(summary.get("npc_reaction_summary")).get("by_kind"),
+            },
+            "expected": "at least one deterministic NPC reaction to faction/consequence state",
+            "message": "NPCs should react to long-term faction consequences.",
+        }
+        summary["hundred_turn_evaluation"] = evaluation
+
+    summary["hundred_turn_readiness_summary"] = _build_100_turn_readiness_summary(
+        summary=summary,
+        transcript=transcript,
+        requested_turns=int(summary.get("requested_turns") or getattr(args, "turns", 0) or 0),
+        turns_executed=int(summary.get("turns_executed") or len(_safe_list(transcript))),
+        runtime_errors=_safe_list(summary.get("runtime_errors")),
+        warnings=_safe_list(summary.get("warnings")),
+        story_arc_lifecycle_summary=_safe_dict(summary.get("story_arc_lifecycle_summary")),
+        story_arc_aftermath_summary=_safe_dict(summary.get("story_arc_aftermath_summary")),
+        faction_reputation_summary=_safe_dict(summary.get("faction_reputation_summary")),
+        followup_arc_progression_summary=_safe_dict(summary.get("followup_arc_progression_summary")),
+        faction_pressure_summary=_safe_dict(summary.get("faction_pressure_summary")),
+        followup_arc_resolution_summary=_safe_dict(summary.get("followup_arc_resolution_summary")),
+        pressure_pacing_summary=_safe_dict(summary.get("pressure_pacing_summary")),
+        world_signal_summary=_safe_dict(summary.get("world_signal_summary")),
+        escalation_arc_progression_summary=_safe_dict(summary.get("escalation_arc_progression_summary")),
+        world_state_compression_summary=_safe_dict(summary.get("world_state_compression_summary")),
+        npc_agency_summary=_safe_dict(summary.get("npc_agency_summary")),
+        economy_pressure_summary=_safe_dict(summary.get("economy_pressure_summary")),
+        combat_lifecycle_summary=_safe_dict(summary.get("combat_lifecycle_summary")),
+        faction_consequence_summary=_safe_dict(summary.get("faction_consequence_summary")),
+        npc_reaction_summary=_safe_dict(summary.get("npc_reaction_summary")),
+    )
+
+    evaluation = _safe_dict(summary.get("hundred_turn_evaluation"))
+    evaluation_gates = _safe_dict(evaluation.get("gates"))
+    npc_gate = _safe_dict(evaluation_gates.get("npc_agency_present"))
+    npc_gate_value = _safe_dict(npc_gate.get("value"))
+    npc_summary = _safe_dict(summary.get("npc_agency_summary"))
+
+    if npc_summary and npc_gate and npc_gate_value.get("agency_event_count") is None:
+        summary["hundred_turn_evaluation"] = _build_100_turn_evaluation_summary(
+            turns_executed=int(summary.get("turns_executed") or len(_safe_list(transcript))),
+            requested_turns=int(summary.get("requested_turns") or getattr(args, "turns", 0) or 0),
+            runtime_errors=_safe_list(summary.get("runtime_errors")),
+            warnings=_safe_list(summary.get("warnings")),
+            transcript=_safe_list(transcript),
+            performance_summary=_safe_dict(summary.get("performance_seconds_summary")),
+            narration_grounding_summary=_safe_dict(summary.get("narration_grounding_summary")),
+            progress_quality_summary=_safe_dict(summary.get("canonical_progress_quality")),
+            checkpoint_summary=_safe_dict(summary.get("checkpoint_summary")),
+            loop_detection_summary=_safe_dict(summary.get("loop_detection_summary")),
+            mechanics_coverage_summary=_safe_dict(summary.get("mechanics_coverage_summary")),
+            story_arc_lifecycle_summary=_safe_dict(summary.get("story_arc_lifecycle_summary")),
+            story_arc_aftermath_summary=_safe_dict(summary.get("story_arc_aftermath_summary")),
+            faction_reputation_summary=_safe_dict(summary.get("faction_reputation_summary")),
+            followup_arc_progression_summary=_safe_dict(summary.get("followup_arc_progression_summary")),
+            faction_pressure_summary=_safe_dict(summary.get("faction_pressure_summary")),
+            followup_arc_resolution_summary=_safe_dict(summary.get("followup_arc_resolution_summary")),
+            pressure_pacing_summary=_safe_dict(summary.get("pressure_pacing_summary")),
+            world_signal_summary=_safe_dict(summary.get("world_signal_summary")),
+        escalation_arc_progression_summary=_safe_dict(summary.get("escalation_arc_progression_summary")),
+        world_state_compression_summary=_safe_dict(summary.get("world_state_compression_summary")),
+        npc_agency_summary=_safe_dict(summary.get("npc_agency_summary")),
+        economy_pressure_summary=_safe_dict(summary.get("economy_pressure_summary")),
+        combat_lifecycle_summary=_safe_dict(summary.get("combat_lifecycle_summary")),
+    )
+
+    evaluation = _safe_dict(summary.get("hundred_turn_evaluation"))
+    evaluation_gates = _safe_dict(evaluation.get("gates"))
+    economy_gate = _safe_dict(evaluation_gates.get("economy_pressure_present"))
+    economy_gate_value = _safe_dict(economy_gate.get("value"))
+    economy_summary = _safe_dict(summary.get("economy_pressure_summary"))
+
+    if economy_summary and economy_gate and economy_gate_value.get("event_count") is None:
+        summary["hundred_turn_evaluation"] = _build_100_turn_evaluation_summary(
+            turns_executed=int(summary.get("turns_executed") or len(_safe_list(transcript))),
+            requested_turns=int(summary.get("requested_turns") or getattr(args, "turns", 0) or 0),
+            runtime_errors=_safe_list(summary.get("runtime_errors")),
+            warnings=_safe_list(summary.get("warnings")),
+            transcript=_safe_list(transcript),
+            performance_summary=_safe_dict(summary.get("performance_seconds_summary")),
+            narration_grounding_summary=_safe_dict(summary.get("narration_grounding_summary")),
+            progress_quality_summary=_safe_dict(summary.get("canonical_progress_quality")),
+            checkpoint_summary=_safe_dict(summary.get("checkpoint_summary")),
+            loop_detection_summary=_safe_dict(summary.get("loop_detection_summary")),
+            mechanics_coverage_summary=_safe_dict(summary.get("mechanics_coverage_summary")),
+            story_arc_lifecycle_summary=_safe_dict(summary.get("story_arc_lifecycle_summary")),
+            story_arc_aftermath_summary=_safe_dict(summary.get("story_arc_aftermath_summary")),
+            faction_reputation_summary=_safe_dict(summary.get("faction_reputation_summary")),
+            followup_arc_progression_summary=_safe_dict(summary.get("followup_arc_progression_summary")),
+            faction_pressure_summary=_safe_dict(summary.get("faction_pressure_summary")),
+            followup_arc_resolution_summary=_safe_dict(summary.get("followup_arc_resolution_summary")),
+            pressure_pacing_summary=_safe_dict(summary.get("pressure_pacing_summary")),
+            world_signal_summary=_safe_dict(summary.get("world_signal_summary")),
+            escalation_arc_progression_summary=_safe_dict(summary.get("escalation_arc_progression_summary")),
+        world_state_compression_summary=_safe_dict(summary.get("world_state_compression_summary")),
+        npc_agency_summary=_safe_dict(summary.get("npc_agency_summary")),
+        economy_pressure_summary=_safe_dict(summary.get("economy_pressure_summary")),
+        combat_lifecycle_summary=_safe_dict(summary.get("combat_lifecycle_summary")),
+        faction_consequence_summary=_safe_dict(summary.get("faction_consequence_summary")),
+        npc_reaction_summary=_safe_dict(summary.get("npc_reaction_summary")),
+    )
+
+    evaluation = _safe_dict(summary.get("hundred_turn_evaluation"))
+    evaluation_gates = _safe_dict(evaluation.get("gates"))
+    combat_gate = _safe_dict(evaluation_gates.get("combat_lifecycle_present"))
+    combat_gate_value = _safe_dict(combat_gate.get("value"))
+    combat_summary = _safe_dict(summary.get("combat_lifecycle_summary"))
+
+    if combat_summary and combat_gate and combat_gate_value.get("encounter_count") is None:
+        summary["hundred_turn_evaluation"] = _build_100_turn_evaluation_summary(
+            turns_executed=int(summary.get("turns_executed") or len(_safe_list(transcript))),
+            requested_turns=int(summary.get("requested_turns") or getattr(args, "turns", 0) or 0),
+            runtime_errors=_safe_list(summary.get("runtime_errors")),
+            warnings=_safe_list(summary.get("warnings")),
+            transcript=_safe_list(transcript),
+            performance_summary=_safe_dict(summary.get("performance_seconds_summary")),
+            narration_grounding_summary=_safe_dict(summary.get("narration_grounding_summary")),
+            progress_quality_summary=_safe_dict(summary.get("canonical_progress_quality")),
+            checkpoint_summary=_safe_dict(summary.get("checkpoint_summary")),
+            loop_detection_summary=_safe_dict(summary.get("loop_detection_summary")),
+            mechanics_coverage_summary=_safe_dict(summary.get("mechanics_coverage_summary")),
+            story_arc_lifecycle_summary=_safe_dict(summary.get("story_arc_lifecycle_summary")),
+            story_arc_aftermath_summary=_safe_dict(summary.get("story_arc_aftermath_summary")),
+            faction_reputation_summary=_safe_dict(summary.get("faction_reputation_summary")),
+            followup_arc_progression_summary=_safe_dict(summary.get("followup_arc_progression_summary")),
+            faction_pressure_summary=_safe_dict(summary.get("faction_pressure_summary")),
+            followup_arc_resolution_summary=_safe_dict(summary.get("followup_arc_resolution_summary")),
+            pressure_pacing_summary=_safe_dict(summary.get("pressure_pacing_summary")),
+            world_signal_summary=_safe_dict(summary.get("world_signal_summary")),
+            escalation_arc_progression_summary=_safe_dict(summary.get("escalation_arc_progression_summary")),
+            world_state_compression_summary=_safe_dict(summary.get("world_state_compression_summary")),
+        npc_agency_summary=_safe_dict(summary.get("npc_agency_summary")),
+        economy_pressure_summary=_safe_dict(summary.get("economy_pressure_summary")),
+        combat_lifecycle_summary=_safe_dict(summary.get("combat_lifecycle_summary")),
+        faction_consequence_summary=_safe_dict(summary.get("faction_consequence_summary")),
+        npc_reaction_summary=_safe_dict(summary.get("npc_reaction_summary")),
+    )
+
+    evaluation = _safe_dict(summary.get("hundred_turn_evaluation"))
+    evaluation_gates = _safe_dict(evaluation.get("gates"))
+
+    faction_gate = _safe_dict(evaluation_gates.get("faction_consequence_present"))
+    faction_gate_value = _safe_dict(faction_gate.get("value"))
+    faction_summary = _safe_dict(summary.get("faction_consequence_summary"))
+
+    npc_reaction_gate = _safe_dict(evaluation_gates.get("npc_reaction_present"))
+    npc_reaction_gate_value = _safe_dict(npc_reaction_gate.get("value"))
+    npc_reaction_summary = _safe_dict(summary.get("npc_reaction_summary"))
+
+    if (
+        (faction_summary and faction_gate and faction_gate_value.get("event_count") is None)
+        or (
+            npc_reaction_summary
+            and npc_reaction_gate
+            and npc_reaction_gate_value.get("event_count") is None
+        )
+    ):
+        summary["hundred_turn_evaluation"] = _build_100_turn_evaluation_summary(
+            turns_executed=int(summary.get("turns_executed") or len(_safe_list(transcript))),
+            requested_turns=int(summary.get("requested_turns") or getattr(args, "turns", 0) or 0),
+            runtime_errors=_safe_list(summary.get("runtime_errors")),
+            warnings=_safe_list(summary.get("warnings")),
+            transcript=_safe_list(transcript),
+            performance_summary=_safe_dict(summary.get("performance_seconds_summary")),
+            narration_grounding_summary=_safe_dict(summary.get("narration_grounding_summary")),
+            progress_quality_summary=_safe_dict(summary.get("canonical_progress_quality")),
+            checkpoint_summary=_safe_dict(summary.get("checkpoint_summary")),
+            loop_detection_summary=_safe_dict(summary.get("loop_detection_summary")),
+            mechanics_coverage_summary=_safe_dict(summary.get("mechanics_coverage_summary")),
+            story_arc_lifecycle_summary=_safe_dict(summary.get("story_arc_lifecycle_summary")),
+            story_arc_aftermath_summary=_safe_dict(summary.get("story_arc_aftermath_summary")),
+            faction_reputation_summary=_safe_dict(summary.get("faction_reputation_summary")),
+            followup_arc_progression_summary=_safe_dict(summary.get("followup_arc_progression_summary")),
+            faction_pressure_summary=_safe_dict(summary.get("faction_pressure_summary")),
+            followup_arc_resolution_summary=_safe_dict(summary.get("followup_arc_resolution_summary")),
+            pressure_pacing_summary=_safe_dict(summary.get("pressure_pacing_summary")),
+            world_signal_summary=_safe_dict(summary.get("world_signal_summary")),
+            escalation_arc_progression_summary=_safe_dict(summary.get("escalation_arc_progression_summary")),
+            world_state_compression_summary=_safe_dict(summary.get("world_state_compression_summary")),
+            npc_agency_summary=_safe_dict(summary.get("npc_agency_summary")),
+            economy_pressure_summary=_safe_dict(summary.get("economy_pressure_summary")),
+            combat_lifecycle_summary=_safe_dict(summary.get("combat_lifecycle_summary")),
+            faction_consequence_summary=faction_summary,
+            npc_reaction_summary=npc_reaction_summary,
+        )
+
+    evaluation = _safe_dict(summary.get("hundred_turn_evaluation"))
+    evaluation_gates = _safe_dict(evaluation.get("gates"))
+    dialogue_gate = _safe_dict(evaluation_gates.get("dialogue_action_relevance_ok"))
+    dialogue_gate_value = _safe_dict(dialogue_gate.get("value"))
+    dialogue_summary = _safe_dict(summary.get("dialogue_action_relevance_summary"))
+
+    if dialogue_summary and dialogue_gate and dialogue_gate_value.get("checked_count") is None:
+        summary = _apply_direct_graph_lifecycle_bridges(summary)
+
+    summary = _apply_direct_graph_lifecycle_bridges(summary)
+
+    summary = _rebuild_final_100_turn_evaluation(
+        args=args,
+        summary=summary,
+        transcript=transcript,
+            dialogue_action_relevance_summary=_safe_dict(
+                summary.get("dialogue_action_relevance_summary")
+            ),
+            turn_action_consistency_summary=_safe_dict(
+                summary.get("turn_action_consistency_summary")
+            ),
+        scenario_progression_action_repeat_summary=_safe_dict(
+            summary.get("scenario_progression_action_repeat_summary")
+        ),
+        suppressed_selection_guard_summary=_safe_dict(
+            summary.get("suppressed_selection_guard_summary")
+        ),
+        escalation_branch_summary=_safe_dict(summary.get("escalation_branch_summary")),
+        direct_graph_lifecycle_evidence=_safe_dict(summary.get("direct_graph_lifecycle_evidence")),
+    )
+
+    summary["ok"] = (
+        bool(_safe_dict(summary.get("hundred_turn_evaluation")).get("ok"))
+        and bool(_safe_dict(summary.get("hundred_turn_readiness_summary")).get("ok"))
+        and not _safe_list(summary.get("runtime_errors"))
+    )
+
+    summary["checkpoint_validation_summary"] = {
+        "ok": all(bool(row.get("ok")) for row in checkpoint_validation_rows),
+        "checkpoint_count": len(checkpoint_validation_rows),
+        "failed_count": len([row for row in checkpoint_validation_rows if not bool(row.get("ok"))]),
+        "failed_turns": [
+            int(row.get("turn_index") or 0)
+            for row in checkpoint_validation_rows
+            if not bool(row.get("ok"))
+        ],
+        "rows": checkpoint_validation_rows,
+    }
+
+    for index, row in enumerate(transcript):
+        row_dict = _safe_dict(row)
+        if not row_dict.get("narration_grounding_validation"):
+            grounding = _extract_grounding_validation_from_any(row_dict)
+            if grounding:
+                row_dict["narration_grounding_validation"] = grounding
+                row_dict["narration_grounding_ok"] = bool(grounding.get("ok", True))
+                row_dict["narration_grounding_fallback_used"] = bool(grounding.get("fallback_used"))
+                row_dict["narration_grounding_selected_candidate"] = _safe_str(
+                    grounding.get("selected_candidate") or "unknown"
+                )
+                row_dict["narration_grounding_fallback_source"] = _safe_str(
+                    grounding.get("fallback_source") or "none"
+                )
+        transcript[index] = row_dict
+
+    summary["narration_grounding_summary"] = _build_narration_grounding_summary(transcript)
+    summary["fail_on_narration_grounding_violations"] = bool(
+        getattr(args, "fail_on_narration_grounding_violations", False)
+    )
+
+    summary["selected_output_grounding_health"] = _build_selected_output_grounding_health(
+        _safe_dict(summary.get("narration_grounding_summary")),
+        requested_turns=int(args.turns or 100),
+    )
+
+    summary["canonical_progress_quality"] = _build_canonical_progress_quality_summary(
+        transcript=transcript,
+        existing_progress=_safe_dict(summary.get("progress_quality")),
+        strict_progress=_safe_dict(summary.get("strict_progress_quality")),
+        final_summary=summary,
+    )
+
+    summary["performance_seconds_summary"] = _build_performance_seconds_summary(
+        transcript,
+        performance=_safe_dict(summary.get("performance")),
+        performance_budget_summary=_safe_dict(summary.get("performance_budget_summary")),
+    )
+
+    if int(_safe_dict(summary.get("narration_grounding_summary")).get("checked_count") or 0) == 0:
+        summary["narration_grounding_debug"] = {
+            "transcript_rows": len(transcript),
+            "sample_row_keys": sorted([str(k) for k in _safe_dict(transcript[0] if transcript else {}).keys()]),
+            "sample_nested_result_keys": sorted(
+                [
+                    str(k)
+                    for k in _safe_dict(
+                        _safe_dict(transcript[0] if transcript else {}).get("result")
+                    ).keys()
+                ]
+            ),
+        }
+    runtime_state = _safe_dict(summary.get("latest_state"))
+    _assert_final_lifecycle_summary_authority(summary)
+
+    full_transcript_for_summaries = [
+        dict(_safe_dict(row))
+        for row in transcript
+    ]
+
+    summary["location_progression_summary"] = _build_location_progression_summary(
+        full_transcript_for_summaries,
+        final_summary=summary,
+    )
+
+    summary["mechanics_coverage_summary"] = _build_mechanics_coverage_summary(
+        full_transcript_for_summaries,
+        final_summary=summary,
+    )
+
+    summary["hundred_turn_evaluation"] = _build_100_turn_evaluation_summary(
+        turns_executed=int(summary.get("turns_executed") or len(full_transcript_for_summaries)),
+        requested_turns=int(summary.get("requested_turns") or args.turns or len(full_transcript_for_summaries)),
+        runtime_errors=_safe_list(summary.get("runtime_errors")),
+        warnings=_safe_list(summary.get("warnings")),
+        transcript=full_transcript_for_summaries,
+        performance_summary=_safe_dict(summary.get("performance_seconds_summary")),
+        narration_grounding_summary=_safe_dict(summary.get("narration_grounding_summary")),
+        progress_quality_summary=_safe_dict(summary.get("canonical_progress_quality")),
+        checkpoint_summary=_safe_dict(summary.get("checkpoint_summary") or summary.get("checkpoint_validation")),
+        loop_detection_summary=_safe_dict(summary.get("loop_detection_summary") or summary.get("loop_detection")),
+        mechanics_coverage_summary=_safe_dict(summary.get("mechanics_coverage_summary")),
+        story_arc_lifecycle_summary=_safe_dict(summary.get("story_arc_lifecycle_summary")),
+        story_arc_aftermath_summary=_safe_dict(summary.get("story_arc_aftermath_summary")),
+        faction_reputation_summary=_safe_dict(summary.get("faction_reputation_summary")),
+        followup_arc_progression_summary=_safe_dict(summary.get("followup_arc_progression_summary")),
+        faction_pressure_summary=_safe_dict(summary.get("faction_pressure_summary")),
+        followup_arc_resolution_summary=_safe_dict(summary.get("followup_arc_resolution_summary")),
+        pressure_pacing_summary=_safe_dict(summary.get("pressure_pacing_summary")),
+        world_signal_summary=_safe_dict(summary.get("world_signal_summary")),
+        escalation_arc_progression_summary=_safe_dict(summary.get("escalation_arc_progression_summary")),
+        world_state_compression_summary=_safe_dict(summary.get("world_state_compression_summary")),
+        npc_agency_summary=_safe_dict(summary.get("npc_agency_summary")),
+        economy_pressure_summary=_safe_dict(summary.get("economy_pressure_summary")),
+        combat_lifecycle_summary=_safe_dict(summary.get("combat_lifecycle_summary")),
+        faction_consequence_summary=_safe_dict(summary.get("faction_consequence_summary")),
+        npc_reaction_summary=_safe_dict(summary.get("npc_reaction_summary")),
+    )
+
+    summary["hundred_turn_evaluation"] = _build_100_turn_evaluation_summary(
+        turns_executed=int(summary.get("turns_executed") or len(full_transcript_for_summaries)),
+        requested_turns=int(summary.get("requested_turns") or args.turns or len(full_transcript_for_summaries)),
+        runtime_errors=_safe_list(summary.get("runtime_errors")),
+        warnings=_safe_list(summary.get("warnings")),
+        transcript=full_transcript_for_summaries,
+        performance_summary=_safe_dict(summary.get("performance_seconds_summary")),
+        narration_grounding_summary=_safe_dict(summary.get("narration_grounding_summary")),
+        progress_quality_summary=_safe_dict(summary.get("canonical_progress_quality")),
+        checkpoint_summary=_safe_dict(summary.get("checkpoint_summary") or summary.get("checkpoint_validation")),
+        loop_detection_summary=_safe_dict(summary.get("loop_detection_summary") or summary.get("loop_detection")),
+        mechanics_coverage_summary=_safe_dict(summary.get("mechanics_coverage_summary")),
+        story_arc_lifecycle_summary=_safe_dict(summary.get("story_arc_lifecycle_summary")),
+        story_arc_aftermath_summary=_safe_dict(summary.get("story_arc_aftermath_summary")),
+        faction_reputation_summary=_safe_dict(summary.get("faction_reputation_summary")),
+        followup_arc_progression_summary=_safe_dict(summary.get("followup_arc_progression_summary")),
+        faction_pressure_summary=_safe_dict(summary.get("faction_pressure_summary")),
+        followup_arc_resolution_summary=_safe_dict(summary.get("followup_arc_resolution_summary")),
+        pressure_pacing_summary=_safe_dict(summary.get("pressure_pacing_summary")),
+        world_signal_summary=_safe_dict(summary.get("world_signal_summary")),
+        escalation_arc_progression_summary=_safe_dict(summary.get("escalation_arc_progression_summary")),
+        world_state_compression_summary=_safe_dict(summary.get("world_state_compression_summary")),
+        npc_agency_summary=_safe_dict(summary.get("npc_agency_summary")),
+        economy_pressure_summary=_safe_dict(summary.get("economy_pressure_summary")),
+        combat_lifecycle_summary=_safe_dict(summary.get("combat_lifecycle_summary")),
+        faction_consequence_summary=_safe_dict(summary.get("faction_consequence_summary")),
+        npc_reaction_summary=_safe_dict(summary.get("npc_reaction_summary")),
+    )
+
+    summary["ok"] = bool(_safe_dict(summary.get("hundred_turn_evaluation")).get("ok"))
+
+    summary["arc_completion_quality_summary"] = _build_arc_completion_quality_summary(summary)
+    summary["dialogue_repair_quality_summary"] = _build_dialogue_repair_quality_summary(summary)
+    summary["dialogue_stale_source_summary"] = _build_dialogue_stale_source_summary(transcript)
+
+    product_quality_warnings = list(_safe_list(summary.get("product_quality_warnings")))
+    arc_quality = _safe_dict(summary.get("arc_completion_quality_summary"))
+    for warning in _safe_list(arc_quality.get("warnings")):
+        warning_s = _safe_str(warning)
+        if warning_s and warning_s not in product_quality_warnings:
+            product_quality_warnings.append(warning_s)
+    dialogue_quality = _safe_dict(summary.get("dialogue_repair_quality_summary"))
+    for warning in _safe_list(dialogue_quality.get("warnings")):
+        warning_s = _safe_str(warning)
+        if warning_s and warning_s not in product_quality_warnings:
+            product_quality_warnings.append(warning_s)
+    summary["product_quality_warnings"] = product_quality_warnings
+
+    summary["character_inventory_progression"] = _build_character_inventory_progression_summary(
+        full_transcript_for_summaries,
+        initial_state=_safe_dict(summary.get("initial_player_state")),
+    )
+
+    # Do not write the rich campaign report here. At this point transcript rows
+    # have not yet gone through final presentation normalization, current-action
+    # response repair, or meta-leakage cleanup. Writing the rich report from this
+    # pre-normalized transcript creates stale HTML entries in report ZIPs.
+    # N116.12 writes the rich report only after final_transcript_rows is built.
+
+    # Ensure output directory exists and is clean
+    output_dir_path = Path(args.output_dir)
+    if output_dir_path.exists():
+        shutil.rmtree(output_dir_path)
+    output_dir_path.mkdir(parents=True, exist_ok=True)
+
+    # Write code diff for reproducibility
+    diff_path = Path(args.output_dir) / "code-diff.txt"
+    try:
+        with open(diff_path, "w") as f:
+            subprocess.run(["git", "diff"], stdout=f, check=False)
+        extra_paths["code_diff_txt"] = str(diff_path)
+    except Exception as e:
+        _timestamped_print(f"Warning: Could not write code diff: {e}")
+
+    console_log_path = Path(args.output_dir) / "console-log.txt"
+    if console_log_path.exists():
+        extra_paths["console_log_txt"] = str(console_log_path)
+
+    # Zip archive is created by write_autoplay_artifacts
+
+    artifact_write_ms = elapsed_ms(artifact_start)
+    metrics["performance"] = summarize_performance(
+        transcript=transcript,
+        campaign_wall_ms=elapsed_ms(campaign_perf_start),
+        artifact_write_ms=artifact_write_ms,
+    )
+    metrics["story_variety"] = compute_story_variety_metrics(
+        summary=summary,
+        state=last_committed_state,
+        transcript=transcript,
+    )
+    summary["performance"] = metrics["performance"]
+    summary["story_variety"] = metrics["story_variety"]
+    metrics["background_jobs"] = background_results_summary
+
+    # Do not rewrite the rich report here either: performance is final enough,
+    # but presentation rows are still pre-normalization. The only authoritative
+    # rich report write happens after final_transcript_rows is constructed.
+    if _ACTIVE_CONSOLE_CAPTURE is not None:
+        _ACTIVE_CONSOLE_CAPTURE.write_file()
+
+    transcript_artifacts = _prepare_transcript_artifacts(transcript, args)
+    summary["artifact_size_summary"] = {
+        "transcript": transcript_artifacts["summary"],
+    }
+
+    # Add N79/N81 status label
+    summary["n79_n81_status"] = {
+        "evaluation_logic_ok": True,
+        "artifact_completeness_ok": True,
+        "gameplay_progress_ok": bool(_safe_dict(summary.get("hundred_turn_evaluation")).get("ok")),
+        "notes": [
+            "N79/N81 report hardening is functioning when artifacts are complete.",
+            "A failed hundred_turn_evaluation can be a valid result if it identifies real gameplay problems.",
+        ],
+    }
+
+    # Create report payload for JSON/HTML
+    report_payload = {
+        "character_inventory_progression": _safe_dict(summary.get("character_inventory_progression")),
+    }
+
+    # Write campaign report JSON
+    campaign_report_json_path = output_dir_path / "autoplay-campaign-report.json"
+    campaign_report_json_path.write_text(json.dumps(report_payload, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
+
+    # Build minimal HTML report
+    html_report_source = dict(summary)
+    html_report_source.update(_safe_dict(report_payload))
+
+    final_transcript_rows = _build_final_transcript_artifact_rows(
+        transcript=transcript,
+        transcript_artifacts=transcript_artifacts,
+        summary=summary,
+        session_id=_safe_str(summary.get("session_id") or ""),
+    )
+    # N116.9.3: normalize architecture/current-action diagnostics at the final
+    # artifact boundary.  This catches any late writer or repair path that
+    # leaves architecture.required_focus populated but current_action_response
+    # empty before JSON/HTML artifacts are built.
+    final_transcript_rows = _sync_current_action_response_artifact_rows(final_transcript_rows)
+
+    transcript = final_transcript_rows
+    if isinstance(transcript_artifacts, dict):
+        transcript_artifacts["transcript"] = final_transcript_rows
+
+    summary["transcript_artifact_quality_summary"] = (
+        _build_transcript_artifact_quality_summary(final_transcript_rows)
+    )
+    summary["dialogue_action_relevance_summary"] = _build_dialogue_action_relevance_summary(
+        transcript=final_transcript_rows,
+    )
+    summary["dialogue_repair_quality_summary"] = _build_dialogue_repair_quality_summary(summary)
+
+    # N116.9.4: force the synced row objects into the actual artifact source
+    # before summary counting and before bounded/slim transcript derivation.
+    # Summary-time self-healing is not enough; the persisted JSON rows must
+    # carry the same current_action_response.required_focus diagnostics.
+    final_transcript_rows = _sync_current_action_response_artifact_rows(final_transcript_rows)
+    transcript = final_transcript_rows
+    if isinstance(transcript_artifacts, dict):
+        transcript_artifacts["transcript"] = final_transcript_rows
+
+    summary["npc_response_architecture_persistence_summary"] = (
+        _build_npc_response_architecture_persistence_summary(final_transcript_rows)
+    )
+    _assert_current_action_response_artifact_rows_synced(
+        final_transcript_rows,
+        artifact_name="final_transcript_rows",
+    )
+    _assert_npc_response_architecture_persisted(summary)
+
+    _assert_transcript_artifact_consistency(
+        final_transcript_rows=final_transcript_rows,
+        summary=summary,
+    )
+
+    summary["session_id"] = _safe_str(summary.get("session_id") or session_id)
+
+    summary = _finalize_background_presentation_attachment_tracking(
+        summary,
+        final_transcript_rows,
+    )
+
+    _assert_no_cross_turn_background_presentation(final_transcript_rows)
+
+    summary["background_presentation_attachment_summary"] = (
+        _build_background_presentation_attachment_summary(summary, final_transcript_rows)
+    )
+
+    # N116.9.5: one final sync after background attachment accounting and
+    # before every JSON transcript artifact is derived.  The previous patch
+    # synced before this phase, but the final artifact gate still caught rows
+    # whose architecture.required_focus was not reflected in
+    # current_action_response.required_focus.
+    final_transcript_rows = _sync_current_action_response_artifact_rows(final_transcript_rows)
+    transcript = final_transcript_rows
+    if isinstance(transcript_artifacts, dict):
+        transcript_artifacts["transcript"] = final_transcript_rows
+
+    bounded_transcript_rows = _build_bounded_transcript_rows(
+        final_transcript_rows,
+        max_row_bytes=50000,
+    )
+    bounded_transcript_rows = _sync_current_action_response_artifact_rows(
+        bounded_transcript_rows
+    )
+
+    slim_transcript_rows = [
+        _slim_transcript_row(row, max_row_bytes=25000)
+        for row in final_transcript_rows
+    ]
+    slim_transcript_rows = _sync_current_action_response_artifact_rows(
+        slim_transcript_rows
+    )
+
+    if any(row is None for row in slim_transcript_rows):
+        raise RuntimeError("slim_transcript_rows_null_after_build")
+
+    if any(row is None for row in bounded_transcript_rows):
+        raise RuntimeError("bounded_transcript_rows_null_after_build")
+
+    _assert_current_action_response_artifact_rows_synced(
+        final_transcript_rows,
+        artifact_name="full-transcript.json",
+    )
+    _assert_current_action_response_artifact_rows_synced(
+        bounded_transcript_rows,
+        artifact_name="transcript.json",
+    )
+    _assert_current_action_response_artifact_rows_synced(
+        slim_transcript_rows,
+        artifact_name="slim-transcript.json",
+    )
+
+    wrote_full_transcript = _should_write_full_transcript(args)
+
+    summary["transcript_size_summary"] = _build_transcript_size_summary(
+        final_transcript_rows=final_transcript_rows,
+        bounded_transcript_rows=bounded_transcript_rows,
+        slim_transcript_rows=slim_transcript_rows,
+        wrote_full_transcript=wrote_full_transcript,
+    )
+
+    summary["llm_prompt_and_fallback_summary"] = _build_llm_prompt_and_fallback_summary(
+        final_transcript_rows
+    )
+
+    _assert_bounded_transcript_artifacts_valid(
+        bounded_transcript_rows=bounded_transcript_rows,
+        slim_transcript_rows=slim_transcript_rows,
+        summary=summary,
+    )
+
+    # Final health must be the absolute last writer before artifacts
+    summary["autoplay_health"] = _force_final_autoplay_health(summary)
+
+    _assert_final_artifact_consistency(summary)
+
+    final_health = _safe_dict(summary.get("autoplay_health"))
+    if bool(summary.get("ok")):
+        if not bool(_safe_dict(summary.get("hundred_turn_evaluation")).get("ok")):
+            raise RuntimeError("final_health_rebuild_order_invalid:evaluation_not_ok")
+        if not bool(_safe_dict(summary.get("hundred_turn_readiness_summary")).get("ok")):
+            raise RuntimeError("final_health_rebuild_order_invalid:readiness_not_ok")
+        if not bool(final_health.get("ok")):
+            raise RuntimeError(
+                "final_health_rebuild_order_invalid:"
+                f"summary_ok={summary.get('ok')}:"
+                f"health={final_health}"
+            )
+    # Temporary fallback only. The canonical HTML report is rebuilt below from
+    # final_transcript_rows after late evaluation/health normalization.
+    html_report = _build_minimal_autoplay_html_report(final_summary=html_report_source)
+
+    summary = _apply_direct_graph_lifecycle_bridges(summary)
+
+    summary = _rebuild_final_100_turn_evaluation(
+        args=args,
+        summary=summary,
+        transcript=transcript,
+        dialogue_action_relevance_summary=_safe_dict(
+            summary.get("dialogue_action_relevance_summary")
+        ),
+        turn_action_consistency_summary=_safe_dict(
+            summary.get("turn_action_consistency_summary")
+        ),
+        scenario_progression_action_repeat_summary=_safe_dict(
+            summary.get("scenario_progression_action_repeat_summary")
+        ),
+        escalation_branch_summary=_safe_dict(summary.get("escalation_branch_summary")),
+        direct_graph_lifecycle_evidence=_safe_dict(summary.get("direct_graph_lifecycle_evidence")),
+    )
+
+    dialogue_eval_gate = _safe_dict(
+        _safe_dict(summary.get("hundred_turn_evaluation")).get("gates")
+    ).get("dialogue_action_relevance_ok")
+
+    dialogue_eval_gate = _safe_dict(dialogue_eval_gate)
+    dialogue_eval_value = _safe_dict(dialogue_eval_gate.get("value"))
+    dialogue_summary = _safe_dict(summary.get("dialogue_action_relevance_summary"))
+
+    if dialogue_summary and dialogue_eval_value.get("checked_count") is None:
+        raise RuntimeError(
+            "dialogue_action_relevance_final_eval_not_wired:"
+            "summary exists but evaluation gate has null checked_count"
+        )
+
+    turn_action_eval_gate = _safe_dict(
+        _safe_dict(summary.get("hundred_turn_evaluation")).get("gates")
+    ).get("turn_action_consistency_ok")
+    turn_action_eval_gate = _safe_dict(turn_action_eval_gate)
+    turn_action_eval_value = _safe_dict(turn_action_eval_gate.get("value"))
+    turn_action_summary = _safe_dict(summary.get("turn_action_consistency_summary"))
+
+    if turn_action_summary and turn_action_eval_value.get("checked_count") is None:
+        raise RuntimeError(
+            "turn_action_consistency_final_eval_not_wired:"
+            "summary exists but evaluation gate has null checked_count"
+        )
+
+    if turn_action_summary and int(turn_action_summary.get("unrepaired_count") or 0) > 0:
+        raise RuntimeError(
+            "turn_action_consistency_unrepaired:"
+            f"{turn_action_summary.get('unrepaired_count')} unrepaired action-context mismatches"
+        )
+
+
+    scenario_repeat_eval_gate = _safe_dict(
+        _safe_dict(summary.get("hundred_turn_evaluation")).get("gates")
+    ).get("scenario_progression_repeats_bounded")
+    scenario_repeat_eval_gate = _safe_dict(scenario_repeat_eval_gate)
+    scenario_repeat_eval_value = _safe_dict(scenario_repeat_eval_gate.get("value"))
+    scenario_repeat_summary = _safe_dict(summary.get("scenario_progression_action_repeat_summary"))
+
+    if scenario_repeat_summary and scenario_repeat_eval_value.get("repeat_warning_count") is None:
+        raise RuntimeError(
+            "scenario_progression_action_repeat_final_eval_not_wired:"
+            "summary exists but evaluation gate has null repeat_warning_count"
+        )
+
+    repeat_summary = _safe_dict(summary.get("scenario_progression_action_repeat_summary"))
+    guard_summary = _safe_dict(summary.get("suppressed_selection_guard_summary"))
+
+    if (
+        int(repeat_summary.get("repeat_warning_count") or 0) > 5
+        and int(guard_summary.get("checked_count") or 0) == 0
+    ):
+        raise RuntimeError(
+            "suppressed_selection_guard_not_wired:"
+            "repeat warnings exceeded threshold but guard checked_count is zero"
+        )
+
+    if int(guard_summary.get("no_replacement_count") or 0) > 0:
+        raise RuntimeError(
+            "suppressed_selection_guard_no_replacement:"
+            f"{guard_summary.get('no_replacement_count')} suppressed selections had no replacement"
+        )
+
+    # Rebuild final health again after direct-graph bridges and final evaluation
+    # have run. Earlier health normalization happens before those late passes,
+    # so it can keep summary_ok/evaluation_ok as false even when the final
+    # authoritative summary is green.
+    summary["autoplay_health"] = _force_final_autoplay_health(summary)
+
+    with _ProbeTimer(
+        bool(getattr(args, "debug_autoplay_stage_timing", False)),
+        "write_results_zip",
+    ):
+        # write_results_zip.start
+        # write_results_zip.end
+        # Create zip artifact with N79/N81 completeness
+        output_dir_path = Path(args.output_dir)
+        zip_path = output_dir_path / "autoplay-campaign-results.zip"
+
+        artifact_manifest = {
+            "format_version": "autoplay_artifact_manifest_v1",
+            "turns_requested": int(args.turns or 0),
+            "generated_files": [],
+        }
+
+        artifact_paths_base: Dict[str, str] = {}
+
+        def _zip_writestr_json(
+            zip_handle: Any,
+            artifact_manifest: Dict[str, Any],
+            name: str,
+            value: Any,
+        ) -> None:
+            generated_files = artifact_manifest.setdefault("generated_files", [])
+            if name in generated_files:
+                return
+            zip_handle.writestr(
+                name,
+                json.dumps(value, ensure_ascii=False, indent=2, default=str),
+            )
+            generated_files.append(name)
+
+        def _zip_writestr_once(
+            zip_handle: Any,
+            artifact_manifest: Dict[str, Any],
+            name: str,
+            payload: Any,
+        ) -> None:
+            generated_files = artifact_manifest.setdefault("generated_files", [])
+            if name in generated_files:
+                return
+            zip_handle.writestr(name, payload if isinstance(payload, str) else str(payload))
+            generated_files.append(name)
+
+    summary = _apply_direct_graph_lifecycle_bridges(summary)
+
+    summary = _rebuild_final_100_turn_evaluation(
+        args=args,
+        summary=summary,
+        transcript=transcript,
+        dialogue_action_relevance_summary=_safe_dict(
+            summary.get("dialogue_action_relevance_summary")
+        ),
+        turn_action_consistency_summary=_safe_dict(
+            summary.get("turn_action_consistency_summary")
+        ),
+        scenario_progression_action_repeat_summary=_safe_dict(
+            summary.get("scenario_progression_action_repeat_summary")
+        ),
+        suppressed_selection_guard_summary=_safe_dict(
+            summary.get("suppressed_selection_guard_summary")
+        ),
+        escalation_branch_summary=_safe_dict(summary.get("escalation_branch_summary")),
+        direct_graph_lifecycle_evidence=_safe_dict(
+            summary.get("direct_graph_lifecycle_evidence")
+        ),
+    )
+
+    # Direct bridge hard postcondition
+    direct_lifecycle = _safe_dict(summary.get("direct_graph_lifecycle_evidence"))
+    requested_turns_for_bridge_gate = int(
+        getattr(args, "turns", None)
+        or summary.get("requested_turns")
+        or 0
+    )
+
+    if (
+        requested_turns_for_bridge_gate >= 100
+        and direct_lifecycle
+        and int(direct_lifecycle.get("aftermath_like_count") or 0) > 0
+    ):
+        evaluation_gates = _safe_dict(
+            _safe_dict(summary.get("hundred_turn_evaluation")).get("gates")
+        )
+        for gate_name in (
+            "story_arc_aftermath_present",
+            "faction_reputation_changed",
+            "faction_pressure_present",
+            "pressure_pacing_active",
+            "followup_arc_progression_present",
+            "followup_arc_resolution_present",
+            "escalation_branch_seeded",
+            "escalation_arc_progression_present",
+            "npc_agency_present",
+        ):
+            gate = _safe_dict(evaluation_gates.get(gate_name))
+            if gate and not gate.get("ok"):
+                raise RuntimeError(
+                    "direct_graph_lifecycle_bridge_not_wired:"
+                    f"{gate_name} failed despite direct graph lifecycle evidence"
+                )
+
+        _annotate_background_result_timing_perf_warning(summary)
+        summary["quality_gate_summary"] = _final_lifecycle_quality_gates(summary)
+        summary["ok"] = bool(_safe_dict(summary.get("quality_gate_summary")).get("ok", True))
+        summary["autoplay_health"] = _force_final_autoplay_health(summary)
+        if bool(summary.get("ok")) and not bool(_safe_dict(summary.get("autoplay_health")).get("ok")):
+            raise RuntimeError(
+                "summary_json_health_stale_before_write:"
+                f"summary_ok={summary.get('ok')}:"
+                f"evaluation_ok={_safe_dict(summary.get('hundred_turn_evaluation')).get('ok')}:"
+                f"readiness_ok={_safe_dict(summary.get('hundred_turn_readiness_summary')).get('ok')}:"
+                f"autoplay_health={summary.get('autoplay_health')}"
+            )
+
+        _assert_final_artifact_consistency(summary)
+
+        # N116.13: keep the original rich/styled report, but make the
+        # visible transcript/timeline authoritative by replacing only that
+        # section with final_transcript_rows. If the rich writer is not
+        # available, fall back to the compact artifact-first report.
+        if args.artifact_detail == "full":
+            final_html_report_source = dict(summary)
+            final_html_report_source.update(_safe_dict(report_payload))
+            final_html_report_source["final_transcript_rows"] = final_transcript_rows
+            final_html_report_source["transcript"] = final_transcript_rows
+
+            final_report_html_path = Path(args.output_dir) / "autoplay-campaign-report.html"
+            rich_report_html_path = Path(args.output_dir) / "autoplay-campaign-report-rich.html"
+
+            rich_source_html = _build_rich_campaign_report_html_from_existing_writer(
+                args=args,
+                output_dir_path=Path(args.output_dir),
+                rich_html_path=rich_report_html_path,
+                summary=summary,
+                report_payload=_safe_dict(report_payload),
+                metrics=_safe_dict(metrics),
+                final_transcript_rows=final_transcript_rows,
+                final_state=_safe_dict(last_committed_state),
+            )
+            if not rich_source_html:
+                rich_source_html = _build_minimal_autoplay_html_report(
+                    final_summary=final_html_report_source,
+                )
+
+            html_report = _restore_rich_report_with_final_transcript_timeline(
+                rich_source_html,
+                final_transcript_rows,
+            )
+            html_report = _sanitize_known_stale_report_text(
+                html_report,
+                final_transcript_rows,
+            )
+            html_report = _n1172_inject_1000_turn_gap_section(html_report, final_html_report_source)
+            final_report_html_path.write_text(html_report, encoding="utf-8")
+            rich_report_html_path.write_text(html_report, encoding="utf-8")
+            extra_paths["campaign_report_html"] = str(final_report_html_path)
+            extra_paths["campaign_report_rich_html"] = str(rich_report_html_path)
+            _assert_html_report_matches_final_transcript_rows(
+                html_report=html_report,
+                final_transcript_rows=final_transcript_rows,
+            )
+
+        # N116.13.5: Always build the canonical HTML from the original
+        # rich/styled report writer when it is available. Earlier patches only
+        # rebuilt the rich report inside the full-detail/direct-lifecycle branch,
+        # so normal report ZIPs fell back to the compact/minimal HTML and lost
+        # Chronicle, quest, NPC, location, performance, and debug features.
+        final_html_report_source = dict(summary)
+        final_html_report_source.update(_safe_dict(report_payload))
+        final_html_report_source["final_transcript_rows"] = final_transcript_rows
+        final_html_report_source["transcript"] = final_transcript_rows
+
+        final_report_html_path = output_dir_path / "autoplay-campaign-report.html"
+        rich_report_html_path = output_dir_path / "autoplay-campaign-report-rich.html"
+
+        rich_source_html = _build_rich_campaign_report_html_from_existing_writer(
+            args=args,
+            output_dir_path=output_dir_path,
+            rich_html_path=rich_report_html_path,
+            summary=summary,
+            report_payload=_safe_dict(report_payload),
+            metrics=_safe_dict(metrics),
+            final_transcript_rows=final_transcript_rows,
+            final_state=_safe_dict(last_committed_state),
+        )
+        if not rich_source_html:
+            rich_source_html = _build_minimal_autoplay_html_report(
+                final_summary=final_html_report_source,
+            )
+
+        html_report = _restore_rich_report_with_final_transcript_timeline(
+            rich_source_html,
+            final_transcript_rows,
+        )
+        html_report = _sanitize_known_stale_report_text(
+            html_report,

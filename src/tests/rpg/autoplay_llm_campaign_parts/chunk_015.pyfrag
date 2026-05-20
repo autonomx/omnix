@@ -1,0 +1,925 @@
+                if milestone:
+                    bucket["milestones"].append(milestone)
+                stage_changes.append(
+                    {
+                        "turn_index": turn_index,
+                        "npc_id": npc_id,
+                        "from": decision.get("arc_stage_before"),
+                        "to": decision.get("arc_stage_after"),
+                        "reason": milestone.get("reason") if milestone else "",
+                        "signal_id": decision.get("signal_id"),
+                        "milestone_id": milestone.get("milestone_id") if milestone else "",
+                    }
+                )
+
+    return {
+        "stage_change_count": len(stage_changes),
+        "stage_changes": stage_changes[:20],
+        "by_npc": by_npc,
+        "latest_summary": latest_summary,
+        "duplicate_milestone_ids": sorted(duplicate_milestone_ids),
+        "out_of_bounds_axes": out_of_bounds_axes,
+        "ok": not duplicate_milestone_ids and not out_of_bounds_axes,
+    }
+
+
+def _summarize_player_agent_prompt_budget(rows: List[Dict[str, Any]]) -> Dict[str, Any]:
+    prompt_rows = [row for row in rows if isinstance(row.get("prompt_metrics"), dict)]
+    if not prompt_rows:
+        return {
+            "count": 0,
+            "avg_total_chars": 0.0,
+            "max_total_chars": 0,
+            "avg_estimated_tokens": 0.0,
+            "cache_hits": 0,
+            "sources": {},
+        }
+    sources: Dict[str, int] = {}
+    total_chars: List[int] = []
+    tokens: List[float] = []
+    cache_hits = 0
+    for row in prompt_rows:
+        source = str(row.get("source") or "unknown")
+        sources[source] = int(sources.get(source) or 0) + 1
+        metrics = row.get("prompt_metrics") or {}
+        total_chars.append(int(metrics.get("total_chars") or 0))
+        tokens.append(float(metrics.get("estimated_tokens") or 0.0))
+        if row.get("cache_hit"):
+            cache_hits += 1
+    return {
+        "count": len(prompt_rows),
+        "avg_total_chars": round(sum(total_chars) / len(total_chars), 3),
+        "max_total_chars": max(total_chars),
+        "avg_estimated_tokens": round(sum(tokens) / len(tokens), 3),
+        "max_estimated_tokens": round(max(tokens), 3),
+        "cache_hits": cache_hits,
+        "sources": sources,
+        "examples": prompt_rows[:3],
+    }
+
+
+def _summarize_manual_turn_errors(transcript: List[Dict[str, Any]]) -> Dict[str, Any]:
+    errors: List[Dict[str, Any]] = []
+    for row in transcript if isinstance(transcript, list) else []:
+        row = _safe_dict(row)
+        manual_summary = _safe_dict(row.get("manual_turn_summary"))
+        error = (
+            _safe_str(row.get("runtime_error"))
+            or _safe_str(manual_summary.get("error"))
+            or _safe_str(_safe_dict(row.get("turn_result")).get("error"))
+        )
+        if error:
+            errors.append(
+                {
+                    "turn_index": row.get("turn_index"),
+                    "error": error,
+                }
+            )
+    return {
+        "ok": not errors,
+        "error_count": len(errors),
+        "errors": errors[:20],
+    }
+
+
+REQUIRED_FINAL_LIFECYCLE_SUMMARY_FIELDS = (
+    "latest_state",
+    "quest_progress_summary",
+    "objective_progression_summary",
+    "quest_reconciliation_summary",
+    "quest_handoff_summary",
+    "final_state_field_coverage_summary",
+    "strict_progress_health_summary",
+    "post_transition_action_quality_summary",
+    "repeated_affordance_loop_summary",
+    "pre_turn_advisory_promotion_performance_summary",
+    "campaign_state_commit_summary",
+    "campaign_stale_state_summary",
+    "campaign_state_commit_performance_summary",
+    "handoff_progress_summary",
+    "scenario_progression_summary",
+    "scenario_progression_action_debug",
+    "progression_authority_summary",
+    "progression_authority_sidecar_present",
+    "scenario_progression_quest_state",
+    "scenario_progression_arc_summary",
+    "behavioral_autoplay_eval_summary",
+    "quality_gate_summary",
+)
+
+
+REQUIRED_FINAL_LIFECYCLE_GATES = (
+    "strict_progress_health_ok",
+    "post_transition_action_quality_ok",
+    "objective_progression_present_ok",
+    "repeated_affordance_loop_ok",
+    "quest_handoff_available_after_completion_ok",
+    "no_completed_without_next_objective_ok",
+    "final_state_field_coverage_ok",
+    "pre_turn_advisory_promotion_fast_ok",
+    "final_lifecycle_summary_fields_present_ok",
+    "campaign_state_commit_ok",
+    "campaign_state_not_stale_ok",
+    "campaign_state_commit_performance_ok",
+    "behavioral_autoplay_eval_ok",
+    "scenario_progression_arc_complete_ok",
+)
+
+
+def _final_lifecycle_field_presence_summary(summary: Dict[str, Any]) -> Dict[str, Any]:
+    summary = _safe_dict(summary)
+    present = []
+    missing = []
+    empty = []
+    for key in REQUIRED_FINAL_LIFECYCLE_SUMMARY_FIELDS:
+        value = summary.get(key)
+        if key not in summary:
+            missing.append(key)
+        elif value in (None, {}, []):
+            empty.append(key)
+        else:
+            present.append(key)
+    return {
+        "ok": not missing and not empty,
+        "present": present,
+        "missing": missing,
+        "empty": empty,
+    }
+
+
+def _quest_progress_summary_from_state(state: Dict[str, Any]) -> Dict[str, Any]:
+    state = _safe_dict(state)
+    quest_progress = _safe_dict(state.get("quest_progress"))
+    quests = _safe_dict(quest_progress.get("quests"))
+    if quests:
+        return _quest_progress_summary_from_quest_mapping(quests, source="latest_state.quest_progress")
+
+    quest_log_state = _safe_dict(state.get("quest_log_state"))
+    quests = _safe_dict(quest_log_state.get("quests"))
+    if quests:
+        return _quest_progress_summary_from_quest_mapping(quests, source="latest_state.quest_log_state")
+
+    synthesized = _synthesize_quest_progress_summary_from_story_state(state)
+    if synthesized.get("quest_count"):
+        return synthesized
+
+    return {
+        "quest_count": 0,
+        "active_count": 0,
+        "completed_count": 0,
+        "quests": [],
+        "source": "none",
+    }
+
+
+def _objective_progression_summary_from_state(
+    state: Dict[str, Any],
+    transcript: List[Dict[str, Any]] | None = None,
+) -> Dict[str, Any]:
+    state = _safe_dict(state)
+    log = _safe_list(state.get("objective_progression_log"))
+    hook_state = _safe_dict(state.get("autoplay_story_hook_state"))
+    fired_hooks = _safe_dict(hook_state.get("fired_hooks"))
+    objective_hooks = [
+        {"hook_id": hook_id, **_safe_dict(payload)}
+        for hook_id, payload in fired_hooks.items()
+        if _safe_str(hook_id).startswith("hook:objective")
+    ]
+    return {
+        "count": len(log) + len(objective_hooks),
+        "recent": log[-10:],
+        "objective_hooks": objective_hooks[-10:],
+        "transcript_turns": len(_safe_list(transcript)),
+        "ok": bool(log or objective_hooks),
+    }
+
+
+def _repeated_affordance_loop_summary(
+    transcript: List[Dict[str, Any]],
+    *,
+    threshold: int = 4,
+    campaign_complete_waiting: bool = False,
+) -> Dict[str, Any]:
+    try:
+        from tests.rpg.autoplay.executable_actions import action_signature
+    except Exception:
+        action_signature = lambda value: _safe_str(value).lower()
+
+    counts: Dict[str, int] = {}
+    max_streak = 0
+    max_signature = ""
+    current_signature = ""
+    current_streak = 0
+    examples: Dict[str, str] = {}
+    for row in _safe_list(transcript):
+        row = _safe_dict(row)
+        if campaign_complete_waiting and _is_campaign_complete_bridge_action(
+            row.get("player_action"),
+            row.get("top_scenario_progression_action_id"),
+        ):
+            continue
+        action = _safe_str(row.get("player_action"))
+        if not action:
+            current_signature = ""
+            current_streak = 0
+            continue
+        sig = action_signature(action)
+        counts[sig] = counts.get(sig, 0) + 1
+        examples.setdefault(sig, action)
+        if sig == current_signature:
+            current_streak += 1
+        else:
+            current_signature = sig
+            current_streak = 1
+        if current_streak > max_streak:
+            max_streak = current_streak
+            max_signature = sig
+
+    repeated = [
+        {"signature": sig, "count": count, "example": examples.get(sig, "")}
+        for sig, count in sorted(counts.items(), key=lambda item: item[1], reverse=True)
+        if count >= int(threshold or 4)
+    ]
+    return {
+        "ok": max_streak < int(threshold or 4),
+        "max_streak": max_streak,
+        "max_signature": max_signature,
+        "repeated": repeated[:10],
+        "threshold": int(threshold or 4),
+    }
+
+
+def _quest_reconciliation_summary_from_state(state: Dict[str, Any]) -> Dict[str, Any]:
+    state = _safe_dict(state)
+    log = [_safe_dict(row) for row in _safe_list(state.get("quest_reconciliation_log"))]
+    errors = [row for row in log if _safe_str(row.get("error"))]
+    return {
+        "ok": not errors,
+        "count": len(log),
+        "changed_count": sum(1 for row in log if bool(row.get("changed"))),
+        "errors": errors[:20],
+        "recent": log[-10:],
+    }
+
+
+def _quest_handoff_summary_from_state(state: Dict[str, Any]) -> Dict[str, Any]:
+    state = _safe_dict(state)
+    log = [_safe_dict(row) for row in _safe_list(state.get("quest_handoff_log"))]
+    quest_rows = _safe_dict(_safe_dict(state.get("quest_progress")).get("quests"))
+    active_handoff_quests = []
+    for quest_id, raw in quest_rows.items():
+        quest = _safe_dict(raw)
+        if _safe_str(quest.get("source")) != "generic_quest_handoff":
+            continue
+        if bool(quest.get("completed")) or _safe_str(quest.get("status")) == "completed":
+            continue
+        active_handoff_quests.append(_safe_str(quest.get("quest_id") or quest_id))
+    return {
+        "ok": True,
+        "count": len(log),
+        "recent": log[-10:],
+        "active_handoff_quests": active_handoff_quests[:20],
+        "available_after_completion": bool(log or active_handoff_quests),
+    }
+
+
+def _final_state_field_coverage_summary(state: Dict[str, Any]) -> Dict[str, Any]:
+    state = _safe_dict(state)
+    required_fields = (
+        "quest_progress",
+        "dialogue_state",
+        "objective_progression_log",
+        "quest_reconciliation_log",
+        "quest_handoff_log",
+        "autoplay_story_hook_state",
+        "location_history",
+        "recent_turns",
+        "action_history",
+    )
+    presence_only_fields = {
+        "quest_handoff_log",
+    }
+    present = []
+    missing = []
+    empty = []
+    for key in required_fields:
+        value = state.get(key)
+        if key not in state:
+            missing.append(key)
+        elif key in presence_only_fields:
+            present.append(key)
+        elif value in (None, {}, []):
+            empty.append(key)
+        else:
+            present.append(key)
+    return {
+        "ok": not missing and not empty,
+        "present": present,
+        "missing": missing,
+        "empty": empty,
+    }
+
+
+def _ensure_runtime_state_tracking_fields(
+    runtime_state: Dict[str, Any],
+    transcript: List[Dict[str, Any]],
+) -> Dict[str, Any]:
+    state = deepcopy(_safe_dict(runtime_state))
+    if "quest_handoff_log" not in state:
+        state["quest_handoff_log"] = []
+    if _safe_list(state.get("action_history")):
+        return state
+
+    action_history = []
+    for row in _safe_list(transcript):
+        row = _safe_dict(row)
+        player_action = _safe_str(row.get("player_action"))
+        if not player_action:
+            continue
+        turn_index = int(row.get("turn_index") or row.get("turn") or 0)
+        action_history.append(
+            {
+                "turn": turn_index,
+                "turn_index": turn_index,
+                "player_action": player_action,
+            }
+        )
+    if action_history:
+        state["action_history"] = action_history[-200:]
+    return state
+
+
+def _compact_campaign_state_transcript_tail(
+    transcript: List[Dict[str, Any]],
+    *,
+    limit: int = 12,
+) -> List[Dict[str, Any]]:
+    rows: List[Dict[str, Any]] = []
+    for row in _safe_list(transcript)[-max(1, int(limit or 12)):]:
+        row = _safe_dict(row)
+        rows.append(
+            {
+                "turn": row.get("turn") or row.get("turn_index"),
+                "turn_index": row.get("turn_index") or row.get("turn"),
+                "player_action": _safe_str(row.get("player_action") or row.get("action")),
+                "narration": _safe_str(row.get("narration")),
+                "objective_progression": _safe_dict(row.get("objective_progression")),
+            }
+        )
+    return rows
+
+
+def _strict_progress_health_summary_from_summary(summary: Dict[str, Any]) -> Dict[str, Any]:
+    summary = _safe_dict(summary)
+    behavioral = _safe_dict(summary.get("behavioral_autoplay_eval_summary"))
+    behavioral_metrics = _safe_dict(behavioral.get("metrics"))
+    arc_summary = _safe_dict(summary.get("scenario_progression_arc_summary"))
+    progression_changed_count = int(behavioral_metrics.get("progression_changed_count") or 0)
+    unique_progression_node_count = int(behavioral_metrics.get("unique_progression_node_count") or 0)
+    arc_complete = bool(arc_summary.get("arc_complete"))
+
+    progress_quality = _safe_dict(_safe_dict(summary.get("health")).get("progress_quality"))
+    metrics = _safe_dict(progress_quality.get("metrics"))
+    objective_progression = _safe_dict(summary.get("objective_progression_summary"))
+    quest_progress_summary = _safe_dict(summary.get("quest_progress_summary"))
+    violations = []
+    for quest in _safe_list(quest_progress_summary.get("quests")):
+        quest = _safe_dict(quest)
+        if _safe_str(quest.get("status")) != "active":
+            continue
+        objectives = [_safe_dict(row) for row in _safe_list(quest.get("objectives"))]
+        if not objectives:
+            continue
+        has_completed = any(
+            bool(row.get("completed")) or _safe_str(row.get("status")) == "completed"
+            for row in objectives
+        )
+        has_next = any(
+            not bool(row.get("completed")) and _safe_str(row.get("status")) != "completed"
+            for row in objectives
+        )
+        if has_completed and not has_next:
+            violations.append(
+                {
+                    "quest_id": _safe_str(quest.get("quest_id")),
+                    "title": _safe_str(quest.get("title")),
+                }
+            )
+    graph_progress_ok = (
+        progression_changed_count >= 3
+        and unique_progression_node_count >= 3
+    ) or arc_complete
+    ok = bool(progress_quality.get("ok", True)) and (bool(objective_progression.get("ok")) or not summary.get("requested_turns"))
+    ok = ok and not violations
+    ok = bool(ok or graph_progress_ok)
+    return {
+        "ok": ok,
+        "graph_progress_ok": graph_progress_ok,
+        "progression_changed_count": progression_changed_count,
+        "unique_progression_node_count": unique_progression_node_count,
+        "scenario_arc_complete": arc_complete,
+        "metrics": metrics,
+        "objective_progression_present": bool(objective_progression.get("ok")),
+        "no_completed_without_next_objective_violations": violations[:20],
+        "quest_count": int(quest_progress_summary.get("quest_count") or 0),
+    }
+
+
+def _pre_turn_advisory_promotion_performance_summary(
+    background_drain_events: List[Dict[str, Any]],
+    *,
+    slow_events: List[Dict[str, Any]],
+    auto_disabled: bool,
+    disable_reason: str,
+) -> Dict[str, Any]:
+    promotion_results = []
+    for row in _safe_list(background_drain_events):
+        result = _safe_dict(_safe_dict(row).get("pre_turn_advisory_promotion_result"))
+        if result:
+            promotion_results.append(result)
+    elapsed_values = [float(_safe_dict(row).get("elapsed_ms") or 0.0) for row in promotion_results]
+    fast_count = sum(1 for row in promotion_results if bool(_safe_dict(row).get("fast_pre_turn")))
+    slow_guard_ms = 5000
+    for row in promotion_results:
+        if int(_safe_dict(row).get("slow_guard_ms") or 0) > 0:
+            slow_guard_ms = int(_safe_dict(row).get("slow_guard_ms") or 0)
+            break
+    max_elapsed_ms = max(elapsed_values) if elapsed_values else 0.0
+    slow_event_count = len(_safe_list(slow_events))
+    ok = slow_event_count == 0 and max_elapsed_ms <= slow_guard_ms
+    return {
+        "ok": ok,
+        "count": len(promotion_results),
+        "promotion_count": len(promotion_results),
+        "fast_count": fast_count,
+        "fast_path_count": fast_count,
+        "slow_guard_ms": slow_guard_ms,
+        "slow_event_count": slow_event_count,
+        "auto_disabled": bool(auto_disabled),
+        "disable_reason": _safe_str(disable_reason),
+        "max_elapsed_ms": max_elapsed_ms,
+        "avg_elapsed_ms": round(sum(elapsed_values) / len(elapsed_values), 3) if elapsed_values else 0.0,
+        "slow_events": _safe_list(slow_events)[-10:],
+    }
+
+
+def _merge_preserving_runtime_state(
+    previous_state: Dict[str, Any],
+    runtime_state: Dict[str, Any],
+) -> Dict[str, Any]:
+    previous_state = _safe_dict(previous_state)
+    runtime_state = _safe_dict(runtime_state)
+    if not previous_state:
+        return deepcopy(runtime_state)
+    if not runtime_state:
+        return deepcopy(previous_state)
+
+    merged = deepcopy(previous_state)
+    for key, value in runtime_state.items():
+        if key == "campaign_calendar":
+            merged[key] = _merge_campaign_calendar(_safe_dict(merged.get(key)), _safe_dict(value))
+            continue
+        if key == "player_journal":
+            merged[key] = _merge_player_journal(_safe_dict(merged.get(key)), _safe_dict(value))
+            continue
+        existing_value = merged.get(key)
+        if value in (None, {}, []) and existing_value not in (None, {}, []):
+            continue
+        if isinstance(merged.get(key), dict) and isinstance(value, dict):
+            merged[key] = _merge_preserving_runtime_state(_safe_dict(merged.get(key)), _safe_dict(value))
+            continue
+        merged[key] = deepcopy(value)
+    return merged
+
+
+def _merge_turn_result_authoritative_state(
+    runtime_state: Dict[str, Any],
+    turn_result: Dict[str, Any],
+) -> Dict[str, Any]:
+    runtime_state = _safe_dict(runtime_state)
+    turn_result = _safe_dict(turn_result)
+    candidates = [
+        _safe_dict(turn_result.get("simulation_state")),
+        _safe_dict(turn_result.get("runtime_state")),
+        _safe_dict(_safe_dict(turn_result.get("result")).get("simulation_state")),
+        _safe_dict(_safe_dict(turn_result.get("result")).get("runtime_state")),
+        _safe_dict(_safe_dict(turn_result.get("resolved_result")).get("simulation_state")),
+        _safe_dict(_safe_dict(turn_result.get("resolved_result")).get("runtime_state")),
+    ]
+    merged = dict(runtime_state)
+    for candidate in candidates:
+        if not candidate:
+            continue
+        candidate = _authoritative_progression_state(
+            merged,
+            candidate,
+            reason="before_turn_result_merge",
+            turn_index=int(merged.get("turn_index") or 0),
+        )
+        merged = _merge_preserving_runtime_state(merged, candidate)
+        merged = _authoritative_progression_state(
+            runtime_state,
+            merged,
+            reason="after_turn_result_merge",
+            turn_index=int(merged.get("turn_index") or 0),
+        )
+    return _authoritative_progression_state(
+        runtime_state,
+        merged,
+        reason="turn_result_merge_final",
+        turn_index=int(merged.get("turn_index") or 0),
+    )
+
+
+def _reconcile_and_apply_handoff(runtime_state: Dict[str, Any]) -> Dict[str, Any]:
+    state = deepcopy(_safe_dict(runtime_state))
+    try:
+        from app.rpg.objectives.reconciliation import (
+            reconcile_objective_progression_into_quests,
+        )
+
+        reconciled = _safe_dict(reconcile_objective_progression_into_quests(state))
+        state = _safe_dict(reconciled.get("state")) or state
+    except Exception:
+        pass
+    try:
+        from app.rpg.objectives.handoff import apply_generic_quest_handoff
+
+        handoff = _safe_dict(apply_generic_quest_handoff(state))
+        state = _safe_dict(handoff.get("state")) or state
+    except Exception:
+        pass
+    return state
+
+
+def _commit_campaign_state_authority(
+    runtime_state: Dict[str, Any],
+    *,
+    turn_record: Dict[str, Any] | None = None,
+    transcript_tail: List[Dict[str, Any]] | None = None,
+    transcript: List[Dict[str, Any]] | None = None,
+    phase: str = "turn",
+) -> Dict[str, Any]:
+    try:
+        from app.rpg.campaign_state.authority_commit import commit_campaign_state
+
+        result = commit_campaign_state(
+            runtime_state,
+            turn_record=turn_record,
+            transcript_tail=transcript_tail,
+            transcript=transcript,
+            phase=phase,
+            performance_budget_ms=25,
+        )
+        committed = _safe_dict(result.get("state")) or runtime_state
+        return _authoritative_progression_state(
+            runtime_state,
+            committed,
+            reason="after_campaign_state_commit",
+            turn_index=int(committed.get("turn_index") or 0),
+        )
+    except Exception as exc:
+        errors = runtime_state.setdefault("campaign_state_commit_errors", [])
+        if isinstance(errors, list):
+            errors.append(f"{type(exc).__name__}: {exc}")
+            del errors[:-20]
+        return runtime_state
+
+
+def _runtime_state_from_transcript(transcript: List[Dict[str, Any]]) -> Dict[str, Any]:
+    merged: Dict[str, Any] = {}
+    for row in _safe_list(transcript):
+        row = _safe_dict(row)
+        row_turn_result = _safe_dict(row.get("turn_result"))
+        manual_summary = _safe_dict(row_turn_result.get("manual_turn_summary"))
+        row_runtime_state = (
+            _safe_dict(row.get("final_authoritative_state"))
+            or _safe_dict(row.get("authoritative_state"))
+            or _safe_dict(row.get("after_state"))
+            or _safe_dict(row.get("runtime_state"))
+            or _safe_dict(row_turn_result.get("runtime_state"))
+            or _safe_dict(manual_summary.get("runtime_state"))
+            or _safe_dict(manual_summary.get("simulation_state"))
+            or _safe_dict(row_turn_result.get("simulation_state"))
+        )
+        if row_runtime_state:
+            merged = _merge_preserving_runtime_state(merged, row_runtime_state)
+    return merged
+
+
+def _guard_quest_summary_source(summary: Dict[str, Any], runtime_state: Dict[str, Any]) -> None:
+    quest_summary = _safe_dict(summary.get("quest_progress_summary"))
+    runtime_state = _safe_dict(runtime_state)
+    derived_source = _safe_str(_quest_progress_summary_from_state(runtime_state).get("source"))
+    current_source = _safe_str(quest_summary.get("source"))
+    if not current_source or current_source == "latest_state.quest_progress":
+        quest_summary["source"] = derived_source or "latest_state"
+    summary["quest_progress_summary"] = quest_summary
+
+
+def _sync_hundred_turn_validation_classification(summary: Dict[str, Any]) -> None:
+    summary = _safe_dict(summary)
+    readiness = _safe_dict(summary.get("hundred_turn_readiness_summary"))
+    readiness_classification = _safe_str(readiness.get("classification"))
+    summary["hundred_turn_validation_classification"] = (
+        readiness_classification
+        if readiness_classification
+        else "content_exhausted_waiting_for_next_graph_pack"
+        if _content_exhausted_waiting_for_next_graph_pack(summary)
+        else "active_or_incomplete"
+    )
+
+
+def _background_result_timing_all_jobs_safely_attached(summary: Dict[str, Any]) -> bool:
+    """Return true when background lag is only a provider-throughput issue.
+
+    A late attach should still be visible in diagnostics, but it should not fail
+    product correctness when every submitted job attached, no jobs failed or
+    orphaned, and selected output grounding stayed safe.
+    """
+    summary = _safe_dict(summary)
+    timing = _safe_dict(summary.get("background_result_timing_summary"))
+    if not timing:
+        return False
+
+    submitted = int(timing.get("jobs_submitted") or 0)
+    attached_total = int(timing.get("jobs_attached_total") or 0)
+    failed = int(timing.get("jobs_failed") or timing.get("failed_count") or 0)
+    orphaned = int(timing.get("orphaned_result_count") or timing.get("orphaned_results") or 0)
+    pending = int(timing.get("pending_result_count") or timing.get("pending_results") or 0)
+    attached_final = int(timing.get("jobs_attached_final") or 0)
+    selected_grounding = _safe_dict(summary.get("selected_output_grounding_health"))
+
+    all_attached = submitted <= 0 or attached_total >= submitted
+    grounding_safe = not selected_grounding or bool(selected_grounding.get("ok", True))
+    return bool(
+        all_attached
+        and attached_total > 0
+        and failed == 0
+        and orphaned == 0
+        and pending == 0
+        and grounding_safe
+        and attached_final < attached_total
+    )
+
+
+def _annotate_background_result_timing_perf_warning(summary: Dict[str, Any]) -> None:
+    summary = _safe_dict(summary)
+    timing = _safe_dict(summary.get("background_result_timing_summary"))
+    if not timing:
+        return
+    if not _background_result_timing_all_jobs_safely_attached(summary):
+        return
+    max_lag = int(timing.get("max_attach_lag_turns") or 0)
+    limit = int(summary.get("background_result_max_turn_lag") or 5)
+    timing["provider_backlog_perf_warning"] = bool(max_lag > limit or not bool(timing.get("ok", True)))
+    timing["provider_backlog_perf_warning_reason"] = (
+        "all_background_jobs_attached_safely_but_provider_queue_lag_exceeded_strict_turn_lag_budget"
+    )
+    timing["correctness_ok_despite_lag"] = True
+    summary["background_result_timing_summary"] = timing
+
+
+def _final_lifecycle_quality_gates(summary: Dict[str, Any]) -> Dict[str, Any]:
+    summary = _safe_dict(summary)
+    existing = _safe_dict(summary.get("quality_gate_summary"))
+    gates = dict(_safe_dict(existing.get("gates")))
+    requested_turns = int(summary.get("requested_turns") or summary.get("turns_executed") or 0)
+    is_20_turn_or_more = requested_turns >= 20
+    strict_progress = _safe_dict(summary.get("strict_progress_health_summary"))
+    post_transition_action_quality = _safe_dict(summary.get("post_transition_action_quality_summary"))
+    objective_progression = _safe_dict(summary.get("objective_progression_summary"))
+    repeated_affordance = _safe_dict(summary.get("repeated_affordance_loop_summary"))
+    quest_handoff = _safe_dict(summary.get("quest_handoff_summary"))
+    field_coverage = _safe_dict(summary.get("final_state_field_coverage_summary"))
+    pre_turn_promotion_perf = _safe_dict(summary.get("pre_turn_advisory_promotion_performance_summary"))
+    final_field_presence = _final_lifecycle_field_presence_summary(summary)
+    campaign_commit = _safe_dict(summary.get("campaign_state_commit_summary"))
+    stale_state = _safe_dict(summary.get("campaign_stale_state_summary"))
+    commit_perf = _safe_dict(summary.get("campaign_state_commit_performance_summary"))
+    behavioral_eval = _safe_dict(summary.get("behavioral_autoplay_eval_summary"))
+    arc_summary = _safe_dict(summary.get("scenario_progression_arc_summary"))
+    arc_complete = bool(arc_summary.get("arc_complete"))
+    background_lag_is_perf_only = _background_result_timing_all_jobs_safely_attached(summary)
+    if background_lag_is_perf_only:
+        # N116.14: late background attachment is a provider-throughput warning,
+        # not a correctness failure, when every job attached safely and selected
+        # output grounding remained clean.
+        gates["background_result_timing_ok"] = True
+        gates["strict_100turn_background_attach_lag_ok"] = True
+
+    quest_progress_summary = _safe_dict(summary.get("quest_progress_summary"))
+    scenario_progression = _safe_dict(summary.get("scenario_progression_summary"))
+    scenario_progression_log = _safe_list(summary.get("scenario_progression_log"))
+    graph_flow_active = bool(
+        scenario_progression_log
+        or _safe_dict(summary.get("progression_completed_nodes"))
+        or _safe_dict(summary.get("progression_facts"))
+        or bool(scenario_progression.get("changed"))
+    )
+    active_quests = 0
+    completed_quests = 0
+    completed_without_next_objective = []
+    for row in _safe_list(quest_progress_summary.get("quests")):
+        quest = _safe_dict(row)
+        objectives = [_safe_dict(item) for item in _safe_list(quest.get("objectives"))]
+        status = _safe_str(quest.get("status"))
+        completed = bool(quest.get("completed")) or status == "completed"
+        if completed:
+            completed_quests += 1
+        elif status == "active":
+            active_quests += 1
+        if status != "active":
+            continue
+        has_completed = any(
+            bool(item.get("completed")) or _safe_str(item.get("status")) == "completed"
+            for item in objectives
+        )
+        has_next = any(
+            not bool(item.get("completed")) and _safe_str(item.get("status")) != "completed"
+            for item in objectives
+        )
+        if has_completed and not has_next:
+            completed_without_next_objective.append(_safe_str(quest.get("quest_id") or quest.get("title")))
+
+    gates["strict_progress_health_ok"] = (
+        not is_20_turn_or_more
+        or bool(strict_progress.get("ok", False) or arc_complete)
+    )
+    gates["post_transition_action_quality_ok"] = (
+        not is_20_turn_or_more
+        or bool(post_transition_action_quality.get("ok", False) or arc_complete)
+    )
+    gates["objective_progression_present_ok"] = (
+        not is_20_turn_or_more
+        or bool(objective_progression.get("ok", False))
+    )
+    gates["repeated_affordance_loop_ok"] = (
+        not is_20_turn_or_more
+        or bool(repeated_affordance.get("ok", True))
+    )
+    gates["quest_handoff_available_after_completion_ok"] = (
+        graph_flow_active
+        or completed_quests == 0
+        or active_quests > 0
+        or bool(quest_handoff.get("changed"))
+        or bool(quest_handoff.get("active_handoff_quests"))
+    )
+    gates["no_completed_without_next_objective_ok"] = not completed_without_next_objective
+    gates["final_state_field_coverage_ok"] = bool(field_coverage.get("ok"))
+    gates["pre_turn_advisory_promotion_fast_ok"] = (
+        not is_20_turn_or_more
+        or bool(pre_turn_promotion_perf.get("ok", True))
+    )
+    gates["final_lifecycle_summary_fields_present_ok"] = bool(final_field_presence.get("ok"))
+    gates["campaign_state_commit_ok"] = bool(campaign_commit.get("ok", False) or arc_complete)
+    gates["campaign_state_not_stale_ok"] = bool(stale_state.get("ok", False) or arc_complete)
+    gates["campaign_state_commit_performance_ok"] = bool(commit_perf.get("ok", True))
+    gates["behavioral_autoplay_eval_ok"] = bool(behavioral_eval.get("ok", False))
+    readiness = _safe_dict(summary.get("hundred_turn_readiness_summary"))
+    if int(summary.get("requested_turns") or 0) >= 100 and readiness:
+        gates["hundred_turn_readiness_ok"] = bool(readiness.get("ok"))
+
+    narration_grounding = _safe_dict(summary.get("narration_grounding_summary"))
+    if bool(summary.get("fail_on_narration_grounding_violations")):
+        gates["narration_grounding_ok"] = bool(narration_grounding.get("ok", True))
+    requested_turns = int(
+        summary.get("requested_turns")
+        or summary.get("turns_executed")
+        or 0
+    )
+    all_expected_node_count = int(
+        arc_summary.get("all_expected_node_count")
+        or arc_summary.get("expected_node_count")
+        or 0
+    )
+    completed_node_count = int(arc_summary.get("completed_node_count") or 0)
+    campaign_complete = bool(
+        arc_summary.get("arc_complete")
+        or arc_summary.get("campaign_graphs_complete")
+        or (
+            int(arc_summary.get("graph_count") or 0) > 0
+            and int(arc_summary.get("completed_graph_count") or 0)
+            >= int(arc_summary.get("graph_count") or 0)
+        )
+    )
+    partial_run_has_expected_progress = bool(
+        requested_turns > 0
+        and all_expected_node_count > 0
+        and requested_turns < all_expected_node_count
+        and completed_node_count >= requested_turns
+    )
+
+    gates["scenario_progression_arc_complete_ok"] = bool(
+        campaign_complete or partial_run_has_expected_progress
+    )
+    gates["scenario_progression_campaign_complete_ok"] = bool(
+        campaign_complete or partial_run_has_expected_progress
+    )
+
+    for required_gate in REQUIRED_FINAL_LIFECYCLE_GATES:
+        gates.setdefault(required_gate, False)
+
+    failed = [name for name, ok in gates.items() if not bool(ok)]
+    return {
+        **existing,
+        "ok": not failed,
+        "gates": gates,
+        "failed_gates": failed,
+        "final_lifecycle_field_presence": final_field_presence,
+        "source": "final_lifecycle_quality_gates",
+    }
+
+
+def _build_story_arc_lifecycle_summary(
+    *,
+    story_arcs: Dict[str, Any],
+    events: List[Dict[str, Any]],
+) -> Dict[str, Any]:
+    arcs = _safe_dict(story_arcs)
+    event_rows = [_safe_dict(event) for event in _safe_list(events)]
+
+    status_counts: Dict[str, int] = {}
+    for arc in arcs.values():
+        status = _safe_str(_safe_dict(arc).get("status") or "unknown")
+        status_counts[status] = int(status_counts.get(status, 0)) + 1
+
+    completed = [
+        arc
+        for arc in arcs.values()
+        if _safe_dict(arc).get("status") == "completed"
+    ]
+    failed = [
+        arc
+        for arc in arcs.values()
+        if _safe_dict(arc).get("status") == "failed"
+    ]
+    active = [
+        arc
+        for arc in arcs.values()
+        if _safe_dict(arc).get("status") not in {"completed", "failed", "abandoned"}
+    ]
+
+    seeded_followups = [
+        arc
+        for arc in active
+        if _safe_dict(arc).get("seeded_followup")
+        or _safe_dict(arc).get("source_hook_id")
+        or _safe_dict(arc).get("current_stage") == "seeded_followup"
+        or any(
+            _safe_dict(history).get("type") == "arc_seeded"
+            for history in _safe_list(_safe_dict(arc).get("history"))
+        )
+    ]
+
+    original_active = [
+        arc
+        for arc in active
+        if arc not in seeded_followups
+    ]
+
+    return {
+        "format_version": "story_arc_lifecycle_summary_v1",
+        "ok": bool(completed or failed),
+        "arc_count": len(arcs),
+        "completed_count": len(completed),
+        "failed_count": len(failed),
+        "active_count": len(active),
+        "original_active_count": len(original_active),
+        "seeded_followup_active_count": len(seeded_followups),
+        "status_counts": dict(sorted(status_counts.items())),
+        "arcs": arcs,
+        "events": event_rows,
+        "completion_events": [
+            event for event in event_rows if event.get("subtype") == "arc_completed"
+        ],
+        "failure_events": [
+            event for event in event_rows if event.get("subtype") == "arc_failed"
+        ],
+        "unresolved_original_arcs": [
+            {
+                "arc_id": _safe_dict(arc).get("arc_id"),
+                "title": _safe_dict(arc).get("title"),
+                "status": _safe_dict(arc).get("status"),
+                "current_stage": _safe_dict(arc).get("current_stage"),
+            }
+            for arc in original_active
+        ],
+        "active_followup_arcs": [
+            {
+                "arc_id": _safe_dict(arc).get("arc_id"),
+                "title": _safe_dict(arc).get("title"),
+                "status": _safe_dict(arc).get("status"),
+                "current_stage": _safe_dict(arc).get("current_stage"),
+                "source_hook_id": _safe_dict(arc).get("source_hook_id"),
+                "progress_count": _safe_dict(arc).get("progress_count"),
+                "last_progress_turn": _safe_dict(arc).get("last_progress_turn"),
+            }
+            for arc in seeded_followups
+        ],
+        "unresolved_arcs": [
+            {
+                "arc_id": _safe_dict(arc).get("arc_id"),
+                "title": _safe_dict(arc).get("title"),
+                "status": _safe_dict(arc).get("status"),
+                "current_stage": _safe_dict(arc).get("current_stage"),

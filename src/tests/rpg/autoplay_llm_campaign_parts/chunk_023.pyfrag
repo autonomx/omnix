@@ -1,0 +1,925 @@
+        row = _sync_selected_narration_npc_to_top_level(row)
+        transcript.append(row)
+
+        _assert_progression_monotonic(
+            authoritative_state,
+            turn_index=turn_index,
+            previous_node_count=progression_node_count_at_turn_start,
+            previous_revision=progression_revision_at_turn_start,
+        )
+
+        compact_transcript_tail = _compact_campaign_state_transcript_tail(transcript, limit=12)
+        runtime_state["recent_turns"] = compact_transcript_tail
+        runtime_state["transcript_tail"] = compact_transcript_tail
+        action_history = runtime_state.setdefault("action_history", [])
+        if isinstance(action_history, list):
+            action_history.append(
+                {
+                    "turn": turn_index,
+                    "turn_index": turn_index,
+                    "player_action": _safe_str(player_action),
+                }
+            )
+            del action_history[:-50]
+
+        runtime_state = _commit_campaign_state_authority(
+            runtime_state,
+            turn_record=record,
+            transcript_tail=transcript[-12:],
+            phase="turn",
+        )
+        runtime_state = _refresh_scenario_progression_actions_for_turn(
+            runtime_state,
+            args,
+            turn_index=turn_index,
+        )
+        runtime_state, progression_authority_state = _update_sidecar_and_overlay(
+            runtime_state,
+            progression_authority_state,
+            reason="after_post_append_commit",
+            turn_index=turn_index,
+        )
+        carried_campaign_runtime_state = _merge_base_runtime_namespaces(
+            carried_campaign_runtime_state,
+            runtime_state,
+        )
+        last_committed_state = deepcopy(runtime_state)
+        simulation_state = deepcopy(last_committed_state)
+        turn_result["runtime_state"] = runtime_state
+        if session_obj:
+            session_obj["runtime_state"] = runtime_state
+            turn_result["session"] = session_obj
+        record["runtime_state"] = runtime_state
+        record["campaign_state_commit_summary"] = _safe_dict(
+            runtime_state.get("campaign_state_commit_summary")
+        )
+        record["quest_progress_after_commit"] = _safe_dict(runtime_state.get("quest_progress"))
+        record["campaign_state_commit_sequence"] = int(runtime_state.get("campaign_state_commit_sequence") or 0)
+        record["progression_sidecar_completed_node_count"] = _progression_node_count(
+            progression_authority_state
+        )
+        record["progression_sidecar_revision"] = _progression_revision(
+            progression_authority_state
+        )
+        record["progression_authority_sidecar_summary"] = _safe_dict(
+            progression_authority_state.get("progression_authority_summary")
+        )
+        record["progression_runtime_completed_node_count"] = _progression_node_count(runtime_state)
+        record["progression_runtime_revision"] = _progression_revision(runtime_state)
+        record["active_graph_objective_count"] = _active_graph_objective_count_from_state(runtime_state)
+        record["scenario_progression_actions_empty_with_active_objectives"] = (
+            _active_graph_objective_count_from_state(runtime_state) > 0
+            and not bool(_safe_list(runtime_state.get("scenario_progression_actions")))
+        )
+        commit_summary = _safe_dict(runtime_state.get("campaign_state_commit_summary"))
+        commit_qps = _safe_dict(commit_summary.get("quest_progress_summary"))
+        active_handoff_count = 0
+        for quest in _safe_list(commit_qps.get("quests")):
+            quest = _safe_dict(quest)
+            if not quest.get("completed") and (
+                quest.get("handoff_quest")
+                or quest.get("source") == "campaign_state_authority_commit"
+                or _safe_str(quest.get("title")).startswith("Investigate Lead:")
+            ):
+                active_handoff_count += 1
+        committed_digest = state_digest(last_committed_state)
+        record["final_authoritative_state"] = last_committed_state
+        record["after_state_digest"] = committed_digest
+        record["authoritative_state_digest"] = committed_digest
+        record["committed_next_turn_digest"] = committed_digest
+        state_preservation_debug["committed_counts"] = committed_digest.get("counts", {})
+        _probe_log(
+            bool(getattr(args, "debug_autoplay_stage_timing", False)),
+            "campaign_state_commit.visible_to_next_turn",
+            turn_index=turn_index,
+            active_count=commit_qps.get("active_count"),
+            completed_count=commit_qps.get("completed_count"),
+            active_handoff_count=active_handoff_count,
+            handoff_reason=_safe_str(_safe_dict(commit_summary.get("handoff_summary")).get("reason")),
+            handoff_changed=bool(_safe_dict(commit_summary.get("handoff_summary")).get("changed")),
+        )
+
+        _probe_log(
+            bool(getattr(args, "debug_autoplay_stage_timing", False)),
+            "turn.end",
+            turn_index=turn_index,
+            transcript_len=len(transcript),
+        )
+        runtime_state = _overlay_and_assert_progression_sidecar(
+            runtime_state,
+            progression_authority_state,
+            reason="turn_end",
+            turn_index=turn_index,
+        )
+        _probe_log(
+            bool(getattr(args, "debug_autoplay_stage_timing", False)),
+            "scenario_progression.sidecar.end",
+            turn_index=turn_index,
+            runtime_revision=_progression_revision(runtime_state),
+            sidecar_revision=_progression_revision(progression_authority_state),
+            runtime_completed_node_count=_progression_node_count(runtime_state),
+            sidecar_completed_node_count=_progression_node_count(progression_authority_state),
+            runtime_fact_count=_progression_fact_count(runtime_state),
+            sidecar_fact_count=_progression_fact_count(progression_authority_state),
+            next_actions=[
+                _safe_str(_safe_dict(row).get("action_id"))
+                for row in _safe_list(runtime_state.get("scenario_progression_actions"))[:5]
+            ],
+        )
+        _assert_progression_sidecar_monotonic(
+            progression_authority_state,
+            turn_index=turn_index,
+            previous_node_count=progression_sidecar_max_node_count,
+            previous_revision=progression_sidecar_max_revision,
+        )
+        progression_sidecar_max_node_count = max(
+            progression_sidecar_max_node_count,
+            _progression_node_count(progression_authority_state),
+        )
+        progression_sidecar_max_revision = max(
+            progression_sidecar_max_revision,
+            _progression_revision(progression_authority_state),
+        )
+        last_committed_state = deepcopy(runtime_state)
+
+        if len(transcript) <= transcript_len_at_turn_start:
+            raise RuntimeError(
+                "autoplay_turn_did_not_append_transcript_row:"
+                f"turn_index={turn_index}:"
+                f"start_len={transcript_len_at_turn_start}:"
+                f"end_len={len(transcript)}"
+            )
+
+        health = evaluate_autoplay_health(
+            transcript,
+            latest_context=context,
+            max_repeated_actions=args.max_repeated_actions,
+            max_runtime_errors=0 if args.fail_on_runtime_error else 999999,
+            allow_compatibility_turn_runtime=not args.fail_on_compatibility_turn_runtime,
+            max_player_agent_fallback_rate=args.max_player_agent_fallback_rate,
+            max_no_progress_turns=args.max_no_progress_turns,
+            fail_on_checkpoint_failure=not args.allow_checkpoint_failures,
+            fail_on_state_bound_warnings=not args.allow_state_bound_warnings,
+            min_action_diversity_rate=float(args.min_action_diversity_rate),
+            min_category_diversity_rate=float(args.min_category_diversity_rate),
+        )
+        if args.stop_on_loop and health.get("loop", {}).get("ok") is False:
+            stopped_reason = "repeated_action_loop"
+            break
+        if runtime_error and args.fail_on_runtime_error:
+            stopped_reason = "runtime_error"
+            break
+
+    _timestamped_print(
+        "Final background drain starting "
+        f"timeout_seconds={float(args.final_background_drain_timeout_seconds)} "
+        f"cancel_unfinished={bool(args.cancel_unfinished_background_on_final_timeout)}"
+    )
+    with _ProbeTimer(
+        bool(getattr(args, "debug_autoplay_stage_timing", False)),
+        "final_background_drain",
+        timeout_seconds=float(args.final_background_drain_timeout_seconds),
+        cancel_unfinished=bool(args.cancel_unfinished_background_on_final_timeout),
+    ):
+        background_results = pipeline.drain(
+            timeout_seconds=float(args.final_background_drain_timeout_seconds),
+            cancel_unfinished=bool(args.cancel_unfinished_background_on_final_timeout),
+        )
+    _timestamped_print(f"Final background drain finished results={len(background_results)}")
+
+    background_executor_shutdown_summary = {}
+    try:
+        background_executor_shutdown_summary = pipeline.executor_thread_diagnostics()
+    except Exception as exc:
+        background_executor_shutdown_summary = {
+            "error": f"{type(exc).__name__}: {exc}",
+        }
+    final_drain_event = _drain_completed_background_jobs_for_transcript(
+        pipeline=pipeline,
+        job_registry=background_job_registry,
+        transcript=transcript,
+        current_turn=int(args.turns),
+        phase="final",
+        wait_ms=0,
+        timing_tracker=background_result_timing_tracker,
+    )
+    background_drain_events.append(final_drain_event)
+    background_results_summary = attach_background_results_to_transcript(
+        transcript, background_results,
+        timing_tracker=background_result_timing_tracker,
+        attach_turn=int(args.turns),
+        session_id=session_id,
+    )
+
+    # If combined results are attached after journal advancement, refresh journal entries with narration.
+    for record in transcript:
+        combined_background_result = _safe_dict(record.get("combined_background_llm_result"))
+        if combined_background_result:
+            record["combined_background_llm_result"] = combined_background_result
+            _attach_llm_prompt_debug_to_row(record, combined_background_result)
+
+            # If the turn just wrote a journal entry, refresh that entry with
+            # the now-available presentation narration. This is deterministic
+            # and only rewrites the same journal:turn:N text from known facts.
+            runtime_state = _safe_dict(record.get("runtime_state"))
+            journal = _safe_dict(runtime_state.get("player_journal"))
+            entries = _safe_list(journal.get("entries"))
+            entry_id = f"journal:turn:{record.get('turn_index')}"
+            for entry in entries:
+                entry = _safe_dict(entry)
+                if _safe_str(entry.get("entry_id")) != entry_id:
+                    continue
+                refreshed_turn_result = _journal_turn_result_with_narration_sources(
+                    turn_result=_safe_dict(record.get("turn_result")),
+                    combined_background_result=combined_background_result,
+                    resolved_narration_payload=_safe_dict(record.get("resolved_narration_payload")),
+                    narration_text=_safe_str(combined_background_result.get("narration")),
+                )
+                # Rebuild one-entry text using accumulated pending snapshots if
+                # present; otherwise only replace result text by appending a
+                # clean narration line to the existing entry.
+                clean_narration = _safe_str(combined_background_result.get("narration"))
+                if clean_narration and clean_narration not in _safe_str(entry.get("text")):
+                    entry["text"] = _safe_str(entry.get("text")).rstrip() + "\nWhat changed: " + clean_narration
+                break
+    advisory_promotion_summary = {"ok": True, "enabled": False}
+    if args.deferred_advisory_promotion == "on":
+        advisory_promotion_summary = run_deferred_advisory_promotions_for_transcript(
+            transcript=transcript,
+            max_promotions_per_turn=int(args.max_advisory_promotions_per_turn),
+        )
+        advisory_promotion_summary["enabled"] = True
+    with _ProbeTimer(
+        bool(getattr(args, "debug_autoplay_stage_timing", False)),
+        "pipeline_shutdown",
+    ):
+        pipeline.shutdown(
+            wait=False,
+            cancel_futures=bool(args.cancel_unfinished_background_on_final_timeout),
+        )
+
+    latest_context = (
+        transcript[-1].get("player_action_context")
+        if transcript and isinstance(transcript[-1].get("player_action_context"), dict)
+        else {}
+    )
+    progress_quality_metrics = compute_progress_quality_metrics(transcript)
+    performance_metrics = summarize_performance(
+        transcript=transcript,
+        campaign_wall_ms=elapsed_ms(campaign_perf_start),
+        artifact_write_ms=artifact_write_ms,
+    )
+    metrics = compute_progress_metrics(transcript, latest_context=latest_context)
+    metrics["player_agent_trace_summary"] = _summarize_player_agent_trace(transcript)
+    metrics["deferred_narration_trace_summary"] = _summarize_deferred_narration_trace(transcript)
+    metrics["deferred_advisory_trace_summary"] = _summarize_deferred_advisory_trace(transcript)
+    metrics["performance_budget_summary"] = _summarize_performance_budget(
+        transcript=transcript,
+        background_summary=background_results_summary,
+    )
+    metrics["background_prompt_budget_summary"] = _summarize_background_prompt_budget(transcript)
+    metrics["combined_quality_shape_summary"] = _summarize_combined_quality_shape(transcript)
+    manual_harness_slowest = []
+    for row in transcript:
+        summary = row.get("manual_harness_trace_summary") or {}
+        for stage in summary.get("slowest_stages") or []:
+            manual_harness_slowest.append(
+                {
+                    "turn_index": row.get("turn_index"),
+                    "event": stage.get("event"),
+                    "elapsed_seconds": stage.get("elapsed_seconds"),
+                }
+            )
+    metrics["manual_harness_trace_summary"] = {
+        "enabled": bool(args.debug_provider_shape),
+        "slowest_stages": sorted(
+            manual_harness_slowest,
+            key=lambda item: float(item.get("elapsed_seconds") or 0.0),
+            reverse=True,
+        )[:20],
+    }
+
+    turn_perf_slowest = []
+    for row in transcript:
+        summary = row.get("turn_perf_trace_summary") or {}
+        for stage in summary.get("slowest_stages") or []:
+            turn_perf_slowest.append(
+                {
+                    "turn_index": row.get("turn_index"),
+                    "event": stage.get("event"),
+                    "elapsed_seconds": stage.get("elapsed_seconds"),
+                }
+            )
+    metrics["turn_perf_trace_summary"] = {
+        "enabled": bool(args.debug_provider_shape),
+        "slowest_stages": sorted(
+            turn_perf_slowest,
+            key=lambda item: float(item.get("elapsed_seconds") or 0.0),
+            reverse=True,
+        )[:30],
+    }
+    provider_trace_rows = [
+        item
+        for row in transcript
+        for item in (row.get("provider_trace") or [])
+        if isinstance(item, dict)
+    ]
+    metrics["provider_trace_summary"] = {
+        "provider_call_count": sum(1 for row in provider_trace_rows if row.get("event") == "provider_call"),
+        "provider_call_seconds": round(
+            sum(float(row.get("elapsed_seconds") or 0.0) for row in provider_trace_rows if row.get("event") == "provider_call"),
+            3,
+        ),
+        "by_purpose": {},
+    }
+    for row in provider_trace_rows:
+        if row.get("event") != "provider_call":
+            continue
+        purpose = str(row.get("purpose") or "unknown")
+        bucket = metrics["provider_trace_summary"]["by_purpose"].setdefault(
+            purpose,
+            {"count": 0, "seconds": 0.0, "prompt_chars": 0},
+        )
+        bucket["count"] += 1
+        bucket["seconds"] = round(bucket["seconds"] + float(row.get("elapsed_seconds") or 0.0), 3)
+        bucket["prompt_chars"] += int(row.get("prompt_chars") or 0)
+    metrics["narration_trace_summary"] = {
+        "guard_enter_count": sum(
+            1
+            for row in transcript
+            for item in (row.get("narration_trace") or [])
+            if item.get("event") == "guard_enter"
+        ),
+        "provider_accessor_calls": sum(
+            1
+            for row in transcript
+            for item in (row.get("narration_trace") or [])
+            if item.get("event") == "get_runtime_llm_provider_called"
+        ),
+        "build_payload_calls": sum(
+            1
+            for row in transcript
+            for item in (row.get("narration_trace") or [])
+            if item.get("event") == "before_build_runtime_narration_payload"
+        ),
+        "provider_runtime_sources": sum(
+            1
+            for row in transcript
+            for item in (row.get("narration_trace") or [])
+            if item.get("event") == "after_build_runtime_narration_payload"
+            and item.get("source") == "provider_runtime_narration"
+        ),
+    }
+    metrics["progress_quality"] = progress_quality_metrics
+    metrics["performance"] = performance_metrics
+    metrics["background_jobs"] = background_results_summary
+    metrics["deferred_advisory_promotion_summary"] = advisory_promotion_summary
+    health = evaluate_autoplay_health(
+        transcript,
+        latest_context=latest_context,
+        max_repeated_actions=args.max_repeated_actions,
+        max_runtime_errors=0 if args.fail_on_runtime_error else 999999,
+        allow_compatibility_turn_runtime=not args.fail_on_compatibility_turn_runtime,
+        max_player_agent_fallback_rate=args.max_player_agent_fallback_rate,
+        max_no_progress_turns=args.max_no_progress_turns,
+        fail_on_checkpoint_failure=not args.allow_checkpoint_failures,
+        fail_on_state_bound_warnings=not args.allow_state_bound_warnings,
+        min_action_diversity_rate=float(args.min_action_diversity_rate),
+        min_category_diversity_rate=float(args.min_category_diversity_rate),
+    )
+
+    deferred_blocking_violations = [
+        row for row in transcript
+        if row.get("deferred_blocking_provider_violation")
+    ]
+    if deferred_blocking_violations:
+        health["ok"] = False
+        health.setdefault("warnings", []).append(
+            f"deferred_narration_blocked_on_provider:{len(deferred_blocking_violations)}"
+        )
+
+    progress_quality_health = _build_strict_progress_quality_certification(
+        transcript=transcript,
+        summary=summary,
+        min_meaningful_progress_rate=float(args.min_meaningful_progress_rate),
+    )
+    health.setdefault("warnings", [])
+    if not progress_quality_health.get("ok"):
+        health["warnings"].extend(
+            [
+                "progress_quality:" + str(warning)
+                for warning in progress_quality_health.get("warnings") or []
+            ]
+        )
+    if args.fail_on_post_objective_weak_progress:
+        post_objective_warnings = post_objective_false_progress_warnings(transcript)
+        if post_objective_warnings:
+            progress_quality_health.setdefault("warnings", [])
+            progress_quality_health["warnings"].extend(post_objective_warnings)
+            progress_quality_health["ok"] = False
+            health["ok"] = False
+    health["progress_quality"] = progress_quality_health
+
+    forbidden_player_action_patterns = [
+        "current objective",
+        "anything that can help",
+        "choose a concrete lead",
+        "ask a named npc",
+        "next known location",
+        "inspect a physical clue",
+        "grounded way to make progress",
+        "investigate story arc",
+    ]
+    forbidden_player_action_summary = {
+        "ok": True,
+        "matches": [],
+    }
+    for row in transcript:
+        action = _safe_str(_safe_dict(row).get("player_action"))
+        lower = action.lower()
+        for pattern in forbidden_player_action_patterns:
+            if pattern in lower:
+                forbidden_player_action_summary["ok"] = False
+                forbidden_player_action_summary["matches"].append(
+                    {
+                        "turn": _safe_dict(row).get("turn"),
+                        "pattern": pattern,
+                        "player_action": action,
+                    }
+                )
+
+    summary = {
+        "ok": bool(health.get("ok")) and not stopped_reason,
+        "session_id": session_id,
+        "scenario_seed": args.scenario_seed,
+        "resolved_scenario_seed": seed_resolution["resolved_seed"],
+        "seed_resolution": seed_resolution,
+        "turn_runtime": "manual_harness",
+        "server_runtime_used": False,
+        "latency_profile": args.latency_profile,
+        "narration_mode": args.narration_mode,
+        "background_llm_mode": args.background_llm_mode,
+        "checkpoint_mode": args.checkpoint_mode,
+        "background_workers": int(effective_background_workers),
+        "provider_workers": int(effective_provider_workers),
+        "requested_background_workers": int(args.background_workers),
+        "requested_provider_workers": int(args.provider_workers),
+        "checkpoint_every": int(args.checkpoint_every or 0),
+        "state_bounds_limits": {
+            "max_state_bytes": int(args.max_state_bytes),
+            "max_roots": int(args.max_roots),
+            "max_state_list_length": int(args.max_state_list_length),
+            "max_state_dict_keys": int(args.max_state_dict_keys),
+        },
+        "progress_quality_thresholds": {
+            "min_meaningful_progress_rate": float(args.min_meaningful_progress_rate),
+            "max_churn_only_rate": float(args.max_churn_only_rate),
+            "max_churn_only_streak": int(args.max_churn_only_streak),
+            "max_objective_target_no_progress_streak": int(args.max_objective_target_no_progress_streak),
+            "fail_on_post_objective_weak_progress": bool(args.fail_on_post_objective_weak_progress),
+            "fail_on_dialogue_coverage_gap": bool(args.fail_on_dialogue_coverage_gap),
+        },
+        "strict_progress_quality_certification": progress_quality_health,
+        "strategy_profile": args.strategy,
+        "base_response_mode": args.autoplay_base_response,
+        "action_diversity_thresholds": {
+            "action_diversity_window": int(args.action_diversity_window),
+            "min_action_diversity_rate": float(args.min_action_diversity_rate),
+            "min_category_diversity_rate": float(args.min_category_diversity_rate),
+        },
+        "seed_result": seed_result,
+        "requested_turns": int(args.turns),
+        "autoplay_profile": _safe_str(getattr(args, "autoplay_profile", "") or "custom"),
+        "effective_turns": int(args.turns),
+        "turns_executed": len(transcript),
+        "stopped_reason": stopped_reason,
+        "player_agent": args.player_agent,
+        "provider_shape": provider_shape if args.artifact_detail == "full" else {
+            "type": provider_shape.get("type"),
+            "module": provider_shape.get("module"),
+            "methods": provider_shape.get("methods", [])[:20],
+        },
+        "strategy": args.strategy,
+        "artifact_detail": args.artifact_detail,
+        "duration_seconds": round(time.time() - started, 3),
+        "health": health,
+        "performance": performance_metrics,
+        "background_jobs": background_results_summary,
+        "deferred_advisory_promotion_summary": advisory_promotion_summary,
+        "player_agent_trace_summary": metrics.get("player_agent_trace_summary") or {},
+        "deferred_narration_trace_summary": metrics.get("deferred_narration_trace_summary") or {},
+        "deferred_advisory_trace_summary": metrics.get("deferred_advisory_trace_summary") or {},
+        "performance_budget_summary": metrics.get("performance_budget_summary") or {},
+        "background_prompt_budget_summary": metrics.get("background_prompt_budget_summary") or {},
+        "combined_quality_shape_summary": metrics.get("combined_quality_shape_summary") or {},
+        "player_agent_prompt_budget_summary": _summarize_player_agent_prompt_budget(player_agent_prompt_rows),
+        "player_agent_cache_summary": player_agent_cache.summary(),
+    }
+    latest_evolution_summary = {}
+    for row in reversed(transcript):
+        latest_evolution_summary = _safe_dict(row.get("npc_evolution_summary"))
+        if latest_evolution_summary:
+            break
+    summary["npc_evolution_summary"] = {
+        "latest": latest_evolution_summary,
+        "signals_created": advisory_promotion_summary.get("evolution_signals_created", 0),
+        "signals_consumed": advisory_promotion_summary.get("evolution_signals_consumed", 0),
+    }
+    summary["promotion_target_grounding_summary"] = _summarize_promotion_target_grounding(transcript)
+    metrics["promotion_target_grounding_summary"] = summary["promotion_target_grounding_summary"]
+    summary["npc_evolution_profile_persistence_summary"] = (
+        advisory_promotion_summary.get("profile_persist_result") or {}
+    )
+    summary["npc_profile_load_summary"] = summarize_profile_loads(transcript)
+    summary["profile_grounded_output_summary"] = _summarize_profile_grounded_output(transcript)
+    summary["npc_arc_progression_summary"] = _summarize_npc_arc_progression(transcript)
+    summary["npc_evolution_report_summary"] = summarize_npc_evolution_for_report(transcript)
+    quest_progress_summary = _quest_progress_summary_from_state(runtime_state)
+    summary["quest_progress_summary"] = quest_progress_summary or summarize_quests_for_report(transcript)
+    summary["location_progression_summary"] = _build_location_progression_summary(
+        transcript,
+        final_summary=summary,
+    )
+    summary["story_beat_summary"] = summarize_story_beats_for_report(transcript)
+    summary["manual_turn_error_summary"] = _summarize_manual_turn_errors(transcript)
+    runtime_narration_diagnostics = _safe_dict(metrics.get("narration_trace_summary"))
+    provider_attempt_count = int(runtime_narration_diagnostics.get("provider_runtime_sources") or 0)
+    fallback_used_turns = len(transcript) - provider_attempt_count  # Approximate
+    npc_dialogue_mode_summary = {
+        "mode": "provider_backed" if provider_attempt_count > 0 else "deterministic_fallback_only",
+        "provider_attempt_count": provider_attempt_count,
+        "fallback_used_turns": fallback_used_turns,
+        "note": (
+            "NPC dialogue is currently deterministic fallback only; intelligence should come from dialogue_state and grounded fallback rules."
+            if provider_attempt_count <= 0
+            else "NPC dialogue provider was attempted during this run."
+        ),
+    }
+    summary["npc_dialogue_mode_summary"] = npc_dialogue_mode_summary
+    console_log_path = Path(args.output_dir) / "console-log.txt"
+    console_log_text = ""
+    if _ACTIVE_CONSOLE_CAPTURE is not None:
+        _ACTIVE_CONSOLE_CAPTURE.write_file()
+        console_log_text = _ACTIVE_CONSOLE_CAPTURE.text()
+    elif console_log_path.exists():
+        console_log_text = console_log_path.read_text(encoding="utf-8", errors="replace")
+    summary["console_log_summary"] = summarize_console_log(console_log_text)
+    summary["console_log_summary"]["path"] = str(console_log_path)
+    summary["action_diversity_summary"] = summarize_action_diversity(transcript)
+    summary["progress_timeline_summary"] = summarize_progress_timeline(transcript)
+    arc = _safe_dict(summary.get("scenario_progression_arc_summary"))
+    campaign_complete_waiting = bool(
+        arc.get("campaign_graphs_complete")
+        and arc.get("waiting_for_next_graph_pack")
+    )
+    summary["long_run_warning_summary"] = summarize_long_run_warnings(
+        transcript=transcript,
+        action_diversity_summary=summary["action_diversity_summary"],
+        progress_timeline_summary=summary["progress_timeline_summary"],
+        console_log_summary=summary["console_log_summary"],
+        manual_turn_error_summary=summary["manual_turn_error_summary"],
+        turns_for_strict_gates=int(args.strict_eval_turns),
+        campaign_complete_waiting=campaign_complete_waiting,
+    )
+    npc_line_repetition_summary = repeated_npc_line_metrics(transcript, streak_threshold=3)
+    summary["npc_line_repetition_summary"] = npc_line_repetition_summary
+    npc_line_repetition_summary = repeated_npc_line_metrics(transcript, streak_threshold=3)
+    summary["npc_line_repetition_summary"] = npc_line_repetition_summary
+    summary["forbidden_player_action_summary"] = forbidden_player_action_summary
+
+    summary["hundred_turn_eval_summary"] = summarize_hundred_turn_eval(
+        transcript=transcript,
+        summary=summary,
+        turns_for_strict_gates=int(args.strict_eval_turns),
+    )
+    background_drain_events.append(
+        _reconcile_existing_background_attachments(
+            transcript=transcript,
+            timing_tracker=background_result_timing_tracker,
+            attach_turn=int(args.turns),
+            phase="final",
+        )
+    )
+    summary["background_result_timing_summary"] = _summarize_background_result_timing(
+        background_result_timing_tracker,
+        turn_count=len(transcript),
+        strict_eval_turns=int(args.strict_eval_turns),
+        max_turn_lag=int(args.background_result_max_turn_lag),
+    )
+    summary["background_executor_shutdown_summary"] = background_executor_shutdown_summary
+    summary["background_drain_events"] = background_drain_events[-200:]
+    summary["background_jobs"] = _summarize_reconciled_background_jobs(
+        existing_background_jobs=_safe_dict(summary.get("background_jobs")),
+        background_results=background_results if isinstance(background_results, list) else [],
+        background_result_timing_summary=_safe_dict(summary.get("background_result_timing_summary")),
+        transcript=transcript,
+    )
+    summary["performance_budget_summary"] = _reconcile_performance_budget_background_llm_counts(
+        performance_budget_summary=_safe_dict(summary.get("performance_budget_summary")),
+        background_jobs=_safe_dict(summary.get("background_jobs")),
+        background_result_timing_summary=_safe_dict(summary.get("background_result_timing_summary")),
+    )
+    metrics["story_beat_summary"] = summary["story_beat_summary"]
+    metrics["manual_turn_error_summary"] = summary["manual_turn_error_summary"]
+    metrics["console_log_summary"] = summary["console_log_summary"]
+    metrics["action_diversity_summary"] = summary["action_diversity_summary"]
+    metrics["progress_timeline_summary"] = summary["progress_timeline_summary"]
+    metrics["long_run_warning_summary"] = summary["long_run_warning_summary"]
+    metrics["hundred_turn_eval_summary"] = summary["hundred_turn_eval_summary"]
+    metrics["background_result_timing_summary"] = summary["background_result_timing_summary"]
+    metrics["background_executor_shutdown_summary"] = summary["background_executor_shutdown_summary"]
+    metrics["background_drain_events"] = summary["background_drain_events"]
+    metrics["background_jobs"] = summary["background_jobs"]
+    metrics["performance_budget_summary"] = summary["performance_budget_summary"]
+    # Strict quality gates: post-transition action quality and progress health
+    summary["objective_progression_summary"] = _objective_progression_summary_from_state(runtime_state)
+    arc = _safe_dict(summary.get("scenario_progression_arc_summary"))
+    campaign_complete_waiting = bool(
+        arc.get("campaign_graphs_complete")
+        and arc.get("waiting_for_next_graph_pack")
+    )
+    summary["repeated_affordance_loop_summary"] = _repeated_affordance_loop_summary(
+        transcript, threshold=4, campaign_complete_waiting=campaign_complete_waiting
+    )
+    summary["post_transition_action_quality"] = _post_transition_action_quality_summary(transcript)
+    summary["post_transition_action_quality_summary"] = summary["post_transition_action_quality"]
+    summary["quality_gate_summary"] = _quality_gate_summary(args, metrics, summary, transcript)
+    if not summary["quality_gate_summary"].get("ok"):
+        health["ok"] = False
+        health.setdefault("warnings", []).append("quality_gate_summary_failed")
+    # Final quest summary override: if no quests, try to extract from story arc view
+    if int(summary["quest_progress_summary"].get("quest_count") or 0) == 0:
+        story_arc_view = _safe_dict(summary.get("story_arc_view") or metrics.get("story_arc_view"))
+        if story_arc_view:
+            from tests.rpg.autoplay.report_sections import (
+                _quest_rows_from_story_arc_view,
+            )
+            arc_quests = _quest_rows_from_story_arc_view(story_arc_view)
+            if arc_quests:
+                summary["quest_progress_summary"] = summarize_quests_for_report(
+                    [{"simulation_state": {"quest_state": {q["quest_id"]: q for q in arc_quests}}}]
+                )
+    calendar_and_journal = build_campaign_calendar_and_journal(
+        transcript,
+        minutes_per_turn=int(args.campaign_minutes_per_turn),
+        journal_every_turns=int(args.journal_every_turns),
+    )
+    summary["campaign_calendar_summary"] = calendar_and_journal["calendar"]
+    summary["player_journal_summary"] = _sanitize_player_journal_summary(calendar_and_journal["journal"])
+    summary["player_journal_quality_summary"] = _summarize_player_journal_quality(summary)
+    metrics["npc_evolution_summary"] = summary["npc_evolution_summary"]
+    metrics["npc_evolution_profile_persistence_summary"] = summary["npc_evolution_profile_persistence_summary"]
+    metrics["npc_profile_load_summary"] = summary["npc_profile_load_summary"]
+    metrics["profile_grounded_output_summary"] = summary["profile_grounded_output_summary"]
+    metrics["npc_arc_progression_summary"] = summary["npc_arc_progression_summary"]
+    metrics["npc_evolution_report_summary"] = summary["npc_evolution_report_summary"]
+    metrics["quest_progress_summary"] = summary["quest_progress_summary"]
+    metrics["campaign_calendar_summary"] = summary["campaign_calendar_summary"]
+    metrics["player_journal_summary"] = summary["player_journal_summary"]
+    metrics["player_journal_quality_summary"] = summary["player_journal_quality_summary"]
+    summary["quality_gate_summary"] = _summarize_quality_gates(
+        args=args,
+        metrics=metrics,
+        summary=summary,
+        transcript=transcript,
+    )
+    if not summary["quality_gate_summary"].get("ok"):
+        health["ok"] = False
+        health.setdefault("warnings", []).append("quality_gate_summary_failed")
+    if advisory_promotion_summary.get("mutated_authoritative_state"):
+        health["ok"] = False
+        health.setdefault("warnings", []).append("deferred_advisory_promotion_mutated_authoritative_state")
+    summary["health"] = health
+    artifact_start = now_perf()
+    extra_paths = {}
+    # First compute current performance without report write timing.
+    metrics["performance"] = summarize_performance(
+        transcript=transcript,
+        campaign_wall_ms=elapsed_ms(campaign_perf_start),
+        artifact_write_ms=0.0,
+    )
+    metrics["story_variety"] = compute_story_variety_metrics(
+        summary=summary,
+        state=last_committed_state,
+        transcript=transcript,
+    )
+    summary["performance"] = metrics["performance"]
+    summary["story_variety"] = metrics["story_variety"]
+    metrics["background_jobs"] = background_results_summary
+
+    # N88.5.2: authoritative final lifecycle summary.
+    # This must be the last summary recomputation before artifact writes.
+    runtime_state = _overlay_and_assert_progression_sidecar(
+        runtime_state,
+        progression_authority_state,
+        reason="before_final_summary",
+        turn_index=int(args.turns or len(transcript)),
+    )
+
+    summary["direct_graph_lifecycle_evidence"] = _collect_direct_graph_lifecycle_evidence(
+        transcript
+    )
+
+    summary["story_arc_lifecycle_summary"] = _build_story_arc_lifecycle_summary(
+        story_arcs=story_arc_runtime_state,
+        events=story_arc_resolution_events,
+    )
+
+    summary["story_arc_aftermath_summary"] = _build_story_arc_aftermath_summary(
+        aftermath_events=story_arc_aftermath_events,
+        world_signals=story_arc_aftermath_world_signals,
+        npc_memory_events=npc_memory_events,
+        followup_hooks=story_arc_aftermath_followup_hooks,
+        faction_events=faction_reputation_events,
+        seeded_events=followup_arc_seed_events,
+    )
+
+    summary["faction_reputation_summary"] = build_faction_reputation_summary(
+        faction_reputation_state
+    )
+
+    summary["followup_arc_progression_summary"] = _build_followup_arc_progression_summary(
+        progression_events=followup_arc_progression_events,
+        progression_world_signals=followup_arc_progression_world_signals,
+        story_arcs=story_arc_runtime_state,
+    )
+
+    summary["world_signal_summary"] = _build_world_signal_summary(world_signal_events)
+
+    summary["faction_pressure_summary"] = _build_faction_pressure_summary(
+        pressure_events=faction_pressure_events,
+        world_signals=[
+            signal
+            for signal in _safe_list(world_signal_events)
+            if _safe_dict(signal).get("kind") == "faction_pressure"
+        ],
+    )
+
+    summary["followup_arc_resolution_summary"] = _build_followup_arc_resolution_summary(
+        resolution_events=followup_arc_resolution_events,
+        resolution_world_signals=followup_arc_resolution_world_signals,
+        escalation_hooks=followup_arc_resolution_escalation_hooks,
+        escalation_seed_events=escalation_arc_seed_events,
+        story_arcs=story_arc_runtime_state,
+    )
+
+    summary["pressure_pacing_summary"] = _build_pressure_pacing_summary(
+        accepted_events=faction_pressure_events,
+        rejected_events=pressure_pacing_rejected_events,
+        rejected_world_signals=pressure_pacing_rejected_world_signals,
+    )
+
+    # Rebuild story_arc_lifecycle_summary after follow-up progression changes story_arc_runtime_state
+    summary["story_arc_lifecycle_summary"] = _build_story_arc_lifecycle_summary(
+        story_arcs=story_arc_runtime_state,
+        events=story_arc_resolution_events + followup_arc_resolution_events + escalation_arc_seed_events,
+    )
+
+    summary["npc_agency_summary"] = _build_npc_agency_summary(
+        npc_presence=npc_presence_state,
+        schedule_events=npc_schedule_events,
+        agency_events=npc_agency_events,
+        world_signals=npc_agency_world_signals,
+        memory_events=npc_agency_memory_events,
+    )
+
+    summary["economy_pressure_summary"] = _build_economy_pressure_summary(
+        economy_state=economy_pressure_state,
+        events=economy_pressure_events,
+        world_signals=economy_pressure_world_signals,
+        warnings=economy_pressure_warnings,
+        currency_deltas=economy_pressure_currency_deltas,
+    )
+
+    summary["combat_lifecycle_summary"] = _build_combat_lifecycle_summary(
+        combat_state=combat_lifecycle_state,
+        player_state=combat_player_state,
+        encounters=combat_lifecycle_encounters,
+        events=combat_lifecycle_events,
+        world_signals=combat_lifecycle_world_signals,
+        memory_events=combat_lifecycle_memory_events,
+        injuries=combat_lifecycle_injuries,
+        consequence_events=combat_consequence_events,
+        economy_hints=combat_consequence_economy_hints,
+        transcript=transcript,
+    )
+
+    summary["faction_consequence_summary"] = _build_faction_consequence_summary(
+        events=faction_consequence_events,
+        world_signals=faction_consequence_world_signals,
+        faction_reputation=faction_reputation_state,
+        transcript=transcript,
+    )
+
+    summary["npc_reaction_summary"] = _build_npc_reaction_summary(
+        events=npc_reaction_events,
+        memory_events=npc_reaction_memory_events,
+        world_signals=npc_reaction_world_signals,
+        transcript=transcript,
+    )
+
+    # Reapply direct graph lifecycle bridges after legacy summary builders.
+    # The legacy builders rebuild from older event arrays and can overwrite the
+    # bridged direct-graph values back to zero.
+    summary = _apply_direct_graph_lifecycle_bridges(summary)
+
+    summary["successful_arc_completion_evidence"] = _collect_successful_arc_completion_evidence(
+        transcript
+    )
+    summary = _apply_successful_arc_completion_bridge(summary)
+
+    transcript = _normalize_turn_action_consistency_transcript_rows(transcript)
+    transcript = _normalize_repaired_dialogue_transcript_rows(transcript)
+
+    summary["dialogue_action_relevance_summary"] = _build_dialogue_action_relevance_summary(
+        transcript=transcript,
+    )
+
+    summary["turn_action_consistency_summary"] = _build_turn_action_consistency_summary(
+        transcript=transcript,
+    )
+
+    summary["scenario_progression_action_repeat_summary"] = (
+        _build_scenario_progression_action_repeat_summary(
+            warnings=scenario_progression_warnings,
+            suppressed_actions=scenario_progression_suppressed_actions,
+        )
+    )
+
+    # Hard postcondition: fail if forced overrides exist
+    turn_action_summary = _safe_dict(summary.get("turn_action_consistency_summary"))
+    if int(turn_action_summary.get("forced_override_count") or 0) > 0:
+        raise RuntimeError(
+            "mechanics_forced_action_override_forbidden:"
+            f"{turn_action_summary.get('forced_override_count')} forced action overrides found"
+        )
+
+    summary = _build_authoritative_final_lifecycle_summary(
+        args=args,
+        summary=summary,
+        runtime_state=runtime_state,
+        transcript=transcript,
+        background_drain_events=background_drain_events,
+        pre_turn_advisory_promotion_slow_events=pre_turn_advisory_promotion_slow_events,
+        pre_turn_advisory_promotion_auto_disabled=pre_turn_advisory_promotion_auto_disabled,
+        pre_turn_advisory_promotion_disable_reason=pre_turn_advisory_promotion_disable_reason,
+        story_arc_lifecycle_summary=_safe_dict(summary.get("story_arc_lifecycle_summary")),
+        story_arc_aftermath_summary=_safe_dict(summary.get("story_arc_aftermath_summary")),
+        faction_reputation_summary=_safe_dict(summary.get("faction_reputation_summary")),
+        followup_arc_progression_summary=_safe_dict(summary.get("followup_arc_progression_summary")),
+        faction_pressure_summary=_safe_dict(summary.get("faction_pressure_summary")),
+        followup_arc_resolution_summary=_safe_dict(summary.get("followup_arc_resolution_summary")),
+        pressure_pacing_summary=_safe_dict(summary.get("pressure_pacing_summary")),
+        escalation_branch_summary=_safe_dict(summary.get("escalation_branch_summary")),
+        escalation_arc_progression_summary=_safe_dict(summary.get("escalation_arc_progression_summary")),
+        npc_agency_summary=_safe_dict(summary.get("npc_agency_summary")),
+        world_signal_summary=_safe_dict(summary.get("world_signal_summary")),
+        world_state_compression_summary=_safe_dict(summary.get("world_state_compression_summary")),
+        economy_pressure_summary=_safe_dict(summary.get("economy_pressure_summary")),
+        combat_lifecycle_summary=_safe_dict(summary.get("combat_lifecycle_summary")),
+        faction_consequence_summary=_safe_dict(summary.get("faction_consequence_summary")),
+        npc_reaction_summary=_safe_dict(summary.get("npc_reaction_summary")),
+        dialogue_action_relevance_summary=_safe_dict(summary.get("dialogue_action_relevance_summary")),
+        turn_action_consistency_summary=_safe_dict(
+            summary.get("turn_action_consistency_summary")
+        ),
+        scenario_progression_action_repeat_summary=_safe_dict(
+            summary.get("scenario_progression_action_repeat_summary")
+        ),
+        suppressed_selection_guard_summary=_safe_dict(
+            summary.get("suppressed_selection_guard_summary")
+        ),
+        direct_graph_lifecycle_evidence=_safe_dict(summary.get("direct_graph_lifecycle_evidence")),
+    )
+
+    summary["escalation_arc_progression_summary"] = _build_escalation_arc_progression_summary(
+        progression_events=escalation_arc_progression_events,
+        progression_world_signals=escalation_arc_progression_world_signals,
+        pressure_events=escalation_arc_pressure_events,
+        story_arcs=story_arc_runtime_state,
+    )
+
+    # Reapply again because escalation summary is rebuilt after the authoritative
+    # lifecycle summary and can overwrite direct-graph escalation evidence.
+    summary = _apply_direct_graph_lifecycle_bridges(summary)
+
+    summary["world_state_compression_summary"] = _build_world_state_compression_summary(
+        compression_events=world_state_compression_events,
+        compressed_state=latest_compressed_world_state or {
+            "story_arcs": story_arc_runtime_state,
+            "world_signals": world_signal_events,
+            "faction_reputation": faction_reputation_state,
+            "npc_memory_events": npc_memory_events,
+        },
+    )
+
+    summary["suppressed_selection_guard_summary"] = (
+        _build_suppressed_selection_guard_summary(transcript=transcript)
+    )
+
+    summary = _rebuild_final_100_turn_evaluation(
+        args=args,
+        summary=summary,
+        transcript=transcript,
+        npc_agency_summary=_safe_dict(summary.get("npc_agency_summary")),
+        dialogue_action_relevance_summary=_safe_dict(summary.get("dialogue_action_relevance_summary")),

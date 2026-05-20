@@ -1,0 +1,925 @@
+        return "evidence"
+
+    if support.get("investigation") and (
+        "investigation" in mechanics
+        or action_id.startswith(("search_", "inspect_", "scout_", "watch_", "track_", "examine_"))
+        or any(t in text_n for t in ("scout", "search", "inspect", "track", "examine", "look for", "signs"))
+    ):
+        return "investigation"
+
+    if support.get("dialogue") and (
+        "dialogue" in mechanics
+        or "social" in mechanics
+        or action_id.startswith(("ask_", "tell_", "warn_", "question_", "persuade_", "confront_", "negotiate_"))
+        or any(t in text_n for t in ("ask", "tell", "warn", "question", "speak", "talk"))
+    ):
+        return "dialogue"
+
+    for category in PRESENTATION_INTENT_SPECIFIC_PRIORITY:
+        if support.get(category):
+            return category
+
+    if support.get("mixed"):
+        return "mixed"
+    return "general"
+
+
+def _derive_fallback_presentation_intent_for_row(
+    row: Dict[str, Any],
+    *,
+    support: Optional[Dict[str, Any]] = None,
+    action_text: str = "",
+) -> Dict[str, Any]:
+    row = _safe_dict(row)
+    support = _safe_dict(support) or _authoritative_category_support(row)
+    fallback_category = _normalize_presentation_category(
+        _background_presentation_action_category(row)
+        or _classify_visible_action_category_without_validated_intent(row)
+        or _turn_action_category(action_text or _safe_str(row.get("canonical_turn_action") or row.get("player_action")))
+    )
+    primary = _specific_supported_presentation_category(
+        row=row,
+        support=support,
+        fallback_category=fallback_category,
+        action_text=action_text,
+    )
+
+    secondary: List[str] = []
+    for category in PRESENTATION_INTENT_SPECIFIC_PRIORITY:
+        if category != primary and bool(support.get(category)) and category not in secondary:
+            secondary.append(category)
+        if len(secondary) >= 4:
+            break
+
+    return {
+        "format_version": "presentation_intent_v1",
+        "primary_category": primary,
+        "secondary_categories": secondary,
+        "confidence": 0.0,
+        "reason": "deterministic_specific_fallback_from_authoritative_turn",
+    }
+
+
+def _display_action_kind_for_validated_category(category: str) -> str:
+    category = _normalize_presentation_category(category)
+    if category in {"dialogue", "social"}:
+        return "social"
+    if category == "economy":
+        return "commerce"
+    return category
+
+
+def _apply_validated_presentation_category_to_relevance(row: Dict[str, Any]) -> Dict[str, Any]:
+    row = dict(_safe_dict(row))
+    relevance = dict(_safe_dict(row.get("dialogue_action_relevance")))
+    if not relevance:
+        return row
+
+    validated = _safe_dict(row.get("validated_presentation_intent"))
+    category = _normalize_presentation_category(validated.get("primary_category"))
+    if category == "general":
+        category = _normalize_presentation_category(
+            _background_presentation_action_category(row)
+            or _classify_visible_action_category_without_validated_intent(row)
+        )
+    if category == "general":
+        return row
+
+    action_kind = _display_action_kind_for_validated_category(category)
+    old_action_kind = _safe_str(relevance.get("action_kind"))
+    if old_action_kind and old_action_kind != action_kind:
+        relevance["original_action_kind"] = old_action_kind
+        relevance["action_kind_source"] = "validated_presentation_category"
+    relevance["action_kind"] = action_kind
+    relevance["validated_presentation_category"] = category
+    relevance["validated_presentation_intent"] = validated
+    row["dialogue_action_relevance"] = relevance
+    return row
+
+
+def _rewrite_public_presentation_intent_fields_from_validated(row: Dict[str, Any]) -> Dict[str, Any]:
+    """Force public transcript LLM-intent fields to mirror validated provider intent.
+
+    ``validated_presentation_intent.primary_category`` is the authoritative,
+    clamped presentation category.  ``validated_presentation_intent.proposed_category``
+    is the category proposed by the provider/LLM before clamping.  Public fields
+    named ``presentation_intent`` and ``llm_presentation_category`` are intended
+    to report that provider proposal, not the deterministic fallback/default.
+
+    This helper is intentionally artifact-time and unconditional when a proposed
+    category exists, because run artifacts showed validated intent was correct
+    while public row fields still serialized as ``general``/``missing``.
+    """
+    row = dict(_safe_dict(row))
+    validated = _safe_dict(row.get("validated_presentation_intent"))
+    if not validated:
+        return row
+
+    proposed_category = _normalize_presentation_category(
+        validated.get("proposed_category")
+        or validated.get("provider_category")
+        or validated.get("llm_category")
+        or "general"
+    )
+    if not proposed_category:
+        proposed_category = "general"
+
+    parse_source = _safe_str(
+        validated.get("provider_intent_parse_source")
+        or row.get("presentation_intent_parse_source")
+        or "missing"
+    )
+
+    secondary_categories: List[str] = []
+    for item in _safe_list(validated.get("secondary_categories")):
+        normalized = _normalize_presentation_category(item)
+        if normalized and normalized != proposed_category and normalized not in secondary_categories:
+            secondary_categories.append(normalized)
+
+    try:
+        confidence = float(validated.get("confidence") or 0.0)
+    except Exception:
+        confidence = 0.0
+    confidence = max(0.0, min(1.0, confidence))
+
+    public_intent = {
+        "format_version": "presentation_intent_v1",
+        "primary_category": proposed_category,
+        "secondary_categories": secondary_categories[:4],
+        "confidence": round(confidence, 3),
+        "reason": _safe_str(validated.get("provider_reason") or "")[:240],
+        "parse_source": parse_source,
+    }
+
+    row["presentation_intent"] = public_intent
+    row["presentation_intent_parse_source"] = parse_source
+    row["llm_presentation_category"] = proposed_category
+    return row
+
+
+def _validate_presentation_intent_for_row(
+    row: Dict[str, Any],
+    *,
+    action_text: str = "",
+) -> Dict[str, Any]:
+    row = _safe_dict(row)
+    proposed = _extract_row_presentation_intent(row)
+    proposed_category = _normalize_presentation_category(proposed.get("primary_category"))
+    support = _authoritative_category_support(row)
+
+    fallback_category = _normalize_presentation_category(
+        _background_presentation_action_category(row)
+        or _classify_visible_action_category_without_validated_intent(row)
+        or _turn_action_category(action_text or _safe_str(row.get("canonical_turn_action") or row.get("player_action")))
+    )
+
+    provider_intent_ok = bool(support.get(proposed_category, False)) and _presentation_category_is_specific(proposed_category)
+    if provider_intent_ok:
+        repaired_category = proposed_category
+        reason = "provider_intent_supported"
+    else:
+        repaired_category = _specific_supported_presentation_category(
+            row=row,
+            support=support,
+            fallback_category=fallback_category,
+            action_text=action_text,
+        )
+        reason = (
+            "provider_intent_supported_but_specific_fallback_preferred"
+            if bool(support.get(proposed_category, False))
+            else "provider_intent_not_supported_by_authoritative_turn"
+        )
+
+    if not support.get(repaired_category, False) and repaired_category in {"combat", "travel", "service", "economy"}:
+        repaired_category = _specific_supported_presentation_category(
+            row=row,
+            support=support,
+            fallback_category="",
+            action_text=action_text,
+        )
+
+    validated_intent_ok = bool(support.get(repaired_category, False)) or repaired_category in {"general", "mixed"}
+    provider_intent_repaired = repaired_category != proposed_category
+
+    return {
+        "format_version": "validated_presentation_intent_v1",
+        "ok": validated_intent_ok,
+        "provider_intent_ok": provider_intent_ok,
+        "validated_intent_ok": validated_intent_ok,
+        "provider_intent_repaired": provider_intent_repaired,
+        "primary_category": repaired_category,
+        "proposed_category": proposed_category,
+        "fallback_category": fallback_category,
+        "secondary_categories": proposed.get("secondary_categories") or [],
+        "confidence": proposed.get("confidence") or 0.0,
+        "reason": reason,
+        "provider_reason": proposed.get("reason") or "",
+        "provider_intent_parse_source": proposed.get("parse_source") or row.get("presentation_intent_parse_source") or "missing",
+        "support": support,
+    }
+
+
+def _presentation_text_category(text: str) -> str:
+    """Classify explicit non-combat state-change claims in presentation text.
+
+    This is intentionally NOT a semantic categorizer. Semantic category should
+    come from provider presentation_intent first and authoritative fallback
+    second. Generic scene nouns such as room, road, bandit, ambush, blood,
+    supplies, or coin must not trigger repair by themselves.
+
+    Combat prose is especially expressive, so this helper deliberately does
+    not classify combat. Combat hard-grounding is handled by the separate
+    state-claim verifiers below, which only flag concrete damage/defeat/
+    resolution claims that can be checked against authoritative JSON.
+    """
+    text_n = _normalize_turn_action_text(text)
+
+    economy_phrases = (
+        "you buy",
+        "you purchase",
+        "you pay",
+        "you spend",
+        "you hand over coin",
+        "coin leaves your purse",
+        "the purchase is complete",
+        "the transaction is complete",
+    )
+    if any(t in text_n for t in economy_phrases):
+        return "economy"
+
+    service_phrases = (
+        "you rent a room",
+        "you rent the room",
+        "you secure a room",
+        "the room is yours",
+        "lodging is secured",
+        "you pay for lodging",
+        "you settle into bed",
+        "you rest for the night",
+        "you sleep for the night",
+    )
+    if any(t in text_n for t in service_phrases):
+        return "service"
+
+    travel_phrases = (
+        "you arrive at",
+        "you arrive in",
+        "you travel to",
+        "you move to",
+        "you leave for",
+        "you set out for",
+        "the location changes",
+    )
+    if any(t in text_n for t in travel_phrases):
+        return "travel"
+
+    return "general"
+
+
+HARD_PRESENTATION_CLAIM_CATEGORIES = {"travel", "service", "economy"}
+
+
+def _presentation_has_currency_or_reward_transfer_claim(text: str) -> bool:
+    text_n = _normalize_turn_action_text(text)
+    transfer_verbs = (
+        "gives you",
+        "hands you",
+        "pays you",
+        "rewards you",
+        "grants you",
+        "awards you",
+        "places coins in your hand",
+        "presses coins into your palm",
+    )
+    currency_terms = ("gold", "coin", "coins", "silver", "copper", "reward", "payment")
+    return any(v in text_n for v in transfer_verbs) and any(t in text_n for t in currency_terms)
+
+
+def _presentation_has_metaphorical_arrival_claim(text: str) -> bool:
+    text_n = _normalize_turn_action_text(text)
+    return any(
+        phrase in text_n
+        for phrase in (
+            "arrive at a clearer understanding",
+            "arrive at a conclusion",
+            "arrive at an understanding",
+        )
+    )
+
+
+def _row_has_authoritative_currency_or_reward_support(row: Dict[str, Any]) -> bool:
+    row = _safe_dict(row)
+    mechanics = _row_mechanics_set(row)
+    if any(m in mechanics for m in ("currency_change", "reward", "economy", "buying", "purchase")):
+        return True
+
+    result = _safe_dict(row.get("result"))
+    turn_contract = _safe_dict(row.get("turn_contract"))
+    contract_result = _safe_dict(turn_contract.get("result"))
+    for source in (row, result, turn_contract, contract_result):
+        source_d = _safe_dict(source)
+        if source_d.get("reward") or source_d.get("currency_delta") or source_d.get("currency_change"):
+            return True
+        if _safe_dict(source_d.get("delta")).get("currency"):
+            return True
+    return False
+
+
+def _presentation_hard_grounding_check(row: Dict[str, Any], presentation_text: str) -> Dict[str, Any]:
+    """Tier 1: deterministic hard factual grounding check.
+
+    This check only rejects visible text when it asserts an explicit outcome that
+    is not supported by authoritative turn state. It is intentionally not a
+    semantic category validator. Soft classification disagreement is handled by
+    metadata repair, not by replacing narration.
+    """
+    row = _safe_dict(row)
+    support = _authoritative_category_support(row)
+    claim_category = _presentation_text_category(presentation_text)
+    reasons: List[str] = []
+    hard_claim_details: List[Dict[str, Any]] = []
+
+    if not (claim_category == "travel" and _presentation_has_metaphorical_arrival_claim(presentation_text)):
+        if claim_category in HARD_PRESENTATION_CLAIM_CATEGORIES and not bool(support.get(claim_category)):
+            reasons.append(f"unsupported_{claim_category}_claim")
+
+    if _presentation_has_combat_damage_claim(presentation_text) and not _row_has_authoritative_combat_damage_support(row):
+        reasons.append("unsupported_damage_claim")
+        hard_claim_details.append({
+            "claim_type": "combat_damage",
+            "authoritative_support_key_checked": "damage_delta|hp_delta|combat_damage",
+            "support_found": False,
+        })
+
+    if _presentation_has_combat_defeat_claim(presentation_text) and not _row_has_authoritative_combat_defeat_support(row):
+        reasons.append("unsupported_defeat_claim")
+        hard_claim_details.append({
+            "claim_type": "combat_defeat",
+            "authoritative_support_key_checked": "enemy_defeated|defeated|victory",
+            "support_found": False,
+        })
+
+    if _presentation_has_combat_resolution_claim(presentation_text) and not _row_has_authoritative_combat_resolution_support(row):
+        reasons.append("unsupported_combat_resolution_claim")
+        hard_claim_details.append({
+            "claim_type": "combat_resolution",
+            "authoritative_support_key_checked": "combat_resolved|encounter_resolved|victory|ended",
+            "support_found": False,
+        })
+
+    if _presentation_has_currency_or_reward_transfer_claim(presentation_text) and not _row_has_authoritative_currency_or_reward_support(row):
+        reasons.append("unsupported_currency_or_reward_claim")
+        hard_claim_details.append({
+            "claim_type": "currency_or_reward_transfer",
+            "authoritative_support_key_checked": "reward|currency_delta|currency_change",
+            "support_found": False,
+        })
+
+    return {
+        "format_version": "presentation_hard_grounding_v2",
+        "ok": not reasons,
+        "tier": "hard_grounding",
+        "claim_category": claim_category,
+        "claim_details": hard_claim_details,
+        "hard_claim_types": [detail.get("claim_type") for detail in hard_claim_details],
+        "reasons": reasons,
+        "support": support,
+        "requires_visible_text_replacement": bool(reasons),
+    }
+
+
+def _presentation_soft_classification_check(
+    *,
+    compat_ok: bool,
+    compat_diag: Dict[str, Any],
+) -> Dict[str, Any]:
+    compat_diag = _safe_dict(compat_diag)
+    reason = _safe_str(compat_diag.get("reason"))
+    soft_repair = not compat_ok and reason == "action_presentation_category_mismatch"
+    return {
+        "format_version": "presentation_soft_classification_v1",
+        "ok": not soft_repair,
+        "tier": "soft_classification",
+        "reason": reason,
+        "compatibility": compat_diag,
+        "metadata_repair_required": soft_repair,
+        "requires_visible_text_replacement": False,
+    }
+
+
+def _soft_metadata_repair_reason_for_row(
+    *,
+    row: Dict[str, Any],
+    soft_diag: Dict[str, Any],
+) -> str:
+    """Return a metadata-only repair reason when visible text can remain.
+
+    Hard grounding is handled separately. This helper activates the soft tier
+    for classification-only changes, including provider-intent fallback repairs
+    and stale relevance category cleanup. These are metadata repairs, not
+    narration rewrites.
+    """
+    row = _safe_dict(row)
+    soft_diag = _safe_dict(soft_diag)
+
+    if bool(soft_diag.get("metadata_repair_required")):
+        return _safe_str(soft_diag.get("reason")) or "soft_classification_metadata_repaired"
+
+    validated = _safe_dict(row.get("validated_presentation_intent"))
+    if bool(validated.get("provider_intent_repaired")):
+        return "provider_intent_reclassified"
+
+    relevance = _safe_dict(row.get("dialogue_action_relevance"))
+    if bool(relevance.get("presentation_intent_sync_repaired")):
+        return _safe_str(relevance.get("presentation_intent_sync_reason")) or "dialogue_relevance_category_synced"
+
+    after_repair = _safe_dict(row.get("dialogue_action_relevance_after_repair"))
+    if bool(after_repair.get("presentation_intent_sync_repaired")):
+        return _safe_str(after_repair.get("presentation_intent_sync_reason")) or "dialogue_relevance_after_repair_category_synced"
+
+    return ""
+
+
+def _background_semantic_reviewer_diagnostic(
+    *,
+    row: Dict[str, Any],
+    soft_diag: Dict[str, Any],
+    hard_diag: Dict[str, Any],
+) -> Dict[str, Any]:
+    """Tier 3 placeholder/diagnostic for optional async semantic review.
+
+    The autoplay harness should not block the turn or call a second LLM here.
+    This diagnostic records that a background semantic reviewer may later refine
+    classification metadata. Immediate safety remains Tier 1 deterministic.
+    """
+    row = _safe_dict(row)
+    return {
+        "format_version": "background_semantic_reviewer_v1",
+        "queued": bool(_safe_dict(soft_diag).get("metadata_repair_required")),
+        "blocking": False,
+        "allowed_to_replace_visible_text": False,
+        "purpose": "classification_metadata_review_only",
+        "validated_presentation_category": _safe_str(row.get("validated_presentation_category")),
+        "soft_reason": _safe_str(_safe_dict(soft_diag).get("reason")),
+        "hard_ok": bool(_safe_dict(hard_diag).get("ok", True)),
+    }
+
+
+def _dialogue_presentation_is_category_compatible(
+    *,
+    action_text: str,
+    presentation_text: str,
+    row: Dict[str, Any],
+) -> Tuple[bool, Dict[str, Any]]:
+    validated_intent = _validate_presentation_intent_for_row(row, action_text=action_text)
+    action_category = _normalize_presentation_category(validated_intent.get("primary_category"))
+    presentation_category = _presentation_text_category(presentation_text)
+
+    if not presentation_text.strip():
+        return True, {
+            "ok": True,
+            "action_category": action_category,
+            "presentation_category": presentation_category,
+            "validated_presentation_intent": validated_intent,
+            "reason": "empty_presentation",
+        }
+
+    if presentation_category == "general":
+        return True, {
+            "ok": True,
+            "action_category": action_category,
+            "presentation_category": presentation_category,
+            "validated_presentation_intent": validated_intent,
+            "reason": "general_presentation",
+        }
+
+    compatible_pairs = {
+        ("dialogue", "investigation"),
+        ("investigation", "dialogue"),
+        ("dialogue", "evidence"),
+        ("evidence", "dialogue"),
+        ("evidence", "investigation"),
+        ("investigation", "evidence"),
+        ("mixed", "dialogue"),
+        ("mixed", "service"),
+        ("mixed", "investigation"),
+        ("mixed", "evidence"),
+        ("combat", "travel"),
+        ("travel", "combat"),
+    }
+
+    if action_category == presentation_category or (action_category, presentation_category) in compatible_pairs:
+        return True, {
+            "ok": True,
+            "action_category": action_category,
+            "presentation_category": presentation_category,
+            "validated_presentation_intent": validated_intent,
+            "reason": "category_match",
+        }
+
+    mechanics = {
+        _safe_str(v)
+        for v in _safe_list(row.get("mechanics_covered_this_turn"))
+        if _safe_str(v)
+    }
+    if presentation_category == "combat" and (
+        "combat_started" in mechanics or "combat_resolved" in mechanics
+    ):
+        return True, {
+            "ok": True,
+            "action_category": action_category,
+            "presentation_category": presentation_category,
+            "validated_presentation_intent": validated_intent,
+            "reason": "combat_supported_by_mechanics",
+        }
+
+    return False, {
+        "ok": False,
+        "action_category": action_category,
+        "presentation_category": presentation_category,
+        "validated_presentation_intent": validated_intent,
+        "reason": "action_presentation_category_mismatch",
+    }
+
+
+def _build_category_compatible_presentation_fallback(row: Dict[str, Any]) -> str:
+    row = _safe_dict(row)
+    action = _safe_str(row.get("canonical_turn_action") or row.get("player_action"))
+    validated = _validate_presentation_intent_for_row(row, action_text=action)
+    category = _normalize_presentation_category(validated.get("primary_category"))
+
+    if category == "economy":
+        return "You complete the purchase; your supplies and coin totals are updated by the authoritative turn result."
+
+    if category == "service":
+        return "You complete the service request; the authoritative turn result records the cost and any lodging or rest effect."
+
+    if category == "combat":
+        return "You press the fight according to the authoritative combat result; only recorded damage, rewards, and outcomes apply."
+
+    if category == "travel":
+        return "You move on according to the authoritative travel result; the current location and available routes update."
+
+    if category == "investigation":
+        return "You follow the clue trail; only evidence recorded by the authoritative turn result becomes true."
+
+    if category in {"dialogue", "social"}:
+        return "The conversation continues; any NPC response is limited to the authoritative social and quest state."
+
+    if category == "evidence":
+        return "You put the evidence forward; only facts recorded by the authoritative turn result become true."
+
+    if category == "mixed":
+        return "The turn resolves across its recorded parts; only authoritative service, social, travel, combat, and evidence results apply."
+
+    return "The action resolves according to the authoritative turn result."
+
+
+def _presentation_has_combat_damage_claim(text: str) -> bool:
+    """Return True only for concrete combat damage/HP state claims.
+
+    Combat-colored prose is not enough. This intentionally ignores words such
+    as ambush, bandit, strike, blade, threat, fear, blood, and fight unless the
+    text asserts a checkable damage/HP mutation.
+    """
+    text_n = _normalize_turn_action_text(text)
+    damage_phrases = (
+        "you take damage",
+        "you suffer damage",
+        "you lose hit points",
+        "you lose hp",
+        "your hp drops",
+        "your hit points drop",
+        "damage is dealt",
+        "deals damage",
+        "takes damage",
+        "enemy takes damage",
+        "the enemy takes damage",
+        "the bandit takes damage",
+        "you deal damage",
+        "you wound him",
+        "you wound her",
+        "you wound them",
+        "you wound the",
+        "your blow wounds",
+    )
+    if any(phrase in text_n for phrase in damage_phrases):
+        return True
+    if "damage" in text_n and any(
+        phrase in text_n
+        for phrase in (
+            "you take",
+            "you suffer",
+            "you deal",
+            "you inflict",
+            "enemy takes",
+            "the enemy takes",
+            "bandit takes",
+            "the bandit takes",
+        )
+    ):
+        return True
+    return False
+
+
+def _presentation_has_combat_defeat_claim(text: str) -> bool:
+    """Return True only for concrete defeat/death claims."""
+    text_n = _normalize_turn_action_text(text)
+    defeat_phrases = (
+        "you defeat",
+        "you kill",
+        "you slay",
+        "falls dead",
+        "falls defeated",
+        "falls lifeless",
+        "collapses dead",
+        "collapses lifeless",
+        "is defeated",
+        "are defeated",
+        "is dead",
+        "are dead",
+        "the enemy falls",
+        "the bandit falls",
+        "the scout falls",
+        "the strike team falls",
+        "the enemy dies",
+        "the bandit dies",
+    )
+    return any(phrase in text_n for phrase in defeat_phrases)
+
+
+def _presentation_has_combat_resolution_claim(text: str) -> bool:
+    """Return True only for concrete combat encounter resolution claims."""
+    text_n = _normalize_turn_action_text(text)
+    resolution_phrases = (
+        "combat resolves",
+        "combat is resolved",
+        "the fight resolves",
+        "the fight is over",
+        "the battle is over",
+        "the combat ends",
+        "the encounter ends",
+        "victory is yours",
+        "you win the fight",
+        "you win the battle",
+        "the enemy surrenders",
+        "the enemies surrender",
+    )
+    return any(phrase in text_n for phrase in resolution_phrases)
+
+
+def _presentation_has_combat_claim(text: str) -> bool:
+    """Legacy compatibility wrapper for concrete combat state claims only."""
+    return (
+        _presentation_has_combat_damage_claim(text)
+        or _presentation_has_combat_defeat_claim(text)
+        or _presentation_has_combat_resolution_claim(text)
+    )
+
+
+def _source_has_any_key(source: Any, keys: Tuple[str, ...]) -> bool:
+    source_d = _safe_dict(source)
+    for key in keys:
+        if source_d.get(key) not in (None, False, "", [], {}):
+            return True
+    return False
+
+
+def _row_authoritative_state_sources(row: Dict[str, Any]) -> List[Dict[str, Any]]:
+    row = _safe_dict(row)
+    result = _safe_dict(row.get("result"))
+    turn_contract = _safe_dict(row.get("turn_contract"))
+    contract_result = _safe_dict(turn_contract.get("result"))
+    direct = _safe_dict(row.get("direct_graph_action_completion"))
+    return [
+        row,
+        result,
+        turn_contract,
+        contract_result,
+        _safe_dict(row.get("state_delta")),
+        _safe_dict(turn_contract.get("state_delta")),
+        _safe_dict(row.get("combat_result")),
+        _safe_dict(result.get("combat_result")),
+        _safe_dict(contract_result.get("combat_result")),
+        _safe_dict(row.get("combat_state_delta")),
+        _safe_dict(result.get("combat_state_delta")),
+        _safe_dict(contract_result.get("combat_state_delta")),
+        direct,
+    ]
+
+
+def _row_has_authoritative_combat_damage_support(row: Dict[str, Any]) -> bool:
+    mechanics = _row_mechanics_set(row)
+    if any(
+        mechanic in mechanics
+        for mechanic in (
+            "damage",
+            "damage_dealt",
+            "damage_taken",
+            "combat_damage",
+            "hp_delta",
+            "health_delta",
+        )
+    ):
+        return True
+
+    damage_keys = (
+        "damage",
+        "damage_delta",
+        "damage_dealt",
+        "damage_taken",
+        "hp_delta",
+        "health_delta",
+        "enemy_hp_delta",
+        "player_hp_delta",
+        "hit_points_delta",
+    )
+    return any(_source_has_any_key(source, damage_keys) for source in _row_authoritative_state_sources(row))
+
+
+def _row_has_authoritative_combat_defeat_support(row: Dict[str, Any]) -> bool:
+    mechanics = _row_mechanics_set(row)
+    if any(
+        mechanic in mechanics
+        for mechanic in (
+            "enemy_defeated",
+            "enemy_defeat",
+            "defeat",
+            "defeated",
+            "combat_resolved",
+        )
+    ):
+        return True
+
+    defeat_keys = (
+        "enemy_defeated",
+        "defeated_enemy",
+        "defeated_enemies",
+        "defeated",
+        "defeat",
+        "victory",
+        "enemy_status",
+    )
+    for source in _row_authoritative_state_sources(row):
+        source_d = _safe_dict(source)
+        if _source_has_any_key(source_d, defeat_keys):
+            return True
+        status = _safe_str(source_d.get("status")).lower()
+        if status in {"defeated", "dead", "resolved", "victory"}:
+            return True
+    return False
+
+
+def _row_has_authoritative_combat_resolution_support(row: Dict[str, Any]) -> bool:
+    mechanics = _row_mechanics_set(row)
+    if any(
+        mechanic in mechanics
+        for mechanic in (
+            "combat_resolved",
+            "encounter_resolved",
+            "combat_victory",
+            "combat_ended",
+        )
+    ):
+        return True
+
+    resolution_keys = (
+        "combat_resolved",
+        "encounter_resolved",
+        "resolved",
+        "victory",
+        "ended",
+        "combat_ended",
+    )
+    return any(_source_has_any_key(source, resolution_keys) for source in _row_authoritative_state_sources(row))
+
+
+def _turn_has_combat_support(row: Dict[str, Any]) -> bool:
+    row = _safe_dict(row)
+    mechanics = {
+        _safe_str(v)
+        for v in _safe_list(row.get("mechanics_covered_this_turn"))
+        if _safe_str(v)
+    }
+
+    if "combat_started" in mechanics or "combat_resolved" in mechanics:
+        return True
+
+    direct = _safe_dict(row.get("direct_graph_action_completion"))
+    direct_mechanics = {
+        _safe_str(v)
+        for v in _safe_list(direct.get("mechanics"))
+        if _safe_str(v)
+    }
+
+    if "combat_started" in direct_mechanics or "combat_resolved" in direct_mechanics:
+        return True
+
+    if row.get("combat_result") or row.get("combat_state_delta"):
+        return True
+
+    return False
+
+
+def _assert_repaired_dialogue_visible_fields(row: Dict[str, Any]) -> Dict[str, Any]:
+    row = dict(_safe_dict(row))
+
+    if not row.get("dialogue_action_relevance_repaired"):
+        return row
+
+    selected = _safe_dict(row.get("selected_narration") or row.get("selected_output"))
+    final_narration = _safe_str(selected.get("narration"))
+    final_action = _safe_str(selected.get("action"))
+    final_source = _safe_str(
+        selected.get("dialogue_source")
+        or row.get("dialogue_source")
+        or "deterministic_action_relevance_fallback"
+    )
+
+    if final_narration:
+        row["narration"] = final_narration
+        row["display_narration"] = final_narration
+        row["selected_narration_text"] = final_narration
+
+    if final_action:
+        row["action"] = final_action
+
+    row["dialogue_source"] = final_source
+    row["display_source"] = final_source
+
+    row["selected_narration"] = selected
+    row["selected_output"] = selected
+
+    row["npc"] = {}
+    row["npc_line"] = ""
+    row["npc_speaker"] = ""
+    row["dialogue"] = ""
+
+    for nested_key in ("result", "presentation", "display", "ui"):
+        nested = dict(_safe_dict(row.get(nested_key)))
+        if not nested:
+            continue
+
+        if final_narration:
+            nested["narration"] = final_narration
+            nested["display_narration"] = final_narration
+            nested["selected_narration_text"] = final_narration
+
+        if final_action:
+            nested["action"] = final_action
+
+        nested["dialogue_source"] = final_source
+        nested["display_source"] = final_source
+        nested["selected_narration"] = selected
+        nested["selected_output"] = selected
+        nested["npc"] = {}
+        nested["npc_line"] = ""
+        nested["npc_speaker"] = ""
+        nested["dialogue"] = ""
+        row[nested_key] = nested
+
+    return row
+
+
+def _normalize_repaired_dialogue_transcript_rows(
+    transcript: List[Dict[str, Any]],
+) -> List[Dict[str, Any]]:
+    normalized: List[Dict[str, Any]] = []
+
+    for row in _safe_list(transcript):
+        fixed = _assert_repaired_dialogue_visible_fields(_safe_dict(row))
+        normalized.append(fixed)
+
+    return normalized
+
+
+def _build_dialogue_action_relevance_summary(
+    *,
+    transcript: List[Dict[str, Any]],
+) -> Dict[str, Any]:
+    rows = [_safe_dict(row) for row in _safe_list(transcript)]
+
+    checked_count = 0
+    mismatch_count = 0
+    repaired_count = 0
+    unrepaired_count = 0
+    source_gate_block_count = 0
+
+    by_action_kind: Dict[str, int] = {}
+    by_dialogue_kind: Dict[str, int] = {}
+    by_reason: Dict[str, int] = {}
+    examples: List[Dict[str, Any]] = []
+
+    for row in rows:
+        row = _sync_dialogue_action_relevance_with_validated_presentation(row)
+        relevance = _safe_dict(row.get("dialogue_action_relevance"))
+        source_gate = _safe_dict(row.get("dialogue_display_source_gate"))
+
+        if not relevance:
+            continue
+
+        checked_count += 1
+
+        action_kind = _safe_str(row.get("validated_presentation_category") or relevance.get("action_kind") or "unknown")
+        dialogue_kind = _safe_str(relevance.get("dialogue_kind") or "unknown")
+        by_action_kind[action_kind] = by_action_kind.get(action_kind, 0) + 1

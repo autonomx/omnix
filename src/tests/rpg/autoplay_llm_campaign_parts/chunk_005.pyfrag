@@ -1,0 +1,925 @@
+    row = dict(_safe_dict(row))
+    row["current_action_response"] = _row_current_action_response_focus(row)
+    row["npc_response_architecture"] = _build_npc_response_architecture_for_row(row)
+    row["npc_response_architecture_persisted"] = True
+    row = _sync_current_action_response_from_npc_response_architecture(row)
+    relevance = _npc_line_current_action_relevance_check(row)
+    row["npc_line_current_action_relevance"] = relevance
+    row["npc_line_addresses_current_action"] = bool(
+        _safe_dict(row.get("current_action_response")).get("npc_line_addresses_current_action")
+    )
+    if not bool(relevance.get("npc_line_repair_required")):
+        row.setdefault("npc_line_repaired", False)
+        return row
+
+    original_npc = _safe_dict(row.get("npc"))
+    original_line = _safe_str(row.get("npc_line") or original_npc.get("line"))
+    repaired_line = _fallback_npc_line_for_current_action(row)
+    speaker = _safe_str(row.get("npc_speaker") or original_npc.get("speaker") or "Bran")
+    if repaired_line:
+        row["npc"] = {"speaker": speaker, "line": repaired_line}
+        row["npc_speaker"] = speaker
+        row["npc_line"] = repaired_line
+    else:
+        row = _clear_visible_npc_fields(row)
+    row["npc_line_repaired"] = True
+    row["npc_line_repair_reason"] = _safe_str(relevance.get("reason"))
+    row["npc_line_before_repair"] = original_line
+    row["presentation_status"] = _safe_str(row.get("presentation_status") or "attached_metadata_repaired")
+    if row["presentation_status"] == "attached":
+        row["presentation_status"] = "attached_metadata_repaired"
+    row["presentation_repair_tier"] = _safe_str(row.get("presentation_repair_tier") or "soft_classification")
+    row["presentation_repair_type"] = _safe_str(row.get("presentation_repair_type") or "npc_line_metadata_only")
+    row["visible_text_replaced"] = bool(row.get("visible_text_replaced", False))
+    row["soft_classification_repair"] = True
+    # Recompute after repair so artifacts reflect the final visible NPC line.
+    row["current_action_response"] = _row_current_action_response_focus(row)
+    row["npc_response_architecture"] = _build_npc_response_architecture_for_row(row)
+    row["npc_response_architecture_persisted"] = True
+    row = _sync_current_action_response_from_npc_response_architecture(row)
+    row["npc_line_current_action_relevance"] = _npc_line_current_action_relevance_check(row)
+    row["npc_line_addresses_current_action"] = bool(
+        _safe_dict(row.get("current_action_response")).get("npc_line_addresses_current_action")
+    )
+    return row
+
+
+def _build_npc_response_architecture_persistence_summary(
+    transcript_rows: List[Dict[str, Any]],
+) -> Dict[str, Any]:
+    """Summarize whether N116.9 response architecture survived into artifacts."""
+    rows = [
+        _sync_current_action_response_from_npc_response_architecture(_safe_dict(row))
+        for row in _safe_list(transcript_rows)
+    ]
+    row_count = len(rows)
+    architecture_rows = [row for row in rows if _safe_dict(row.get("npc_response_architecture"))]
+    current_action_rows = [row for row in rows if _safe_dict(row.get("current_action_response"))]
+    focus_rows = [
+        row
+        for row in rows
+        if _safe_list(_safe_dict(row.get("current_action_response")).get("required_focus"))
+    ]
+    addressed_rows = [
+        row
+        for row in rows
+        if bool(_safe_dict(row.get("current_action_response")).get("npc_line_addresses_current_action"))
+    ]
+    transaction_focus_rows = []
+    transaction_addressed_rows = []
+    architecture_focus_rows = []
+    architecture_focus_missing_from_current_rows = []
+    architecture_sync_rows = []
+    transaction_focus = {
+        "purchase_acknowledgement",
+        "item_quantity_or_availability",
+        "price_or_payment",
+        "service_request_acknowledgement",
+        "lodging_or_rest_terms",
+    }
+    for row in rows:
+        current_response = _safe_dict(row.get("current_action_response"))
+        focus = {
+            _safe_str(item)
+            for item in _safe_list(current_response.get("required_focus"))
+            if _safe_str(item)
+        }
+        architecture_focus = {
+            _safe_str(item)
+            for item in _safe_list(_safe_dict(row.get("npc_response_architecture")).get("required_focus"))
+            if _safe_str(item)
+        }
+        if architecture_focus:
+            architecture_focus_rows.append(row)
+            if not architecture_focus.issubset(focus):
+                architecture_focus_missing_from_current_rows.append(row)
+        if bool(current_response.get("architecture_focus_sync_applied")):
+            architecture_sync_rows.append(row)
+        if focus.intersection(transaction_focus):
+            transaction_focus_rows.append(row)
+            if bool(current_response.get("npc_line_addresses_current_action")):
+                transaction_addressed_rows.append(row)
+
+    missing_architecture_turns = [
+        int(row.get("turn_index") or row.get("turn") or 0)
+        for row in rows
+        if not _safe_dict(row.get("npc_response_architecture"))
+    ][:20]
+    architecture_focus_missing_turns = [
+        int(row.get("turn_index") or row.get("turn") or 0)
+        for row in architecture_focus_missing_from_current_rows
+    ][:20]
+    ok = (
+        row_count == 0
+        or (
+            len(architecture_rows) == row_count
+            and not architecture_focus_missing_from_current_rows
+        )
+    )
+    return {
+        "format_version": "npc_response_architecture_persistence_v2",
+        "ok": ok,
+        "row_count": row_count,
+        "architecture_row_count": len(architecture_rows),
+        "missing_architecture_row_count": max(0, row_count - len(architecture_rows)),
+        "missing_architecture_turns": missing_architecture_turns,
+        "current_action_response_row_count": len(current_action_rows),
+        "required_focus_row_count": len(focus_rows),
+        "addresses_current_action_row_count": len(addressed_rows),
+        "transaction_focus_row_count": len(transaction_focus_rows),
+        "transaction_addressed_row_count": len(transaction_addressed_rows),
+        "architecture_required_focus_row_count": len(architecture_focus_rows),
+        "current_action_response_architecture_sync_count": len(architecture_sync_rows),
+        "architecture_focus_missing_from_current_action_response_count": len(
+            architecture_focus_missing_from_current_rows
+        ),
+        "architecture_focus_missing_from_current_action_response_turns": (
+            architecture_focus_missing_turns
+        ),
+    }
+
+
+def _assert_npc_response_architecture_persisted(summary: Dict[str, Any]) -> None:
+    diag = _safe_dict(_safe_dict(summary).get("npc_response_architecture_persistence_summary"))
+    if not diag:
+        raise RuntimeError("npc_response_architecture_persistence_summary_missing")
+    if int(diag.get("row_count") or 0) > 0 and int(diag.get("architecture_row_count") or 0) == 0:
+        raise RuntimeError("npc_response_architecture_not_persisted:any_rows=0")
+    if int(diag.get("missing_architecture_row_count") or 0) > 0:
+        raise RuntimeError(
+            "npc_response_architecture_missing_rows:"
+            f"count={diag.get('missing_architecture_row_count')}:"
+            f"turns={diag.get('missing_architecture_turns')}"
+        )
+    if int(diag.get("architecture_focus_missing_from_current_action_response_count") or 0) > 0:
+        raise RuntimeError(
+            "npc_response_architecture_focus_not_synced_to_current_action_response:"
+            f"count={diag.get('architecture_focus_missing_from_current_action_response_count')}:"
+            f"turns={diag.get('architecture_focus_missing_from_current_action_response_turns')}"
+        )
+
+
+def _background_presentation_expected_attachment_count(summary: Dict[str, Any]) -> int:
+    summary = _safe_dict(summary)
+
+    explicit_count = int(summary.get("background_presentation_completed_result_count") or 0)
+
+    timing = _safe_dict(summary.get("background_result_timing_summary"))
+    timing_attached = int(timing.get("jobs_attached_total") or 0)
+
+    background_jobs = _safe_dict(summary.get("background_jobs"))
+    combined_jobs = int(background_jobs.get("combined_background_llm_jobs") or 0)
+
+    deferred_trace = _safe_dict(summary.get("deferred_narration_trace_summary"))
+    ok_deferred_jobs = int(deferred_trace.get("ok_jobs") or 0)
+
+    return max(explicit_count, timing_attached, combined_jobs, ok_deferred_jobs)
+
+
+def _build_background_attachment_events_from_timing_summary(
+    summary: Dict[str, Any],
+) -> List[Dict[str, Any]]:
+    timing = _safe_dict(_safe_dict(summary).get("background_result_timing_summary"))
+    events = []
+
+    for event_any in _safe_list(timing.get("attachment_events")):
+        event = _safe_dict(event_any)
+        source_turn = int(event.get("source_turn") or 0)
+        attach_turn = int(event.get("attach_turn") or 0)
+
+        events.append(
+            {
+                "attached": True,
+                "reason": "legacy_background_timing_attachment_observed",
+                "phase": _safe_str(event.get("phase") or "unknown"),
+                "source_turn": source_turn,
+                "attach_turn": attach_turn,
+                "lag_turns": int(event.get("lag_turns") or max(0, attach_turn - source_turn)),
+                "job_id": _safe_str(event.get("job_id")),
+                "turn_bound_verified": False,
+                "legacy_observed_only": True,
+            }
+        )
+
+    return events
+
+
+def _assert_background_presentation_attachment_wired(summary: Dict[str, Any]) -> None:
+    summary = _safe_dict(summary)
+
+    expected_count = _background_presentation_expected_attachment_count(summary)
+    events = _safe_list(summary.get("background_presentation_attachment_events"))
+    attach_summary = _safe_dict(summary.get("background_presentation_attachment_summary"))
+
+    if expected_count > 0 and not events:
+        raise RuntimeError(
+            "background_presentation_attachment_not_wired:"
+            f"expected_count={expected_count}:events=0:"
+            f"timing_jobs_attached_total="
+            f"{_safe_dict(summary.get('background_result_timing_summary')).get('jobs_attached_total')}:"
+            f"combined_background_llm_jobs="
+            f"{_safe_dict(summary.get('background_jobs')).get('combined_background_llm_jobs')}:"
+            f"deferred_ok_jobs="
+            f"{_safe_dict(summary.get('deferred_narration_trace_summary')).get('ok_jobs')}"
+        )
+
+    if expected_count > 0 and not attach_summary:
+        raise RuntimeError(
+            "background_presentation_attachment_summary_missing:"
+            f"expected_count={expected_count}"
+        )
+
+    if expected_count > 0 and int(attach_summary.get("event_count") or 0) == 0:
+        raise RuntimeError(
+            "background_presentation_attachment_summary_empty:"
+            f"expected_count={expected_count}"
+        )
+
+
+def _assert_turn_bound_attachment_verified(summary: Dict[str, Any]) -> None:
+    attachment = _safe_dict(summary.get("background_presentation_attachment_summary"))
+    expected_count = _background_presentation_expected_attachment_count(summary)
+
+    if expected_count <= 0:
+        return
+
+    if not bool(attachment.get("turn_bound_attachment_verified")):
+        raise RuntimeError(
+            "background_presentation_not_turn_bound_verified:"
+            f"expected_count={expected_count}:"
+            f"event_count={attachment.get('event_count')}:"
+            f"turn_bound_verified_count={attachment.get('turn_bound_verified_count')}:"
+            f"legacy_observed_count={attachment.get('legacy_observed_count')}:"
+            f"rejected_count={attachment.get('rejected_count')}:"
+            f"orphaned_count={attachment.get('orphaned_count')}"
+        )
+
+
+def _build_background_presentation_attachment_summary(
+    summary: Dict[str, Any],
+    transcript: List[Dict[str, Any]],
+) -> Dict[str, Any]:
+    summary = _safe_dict(summary)
+    events = _safe_list(summary.get("background_presentation_attachment_events"))
+    if not events:
+        events = _build_background_attachment_events_from_timing_summary(summary)
+    orphans = _safe_list(summary.get("orphaned_background_presentation_results"))
+    expected_count = _background_presentation_expected_attachment_count(summary)
+
+    attached_count = sum(1 for e in events if _safe_dict(e).get("attached"))
+    rejected_count = sum(1 for e in events if not _safe_dict(e).get("attached"))
+
+    by_reason: Dict[str, int] = {}
+    for e in events:
+        reason = _safe_str(_safe_dict(e).get("reason")) or "unknown"
+        by_reason[reason] = by_reason.get(reason, 0) + 1
+
+    pending_count = 0
+    attached_row_count = 0
+    repaired_attached_count = 0
+    hard_repaired_count = 0
+    metadata_repaired_count = 0
+    soft_reclassified_count = 0
+    visible_text_replaced_count = 0
+    category_reclassified_count = 0
+
+    attached_statuses = {
+        "attached",
+        "attached_repaired",
+        "attached_hard_repaired",
+        "attached_metadata_repaired",
+        "attached_soft_reclassified",
+    }
+
+    for row_any in _safe_list(transcript):
+        row = _safe_dict(row_any)
+        status = _safe_str(row.get("presentation_status"))
+        if status == "pending":
+            pending_count += 1
+        if status in attached_statuses:
+            attached_row_count += 1
+        if status in {"attached_repaired", "attached_hard_repaired", "attached_metadata_repaired", "attached_soft_reclassified"}:
+            repaired_attached_count += 1
+        if status in {"attached_repaired", "attached_hard_repaired"} or bool(row.get("hard_grounding_repair")):
+            hard_repaired_count += 1
+        if status in {"attached_metadata_repaired", "attached_soft_reclassified"} or bool(row.get("soft_classification_repair")):
+            metadata_repaired_count += 1
+        if status == "attached_soft_reclassified":
+            soft_reclassified_count += 1
+        if bool(row.get("visible_text_replaced")):
+            visible_text_replaced_count += 1
+        if bool(_safe_dict(row.get("validated_presentation_intent")).get("provider_intent_repaired")):
+            category_reclassified_count += 1
+
+    turn_bound_verified_count = sum(
+        1
+        for event_any in events
+        if bool(_safe_dict(event_any).get("turn_bound_verified"))
+    )
+
+    legacy_observed_count = sum(
+        1
+        for event_any in events
+        if bool(_safe_dict(event_any).get("legacy_observed_only"))
+    )
+
+    return {
+        "format_version": "background_presentation_attachment_summary_v1",
+        "ok": rejected_count == 0 or attached_count > 0,
+        "event_count": len(events),
+        "attached_count": attached_count,
+        "rejected_count": rejected_count,
+        "orphaned_count": len(orphans),
+        "pending_count": pending_count,
+        "attached_row_count": attached_row_count,
+        "repaired_attached_count": repaired_attached_count,
+        "hard_repaired_count": hard_repaired_count,
+        "metadata_repaired_count": metadata_repaired_count,
+        "soft_reclassified_count": soft_reclassified_count,
+        "visible_text_replaced_count": visible_text_replaced_count,
+        "hard_repair_rate": hard_repaired_count / float(attached_row_count or 1),
+        "metadata_repair_rate": metadata_repaired_count / float(attached_row_count or 1),
+        "visible_text_replacement_rate": visible_text_replaced_count / float(attached_row_count or 1),
+        "category_reclassification_rate": category_reclassified_count / float(attached_row_count or 1),
+        "category_reclassified_count": category_reclassified_count,
+        "expected_attachment_count": expected_count,
+        "by_reason": by_reason,
+        "orphan_examples": orphans[:20],
+        "turn_bound_verified_count": turn_bound_verified_count,
+        "legacy_observed_count": legacy_observed_count,
+        "converted_from_legacy_timing_count": sum(
+            1
+            for event_any in events
+            if bool(_safe_dict(event_any).get("converted_from_legacy_timing_event"))
+        ),
+        "turn_bound_attachment_verified": (
+
+            expected_count > 0
+            and turn_bound_verified_count >= expected_count
+            and legacy_observed_count == 0
+            and rejected_count == 0
+        ),
+    }
+
+
+def _finalize_background_presentation_attachment_tracking(
+    summary: Dict[str, Any],
+    transcript: List[Dict[str, Any]],
+) -> Dict[str, Any]:
+    summary = dict(_safe_dict(summary))
+
+    events = list(_safe_list(summary.get("background_presentation_attachment_events")))
+    orphans = list(_safe_list(summary.get("orphaned_background_presentation_results")))
+
+    if not events:
+        events = _attach_legacy_background_timing_events_turn_bound(
+            transcript=transcript,
+            summary=summary,
+            session_id=_safe_str(summary.get("session_id") or ""),
+            orphaned_results=orphans,
+        )
+
+    if not events and _safe_list(_safe_dict(summary.get("background_result_timing_summary")).get("attachment_events")):
+        events = _build_background_attachment_events_from_timing_summary(summary)
+
+    summary["background_presentation_attachment_events"] = events
+    summary["orphaned_background_presentation_results"] = orphans
+
+    expected_count = _background_presentation_expected_attachment_count(summary)
+    summary["background_presentation_completed_result_count"] = max(
+        int(summary.get("background_presentation_completed_result_count") or 0),
+        expected_count,
+    )
+
+    summary["background_presentation_attachment_summary"] = (
+        _build_background_presentation_attachment_summary(summary, transcript)
+    )
+
+    _assert_turn_bound_attachment_verified(summary)
+
+    return summary
+
+
+def _assert_no_cross_turn_background_presentation(transcript: List[Dict[str, Any]]) -> None:
+    for row_any in _safe_list(transcript):
+        row = _safe_dict(row_any)
+        bg = _safe_dict(row.get("background_presentation_result"))
+        if not bg:
+            continue
+
+        row_identity = _safe_dict(row.get("turn_presentation_identity"))
+
+        if _safe_str(bg.get("turn_id")) != _safe_str(row_identity.get("turn_id")):
+            raise RuntimeError(
+                "cross_turn_background_presentation:"
+                f"row_turn_id={row_identity.get('turn_id')}:"
+                f"bg_turn_id={bg.get('turn_id')}"
+            )
+
+        if _safe_str(bg.get("canonical_turn_action_hash")) != _safe_str(
+            row_identity.get("canonical_turn_action_hash")
+        ):
+            raise RuntimeError(
+                "cross_turn_background_presentation:"
+                f"row_turn_id={row_identity.get('turn_id')}:"
+                "canonical_turn_action_hash_mismatch"
+            )
+
+
+def _extract_grounding_validation_from_any(value: Any) -> Dict[str, Any]:
+    value = _safe_dict(value)
+
+    candidates = [
+        value.get("grounding_validation"),
+        _safe_dict(value.get("narration_payload")).get("grounding_validation"),
+        _safe_dict(value.get("structured_narration")).get("grounding_validation"),
+        _safe_dict(value.get("narration_json")).get("grounding_validation"),
+        _safe_dict(value.get("narration_artifact")).get("grounding_validation"),
+        _safe_dict(_safe_dict(value.get("narration_artifact")).get("narration_json")).get("grounding_validation"),
+        _safe_dict(value.get("result")).get("grounding_validation"),
+        _safe_dict(_safe_dict(value.get("result")).get("narration_payload")).get("grounding_validation"),
+        _safe_dict(_safe_dict(value.get("result")).get("structured_narration")).get("grounding_validation"),
+        _safe_dict(_safe_dict(value.get("result")).get("raw_llm_narration")).get("grounding_validation"),
+        _safe_dict(_safe_dict(_safe_dict(value.get("result")).get("raw_llm_narration")).get("narration_json")).get("grounding_validation"),
+    ]
+
+    for candidate in candidates:
+        candidate = _safe_dict(candidate)
+        if candidate:
+            return candidate
+
+    # Last resort: some artifacts store narration_json as a JSON string.
+    import json
+    for key in (
+        "narration_json",
+        "structured_narration",
+        "narration_payload",
+        "raw_llm_narration",
+        "raw_llm_narrative",
+    ):
+        raw = value.get(key)
+        if isinstance(raw, str) and "grounding_validation" in raw:
+            try:
+                parsed = json.loads(raw)
+            except Exception:
+                parsed = {}
+            validation = _safe_dict(_safe_dict(parsed).get("grounding_validation"))
+            if validation:
+                return validation
+
+    scanned = _scan_for_grounding_validation(value)
+    if scanned:
+        return scanned
+
+    return {}
+
+
+def _scan_for_grounding_validation(value: Any, *, max_depth: int = 5) -> Dict[str, Any]:
+    if max_depth <= 0:
+        return {}
+
+    if isinstance(value, dict):
+        direct = _safe_dict(value.get("grounding_validation"))
+        if direct:
+            return direct
+
+        # Common nested selected narration shapes.
+        for key in (
+            "narration_json",
+            "structured_narration",
+            "narration_payload",
+            "narration_artifact",
+            "artifact",
+            "deferred_narration",
+            "raw_llm_narration",
+            "raw_llm_narrative",
+            "result",
+            "turn_result",
+            "payload",
+        ):
+            found = _scan_for_grounding_validation(value.get(key), max_depth=max_depth - 1)
+            if found:
+                return found
+
+        # Scan values.
+        for nested in value.values():
+            found = _scan_for_grounding_validation(nested, max_depth=max_depth - 1)
+            if found:
+                return found
+
+    if isinstance(value, list):
+        for item in value[:20]:
+            found = _scan_for_grounding_validation(item, max_depth=max_depth - 1)
+            if found:
+                return found
+
+    if isinstance(value, str) and "grounding_validation" in value:
+        try:
+            parsed = json.loads(value)
+        except Exception:
+            parsed = {}
+        return _scan_for_grounding_validation(parsed, max_depth=max_depth - 1)
+
+    return {}
+
+
+def _attach_grounding_fields_to_autoplay_row(row: Dict[str, Any], source: Dict[str, Any]) -> None:
+    grounding = _extract_grounding_validation_from_any(source)
+    if not grounding:
+        grounding = _extract_grounding_validation_from_any(row)
+
+    if grounding:
+        row["narration_grounding_validation"] = grounding
+        row["narration_grounding_ok"] = bool(grounding.get("ok", True))
+        row["narration_grounding_fallback_used"] = bool(grounding.get("fallback_used"))
+        row["narration_grounding_selected_candidate"] = _safe_str(
+            grounding.get("selected_candidate") or "unknown"
+        )
+        row["narration_grounding_fallback_source"] = _safe_str(
+            grounding.get("fallback_source") or "none"
+        )
+        row["narration_grounding_violation_codes"] = [
+            _safe_str(_safe_dict(v).get("code"))
+            for v in _safe_list(grounding.get("violations"))
+            if _safe_str(_safe_dict(v).get("code"))
+        ]
+        row["narration_grounding_primary_violation_codes"] = [
+            _safe_str(_safe_dict(v).get("code"))
+            for v in _safe_list(grounding.get("primary_violations"))
+            if _safe_str(_safe_dict(v).get("code"))
+        ]
+
+
+def _content_exhausted_waiting_for_next_graph_pack(summary: Dict[str, Any]) -> bool:
+    summary = _safe_dict(summary)
+    arc = _safe_dict(summary.get("scenario_progression_arc_summary"))
+    readiness = _safe_dict(summary.get("hundred_turn_readiness_summary"))
+
+    classification = _safe_str(
+        summary.get("hundred_turn_validation_classification")
+        or readiness.get("classification")
+    )
+    if classification == "content_exhausted_waiting_for_next_graph_pack":
+        return True
+
+    return bool(
+        arc.get("campaign_graphs_complete")
+        and arc.get("waiting_for_next_graph_pack")
+    )
+
+
+def _build_final_autoplay_health(summary: Dict[str, Any]) -> Dict[str, Any]:
+    summary = _safe_dict(summary)
+
+    evaluation = _safe_dict(summary.get("hundred_turn_evaluation"))
+    readiness = _safe_dict(summary.get("hundred_turn_readiness_summary"))
+    quality_gate_summary = _safe_dict(summary.get("quality_gate_summary"))
+
+    evaluation_ok = bool(evaluation.get("ok"))
+    readiness_ok = bool(readiness.get("ok"))
+    summary_ok = bool(summary.get("ok"))
+
+    evaluation_failed = _safe_list(evaluation.get("failed_gates"))
+    readiness_failed = _safe_list(readiness.get("failed_gates"))
+
+    warnings: List[str] = []
+    if evaluation_failed:
+        warnings.append("hundred_turn_evaluation_failed")
+    if readiness_failed:
+        warnings.append("hundred_turn_readiness_failed")
+
+    # quality_gate_summary may be built earlier than final bridge/evaluation rebuild.
+    # Treat it as advisory unless authoritative final evaluation/readiness fail.
+    quality_ok = quality_gate_summary.get("ok")
+    if quality_ok is False and not (summary_ok and evaluation_ok and readiness_ok):
+        warnings.append("quality_gate_summary_failed")
+
+    health_ok = bool(summary_ok and evaluation_ok and readiness_ok and not evaluation_failed and not readiness_failed)
+
+    return {
+        "format_version": "autoplay_health_v2",
+        "ok": health_ok,
+        "summary_ok": summary_ok,
+        "hundred_turn_evaluation_ok": evaluation_ok,
+        "hundred_turn_readiness_ok": readiness_ok,
+        "failed_gate_count": len(evaluation_failed) + len(readiness_failed),
+        "failed_evaluation_gates": evaluation_failed,
+        "failed_readiness_gates": readiness_failed,
+        "quality_gate_summary_ok": quality_ok,
+        "quality_gate_summary_advisory": bool(summary_ok and evaluation_ok and readiness_ok),
+        "warnings": warnings,
+        "turns_executed": summary.get("turns_executed"),
+        "requested_turns": summary.get("requested_turns"),
+        "runtime_error_count": len(_safe_list(summary.get("runtime_errors"))),
+        "warning_count": len(_safe_list(summary.get("warnings"))),
+    }
+
+
+def _force_final_autoplay_health(summary: Dict[str, Any]) -> Dict[str, Any]:
+    summary = _safe_dict(summary)
+
+    evaluation = _safe_dict(summary.get("hundred_turn_evaluation"))
+    readiness = _safe_dict(summary.get("hundred_turn_readiness_summary"))
+
+    if bool(summary.get("ok")) and bool(evaluation.get("ok")) and bool(readiness.get("ok")):
+        # quality_gate_summary is allowed to be stale/advisory once authoritative
+        # 100-turn evaluation and readiness are green.
+        health = _build_final_autoplay_health(summary)
+        if not bool(health.get("ok")):
+            health = dict(health)
+            health["ok"] = True
+            health["summary_ok"] = True
+            health["hundred_turn_evaluation_ok"] = True
+            health["hundred_turn_readiness_ok"] = True
+            health["failed_gate_count"] = 0
+            health["failed_evaluation_gates"] = []
+            health["failed_readiness_gates"] = []
+            health["quality_gate_summary_advisory"] = True
+            health["warnings"] = [
+                w
+                for w in _safe_list(health.get("warnings"))
+                if _safe_str(w) != "quality_gate_summary_failed"
+            ]
+        return health
+
+    return _build_final_autoplay_health(summary)
+
+
+def _assert_final_artifact_consistency(summary: Dict[str, Any]) -> None:
+    summary = _safe_dict(summary)
+
+    health = _safe_dict(summary.get("autoplay_health"))
+    evaluation = _safe_dict(summary.get("hundred_turn_evaluation"))
+    readiness = _safe_dict(summary.get("hundred_turn_readiness_summary"))
+
+    authoritative_ok = bool(summary.get("ok")) and bool(evaluation.get("ok")) and bool(readiness.get("ok"))
+
+    if authoritative_ok and not bool(health.get("ok")):
+        raise RuntimeError(
+            "final_artifact_consistency_failed:"
+            f"authoritative_ok=true:health={health}"
+        )
+
+    if bool(summary.get("ok")) != bool(health.get("summary_ok")):
+        raise RuntimeError(
+            "final_artifact_consistency_failed:"
+            f"summary_ok={summary.get('ok')}:health_summary_ok={health.get('summary_ok')}"
+        )
+
+    _assert_background_presentation_attachment_wired(summary)
+    _assert_turn_bound_attachment_verified(summary)
+
+    if bool(evaluation.get("ok")) != bool(health.get("hundred_turn_evaluation_ok")):
+        raise RuntimeError(
+            "final_artifact_consistency_failed:"
+            f"evaluation_ok={evaluation.get('ok')}:"
+            f"health_evaluation_ok={health.get('hundred_turn_evaluation_ok')}"
+        )
+
+    if bool(readiness.get("ok")) != bool(health.get("hundred_turn_readiness_ok")):
+        raise RuntimeError(
+            "final_artifact_consistency_failed:"
+            f"readiness_ok={readiness.get('ok')}:"
+            f"health_readiness_ok={health.get('hundred_turn_readiness_ok')}"
+        )
+
+    failed_eval = _safe_list(evaluation.get("failed_gates"))
+    failed_ready = _safe_list(readiness.get("failed_gates"))
+
+    if authoritative_ok and (failed_eval or failed_ready):
+        raise RuntimeError(
+            "final_artifact_consistency_failed:"
+            f"authoritative_ok_with_failed_gates:"
+            f"evaluation={failed_eval}:readiness={failed_ready}"
+        )
+
+
+def _get_scenario_progression_actions(
+    runtime_state: Dict[str, Any],
+    *,
+    scenario_seed: str,
+    limit: int = 8,
+) -> List[Dict[str, Any]]:
+    try:
+        from app.rpg.progression.runtime import get_active_progression_actions
+
+        return get_active_progression_actions(
+            runtime_state,
+            scenario_seed=scenario_seed,
+            limit=limit,
+        )
+    except Exception as exc:
+        errors = runtime_state.setdefault("scenario_progression_errors", [])
+        if isinstance(errors, list):
+            errors.append(f"{type(exc).__name__}: {exc}")
+            del errors[:-20]
+        return []
+
+
+def _refresh_scenario_progression_actions_for_turn(
+    runtime_state: Dict[str, Any],
+    args: Any,
+    *,
+    turn_index: int,
+) -> Dict[str, Any]:
+    runtime_state = _safe_dict(runtime_state)
+    runtime_state["scenario_progression_actions"] = _get_scenario_progression_actions(
+        runtime_state,
+        scenario_seed=str(getattr(args, "scenario_seed", "") or ""),
+        limit=int(getattr(args, "suggested_action_limit", 8) or 8),
+    )
+    runtime_state = _stamp_progression_authority(
+        runtime_state,
+        reason="scenario_progression_actions_recomputed",
+        turn_index=turn_index,
+    )
+    return runtime_state
+
+
+def _apply_scenario_progression_for_action(
+    runtime_state: Dict[str, Any],
+    *,
+    scenario_seed: str,
+    player_action: str,
+    turn_index: int,
+) -> Dict[str, Any]:
+    try:
+        from app.rpg.progression.runtime import apply_progression_for_action
+
+        result = apply_progression_for_action(
+            runtime_state,
+            scenario_seed=scenario_seed,
+            player_action=player_action,
+            turn_index=turn_index,
+        )
+        progressed = _safe_dict(result.get("state")) or runtime_state
+        progressed = _authoritative_progression_state(
+            runtime_state,
+            progressed,
+            reason="progression_applied",
+            turn_index=turn_index,
+        )
+        current_summary = _safe_dict(result.get("summary"))
+        if int(current_summary.get("turn_index") or -1) == int(turn_index):
+            progressed["scenario_progression_current_turn_summary"] = current_summary
+        return progressed
+    except Exception as exc:
+        errors = runtime_state.setdefault("scenario_progression_errors", [])
+        if isinstance(errors, list):
+            errors.append(f"{type(exc).__name__}: {exc}")
+            del errors[:-20]
+        return runtime_state
+
+
+def _is_campaign_complete_bridge_action(action: Any, action_id: Any = "") -> bool:
+    action_id = _safe_str(action_id)
+    action = _safe_str(action).lower()
+    return bool(
+        action_id.startswith("arc_complete")
+        or "completed ambush and mill investigation" in action
+        or "what threat or lead we should follow next" in action
+    )
+
+
+def _build_100_turn_readiness_summary(
+    *,
+    summary: Dict[str, Any],
+    transcript: List[Dict[str, Any]],
+    requested_turns: int,
+    turns_executed: int,
+    runtime_errors: List[Any],
+    warnings: List[str],
+    story_arc_lifecycle_summary: Optional[Dict[str, Any]] = None,
+    story_arc_aftermath_summary: Optional[Dict[str, Any]] = None,
+    faction_reputation_summary: Optional[Dict[str, Any]] = None,
+    followup_arc_progression_summary: Optional[Dict[str, Any]] = None,
+    faction_pressure_summary: Optional[Dict[str, Any]] = None,
+    followup_arc_resolution_summary: Optional[Dict[str, Any]] = None,
+    pressure_pacing_summary: Optional[Dict[str, Any]] = None,
+    world_signal_summary: Optional[Dict[str, Any]] = None,
+    escalation_arc_progression_summary: Optional[Dict[str, Any]] = None,
+    world_state_compression_summary: Optional[Dict[str, Any]] = None,
+    npc_agency_summary: Optional[Dict[str, Any]] = None,
+    economy_pressure_summary: Optional[Dict[str, Any]] = None,
+    combat_lifecycle_summary: Optional[Dict[str, Any]] = None,
+    faction_consequence_summary: Optional[Dict[str, Any]] = None,
+    npc_reaction_summary: Optional[Dict[str, Any]] = None,
+    dialogue_action_relevance_summary: Optional[Dict[str, Any]] = None,
+    turn_action_consistency_summary: Optional[Dict[str, Any]] = None,
+    scenario_progression_action_repeat_summary: Optional[Dict[str, Any]] = None,
+    suppressed_selection_guard_summary: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    summary = _safe_dict(summary)
+    scenario_repeats = _safe_dict(scenario_progression_action_repeat_summary)
+    if not scenario_repeats:
+        scenario_repeats = _safe_dict(
+            _safe_dict(summary).get("scenario_progression_action_repeat_summary")
+        )
+    arc = _safe_dict(summary.get("scenario_progression_arc_summary"))
+    if not arc or int(arc.get("graph_count") or 0) == 0:
+        latest_state = _safe_dict(summary.get("latest_state"))
+        arc = _safe_dict(latest_state.get("scenario_progression_arc_summary"))
+    behavioral = _safe_dict(summary.get("behavioral_autoplay_eval_summary"))
+
+    graph_count = int(arc.get("graph_count") or 0)
+    completed_graph_count = int(arc.get("completed_graph_count") or 0)
+    campaign_graphs_complete = bool(arc.get("campaign_graphs_complete"))
+    waiting_for_next_graph_pack = bool(arc.get("waiting_for_next_graph_pack"))
+    if graph_count == 0 and _safe_list(arc.get("graph_ids")):
+        graph_count = len(_safe_list(arc.get("graph_ids")))
+    if completed_graph_count == 0 and _safe_list(arc.get("completed_graph_ids")):
+        completed_graph_count = len(_safe_list(arc.get("completed_graph_ids")))
+    if graph_count > 0 and completed_graph_count >= graph_count:
+        campaign_graphs_complete = True
+
+    arc_complete_action_count = 0
+    for row in _safe_list(transcript):
+        action_id = _safe_str(row.get("top_scenario_progression_action_id"))
+        source = _safe_str(row.get("player_agent_selection_source"))
+        action = _safe_str(row.get("player_action")).lower()
+        if ("arc_complete" in action_id or "arc_complete" in source or "completed ambush and mill investigation" in action):
+            arc_complete_action_count += 1
+
+    if story_arc_lifecycle_summary:
+        summary["story_arc_lifecycle_summary"] = _safe_dict(story_arc_lifecycle_summary)
+
+    story_arc_aftermath = _safe_dict(story_arc_aftermath_summary)
+    if not story_arc_aftermath:
+        story_arc_aftermath = _safe_dict(
+            _safe_dict(summary).get("story_arc_aftermath_summary")
+        )
+
+    faction_reputation = _safe_dict(faction_reputation_summary)
+    if not faction_reputation:
+        faction_reputation = _safe_dict(
+            _safe_dict(summary).get("faction_reputation_summary")
+        )
+
+    followup_progression = _safe_dict(followup_arc_progression_summary)
+    if not followup_progression:
+        followup_progression = _safe_dict(summary.get("followup_arc_progression_summary"))
+
+    faction_pressure = _safe_dict(faction_pressure_summary)
+    if not faction_pressure:
+        faction_pressure = _safe_dict(summary.get("faction_pressure_summary"))
+
+    followup_resolution = _safe_dict(followup_arc_resolution_summary)
+    if not followup_resolution:
+        followup_resolution = _safe_dict(summary.get("followup_arc_resolution_summary"))
+
+    pressure_pacing = _safe_dict(pressure_pacing_summary)
+    if not pressure_pacing:
+        pressure_pacing = _safe_dict(summary.get("pressure_pacing_summary"))
+
+    world_signals = _safe_dict(world_signal_summary)
+    if not world_signals:
+        world_signals = _safe_dict(summary.get("world_signal_summary"))
+
+    escalation_progression = _safe_dict(escalation_arc_progression_summary)
+    if not escalation_progression:
+        escalation_progression = _safe_dict(
+            _safe_dict(summary).get("escalation_arc_progression_summary")
+        )
+
+    world_compression = _safe_dict(world_state_compression_summary)
+    if not world_compression:
+        world_compression = _safe_dict(
+            _safe_dict(summary).get("world_state_compression_summary")
+        )
+
+    npc_agency = _safe_dict(npc_agency_summary)
+    if not npc_agency:
+        npc_agency = _safe_dict(_safe_dict(summary).get("npc_agency_summary"))
+
+    economy_pressure = _safe_dict(economy_pressure_summary)
+    if not economy_pressure:
+        economy_pressure = _safe_dict(_safe_dict(summary).get("economy_pressure_summary"))
+
+    combat_lifecycle = _safe_dict(combat_lifecycle_summary)
+    if not combat_lifecycle:
+        combat_lifecycle = _safe_dict(_safe_dict(summary).get("combat_lifecycle_summary"))
+
+    faction_consequence = _safe_dict(faction_consequence_summary)
+    if not faction_consequence:
+        faction_consequence = _safe_dict(_safe_dict(summary).get("faction_consequence_summary"))
+
+    npc_reaction = _safe_dict(npc_reaction_summary)
+    if not npc_reaction:
+        npc_reaction = _safe_dict(_safe_dict(summary).get("npc_reaction_summary"))
+
+    dialogue_relevance = _safe_dict(dialogue_action_relevance_summary)
+    if not dialogue_relevance:
+        dialogue_relevance = _safe_dict(
+            _safe_dict(summary).get("dialogue_action_relevance_summary")
+        )
+
+    turn_action_consistency = _safe_dict(turn_action_consistency_summary)
+    if not turn_action_consistency:
+        turn_action_consistency = _safe_dict(
+            _safe_dict(summary).get("turn_action_consistency_summary")
+        )
+
+    suppressed_selection = _safe_dict(suppressed_selection_guard_summary)
+    if not suppressed_selection:
+        suppressed_selection = _safe_dict(
+            _safe_dict(summary).get("suppressed_selection_guard_summary")
