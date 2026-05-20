@@ -25,6 +25,21 @@ from typing import Any, Callable, Dict, List, Optional
 from app.rpg.ai.grounding_settings import normalize_grounding_settings
 from app.rpg.ai.grounding_validator import select_grounded_narration_candidate
 from app.rpg.memory.npc_memory_recall import memory_reference_is_backed
+from app.rpg.dialogue.npc_response_architecture import (
+    build_runtime_npc_response_architecture,
+)
+from app.rpg.presentation.current_turn_prompt_contract import (
+    build_runtime_current_turn_prompt_contract,
+    format_runtime_prompt_contract_block,
+)
+from app.rpg.presentation.grounding_validator import (
+    build_runtime_presentation_guardrails_block,
+    sanitize_unsupported_combat_payload,
+)
+from app.rpg.presentation.provider_payload import (
+    parse_runtime_provider_payload,
+)
+
 
 # Phase 8: player-facing encounter view
 from app.rpg.player import build_encounter_view
@@ -1466,6 +1481,10 @@ def _normalize_narration_json(payload: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def _parse_llm_narration_payload(raw: Any) -> Dict[str, Any]:
+    provider_payload = parse_runtime_provider_payload(raw)
+    if provider_payload.get("ok"):
+        return _safe_dict(provider_payload.get("payload"))
+
     if isinstance(raw, dict):
         return raw
 
@@ -2094,6 +2113,8 @@ def _sanitize_narration_payload(
     if travel_action:
         normalized["action"] = travel_action
 
+    normalized = sanitize_unsupported_combat_payload(normalized, narration_context)
+
     _apply_grounded_conversation_beat(normalized, narration_context)
     conversation = _conversation_result_from_context(narration_context)
     if conversation.get("triggered"):
@@ -2624,6 +2645,15 @@ def build_scene_prompt(scene, narration_context, tone="dramatic"):
     recent_authoritative_facts = _recent_authoritative_facts(narration_context)
     recent_facts_block = "\n".join(f"- {fact}" for fact in recent_authoritative_facts[:3]) or "- none"
     combat_facts_block = _build_combat_facts_block(narration_context)
+    current_turn_prompt_contract = build_runtime_current_turn_prompt_contract(
+        scene=scene,
+        narration_context=narration_context,
+    )
+    npc_response_architecture = build_runtime_npc_response_architecture(
+        narration_context=narration_context,
+        current_turn_prompt_contract=current_turn_prompt_contract,
+    )
+    runtime_guardrails_block = build_runtime_presentation_guardrails_block(narration_context)
 
     grounding_settings = normalize_grounding_settings(
         _safe_dict(_safe_dict(narration_context.get("runtime_settings")).get("grounding"))
@@ -2692,6 +2722,14 @@ Authoritative combat facts:
 Turn contract PRIMARY TRUTH:
 {json.dumps(_safe_dict(narration_context.get("turn_contract")), ensure_ascii=False, indent=2)[:6000]}
 
+CURRENT_TURN_PROMPT_CONTRACT_JSON:
+{format_runtime_prompt_contract_block(current_turn_prompt_contract)}
+
+NPC_RESPONSE_ARCHITECTURE_JSON:
+{json.dumps(npc_response_architecture, ensure_ascii=False, indent=2, default=str)[:5000]}
+
+{runtime_guardrails_block}
+
 NPC STATE SUMMARY (must influence tone and dialogue):
 {json.dumps({
     "mood": _safe_dict(narration_context.get("npc_behavior_context") or _safe_dict(narration_context.get("turn_contract")).get("npc_behavior_context")).get("mood"),
@@ -2721,6 +2759,9 @@ Do not include commentary outside JSON.
  - NO faction goals, loyalty, awareness, or ambient content
 TURN CONTRACT RULES:
 - turn_contract is the primary truth for this turn.
+- CURRENT_TURN_PROMPT_CONTRACT_JSON is the presentation boundary for this exact player action.
+- required_focus must be addressed before older context, memories, profile hooks, or recent events.
+- NPC_RESPONSE_ARCHITECTURE_JSON may shape speaker, tone, persona, and continuity only.
 - resolved_result is legacy compatibility; prefer turn_contract when both are present.
 - You MUST base the narration primarily on turn_contract.narration_brief.
 - You MUST reflect turn_contract.state_delta when it exists.
