@@ -1,0 +1,4 @@
+ChatGPT GitHub connector smoke test.
+
+This file was created to verify branch, commit, and pull request permissions.
+It can be safely deleted after the permission test.
