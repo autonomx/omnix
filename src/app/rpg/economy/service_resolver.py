@@ -466,3 +466,126 @@ def resolve_service_turn(
 
     result["available_actions"] = _build_available_actions(result)
     return result
+
+# N116.19 — Root Service Resolver Precision
+# The deterministic service resolver must not treat document/order/payment
+# evidence as tavern services.  This is a negative guard only: it returns
+# ``not_service`` for service-confusable evidence phrases unless the player
+# explicitly asks to buy/rent/order/pay for a real service.
+
+_N11619_PREVIOUS_RESOLVE_SERVICE_INTENT = resolve_service_intent
+_N11619_PREVIOUS_RESOLVE_SERVICE_TURN = resolve_service_turn
+
+_N11619_STRONG_DOCUMENT_SERVICE_FALSE_POSITIVE_TERMS = (
+    "sealed order", "sealed orders", "countermove order", "countermove orders",
+    "strike order", "strike orders", "captured order", "captured orders",
+    "written order", "written orders", "orders from", "orders signed",
+    "orders naming", "route paper", "route papers", "captured route paper",
+    "captured route papers", "ledger", "ledger entry", "ledger entries",
+    "manifest", "manifest mark", "manifest marks", "payment mark",
+    "payment marks", "manifest payment", "marked coin", "coin proof",
+    "coin lead", "route cipher", "coded message", "coded messages",
+    "toll marker", "toll markers", "courier route", "paymaster",
+)
+_N11619_DOCUMENT_CONTEXT_TERMS = (
+    "document", "documents", "paper", "papers", "letter", "letters",
+    "note", "notes", "record", "records", "file", "files", "cipher",
+    "code", "marks", "markings", "seal", "sealed", "ledger", "manifest",
+)
+_N11619_EVIDENCE_VERBS = (
+    "inspect", "study", "review", "decode", "trace", "capture", "recover",
+    "report", "compare", "analyze", "analyse", "examine", "read", "copy",
+    "secure", "protect", "warn", "follow", "bring", "show", "present",
+    "search", "find", "identify", "check",
+)
+_N11619_EXPLICIT_SERVICE_COMMERCE_TERMS = (
+    "buy", "purchase", "pay for", "pay bran for", "pay the innkeeper for",
+    "rent a room", "rent room", "book a room", "book room", "order ale",
+    "order a drink", "order food", "order a meal", "order stew",
+    "order supper", "buy ale", "buy food", "buy meal", "buy stew",
+    "sell", "trade", "hire", "lodging", "sleep here", "rest here",
+    "stay the night",
+)
+
+
+def _n11619_norm_service_text(value: Any) -> str:
+    return " ".join(_safe_str(value).lower().replace("-", " ").replace("_", " ").split())
+
+
+def _n11619_has_explicit_service_or_commerce(text_l: str) -> bool:
+    text_l = _n11619_norm_service_text(text_l)
+    if not text_l:
+        return False
+    return any(term in text_l for term in _N11619_EXPLICIT_SERVICE_COMMERCE_TERMS)
+
+
+def _n11619_is_document_service_false_positive_text(text_l: str) -> bool:
+    text_l = _n11619_norm_service_text(text_l)
+    if not text_l:
+        return False
+    if _n11619_has_explicit_service_or_commerce(text_l):
+        return False
+    if any(term in text_l for term in _N11619_STRONG_DOCUMENT_SERVICE_FALSE_POSITIVE_TERMS):
+        return True
+    has_context = any(term in text_l for term in _N11619_DOCUMENT_CONTEXT_TERMS)
+    has_verb = any(verb in text_l for verb in _N11619_EVIDENCE_VERBS)
+    return bool(has_context and has_verb)
+
+
+def _n11619_not_service_precision_result(player_input: str, *, service_kind: str = "") -> Dict[str, Any]:
+    return {
+        "matched": False,
+        "kind": "not_service",
+        "service_kind": service_kind,
+        "provider_id": "",
+        "provider_name": "",
+        "status": "not_service",
+        "offers": [],
+        "selected_offer_id": "",
+        "purchase": None,
+        "available_actions": [],
+        "confidence": 0.0,
+        "reason": "document_evidence_without_explicit_service_request",
+        "player_input": player_input,
+        "source": "deterministic_service_resolver",
+        "n11619_root_service_precision_guard": True,
+        "veto_only": True,
+    }
+
+
+def resolve_service_intent(
+    player_input: str,
+    action: Dict[str, Any] | None = None,
+    simulation_state: Dict[str, Any] | None = None,
+    runtime_state: Dict[str, Any] | None = None,
+) -> Dict[str, Any]:
+    text = _safe_str(player_input)
+    text_l = _n11619_norm_service_text(text)
+    if _n11619_is_document_service_false_positive_text(text_l):
+        return _n11619_not_service_precision_result(text)
+    return _N11619_PREVIOUS_RESOLVE_SERVICE_INTENT(
+        player_input=player_input,
+        action=action,
+        simulation_state=simulation_state,
+        runtime_state=runtime_state,
+    )
+
+
+def resolve_service_turn(
+    *,
+    player_input: str,
+    action: Dict[str, Any] | None,
+    resolved_action: Dict[str, Any] | None,
+    simulation_state: Dict[str, Any] | None,
+    runtime_state: Dict[str, Any] | None,
+) -> Dict[str, Any]:
+    text = _safe_str(player_input)
+    if _n11619_is_document_service_false_positive_text(text):
+        return _n11619_not_service_precision_result(text)
+    return _N11619_PREVIOUS_RESOLVE_SERVICE_TURN(
+        player_input=player_input,
+        action=action,
+        resolved_action=resolved_action,
+        simulation_state=simulation_state,
+        runtime_state=runtime_state,
+    )
