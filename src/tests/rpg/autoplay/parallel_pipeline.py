@@ -3752,3 +3752,74 @@ def _build_combined_background_payload(
         semantic_action_record=semantic_action_record,
         turn_index=turn_index,
     )
+
+# N116.19 — Root Service Resolver Precision for Background Prompt Contracts
+# The service resolver is patched at the app level, but the background prompt
+# pipeline also carries its own service/economy guard.  Make that guard precise:
+# only service-confusable document/order/payment actions block service/economy.
+
+_N11619_PARALLEL_STRONG_DOCUMENT_TERMS = (
+    "sealed order", "sealed orders", "countermove order", "countermove orders",
+    "strike order", "strike orders", "captured order", "captured orders",
+    "written order", "written orders", "orders from", "orders signed",
+    "orders naming", "route paper", "route papers", "captured route paper",
+    "captured route papers", "ledger", "ledger entry", "ledger entries",
+    "manifest", "manifest mark", "manifest marks", "payment mark",
+    "payment marks", "manifest payment", "marked coin", "coin proof",
+    "coin lead", "route cipher", "coded message", "coded messages",
+    "toll marker", "toll markers", "courier route", "paymaster",
+)
+_N11619_PARALLEL_DOCUMENT_CONTEXT_TERMS = (
+    "document", "documents", "paper", "papers", "letter", "letters",
+    "note", "notes", "record", "records", "cipher", "code", "marks",
+    "markings", "seal", "sealed", "ledger", "manifest",
+)
+_N11619_PARALLEL_EVIDENCE_VERBS = (
+    "inspect", "study", "review", "decode", "trace", "capture", "recover",
+    "report", "compare", "analyze", "analyse", "examine", "read", "copy",
+    "secure", "protect", "warn", "follow", "bring", "show", "present",
+    "search", "find", "identify", "check",
+)
+_N11619_PARALLEL_EXPLICIT_SERVICE_COMMERCE_TERMS = (
+    "buy", "purchase", "pay for", "pay bran for", "pay the innkeeper for",
+    "rent a room", "rent room", "book a room", "book room", "order ale",
+    "order a drink", "order food", "order a meal", "order stew",
+    "order supper", "buy ale", "buy food", "buy meal", "buy stew",
+    "sell", "trade", "hire", "lodging", "sleep here", "rest here",
+    "stay the night",
+)
+
+
+def _n11619_parallel_is_document_service_false_positive_action(action: Any) -> bool:
+    action_norm = _norm(action)
+    if not action_norm:
+        return False
+    if any(term in action_norm for term in _N11619_PARALLEL_EXPLICIT_SERVICE_COMMERCE_TERMS):
+        return False
+    if any(term in action_norm for term in _N11619_PARALLEL_STRONG_DOCUMENT_TERMS):
+        return True
+    has_context = any(term in action_norm for term in _N11619_PARALLEL_DOCUMENT_CONTEXT_TERMS)
+    has_verb = any(verb in action_norm for verb in _N11619_PARALLEL_EVIDENCE_VERBS)
+    return bool(has_context and has_verb)
+
+
+def _n116161_is_document_evidence_action(action: str) -> bool:
+    return _n11619_parallel_is_document_service_false_positive_action(action)
+
+
+def _n116161_service_veto_reason(action: str, service_result: Dict[str, Any]) -> str:
+    action_norm = _norm(action)
+    service_result = _safe_dict(service_result)
+    if not _n11619_parallel_is_document_service_false_positive_action(action_norm):
+        return ""
+    if _n116161_has_explicit_commerce_request(action_norm) or _n116161_has_explicit_service_request(action_norm):
+        return ""
+    if any(service_result.get(key) for key in ("matched", "service", "purchase", "sale", "offers_available")):
+        return "document_evidence_without_explicit_service_request"
+    status = _safe_str(service_result.get("status") or service_result.get("service_status")).lower()
+    kind = _safe_str(service_result.get("service_kind") or service_result.get("kind") or service_result.get("item_kind")).lower()
+    if status in {"offers_available", "available", "service_available", "purchase_available"}:
+        return "document_evidence_without_explicit_service_request"
+    if kind in {"drink", "lodging", "meal", "shop_goods", "paid_information", "service_inquiry"}:
+        return "document_evidence_without_explicit_service_request"
+    return ""
