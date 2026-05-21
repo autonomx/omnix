@@ -5,7 +5,10 @@ from typing import Any, Dict, List
 
 from app.rpg.economy.service_resolver import resolve_service_turn
 from app.rpg.session.runtime_promotions import apply_climate_survival_turn_effects
-from app.rpg.session.survival_actions import resolve_survival_action
+from app.rpg.session.survival_actions import (
+    build_survival_suggested_actions,
+    resolve_survival_action,
+)
 from app.rpg.world.travel_graph import list_available_routes
 
 
@@ -331,6 +334,7 @@ def build_turn_contract(*, player_input: str, action: Dict[str, Any], resolved_a
         resolved_for_contract["effect_result"] = _merge_effect_result(resolved_for_contract.get("effect_result"), relief_result.get("effect_result"))
         resolved_for_contract["climate_survival"] = safe_dict(simulation_state_after.get("climate_survival")) or climate_survival
         climate_survival = resolved_for_contract["climate_survival"]
+    survival_suggestions = build_survival_suggested_actions(simulation_state_after, runtime_state)
     state_delta = derive_state_delta(simulation_state_before, interpreted, resolved_for_contract)
     narration_brief = build_narration_brief(interpreted, resolved_for_contract, state_delta)
     resolved = supplement_generic_resolved_action(resolved_for_contract, interpreted, narration_brief)
@@ -342,4 +346,5 @@ def build_turn_contract(*, player_input: str, action: Dict[str, Any], resolved_a
     npc_behavior_context = build_npc_behavior_context(simulation_state_after, interpreted, state_delta)
     available_routes = list_available_routes(state=simulation_state_before)
     travel_suggestions = [{"type": "travel", "label": f"Travel to {route.get('to_name')}", "command": f"go to {route.get('to_name')}", "to_location": route.get("to_location"), "direction": route.get("direction")} for route in available_routes[:4]]
-    return {"version": "turn_contract_v1", "player_input": player_input, "action": action, "interpreted_action": interpreted, "resolved_action": resolved, "resolved_result": resolved, "service_result": service_result, "semantic_action": safe_dict(resolved.get("semantic_action")), "state_delta": state_delta, "npc_behavior_context": npc_behavior_context, "narration_brief": narration_brief, "available_routes": available_routes, "suggested_actions": travel_suggestions, "climate_survival": climate_survival, "survival_action": safe_dict(resolved.get("survival_action")), "resource_changes": safe_dict(resolved.get("resource_changes")), "effect_result": safe_dict(resolved.get("effect_result")), "presentation": {"available_actions": safe_list(service_result.get("available_actions")) if service_result.get("matched") else []}}
+    suggested_actions = survival_suggestions + travel_suggestions
+    return {"version": "turn_contract_v1", "player_input": player_input, "action": action, "interpreted_action": interpreted, "resolved_action": resolved, "resolved_result": resolved, "service_result": service_result, "semantic_action": safe_dict(resolved.get("semantic_action")), "state_delta": state_delta, "npc_behavior_context": npc_behavior_context, "narration_brief": narration_brief, "available_routes": available_routes, "suggested_actions": suggested_actions, "survival_suggested_actions": survival_suggestions, "climate_survival": climate_survival, "survival_action": safe_dict(resolved.get("survival_action")), "resource_changes": safe_dict(resolved.get("resource_changes")), "effect_result": safe_dict(resolved.get("effect_result")), "presentation": {"available_actions": safe_list(service_result.get("available_actions")) + survival_suggestions, "survival_suggested_actions": survival_suggestions}}
