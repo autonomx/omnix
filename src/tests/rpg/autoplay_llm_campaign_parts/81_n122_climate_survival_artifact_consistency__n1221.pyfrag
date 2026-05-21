@@ -1,0 +1,199 @@
+
+# N122.1 -- Climate/survival artifact consistency + compact action plan
+#
+# The first N122 run produced climate/survival data in the ZIP/manifest, but the
+# Git-review mirror can become inconsistent if a result upload commits the index
+# without every listed essential file.  This pass writes a compact action-plan
+# artifact and a mirror consistency artifact so the next run is directly
+# reviewable from GitHub without needing the ZIP.
+_N1221_PREVIOUS_N11721_REFRESH_READINESS_SOURCES = globals().get("_n11721_refresh_1000_turn_readiness_gap_report_sources")
+_N1221_PREVIOUS_N1176_WRITE_REVIEW_JSON_ARTIFACT = globals().get("_n1176_write_review_json_artifact")
+_N1221_PREVIOUS_N1181_MIRROR_AUTOPLAY_RESULTS_ZIP = globals().get("_n1181_mirror_autoplay_results_zip")
+
+try:
+    _N1192_EXACT_ESSENTIAL_ARTIFACTS.update({
+        "climate-survival-campaign-summary.json",
+        "climate-survival-action-plan-summary.json",
+        "essential-mirror-consistency-summary.json",
+    })
+except Exception:
+    pass
+
+
+def _n1221_safe_path(value: Any) -> str:
+    try:
+        return str(Path(value)).replace("\\", "/")
+    except Exception:
+        return _safe_str(value).replace("\\", "/")
+
+
+def _n1221_build_action_plan(summary: Dict[str, Any]) -> Dict[str, Any]:
+    summary = _safe_dict(summary)
+    if "_n122_apply_climate_survival" in globals() and callable(globals().get("_n122_apply_climate_survival")):
+        summary = _n122_apply_climate_survival(summary)
+    climate = _safe_dict(summary.get("climate_survival_campaign_summary"))
+    survival = _safe_dict(climate.get("survival"))
+    actions = [_safe_dict(item) for item in _safe_list(survival.get("actions"))]
+    action_counts = dict(_safe_dict(survival.get("action_counts")))
+    final_time = _safe_dict(climate.get("final_time"))
+    needs = {
+        "hunger": survival.get("hunger"),
+        "thirst": survival.get("thirst"),
+        "fatigue": survival.get("fatigue"),
+    }
+    thresholds = _safe_dict(_safe_dict(climate.get("settings")))
+    next_actions: List[Dict[str, Any]] = []
+    hunger = _n122_float(needs.get("hunger"), 0.0) if "_n122_float" in globals() else float(needs.get("hunger") or 0.0)
+    thirst = _n122_float(needs.get("thirst"), 0.0) if "_n122_float" in globals() else float(needs.get("thirst") or 0.0)
+    fatigue = _n122_float(needs.get("fatigue"), 0.0) if "_n122_float" in globals() else float(needs.get("fatigue") or 0.0)
+    if hunger >= float(thresholds.get("hungry_threshold") or 55):
+        next_actions.append({"kind": "eat", "reason": "hunger_above_threshold", "need": round(hunger, 2)})
+    if thirst >= float(thresholds.get("thirsty_threshold") or 50):
+        next_actions.append({"kind": "drink", "reason": "thirst_above_threshold", "need": round(thirst, 2)})
+    hour = int(final_time.get("hour") or 0)
+    night = hour >= int(thresholds.get("sleep_start_hour") or 22) or hour < int(thresholds.get("wake_hour") or 6)
+    if fatigue >= float(thresholds.get("tired_threshold") or 60) and night:
+        next_actions.append({"kind": "sleep", "reason": "fatigue_above_threshold_at_night", "need": round(fatigue, 2), "hour": hour})
+    return {
+        "format_version": "n1221_climate_survival_action_plan_v1",
+        "ok": bool(climate.get("ok")),
+        "campaign_tracking_enabled": bool(climate.get("campaign_tracking_enabled")),
+        "player_auto_care_enabled": bool(climate.get("player_auto_care_enabled")),
+        "final_time": final_time,
+        "final_needs": needs,
+        "action_count": len(actions),
+        "action_counts": action_counts,
+        "actions_preview": actions[:40],
+        "next_recommended_actions": next_actions,
+        "policy": "Player auto-care is deterministic: eat/drink/sleep actions are emitted when bounded hunger/thirst/fatigue thresholds are crossed. next_recommended_actions is only populated if final needs remain above threshold.",
+    }
+
+
+def _n1221_apply(summary: Dict[str, Any]) -> Dict[str, Any]:
+    summary = _safe_dict(summary)
+    if "_n122_apply_climate_survival" in globals() and callable(globals().get("_n122_apply_climate_survival")):
+        summary = _n122_apply_climate_survival(summary)
+    action_plan = _n1221_build_action_plan(summary)
+    summary["climate_survival_action_plan_summary"] = action_plan
+    climate = dict(_safe_dict(summary.get("climate_survival_campaign_summary")))
+    climate["action_plan"] = {
+        "action_count": action_plan.get("action_count"),
+        "action_counts": action_plan.get("action_counts"),
+        "next_recommended_actions": action_plan.get("next_recommended_actions"),
+    }
+    summary["climate_survival_campaign_summary"] = climate
+    return summary
+
+
+def _n11721_refresh_1000_turn_readiness_gap_report_sources(*args: Any, **kwargs: Any) -> Dict[str, Any]:
+    if callable(_N1221_PREVIOUS_N11721_REFRESH_READINESS_SOURCES):
+        summary = _N1221_PREVIOUS_N11721_REFRESH_READINESS_SOURCES(*args, **kwargs)
+    elif args:
+        summary = _safe_dict(args[0])
+    else:
+        summary = _safe_dict(kwargs.get("summary"))
+    return _n1221_apply(summary)
+
+
+def _n1221_expected_essential_files() -> List[str]:
+    try:
+        return sorted(str(item) for item in _N1192_EXACT_ESSENTIAL_ARTIFACTS)
+    except Exception:
+        return sorted([
+            "summary.json",
+            "artifact-manifest.json",
+            "autoplay-health.json",
+            "one-thousand-turn-readiness-gap-report.json",
+            "climate-survival-campaign-summary.json",
+            "climate-survival-action-plan-summary.json",
+        ])
+
+
+def _n1221_build_mirror_consistency(mirror_dir: Path, mirror_summary: Dict[str, Any]) -> Dict[str, Any]:
+    mirror_dir = Path(mirror_dir)
+    mirror_summary = _safe_dict(mirror_summary)
+    extracted = {str(item).replace("\\", "/") for item in _safe_list(mirror_summary.get("extracted_files"))}
+    expected = _n1221_expected_essential_files()
+    missing = []
+    present = []
+    for name in expected:
+        if (mirror_dir / name).exists():
+            present.append(name)
+        elif name in extracted:
+            missing.append(name)
+    return {
+        "format_version": "n1221_essential_mirror_consistency_v1",
+        "ok": not missing,
+        "mirror_dir": _n1221_safe_path(mirror_dir),
+        "expected_file_count": len(expected),
+        "present_expected_file_count": len(present),
+        "missing_listed_file_count": len(missing),
+        "missing_listed_files": missing,
+        "climate_survival_campaign_summary_present": (mirror_dir / "climate-survival-campaign-summary.json").exists(),
+        "climate_survival_action_plan_summary_present": (mirror_dir / "climate-survival-action-plan-summary.json").exists(),
+        "note": "If this reports missing files, commit the full autoplay-campaign-results-unzipped folder after rerunning; do not commit only unzipped-artifact-index.json.",
+    }
+
+
+def _n1181_mirror_autoplay_results_zip(args: Any) -> Dict[str, Any]:
+    if callable(_N1221_PREVIOUS_N1181_MIRROR_AUTOPLAY_RESULTS_ZIP):
+        result = _safe_dict(_N1221_PREVIOUS_N1181_MIRROR_AUTOPLAY_RESULTS_ZIP(args))
+    else:
+        result = {}
+    try:
+        output_dir = Path(getattr(args, "output_dir", "") or "")
+        mirror_dir = output_dir / "autoplay-campaign-results-unzipped"
+        consistency = _n1221_build_mirror_consistency(mirror_dir, result)
+        (mirror_dir / "essential-mirror-consistency-summary.json").write_text(
+            json.dumps(consistency, ensure_ascii=False, indent=2, sort_keys=True, default=str),
+            encoding="utf-8",
+        )
+        extracted = list(_safe_list(result.get("extracted_files")))
+        if "essential-mirror-consistency-summary.json" not in extracted:
+            extracted.append("essential-mirror-consistency-summary.json")
+        result["extracted_files"] = extracted
+        result["extracted_file_count"] = len(extracted)
+        result["essential_mirror_consistency"] = consistency
+        index_path = mirror_dir / "unzipped-artifact-index.json"
+        if index_path.exists():
+            index_path.write_text(
+                json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True, default=str),
+                encoding="utf-8",
+            )
+    except Exception as exc:
+        _timestamped_print(f"Warning: failed to write essential mirror consistency summary: {type(exc).__name__}: {exc}")
+    return result
+
+
+def _n1176_write_review_json_artifact(*args: Any, **kwargs: Any) -> Any:
+    result = None
+    if callable(_N1221_PREVIOUS_N1176_WRITE_REVIEW_JSON_ARTIFACT):
+        result = _N1221_PREVIOUS_N1176_WRITE_REVIEW_JSON_ARTIFACT(*args, **kwargs)
+    if len(args) < 4:
+        return result
+    zip_handle, artifact_manifest, name, value = args[:4]
+    if name != "summary.json" or not isinstance(value, dict):
+        return result
+    value = _n1221_apply(value)
+    artifacts = {
+        "climate-survival-campaign-summary.json": value.get("climate_survival_campaign_summary"),
+        "climate-survival-action-plan-summary.json": value.get("climate_survival_action_plan_summary"),
+    }
+    generated_files = artifact_manifest.setdefault("generated_files", [])
+    for artifact_name, payload in artifacts.items():
+        payload = _safe_dict(payload)
+        if not payload or artifact_name in generated_files:
+            continue
+        serialized = json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True, default=str)
+        zip_handle.writestr(artifact_name, serialized)
+        generated_files.append(artifact_name)
+        if callable(_N1221_PREVIOUS_N1176_WRITE_REVIEW_JSON_ARTIFACT):
+            _N1221_PREVIOUS_N1176_WRITE_REVIEW_JSON_ARTIFACT(
+                zip_handle,
+                artifact_manifest,
+                artifact_name,
+                payload,
+                serialized_text=serialized,
+                force=True,
+            )
+    return result
